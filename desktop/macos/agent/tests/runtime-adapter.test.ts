@@ -10,9 +10,12 @@ import {
 import {
   ADAPTER_CAPABILITY_MATRIX,
   PLACEHOLDER_RUNTIME_ADAPTERS,
+  PLACEHOLDER_ADAPTER_IDS,
+  PRODUCTION_ADAPTER_IDS,
 } from "../src/adapters/interface.js";
 import type {
   AdapterAttemptContext,
+  OpenedBinding,
   RuntimeAdapter,
 } from "../src/adapters/interface.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
@@ -71,9 +74,7 @@ function fakeAdapter(adapterId = "fake"): RuntimeAdapter {
       cwd: input.cwd,
     }),
     executeAttempt: async (context: AdapterAttemptContext) => ({
-      text: "",
-      sessionId: context.binding.adapterNativeSessionId,
-      adapterSessionId: context.binding.adapterNativeSessionId,
+      text: "",      adapterSessionId: context.binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     }),
     cancelAttempt: async () => ({
@@ -166,13 +167,11 @@ describe("PiMonoRuntimeAdapter bindings", () => {
 
 describe("adapter capability matrix", () => {
   it("declares explicit support, skip, and known-limitation expectations for current and future adapters", () => {
-    expect(Object.keys(ADAPTER_CAPABILITY_MATRIX).sort()).toEqual([
-      "a2a",
-      "acp",
-      "hermes",
-      "openclaw",
-      "pi-mono",
-    ]);
+    expect(Object.keys(ADAPTER_CAPABILITY_MATRIX).sort()).toEqual(
+      [...PRODUCTION_ADAPTER_IDS, ...PLACEHOLDER_ADAPTER_IDS].sort()
+    );
+    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono"]);
+    expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["hermes", "openclaw", "a2a"]);
 
     expect(ADAPTER_CAPABILITY_MATRIX.acp.expectations).toMatchObject({
       nativeResume: { status: "required" },
@@ -195,7 +194,7 @@ describe("adapter capability matrix", () => {
       restartOrphanSemantics: { status: "required" },
     });
 
-    for (const adapterId of ["hermes", "openclaw", "a2a"] as const) {
+    for (const adapterId of PLACEHOLDER_ADAPTER_IDS) {
       expect(ADAPTER_CAPABILITY_MATRIX[adapterId].productionAdapter).toBe(false);
       expect(PLACEHOLDER_RUNTIME_ADAPTERS[adapterId]).toMatchObject({
         adapterId,
@@ -205,6 +204,34 @@ describe("adapter capability matrix", () => {
       expect(Object.values(ADAPTER_CAPABILITY_MATRIX[adapterId].expectations).every(
         (expectation) => expectation.status === "known_limitation" && Boolean(expectation.followUpTicket),
       )).toBe(true);
+    }
+  });
+
+  it("keeps every production capability expectation documented with explicit status and reason", () => {
+    for (const adapterId of PRODUCTION_ADAPTER_IDS) {
+      const entry = ADAPTER_CAPABILITY_MATRIX[adapterId];
+
+      expect(entry.productionAdapter).toBe(true);
+      expect(entry.adapterId).toBe(adapterId);
+      expect(Object.keys(entry.expectations).sort()).toEqual([
+        "artifactEmission",
+        "cancellationAck",
+        "cancellationDispatch",
+        "modelSwitching",
+        "nativeResume",
+        "pinnedWorker",
+        "restartOrphanSemantics",
+        "toolSupport",
+      ]);
+      for (const expectation of Object.values(entry.expectations)) {
+        expect(["required", "unsupported", "known_limitation"]).toContain(expectation.status);
+        expect(expectation.reason.trim().length).toBeGreaterThan(0);
+        if (expectation.status === "known_limitation") {
+          expect(expectation.followUpTicket?.trim().length).toBeGreaterThan(0);
+        } else {
+          expect(expectation.followUpTicket).toBeUndefined();
+        }
+      }
     }
   });
 
@@ -244,7 +271,7 @@ describe("AdapterRegistry", () => {
   it("rejects known placeholder adapters on the production registration path", () => {
     const registry = new AdapterRegistry();
 
-    for (const adapterId of ["hermes", "openclaw", "a2a"] as const) {
+    for (const adapterId of PLACEHOLDER_ADAPTER_IDS) {
       expect(() => registry.register(adapterId, () => fakeAdapter(adapterId))).toThrow(
         `Adapter ${adapterId} is a placeholder and cannot be registered as a production adapter without an implementation factory`
       );
@@ -259,6 +286,117 @@ describe("AdapterRegistry", () => {
 
     expect(registry.has("fake")).toBe(true);
     expect(registry.capacity("fake")).toBe(1);
+  });
+
+  it("rejects fake adapters that conflate Omi sessionId and adapterNativeSessionId", async () => {
+    const registry = new AdapterRegistry();
+    registry.register("fake", () => fakeAdapter("fake"), 1);
+    const worker = registry.get("fake").acquire();
+    expect(worker).not.toBeNull();
+    const adapter = worker!.adapter;
+
+    await expect(adapter.openBinding({
+      sessionId: "same-id",
+      cwd: "/tmp/work",
+    })).resolves.toMatchObject({
+      sessionId: "same-id",
+      adapterNativeSessionId: "native",
+    });
+
+    const badOpenRegistry = new AdapterRegistry();
+    badOpenRegistry.register("bad-open", () => ({
+      ...fakeAdapter("bad-open"),
+      openBinding: async (input): Promise<OpenedBinding> => ({
+        sessionId: input.sessionId,
+        adapterId: "bad-open",
+        adapterNativeSessionId: input.sessionId,
+        resumeFidelity: "native",
+        cwd: input.cwd,
+      }),
+    }), 1);
+    await expect(badOpenRegistry.get("bad-open").acquire()!.adapter.openBinding({
+      sessionId: "omi-session",
+      cwd: "/tmp/work",
+    })).rejects.toThrow("bad-open.openBinding conflated Omi sessionId omi-session with adapterNativeSessionId");
+
+    const badResumeRegistry = new AdapterRegistry();
+    badResumeRegistry.register("bad-resume", () => ({
+      ...fakeAdapter("bad-resume"),
+      resumeBinding: async (input): Promise<OpenedBinding> => ({
+        sessionId: input.sessionId,
+        adapterId: "bad-resume",
+        adapterNativeSessionId: input.sessionId,
+        resumeFidelity: "native",
+        cwd: input.cwd,
+      }),
+    }), 1);
+    await expect(badResumeRegistry.get("bad-resume").acquire()!.adapter.resumeBinding({
+      sessionId: "omi-session",
+      adapterNativeSessionId: "native-session",
+      cwd: "/tmp/work",
+    })).rejects.toThrow("bad-resume.resumeBinding conflated Omi sessionId omi-session with adapterNativeSessionId");
+
+    const badExecuteRegistry = new AdapterRegistry();
+    badExecuteRegistry.register("bad-execute", () => ({
+      ...fakeAdapter("bad-execute"),
+      executeAttempt: async (context: AdapterAttemptContext) => ({
+        text: "",
+        sessionId: context.sessionId,
+        adapterSessionId: context.sessionId,
+        terminalStatus: "succeeded" as const,
+      }),
+    }), 1);
+    await expect(badExecuteRegistry.get("bad-execute").acquire()!.adapter.executeAttempt(
+      {
+        sessionId: "omi-session",
+        requestId: "request",
+        clientId: "client",
+        runId: "run",
+        attemptId: "attempt",
+        binding: {
+          sessionId: "omi-session",
+          adapterId: "bad-execute",
+          adapterNativeSessionId: "native-session",
+          resumeFidelity: "native",
+          cwd: "/tmp/work",
+        },
+        prompt: [{ type: "text", text: "hello" }],
+        mode: "ask",
+      },
+      () => {},
+      new AbortController().signal,
+    )).rejects.toThrow("bad-execute.executeAttempt conflated Omi sessionId omi-session with adapter native session id");
+
+    const driftExecuteRegistry = new AdapterRegistry();
+    driftExecuteRegistry.register("drift-execute", () => ({
+      ...fakeAdapter("drift-execute"),
+      executeAttempt: async () => ({
+        text: "",
+        sessionId: "other-native-session",
+        adapterSessionId: "other-native-session",
+        terminalStatus: "succeeded" as const,
+      }),
+    }), 1);
+    await expect(driftExecuteRegistry.get("drift-execute").acquire()!.adapter.executeAttempt(
+      {
+        sessionId: "omi-session",
+        requestId: "request",
+        clientId: "client",
+        runId: "run",
+        attemptId: "attempt",
+        binding: {
+          sessionId: "omi-session",
+          adapterId: "drift-execute",
+          adapterNativeSessionId: "native-session",
+          resumeFidelity: "native",
+          cwd: "/tmp/work",
+        },
+        prompt: [{ type: "text", text: "hello" }],
+        mode: "ask",
+      },
+      () => {},
+      new AbortController().signal,
+    )).rejects.toThrow("drift-execute.executeAttempt returned adapterSessionId other-native-session for binding native-session");
   });
 });
 
@@ -337,8 +475,7 @@ describe("fake runtime adapter contract fixture", () => {
       adapterSessionId: "native-1",
       artifacts: [expect.objectContaining({ uri: "adapter://contract-fake/native-artifact" })],
     });
-    expect(result.sessionId).toBe("native-1");
-    expect(result.sessionId).not.toBe(adapter.executed[0].sessionId);
+    expect("sessionId" in result).toBe(false);
     expect(result.adapterSessionId).toBe("native-1");
     expect(result.adapterSessionId).toBe(adapter.executed[0].binding.adapterNativeSessionId);
     expect(cancel).toMatchObject({

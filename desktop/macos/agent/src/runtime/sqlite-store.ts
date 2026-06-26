@@ -416,7 +416,7 @@ export class SqliteAgentStore implements AgentStore {
           sessionId: sessionIdForRun(this.db, text(attempt.run_id)),
           runId: text(attempt.run_id),
           attemptId: text(attempt.attempt_id),
-          type: "runtime.attempt_orphaned",
+          type: "attempt.orphaned",
           payload: { attemptId: attempt.attempt_id, reason: "daemon_startup_reconciliation" },
           createdAtMs: now,
         }));
@@ -426,7 +426,7 @@ export class SqliteAgentStore implements AgentStore {
           sessionId: sessionIdForRun(this.db, runId),
           runId,
           attemptId: null,
-          type: "runtime.run_orphaned",
+          type: "run.orphaned",
           payload: { runId, reason: "daemon_startup_reconciliation" },
           createdAtMs: now,
         }));
@@ -436,7 +436,7 @@ export class SqliteAgentStore implements AgentStore {
           sessionId: text(binding.session_id),
           runId: null,
           attemptId: null,
-          type: "runtime.binding_stale",
+          type: "binding.stale",
           payload: { bindingId: binding.binding_id, reason: "non_resumable_binding_after_restart" },
           createdAtMs: now,
         }));

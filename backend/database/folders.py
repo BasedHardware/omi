@@ -6,6 +6,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+from database.document_ids import system_folder_doc_id
 from models.folder import Folder
 
 # System folders that are created for new users
@@ -225,7 +226,7 @@ def initialize_system_folders(uid: str) -> List[dict]:
     now = datetime.now(timezone.utc)
 
     for i, folder_config in enumerate(SYSTEM_FOLDERS):
-        folder_id = str(uuid.uuid4())
+        folder_id = system_folder_doc_id(uid, folder_config['category_mapping'])
         folder_data = {
             'id': folder_id,
             'name': folder_config['name'],

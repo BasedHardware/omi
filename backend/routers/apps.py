@@ -116,6 +116,11 @@ from utils.llm.app_generator import generate_description
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
+from utils.request_validation import (
+    backfill_app_home_url_from_auth_steps,
+    normalize_required_webhook_url,
+    parse_form_json,
+)
 from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
@@ -467,12 +472,7 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/apps', tags=['v1'])
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
-    try:
-        data = json.loads(app_data)
-    except (json.JSONDecodeError, TypeError):
-        raise HTTPException(status_code=400, detail='Invalid app_data: must be valid JSON')
-    if not isinstance(data, dict):
-        raise HTTPException(status_code=400, detail='Invalid app_data: must be a JSON object')
+    data = parse_form_json(dict, app_data, 'app_data')
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
@@ -500,7 +500,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
             raise HTTPException(status_code=422, detail='Triggers on or actions is required')
         # Trigger on
         if external_integration.get('triggers_on'):
-            external_integration['webhook_url'] = external_integration['webhook_url'].strip()
+            normalize_required_webhook_url(external_integration)
             if external_integration.get('setup_instructions_file_path'):
                 external_integration['setup_instructions_file_path'] = external_integration[
                     'setup_instructions_file_path'
@@ -529,9 +529,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
-        ext_int = data['external_integration']
-        if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
-            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+        backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
         app = AppCreate.model_validate(data)
@@ -557,7 +555,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
-    data = json.loads(persona_data)
+    data = parse_form_json(dict, persona_data, 'persona_data')
     data['approved'] = False
     data['status'] = 'under-review'
     data['category'] = 'personality-emulation'
@@ -603,7 +601,7 @@ async def update_persona(
     file: UploadFile = File(None),
     uid=Depends(auth.get_current_user_uid),
 ):
-    data = json.loads(persona_data)
+    data = parse_form_json(dict, persona_data, 'persona_data')
     persona = await run_blocking(db_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
@@ -723,7 +721,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
 def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
 ):
-    data = json.loads(app_data)
+    data = parse_form_json(dict, app_data, 'app_data')
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
@@ -742,9 +740,7 @@ def update_app(
 
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
-        ext_int = data['external_integration']
-        if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
-            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+        backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
         update_app = AppUpdate.model_validate(data)
@@ -1668,7 +1664,8 @@ async def mcp_oauth_callback(code: str, state: str):
     tool_count = len(tools)
     tool_names = ', '.join(t.name for t in tools)
 
-    return HTMLResponse(f"""
+    return HTMLResponse(
+        f"""
     <html>
     <head><meta name="viewport" content="width=device-width,initial-scale=1">
     <style>
@@ -1685,7 +1682,8 @@ async def mcp_oauth_callback(code: str, state: str):
         <p>{tool_names}</p>
         <p style="margin-top:24px;color:#666;">You can close this window and return to the app.</p>
     </div></body></html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])

@@ -368,9 +368,9 @@ describe("SqliteAgentStore", () => {
       adapter_instance_id: "",
     });
     expect(store.allRows("SELECT type FROM events ORDER BY event_seq").map((row) => row.type)).toEqual([
-      "runtime.attempt_orphaned",
-      "runtime.run_orphaned",
-      "runtime.binding_stale",
+      "attempt.orphaned",
+      "run.orphaned",
+      "binding.stale",
     ]);
     store.close();
   });

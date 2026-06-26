@@ -13,6 +13,11 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
+from models.calendar_mutation import (
+    CalendarMutationResult,
+    event_title as calendar_event_title,
+    format_deleted_calendar_events,
+)
 from utils.http_client import get_auth_client
 from utils.retrieval.tools.integration_base import (
     ensure_capped,
@@ -27,6 +32,7 @@ from utils.log_sanitizer import sanitize, sanitize_pii
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 # Import the context variable from agentic module
 try:
@@ -129,7 +135,8 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
 
                 if email_addresses:
                     email = email_addresses[0].get('value')
-                    name = person.get('names', [{}])[0].get('displayName', query)
+                    names = person.get('names') or [{}]
+                    name = names[0].get('displayName', query)
                     logger.info(f"✅ Found contact in Other Contacts: {sanitize_pii(name)} -> {sanitize_pii(email)}")
                     return email
                 else:
@@ -144,9 +151,7 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
             return None
         else:
             error_body = response.text[:200] if response.text else "No error body"
-            logger.error(
-                f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {sanitize(error_body)}"
-            )
+            logger.error(f"⚠️ Google Contacts API (Other Contacts) error {response.status_code}: {sanitize(error_body)}")
     except httpx.HTTPError as e:
         logger.error(f"⚠️ Network error searching Other Contacts: {e}")
     except Exception as e:
@@ -1071,9 +1076,8 @@ async def delete_calendar_event_tool(
 
             logger.info(f"📅 Found {len(matching_events)} matching event(s) to delete")
 
-            # Delete all matching events
-            deleted_count = 0
-            failed_deletions = []
+            # Delete all matching events, keeping success and failure attribution separate.
+            mutation_result = CalendarMutationResult()
 
             for event in matching_events:
                 event_id = event.get('id')
@@ -1085,39 +1089,13 @@ async def delete_calendar_event_tool(
 
                 try:
                     await delete_google_calendar_event(access_token, event_id)
-                    deleted_count += 1
+                    mutation_result.succeeded.append(event)
                 except Exception as e:
                     error_msg = str(e)
                     logger.error(f"❌ Failed to delete {event_title_found}: {error_msg}")
-                    failed_deletions.append((event_title_found, error_msg))
+                    mutation_result.failed.append((event_title_found, error_msg))
 
-            # Build result message
-            if deleted_count > 0:
-                result = f"✅ Successfully deleted {deleted_count} calendar event(s):\n"
-                for event in matching_events[:deleted_count]:
-                    summary = event.get('summary', 'Untitled')
-                    start = event.get('start', {})
-                    if 'dateTime' in start:
-                        try:
-                            start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                            result += f"   - {summary} ({start_dt.strftime('%Y-%m-%d %H:%M')})\n"
-                        except:
-                            result += f"   - {summary}\n"
-                    else:
-                        result += f"   - {summary}\n"
-
-                if failed_deletions:
-                    result += f"\n⚠️ Failed to delete {len(failed_deletions)} event(s):\n"
-                    for title, error in failed_deletions:
-                        result += f"   - {title}: {error}\n"
-
-                return result.strip()
-            else:
-                if failed_deletions:
-                    error_msgs = '; '.join([f"{title}: {error}" for title, error in failed_deletions])
-                    return f"Error: Failed to delete events: {error_msgs}"
-                else:
-                    return "No events were deleted."
+            return format_deleted_calendar_events(mutation_result)
 
         except GoogleAPIError as e:
             logger.error(f"❌ Google API error searching events to delete: status={e.status_code}, msg={e.message}")
@@ -1151,20 +1129,18 @@ async def delete_calendar_event_tool(
                         if not matching_events:
                             return f"No calendar events found matching '{event_title}'{date_info_retry}."
 
-                        deleted_count = 0
+                        mutation_result = CalendarMutationResult()
                         for event in matching_events:
                             event_id = event.get('id')
+                            event_title_found = calendar_event_title(event)
                             if event_id:
                                 try:
                                     await delete_google_calendar_event(new_token, event_id)
-                                    deleted_count += 1
-                                except Exception:
-                                    pass
+                                    mutation_result.succeeded.append(event)
+                                except Exception as delete_error:
+                                    mutation_result.failed.append((event_title_found, str(delete_error)))
 
-                        if deleted_count > 0:
-                            return f"✅ Successfully deleted {deleted_count} calendar event(s)"
-                        else:
-                            return "No events were deleted."
+                        return format_deleted_calendar_events(mutation_result)
                     except Exception as retry_error:
                         return f"Error deleting calendar events: {retry_error}"
                 else:

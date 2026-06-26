@@ -142,8 +142,13 @@ export interface AgentControlToolContext {
 
 export interface ActiveControlToolOwnerInput {
   requestKey?: string;
+  runId?: string;
+  attemptId?: string;
   ownerIdForRequest?: (requestKey: string) => string | undefined;
+  ownerIdForRun?: (runId: string) => string | undefined;
+  ownerIdForAttempt?: (attemptId: string) => string | undefined;
   fallbackOwnerId?: string;
+  allowFallbackOwner?: boolean;
 }
 
 export interface ControlRequestKeyInput {
@@ -153,7 +158,9 @@ export interface ControlRequestKeyInput {
 
 export interface ControlRequestContextInput extends ControlRequestKeyInput {
   ownerGuard?: string;
-  fallbackOwnerId?: string;
+  activeOwnerId?: string;
+  requireActiveOwner?: boolean;
+  requireOwnerGuard?: boolean;
 }
 
 export interface ResolvedControlRequestContext {
@@ -163,8 +170,13 @@ export interface ResolvedControlRequestContext {
 }
 
 export const DEFAULT_LEGACY_JSONL_CLIENT_ID = "legacy-jsonl-client";
+export const DEFAULT_LOCAL_OWNER_ID = "desktop-local-user";
 
 export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
+  return input.requestId && input.clientId ? JSON.stringify([input.clientId, input.requestId]) : undefined;
+}
+
+export function legacyControlRequestKey(input: ControlRequestKeyInput): string | undefined {
   return input.requestId ? JSON.stringify([input.clientId ?? DEFAULT_LEGACY_JSONL_CLIENT_ID, input.requestId]) : undefined;
 }
 
@@ -173,10 +185,22 @@ export function resolveControlRequestContext(input: ControlRequestContextInput):
   if (input.ownerGuard !== undefined && !ownerGuard) {
     throw new Error("ownerId cannot be empty");
   }
-  const fallbackOwnerId = input.fallbackOwnerId?.trim();
+  const activeContextOwnerId = input.activeOwnerId?.trim();
+  if (input.requireOwnerGuard && !ownerGuard) {
+    throw new Error("missing owner guard");
+  }
+  if (input.requireActiveOwner && (!activeContextOwnerId || activeContextOwnerId === DEFAULT_LOCAL_OWNER_ID)) {
+    throw new Error("missing active control owner");
+  }
+  const activeOwnerId = activeContextOwnerId && activeContextOwnerId !== DEFAULT_LOCAL_OWNER_ID
+    ? activeContextOwnerId
+    : ownerGuard || activeContextOwnerId || DEFAULT_LOCAL_OWNER_ID;
+  if (ownerGuard && ownerGuard !== activeOwnerId) {
+    throw new Error("ownerId does not match active control owner");
+  }
   return {
     requestKey: controlRequestKey(input),
-    activeOwnerId: ownerGuard || fallbackOwnerId || "desktop-local-user",
+    activeOwnerId,
     ownerGuard,
   };
 }
@@ -383,6 +407,17 @@ export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): st
   const requestOwnerId = input.requestKey ? input.ownerIdForRequest?.(input.requestKey)?.trim() : undefined;
   if (requestOwnerId) {
     return requestOwnerId;
+  }
+  const attemptOwnerId = input.attemptId ? input.ownerIdForAttempt?.(input.attemptId)?.trim() : undefined;
+  if (attemptOwnerId) {
+    return attemptOwnerId;
+  }
+  const runOwnerId = input.runId ? input.ownerIdForRun?.(input.runId)?.trim() : undefined;
+  if (runOwnerId) {
+    return runOwnerId;
+  }
+  if (!input.allowFallbackOwner) {
+    throw new Error("Owner-scoped control tools require active request, run, or attempt context");
   }
   const fallbackOwnerId = input.fallbackOwnerId?.trim();
   return fallbackOwnerId || "desktop-local-user";

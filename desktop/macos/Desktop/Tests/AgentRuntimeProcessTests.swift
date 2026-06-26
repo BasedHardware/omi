@@ -13,7 +13,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.kind, .result)
     XCTAssertEqual(message?.requestId, "req-1")
     XCTAssertEqual(message?.clientId, "client-1")
-    XCTAssertEqual(message?.routingKey, "req-1")
+    XCTAssertEqual(message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "req-1"))
     XCTAssertEqual(message?.payload["sessionId"] as? String, "omi-1")
     XCTAssertEqual(message?.payload["adapterSessionId"] as? String, "acp-1")
     XCTAssertEqual(message?.payload["terminalStatus"] as? String, "succeeded")
@@ -25,7 +25,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     )
 
     XCTAssertEqual(message?.kind, .cancelAck)
-    XCTAssertEqual(message?.routingKey, "cancel-me")
+    XCTAssertEqual(message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "cancel-me"))
     XCTAssertEqual(message?.payload["accepted"] as? Bool, true)
     XCTAssertEqual(message?.payload["adapterAcknowledged"] as? Bool, false)
   }
@@ -36,9 +36,18 @@ final class AgentRuntimeProcessTests: XCTestCase {
     )
 
     XCTAssertEqual(message?.kind, .controlToolResult)
-    XCTAssertEqual(message?.routingKey, "control-1")
+    XCTAssertEqual(message?.requestKey, AgentRuntimeProcess.RuntimeMessage.RequestKey(clientId: "client-1", requestId: "control-1"))
     XCTAssertEqual(message?.payload["name"] as? String, "inspect_agent_artifacts")
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
+  }
+
+  func testV2MessagesWithoutClientIdDoNotHaveRequestKey() {
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"result","protocolVersion":2,"requestId":"req-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done"}"#
+    )
+
+    XCTAssertEqual(message?.kind, .result)
+    XCTAssertNil(message?.requestKey)
   }
 
   func testNamedBundleStateDirectoriesAreIsolated() {
@@ -136,11 +145,23 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
     XCTAssertTrue(source.contains(#""type": "control_tool""#))
-    XCTAssertTrue(source.contains("activeControlRequests[requestId]"))
+    XCTAssertTrue(source.contains("activeControlRequests[requestKey]"))
     XCTAssertTrue(source.contains(#"dict["ownerId"] = ownerId"#))
     XCTAssertTrue(source.contains("completeControlRequest(message)"))
-    XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestId)"))
+    XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestKey)"))
     XCTAssertTrue(source.contains("controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))"))
+  }
+
+  func testToolResultsEchoRequestScope() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)"))
+    XCTAssertTrue(source.contains(#"if let requestId { payload["requestId"] = requestId }"#))
+    XCTAssertTrue(source.contains(#"if let clientId { payload["clientId"] = clientId }"#))
   }
 
   func testStartupTimeoutResumesInitContinuations() throws {

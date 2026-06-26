@@ -448,18 +448,26 @@ struct DashboardPage: View {
                 }
                 .frame(width: 320)
 
-                VStack(spacing: 12) {
-                    centerMemoryHeader
-                    homeMetricsStrip
-                }
-                .frame(width: 340)
+                centerMemoryColumn
 
                 destinationStack
                     .frame(width: 300)
             }
-            .frame(height: 318)
             .padding(26)
         }
+    }
+
+    private var centerMemoryColumn: some View {
+        HomeCenterMemoryColumn(
+            conversationValue: conversationMetricValue,
+            taskValue: taskMetricValue,
+            memoryValue: memoryMetricValue,
+            screenshotValue: screenshotMetricValue,
+            onConversations: { navigate(to: .conversations) },
+            onTasks: { navigate(to: .tasks) },
+            onMemories: { navigate(to: .memories) },
+            onScreenshots: { navigate(to: .rewind) }
+        )
     }
 
     private var sourceColumnHeader: some View {
@@ -495,36 +503,23 @@ struct DashboardPage: View {
 
     private var sourceConstellation: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                HomeSourceIconTile(title: "Gmail", brand: .gmail) {
-                    openImportConnector("email")
-                }
-
-                HomeSourceIconTile(title: "Calendar", brand: .calendar) {
-                    openImportConnector("calendar")
-                }
-
-                HomeSourceIconTile(title: "Files", brand: .localFiles, isConnected: true) {
-                    openImportConnector("local-files")
-                }
+            HomeAIChoiceButton(title: "Gmail", brand: .gmail) {
+                openImportConnector("email")
             }
-
-            HStack(spacing: 10) {
-                HomeSourceIconTile(title: "Notes", brand: .appleNotes) {
-                    openImportConnector("apple-notes")
-                }
-
-                HomeSourceIconTile(
-                    title: "Omi Device",
-                    usesOmiDeviceImage: true,
-                    isConnected: hasOmiDeviceHistory
-                ) {
-                    openOmiDeviceWebsite()
-                }
-
-                HomeSourceIconTile(title: "More", systemImage: "plus", isBrowse: true) {
-                    openAppsPage()
-                }
+            HomeAIChoiceButton(title: "Calendar", brand: .calendar) {
+                openImportConnector("calendar")
+            }
+            HomeAIChoiceButton(title: "Files", brand: .localFiles) {
+                openImportConnector("local-files")
+            }
+            HomeAIChoiceButton(title: "Notes", brand: .appleNotes) {
+                openImportConnector("apple-notes")
+            }
+            HomeAIChoiceButton(title: "Omi Device", usesOmiMark: true) {
+                openOmiDeviceWebsite()
+            }
+            HomeAIChoiceButton(title: "More", systemImage: "plus") {
+                openAppsPage()
             }
         }
     }
@@ -543,16 +538,22 @@ struct DashboardPage: View {
             }
             .frame(height: 62, alignment: .bottomLeading)
 
-            HomeAIChoiceButton(title: "Claude", brand: .claude) {
-                openExportDestination(.claude)
+            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude) {
+                openExportDestination(.claudeCode)
             }
-            HomeAIChoiceButton(title: "ChatGPT", brand: .chatgpt) {
-                openExportDestination(.chatgpt)
+            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt) {
+                openExportDestination(.codex)
+            }
+            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw) {
+                openExportDestination(.openclaw)
+            }
+            HomeAIChoiceButton(title: "Hermes", brand: .hermes) {
+                openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
                 navigate(to: .chat)
             }
-            HomeAIChoiceButton(title: "More", brand: .agents) {
+            HomeAIChoiceButton(title: "More", systemImage: "plus") {
                 openAppsPage()
             }
         }
@@ -560,43 +561,63 @@ struct DashboardPage: View {
 
     private var homeMetricsStrip: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                HomeCenterMetricTile(
-                    title: "Conversations",
-                    value: formattedCount(
-                        conversationCount ?? appState.totalConversationsCount
-                            ?? appState.conversations.count),
-                    systemImage: "text.bubble.fill",
-                    action: { navigate(to: .conversations) }
-                )
-                HomeCenterMetricTile(
-                    title: "Tasks",
-                    value: formattedCount(taskCount ?? incompleteTaskCount),
-                    systemImage: "checklist",
-                    action: { navigate(to: .tasks) }
-                )
-            }
-
-            HStack(spacing: 8) {
-                HomeCenterMetricTile(
-                    title: "Memories",
-                    value: formattedCount(
-                        memoryCount
-                            ?? (memoriesViewModel.totalMemoriesCount > 0
-                                ? memoriesViewModel.totalMemoriesCount
-                                : memoriesViewModel.memories.count)),
-                    systemImage: "brain",
-                    action: { navigate(to: .memories) }
-                )
-                HomeCenterMetricTile(
-                    title: "Screenshots",
-                    value: screenshotCount.map(formattedCount) ?? "—",
-                    systemImage: "photo.on.rectangle.angled",
-                    action: { navigate(to: .rewind) }
-                )
-            }
+            homeMetricTopRow
+            homeMetricBottomRow
         }
-        .frame(maxWidth: 300)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var homeMetricTopRow: some View {
+        HStack(spacing: 8) {
+            HomeCenterMetricTile(
+                title: "Conversations",
+                value: conversationMetricValue,
+                systemImage: "text.bubble.fill",
+                action: { navigate(to: .conversations) }
+            )
+            HomeCenterMetricTile(
+                title: "Tasks",
+                value: taskMetricValue,
+                systemImage: "checklist",
+                action: { navigate(to: .tasks) }
+            )
+        }
+    }
+
+    private var homeMetricBottomRow: some View {
+        HStack(spacing: 8) {
+            HomeCenterMetricTile(
+                title: "Memories",
+                value: memoryMetricValue,
+                systemImage: "brain",
+                action: { navigate(to: .memories) }
+            )
+            HomeCenterMetricTile(
+                title: "Screenshots",
+                value: screenshotMetricValue,
+                systemImage: "photo.on.rectangle.angled",
+                action: { navigate(to: .rewind) }
+            )
+        }
+    }
+
+    private var conversationMetricValue: String {
+        formattedCount(conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count)
+    }
+
+    private var taskMetricValue: String {
+        formattedCount(taskCount ?? incompleteTaskCount)
+    }
+
+    private var memoryMetricValue: String {
+        let count = memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
+            ? memoriesViewModel.totalMemoriesCount
+            : memoriesViewModel.memories.count)
+        return formattedCount(count)
+    }
+
+    private var screenshotMetricValue: String {
+        screenshotCount.map(formattedCount) ?? "—"
     }
 
     private func navigate(to item: SidebarNavItem) {
@@ -1939,6 +1960,85 @@ private struct HomeSourceTile: View {
     }
 }
 
+private struct HomeCenterMemoryColumn: View {
+    let conversationValue: String
+    let taskValue: String
+    let memoryValue: String
+    let screenshotValue: String
+    let onConversations: () -> Void
+    let onTasks: () -> Void
+    let onMemories: () -> Void
+    let onScreenshots: () -> Void
+
+    var body: some View {
+        content
+    }
+
+    private var content: AnyView {
+        let stack = VStack(spacing: 18) {
+            header
+            metrics
+        }
+        // Group the title directly above the cards and center the unit in a
+        // column the same height as the side lists.
+        let columnHeight = CGFloat(422)
+        let framed = stack.frame(width: CGFloat(340), height: columnHeight, alignment: Alignment.center)
+        return AnyView(framed)
+    }
+
+    private var header: AnyView {
+        AnyView(VStack(spacing: 2) {
+            Text("omi.")
+                .font(.system(size: 42, weight: .bold, design: .rounded))
+                .foregroundStyle(HomePalette.ink)
+                .lineLimit(1)
+                .shadow(color: HomePalette.purple.opacity(0.42), radius: 20)
+
+            Text("What omi knows")
+                .font(.system(size: 15, weight: .medium, design: .serif))
+                .foregroundStyle(HomePalette.secondary)
+                .multilineTextAlignment(.center)
+                .lineLimit(1)
+        }
+        .frame(height: 62, alignment: .bottom))
+    }
+
+    private var metrics: AnyView {
+        AnyView(VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                HomeCenterMetricTile(
+                    title: "Conversations",
+                    value: conversationValue,
+                    systemImage: "text.bubble.fill",
+                    action: onConversations
+                )
+                HomeCenterMetricTile(
+                    title: "Tasks",
+                    value: taskValue,
+                    systemImage: "checklist",
+                    action: onTasks
+                )
+            }
+
+            HStack(spacing: 8) {
+                HomeCenterMetricTile(
+                    title: "Memories",
+                    value: memoryValue,
+                    systemImage: "brain",
+                    action: onMemories
+                )
+                HomeCenterMetricTile(
+                    title: "Screenshots",
+                    value: screenshotValue,
+                    systemImage: "photo.on.rectangle.angled",
+                    action: onScreenshots
+                )
+            }
+        }
+        .frame(maxWidth: .infinity))
+    }
+}
+
 private struct HomeCenterMetricTile: View {
     let title: String
     let value: String
@@ -1975,7 +2075,7 @@ private struct HomeCenterMetricTile: View {
                     .minimumScaleFactor(0.82)
             }
             .padding(10)
-            .frame(width: 146, height: 82, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 82, maxHeight: 82, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.92))

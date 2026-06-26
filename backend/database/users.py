@@ -375,6 +375,37 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
     return len(person_data.get('speech_samples', []))
 
 
+@transactional
+def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> bool:
+    """Atomically remove a sample and its aligned transcript."""
+    snapshot = person_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+
+    person_data = snapshot.to_dict()
+    samples = list(person_data.get('speech_samples', []))
+    transcripts = list(person_data.get('speech_sample_transcripts', []))
+
+    try:
+        idx = samples.index(sample_path)
+    except ValueError:
+        return False
+
+    samples.pop(idx)
+    if idx < len(transcripts):
+        transcripts.pop(idx)
+
+    transaction.update(
+        person_ref,
+        {
+            'speech_samples': samples,
+            'speech_sample_transcripts': transcripts,
+            'updated_at': datetime.now(timezone.utc),
+        },
+    )
+    return True
+
+
 def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> bool:
     """
     Remove a speech sample path from person's speech_samples list.
@@ -389,34 +420,8 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
         True if removed, False if person or sample not found
     """
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_doc = person_ref.get()
-
-    if not person_doc.exists:
-        return False
-
-    person_data = person_doc.to_dict()
-    samples = person_data.get('speech_samples', [])
-    transcripts = person_data.get('speech_sample_transcripts', [])
-
-    # Find index of sample to remove
-    try:
-        idx = samples.index(sample_path)
-    except ValueError:
-        return False  # Sample not found
-
-    # Remove from both arrays by index
-    samples.pop(idx)
-    if idx < len(transcripts):
-        transcripts.pop(idx)
-
-    person_ref.update(
-        {
-            'speech_samples': samples,
-            'speech_sample_transcripts': transcripts,
-            'updated_at': datetime.now(timezone.utc),
-        }
-    )
-    return True
+    transaction = db.transaction()
+    return _remove_sample_transaction(transaction, person_ref, sample_path)
 
 
 def set_user_speaker_embedding(uid: str, embedding: list) -> bool:
