@@ -919,13 +919,13 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   if (!hermesAvailable && defaultAdapterId === "hermes") {
-    const msg = "Hermes mode requires OMI_HERMES_ADAPTER_COMMAND; refusing to start";
+    const msg = adapterActivationError("hermes") ?? "Hermes adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
   }
   if (!openClawAvailable && defaultAdapterId === "openclaw") {
-    const msg = "OpenClaw mode requires OMI_OPENCLAW_ADAPTER_COMMAND; refusing to start";
+    const msg = adapterActivationError("openclaw") ?? "OpenClaw adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);

@@ -49,7 +49,10 @@ describe("adapter selection and activation", () => {
       activationEnv: "OMI_OPENCLAW_ADAPTER_COMMAND",
       capabilities: { supportsTools: false, supportsModelSwitching: false },
     });
-    expect(adapterActivationError("openclaw")).toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
+    expect(adapterActivationError("hermes")).toContain("Hermes was not found");
+    expect(adapterActivationError("hermes")).toContain("Advanced override: OMI_HERMES_ADAPTER_COMMAND");
+    expect(adapterActivationError("openclaw")).toContain("OpenClaw was not found");
+    expect(adapterActivationError("openclaw")).toContain("Advanced override: OMI_OPENCLAW_ADAPTER_COMMAND");
   });
 
   it("source: daemon registers Hermes/OpenClaw explicitly and does not stamp MCP env as ACP", () => {
@@ -59,8 +62,8 @@ describe("adapter selection and activation", () => {
     expect(indexSource).toContain('defaultAdapterId === "acp"');
     expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"hermes\"");
     expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"openclaw\"");
-    expect(indexSource).toContain("OMI_HERMES_ADAPTER_COMMAND");
-    expect(indexSource).toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
+    expect(indexSource).toContain('adapterActivationError("hermes")');
+    expect(indexSource).toContain('adapterActivationError("openclaw")');
     expect(indexSource).toContain("query.ownerId = queryOwnerId");
     expect(indexSource).toContain('{ name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" }');
     expect(indexSource).not.toContain('{ name: "OMI_ADAPTER_ID", value: "acp" }');

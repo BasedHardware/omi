@@ -92,7 +92,10 @@ export function adapterActivationError(adapterId: ProductionAdapterId): string |
   const envName = adapterActivationEnv(adapterId);
   if (!envName) return undefined;
   const label = adapterId === "pi-mono" ? "pi-mono" : adapterId === "openclaw" ? "OpenClaw" : "Hermes";
-  return `${label} adapter is not configured; set ${envName} before routing a query to ${label}`;
+  if (adapterId === "hermes" || adapterId === "openclaw") {
+    return `${label} was not found on this Mac. Install ${label} or choose a custom ${label} command in settings. Advanced override: ${envName}.`;
+  }
+  return `${label} adapter is unavailable. Advanced override: ${envName}.`;
 }
 
 export function ensureRegisteredAdapter(

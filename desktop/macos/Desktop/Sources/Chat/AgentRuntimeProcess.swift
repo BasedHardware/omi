@@ -546,6 +546,13 @@ actor AgentRuntimeProcess {
     // different adapter. registerClient returns early once isRunning, so the
     // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
+    if env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+      env["HOME"] = home
+    }
+    if env["HERMES_HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+      env["HERMES_HOME"] = "\(home)/.hermes"
+    }
+
     let adapterSearchDirs = [
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
@@ -570,6 +577,7 @@ actor AgentRuntimeProcess {
     {
       env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
     }
+
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
       let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
     {

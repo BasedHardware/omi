@@ -143,6 +143,22 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains(#""adapterId": harnessMode == "piMono" ? "pi-mono" : "acp""#))
   }
 
+  func testLocalAdapterDiscoveryRunsForSharedRuntimeStartup() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("applyLocalAgentEnvironment(to: &env)"))
+    XCTAssertFalse(source.contains("applyLocalAgentEnvironment(to: &env, adapterId: preferredAdapterId)"))
+    XCTAssertFalse(source.contains("guard adapterId == .hermes || adapterId == .openclaw else"))
+    XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
+    XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
+    XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
+    XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+  }
+
   func testFailedRuntimeStartCleansUpLatchedRunningState() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
