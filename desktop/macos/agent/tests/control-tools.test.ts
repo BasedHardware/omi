@@ -1113,6 +1113,7 @@ describe("agent control tools", () => {
       ownerId: "owner",
       requestId: "delegate-tools-1",
       clientId: "delegate-client",
+      adapterId: "fake",
       protocolVersion: 2,
       includeSwiftBackedTools: false,
     });

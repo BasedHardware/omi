@@ -27,6 +27,7 @@ export interface McpServerBuildContext {
   sessionId?: string;
   runId?: string;
   attemptId?: string;
+  adapterId?: string;
   includeSwiftBackedTools?: boolean;
 }
 export type McpServerBuilder = (
@@ -448,6 +449,7 @@ export class JsonlCompatibilityFacade {
         clientId,
         protocolVersion: message.protocolVersion,
         sessionId,
+        adapterId: message.adapterId ?? this.defaultAdapterId,
       }),
       legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,

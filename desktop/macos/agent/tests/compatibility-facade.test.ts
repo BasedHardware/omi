@@ -207,6 +207,90 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("routes simultaneous Hermes and OpenClaw relay contexts by clientId plus requestId", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const hermes = new FakeRuntimeAdapter("hermes");
+    const openclaw = new FakeRuntimeAdapter("openclaw");
+    hermes.deferResult();
+    openclaw.deferResult();
+    const registry = new AdapterRegistry();
+    registry.register("hermes", () => hermes, 1);
+    registry.register("openclaw", () => openclaw, 1);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "hermes",
+      suppressToolUseEvents: false,
+    });
+
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "shared-request",
+      clientId: "client-hermes",
+      ownerId: "owner",
+      adapterId: "hermes",
+    });
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "shared-request",
+      clientId: "client-openclaw",
+      ownerId: "owner",
+      adapterId: "openclaw",
+    });
+
+    const hermesRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "hermes",
+      defaultAdapterId: "hermes",
+      requestId: "shared-request",
+      clientId: "client-hermes",
+      externalRefId: "task-hermes",
+    });
+    const openclawRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "openclaw",
+      defaultAdapterId: "openclaw",
+      requestId: "shared-request",
+      clientId: "client-openclaw",
+      externalRefId: "task-openclaw",
+    });
+    await waitUntil(() => hermes.executed.length === 1 && openclaw.executed.length === 1);
+
+    expect(facade.toolCallCorrelationForRequest("shared-request", "client-hermes")).toMatchObject({
+      requestId: "shared-request",
+      clientId: "client-hermes",
+      runId: hermes.executed[0].runId,
+      attemptId: hermes.executed[0].attemptId,
+    });
+    expect(facade.toolCallCorrelationForRequest("shared-request", "client-openclaw")).toMatchObject({
+      requestId: "shared-request",
+      clientId: "client-openclaw",
+      runId: openclaw.executed[0].runId,
+      attemptId: openclaw.executed[0].attemptId,
+    });
+    expect(facade.toolCallCorrelationForAdapter("hermes")).toMatchObject({
+      clientId: "client-hermes",
+      runId: hermes.executed[0].runId,
+    });
+    expect(facade.toolCallCorrelationForAdapter("openclaw")).toMatchObject({
+      clientId: "client-openclaw",
+      runId: openclaw.executed[0].runId,
+    });
+    expect(facade.legacyUnscopedToolCallCorrelationForRequest("shared-request")).toEqual({});
+
+    hermes.resolveDeferred({
+      adapterSessionId: hermes.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    openclaw.resolveDeferred({
+      adapterSessionId: openclaw.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await Promise.all([hermesRun, openclawRun]);
+    store.close();
+  });
+
   it("does not infer unscoped v2 tool-call correlation when v1 concurrency makes routing ambiguous", () => {
     expect(
       selectUnscopedToolCallCorrelation([
@@ -303,6 +387,7 @@ describe("JsonlCompatibilityFacade", () => {
       clientId: "client-mcp",
       protocolVersion: 2,
       sessionId: "session-mcp",
+      adapterId: "fake",
     });
     store.close();
   });

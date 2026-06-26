@@ -54,6 +54,7 @@ import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
+import { adapterIdForHarnessMode, adapterIsActivated } from "./runtime/adapter-selection.js";
 import {
   activeControlToolOwnerId,
   controlRequestKey,
@@ -594,7 +595,7 @@ function buildMcpServers(
     const omiToolsEnv: Array<{ name: string; value: string }> = [
       { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
       { name: "OMI_QUERY_MODE", value: mode },
-      { name: "OMI_ADAPTER_ID", value: "acp" },
+      { name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" },
     ];
     if (context) {
       omiToolsEnv.push(
@@ -794,7 +795,7 @@ async function main(): Promise<void> {
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
 
   const defaultHarnessMode = process.env.HARNESS_MODE || "acp";
-  const defaultAdapterId = defaultHarnessMode === "piMono" ? "pi-mono" : "acp";
+  const defaultAdapterId = adapterIdForHarnessMode(defaultHarnessMode);
   logErr(`Default harness mode: ${defaultHarnessMode}`);
 
   // 1. Start Unix socket for omi-tools relay
@@ -802,9 +803,11 @@ async function main(): Promise<void> {
   logErr("omi-tools relay started");
   process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
 
-  // 2. Start the ACP subprocess
-  await startAcpProcess();
-  logErr("ACP subprocess spawned");
+  // 2. Start ACP only when selected or lazily needed by an ACP query.
+  if (defaultAdapterId === "acp") {
+    await startAcpProcess();
+    logErr("ACP subprocess spawned");
+  }
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
@@ -885,8 +888,40 @@ async function main(): Promise<void> {
   };
 
   const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  const ensureHermesAdapter = async (): Promise<boolean> => {
+    if (!adapterIsActivated("hermes")) return false;
+    if (!registry.has("hermes")) {
+      const { HermesRuntimeAdapter } = await import("./adapters/hermes.js");
+      registry.register("hermes", () => new HermesRuntimeAdapter({ log: logErr }), 1);
+      logErr("Hermes adapter registered (maxWorkers=1)");
+    }
+    return true;
+  };
+  const ensureOpenClawAdapter = async (): Promise<boolean> => {
+    if (!adapterIsActivated("openclaw")) return false;
+    if (!registry.has("openclaw")) {
+      const { OpenClawRuntimeAdapter } = await import("./adapters/openclaw.js");
+      registry.register("openclaw", () => new OpenClawRuntimeAdapter({ log: logErr }), configuredPiMonoMaxWorkers());
+      logErr(`OpenClaw adapter registered (maxWorkers=${configuredPiMonoMaxWorkers()})`);
+    }
+    return true;
+  };
+  const hermesAvailable = await ensureHermesAdapter();
+  const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!hermesAvailable && defaultAdapterId === "hermes") {
+    const msg = "Hermes mode requires OMI_HERMES_ADAPTER_COMMAND; refusing to start";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!openClawAvailable && defaultAdapterId === "openclaw") {
+    const msg = "OpenClaw mode requires OMI_OPENCLAW_ADAPTER_COMMAND; refusing to start";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -961,6 +996,12 @@ async function main(): Promise<void> {
           try {
             if (adapterId === "acp") {
               await initializeAcp();
+            } else if (adapterId === "pi-mono") {
+              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+            } else if (adapterId === "hermes") {
+              await ensureHermesAdapter();
+            } else if (adapterId === "openclaw") {
+              await ensureOpenClawAdapter();
             }
             await facade.handleQuery(query);
           } finally {
