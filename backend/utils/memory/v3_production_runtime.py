@@ -14,9 +14,6 @@ from config.memory_rollout import (
     MemoryRolloutMode,
     MemoryRolloutConfig,
     parse_enabled_users,
-    rollout_archive_opt_in_enabled_env_value,
-    rollout_backfill_daily_limit_env_value,
-    rollout_backfill_enabled_env_value,
     rollout_enabled_users_env_raw,
     rollout_mode_env_value,
     rollout_v3_get_enabled_env_value,
@@ -365,15 +362,11 @@ def _runtime_enabled(rollout_config: MemoryRolloutConfig) -> bool:
 def _rollout_config_from_env(env) -> MemoryRolloutConfig:
     try:
         mode = MemoryRolloutMode(rollout_mode_env_value(env))
-        backfill_daily_limit = rollout_backfill_daily_limit_env_value(env)
     except (TypeError, ValueError):
         return MemoryRolloutConfig()
     return MemoryRolloutConfig(
         enabled_users=parse_enabled_users(rollout_enabled_users_env_raw(env)),
         mode=mode,
-        backfill_enabled=rollout_backfill_enabled_env_value(env),
-        backfill_daily_limit=backfill_daily_limit,
-        archive_opt_in_enabled=rollout_archive_opt_in_enabled_env_value(env),
     )
 
 
