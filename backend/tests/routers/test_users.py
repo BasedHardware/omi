@@ -112,23 +112,14 @@ for _pkg_name, _attr in (
     if _pkg is not None and hasattr(_pkg, _attr):
         delattr(_pkg, _attr)
 
-
-@pytest.fixture(autouse=True, scope='module')
-def _restore_endpoints_shim():
-    yield
-    if _prior_endpoints is None:
-        sys.modules.pop('utils.other.endpoints', None)
-    else:
-        sys.modules['utils.other.endpoints'] = _prior_endpoints
-    if _prior_routers_users is None:
-        sys.modules.pop('routers.users', None)
-    else:
-        sys.modules['routers.users'] = _prior_routers_users
-    for _svc_name, _prior in _prior_service_modules.items():
-        if _prior is None:
-            sys.modules.pop(_svc_name, None)
-        else:
-            sys.modules[_svc_name] = _prior
+# Restore utils.other.endpoints immediately too — pytest collects later test
+# modules before any module-scoped fixture teardown runs, so the shim would
+# persist in sys.modules during that window.  users_router already holds the
+# reference it needs; the shim is no longer required after import.
+if _prior_endpoints is None:
+    sys.modules.pop('utils.other.endpoints', None)
+else:
+    sys.modules['utils.other.endpoints'] = _prior_endpoints
 
 
 def _account_deletion_module(start_account_deletion):

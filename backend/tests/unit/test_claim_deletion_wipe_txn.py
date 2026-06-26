@@ -17,8 +17,6 @@ import types
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret-for-ci')
 
 # ---------------------------------------------------------------------------
@@ -69,26 +67,20 @@ if 'database.users' not in _STUB_PRIORS:
 
 from database import users as users_db  # noqa: E402
 
-
-@pytest.fixture(autouse=True, scope='module')
-def _restore_sys_modules():
-    """Restore sys.modules entries this module stubbed.
-
-    After all tests in this module finish, each stubbed name is either removed
-    (if it was absent before) or restored to its prior object, so the stubs do
-    not leak into later test modules in a multi-file pytest run.  We also clear
-    the parent ``database`` package attribute so ``from database import users``
-    doesn't resolve to the half-stubbed module via attribute lookup.
-    """
-    yield
-    for _name, _prior in _STUB_PRIORS.items():
-        if _prior is None:
-            sys.modules.pop(_name, None)
-        else:
-            sys.modules[_name] = _prior
-    _db_pkg = sys.modules.get('database')
-    if _db_pkg is not None and hasattr(_db_pkg, 'users'):
-        delattr(_db_pkg, 'users')
+# Restore all stubbed sys.modules entries IMMEDIATELY after capturing the
+# users_db reference. pytest imports/collects later test modules before any
+# module-scoped fixture teardown runs, so if we waited for fixture teardown
+# the half-stubbed entries (database._client, database.redis_db, etc.) would
+# still be in sys.modules while later tests are collected, causing them to
+# bind MagicMock-backed helpers instead of their own stubs or the real modules.
+for _name, _prior in _STUB_PRIORS.items():
+    if _prior is None:
+        sys.modules.pop(_name, None)
+    else:
+        sys.modules[_name] = _prior
+_db_pkg = sys.modules.get('database')
+if _db_pkg is not None and hasattr(_db_pkg, 'users'):
+    delattr(_db_pkg, 'users')
 
 
 def _make_snapshot(data):
