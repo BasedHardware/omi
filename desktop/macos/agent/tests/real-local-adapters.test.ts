@@ -49,7 +49,7 @@ function makeOpenClawContext(binding: AdapterBindingHandle): AdapterAttemptConte
     runId: "omi-run",
     attemptId: "omi-attempt",
     binding,
-    prompt: "Reply exactly: OMI_OPENCLAW_DOGFOOD_OK",
+    prompt: [{ type: "text" as const, text: "Reply exactly: OMI_OPENCLAW_DOGFOOD_OK" }],
     mode: "act",
     tools: [],
     model: "glm-5",
@@ -205,6 +205,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       adapterNativeSessionId: "openclaw-native-session",
       resumeFidelity: "native",
     });
+    expect(binding.model).toBeUndefined();
     expect(result).toMatchObject({
       text: "OMI_OPENCLAW_DOGFOOD_OK",
       adapterSessionId: "openclaw-native-session",
@@ -276,7 +277,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     const firstExecution = adapter.executeAttempt(
       {
         ...makeOpenClawContext(binding),
-        prompt: "Remember BLUEFJORD.",
+        prompt: [{ type: "text" as const, text: "Remember BLUEFJORD." }],
         model: "openrouter/openai/gpt-4.1-mini",
       },
       () => {},
@@ -291,16 +292,18 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     });
     expect(requests.find((request) => request.method === "session/new")?.params).toMatchObject({ mcpServers: [] });
 
+    const resumeStartIndex = requests.length;
     const resumedBinding = await adapter.resumeBinding({
       sessionId: "omi-session",
       cwd: "/tmp/work",
       model: "openrouter/openai/gpt-4.1-mini",
       adapterNativeSessionId: firstResult.adapterSessionId,
     });
+    const secondProcessRequests = requests.slice(resumeStartIndex);
     const secondExecution = adapter.executeAttempt(
       {
         ...makeOpenClawContext(resumedBinding),
-        prompt: "What codeword did I ask you to remember?",
+        prompt: [{ type: "text" as const, text: "What codeword did I ask you to remember?" }],
         model: "openrouter/openai/gpt-4.1-mini",
       },
       () => {},
@@ -315,6 +318,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     expect(requests.map((request) => request.method)).toContain("session/resume");
     expect(requests.map((request) => request.method)).not.toContain("session/set_model");
     expect(requests.find((request) => request.method === "session/resume")?.params).toMatchObject({ mcpServers: [] });
+    expect(secondProcessRequests.map((request) => request.method)).not.toContain("session/new");
     await adapter.stop();
   });
 });

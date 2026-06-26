@@ -79,7 +79,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.command = options.command;
     this.envCommandName = options.envCommandName;
     this.sessionMcpServersMode = options.sessionMcpServersMode ?? "passthrough";
-    this.supportsSessionSetModel = options.supportsSessionSetModel ?? true;
+    this.supportsSessionSetModel = options.supportsSessionSetModel ?? this.capabilities.supportsModelSwitching;
   }
 
   async start(): Promise<void> {
@@ -250,7 +250,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       });
     }
 
-    return this.binding(input, result.sessionId);
+    return this.binding(input, result.sessionId, this.supportsSessionSetModel);
   }
 
   async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
@@ -267,7 +267,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       });
     }
 
-    return this.binding(input, input.adapterNativeSessionId);
+    return this.binding(input, input.adapterNativeSessionId, this.supportsSessionSetModel);
   }
 
   async executeAttempt(
@@ -340,7 +340,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
   private binding(
     input: OpenBindingInput,
-    adapterNativeSessionId: string
+    adapterNativeSessionId: string,
+    modelApplied: boolean
   ): AdapterBindingHandle {
     return {
       sessionId: input.sessionId,
@@ -348,7 +349,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       adapterNativeSessionId,
       resumeFidelity: "native",
       cwd: input.cwd,
-      model: input.model,
+      model: modelApplied ? input.model : undefined,
       metadata: input.metadata,
     };
   }

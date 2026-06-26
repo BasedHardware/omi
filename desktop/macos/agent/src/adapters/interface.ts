@@ -275,12 +275,11 @@ export function isPlaceholderAdapterId(adapterId: string): adapterId is Placehol
   return isKnownAdapterId(adapterId) && !ADAPTER_CAPABILITY_MATRIX[adapterId].productionAdapter;
 }
 
-const PRODUCTION_ADAPTER_RESTART_BEHAVIOR: Record<ProductionAdapterId, AdapterCapabilities["restartBehavior"]> = {
-  acp: "native_bindings_survive",
-  "pi-mono": "process_local_bindings_stale",
-  hermes: "native_bindings_survive",
-  openclaw: "native_bindings_survive",
-};
+function restartBehaviorFor(expectations: Record<AdapterCapabilityKey, AdapterCapabilityExpectation>): AdapterCapabilities["restartBehavior"] {
+  if (expectations.nativeResume.status === "required") return "native_bindings_survive";
+  if (expectations.pinnedWorker.status === "required") return "process_local_bindings_stale";
+  return "attempts_orphaned";
+}
 
 export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterCapabilities {
   const expectations = ADAPTER_CAPABILITY_MATRIX[adapterId].expectations;
@@ -293,7 +292,7 @@ export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterC
     supportsModelSwitching: expectations.modelSwitching.status === "required",
     supportsArtifactEmission: expectations.artifactEmission.status === "required",
     supportsTools: expectations.toolSupport.status === "required",
-    restartBehavior: PRODUCTION_ADAPTER_RESTART_BEHAVIOR[adapterId],
+    restartBehavior: restartBehaviorFor(expectations),
   };
 }
 

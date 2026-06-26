@@ -5,7 +5,7 @@ actor AgentRuntimeProcess {
 
   struct WarmupSessionConfig {
     let key: String
-    let model: String
+    let model: String?
     let systemPrompt: String?
   }
 
@@ -212,8 +212,10 @@ actor AgentRuntimeProcess {
     dict["sessions"] = sessions.map { session -> [String: Any] in
       var entry: [String: Any] = [
         "key": session.key,
-        "model": session.model,
       ]
+      if let model = session.model {
+        entry["model"] = model
+      }
       if let systemPrompt = session.systemPrompt {
         entry["systemPrompt"] = systemPrompt
       }
@@ -539,7 +541,7 @@ actor AgentRuntimeProcess {
 
   private func applyLocalAgentEnvironment(to env: inout [String: String]) {
     let home = NSHomeDirectory()
-    let localAgentDirs = [
+    let adapterSearchDirs = [
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
       "\(home)/.hermes/hermes-agent/venv/bin",
@@ -547,20 +549,25 @@ actor AgentRuntimeProcess {
       "/opt/homebrew/bin",
       "/usr/local/bin",
     ]
+    let trustedPathDirs = [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
-    let prefix = localAgentDirs.filter { !existingPath.contains($0) }.joined(separator: ":")
-    if !prefix.isEmpty {
-      env["PATH"] = "\(prefix):\(existingPath)"
+    let existingPathElements = Set(existingPath.split(separator: ":").map(String.init))
+    let suffix = trustedPathDirs.filter { !existingPathElements.contains($0) }.joined(separator: ":")
+    if !suffix.isEmpty {
+      env["PATH"] = "\(existingPath):\(suffix)"
     }
 
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let openClaw = firstExecutable(named: "openclaw", in: localAgentDirs)
+      let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(shellQuote(openClaw)) acp"
     }
 
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let hermes = firstExecutable(named: "hermes", in: localAgentDirs)
+      let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
     {
       env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
     }

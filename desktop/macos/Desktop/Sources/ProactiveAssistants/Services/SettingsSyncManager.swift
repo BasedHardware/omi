@@ -49,9 +49,7 @@ class SettingsSyncManager {
             if let v = shared.cooldownInterval { AssistantSettings.shared.cooldownInterval = v }
             if let v = shared.glowOverlayEnabled { AssistantSettings.shared.glowOverlayEnabled = v }
             if let v = shared.analysisDelay { AssistantSettings.shared.analysisDelay = v }
-            if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
-                AssistantSettings.shared.screenAnalysisEnabled = v
-            }
+            if let v = shared.screenAnalysisEnabled { AssistantSettings.shared.screenAnalysisEnabled = v }
         }
 
         // Focus settings
@@ -118,7 +116,7 @@ class SettingsSyncManager {
             cooldownInterval: AssistantSettings.shared.cooldownInterval,
             glowOverlayEnabled: AssistantSettings.shared.glowOverlayEnabled,
             analysisDelay: AssistantSettings.shared.analysisDelay,
-            screenAnalysisEnabled: AssistantSettings.shared.screenAnalysisEnabled
+            screenAnalysisEnabled: shouldKeepLocalScreenAnalysisDefault ? nil : AssistantSettings.shared.screenAnalysisEnabled
         )
 
         let focus = FocusSettingsResponse(

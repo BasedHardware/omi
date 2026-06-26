@@ -30,7 +30,7 @@ actor AgentBridge {
 
   struct WarmupSessionConfig {
     let key: String
-    let model: String
+    let model: String?
     let systemPrompt: String?
   }
 

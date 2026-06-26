@@ -625,7 +625,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       case "openclaw": directedProvider = .openclaw
       case "hermes": directedProvider = .hermes
       case "": directedProvider = nil
-      default: directedProvider = nil
+      default:
+        session?.sendToolResult(
+          callId: callId, name: name,
+          output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
+        return
       }
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel

@@ -603,7 +603,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
     var isUsingOmiAccountProvider: Bool {
-        bridgeMode == BridgeMode.piMono.rawValue || bridgeMode == BridgeMode.omiAI.rawValue
+        resolvedHarnessMode() == "piMono"
     }
 
     nonisolated static func harnessMode(for mode: BridgeMode) -> String {
@@ -1013,8 +1013,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 : ShortcutSettings.shared.selectedModel
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
+            let mainWarmupModel = activeBridgeHarness == "hermes" ? nil : ModelQoS.Claude.chat
             await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
-                .init(key: "main", model: ModelQoS.Claude.chat, systemPrompt: mainSystemPrompt),
+                .init(key: "main", model: mainWarmupModel, systemPrompt: mainSystemPrompt),
                 .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
             ])
             return true
