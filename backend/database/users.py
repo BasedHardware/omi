@@ -272,52 +272,6 @@ def mark_user_deletion_wipe_running(uid: str):
     )
 
 
-@transactional
-def _claim_running_wipe_txn(transaction, doc_ref, stale_after: timedelta) -> str | None:
-    """Atomically transition a wipe to ``running`` before the worker executes.
-
-    Only transitions from actionable states (``pending``, ``failed``,
-    ``retrying``, or stale ``running`` where the previous worker crashed). A
-    fresh ``running`` record means another worker is actively executing and is
-    refused; ``completed``, ``cancelled``, and ``deleting_auth`` are terminal
-    or pre-actionable and are also refused.
-
-    This transactional guard prevents concurrent execution of the same wipe
-    even when the reconciler re-enqueues it: only one worker successfully
-    transitions to ``running``; all others skip.
-    """
-    snapshot = doc_ref.get(transaction=transaction)
-    if not snapshot.exists:
-        return None
-    data = snapshot.to_dict()
-    status = data.get('wipe_status')
-    now = datetime.now(timezone.utc)
-    if status in ('pending', 'failed', 'retrying'):
-        transaction.update(doc_ref, {'wipe_status': 'running', 'wipe_running_at': now})
-        return snapshot.id
-    if status == 'running':
-        running_at = data.get('wipe_running_at')
-        if running_at and running_at < now - stale_after:
-            # Stale running — previous worker crashed mid-execution. Re-claim.
-            transaction.update(doc_ref, {'wipe_running_at': now})
-            return snapshot.id
-        return None  # Another worker is actively running this wipe.
-    return None  # completed, cancelled, deleting_auth — skip.
-
-
-def claim_running_wipe(uid: str, stale_after: timedelta = timedelta(minutes=10)) -> str | None:
-    """Attempt to transition a wipe to ``running`` before executing it.
-
-    Returns the uid if claimed (caller should proceed with the wipe), or
-    ``None`` if another worker is already running it or the wipe is in a
-    terminal/pre-actionable state. This prevents concurrent execution of the
-    same wipe by multiple workers or overlapping scheduler runs.
-    """
-    doc_ref = db.collection('account_deletions').document(uid)
-    transaction = db.transaction()
-    return _claim_running_wipe_txn(transaction, doc_ref, stale_after)
-
-
 def mark_user_deletion_wipe_intent(uid: str):
     """Persist a non-actionable deletion intent *before* auth deletion.
 
