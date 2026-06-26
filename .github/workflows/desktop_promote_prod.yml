@@ -4,8 +4,8 @@ name: Promote Desktop Backend to Prod
 #   1. choose an existing v*-macos GitHub Release,
 #   2. deploy the Rust desktop backend from that exact tag,
 #   3. verify /health reports that release identity,
-#   4. mark the GitHub Release metadata channel stable,
-#   5. promote the Firestore bridge release for old Rust appcast clients,
+#   4. promote the Firestore bridge release for old Rust appcast clients,
+#   5. mark the GitHub Release metadata channel stable,
 #   6. move desktop-backend-prod-deployed.
 #
 # Do not add schedule, push, or release triggers here. Release-edited events
@@ -290,19 +290,6 @@ jobs:
           echo "Prod backend did not report the promoted release identity." >&2
           exit 1
 
-      - name: Mark GitHub Release stable
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/release-body.md
-          python3 .github/scripts/mark-desktop-release-stable.py \
-            --input /tmp/release-body.md \
-            --output /tmp/release-body-stable.md
-          gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/release-body-stable.md
-
       - name: Promote Firestore release stable
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -348,6 +335,19 @@ jobs:
             echo "Failed to promote Firestore release $FIRESTORE_DOC_ID (HTTP $HTTP_CODE)" >&2
             exit 1
           fi
+
+      - name: Mark GitHub Release stable
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/release-body.md
+          python3 .github/scripts/mark-desktop-release-stable.py \
+            --input /tmp/release-body.md \
+            --output /tmp/release-body-stable.md
+          gh release edit "$RELEASE_TAG" --repo "$REPO" --notes-file /tmp/release-body-stable.md
 
       - name: Clear desktop update cache
         env:

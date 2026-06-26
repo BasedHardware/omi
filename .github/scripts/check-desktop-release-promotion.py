@@ -83,6 +83,14 @@ def main() -> int:
     if not metadata.get("edSignature"):
         fail(f"{tag_name} is missing edSignature metadata")
 
+    # A release that is not live is invisible to the Python appcast
+    # (backend/routers/updates.py filters on isLive == true), so promoting
+    # it would advance the prod tracking tag / backend without appcast
+    # users ever seeing the build.
+    is_live = metadata.get("isLive", "").strip().lower()
+    if is_live not in {"true", "1", "yes"}:
+        fail(f"{tag_name} must have isLive: true in release metadata before prod promotion (got {is_live!r})")
+
     asset_names = {asset.get("name") for asset in release.get("assets", [])}
     missing_assets = sorted(REQUIRED_ASSETS - asset_names)
     if missing_assets:
