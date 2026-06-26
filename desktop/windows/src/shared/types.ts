@@ -421,6 +421,36 @@ export type OmiOverlayApi = {
 /** Overlay window state broadcast to all renderers. `active` = visible & focused. */
 export type OverlayVisibility = { open: boolean; active: boolean }
 
+export type FloatingBarSettings = {
+  enabled: boolean
+  summonOnShortcut: boolean
+  summonShortcut: string
+  alwaysOnTop: boolean
+  voiceAnswersEnabled: boolean
+  realtimeVoiceEnabled: boolean
+  realtimeVoiceProvider: RealtimeVoiceProvider
+  summonCount: number
+  askCount: number
+  voiceCaptureCount: number
+  lastSummonedAt: number | null
+  lastOpenedAt: number | null
+  lastAskedAt: number | null
+  lastVoiceCapturedAt: number | null
+}
+
+export type FloatingBarStatus = {
+  settings: FloatingBarSettings
+  effectiveSummonEnabled: boolean
+  windowCreated: boolean
+  open: boolean
+  active: boolean
+  overlayReady: boolean
+  shortcutRegistered: boolean
+  currentShortcut: string
+  alwaysOnTop: boolean
+  alwaysOnTopLevel: 'screen-saver' | 'normal'
+}
+
 export type OmiBridgeApi = {
   getCaptureSources: () => Promise<CaptureSource[]>
   remapConversationId: (fromId: string, toId: string) => Promise<number>
@@ -477,6 +507,10 @@ export type OmiBridgeApi = {
   /** Read/write the foreground-monitor opt-out flag. */
   usageGetSettings: () => Promise<UsageSettings>
   usageSetSettings: (next: UsageSettings) => Promise<UsageSettings>
+  floatingBarGetSettings: () => Promise<FloatingBarSettings>
+  floatingBarSetSettings: (next: FloatingBarSettings) => Promise<FloatingBarSettings>
+  floatingBarStatus: () => Promise<FloatingBarStatus>
+  onFloatingBarSettings: (cb: (s: FloatingBarSettings) => void) => () => void
   // Bulk-delete memories from the main process (survives renderer navigation /
   // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
   // and the ids; progress streams via onMemoriesDeleteProgress.
