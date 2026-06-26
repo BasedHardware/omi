@@ -1,7 +1,6 @@
 {
   "unreleased": [
-    "Improved OpenClaw multi-turn continuity in desktop agent chats",
-    "Developer named bundles now start quiet — lazy permissions, no auto screen/audio capture — unless explicitly seeded eager"
+    "Improved OpenClaw multi-turn continuity in desktop agent chats"
   ],
   "releases": [
     {
