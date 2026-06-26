@@ -97,7 +97,7 @@ flowchart TD
 |-----|------------|----------------------|-------------------|-------------|
 | **Legacy flat memories** | Original production store + extractor | `users/{uid}/memories`, `MemoryDB`, `new_memories_extractor`, `/v3/memories` | **Long-term** in unified Memories (`layer=long_term`) | **Migrate** → **Retire** store |
 | **Legacy categories** | Old taxonomy on legacy rows | `core`, `hobbies`, `lifestyle`, `work`, `skills`, `learnings`, … | **Keep** as `category` metadata; UI filters use primary four (`interesting`, `system`, `manual`, `workflow`) | **Keep** (not layers) |
-| **Shadow short_term** | Interim shadow write path | `users/{uid}/short_term`, `OMI_MEMORY_SHORT_TERM_SHADOW_ENABLED` | **Short-term** in unified Memories (`layer=short_term`) | **Fold** → **Retire** collection |
+| **Shadow short_term** *(retired)* | Was interim shadow write path (`OMI_MEMORY_SHORT_TERM_SHADOW_ENABLED`) | `users/{uid}/short_term` collection may still hold historical rows | **Short-term** in unified Memories (`layer=short_term`) | **Retired** write path; collection cleanup is separate |
 | **Canonical product memory** | Tiered store + ledger | `memory_items`, `MemoryTier`, `memory_commits`, neutral `memory_*` modules | **Canonical Memories store** | **Rename** complete; store is canonical |
 | **Rollout modes** | Gradual rollout control | `off` / `shadow` / `write` / `read`, `MEMORY_MODE` (compat), `MEMORY_ENABLED_USERS`, `memory_control/state` | **`MemorySystem`** + `resolve_memory_system(uid)` | **Collapse** |
 | **`tier` product field** | Persisted item field | `short_term` / `long_term` / `archive` on `memory_items` | **`layer`** (same semantics) | **Rename** API + clients |
