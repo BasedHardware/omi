@@ -1,17 +1,32 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Loader2, Check } from 'lucide-react'
+import { Loader2, Check, Users } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { liveConversation, requestFinalize, type LiveStatus } from '../lib/liveConversation'
 import { startLiveMicSession } from '../lib/liveMicSession'
 import { getPreferences } from '../lib/preferences'
 import type { TranscriptLine } from '../../../shared/types'
+import {
+  displaySpeakerName,
+  loadSpeakerNames,
+  saveSpeakerNames,
+  speakerKey,
+  type SpeakerNameMap
+} from '../lib/speakerNames'
+
+const LIVE_SPEAKER_SCOPE = 'live'
 
 function statusLabel(status: LiveStatus): string {
   if (status === 'connecting') return 'Connecting…'
   if (status === 'live') return 'Listening'
   if (status === 'error') return 'Microphone unavailable'
   return 'Idle'
+}
+
+function uniqueSpeakers(segments: TranscriptLine[]): string[] {
+  const labels = new Set<string>()
+  for (const segment of segments) labels.add(speakerKey(segment.speaker))
+  return [...labels]
 }
 
 // Live in-progress transcript of the mic capture (the "New" view). It does not
@@ -29,6 +44,19 @@ export function LiveConversation(): React.JSX.Element {
   const [errorMsg, setErrorMsg] = useState<string | null>(liveConversation.getError())
   const [saved, setSaved] = useState<boolean>(liveConversation.isSaved())
   const [topic, setTopic] = useState(liveConversation.getSavedTopic())
+  const [speakerNames, setSpeakerNames] = useState<SpeakerNameMap>(() =>
+    loadSpeakerNames(LIVE_SPEAKER_SCOPE)
+  )
+
+  const setSpeakerName = (rawLabel: string, name: string): void => {
+    const key = speakerKey(rawLabel)
+    const next = { ...speakerNames }
+    const clean = name.trim()
+    if (clean) next[key] = clean
+    else delete next[key]
+    setSpeakerNames(next)
+    saveSpeakerNames(LIVE_SPEAKER_SCOPE, next)
+  }
 
   useEffect(() => {
     return liveConversation.subscribe(() => {
@@ -88,12 +116,41 @@ export function LiveConversation(): React.JSX.Element {
             <div className="mb-4 flex items-center justify-between">
               <h2 className="section-label">Transcript</h2>
             </div>
+            {segments.length > 0 && (
+              <div className="mb-5 rounded-xl border border-white/[0.08] bg-black/15 p-3">
+                <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-white/45">
+                  <Users className="h-3.5 w-3.5" />
+                  Speakers
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {uniqueSpeakers(segments).map((speaker) => (
+                    <div key={speaker} className="flex items-center gap-2">
+                      <span className="shrink-0 rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/60">
+                        {speaker.replace(/^SPEAKER_/, 'S')}
+                      </span>
+                      <input
+                        value={speakerNames[speaker] ?? ''}
+                        onChange={(event) => setSpeakerName(speaker, event.target.value)}
+                        placeholder="Person name"
+                        className="min-w-0 flex-1 rounded-lg border border-white/[0.08] bg-black/20 px-2.5 py-1.5 text-xs text-white placeholder:text-white/35 focus:border-white/25 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => setSpeakerName(speaker, 'You')}
+                        className="text-xs text-white/45 hover:text-white/80"
+                      >
+                        Me
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {segments.length > 0 ? (
               <ul className="space-y-4">
                 {segments.map((s, i) => (
                   <li key={s.id ?? i} className="flex gap-3 animate-fade-in">
                     <span className="shrink-0 self-start rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/75">
-                      {s.speaker || 'speaker'}
+                      {displaySpeakerName(s.speaker, speakerNames)}
                     </span>
                     <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-white/85">
                       {s.text}
