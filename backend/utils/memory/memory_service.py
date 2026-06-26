@@ -4,12 +4,14 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from fastapi import HTTPException
 from pydantic import ValidationError
 
 import database.memories as memories_db
 import database.vector_db as vector_db
 from models.memories import MemoryDB
 from utils.memory.canonical_memory_adapter import (
+    _read_canonical_memory_item,
     delete_all_canonical_memories,
     delete_canonical_memory,
     memory_item_to_memorydb,
@@ -25,7 +27,7 @@ from utils.memory.canonical_memory_adapter import (
     write_canonical_external_memory,
 )
 from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_system_pin import resolve_pinned_memory_system
+from utils.memory.memory_system_pin import pin_memory_system, resolve_pinned_memory_system
 from utils.retrieval.hybrid import rrf_rerank
 
 logger = logging.getLogger(__name__)
@@ -33,6 +35,40 @@ logger = logging.getLogger(__name__)
 
 class DeviceScopeNotSupportedError(ValueError):
     """device_scope filtering is only supported on the canonical memory backend."""
+
+
+def _truncate_locked_preview_text(content: str) -> str:
+    if len(content) > 70:
+        return content[:70] + "..."
+    return content
+
+
+def truncate_locked_memory_preview(memory: MemoryDB) -> MemoryDB:
+    """Truncate locked-memory content to the legacy 70-char preview."""
+    if not memory.content:
+        return memory
+    truncated = _truncate_locked_preview_text(memory.content)
+    if truncated == memory.content:
+        return memory
+    return memory.model_copy(update={"content": truncated})
+
+
+def fetch_memory_dict(uid: str, memory_id: str, *, db_client) -> dict:
+    """Fetch one memory by id with canonical/legacy routing and locked-memory paywall."""
+    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        return memory_item_to_memorydb(item).model_dump()
+
+    memory = memories_db.get_memory(uid, memory_id)
+    if memory is None:
+        raise HTTPException(status_code=404, detail="Memory not found")
+
+    if memory.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+
+    return memory
 
 
 def _reject_legacy_device_scope(device_scope: str) -> None:
@@ -52,7 +88,7 @@ def _validate_memory_list(memories: List[dict]) -> List[MemoryDB]:
         if memory.get("is_locked", False):
             content = memory.get("content", "")
             memory = dict(memory)
-            memory["content"] = (content[:70] + "...") if len(content) > 70 else content
+            memory["content"] = _truncate_locked_preview_text(content)
         try:
             valid_memories.append(MemoryDB.model_validate(memory))
         except ValidationError as exc:
