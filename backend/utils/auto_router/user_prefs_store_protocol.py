@@ -21,6 +21,27 @@ from typing import Protocol, runtime_checkable
 from utils.auto_router.user_prefs import UserPrefs
 
 
+class PrefsStoreUnavailableError(Exception):
+    """Raised by a UserPrefsStore when the backing persistence layer is unavailable.
+
+    Distinct from generic Exception so callers (endpoints) can map this to a
+    structured 503 (code: prefs_store_unavailable) instead of bubbling a 500.
+    Implementations should raise this — not bare Exception — for any failure
+    where the persistence layer is unreachable, timing out, or otherwise
+    cannot complete the operation.
+
+    Use cases:
+    - Firestore: transient connection errors, deadline exceeded, internal error
+    - Redis: connection lost, timeout, cluster failover in progress
+    - Future backends: any equivalent "backend unavailable" condition
+
+    Does NOT cover:
+    - Input validation errors (caller's bug — should raise ValueError/TypeError)
+    - Permission errors (caller's bug — should raise PermissionError)
+    - Programmer errors (should bubble as 500)
+    """
+
+
 @dataclass(frozen=True)
 class StoredPrefs:
     """A user's stored prefs + the timestamp of the last write.
@@ -59,7 +80,13 @@ class UserPrefsStoreProtocol(Protocol):
         ...
 
     def set(self, uid: str, prefs: UserPrefs) -> StoredPrefs:
-        """Store the user's prefs and return the new entry with timestamp."""
+        """Store the user's prefs and return the new entry with timestamp.
+
+        MUST raise `PrefsStoreUnavailableError` (not generic Exception)
+        when the backing persistence layer is unreachable. Endpoints map
+        this to a structured 503 (code: prefs_store_unavailable); a bare
+        Exception would bubble as a generic 500.
+        """
         ...
 
     def clear(self, uid: str) -> None:

@@ -37,6 +37,7 @@ from database.firestore_cache import (
     invalidate,
 )
 from database._client import db as default_db_client
+from utils.auto_router.user_prefs_store_protocol import PrefsStoreUnavailableError
 
 from utils.auto_router.user_prefs import UserPrefs
 from utils.auto_router.user_prefs_store_protocol import StoredPrefs
@@ -162,10 +163,13 @@ class FirestoreUserPrefsStore:
         except Exception as e:  # noqa: BLE001
             # Catch the narrow NotFound race: doc was deleted between get()
             # and update(). Fall back to set() to create the doc from scratch.
-            # For all OTHER errors (Firestore down, auth, etc.), propagate
-            # so the router returns 503 (don't swallow transport errors).
+            # For all OTHER errors (Firestore down, auth, etc.), wrap as
+            # PrefsStoreUnavailableError so the router maps them to a
+            # structured 503 (not a bare 500).
             if "NotFound" not in type(e).__name__:
-                raise
+                raise PrefsStoreUnavailableError(
+                    f"firestore write failed for uid={uid}: {type(e).__name__}: {e}"
+                ) from e
             user_ref.set({"auto_router_prefs": payload}, merge=True)
             logger.info(
                 "FirestoreUserPrefsStore: recovered from update() NotFound race for uid=%s",

@@ -156,13 +156,33 @@ class TestFirestoreStoreWrite:
         assert data.get("language") == "en"
         assert "auto_router_prefs" in data
 
-    def test_set_raises_on_firestore_error(self):
+    def test_set_wraps_firestore_error_as_prefs_store_unavailable(self):
+        """set() must wrap raw Firestore errors as PrefsStoreUnavailableError
+        so the router can map them to a structured 503 (not a bare 500).
+        """
+        from utils.auto_router.user_prefs_store_protocol import (
+            PrefsStoreUnavailableError,
+        )
+
         mock = MockFirestore()
         store = _make_store(mock)
         # Simulate Firestore being down on set
         mock.simulate_set_error(ConnectionError("Firestore unreachable"))
         prefs = UserPrefs(overrides={"ptt_response": TaskWeights(0.2, 0.7, 0.1)})
-        with pytest.raises(ConnectionError, match="Firestore unreachable"):
+        with pytest.raises(PrefsStoreUnavailableError, match="firestore write failed"):
+            store.set("uid-1", prefs)
+
+    def test_set_wraps_runtime_error_as_prefs_store_unavailable(self):
+        """Non-NotFound runtime errors should also be wrapped."""
+        from utils.auto_router.user_prefs_store_protocol import (
+            PrefsStoreUnavailableError,
+        )
+
+        mock = MockFirestore()
+        store = _make_store(mock)
+        mock.simulate_set_error(RuntimeError("network timeout"))
+        prefs = UserPrefs(overrides={"ptt_response": TaskWeights(0.2, 0.7, 0.1)})
+        with pytest.raises(PrefsStoreUnavailableError, match="RuntimeError"):
             store.set("uid-1", prefs)
 
     def test_set_only_field_path_is_used(self):
@@ -205,11 +225,15 @@ class TestFirestoreStoreCacheInvalidation:
 
     def test_write_failure_does_not_invalidate(self):
         """If write raises, cache is NOT touched (invalidation skipped)."""
+        from utils.auto_router.user_prefs_store_protocol import (
+            PrefsStoreUnavailableError,
+        )
+
         mock = MockFirestore()
         store = _make_store(mock)
         mock.simulate_set_error(RuntimeError("network timeout"))
         prefs = UserPrefs(overrides={"a": TaskWeights(0.4, 0.4, 0.2)})
-        with pytest.raises(RuntimeError, match="network timeout"):
+        with pytest.raises(PrefsStoreUnavailableError, match="network timeout"):
             store.set("uid-1", prefs)
         # Note: we can't directly verify the cache wasn't invalidated
         # (because the cache is in Redis and the test doesn't connect to it),
@@ -443,7 +467,9 @@ class TestFirestoreStoreToctouRecovery:
     def test_set_propagates_non_notfound_errors(self):
         """Errors other than NotFound (e.g., ConnectionError) MUST propagate.
         The fix should only catch the narrow NotFound race — not swallow
-        transport errors."""
+        transport errors. Non-NotFound errors are wrapped as
+        PrefsStoreUnavailableError so the router maps them to 503.
+        """
 
         class _ErrorDocument(MockDocumentReference):
             def update(self, data):
@@ -469,7 +495,13 @@ class TestFirestoreStoreToctouRecovery:
         # Pre-populate so get() returns exists=True (forces the update() path).
         mock.docs.setdefault("users", {})["uid-1"] = {"auto_router_prefs": {"overrides": {}}}
 
+        # Import for the assertion (above test docstring mentions it).
+        from utils.auto_router.user_prefs_store_protocol import (
+            PrefsStoreUnavailableError,
+        )
+
         store = _make_store(mock)
         prefs = UserPrefs(overrides={"a": TaskWeights(0.4, 0.4, 0.2)})
-        with pytest.raises(ConnectionError, match="Firestore unreachable"):
+        # Wrapped as PrefsStoreUnavailableError so the router can map to 503.
+        with pytest.raises(PrefsStoreUnavailableError, match="Firestore unreachable"):
             store.set("uid-1", prefs)

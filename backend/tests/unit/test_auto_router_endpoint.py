@@ -1262,3 +1262,193 @@ class TestMetricsAdminGating:
         body = resp.json()
         assert body["pick_history"] == []
         assert body.get("pick_history_admin_required") is True
+
+
+# ---------------------------------------------------------------------------
+# AC: sync DB calls must NOT block the event loop (maintainer review, v5)
+# ---------------------------------------------------------------------------
+
+
+class TestPrefsStoreCallsAreOffloadedToExecutor:
+    """Regression guard: /pick, GET /prefs, PUT /prefs must call store methods
+    via `run_blocking(db_executor, ...)` so sync Firestore/Redis I/O does not
+    block the FastAPI event loop.
+
+    Strategy: monkeypatch the prefs store with one that records the thread
+    name for each call. Worker threads in db_executor are named 'db_<N>'
+    (Python's ThreadPoolExecutor format is `<prefix>_<N>`). A call from
+    the event-loop thread is a regression.
+    """
+
+    def _instrumented_store(self, real_store):
+        """Wrap a real store so each method records the calling thread name."""
+        import threading
+
+        recorded = []
+
+        class _RecordingStore:
+            def get(self, uid):
+                recorded.append(("get", threading.current_thread().name))
+                return real_store.get(uid)
+
+            def set(self, uid, prefs):
+                recorded.append(("set", threading.current_thread().name))
+                return real_store.set(uid, prefs)
+
+            def clear(self, uid):
+                recorded.append(("clear", threading.current_thread().name))
+                return real_store.clear(uid)
+
+            def reset_for_testing(self):
+                return real_store.reset_for_testing()
+
+        return _RecordingStore(), recorded
+
+    def test_pick_endpoint_calls_store_get_off_loop(self, client, monkeypatch):
+        from utils.auto_router.prefs_store_factory import (
+            get_user_prefs_store,
+            reset_user_prefs_store_for_testing,
+        )
+
+        reset_user_prefs_store_for_testing()
+        real = get_user_prefs_store()
+        wrapped, recorded = self._instrumented_store(real)
+
+        # Monkeypatch the factory's getter to return our wrapper.
+        from utils.auto_router import prefs_store_factory as factory_mod
+
+        monkeypatch.setattr(factory_mod, "_user_prefs_store_singleton", wrapped)
+
+        client.get("/v1/auto-router/pick?task=ptt_response")
+
+        # At least one get call was recorded.
+        assert any(op == "get" for op, _ in recorded), recorded
+        # None of the recorded calls happened on the event-loop thread.
+        # db_executor worker threads are named 'db_<N>' (Python's default
+        # ThreadPoolExecutor format is `<prefix>_<N>`).
+        for op, thread_name in recorded:
+            assert thread_name.startswith("db_"), (
+                f"store.{op} called on thread {thread_name!r} "
+                f"(expected db_executor worker, e.g. 'db_0'). "
+                f"This blocks the FastAPI event loop in production. "
+                f"Wrap with `await run_blocking(db_executor, store.{op}, ...)`."
+            )
+
+    def test_get_prefs_endpoint_calls_store_get_off_loop(self, client, monkeypatch):
+        from utils.auto_router.prefs_store_factory import (
+            get_user_prefs_store,
+            reset_user_prefs_store_for_testing,
+        )
+
+        reset_user_prefs_store_for_testing()
+        real = get_user_prefs_store()
+        wrapped, recorded = self._instrumented_store(real)
+
+        from utils.auto_router import prefs_store_factory as factory_mod
+
+        monkeypatch.setattr(factory_mod, "_user_prefs_store_singleton", wrapped)
+
+        client.get("/v1/auto-router/prefs")
+
+        assert any(op == "get" for op, _ in recorded), recorded
+        for op, thread_name in recorded:
+            assert thread_name.startswith("db_"), (
+                f"store.{op} called on thread {thread_name!r} "
+                f"(expected db_executor worker). "
+                f"This blocks the FastAPI event loop in production."
+            )
+
+    def test_set_prefs_endpoint_calls_store_set_off_loop(self, client, monkeypatch):
+        from utils.auto_router.prefs_store_factory import (
+            get_user_prefs_store,
+            reset_user_prefs_store_for_testing,
+        )
+
+        reset_user_prefs_store_for_testing()
+        real = get_user_prefs_store()
+        wrapped, recorded = self._instrumented_store(real)
+
+        from utils.auto_router import prefs_store_factory as factory_mod
+
+        monkeypatch.setattr(factory_mod, "_user_prefs_store_singleton", wrapped)
+
+        client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}},
+        )
+
+        assert any(op == "set" for op, _ in recorded), recorded
+        for op, thread_name in recorded:
+            assert thread_name.startswith("db_"), (
+                f"store.{op} called on thread {thread_name!r} "
+                f"(expected db_executor worker). "
+                f"This blocks the FastAPI event loop in production."
+            )
+
+
+class TestSetPrefsReturns503OnStoreUnavailable:
+    """When the store raises PrefsStoreUnavailableError, the endpoint
+    must return 503 with code=prefs_store_unavailable — not bubble a 500.
+
+    This makes the desktop `PrefsError.unavailable` path actually reachable.
+    """
+
+    def test_set_prefs_returns_503_on_store_unavailable(self, client, monkeypatch):
+        from utils.auto_router import prefs_store_factory as factory_mod
+        from utils.auto_router.user_prefs_store_protocol import (
+            PrefsStoreUnavailableError,
+            StoredPrefs,
+        )
+        from utils.auto_router.user_prefs import UserPrefs
+
+        class _BrokenStore:
+            def get(self, uid):
+                return StoredPrefs(prefs=UserPrefs(overrides={}), updated_at=0.0)
+
+            def set(self, uid, prefs):
+                raise PrefsStoreUnavailableError("firestore deadline exceeded")
+
+            def clear(self, uid):
+                pass
+
+            def reset_for_testing(self):
+                pass
+
+        monkeypatch.setattr(factory_mod, "_user_prefs_store_singleton", _BrokenStore())
+
+        resp = client.put(
+            "/v1/auto-router/prefs",
+            json={"prefs": {"ptt_response": {"quality": 0.2, "latency": 0.7, "cost": 0.1}}},
+        )
+
+        assert resp.status_code == 503, resp.text
+        body = resp.json()
+        assert body["detail"]["code"] == "prefs_store_unavailable"
+        assert "firestore deadline exceeded" in body["detail"]["message"]
+
+    def test_get_prefs_returns_empty_when_store_returns_empty(self, client, monkeypatch):
+        """GET /prefs contract check: a store that returns empty prefs
+        (per protocol: get() never raises) yields 200 with empty prefs.
+        """
+        from utils.auto_router import prefs_store_factory as factory_mod
+        from utils.auto_router.user_prefs_store_protocol import StoredPrefs
+        from utils.auto_router.user_prefs import UserPrefs
+
+        class _EmptyStore:
+            def get(self, uid):
+                return StoredPrefs(prefs=UserPrefs(overrides={}), updated_at=0.0)
+
+            def set(self, uid, prefs):
+                return StoredPrefs(prefs=prefs, updated_at=0.0)
+
+            def clear(self, uid):
+                pass
+
+            def reset_for_testing(self):
+                pass
+
+        monkeypatch.setattr(factory_mod, "_user_prefs_store_singleton", _EmptyStore())
+
+        resp = client.get("/v1/auto-router/prefs")
+        assert resp.status_code == 200
+        assert resp.json()["prefs"] == {}

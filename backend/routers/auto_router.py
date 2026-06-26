@@ -53,7 +53,11 @@ from utils.auto_router.prefs_store_factory import (
     reset_user_prefs_store_for_testing as _factory_reset_user_prefs_store,
 )
 from utils.auto_router.user_prefs import TaskWeights
-from utils.executors import run_blocking
+from utils.auto_router.user_prefs_store_protocol import (
+    PrefsStoreUnavailableError,
+    StoredPrefs,
+)
+from utils.executors import run_blocking, db_executor
 
 # Module-level metrics collector singleton. Reset between tests via
 # reset_metrics_collector_for_testing().
@@ -229,7 +233,10 @@ async def auto_router_pick(
         weights_source = "query_param"
     else:
         store = _factory_get_user_prefs_store()
-        stored = store.get(uid)
+        # FirestoreUserPrefsStore.get() does sync I/O. Per repo CLAUDE.md:
+        # never call sync DB/storage/file functions directly inside async def.
+        # Offload to db_executor so the event loop stays responsive.
+        stored = await run_blocking(db_executor, store.get, uid)
         defaults = {
             task_spec.name: TaskWeights(
                 quality=task_spec.quality_weight,
@@ -416,7 +423,9 @@ async def auto_router_get_prefs(uid: str = Depends(auth_dependency)):
     Requires authentication (matches `/pick`).
     """
     store = _factory_get_user_prefs_store()
-    entry = store.get(uid)
+    # FirestoreUserPrefsStore.get() does sync I/O — offload to db_executor.
+    # See auto_router_pick() for the rationale.
+    entry = await run_blocking(db_executor, store.get, uid)
     updated_at_iso = (
         datetime.fromtimestamp(entry.updated_at, tz=timezone.utc).isoformat().replace("+00:00", "Z")
         if entry.updated_at > 0.0
@@ -483,9 +492,21 @@ async def auto_router_set_prefs(
             },
         )
 
-    # Persist.
+    # Persist. store.set() does sync I/O (Firestore write) — offload to
+    # db_executor so the event loop stays responsive. Map persistence
+    # failures to a structured 503 (not 500) so the desktop
+    # PrefsError.unavailable path is reachable.
     store = _factory_get_user_prefs_store()
-    entry = store.set(uid, prefs)
+    try:
+        entry = await run_blocking(db_executor, store.set, uid, prefs)
+    except PrefsStoreUnavailableError as e:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "prefs_store_unavailable",
+                "message": f"prefs store unavailable: {e}",
+            },
+        )
     return {
         "uid": uid,
         "prefs": entry.prefs.to_dict(),
