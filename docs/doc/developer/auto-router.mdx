@@ -493,7 +493,7 @@ accidentally exposes per-user pick history.
 | `AUTO_ROUTER_PREFS_BACKEND` | `firestore` | Storage backend for user prefs. Set to `memory` for dev/testing (resets on restart). |
 | `ADMIN_KEY` | unset | Required to access admin endpoints (`/metrics`, `/refresh-benchmarks`). Without it, admin endpoints return an empty body + a flag indicating admin is not configured. See "ADMIN_KEY — when to set it" above. |
 | `BENCHMARKS_CACHE_PATH` | `<repo>/backend/utils/auto_router/benchmarks.json` | Where to cache successful AA responses. Gitignored. |
-| `ASSEMBLYAI_API_KEY` | unset | Required for live AA benchmark fetching. Without it, falls back to `benchmarks.example.json` (curated mock data). |
+| `AA_API_KEY` | unset | Required for live AA (Artificial Analysis) benchmark fetching. Without it, falls back to `benchmarks.example.json` (curated mock data). Note: this is NOT `ASSEMBLYAI_API_KEY` — that's a different service (AssemblyAI's STT API). |
 
 ### Out of scope (v6+)
 

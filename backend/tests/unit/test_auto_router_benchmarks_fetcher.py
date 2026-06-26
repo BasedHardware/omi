@@ -564,3 +564,62 @@ class TestCacheFileModifiedIsoAccessor:
         fetcher._cache_path = _RacyPath(str(cache_path))
         result = fetcher.cache_file_modified_iso()
         assert result is None, "OSError should be caught and return None"
+
+
+# ---------------------------------------------------------------------------
+# Doc/code env var consistency (maintainer review)
+# ---------------------------------------------------------------------------
+
+
+class TestDocCodeEnvVarConsistency:
+    """Lock doc/code agreement on the AA benchmark env var name.
+
+    Maintainer review (PR #8359) caught: docs said `ASSEMBLYAI_API_KEY` but
+    the code reads `AA_API_KEY`. ASSEMBLYAI_API_KEY is AssemblyAI's STT
+    API key — a different service. This test fails if the docs and code
+    disagree, so the bug can't regress silently.
+    """
+
+    def test_docs_reference_correct_aa_env_var(self):
+        from pathlib import Path
+
+        from utils.auto_router.benchmarks_fetcher import AA_ENV_VAR
+
+        doc_path = Path(__file__).parent.parent.parent.parent / "docs" / "doc" / "developer" / "auto-router.mdx"
+        doc = doc_path.read_text()
+        # The correct env var name (matches the code's AA_ENV_VAR).
+        assert AA_ENV_VAR in doc, (
+            f"docs/doc/developer/auto-router.mdx does not mention "
+            f"the canonical env var name '{AA_ENV_VAR}' from "
+            f"benchmarks_fetcher.AA_ENV_VAR. Operators setting "
+            f"the env var will look for it in the docs."
+        )
+
+    def test_docs_do_not_reference_wrong_env_var(self):
+        """ASSEMBLYAI_API_KEY is a different service (AssemblyAI STT).
+        Mentioning it in the AA benchmark docs will mislead operators.
+        """
+        from pathlib import Path
+
+        doc_path = Path(__file__).parent.parent.parent.parent / "docs" / "doc" / "developer" / "auto-router.mdx"
+        doc = doc_path.read_text()
+        # The wrong env var name (AssemblyAI STT, not AA benchmarks).
+        wrong_name = "ASSEMBLYAI_API_KEY"
+        # The docs may mention it in a 'not to be confused with' note
+        # (which is fine and encouraged), but should not present it as
+        # the canonical AA env var.
+        for line in doc.splitlines():
+            stripped = line.strip()
+            if wrong_name in stripped and not stripped.startswith("|") is False:
+                # In a table row, check it's not the env var being documented.
+                if stripped.startswith("|") and f"`{wrong_name}`" in stripped:
+                    # Allow if it's in a 'note' / 'not to be confused' clause
+                    # (i.e., not in the env-var name column).
+                    parts = [p.strip() for p in stripped.strip("|").split("|")]
+                    if parts and parts[0] == f"`{wrong_name}`":
+                        pytest.fail(
+                            f"docs/doc/developer/auto-router.mdx presents "
+                            f"'{wrong_name}' as an env var name: {stripped!r}. "
+                            f"This is the AssemblyAI STT key, not the AA "
+                            f"benchmark key. Use 'AA_API_KEY' instead."
+                        )
