@@ -377,9 +377,6 @@ def apply_long_term_patch_transaction(
         "corroboration_count",
         "last_corroborated_at",
         "superseded_by",
-        "subject_entity_id",
-        "predicate",
-        "arguments",
         "kg_extracted",
         "confidence",
     ):
