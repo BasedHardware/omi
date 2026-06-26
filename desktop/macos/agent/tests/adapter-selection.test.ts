@@ -49,9 +49,9 @@ describe("adapter selection and activation", () => {
       activationEnv: "OMI_OPENCLAW_ADAPTER_COMMAND",
       capabilities: { supportsTools: false, supportsModelSwitching: false },
     });
-    expect(adapterActivationError("hermes")).toContain("Hermes was not found");
+    expect(adapterActivationError("hermes")).toContain("Hermes command is not configured");
     expect(adapterActivationError("hermes")).toContain("Advanced override: OMI_HERMES_ADAPTER_COMMAND");
-    expect(adapterActivationError("openclaw")).toContain("OpenClaw was not found");
+    expect(adapterActivationError("openclaw")).toContain("OpenClaw command is not configured");
     expect(adapterActivationError("openclaw")).toContain("Advanced override: OMI_OPENCLAW_ADAPTER_COMMAND");
   });
 
