@@ -114,7 +114,7 @@ def test_cutover_evidence_execute_does_not_change_state_or_run_network_calls():
 
 def test_cutover_evidence_docs_and_ticket_reference_runner_and_non_claims():
     root = Path(__file__).resolve().parents[2].parent
-    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    oracle = (root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md").read_text()
     tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
     for text in (oracle, tickets):
