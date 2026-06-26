@@ -10,13 +10,12 @@ MEMORY_SYSTEM_FIELD = "memory_system"
 
 # Code-as-config canonical cohort whitelist (reviewable, diff-able, test-guarded).
 # Add Firebase UIDs here to enroll users in the canonical memory path.
-# Empty by default — everyone resolves to LEGACY until explicitly listed.
-#
-# Example (uncomment and replace with a real uid before deploy):
-# CANONICAL_MEMORY_USERS: frozenset[str] = frozenset({
-#     "your-firebase-uid-here",
-# })
-CANONICAL_MEMORY_USERS: frozenset[str] = frozenset()
+# Everyone not listed resolves to LEGACY.
+CANONICAL_MEMORY_USERS: frozenset[str] = frozenset(
+    {
+        "vi7SA9ckQCe4ccobWNxlbdcNdC23",  # david.d.zhang@gmail.com (prod Firebase: based-hardware)
+    }
+)
 
 
 class MemorySystem(str, Enum):
