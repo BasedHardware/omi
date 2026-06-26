@@ -66,7 +66,15 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertEqual(surfaceKind?["enum"] as? [String], ["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"])
 
         let inspectTool = tools.first { ($0["name"] as? String) == HubTool.inspectAgentArtifacts.rawValue }
-        let inspectParameters = inspectTool?["parameters"] as? [String: Any]
+        let inspectParameters = (inspectTool?["parameters"] as? [String: Any])
+        XCTAssertNotNil(inspectParameters, "inspect_agent_artifacts must declare a parameters object")
+        let inspectProperties = inspectParameters?["properties"] as? [String: Any]
+        XCTAssertNotNil(inspectProperties?["agentRef"], "inspect_agent_artifacts must expose an agentRef property")
+        XCTAssertNotNil(inspectProperties?["artifactRef"], "inspect_agent_artifacts must expose an artifactRef property")
+        XCTAssertNotNil(inspectProperties?["artifactId"], "inspect_agent_artifacts must expose an artifactId property")
+        XCTAssertNotNil(inspectProperties?["sessionId"], "inspect_agent_artifacts must expose a sessionId property")
+        XCTAssertNotNil(inspectProperties?["runId"], "inspect_agent_artifacts must expose a runId property")
+        XCTAssertNotNil(inspectProperties?["attemptId"], "inspect_agent_artifacts must expose an attemptId property")
         // Schemas must stay flat (no root-level anyOf) for provider compatibility.
         XCTAssertNil(inspectParameters?["anyOf"])
     }
