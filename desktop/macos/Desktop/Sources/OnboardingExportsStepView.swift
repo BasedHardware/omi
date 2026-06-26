@@ -184,7 +184,7 @@ private struct OnboardingInlineExportPanel: View {
           "Omi copies one setup prompt for your agent. It includes the connection keys and a short guide the agent can save for later."
         )
 
-      case .claudeCode, .codex:
+      case .claudeCode, .codex, .openclaw, .hermes:
         inlineInfoCard(
           "Connect \(destination.title) over MCP from Apps after onboarding.")
       }
@@ -242,7 +242,7 @@ private struct OnboardingInlineExportPanel: View {
     switch destination {
     case .notion: return "Preparing…"
     case .obsidian: return "Exporting…"
-    case .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex: return "Preparing…"
+    case .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes: return "Preparing…"
     }
   }
 
@@ -254,7 +254,7 @@ private struct OnboardingInlineExportPanel: View {
       return model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export"
     case .agents:
       return "Copy prompt"
-    case .chatgpt, .claude, .gemini, .claudeCode, .codex:
+    case .chatgpt, .claude, .gemini, .claudeCode, .codex, .openclaw, .hermes:
       return "Copy & open"
     }
   }

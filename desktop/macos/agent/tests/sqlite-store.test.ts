@@ -19,7 +19,7 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(1);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(2);
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
@@ -54,7 +54,7 @@ describe("SqliteAgentStore", () => {
     store.close();
   });
 
-  it("persists sessions, runs, attempts, bindings, and events across reopen", () => {
+  it("persists sessions, runs, attempts, bindings, artifacts, and events across reopen", () => {
     const databasePath = newDatabasePath();
     let store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => 100 });
     const session = store.insertSession({
@@ -94,6 +94,19 @@ describe("SqliteAgentStore", () => {
       type: "run.completed",
       payloadJson: "{\"ok\":true}",
     });
+    const artifact = store.insertArtifact({
+      sessionId: session.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      kind: "json",
+      role: "result",
+      uri: "adapter://fake/native-artifact",
+      displayName: "result.json",
+      mimeType: "application/json",
+      contentHash: "sha256:test",
+      sizeBytes: 42,
+      metadataJson: "{\"adapterArtifactId\":\"native-artifact\"}",
+    });
     store.close();
 
     store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false });
@@ -101,6 +114,14 @@ describe("SqliteAgentStore", () => {
     expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [run.runId]).status).toBe("succeeded");
     expect(store.getRow("SELECT status FROM run_attempts WHERE attempt_id = ?", [attempt.attemptId]).status).toBe("succeeded");
     expect(store.getRow("SELECT adapter_native_session_id FROM adapter_bindings WHERE binding_id = ?", [binding.bindingId]).adapter_native_session_id).toBe("native-session");
+    expect(store.getRow("SELECT uri, metadata_json FROM artifacts WHERE artifact_id = ?", [artifact.artifactId])).toMatchObject({
+      uri: "adapter://fake/native-artifact",
+      metadata_json: "{\"adapterArtifactId\":\"native-artifact\"}",
+    });
+    expect(store.getRow("SELECT lifecycle_state, lifecycle_updated_at_ms FROM artifacts WHERE artifact_id = ?", [artifact.artifactId])).toMatchObject({
+      lifecycle_state: "retained",
+      lifecycle_updated_at_ms: null,
+    });
     expect(store.getRow("SELECT type FROM events WHERE event_id = ?", [event.eventId]).type).toBe("run.completed");
     store.close();
   });
@@ -186,6 +207,43 @@ describe("SqliteAgentStore", () => {
     store.close();
   });
 
+  it("rolls back artifact and lifecycle event writes atomically", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "running",
+      mode: "act",
+    });
+
+    expect(() => store.withTransaction(() => {
+      const artifact = store.insertArtifact({
+        sessionId: session.sessionId,
+        runId: run.runId,
+        kind: "log",
+        role: "log",
+        uri: "omi-artifact://rollback",
+      });
+      store.appendEvent({
+        sessionId: session.sessionId,
+        runId: run.runId,
+        type: "artifact.created",
+        payloadJson: JSON.stringify({ artifactId: artifact.artifactId }),
+      });
+      throw new Error("force rollback");
+    })).toThrow("force rollback");
+
+    expect(store.getRow("SELECT COUNT(*) AS count FROM artifacts").count).toBe(0);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM events WHERE type = ?", ["artifact.created"]).count).toBe(0);
+    store.close();
+  });
+
   it("reconciles active attempts and non-resumable bindings on startup", () => {
     const databasePath = newDatabasePath();
     let now = 100;
@@ -265,9 +323,9 @@ describe("SqliteAgentStore", () => {
       adapter_instance_id: "",
     });
     expect(store.allRows("SELECT type FROM events ORDER BY event_seq").map((row) => row.type)).toEqual([
-      "runtime.attempt_orphaned",
-      "runtime.run_orphaned",
-      "runtime.binding_stale",
+      "attempt.orphaned",
+      "run.orphaned",
+      "binding.stale",
     ]);
     store.close();
   });
@@ -288,6 +346,26 @@ describe("SqliteAgentStore", () => {
     expect(() => probeNodeSqliteRuntime({ databaseFactory: BrokenDatabase })).toThrow(
       /Bundled Node runtime does not support required node:sqlite AgentStore features: sqlite unavailable/,
     );
+  });
+
+  it("includes artifact lifecycle migration in the runtime probe", () => {
+    const execStatements: string[] = [];
+    class ProbeDatabase {
+      readonly isTransaction = false;
+      constructor(_path: string) {}
+      exec(sql: string): void {
+        execStatements.push(sql);
+      }
+      prepare(_sql: string): { run: (..._args: unknown[]) => void } {
+        return { run: () => {} };
+      }
+      close(): void {}
+    }
+
+    probeNodeSqliteRuntime({ databaseFactory: ProbeDatabase });
+
+    expect(execStatements.some((statement) => statement.includes("ADD COLUMN lifecycle_state"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("ADD COLUMN lifecycle_updated_at_ms"))).toBe(true);
   });
 });
 

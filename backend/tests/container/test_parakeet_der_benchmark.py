@@ -27,6 +27,7 @@ import tempfile
 import time
 import urllib.request
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -41,6 +42,40 @@ MAX_CLIPS = int(os.getenv("VOXCONVERSE_MAX_CLIPS", "15"))
 DER_THRESHOLD = float(os.getenv("DER_THRESHOLD", "0.40"))
 PER_CLIP_DER_MAX = float(os.getenv("PER_CLIP_DER_MAX", "0.85"))
 REPORT_ONLY = os.getenv("DER_REPORT_ONLY", "false").lower() == "true"
+DER_RESULTS_PATH = os.getenv("DER_RESULTS_PATH")
+DER_REPORT_SCHEMA_VERSION = 1
+
+
+def _aggregate_components(ok_results):
+    total_scored = sum(r["total"] for r in ok_results)
+    total_missed = sum(r["missed"] for r in ok_results)
+    total_fa = sum(r["false_alarm"] for r in ok_results)
+    total_confusion = sum(r["confusion"] for r in ok_results)
+    agg_der = (total_missed + total_fa + total_confusion) / total_scored if total_scored > 0 else 1.0
+    return {
+        "der": agg_der,
+        "total": total_scored,
+        "missed": total_missed,
+        "false_alarm": total_fa,
+        "confusion": total_confusion,
+    }
+
+
+def write_der_results_artifact(results, output_path=None):
+    """Persist structured DER diagnostics for CI artifact upload."""
+    target = output_path or DER_RESULTS_PATH
+    if not target:
+        return None
+
+    path = Path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+    with open(tmp_path, "w") as f:
+        json.dump(results, f, indent=2, sort_keys=True)
+        f.write("\n")
+    tmp_path.replace(path)
+    print(f"DER diagnostics written to {path}")
+    return path
 
 
 def load_manifest():
@@ -235,14 +270,18 @@ def run_benchmark():
 
     ok_results = [r for r in results if r["status"] == "ok"]
 
-    if ok_results:
-        total_scored = sum(r["total"] for r in ok_results)
-        total_missed = sum(r["missed"] for r in ok_results)
-        total_fa = sum(r["false_alarm"] for r in ok_results)
-        total_confusion = sum(r["confusion"] for r in ok_results)
-        agg_der = (total_missed + total_fa + total_confusion) / total_scored if total_scored > 0 else 1.0
-    else:
-        agg_der = 1.0
+    aggregate = (
+        _aggregate_components(ok_results)
+        if ok_results
+        else {
+            "der": 1.0,
+            "total": 0,
+            "missed": 0,
+            "false_alarm": 0,
+            "confusion": 0,
+        }
+    )
+    agg_der = aggregate["der"]
 
     high_der_clips = [r for r in ok_results if r["der"] > PER_CLIP_DER_MAX]
     skipped = [r for r in results if r["status"] == "skipped"]
@@ -255,15 +294,79 @@ def run_benchmark():
         print(f"High-DER clips (>{PER_CLIP_DER_MAX:.0%}): {[r['id'] for r in high_der_clips]}")
     print(f"{'=' * 60}\n")
 
-    return {
+    result = {
+        "schema_version": DER_REPORT_SCHEMA_VERSION,
+        "generated_at": datetime.now(UTC).isoformat(),
+        "config": {
+            "parakeet_url": PARAKEET_URL,
+            "max_clips": MAX_CLIPS,
+            "der_threshold": DER_THRESHOLD,
+            "per_clip_der_max": PER_CLIP_DER_MAX,
+            "report_only": REPORT_ONLY,
+            "collar_s": 0.25,
+            "skip_overlap": True,
+        },
         "aggregate_der": agg_der,
+        "aggregate": aggregate,
         "per_clip": results,
         "threshold": DER_THRESHOLD,
         "per_clip_max": PER_CLIP_DER_MAX,
         "report_only": REPORT_ONLY,
         "clips_scored": len(ok_results),
         "clips_total": len(clips),
+        "clips_skipped": len(skipped),
+        "clips_errored": len(errors),
     }
+    write_der_results_artifact(result)
+    return result
+
+
+class TestDERDiagnosticsArtifact:
+    def test_aggregate_components_from_synthetic_records(self):
+        aggregate = _aggregate_components(
+            [
+                {"total": 10.0, "missed": 1.0, "false_alarm": 0.5, "confusion": 0.5},
+                {"total": 30.0, "missed": 3.0, "false_alarm": 1.0, "confusion": 0.0},
+            ]
+        )
+
+        assert aggregate == {
+            "der": 0.15,
+            "total": 40.0,
+            "missed": 4.0,
+            "false_alarm": 1.5,
+            "confusion": 0.5,
+        }
+
+    def test_write_der_results_artifact(self, tmp_path):
+        artifact_path = tmp_path / "der" / "results.json"
+        results = {
+            "schema_version": DER_REPORT_SCHEMA_VERSION,
+            "aggregate_der": 0.341,
+            "aggregate": {"der": 0.341, "total": 100.0, "missed": 10.0, "false_alarm": 4.0, "confusion": 20.1},
+            "per_clip": [
+                {
+                    "id": "dohag",
+                    "status": "ok",
+                    "der": 0.052,
+                    "missed": 1.0,
+                    "false_alarm": 0.0,
+                    "confusion": 0.1,
+                    "total": 21.0,
+                    "ref_speakers": 1,
+                    "hyp_speakers": 1,
+                }
+            ],
+        }
+
+        written = write_der_results_artifact(results, artifact_path)
+
+        assert written == artifact_path
+        loaded = json.loads(artifact_path.read_text())
+        assert loaded["schema_version"] == DER_REPORT_SCHEMA_VERSION
+        assert loaded["aggregate"]["confusion"] == 20.1
+        assert loaded["per_clip"][0]["ref_speakers"] == 1
+        assert loaded["per_clip"][0]["hyp_speakers"] == 1
 
 
 class TestVoxConverseDERBenchmark:

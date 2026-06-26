@@ -37,6 +37,7 @@ pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
 pytest tests/unit/test_mcp_conversations_poison.py -v
+pytest tests/unit/test_mcp_profile_contact.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
@@ -65,6 +66,7 @@ pytest tests/unit/test_conversations_to_string.py -v
 pytest tests/unit/test_location_maps_status_guard.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
+pytest tests/unit/test_retrieval_semantics.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
@@ -72,6 +74,7 @@ pytest tests/unit/test_calendar_autolink_invalid_timestamp.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_firestore_cache.py -v
+pytest tests/unit/test_firestore_invariant_helpers.py -v
 pytest tests/unit/test_task_sharing.py -v
 pytest tests/unit/test_action_items_conversation_list_malformed.py -v
 pytest tests/unit/test_firmware_pagination.py -v
@@ -84,6 +87,7 @@ pytest tests/unit/test_file_upload_endpoint_security.py -v
 pytest tests/unit/test_auth_redirect_uri.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_pusher_conversation_retry.py -v
+pytest tests/unit/utils/test_listen_pusher_session.py -v
 pytest tests/unit/test_listen_fallback_removal.py -v
 pytest tests/unit/test_desktop_updates.py -v
 pytest tests/unit/test_translation_optimization.py -v
@@ -102,6 +106,7 @@ pytest tests/unit/test_speech_profile_wav_decode.py -v
 pytest tests/unit/test_storage_fanout_limits.py -v
 pytest tests/unit/test_deferred_blob_janitor.py -v
 pytest tests/unit/test_audio_merge_tasks.py -v
+pytest tests/unit/test_sync_playback_service.py -v
 pytest tests/unit/test_people_conversations_500s.py -v
 pytest tests/unit/test_import_jobs_malformed.py -v
 pytest tests/unit/test_firestore_read_ops_cache.py -v
@@ -111,6 +116,7 @@ pytest tests/unit/test_executors.py -v
 pytest tests/unit/test_modulate_stt.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_request_validation_contracts.py -v
 pytest tests/unit/test_conversation_structure_timezone.py -v
 pytest tests/unit/test_action_item_dedup.py -v
 pytest tests/unit/test_action_item_reminder_cancel_on_complete.py -v
@@ -142,6 +148,7 @@ pytest tests/unit/test_timeout_middleware.py -v
 pytest tests/unit/test_pusher_circuit_breaker.py -v
 pytest tests/unit/test_pusher_ghost_connections.py -v
 pytest tests/unit/test_async_tasks.py -v
+pytest tests/unit/test_async_resource_correctness.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_integration_malformed_records.py -v
 pytest tests/unit/test_oauth_callback_uid_guard.py -v

@@ -2,9 +2,25 @@ import AppKit
 import SwiftUI
 
 struct ExportsSection: View {
-  private let destinations = MemoryExportDestination.allCases
   let statuses: [MemoryExportDestination: MemoryExportStatus]
   let onSelectDestination: (MemoryExportDestination) -> Void
+
+  // Claude/Claude Code and ChatGPT/Codex are merged into one row each; tapping
+  // opens the grouped sheet that shows both options. The CLI-only cases drop out.
+  private var entries: [(destination: MemoryExportDestination, title: String?, subtitle: String?)] {
+    MemoryExportDestination.allCases.compactMap { d in
+      switch d {
+      case .claudeCode, .codex:
+        return nil
+      case .claude:
+        return (.claude, "Claude / Claude Code", "Claude Code (CLI) or Claude cloud — choose in setup.")
+      case .chatgpt:
+        return (.chatgpt, "ChatGPT / Codex", "Codex (CLI) or ChatGPT cloud — choose in setup.")
+      default:
+        return (d, nil, nil)
+      }
+    }
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -13,18 +29,20 @@ struct ExportsSection: View {
         .foregroundColor(OmiColors.textPrimary)
 
       VStack(spacing: 0) {
-        ForEach(Array(destinations.enumerated()), id: \.element.id) { index, destination in
+        ForEach(Array(entries.enumerated()), id: \.element.destination.id) { index, entry in
           if index > 0 {
             Divider()
               .background(OmiColors.backgroundTertiary)
           }
           MemoryExportRow(
-            destination: destination,
-            status: statuses[destination]
+            destination: entry.destination,
+            titleOverride: entry.title,
+            subtitleOverride: entry.subtitle,
+            status: statuses[entry.destination]
               ?? MemoryExportStatus(
                 exportedCount: 0, lastExportedAt: nil, detailText: nil, isConfigured: false)
           ) {
-            onSelectDestination(destination)
+            onSelectDestination(entry.destination)
           }
         }
       }
@@ -71,6 +89,8 @@ private struct AgentSetupActionButtonStyle: ButtonStyle {
 
 private struct MemoryExportRow: View {
   let destination: MemoryExportDestination
+  var titleOverride: String? = nil
+  var subtitleOverride: String? = nil
   let status: MemoryExportStatus
   let action: () -> Void
 
@@ -86,7 +106,7 @@ private struct MemoryExportRow: View {
     switch destination {
     case .obsidian:
       return status.isConfigured ? "Sync" : "Connect"
-    case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex:
+    case .notion, .chatgpt, .claude, .gemini, .agents, .claudeCode, .codex, .openclaw, .hermes:
       return "Open"
     }
   }
@@ -97,12 +117,12 @@ private struct MemoryExportRow: View {
         ConnectorBrandIcon(brand: destination.brand, size: 34, cornerRadius: 9)
 
         VStack(alignment: .leading, spacing: 2) {
-          Text(destination.title)
+          Text(titleOverride ?? destination.title)
             .scaledFont(size: 14, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
             .lineLimit(1)
 
-          Text(destination.description)
+          Text(subtitleOverride ?? destination.description)
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
             .lineLimit(1)
@@ -241,6 +261,9 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
       case .assisted:
         statusMessage =
           "Opened \(destination.title) and copied your key — finish with the steps below."
+      case .completed:
+        // Deterministic local write (OpenClaw/Hermes) — show the result directly.
+        statusMessage = outcome.taskTitle
       }
     } catch {
       errorMessage = error.localizedDescription
@@ -292,7 +315,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
         }
         statusMessage = "Memory pack ready for \(destination.title). Prompt and export copied."
 
-      case .agents, .claudeCode, .codex:
+      case .agents, .claudeCode, .codex, .openclaw, .hermes:
         // MCP-only destinations have no memory-pack run step.
         return nil
       }
@@ -382,6 +405,7 @@ struct MemoryExportDestinationSheet: View {
   let onDismiss: () -> Void
 
   @StateObject private var model = MemoryExportDestinationSheetModel()
+  @State private var showManualSetup = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -445,27 +469,12 @@ struct MemoryExportDestinationSheet: View {
       if destination.supportsAgentSetup {
         agentSetupSection
       } else if destination.supportsMCP {
+        // Lead with the one action — "Do it for me". Everything manual (live
+        // MCP fields, memory pack) is tucked behind a collapsed disclosure so
+        // the default view stays simple.
         executeBlock
-        Divider()
-          .background(OmiColors.backgroundTertiary)
-          .padding(.vertical, 2)
-
-        methodHeader(
-          icon: "bolt.fill",
-          title: "Live connection",
-          tag: "AUTOMATIC",
-          tagColor: OmiColors.success,
-          subtitle: "Set it once — \(destination.title) reads your memories live and stays in sync."
-        )
-        mcpSection
-      }
-
-      if destination.supportsMemoryPack {
-        if destination.supportsMCP {
-          Divider()
-            .background(OmiColors.backgroundTertiary)
-            .padding(.vertical, 2)
-        }
+        manualSetupDisclosure
+      } else if destination.supportsMemoryPack {
         methodHeader(
           icon: "doc.on.clipboard.fill",
           title: "Memory pack",
@@ -477,6 +486,43 @@ struct MemoryExportDestinationSheet: View {
         packActionButton
       }
     }
+  }
+
+  @ViewBuilder
+  private var manualSetupDisclosure: some View {
+    DisclosureGroup(isExpanded: $showManualSetup) {
+      VStack(alignment: .leading, spacing: 18) {
+        methodHeader(
+          icon: "bolt.fill",
+          title: "Live connection",
+          tag: "AUTOMATIC",
+          tagColor: OmiColors.success,
+          subtitle: "Set it once — \(destination.title) reads your memories live and stays in sync."
+        )
+        mcpSection
+
+        if destination.supportsMemoryPack {
+          Divider()
+            .background(OmiColors.backgroundTertiary)
+            .padding(.vertical, 2)
+          methodHeader(
+            icon: "doc.on.clipboard.fill",
+            title: "Memory pack",
+            tag: "MANUAL",
+            tagColor: OmiColors.textTertiary,
+            subtitle: "Copy a one-time snapshot and paste it in yourself. Won't update on its own."
+          )
+          packSection
+          packActionButton
+        }
+      }
+      .padding(.top, 10)
+    } label: {
+      Text("Manual installation")
+        .scaledFont(size: 13, weight: .medium)
+        .foregroundColor(OmiColors.textTertiary)
+    }
+    .tint(OmiColors.textTertiary)
   }
 
   private var agentSetupSection: some View {
@@ -873,7 +919,7 @@ struct MemoryExportDestinationSheet: View {
           )
       }
 
-    case .agents, .claudeCode, .codex:
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
       EmptyView()
     }
   }
@@ -898,7 +944,7 @@ struct MemoryExportDestinationSheet: View {
       return (model.obsidianVaultPath.isEmpty ? "Choose vault" : "Export", "Exporting…")
     case .chatgpt, .claude, .gemini:
       return ("Copy & open", "Preparing…")
-    case .agents, .claudeCode, .codex:
+    case .agents, .claudeCode, .codex, .openclaw, .hermes:
       return ("Copy", "…")
     }
   }

@@ -3061,5 +3061,6 @@
     "recordingMode": "Mod rakaman",
     "captureModeLater": "Kemudian",
     "captureModeLiveDescription": "Transkripsi secara masa nyata semasa anda bercakap.",
-    "captureModeLaterDescription": "Simpan audio sekarang dan transkripsi bila-bila masa."
+    "captureModeLaterDescription": "Simpan audio sekarang dan transkripsi bila-bila masa.",
+    "backgroundModeUnavailable": "Mod Latar Belakang tidak tersedia kerana tiada peranti serasi yang disambungkan. Sambungkan peranti Omi, OpenGlass atau Friend Pendant untuk menggunakan ciri ini."
 }

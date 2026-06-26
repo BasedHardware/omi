@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import type {
   AdapterBinding,
+  AgentArtifact,
   AgentEvent,
   AgentIdKind,
   AgentRun,
@@ -11,6 +12,7 @@ import type {
   AgentStore,
   NewAdapterBinding,
   NewAgentEvent,
+  NewAgentArtifact,
   NewAgentRun,
   NewAgentSession,
   NewRunAttempt,
@@ -20,6 +22,7 @@ import type {
 
 const DATABASE_FILENAME = "omi-agentd.sqlite3";
 const PHASE_1_MIGRATION_VERSION = 1;
+const ARTIFACT_LIFECYCLE_MIGRATION_VERSION = 2;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -290,6 +293,7 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     applyConnectionPragmas(db);
     createSchemaMigrationsTable(db);
     runPhase1Migration(db, Date.now());
+    runArtifactLifecycleMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -339,10 +343,12 @@ export class SqliteAgentStore implements AgentStore {
 
   migrate(): void {
     createSchemaMigrationsTable(this.db);
-    if (this.hasMigration(PHASE_1_MIGRATION_VERSION)) {
-      return;
+    if (!this.hasMigration(PHASE_1_MIGRATION_VERSION)) {
+      runPhase1Migration(this.db, this.nowMs());
     }
-    runPhase1Migration(this.db, this.nowMs());
+    if (!this.hasMigration(ARTIFACT_LIFECYCLE_MIGRATION_VERSION)) {
+      runArtifactLifecycleMigration(this.db, this.nowMs());
+    }
   }
 
   withTransaction<T>(work: () => T): T {
@@ -410,7 +416,7 @@ export class SqliteAgentStore implements AgentStore {
           sessionId: sessionIdForRun(this.db, text(attempt.run_id)),
           runId: text(attempt.run_id),
           attemptId: text(attempt.attempt_id),
-          type: "runtime.attempt_orphaned",
+          type: "attempt.orphaned",
           payload: { attemptId: attempt.attempt_id, reason: "daemon_startup_reconciliation" },
           createdAtMs: now,
         }));
@@ -420,7 +426,7 @@ export class SqliteAgentStore implements AgentStore {
           sessionId: sessionIdForRun(this.db, runId),
           runId,
           attemptId: null,
-          type: "runtime.run_orphaned",
+          type: "run.orphaned",
           payload: { runId, reason: "daemon_startup_reconciliation" },
           createdAtMs: now,
         }));
@@ -430,7 +436,7 @@ export class SqliteAgentStore implements AgentStore {
           sessionId: text(binding.session_id),
           runId: null,
           attemptId: null,
-          type: "runtime.binding_stale",
+          type: "binding.stale",
           payload: { bindingId: binding.binding_id, reason: "non_resumable_binding_after_restart" },
           createdAtMs: now,
         }));
@@ -590,6 +596,34 @@ export class SqliteAgentStore implements AgentStore {
     return binding;
   }
 
+  insertArtifact(input: NewAgentArtifact): AgentArtifact {
+    const artifact: AgentArtifact = {
+      artifactId: input.artifactId ?? generateAgentId("artifact"),
+      sessionId: input.sessionId,
+      runId: input.runId ?? null,
+      attemptId: input.attemptId ?? null,
+      kind: input.kind,
+      role: input.role,
+      uri: input.uri,
+      displayName: input.displayName ?? null,
+      mimeType: input.mimeType ?? null,
+      contentHash: input.contentHash ?? null,
+      sizeBytes: input.sizeBytes ?? null,
+      lifecycleState: input.lifecycleState ?? "retained",
+      lifecycleUpdatedAtMs: input.lifecycleUpdatedAtMs ?? null,
+      metadataJson: input.metadataJson ?? "{}",
+      createdAtMs: input.createdAtMs ?? this.nowMs(),
+    };
+    this.db.prepare(
+      `INSERT INTO artifacts (
+        artifact_id, session_id, run_id, attempt_id, kind, role, uri,
+        display_name, mime_type, content_hash, size_bytes, lifecycle_state,
+        lifecycle_updated_at_ms, metadata_json, created_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...artifactValues(artifact));
+    return artifact;
+  }
+
   appendEvent(input: NewAgentEvent): AgentEvent {
     const event = this.buildEvent(input);
     this.db.prepare(
@@ -704,6 +738,22 @@ function runPhase1Migration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTrans
     db.exec(phase1SchemaSql);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       PHASE_1_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+function runArtifactLifecycleMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      ALTER TABLE artifacts
+        ADD COLUMN lifecycle_state TEXT NOT NULL DEFAULT 'retained' CHECK (lifecycle_state IN ('retained', 'dismissed', 'opened'));
+
+      ALTER TABLE artifacts
+        ADD COLUMN lifecycle_updated_at_ms INTEGER;
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      ARTIFACT_LIFECYCLE_MIGRATION_VERSION,
       appliedAtMs,
     );
   });
@@ -860,5 +910,25 @@ function eventValues(event: AgentEvent): SQLInputValue[] {
     event.visibility,
     event.payloadJson,
     event.createdAtMs,
+  ];
+}
+
+function artifactValues(artifact: AgentArtifact): SQLInputValue[] {
+  return [
+    artifact.artifactId,
+    artifact.sessionId,
+    artifact.runId,
+    artifact.attemptId,
+    artifact.kind,
+    artifact.role,
+    artifact.uri,
+    artifact.displayName,
+    artifact.mimeType,
+    artifact.contentHash,
+    artifact.sizeBytes,
+    artifact.lifecycleState,
+    artifact.lifecycleUpdatedAtMs,
+    artifact.metadataJson,
+    artifact.createdAtMs,
   ];
 }

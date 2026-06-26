@@ -9138,6 +9138,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
 
   @override
+  String get backgroundModeUnavailable => '后台模式不可用，因为未连接兼容设备。请连接 Omi、OpenGlass 或 Friend Pendant 设备以使用此功能。';
+
+  @override
   String get regenerateRecap => '重新生成回顾';
 
   @override

@@ -9303,6 +9303,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Taustatila ei ole käytettävissä, koska yhteensopivaa laitetta ei ole yhdistetty. Yhdistä Omi-, OpenGlass- tai Friend Pendant -laite käyttääksesi tätä ominaisuutta.';
+
+  @override
   String get regenerateRecap => 'Luo yhteenveto uudelleen';
 
   @override

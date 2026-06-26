@@ -9388,6 +9388,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Hindi available ang Background Mode dahil walang nakakonektang compatible na device. Magkonekta ng Omi, OpenGlass, o Friend Pendant device para magamit ang feature na ito.';
+
+  @override
   String get regenerateRecap => 'Buuin muli ang buod';
 
   @override

@@ -1,9 +1,12 @@
 import { z } from "zod";
 import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
 import { AgentRuntimeKernel } from "./kernel.js";
+import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
+import type { McpServerBuildContext } from "./compatibility-facade.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
+const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
 const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
 
@@ -17,12 +20,14 @@ const listAgentSessionsSchema = z.object({
 
 const getAgentRunSchema = z.object({
   runId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
   includeEvents: z.boolean().default(true),
   eventLimit: z.coerce.number().int().positive().max(500).default(100),
 });
 
 const cancelAgentRunSchema = z.object({
   runId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
 });
 
 const inspectAgentArtifactsSchema = z
@@ -30,12 +35,24 @@ const inspectAgentArtifactsSchema = z
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
     attemptId: z.string().min(1).optional(),
+    ownerId: z.string().min(1).optional(),
     role: artifactRoleSchema.optional(),
     limit: z.coerce.number().int().positive().max(200).default(50),
   })
   .refine((value) => value.sessionId || value.runId || value.attemptId, {
     message: "Provide sessionId, runId, or attemptId",
   });
+
+const updateAgentArtifactLifecycleSchema = z.object({
+  artifactId: z.string().min(1),
+  state: artifactLifecycleStateSchema,
+  sessionId: z.string().min(1).optional(),
+  runId: z.string().min(1).optional(),
+  attemptId: z.string().min(1).optional(),
+  ownerId: z.string().min(1).optional(),
+  reason: z.string().min(1).max(500).optional(),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
 
 const sendAgentMessageSchema = z.object({
   sessionId: z.string().min(1),
@@ -88,6 +105,7 @@ export const agentControlToolSchemas = {
   get_agent_run: getAgentRunSchema,
   cancel_agent_run: cancelAgentRunSchema,
   inspect_agent_artifacts: inspectAgentArtifactsSchema,
+  update_agent_artifact_lifecycle: updateAgentArtifactLifecycleSchema,
   send_agent_message: sendAgentMessageSchema,
   delegate_agent: delegateAgentSchema,
 } as const;
@@ -104,129 +122,112 @@ export interface AgentControlToolDefinition {
   inputSchema: Record<string, unknown>;
 }
 
-export const agentControlToolDefinitions: AgentControlToolDefinition[] = [
-  {
-    name: "list_agent_sessions",
-    description: `List Omi-managed agent sessions from the local runtime kernel.
-
-Use when the user asks what Omi agents/subagents are active, recent, failed, or attached to a surface.
-Returns canonical Omi session IDs, latest/active run summaries, and adapter binding metadata.`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        ownerId: { type: "string", description: "Owner id to list. Defaults to the active signed-in owner." },
-        status: { type: "string", enum: ["open", "archived", "closed"] },
-        surfaceKind: { type: "string", description: "Filter to a surface kind such as main_chat, task_chat, or floating_pill." },
-        limit: { type: "number", description: "Maximum sessions to return. Default 50, max 200." },
-        beforeUpdatedAtMs: { type: "number", description: "Pagination cursor: only sessions updated before this epoch-ms timestamp." },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "get_agent_run",
-    description: `Inspect one canonical Omi agent run.
-
-Use a runId returned by list_agent_sessions or a correlated Omi response. Returns the run, session, attempts, adapter bindings, artifact metadata, and optionally events.`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        runId: { type: "string", description: "Canonical Omi run_id." },
-        includeEvents: { type: "boolean", description: "Include ordered kernel events. Default true." },
-        eventLimit: { type: "number", description: "Maximum events to return. Default 100, max 500." },
-      },
-      required: ["runId"],
-    },
-  },
-  {
-    name: "cancel_agent_run",
-    description: `Request cancellation for one canonical Omi agent run through the runtime kernel.
-
-Use when the user asks to stop a running Omi agent/subagent. Returns whether cancellation was accepted, dispatched to the adapter, and acknowledged by the adapter.`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        runId: { type: "string", description: "Canonical Omi run_id to cancel." },
-      },
-      required: ["runId"],
-    },
-  },
-  {
-    name: "inspect_agent_artifacts",
-    description: `Inspect canonical artifact metadata for an Omi agent session, run, or attempt.
-
-Returns metadata and references only. It does not read arbitrary artifact contents.`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        sessionId: { type: "string", description: "Canonical Omi session_id." },
-        runId: { type: "string", description: "Canonical Omi run_id." },
-        attemptId: { type: "string", description: "Canonical Omi attempt_id." },
-        role: { type: "string", enum: ["input", "result", "checkpoint", "tool_output", "log", "other"] },
-        limit: { type: "number", description: "Maximum artifacts to return. Default 50, max 200." },
-      },
-      required: [],
-    },
-  },
-  {
-    name: "send_agent_message",
-    description: `Send a follow-up message to an existing canonical Omi agent session.
-
-Creates a new run in that session through the runtime kernel. Use this for multi-turn conversations with Omi-managed agents when you already have an omiSessionId.`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        sessionId: { type: "string", description: "Canonical Omi session_id to continue." },
-        ownerId: { type: "string", description: "Owner id. Defaults to the active signed-in owner." },
-        prompt: { type: "string", description: "The follow-up message." },
-        mode: { type: "string", enum: ["ask", "act"], description: "Run mode. Default ask." },
-        adapterId: { type: "string", description: "Optional adapter override." },
-        cwd: { type: "string", description: "Optional working directory override." },
-        model: { type: "string", description: "Optional model override." },
-        requestId: { type: "string", description: "Optional caller-provided idempotent request id." },
-        clientId: { type: "string", description: "Logical caller id. Defaults to omi-control-tools." },
-        metadata: { type: "object", description: "Small structured metadata for this run." },
-      },
-      required: ["sessionId", "prompt"],
-    },
-  },
-  {
-    name: "delegate_agent",
-    description: `Create or continue a distinct delegated child agent session linked to a parent run.
-
-Supports call, spawn, and continue modes. Child context is intentionally minimal: objective plus optional concise context. Spawn returns child handles immediately; call and continue return a structured child result without the full transcript.`,
-    inputSchema: {
-      type: "object",
-      properties: {
-        mode: { type: "string", enum: ["call", "spawn", "continue"] },
-        parentRunId: { type: "string", description: "Canonical parent Omi run_id." },
-        objective: { type: "string", description: "Delegated objective for the child agent." },
-        context: { type: "string", description: "Optional concise context, not a full transcript." },
-        ownerId: { type: "string", description: "Optional owner guard for the parent run." },
-        childSessionId: { type: "string", description: "Required for continue mode; optional only to resume a known child." },
-        childSurfaceKind: { type: "string", description: "Child session surface kind. Default delegated_agent." },
-        childExternalRefKind: { type: "string", description: "Optional child external reference kind." },
-        childExternalRefId: { type: "string", description: "Optional child external reference id." },
-        childTitle: { type: "string", description: "Optional title for a newly created child session." },
-        adapterId: { type: "string", description: "Optional adapter override." },
-        defaultAdapterId: { type: "string", description: "Optional child session default adapter." },
-        cwd: { type: "string", description: "Optional working directory." },
-        model: { type: "string", description: "Optional model override." },
-        runMode: { type: "string", enum: ["ask", "act"], description: "Child run mode. Default ask." },
-        requestId: { type: "string", description: "Optional caller-provided idempotent request id." },
-        clientId: { type: "string", description: "Logical caller id. Defaults to omi-control-tools." },
-        maxDepth: { type: "number", description: "Maximum delegation depth for this call. Default 3, hard max 5." },
-        maxBudgetUsd: { type: "number", description: "Per-delegation budget guard. Default 5, hard max 10." },
-        metadata: { type: "object", description: "Small structured metadata for the child run." },
-      },
-      required: ["mode", "parentRunId", "objective"],
-    },
-  },
-];
+export const agentControlToolDefinitions: AgentControlToolDefinition[] = agentControlCapabilityManifest.map((tool) => ({
+  name: tool.name,
+  description: tool.description,
+  inputSchema: agentControlInputSchema(tool),
+}));
 
 export interface AgentControlToolContext {
   kernel: AgentRuntimeKernel;
   getOwnerId?: () => string;
+  buildMcpServers?: (
+    mode: "ask" | "act",
+    cwd: string | undefined,
+    sessionKey: string | undefined,
+    context: McpServerBuildContext
+  ) => Record<string, unknown>[];
+  getProtocolVersion?: () => McpServerBuildContext["protocolVersion"];
+}
+
+export interface ActiveControlToolOwnerInput {
+  requestKey?: string;
+  runId?: string;
+  attemptId?: string;
+  ownerIdForRequest?: (requestKey: string) => string | undefined;
+  ownerIdForRun?: (runId: string) => string | undefined;
+  ownerIdForAttempt?: (attemptId: string) => string | undefined;
+  fallbackOwnerId?: string;
+  allowFallbackOwner?: boolean;
+}
+
+export interface ControlRequestKeyInput {
+  requestId?: string;
+  clientId?: string;
+}
+
+export interface ControlRequestContextInput extends ControlRequestKeyInput {
+  ownerGuard?: string;
+  activeOwnerId?: string;
+  requireActiveOwner?: boolean;
+  requireOwnerGuard?: boolean;
+}
+
+export interface ResolvedControlRequestContext {
+  requestKey?: string;
+  activeOwnerId: string;
+  ownerGuard?: string;
+}
+
+export const DEFAULT_LEGACY_JSONL_CLIENT_ID = "legacy-jsonl-client";
+export const DEFAULT_LOCAL_OWNER_ID = "desktop-local-user";
+
+export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
+  return input.requestId && input.clientId ? JSON.stringify([input.clientId, input.requestId]) : undefined;
+}
+
+export function legacyControlRequestKey(input: ControlRequestKeyInput): string | undefined {
+  return input.requestId ? JSON.stringify([input.clientId ?? DEFAULT_LEGACY_JSONL_CLIENT_ID, input.requestId]) : undefined;
+}
+
+export function resolveControlRequestContext(input: ControlRequestContextInput): ResolvedControlRequestContext {
+  const ownerGuard = input.ownerGuard?.trim();
+  if (input.ownerGuard !== undefined && !ownerGuard) {
+    throw new Error("ownerId cannot be empty");
+  }
+  const activeContextOwnerId = input.activeOwnerId?.trim();
+  if (input.requireOwnerGuard && !ownerGuard) {
+    throw new Error("missing owner guard");
+  }
+  if (input.requireActiveOwner && (!activeContextOwnerId || activeContextOwnerId === DEFAULT_LOCAL_OWNER_ID)) {
+    throw new Error("missing active control owner");
+  }
+  const activeOwnerId = activeContextOwnerId && activeContextOwnerId !== DEFAULT_LOCAL_OWNER_ID
+    ? activeContextOwnerId
+    : ownerGuard || activeContextOwnerId || DEFAULT_LOCAL_OWNER_ID;
+  if (ownerGuard && ownerGuard !== activeOwnerId) {
+    throw new Error("ownerId does not match active control owner");
+  }
+  return {
+    requestKey: controlRequestKey(input),
+    activeOwnerId,
+    ownerGuard,
+  };
+}
+
+export function withDefaultOwnerGuard(input: Record<string, unknown>, ownerGuard: string): Record<string, unknown> {
+  if (Object.hasOwn(input, "ownerId")) {
+    return input;
+  }
+  return { ...input, ownerId: ownerGuard };
+}
+
+export function withMergedOwnerGuard(
+  input: Record<string, unknown>,
+  ownerGuard: string | undefined,
+  defaultOwnerGuard: string
+): Record<string, unknown> {
+  if (!ownerGuard) {
+    return withDefaultOwnerGuard(input, defaultOwnerGuard);
+  }
+  if (!Object.hasOwn(input, "ownerId")) {
+    return { ...input, ownerId: ownerGuard };
+  }
+  const inputOwnerId = typeof input.ownerId === "string" ? input.ownerId.trim() : undefined;
+  if (inputOwnerId !== ownerGuard) {
+    throw new Error("Owner guards do not match");
+  }
+  return { ...input, ownerId: ownerGuard };
 }
 
 export function isAgentControlToolName(name: string): name is AgentControlToolName {
@@ -248,19 +249,23 @@ export async function handleAgentControlToolCall(
         const parsed = agentControlToolSchemas.list_agent_sessions.parse(input);
         const sessions = context.kernel.listSessions({
           ...parsed,
-          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
         });
         return stringifyToolResult({ sessions: sessions.map(serializeSessionSummary) });
       }
       case "get_agent_run": {
         const parsed = agentControlToolSchemas.get_agent_run.parse(input);
-        const details = context.kernel.getRun(parsed);
+        const details = context.kernel.getRun({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+        });
         return stringifyToolResult(serializeRunDetails(details));
       }
       case "cancel_agent_run": {
         const parsed = agentControlToolSchemas.cancel_agent_run.parse(input);
-        const cancellation = await context.kernel.cancelRun(parsed.runId);
-        const details = context.kernel.getRun({ runId: parsed.runId, includeEvents: true, eventLimit: 100 });
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const cancellation = await context.kernel.cancelRun(parsed.runId, { ownerId });
+        const details = context.kernel.getRun({ runId: parsed.runId, ownerId, includeEvents: true, eventLimit: 100 });
         return stringifyToolResult({
           cancellation,
           run: serializeRun(details.run),
@@ -269,17 +274,42 @@ export async function handleAgentControlToolCall(
       }
       case "inspect_agent_artifacts": {
         const parsed = agentControlToolSchemas.inspect_agent_artifacts.parse(input);
-        const artifacts = context.kernel.inspectArtifacts(parsed);
+        const artifacts = context.kernel.inspectArtifacts({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+        });
         return stringifyToolResult({ artifacts: artifacts.map(serializeArtifact) });
+      }
+      case "update_agent_artifact_lifecycle": {
+        const parsed = agentControlToolSchemas.update_agent_artifact_lifecycle.parse(input);
+        const result = context.kernel.updateArtifactLifecycle({
+          ...parsed,
+          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+        });
+        return stringifyToolResult({
+          artifact: serializeArtifact(result.artifact),
+          changed: result.changed,
+          event: result.event ? serializeEvent(result.event) : null,
+        });
       }
       case "send_agent_message": {
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
         const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId);
         rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const requestId = parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const result = await context.kernel.sendAgentMessage({
           ...parsed,
-          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
-          requestId: parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          ownerId,
+          requestId,
+          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          mcpServers: buildControlRunMcpServers(context, {
+            mode: parsed.mode,
+            cwd: parsed.cwd,
+            ownerId,
+            requestId,
+            clientId: parsed.clientId,
+          }),
         });
         return stringifyToolResult({
           session: serializeSession(result.session),
@@ -299,10 +329,20 @@ export async function handleAgentControlToolCall(
             parsed.mode === "continue" ? parsed.childSessionId : undefined
           );
         }
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const requestId = parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const result = await context.kernel.delegateAgent({
           ...parsed,
-          ownerId: parsed.ownerId ?? controlToolOwnerId(context),
-          requestId: parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          ownerId,
+          requestId,
+          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          mcpServers: buildControlRunMcpServers(context, {
+            mode: parsed.runMode,
+            cwd: parsed.cwd,
+            ownerId,
+            requestId,
+            clientId: parsed.clientId,
+          }),
         });
         return stringifyToolResult({
           delegation: serializeDelegation(result.delegation),
@@ -331,9 +371,68 @@ export async function handleAgentControlToolCall(
   }
 }
 
+function buildControlRunMcpServers(
+  context: AgentControlToolContext,
+  input: {
+    mode: "ask" | "act";
+    cwd?: string;
+    ownerId: string;
+    requestId: string;
+    clientId: string;
+  }
+): Record<string, unknown>[] | undefined {
+  if (!context.buildMcpServers) {
+    return undefined;
+  }
+  const servers = context.buildMcpServers(input.mode, input.cwd, undefined, {
+    ownerId: input.ownerId,
+    requestId: input.requestId,
+    clientId: input.clientId,
+    protocolVersion: context.getProtocolVersion?.(),
+    includeSwiftBackedTools: false,
+  });
+  // Direct control-created runs do not have a Swift ActiveRequest with an
+  // onToolCall handler. Keep browser/stdio-independent MCPs available, but do
+  // not expose omi-tools, whose execute_sql/semantic_search calls must be
+  // answered by Swift-backed request routing.
+  return servers.filter((server) => server.name !== "omi-tools");
+}
+
 function controlToolOwnerId(context: AgentControlToolContext): string {
   const ownerId = context.getOwnerId?.().trim();
   return ownerId || "desktop-local-user";
+}
+
+export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): string {
+  const requestOwnerId = input.requestKey ? input.ownerIdForRequest?.(input.requestKey)?.trim() : undefined;
+  if (requestOwnerId) {
+    return requestOwnerId;
+  }
+  const attemptOwnerId = input.attemptId ? input.ownerIdForAttempt?.(input.attemptId)?.trim() : undefined;
+  if (attemptOwnerId) {
+    return attemptOwnerId;
+  }
+  const runOwnerId = input.runId ? input.ownerIdForRun?.(input.runId)?.trim() : undefined;
+  if (runOwnerId) {
+    return runOwnerId;
+  }
+  if (!input.allowFallbackOwner) {
+    throw new Error("Owner-scoped control tools require active request, run, or attempt context");
+  }
+  const fallbackOwnerId = input.fallbackOwnerId?.trim();
+  return fallbackOwnerId || "desktop-local-user";
+}
+
+function effectiveControlToolOwnerId(context: AgentControlToolContext, requestedOwnerId?: string): string {
+  const activeOwnerId = controlToolOwnerId(context);
+  const ownerGuard = requestedOwnerId?.trim();
+  if (requestedOwnerId !== undefined && !ownerGuard) {
+    throw new Error("Requested ownerId cannot be empty");
+  }
+  if (ownerGuard && ownerGuard !== activeOwnerId) {
+    throw new Error("Requested ownerId does not match the active control owner");
+  }
+  return activeOwnerId;
 }
 
 function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId: string, sessionId?: string): void {
@@ -503,6 +602,8 @@ function serializeArtifact(artifact: AgentArtifact): Record<string, unknown> {
     mimeType: artifact.mimeType,
     contentHash: artifact.contentHash,
     sizeBytes: artifact.sizeBytes,
+    lifecycleState: artifact.lifecycleState,
+    lifecycleUpdatedAtMs: artifact.lifecycleUpdatedAtMs,
     metadata: parseJsonObject(artifact.metadataJson),
     createdAtMs: artifact.createdAtMs,
   };

@@ -11,7 +11,7 @@ import {
 } from "../src/runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
-import { createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
 
@@ -22,6 +22,26 @@ afterEach(() => {
 });
 
 describe("JsonlCompatibilityFacade", () => {
+  it("rejects protocol v2 queries that only provide legacy id", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    await expect(
+      facade.handleQuery({
+        ...v1Query({ id: "legacy-id-only", prompt: "missing v2 request id" }),
+        protocolVersion: 2,
+        requestId: undefined,
+        clientId: "client-v2",
+      }),
+    ).rejects.toThrow("protocol v2 query requires requestId");
+    store.close();
+  });
+
   it("selects the sole running request for unscoped tool-call correlation", () => {
     expect(
       selectUnscopedToolCallCorrelation([
@@ -69,6 +89,122 @@ describe("JsonlCompatibilityFacade", () => {
         },
       ]),
     ).toEqual({});
+  });
+
+  it("tracks externally-created control runs for Swift-backed tool routing", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      suppressToolUseEvents: false,
+    });
+    adapter.deferResult();
+
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "control-run-1",
+      clientId: "control-client",
+      ownerId: "owner",
+      adapterId: "fake",
+    });
+    const running = kernel.executeRun({
+      ...baseRunInput,
+      requestId: "control-run-1",
+      clientId: "control-client",
+      prompt: "control-created child",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+    const attemptId = adapter.executed[0].attemptId;
+
+    adapter.emitLate(attemptId, {
+      type: "tool_use",
+      callId: "tool-control-1",
+      name: "execute_sql",
+      input: { query: "select 1" },
+    });
+
+    expect(sent.find((message) => message.type === "tool_use")).toMatchObject({
+      type: "tool_use",
+      requestId: "control-run-1",
+      clientId: "control-client",
+      runId: adapter.executed[0].runId,
+      attemptId,
+    });
+    expect(facade.toolCallCorrelationForRequest("control-run-1", "control-client")).toMatchObject({
+      requestId: "control-run-1",
+      clientId: "control-client",
+      attemptId,
+    });
+    expect(facade.toolCallCorrelationForRequest("control-run-1", "other-client")).toEqual({});
+
+    adapter.resolveDeferred({
+      text: "done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await running;
+    expect(facade.toolCallCorrelationForRequest("control-run-1", "control-client")).toEqual({});
+    store.close();
+  });
+
+  it("requires client id when resolving request-scoped v2 tool-call correlation", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
+    adapter.deferResult();
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      suppressToolUseEvents: false,
+    });
+
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "shared-control-run",
+      clientId: "client-a",
+      ownerId: "owner",
+      adapterId: "fake",
+    });
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "shared-control-run",
+      clientId: "client-b",
+      ownerId: "owner",
+      adapterId: "fake",
+    });
+    const first = kernel.executeRun({
+      ...baseRunInput,
+      requestId: "shared-control-run",
+      clientId: "client-a",
+      prompt: "control-created child a",
+    });
+    const second = kernel.executeRun({
+      ...baseRunInput,
+      requestId: "shared-control-run",
+      clientId: "client-b",
+      prompt: "control-created child b",
+      externalRefId: "task-b",
+    });
+    await waitUntil(() => adapter.executed.length === 2);
+
+    expect(facade.toolCallCorrelationForRequest("shared-control-run", "client-a")).toMatchObject({
+      requestId: "shared-control-run",
+      clientId: "client-a",
+      runId: adapter.executed[0].runId,
+    });
+    expect(facade.toolCallCorrelationForRequest("shared-control-run", "client-b")).toMatchObject({
+      requestId: "shared-control-run",
+      clientId: "client-b",
+      runId: adapter.executed[1].runId,
+    });
+    expect(facade.legacyUnscopedToolCallCorrelationForRequest("shared-control-run")).toEqual({});
+
+    adapter.resolveDeferred({
+      text: "done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await Promise.all([first, second]);
+    store.close();
   });
 
   it("does not infer unscoped v2 tool-call correlation when v1 concurrency makes routing ambiguous", () => {
@@ -304,15 +440,346 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "partial",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     expect(sent.some((message) => message.type === "result" && message.terminalStatus === "cancelled")).toBe(true);
     store.close();
   });
 
-  it("uses owner-scoped latest runs when interrupt omits request and run ids", async () => {
+  it("allows runId-only v2 interrupts to reach kernel cancellation", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "cancel by run id" }),
+      protocolVersion: 2,
+      requestId: "request-run-only-cancel",
+      clientId: "client-run-only-cancel",
+      ownerId: "owner-run-only-cancel",
+      legacySessionKey: "run-only-cancel-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      protocolVersion: 2,
+      runId: adapter.executed[0].runId,
+      attemptId: adapter.executed[0].attemptId,
+      ownerId: "owner-run-only-cancel",
+    });
+
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-run-only-cancel",
+      clientId: "client-run-only-cancel",
+      runId: adapter.executed[0].runId,
+      attemptId: adapter.executed[0].attemptId,
+      accepted: true,
+      dispatchAttempted: true,
+    });
+
+    adapter.resolveDeferred({
+      text: "cancelled by run id",
+      terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await running;
+    store.close();
+  });
+
+  it("rejects v2 interrupt when the supplied owner does not match the active request owner", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "do not cancel cross-owner" }),
+      protocolVersion: 2,
+      requestId: "request-owner-guard",
+      clientId: "client-owner-guard",
+      ownerId: "owner-a",
+      legacySessionKey: "owner-guard-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      type: "interrupt",
+      protocolVersion: 2,
+      requestId: "request-owner-guard",
+      clientId: "client-owner-guard",
+      ownerId: "owner-b",
+    });
+
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-owner-guard",
+      clientId: "client-owner-guard",
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
+    expect(adapter.cancelled).toHaveLength(0);
+
+    adapter.resolveDeferred({
+      text: "still running",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
+    await running;
+    store.close();
+  });
+
+  it("uses the active request owner when request-scoped interrupt omits ownerId", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "cancel firebase owner" }),
+      protocolVersion: 2,
+      requestId: "request-firebase-owner",
+      clientId: "client-firebase-owner",
+      ownerId: "firebase-owner",
+      legacySessionKey: "firebase-owner-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      type: "interrupt",
+      protocolVersion: 2,
+      requestId: "request-firebase-owner",
+      clientId: "client-firebase-owner",
+    });
+
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-firebase-owner",
+      clientId: "client-firebase-owner",
+      accepted: true,
+    });
+
+    adapter.resolveDeferred({
+      text: "cancelled",
+      terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
+    await running;
+    store.close();
+  });
+
+  it("rejects protocol v2 request-scoped interrupts that omit clientId", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "cancel without client id" }),
+      protocolVersion: 2,
+      requestId: "request-without-client",
+      clientId: "non-default-client",
+      ownerId: "owner-without-client",
+      legacySessionKey: "without-client-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      type: "interrupt",
+      protocolVersion: 2,
+      requestId: "request-without-client",
+    });
+
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "request-without-client",
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
+    expect(cancelAck).not.toHaveProperty("clientId");
+
+    adapter.resolveDeferred({
+      text: "cancelled",
+      terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
+    await running;
+    store.close();
+  });
+
+  it("ignores request-scoped interrupt context when the client id does not match", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "do not cancel cross-client" }),
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-a",
+      ownerId: "owner-a",
+      legacySessionKey: "cross-client-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-b",
+    });
+
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-b",
+      accepted: false,
+    });
+
+    adapter.resolveDeferred({
+      text: "still running",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
+    await running;
+    store.close();
+  });
+
+  it("rejects an explicit empty v2 client id instead of using scoped fallback", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "do not cancel with empty explicit client" }),
+      protocolVersion: 2,
+      requestId: "empty-client-request",
+      clientId: "client-a",
+      ownerId: "owner-a",
+      legacySessionKey: "empty-client-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      protocolVersion: 2,
+      requestId: "empty-client-request",
+      clientId: "",
+    });
+
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "empty-client-request",
+      accepted: false,
+    });
+    expect(cancelAck).not.toHaveProperty("clientId");
+
+    adapter.resolveDeferred({
+      text: "still running",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
+    await running;
+    store.close();
+  });
+
+  it("keeps duplicate request ids isolated by client when interrupting", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const first = facade.handleQuery({
+      ...v1Query({ prompt: "shared request client a" }),
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-a",
+      ownerId: "owner-shared",
+      legacySessionKey: "shared-a",
+    });
+    const second = facade.handleQuery({
+      ...v1Query({ prompt: "shared request client b" }),
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-b",
+      ownerId: "owner-shared",
+      legacySessionKey: "shared-b",
+    });
+    await waitUntil(() => adapter.executed.length === 2);
+
+    await facade.handleInterrupt({
+      type: "interrupt",
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-a",
+    });
+
+    expect(adapter.cancelled).toHaveLength(1);
+    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "shared-request-id",
+      clientId: "client-a",
+      runId: adapter.executed[0].runId,
+      accepted: true,
+    });
+
+    adapter.resolveDeferred({
+      text: "client a cancelled",
+      terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
+    await Promise.all([first, second]);
+    store.close();
+  });
+
+  it("rejects v2 interrupt when requestId is missing", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
@@ -344,21 +811,26 @@ describe("JsonlCompatibilityFacade", () => {
     await facade.handleInterrupt({
       type: "interrupt",
       protocolVersion: 2,
+      id: "legacy-interrupt-id",
       clientId: "shared-client",
       ownerId: "owner-a",
     });
 
-    expect(adapter.cancelled).toHaveLength(1);
-    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    expect(adapter.cancelled).toHaveLength(0);
     const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck?.runId).toBe(adapter.executed[0].runId);
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      clientId: "shared-client",
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
+    expect(cancelAck).not.toHaveProperty("runId");
 
     adapter.resolveDeferred({
-      text: "cancelled",
-      terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      text: "owner a finished",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await Promise.all([ownerA, ownerB]);
     store.close();
   });
@@ -399,15 +871,20 @@ describe("JsonlCompatibilityFacade", () => {
       ownerId: "a",
     });
 
-    expect(adapter.cancelled).toHaveLength(1);
-    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      clientId: "b:c",
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
 
     adapter.resolveDeferred({
-      text: "cancelled",
-      terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      text: "first finished",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await Promise.all([first, second]);
     store.close();
   });
@@ -454,9 +931,7 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "first done",
       terminalStatus: "succeeded",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await first;
     await second;
 
@@ -604,9 +1079,7 @@ describe("JsonlCompatibilityFacade", () => {
     });
     adapter.resolveDeferred({
       text: "done",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,      terminalStatus: "succeeded",
     });
     await running;
 
@@ -645,12 +1118,12 @@ describe("JsonlCompatibilityFacade", () => {
       requestId: "request-terminal-marker",
       runId: adapter.executed[0].runId,
     });
-    expect(facade.toolCallCorrelationForRequest("request-terminal-marker")).toMatchObject({
+    expect(facade.toolCallCorrelationForRequest("request-terminal-marker", "client-terminal-marker")).toMatchObject({
       requestId: "request-terminal-marker",
       runId: adapter.executed[0].runId,
       attemptId: adapter.executed[0].attemptId,
     });
-    expect(facade.toolCallCorrelationForRequest("stale-request-from-reused-mcp-process")).toEqual({});
+    expect(facade.toolCallCorrelationForRequest("stale-request-from-reused-mcp-process", "client-terminal-marker")).toEqual({});
     expect(facade.toolCallCorrelationForAdapter("fake")).toMatchObject({
       requestId: "request-terminal-marker",
       runId: adapter.executed[0].runId,
@@ -659,9 +1132,7 @@ describe("JsonlCompatibilityFacade", () => {
 
     adapter.resolveDeferred({
       text: "done",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,      terminalStatus: "succeeded",
     });
     await running;
 

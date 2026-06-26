@@ -46,6 +46,7 @@ from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -168,10 +169,18 @@ def reprocess_conversation(
     return processed_conversation
 
 
-@router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
+@router.get(
+    '/v1/conversations',
+    response_model=List[Conversation],
+    tags=['conversations'],
+    description=(
+        "List responses may omit detail-only fields such as transcript_segments. "
+        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript."
+    ),
+)
 def get_conversations(
-    limit: int = 100,
-    offset: int = 0,
+    limit: PositiveLimit = 100,
+    offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
@@ -205,14 +214,34 @@ def get_conversations(
 def get_conversations_count(
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
     include_discarded: bool = Query(False),
+    start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
+    folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
+    starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
-    count = conversations_db.get_conversations_count(uid, include_discarded=include_discarded, statuses=status_list)
+    count = conversations_db.get_conversations_count(
+        uid,
+        include_discarded=include_discarded,
+        statuses=status_list,
+        start_date=start_date,
+        end_date=end_date,
+        folder_id=folder_id,
+        starred=starred,
+    )
     return {'count': count}
 
 
-@router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}",
+    response_model=Conversation,
+    tags=['conversations'],
+    description=(
+        "Detail responses include transcript fields when available. Locked or redacted conversations "
+        "may include an empty transcript_segments array even though transcript data exists."
+    ),
+)
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
@@ -485,7 +514,7 @@ def set_action_item_status(
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
     for i, action_item_idx in enumerate(data.items_idx):
-        if action_item_idx >= len(action_items):
+        if not (0 <= action_item_idx < len(action_items)):
             continue
 
         action_item = action_items[action_item_idx]
@@ -522,7 +551,7 @@ def set_action_item_status(
             description_to_ids.setdefault(desc, []).append(ai['id'])
 
         for i, action_item_idx in enumerate(data.items_idx):
-            if action_item_idx >= len(action_items):
+            if not (0 <= action_item_idx < len(action_items)):
                 continue
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]

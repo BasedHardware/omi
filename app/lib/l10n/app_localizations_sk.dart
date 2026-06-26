@@ -9295,6 +9295,10 @@ class AppLocalizationsSk extends AppLocalizations {
   String get backgroundModeNote => 'Zatiaľ funguje len so zariadeniami Omi a priebežne sa vylepšuje.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Režim na pozadí nie je dostupný, pretože nie je pripojené žiadne kompatibilné zariadenie. Ak chcete túto funkciu používať, pripojte zariadenie Omi, OpenGlass alebo Friend Pendant.';
+
+  @override
   String get regenerateRecap => 'Znovu vygenerovať zhrnutie';
 
   @override

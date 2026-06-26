@@ -301,11 +301,13 @@ OAuth is required for user authentication. You need to configure both Google and
     You should see `(.venv)` at the beginning of your command prompt.
   </Step>
   <Step title="Update Python Dependencies" icon="download">
-    When intentionally changing backend dependencies, edit `requirements.txt` or `testing/e2e/requirements.txt`, then refresh the lock:
+    When intentionally changing backend dependencies, edit the relevant `requirements*.txt` input, then refresh the locks:
 
     ```bash
     ./scripts/update-python-lock.sh
     ```
+
+    The refresh preserves already-locked package versions by default. Use `PYLOCK_UPGRADE=1 ./scripts/update-python-lock.sh` only when intentionally upgrading dependency versions.
   </Step>
   <Step title="Create Environment File" icon="file">
     ```bash

@@ -13,6 +13,7 @@ Usage:
     logger.info(f"Found contact: {sanitize_pii(name)} -> {sanitize_pii(email)}")
 """
 
+import json
 import re
 import logging
 
@@ -49,6 +50,25 @@ def sanitize(value) -> str:
     # Mask emails first (before token regex can match parts of them)
     text = _EMAIL_PATTERN.sub(_mask_email, text)
     return _TOKEN_CHARS.sub(_mask_token, text)
+
+
+def sanitize_validation_error(error) -> str:
+    """Return validation diagnostics without logging raw input values.
+
+    Pydantic's default ``ValidationError.__str__`` includes ``input_value``;
+    for LLM/user-derived payloads that can expose private text. Keep only the
+    structural fields needed to debug malformed payloads.
+    """
+    safe_errors = []
+    for item in error.errors(include_input=False):
+        safe_errors.append(
+            {
+                'type': item.get('type'),
+                'loc': item.get('loc'),
+                'msg': item.get('msg'),
+            }
+        )
+    return sanitize(json.dumps(safe_errors, default=str))
 
 
 def _mask_email(match: re.Match) -> str:

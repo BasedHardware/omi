@@ -334,6 +334,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     func closeAIConversation() {
         AnalyticsManager.shared.floatingBarAskOmiClosed()
+        resignKeyAnimationToken += 1
+        let closeAnimationToken = resignKeyAnimationToken
 
         // Cancel any in-flight chat streaming to prevent re-expansion
         FloatingControlBarManager.shared.cancelChat()
@@ -390,6 +392,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         preChatCenter = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
             guard let self = self else { return }
+            guard self.resignKeyAnimationToken == closeAnimationToken else { return }
             self.isResizingProgrammatically = false
             self.pendingRestoreOrigin = nil
             // Safety net: only snap if no new AI session was opened while the close settled.
@@ -403,15 +406,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         // Allow hover resizes again after the animation settles.
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.askOmiSettleDelay) { [weak self] in
-            self?.suppressHoverResize = false
+            guard let self = self else { return }
+            guard self.resignKeyAnimationToken == closeAnimationToken else { return }
+            self.suppressHoverResize = false
             FloatingControlBarManager.shared.flushQueuedNotificationsIfPossible()
 
             // If the user has the bar disabled, hide it completely after closing the
             // AI conversation instead of leaving the compact pill visible — unless a
             // queued notification was just flushed; hiding now would swallow it, and
             // its dismissal re-hides the bar anyway.
-            if !FloatingControlBarManager.shared.isEnabled && self?.state.currentNotification == nil {
-                self?.orderOut(nil)
+            if !FloatingControlBarManager.shared.isEnabled && self.state.currentNotification == nil {
+                self.orderOut(nil)
             }
         }
     }
@@ -559,19 +564,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Center-center: preserves midpoint (used by hover expand/collapse).
     private func originForCenterAnchor(newSize: NSSize) -> NSPoint {
-        NSPoint(
-            x: frame.midX - newSize.width / 2,
-            y: frame.midY - newSize.height / 2
-        )
+        FloatingControlBarGeometry.centerAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
     /// Top-center: keeps top edge fixed, centers horizontally (used by chat expand/collapse).
     private func originForTopCenterAnchor(newSize: NSSize) -> NSPoint {
-        let top = frame.origin.y + frame.height
-        return NSPoint(
-            x: frame.midX - newSize.width / 2,
-            y: top - newSize.height
-        )
+        FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
     private func resizeAnchored(
@@ -595,6 +593,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
+        let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
+        resizeToFrame(
+            targetFrame,
+            makeResizable: makeResizable,
+            animated: animated,
+            animationDuration: animationDuration
+        )
+    }
+
+    private func resizeToFrame(
+        _ targetFrame: NSRect,
+        makeResizable: Bool,
+        animated: Bool = false,
+        animationDuration: TimeInterval = 0.3
+    ) {
         if makeResizable {
             styleMask.insert(.resizable)
         } else {
@@ -603,7 +616,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         isResizingProgrammatically = true
 
-        let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
         if animated {
             // Keep windowDidResize from persisting transient animation frames as
             // the user's saved response size until the final frame lands.
@@ -670,13 +682,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                   !self.state.isShowingNotification,
                   !self.suppressHoverResize
             else { return }
-            let newOrigin = NSPoint(
-                x: self.frame.midX - targetSize.width / 2,
-                y: self.frame.midY - targetSize.height / 2
+            let targetFrame = FloatingControlBarGeometry.centerAnchoredFrame(
+                currentFrame: self.frame,
+                targetSize: targetSize
             )
             self.styleMask.remove(.resizable)
             self.isResizingProgrammatically = true
-            self.setFrame(NSRect(origin: newOrigin, size: targetSize), display: true, animate: false)
+            self.setFrame(targetFrame, display: true, animate: false)
             self.isResizingProgrammatically = false
         }
 
@@ -698,8 +710,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Resize window for PTT state (expanded when listening, compact circle when idle)
     func resizeForPTTState(expanded: Bool) {
-        let size = expanded ? Self.voiceBarSize : Self.minBarSize
-        resizeAnchored(to: size, makeResizable: false, animated: true)
+        let targetFrame = FloatingControlBarGeometry.pushToTalkFrame(
+            currentFrame: frame,
+            expanded: expanded,
+            draggable: ShortcutSettings.shared.draggableBarEnabled,
+            visibleFrame: geometryScreenVisibleFrame(),
+            topInset: Self.topInset,
+            compactSize: Self.minBarSize,
+            voiceSize: Self.voiceBarSize
+        )
+        resizeToFrame(targetFrame, makeResizable: false, animated: true, animationDuration: 0.3)
     }
 
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
@@ -784,16 +804,20 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Compute the default origin for the collapsed pill (top-center of the key screen).
     /// Used by closeAIConversation in non-draggable mode and centerOnMainScreen.
     private func defaultPillOrigin() -> NSPoint {
-        defaultTopCenteredOrigin(for: FloatingControlBarWindow.minBarSize)
+        defaultTopCenteredFrame(for: FloatingControlBarWindow.minBarSize).origin
     }
 
-    private func defaultTopCenteredOrigin(for size: NSSize) -> NSPoint {
-        let targetScreen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
-        guard let screen = targetScreen else { return .zero }
-        let visibleFrame = screen.visibleFrame
-        let x = (visibleFrame.midX - size.width / 2).rounded(.toNearestOrAwayFromZero)
-        let y = visibleFrame.maxY - size.height - Self.topInset
-        return NSPoint(x: x, y: y)
+    private func defaultTopCenteredFrame(for size: NSSize) -> NSRect {
+        FloatingControlBarGeometry.defaultPillFrame(
+            size: size,
+            visibleFrame: geometryScreenVisibleFrame(),
+            topInset: Self.topInset
+        )
+    }
+
+    private func geometryScreenVisibleFrame() -> NSRect {
+        let targetScreen = self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
+        return targetScreen?.visibleFrame ?? .zero
     }
 
     /// Center the bar near the top of the main screen.
@@ -804,7 +828,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        let origin = defaultTopCenteredOrigin(for: frame.size)
+        let origin = FloatingControlBarGeometry.defaultPillFrame(
+            size: frame.size,
+            visibleFrame: screen.visibleFrame,
+            topInset: Self.topInset
+        ).origin
         self.setFrameOrigin(origin)
         log("FloatingControlBarWindow: centered at \(origin) on screen \(screen.visibleFrame)")
     }
@@ -2409,6 +2437,11 @@ extension FloatingControlBarWindow {
     /// query won't be immediately closed by a stale completion block.
     func cancelPendingDismiss() {
         resignKeyAnimationToken += 1
+        frameAnimationToken += 1
+        if !ShortcutSettings.shared.draggableBarEnabled {
+            pendingRestoreOrigin = nil
+        }
+        suppressHoverResize = false
+        isResizingProgrammatically = false
     }
 }
-

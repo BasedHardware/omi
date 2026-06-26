@@ -9343,6 +9343,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt.';
+
+  @override
   String get regenerateRecap => 'Összegzés újragenerálása';
 
   @override

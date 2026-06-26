@@ -9233,6 +9233,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get backgroundModeNote => 'כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'מצב רקע אינו זמין כי לא מחובר מכשיר תואם. חבר מכשיר Omi, OpenGlass או Friend Pendant כדי להשתמש בתכונה הזו.';
+
+  @override
   String get regenerateRecap => 'צור סיכום מחדש';
 
   @override

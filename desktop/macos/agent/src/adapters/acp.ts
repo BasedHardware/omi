@@ -3,6 +3,7 @@ import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { legacyPermissionPolicy } from "../legacy-permission-policy.js";
+import { adapterCapabilitiesFor } from "./interface.js";
 import type {
   AdapterAttemptContext,
   AdapterAttemptResult,
@@ -45,11 +46,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export class AcpRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId = "acp";
-  readonly capabilities: AdapterCapabilities = {
-    resumeFidelity: "native",
-    supportsNativeResume: true,
-    supportsCancellation: true,
-  };
+  readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor("acp");
 
   private process: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
@@ -247,7 +244,6 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
       return {
         text: fullText,
-        sessionId: adapterSessionId,
         adapterSessionId,
         terminalStatus: signal.aborted ? "cancelled" : "succeeded",
         costUsd: result._meta?.costUsd ?? 0,

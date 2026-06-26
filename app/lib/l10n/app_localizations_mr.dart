@@ -9313,6 +9313,10 @@ class AppLocalizationsMr extends AppLocalizations {
   String get backgroundModeNote => 'सध्या फक्त Omi उपकरणांसह कार्य करते आणि सतत सुधारित केले जात आहे.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'सुसंगत डिव्हाइस कनेक्ट नसल्यामुळे बॅकग्राउंड मोड उपलब्ध नाही. हे वैशिष्ट्य वापरण्यासाठी Omi, OpenGlass किंवा Friend Pendant डिव्हाइस कनेक्ट करा.';
+
+  @override
   String get regenerateRecap => 'सारांश पुन्हा तयार करा';
 
   @override

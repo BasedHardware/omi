@@ -139,6 +139,7 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
         events: []
       ),
       transcriptSegments: segments,
+      transcriptSegmentsIncluded: true,
       geolocation: nil,
       photos: [],
       appsResults: [],

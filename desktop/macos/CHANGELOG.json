@@ -1,8 +1,95 @@
 {
   "unreleased": [
+    "Entry from main (other PR that landed first)",
     "New Settings → Auto-router page for tuning per-task weights (quality/latency/cost) with auto-balancing sliders and debounced save"
   ],
   "releases": [
+    {
+      "version": "0.11.539",
+      "date": "2026-06-26",
+      "changes": [
+        "Developer named bundles now start quiet \u2014 lazy permissions, no auto screen/audio capture \u2014 unless explicitly seeded eager"
+      ]
+    },
+    {
+      "version": "0.11.538",
+      "date": "2026-06-26",
+      "changes": [
+        "Improved desktop agent session continuity across bridge restarts and control-tool ownership changes.",
+        "Improves update release safety checks"
+      ]
+    },
+    {
+      "version": "0.11.537",
+      "date": "2026-06-26",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.536",
+      "date": "2026-06-26",
+      "changes": [
+        "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons",
+        "Added get_work_context tool to the local AI-agent API so agents can pull your current screen + last few minutes of activity in one call (no manual screenshots)"
+      ]
+    },
+    {
+      "version": "0.11.535",
+      "date": "2026-06-25",
+      "changes": [
+        "Connect your AI: centered the omi title together with the What-omi-knows cards"
+      ]
+    },
+    {
+      "version": "0.11.534",
+      "date": "2026-06-25",
+      "changes": [
+        "Connect your AI: 6 agents (Claude, ChatGPT, OpenClaw, Hermes, Ask Omi, More), a simple Claude/ChatGPT picker (Claude Code/cloud/both), and one-click OpenClaw + Hermes memory-bank setup"
+      ]
+    },
+    {
+      "version": "0.11.533",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.531",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.530",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.529",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.527",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.525",
+      "date": "2026-06-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
     {
       "version": "0.11.524",
       "date": "2026-06-25",
