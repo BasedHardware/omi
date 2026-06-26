@@ -27,6 +27,8 @@ import type {
   LocalAgentSetupPromptArgs,
   LocalAgentToolArguments,
   PiChatRequest,
+  PiChatStreamEvent,
+  PiChatStreamRequest,
   ClaudeAcpChatRequest,
   ByokProvider,
   ByokSaveRequest,
@@ -118,6 +120,13 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('localAgent:chatTool', name, args ?? {}),
   piChatEnabled: process.env.OMI_WINDOWS_PI_CHAT !== '0' && process.env.OMI_PI_CHAT !== '0',
   piChatSend: (request: PiChatRequest) => ipcRenderer.invoke('piChat:send', request),
+  piChatStart: (request: PiChatStreamRequest) => ipcRenderer.invoke('piChat:start', request),
+  piChatAbort: (sessionId: string) => ipcRenderer.invoke('piChat:abort', sessionId),
+  onPiChatEvent: (cb: (event: PiChatStreamEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: PiChatStreamEvent): void => cb(event)
+    ipcRenderer.on('piChat:event', listener)
+    return () => ipcRenderer.removeListener('piChat:event', listener)
+  },
   skillsList: () => ipcRenderer.invoke('skills:list'),
   claudeAcpStatus: () => ipcRenderer.invoke('claudeAcp:status'),
   claudeAcpChatSend: (request: ClaudeAcpChatRequest) =>
