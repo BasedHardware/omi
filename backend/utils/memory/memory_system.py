@@ -4,12 +4,19 @@ Replaces fragmented memory rollout flags with one explicit server-owned selector
 ``MemorySystem.LEGACY`` is the documented default — not an implicit None fallback.
 """
 
-import os
 from enum import Enum
-from typing import Set
 
 MEMORY_SYSTEM_FIELD = "memory_system"
-CANONICAL_COHORT_ENV = "MEMORY_CANONICAL_USERS"
+
+# Code-as-config canonical cohort whitelist (reviewable, diff-able, test-guarded).
+# Add Firebase UIDs here to enroll users in the canonical memory path.
+# Empty by default — everyone resolves to LEGACY until explicitly listed.
+#
+# Example (uncomment and replace with a real uid before deploy):
+# CANONICAL_MEMORY_USERS: frozenset[str] = frozenset({
+#     "your-firebase-uid-here",
+# })
+CANONICAL_MEMORY_USERS: frozenset[str] = frozenset()
 
 
 class MemorySystem(str, Enum):
@@ -17,35 +24,35 @@ class MemorySystem(str, Enum):
     CANONICAL = "canonical"
 
 
-def _canonical_users_from_env() -> Set[str]:
-    raw = os.getenv(CANONICAL_COHORT_ENV, "")
-    return {uid.strip() for uid in raw.split(",") if uid.strip()}
+def _canonical_cohort_uids() -> frozenset[str]:
+    """Return the code-defined canonical cohort set."""
+    return CANONICAL_MEMORY_USERS
 
 
 def list_canonical_cohort_uids() -> list[str]:
-    """Return sorted uids from ``MEMORY_CANONICAL_USERS`` (empty when unset)."""
-    return sorted(_canonical_users_from_env())
+    """Return sorted uids from ``CANONICAL_MEMORY_USERS``."""
+    return sorted(_canonical_cohort_uids())
 
 
 def resolve_memory_system(uid: str, *, db_client=None) -> MemorySystem:
     """Return the server-owned memory cohort for ``uid``.
 
     Precedence (authoritative):
-      1. ``MEMORY_CANONICAL_USERS`` env whitelist — sole source of canonical cohort membership.
+      1. ``CANONICAL_MEMORY_USERS`` in this module — sole source of canonical cohort membership.
       2. Absence from the whitelist → ``MemorySystem.LEGACY`` (explicit default; no implicit None).
 
     A stale persisted ``memory_control/state.memory_system=canonical`` does **not** override
-    whitelist removal — emptying the whitelist is the global kill-switch (everyone legacy).
+    whitelist removal — clearing the code whitelist is the global kill-switch (everyone legacy).
 
     Transitional memory rollout controls (``MEMORY_MODE``, ``MEMORY_ENABLED_USERS``, stage gates,
     global read gates) select memory read/write adapters — they do **not** imply ``MemorySystem.CANONICAL``.
     """
-    del db_client  # reserved for callers/tests; cohort is env-only today
+    del db_client  # reserved for callers/tests; cohort is code-defined today
 
     if not uid:
         return MemorySystem.LEGACY
 
-    if uid in _canonical_users_from_env():
+    if uid in _canonical_cohort_uids():
         return MemorySystem.CANONICAL
 
     return MemorySystem.LEGACY
