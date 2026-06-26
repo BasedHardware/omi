@@ -72,6 +72,7 @@ pytest tests/unit/test_calendar_autolink_invalid_timestamp.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_firestore_cache.py -v
+pytest tests/unit/test_firestore_invariant_helpers.py -v
 pytest tests/unit/test_task_sharing.py -v
 pytest tests/unit/test_action_items_conversation_list_malformed.py -v
 pytest tests/unit/test_firmware_pagination.py -v
@@ -111,6 +112,7 @@ pytest tests/unit/test_executors.py -v
 pytest tests/unit/test_modulate_stt.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_request_validation_contracts.py -v
 pytest tests/unit/test_conversation_structure_timezone.py -v
 pytest tests/unit/test_action_item_dedup.py -v
 pytest tests/unit/test_action_item_reminder_cancel_on_complete.py -v
@@ -142,6 +144,7 @@ pytest tests/unit/test_timeout_middleware.py -v
 pytest tests/unit/test_pusher_circuit_breaker.py -v
 pytest tests/unit/test_pusher_ghost_connections.py -v
 pytest tests/unit/test_async_tasks.py -v
+pytest tests/unit/test_async_resource_correctness.py -v
 pytest tests/unit/test_lock_bypass_fixes.py -v
 pytest tests/unit/test_integration_malformed_records.py -v
 pytest tests/unit/test_oauth_callback_uid_guard.py -v

@@ -241,6 +241,9 @@ final class LocalAgentAPIServer {
     guard Self.tools.contains(where: { $0.name == toolName }) else {
       return errorResponse("unknown_tool: \(toolName)", statusCode: 404)
     }
+    if toolName == "get_work_context" {
+      return await workContextResponse(arguments: arguments)
+    }
     if toolName == "get_screenshot" {
       return await screenshotToolResponse(toolName: toolName, arguments: arguments)
     }
@@ -271,6 +274,98 @@ final class LocalAgentAPIServer {
       diff |= Int(a ^ b)
     }
     return diff == 0
+  }
+
+  /// One-call "work context" for agents: the current screen + a compressed
+  /// timeline of the last N minutes of on-screen activity. Read-only; composes
+  /// existing Rewind data so agents stop asking the user to screenshot/re-explain.
+  private func workContextResponse(arguments: [String: Any]) async -> LocalHTTPResponse {
+    let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
+    let now = Date()
+    let start = now.addingTimeInterval(-Double(minutes) * 60)
+    let formatter = ISO8601DateFormatter()
+
+    // 1) Screen now — most recent frame whose pixels are currently loadable
+    //    (skips frames still buffering in the unflushed active video chunk).
+    var screenNow: [String: Any] = ["available": false]
+    if let recent = try? await RewindDatabase.shared.getRecentScreenshots(limit: 25) {
+      for shot in recent {
+        guard let sid = shot.id else { continue }
+        if let data = try? await loadScreenshotDataEnsuringStorage(for: shot) {
+          screenNow = [
+            "available": true,
+            "screenshot_id": sid,
+            "timestamp": formatter.string(from: shot.timestamp),
+            "app_name": shot.appName,
+            "window_title": shot.windowTitle ?? NSNull(),
+            "ocr_preview": String((shot.ocrText ?? "").prefix(800)),
+            "image_bytes": data.count,
+            "note": "Call get_screenshot with this screenshot_id to SEE the full-screen image.",
+          ]
+          break
+        }
+      }
+    }
+
+    // 2) Recent activity — sampled frames, consecutive (app, window) runs collapsed.
+    var timeline: [[String: Any]] = []
+    let calendar = Calendar.current
+    func clock(_ date: Date) -> String {
+      let c = calendar.dateComponents([.hour, .minute], from: date)
+      return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+    }
+    if let shots = try? await RewindDatabase.shared.getScreenshotsSampled(
+      from: start, to: now, targetCount: 80)
+    {
+      var runs: [(app: String, window: String, start: String, end: String, frames: Int)] = []
+      for shot in shots {
+        let window = Self.normalizeWindow(shot.windowTitle ?? "")
+        let cl = clock(shot.timestamp)
+        if var last = runs.last, last.app == shot.appName, last.window == window {
+          last.end = cl
+          last.frames += 1
+          runs[runs.count - 1] = last
+        } else {
+          runs.append((shot.appName, window, cl, cl, 1))
+        }
+      }
+      for run in runs.reversed().prefix(20) {
+        timeline.append([
+          "start": run.start, "end": run.end, "app": run.app,
+          "window": run.window, "frames": run.frames,
+        ])
+      }
+    }
+
+    return jsonResponse([
+      "ok": true,
+      "name": "get_work_context",
+      "window_minutes": minutes,
+      "screen_now": screenNow,
+      "timeline": timeline,
+      "memories_hint":
+        "For the user's operating principles/preferences, also call search_memories (omi-memory).",
+      "guidance":
+        "This is the user's recent on-screen activity. Act on it directly instead of asking them to screenshot or re-explain what they were doing.",
+    ])
+  }
+
+  /// Strip Unicode format/control marks (bidi isolates apps like Telegram inject),
+  /// trailing message counters "(245236)", and leading unread badges "(2) ", so
+  /// near-identical consecutive window titles collapse into one timeline run.
+  private static func normalizeWindow(_ raw: String) -> String {
+    var w = String(
+      raw.unicodeScalars.filter { scalar in
+        let category = scalar.properties.generalCategory
+        return category != .format && category != .control
+      })
+    if let r = w.range(of: #"\s*\(\d{2,}\)\s*$"#, options: .regularExpression) {
+      w.removeSubrange(r)
+    }
+    if let r = w.range(of: #"^\(\d+\)\s*"#, options: .regularExpression) {
+      w.removeSubrange(r)
+    }
+    return w.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   private func screenshotToolResponse(toolName: String, arguments: [String: Any]) async -> LocalHTTPResponse {
@@ -429,6 +524,18 @@ final class LocalAgentAPIServer {
         "screenshot_id": ["type": "number", "description": "Screenshot ID from search_screen_history or the screenshots table"]
       ],
       required: ["screenshot_id"]
+    ),
+    LocalAgentTool(
+      name: "get_work_context",
+      description:
+        "Get the user's CURRENT screen + what they were just doing, in one fast call. Returns screen_now (the latest full-screen frame as a screenshot_id + its OCR text — fetch pixels with get_screenshot) and a compressed timeline of the last N minutes of on-screen activity. CALL THIS FIRST, on any turn where seeing the user's screen or recent work would help — e.g. they say 'fix this', 'it didn't work', 'this bug', or reference something on screen — instead of asking them to screenshot or re-explain. Default window 10 minutes (minutes arg to widen/narrow). Pair with search_memories for their preferences.",
+      properties: [
+        "minutes": [
+          "type": "number",
+          "description": "Minutes of recent activity to summarize (default 10, max 120)",
+        ]
+      ],
+      required: []
     ),
     LocalAgentTool(
       name: "get_daily_recap",

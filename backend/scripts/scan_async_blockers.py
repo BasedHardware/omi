@@ -70,11 +70,12 @@ def get_route_info(decorators):
 
 
 def _get_offloaded_lines(node):
-    """Find line numbers of calls inside asyncio.to_thread/run_in_executor wrappers.
+    """Find line numbers of calls inside recognized executor wrappers.
 
     These are lambda bodies and nested def functions passed as arguments to
-    asyncio.to_thread() or loop.run_in_executor(). Calls inside those are
-    already offloaded and should not be flagged.
+    asyncio.to_thread(), loop.run_in_executor(), or the repository's
+    utils.executors.run_blocking(). Calls inside those are already offloaded and
+    should not be flagged.
     """
     offloaded = set()
     for child in ast.walk(node):
@@ -82,7 +83,8 @@ def _get_offloaded_lines(node):
             continue
         is_to_thread = isinstance(child.func, ast.Attribute) and child.func.attr == 'to_thread'
         is_run_in_executor = isinstance(child.func, ast.Attribute) and child.func.attr == 'run_in_executor'
-        if not is_to_thread and not is_run_in_executor:
+        is_run_blocking = isinstance(child.func, ast.Name) and child.func.id == 'run_blocking'
+        if not is_to_thread and not is_run_in_executor and not is_run_blocking:
             continue
         for arg in child.args + [kw.value for kw in child.keywords]:
             if isinstance(arg, ast.Lambda):

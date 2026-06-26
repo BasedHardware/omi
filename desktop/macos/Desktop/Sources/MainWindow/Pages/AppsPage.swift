@@ -289,7 +289,7 @@ struct AppsPage: View {
             .frame(width: 520, height: 620)
         }
         .dismissableSheet(item: $selectedExportDestination) { destination in
-            MemoryExportDestinationSheet(
+            ConnectDestinationSheet(
                 destination: destination,
                 statuses: $exportStatuses,
                 onDismiss: {

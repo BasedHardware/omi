@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 import database.action_items as action_items_db
 from utils.other import endpoints as auth
+from utils.request_validation import validate_calendar_date
 
 router = APIRouter()
 
@@ -13,6 +14,7 @@ def get_daily_score(
     date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    date = validate_calendar_date(date)
     return action_items_db.get_daily_score(uid, date=date)
 
 
@@ -21,4 +23,5 @@ def get_scores(
     date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    date = validate_calendar_date(date)
     return action_items_db.get_scores(uid, date=date)

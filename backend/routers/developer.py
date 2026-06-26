@@ -46,6 +46,7 @@ from utils.apps import update_personas_async
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
+from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
 import logging
 
@@ -1450,7 +1451,7 @@ def update_goal_progress(
 @router.get("/v1/dev/user/goals/{goal_id}/history", tags=["developer"])
 def get_goal_history(
     goal_id: str,
-    days: int = Query(default=30, le=365),
+    days: HistoryDays = 30,
     uid: str = Depends(get_uid_with_goals_read),
 ) -> List[dict]:
     """
