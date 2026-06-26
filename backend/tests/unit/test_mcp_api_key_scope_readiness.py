@@ -146,7 +146,7 @@ def test_write_plan_requires_execute_and_allow_write_and_rejects_unknown_scopes(
 def test_docs_reference_non_claims_and_server_owned_scope_assignment():
     root = Path(__file__).resolve().parents[2].parent
     readiness_doc = root / "docs" / "epics" / "memory_mcp_app_key_scope_readiness.md"
-    oracle_doc = root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md"
+    oracle_doc = root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md"
     readiness = readiness_doc.read_text()
     oracle = oracle_doc.read_text()
 
