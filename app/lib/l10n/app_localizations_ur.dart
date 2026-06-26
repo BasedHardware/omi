@@ -9317,6 +9317,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get backgroundModeNote => 'فی الحال صرف Omi آلات کے ساتھ کام کرتا ہے اور مسلسل بہتر بنایا جا رہا ہے۔';
 
   @override
+  String get backgroundModeUnavailable =>
+      'پس منظر موڈ دستیاب نہیں ہے کیونکہ کوئی مطابقت رکھنے والا آلہ منسلک نہیں ہے۔ اس خصوصیت کو استعمال کرنے کے لیے Omi، OpenGlass یا Friend Pendant ڈیوائس منسلک کریں۔';
+
+  @override
   String get regenerateRecap => 'خلاصہ دوبارہ بنائیں';
 
   @override
@@ -9337,4 +9341,40 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'آپ اپنا ذاتی ٹرانسکرپشن فراہم کنندہ استعمال کرتے ہیں۔ ان ریکارڈنگز کو سنک کرنے پر یہ Omi کے سرورز پر ٹرانسکرائب ہوں گی اور آپ کے پلان کی ٹرانسکرپشن حد میں شمار ہوں گی۔';
+
+  @override
+  String get transcribeLaterTitle => 'بعد میں ٹرانسکرائب کریں';
+
+  @override
+  String get transcribeLaterDescription =>
+      'ابھی آڈیو ریکارڈ کریں اور لائیو کے بجائے جب چاہیں اسے ٹرانسکرائب کریں۔ ریکارڈنگز آپ کے فون پر محفوظ رہتی ہیں، پھر آپ انہیں اپ لوڈ کر کے گفتگوئیں بنا سکتے ہیں۔';
+
+  @override
+  String get transcribeLaterNote =>
+      'فی الحال صرف Omi ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'آپ کے فون میں جگہ کم ہے، اس لیے ریکارڈنگ روک دی گئی ہے۔ کچھ جگہ خالی کریں یا اپنی ریکارڈنگز اپ لوڈ کریں، پھر یہ خود بخود دوبارہ شروع ہو جائے گی۔';
+
+  @override
+  String get recordingMode => 'ریکارڈنگ موڈ';
+
+  @override
+  String get captureModeLater => 'بعد میں';
+
+  @override
+  String get captureModeLiveDescription => 'بولتے وقت حقیقی وقت میں ٹرانسکرائب کریں۔';
+
+  @override
+  String get captureModeLaterDescription => 'ابھی آڈیو محفوظ کریں اور جب چاہیں ٹرانسکرائب کریں۔';
+
+  @override
+  String get unmute => 'آواز چالو کریں';
+
+  @override
+  String get newRecording => 'نئی ریکارڈنگ';
+
+  @override
+  String get transcribeLaterPaused => 'روکا گیا — آڈیو ریکارڈ نہیں ہو رہی';
 }

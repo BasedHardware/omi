@@ -9348,6 +9348,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Modul de fundal nu este disponibil deoarece nu este conectat niciun dispozitiv compatibil. Conectează un dispozitiv Omi, OpenGlass sau Friend Pendant pentru a folosi această funcție.';
+
+  @override
   String get regenerateRecap => 'Regenerează rezumatul';
 
   @override
@@ -9368,4 +9372,40 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.';
+
+  @override
+  String get transcribeLaterTitle => 'Transcrie mai târziu';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Deocamdată funcționează cu dispozitivele Omi. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.';
+
+  @override
+  String get recordingMode => 'Mod de înregistrare';
+
+  @override
+  String get captureModeLater => 'Mai târziu';
+
+  @override
+  String get captureModeLiveDescription => 'Transcrie în timp real în timp ce vorbești.';
+
+  @override
+  String get captureModeLaterDescription => 'Salvează audio acum și transcrie oricând dorești.';
+
+  @override
+  String get unmute => 'Reactivează sunetul';
+
+  @override
+  String get newRecording => 'Înregistrare nouă';
+
+  @override
+  String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
 }

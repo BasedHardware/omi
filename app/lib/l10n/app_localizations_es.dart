@@ -9324,6 +9324,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get backgroundModeNote => 'Por ahora solo funciona con dispositivos Omi y se mejora continuamente.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'El modo en segundo plano no está disponible porque no hay ningún dispositivo compatible conectado. Conecta un dispositivo Omi, OpenGlass o Friend Pendant para usar esta función.';
+
+  @override
   String get regenerateRecap => 'Regenerar resumen';
 
   @override
@@ -9344,4 +9348,40 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Usas tu propio proveedor de transcripción. Sincronizar estas grabaciones las transcribe en los servidores de Omi y cuentan para el límite de transcripción de tu plan.';
+
+  @override
+  String get transcribeLaterTitle => 'Transcribir después';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Graba el audio ahora y transcríbelo cuando quieras, en lugar de en directo. Las grabaciones se guardan en tu teléfono y luego las subes para crear conversaciones.';
+
+  @override
+  String get transcribeLaterNote =>
+      'De momento funciona con dispositivos Omi. El audio permanece en tu teléfono hasta que decidas subirlo.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Tu teléfono tiene poco espacio, así que la grabación está en pausa. Libera espacio o sube tus grabaciones y se reanudará automáticamente.';
+
+  @override
+  String get recordingMode => 'Modo de grabación';
+
+  @override
+  String get captureModeLater => 'Después';
+
+  @override
+  String get captureModeLiveDescription => 'Transcribe en tiempo real mientras hablas.';
+
+  @override
+  String get captureModeLaterDescription => 'Guarda el audio ahora y transcríbelo cuando quieras.';
+
+  @override
+  String get unmute => 'Reactivar audio';
+
+  @override
+  String get newRecording => 'Nueva grabación';
+
+  @override
+  String get transcribeLaterPaused => 'En pausa: no se está grabando audio';
 }

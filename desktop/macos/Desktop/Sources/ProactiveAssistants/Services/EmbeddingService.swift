@@ -119,7 +119,14 @@ actor EmbeddingService {
     request.timeoutInterval = 60
     request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
 
-    let (data, _) = try await URLSession.shared.data(for: request)
+    let (data, response) = try await URLSession.shared.data(for: request)
+
+    // Check HTTP status before parsing — non-JSON error bodies (HTML 401/500)
+    // cause "data couldn't be read" errors that mask the real problem.
+    if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
+      let body = String(data: data.prefix(200), encoding: .utf8) ?? "<non-utf8>"
+      throw EmbeddingError.serverError(statusCode: httpResponse.statusCode, body: body)
+    }
 
     guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
       let embeddings = json["embeddings"] as? [[String: Any]]
@@ -261,6 +268,8 @@ actor EmbeddingService {
       if totalProcessed > 0 {
         log("EmbeddingService: Backfill complete — \(totalProcessed) items embedded")
       }
+    } catch let error as EmbeddingError where error.isExpectedBackendState {
+      log("EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)")
     } catch {
       logError("EmbeddingService: Backfill failed after \(totalProcessed) items", error: error)
     }
@@ -317,12 +326,64 @@ actor EmbeddingService {
     case invalidResponse
     case serverError(statusCode: Int, body: String)
 
+    var reasonCode: String {
+      switch self {
+      case .missingAPIKey:
+        return "missing_api_key"
+      case .invalidResponse:
+        return "malformed_response"
+      case .serverError(let statusCode, let body):
+        let lower = body.lowercased()
+        if statusCode == 402 || lower.contains("trial_expired") || lower.contains("trial expired")
+          || lower.contains("payment required") || lower.contains("byok")
+          || lower.contains("bring your own key") || lower.contains("usage limit")
+        {
+          return "product_gate"
+        }
+        if statusCode == 429 || lower.contains("rate limit") || lower.contains("resource exhausted") {
+          return "rate_limited"
+        }
+        if (500...599).contains(statusCode) || lower.contains("temporarily unavailable")
+          || lower.contains("service unavailable") || lower.contains("overloaded")
+        {
+          return "temporarily_unavailable"
+        }
+        return "http_\(statusCode)"
+      }
+    }
+
+    var isExpectedProductState: Bool { reasonCode == "product_gate" }
+    var isTransient: Bool { reasonCode == "rate_limited" || reasonCode == "temporarily_unavailable" }
+    var isNonActionableForSentry: Bool { isExpectedProductState || isTransient }
+
     var errorDescription: String? {
       switch self {
-      case .missingAPIKey: return "AI features are not configured. Please update the app."
-      case .invalidResponse: return "AI service returned an unexpected response. Please try again."
-      case .serverError(let statusCode, let body): return "Embedding API error (HTTP \(statusCode)): \(body)"
+      case .missingAPIKey:
+        return "AI features are not configured. Please update the app."
+      case .invalidResponse:
+        return "Embedding API returned an unexpected response."
+      case .serverError:
+        switch reasonCode {
+        case "product_gate":
+          return "Embedding API unavailable: active plan or BYOK keys required."
+        case "rate_limited":
+          return "Embedding API rate limited. Will retry later."
+        case "temporarily_unavailable":
+          return "Embedding API temporarily unavailable. Will retry later."
+        default:
+          return "Embedding API error (\(reasonCode))."
+        }
       }
+    }
+
+    /// Expected product-gating / backend-limit states (paywall/trial-expired, rate-limited).
+    /// These are not actionable bugs: they should be logged locally rather than reported to
+    /// Sentry as high-priority errors, and must not drive tight retry loops.
+    var isExpectedBackendState: Bool {
+      if case .serverError(let statusCode, _) = self {
+        return statusCode == 402 || statusCode == 429
+      }
+      return false
     }
   }
 }

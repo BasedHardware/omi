@@ -325,6 +325,10 @@ class TestIsTrialPaywalledBehavioral:
 
         import utils.subscription as sub
 
+        # The trial paywall is OFF by default (freemium). Force it on so the delegation
+        # logic under test is reachable.
+        sub.TRIAL_PAYWALL_ENABLED = True
+
         self._sub = sub
         self._mock_expired = MagicMock(return_value=True)
         self._orig_expired = sub._is_trial_expired_cached
@@ -444,6 +448,9 @@ class TestByokRequestEscapeHatch:
 
         import utils.subscription as sub
         from utils import byok
+
+        # Paywall is OFF by default (freemium); force it on for these BYOK-bypass tests.
+        sub.TRIAL_PAYWALL_ENABLED = True
 
         self._sub = sub
         self._byok = byok

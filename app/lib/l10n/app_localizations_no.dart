@@ -9300,6 +9300,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get backgroundModeNote => 'Fungerer foreløpig bare med Omi-enheter og forbedres kontinuerlig.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Bakgrunnsmodus er ikke tilgjengelig fordi ingen kompatibel enhet er tilkoblet. Koble til en Omi-, OpenGlass- eller Friend Pendant-enhet for å bruke denne funksjonen.';
+
+  @override
   String get regenerateRecap => 'Generer sammendrag på nytt';
 
   @override
@@ -9320,4 +9324,40 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Du bruker din egen transkripsjonsleverandør. Synkronisering av disse opptakene transkriberer dem på Omis servere, og de teller mot transkripsjonsgrensen i abonnementet ditt.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkriber senere';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Ta opp lyd nå og transkriber den ved behov i stedet for direkte. Opptakene lagres på telefonen, og du laster dem opp for å lage samtaler.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Fungerer foreløpig med Omi-enheter. Lyden blir værende på telefonen til du velger å laste den opp.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefonen har lite lagringsplass, så opptaket er satt på pause. Frigjør plass eller last opp opptakene dine, så fortsetter det automatisk.';
+
+  @override
+  String get recordingMode => 'Opptaksmodus';
+
+  @override
+  String get captureModeLater => 'Senere';
+
+  @override
+  String get captureModeLiveDescription => 'Transkriber i sanntid mens du snakker.';
+
+  @override
+  String get captureModeLaterDescription => 'Lagre lyden nå og transkriber når du vil.';
+
+  @override
+  String get unmute => 'Slå på lyd';
+
+  @override
+  String get newRecording => 'Nytt opptak';
+
+  @override
+  String get transcribeLaterPaused => 'På pause – lyd tas ikke opp';
 }

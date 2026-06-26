@@ -39,12 +39,14 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.executors import postprocess_executor, submit_with_context
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -68,6 +70,41 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
+    return conversation
+
+
+def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
+    """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
+    items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
+    the conversation immediately: the client gets an instant open (transcript already present) and
+    polls until `status` flips to `completed`. The `deferred` flag is cleared first so the poll's
+    repeated GETs don't each kick off another enrichment. On enrichment failure the flag is
+    re-armed and status reset to completed so the next open retries cleanly instead of spinning."""
+    conversation_id = conversation.get('id')
+    try:
+        conversations_db.update_conversation(uid, conversation_id, {'deferred': False})
+    except Exception as e:
+        logger.error(f"lazy enrich claim failed uid={uid} conv={conversation_id}: {e}")
+        return conversation
+
+    def _run_enrichment():
+        try:
+            conv_obj = deserialize_conversation(conversation)
+            conv_obj.deferred = False
+            process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+            logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
+        except Exception as e:
+            logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            try:
+                conversations_db.update_conversation(
+                    uid, conversation_id, {'deferred': True, 'status': ConversationStatus.completed.value}
+                )
+            except Exception:
+                pass
+
+    submit_with_context(postprocess_executor, _run_enrichment)
+    # Return immediately — still status=processing, no summary yet; the client polls for completion.
+    conversation['deferred'] = False
     return conversation
 
 
@@ -132,10 +169,18 @@ def reprocess_conversation(
     return processed_conversation
 
 
-@router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
+@router.get(
+    '/v1/conversations',
+    response_model=List[Conversation],
+    tags=['conversations'],
+    description=(
+        "List responses may omit detail-only fields such as transcript_segments. "
+        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript."
+    ),
+)
 def get_conversations(
-    limit: int = 100,
-    offset: int = 0,
+    limit: PositiveLimit = 100,
+    offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
@@ -169,17 +214,42 @@ def get_conversations(
 def get_conversations_count(
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
     include_discarded: bool = Query(False),
+    start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
+    folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
+    starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
-    count = conversations_db.get_conversations_count(uid, include_discarded=include_discarded, statuses=status_list)
+    count = conversations_db.get_conversations_count(
+        uid,
+        include_discarded=include_discarded,
+        statuses=status_list,
+        start_date=start_date,
+        end_date=end_date,
+        folder_id=folder_id,
+        starred=starred,
+    )
     return {'count': count}
 
 
-@router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}",
+    response_model=Conversation,
+    tags=['conversations'],
+    description=(
+        "Detail responses include transcript fields when available. Locked or redacted conversations "
+        "may include an empty transcript_segments array even though transcript data exists."
+    ),
+)
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
-    return _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
+    # enriched on first open. Other conversations are returned unchanged.
+    if conversation.get('deferred'):
+        conversation = _enrich_deferred_conversation(uid, conversation)
+    return conversation
 
 
 @router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])
@@ -306,11 +376,16 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     if not started_at:
         raise HTTPException(status_code=400, detail="Conversation has no timestamp information")
 
-    # Parse datetimes if they're strings
-    if isinstance(started_at, str):
-        started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
-    if isinstance(finished_at, str):
-        finished_at = datetime.fromisoformat(finished_at.replace('Z', '+00:00'))
+    # Parse datetimes if they're strings. A stored timestamp that is not valid ISO (legacy or imported
+    # data) would otherwise raise ValueError and surface as a 500; return a clear 400 instead, matching the
+    # missing-timestamp case handled just above.
+    try:
+        if isinstance(started_at, str):
+            started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+        if isinstance(finished_at, str):
+            finished_at = datetime.fromisoformat(finished_at.replace('Z', '+00:00'))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Conversation has invalid timestamp information")
 
     # Ensure timezone-aware
     if started_at.tzinfo is None:
@@ -417,11 +492,13 @@ def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(au
 def set_conversation_events_state(
     conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    if len(data.events_idx) != len(data.values):
+        raise HTTPException(status_code=422, detail="events_idx and values must have the same length")
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     events = conversation.structured.events
     for i, event_idx in enumerate(data.events_idx):
-        if event_idx >= len(events):
+        if not (0 <= event_idx < len(events)):
             continue
         events[event_idx].created = data.values[i]
 
@@ -437,7 +514,7 @@ def set_action_item_status(
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
     for i, action_item_idx in enumerate(data.items_idx):
-        if action_item_idx >= len(action_items):
+        if not (0 <= action_item_idx < len(action_items)):
             continue
 
         action_item = action_items[action_item_idx]
@@ -474,7 +551,7 @@ def set_action_item_status(
             description_to_ids.setdefault(desc, []).append(ai['id'])
 
         for i, action_item_idx in enumerate(data.items_idx):
-            if action_item_idx >= len(action_items):
+            if not (0 <= action_item_idx < len(action_items)):
                 continue
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]

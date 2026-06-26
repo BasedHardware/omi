@@ -66,7 +66,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["exclude", "ignore", "block apps", "blocklist", "reset to defaults"],
       section: .rewind, icon: "clock.arrow.circlepath", settingId: "rewind.excludedapps"),
     SettingsSearchItem(
-      name: "Battery Optimization", subtitle: "Pause text recognition on battery to save energy",
+      name: "Battery Optimization", subtitle: "Saves power by reducing screenshot frequency",
       keywords: ["battery", "power", "energy", "low power"], section: .rewind,
       icon: "clock.arrow.circlepath", settingId: "rewind.battery"),
     SettingsSearchItem(
@@ -255,11 +255,6 @@ struct SettingsSearchItem: Identifiable {
       subtitle: "Allow repositioning the floating bar by dragging it",
       keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.draggable"),
-    SettingsSearchItem(
-      name: "Voice Questions", subtitle: "Speak replies aloud for push-to-talk questions",
-      keywords: ["voice", "speech", "tts", "audio answers", "push to talk"],
-      section: .floatingBar,
-      icon: "sparkles", settingId: "floatingbar.voiceanswers"),
     SettingsSearchItem(
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,

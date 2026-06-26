@@ -9154,6 +9154,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get backgroundModeNote => '현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다.';
 
   @override
+  String get backgroundModeUnavailable =>
+      '호환되는 기기가 연결되어 있지 않아 백그라운드 모드를 사용할 수 없습니다. 이 기능을 사용하려면 Omi, OpenGlass 또는 Friend Pendant 기기를 연결하세요.';
+
+  @override
   String get regenerateRecap => '요약 재생성';
 
   @override
@@ -9173,4 +9177,37 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncCustomSttWarningMessage => '직접 설정한 전사 제공자를 사용 중입니다. 이 녹음을 동기화하면 Omi 서버에서 전사되며 요금제의 전사 한도에 포함됩니다.';
+
+  @override
+  String get transcribeLaterTitle => '나중에 변환하기';
+
+  @override
+  String get transcribeLaterDescription => '실시간 변환 대신 지금 녹음하고 필요할 때 텍스트로 변환하세요. 녹음은 휴대폰에 저장되며, 업로드하면 대화로 만들어집니다.';
+
+  @override
+  String get transcribeLaterNote => '현재는 Omi 기기에서만 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
+
+  @override
+  String get transcribeLaterStorageFull => '휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.';
+
+  @override
+  String get recordingMode => '녹음 모드';
+
+  @override
+  String get captureModeLater => '나중에';
+
+  @override
+  String get captureModeLiveDescription => '말하는 동안 실시간으로 변환합니다.';
+
+  @override
+  String get captureModeLaterDescription => '지금 오디오를 저장하고 원할 때 변환하세요.';
+
+  @override
+  String get unmute => '음소거 해제';
+
+  @override
+  String get newRecording => '새 녹음';
+
+  @override
+  String get transcribeLaterPaused => '일시중지됨 — 오디오가 녹음되지 않고 있습니다';
 }

@@ -159,6 +159,7 @@ utils_calendar_linking.write_conversation_link_to_calendar_event = MagicMock()
 
 utils_subscription = sys.modules["utils.subscription"]
 utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
+utils_subscription.should_defer_desktop_processing = MagicMock(return_value=False)
 
 utils_executors = sys.modules["utils.executors"]
 utils_executors.db_executor = MagicMock()

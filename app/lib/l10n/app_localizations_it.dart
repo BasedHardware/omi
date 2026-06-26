@@ -9358,6 +9358,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get backgroundModeNote => 'Per ora funziona solo con i dispositivi Omi ed è in continuo miglioramento.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'La modalità in background non è disponibile perché non è connesso alcun dispositivo compatibile. Collega un dispositivo Omi, OpenGlass o Friend Pendant per usare questa funzione.';
+
+  @override
   String get regenerateRecap => 'Rigenera il riepilogo';
 
   @override
@@ -9378,4 +9382,40 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Usi un tuo fornitore di trascrizione. Sincronizzare queste registrazioni le trascrive sui server di Omi e contano per il limite di trascrizione del tuo piano.';
+
+  @override
+  String get transcribeLaterTitle => 'Trascrivi più tardi';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Registra l\'audio ora e trascrivilo quando vuoi, invece che in tempo reale. Le registrazioni vengono salvate sul telefono; poi le carichi per creare le conversazioni.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Per ora funziona con i dispositivi Omi. L\'audio resta sul telefono finché non scegli di caricarlo.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Lo spazio sul telefono sta per esaurirsi, quindi la registrazione è in pausa. Libera spazio o carica le registrazioni e riprenderà automaticamente.';
+
+  @override
+  String get recordingMode => 'Modalità di registrazione';
+
+  @override
+  String get captureModeLater => 'Più tardi';
+
+  @override
+  String get captureModeLiveDescription => 'Trascrivi in tempo reale mentre parli.';
+
+  @override
+  String get captureModeLaterDescription => 'Salva l\'audio ora e trascrivilo quando vuoi.';
+
+  @override
+  String get unmute => 'Riattiva audio';
+
+  @override
+  String get newRecording => 'Nuova registrazione';
+
+  @override
+  String get transcribeLaterPaused => 'In pausa — l\'audio non viene registrato';
 }

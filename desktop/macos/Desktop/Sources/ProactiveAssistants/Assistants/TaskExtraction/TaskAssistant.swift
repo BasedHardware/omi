@@ -11,7 +11,10 @@ actor TaskAssistant: ProactiveAssistant {
     var isEnabled: Bool {
         get async {
             await MainActor.run {
+                // Gate the Gemini screen analysis on notifications (off by default) — no
+                // notification, no Gemini call. Re-enabling notifications resumes analysis.
                 TaskAssistantSettings.shared.isEnabled
+                    && TaskAssistantSettings.shared.notificationsEnabled
             }
         }
     }

@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
+import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -688,7 +689,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                               await Share.share(
                                 'https://h.omi.me/apps/${app.id}',
-                                subject: app.name.isEmpty ? null : app.name,
+                                subject: app.name,
                                 sharePositionOrigin: sharePositionOrigin,
                               );
                             },
@@ -1659,16 +1660,6 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     super.dispose();
   }
 
-  String _getAvatarUrl(String seed, String? username) {
-    // Using Avatar Placeholder API for random avatars
-    // If username is available, use username-based avatar for consistency
-    if (username != null && username.isNotEmpty) {
-      return 'https://avatar.iran.liara.run/username?username=${Uri.encodeComponent(username)}';
-    }
-    // Otherwise use a seeded random avatar
-    return 'https://avatar.iran.liara.run/public/${seed.hashCode % 100}';
-  }
-
   Future<void> _submitReview() async {
     if (editRating == 0) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.pleaseSelectRating)));
@@ -1913,40 +1904,13 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Random Avatar
-              ClipOval(
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  color: Colors.grey.shade800,
-                  child: Image.network(
-                    _getAvatarUrl(avatarSeed, review.username),
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      final initial = review.username.isNotEmpty ? review.username[0].toUpperCase() : 'A';
-                      return Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: isUserReview ? Colors.deepPurple.withOpacity(0.2) : Colors.grey.shade800,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            initial,
-                            style: TextStyle(
-                              color: isUserReview ? Colors.deepPurple : Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+              // Avatar
+              ReviewAvatar(
+                seed: avatarSeed,
+                username: review.username,
+                size: 36,
+                backgroundColor: isUserReview ? Colors.deepPurple.withOpacity(0.2) : null,
+                foregroundColor: isUserReview ? Colors.deepPurple : null,
               ),
               const SizedBox(width: 12),
               // Name, date, and stars

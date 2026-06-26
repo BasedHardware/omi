@@ -6,6 +6,7 @@ from typing import List
 
 from pinecone import Pinecone
 
+from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from utils.llm.clients import embeddings
 import logging
 
@@ -83,9 +84,9 @@ def query_vectors_by_metadata(
         filter_data['$and'].append(
             {
                 '$or': [
-                    {'people': {'$in': people}},
-                    {'topics': {'$in': topics}},
-                    {'entities': {'$in': entities}},
+                    {ConversationMetadataKeys.PEOPLE: {'$in': people}},
+                    {ConversationMetadataKeys.TOPICS: {'$in': topics}},
+                    {ConversationMetadataKeys.ENTITIES: {'$in': entities}},
                     # {'dates': {'$in': dates_mentioned}},
                 ]
             }
@@ -119,13 +120,13 @@ def query_vectors_by_metadata(
         metadata = item['metadata']
         conversation_id = metadata['memory_id']
         for topic in topics:
-            if topic in metadata.get('topics', []):
+            if topic in metadata_list(metadata, ConversationMetadataKeys.TOPICS):
                 conversation_id_to_matches[conversation_id] += 1
         for entity in entities:
-            if entity in metadata.get('entities', []):
+            if entity in metadata_list(metadata, ConversationMetadataKeys.ENTITIES):
                 conversation_id_to_matches[conversation_id] += 1
         for person in people:
-            if person in metadata.get('people_mentioned', []):
+            if person in metadata_list(metadata, ConversationMetadataKeys.PEOPLE):
                 conversation_id_to_matches[conversation_id] += 1
 
     conversations_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]

@@ -17,7 +17,6 @@ import database.conversations as conversations_db
 import database.notifications as notification_db
 import database.users as users_db
 import database.tasks as tasks_db
-import database.trends as trends_db
 import database.action_items as action_items_db
 import database.folders as folders_db
 import database.calendar_meetings as calendar_db
@@ -44,14 +43,13 @@ from models.conversation import (
 )
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
-from utils.subscription import is_trial_paywalled
+from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
 from models.other import Person
 from models.structured import Structured
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
-from models.trend import Trend
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_personas_async, update_persona_prompt
+from utils.apps import get_available_apps, update_persona_prompt
 from utils.executors import db_executor, llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
@@ -66,7 +64,6 @@ from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
 from utils.llm.external_integrations import summarize_experience_text
-from utils.llm.trends import trends_extractor
 from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.chat import (
     retrieve_metadata_from_text,
@@ -585,13 +582,6 @@ def send_new_memories_notification(user_id: str, memories: [MemoryDB]):
     send_notification(user_id, "omi" + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
 
 
-def _extract_trends(uid: str, conversation: Conversation):
-    with track_usage(uid, Features.TRENDS):
-        extracted_items = trends_extractor(uid, conversation.transcript_segments, conversation.get_person_ids())
-        parsed = [Trend(category=item.category, topics=[item.topic], type=item.type) for item in extracted_items]
-        trends_db.save_trends(conversation.id, parsed)
-
-
 def _save_action_items(uid: str, conversation: Conversation):
     """
     Save action items from a conversation to the dedicated action_items collection.
@@ -720,6 +710,40 @@ def _update_personas_async(uid: str):
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
+def _build_deferred_structured(conversation) -> Structured:
+    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
+    the first few words of the transcript so the conversation list stays usable until the user
+    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
+    marks the conversation discarded in `_get_conversation_obj`."""
+    text = ''
+    for seg in getattr(conversation, 'transcript_segments', None) or []:
+        seg_text = (getattr(seg, 'text', '') or '').strip()
+        if seg_text:
+            text = seg_text
+            break
+    words = text.split()
+    title = ' '.join(words[:8]).strip() if words else ''
+    return Structured(title=title or 'Recording')
+
+
+def _store_deferred_conversation(uid: str, conversation):
+    """Persist a desktop conversation with a cheap (no-LLM) title and `deferred=True`, skipping
+    all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
+    `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
+    later via the lazy trigger in `get_conversation_by_id`."""
+    structured = _build_deferred_structured(conversation)
+    conversation = _get_conversation_obj(uid, structured, conversation)
+    conversation.deferred = True
+    # `processing` (not completed) is the user-facing "awaiting enrichment" state. Unlike the
+    # `deferred` flag it survives the desktop's local conversation cache, so the client shows a
+    # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
+    # back to `completed`.
+    conversation.status = ConversationStatus.processing
+    conversations_db.upsert_conversation(uid, conversation.dict())
+    logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
+    return conversation
+
+
 def process_conversation(
     uid: str,
     language_code: str,
@@ -755,6 +779,22 @@ def process_conversation(
             except Exception:
                 pass
         return conversation
+
+    # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
+    # paid plan (basic / Neo) get ONLY the raw transcript on capture. The expensive LLM
+    # enrichment (summary, action items, memories, embeddings, app results) is deferred until
+    # they first OPEN the conversation (get_conversation_by_id reprocesses it with
+    # force_process=True). Paid desktop plans (Operator / Architect), BYOK users, and all
+    # non-desktop sources are processed normally here. force_process / is_reprocess — the lazy
+    # trigger and manual reprocess — bypass this so the enrichment actually runs.
+    if (
+        not force_process
+        and not is_reprocess
+        and hasattr(conversation, 'source')
+        and conversation.source == ConversationSource.desktop
+        and should_defer_desktop_processing(uid)
+    ):
+        return _store_deferred_conversation(uid, conversation)
 
     # Fetch meeting context from Firestore if meeting_id is associated with this conversation
     if hasattr(conversation, 'id') and conversation.id:
@@ -862,7 +902,6 @@ def process_conversation(
             if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
                 submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
         submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
-        submit_with_context(postprocess_executor, _extract_trends, uid, conversation)
         submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
         submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
@@ -893,7 +932,6 @@ def process_conversation(
             asyncio.run(conversation_created_webhook(uid, conversation))
 
         submit_with_context(postprocess_executor, _run_webhook)
-        submit_with_context(postprocess_executor, update_personas_async, uid)
 
         # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)

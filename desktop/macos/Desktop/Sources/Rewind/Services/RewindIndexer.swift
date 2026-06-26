@@ -18,7 +18,6 @@ actor RewindIndexer {
     private var statsOCRRan = 0
     private var statsSkippedFrequency = 0
     private var statsSkippedDedup = 0
-    private var statsSkippedBattery = 0
     private var statsLastLogTime = Date()
     private let statsLogInterval: TimeInterval = 60
 
@@ -26,6 +25,13 @@ actor RewindIndexer {
     private var initFailureCount = 0
     private var nextRetryTime: Date = .distantPast
     private static let maxBackoffSeconds: Double = 300 // Cap at 5 minutes
+
+    /// Retention enforcement: prune screenshots/video older than the user's
+    /// `rewindRetentionDays` setting. `.distantPast` means the first frame after
+    /// launch runs cleanup immediately; afterwards it runs at most every 6h.
+    private var lastRetentionCleanupAt: Date = .distantPast
+    private let retentionCleanupInterval: TimeInterval = 6 * 60 * 60
+    private var isRetentionCleanupRunning = false
 
     // MARK: - Initialization
 
@@ -104,7 +110,7 @@ actor RewindIndexer {
 
     // MARK: - OCR Stats
 
-    private enum OCROutcome { case ran, skippedFrequency, skippedDedup, skippedBattery }
+    private enum OCROutcome { case ran, skippedFrequency, skippedDedup }
 
     private func recordOCROutcome(_ outcome: OCROutcome) {
         statsTotalFrames += 1
@@ -112,28 +118,18 @@ actor RewindIndexer {
         case .ran: statsOCRRan += 1
         case .skippedFrequency: statsSkippedFrequency += 1
         case .skippedDedup: statsSkippedDedup += 1
-        case .skippedBattery: statsSkippedBattery += 1
         }
 
         let now = Date()
         if now.timeIntervalSince(statsLastLogTime) >= statsLogInterval {
-            var parts = ["\(statsTotalFrames) frames", "\(statsOCRRan) OCR'd", "\(statsSkippedFrequency) skipped (frequency)", "\(statsSkippedDedup) skipped (dedup)"]
-            if statsSkippedBattery > 0 {
-                parts.append("\(statsSkippedBattery) skipped (battery)")
-            }
+            let parts = ["\(statsTotalFrames) frames", "\(statsOCRRan) OCR'd", "\(statsSkippedFrequency) skipped (frequency)", "\(statsSkippedDedup) skipped (dedup)"]
             log("RewindIndexer: Last \(Int(statsLogInterval))s — \(parts.joined(separator: ", "))")
             statsTotalFrames = 0
             statsOCRRan = 0
             statsSkippedFrequency = 0
             statsSkippedDedup = 0
-            statsSkippedBattery = 0
             statsLastLogTime = now
         }
-    }
-
-    /// Check if OCR should be paused due to battery power
-    private func shouldPauseOCRForBattery() -> Bool {
-        return RewindSettings.shared.pauseOCROnBattery && PowerMonitor.checkBatteryState()
     }
 
     // MARK: - Frame Processing
@@ -142,6 +138,7 @@ actor RewindIndexer {
     func processFrame(_ frame: CapturedFrame) async {
         // Ensure initialized with backoff
         guard await ensureInitialized() else { return }
+        scheduleRetentionCleanupIfDue()
 
         do {
             // Convert JPEG to CGImage for video encoding.
@@ -171,7 +168,6 @@ actor RewindIndexer {
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
-            var skippedForBattery = false
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -180,10 +176,6 @@ actor RewindIndexer {
             } else if await RewindOCRService.shared.shouldSkipOCR(for: cgImage) {
                 recordOCROutcome(.skippedDedup)
                 isIndexed = true
-            } else if shouldPauseOCRForBattery() {
-                framesSinceLastOCR = 0
-                recordOCROutcome(.skippedBattery)
-                skippedForBattery = true
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
@@ -211,8 +203,7 @@ actor RewindIndexer {
                 frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
-                isIndexed: isIndexed,
-                skippedForBattery: skippedForBattery
+                isIndexed: isIndexed
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -238,6 +229,7 @@ actor RewindIndexer {
     /// Process a frame directly from a CGImage (macOS 14+ path, avoids JPEG decode round-trip)
     func processFrame(cgImage: CGImage, appName: String, windowTitle: String?, captureTime: Date) async {
         guard await ensureInitialized() else { return }
+        scheduleRetentionCleanupIfDue()
 
         do {
             // Add frame to video encoder (CGImage directly, no decode needed)
@@ -253,7 +245,6 @@ actor RewindIndexer {
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
-            var skippedForBattery = false
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -262,10 +253,6 @@ actor RewindIndexer {
             } else if await RewindOCRService.shared.shouldSkipOCR(for: cgImage) {
                 recordOCROutcome(.skippedDedup)
                 isIndexed = true
-            } else if shouldPauseOCRForBattery() {
-                framesSinceLastOCR = 0
-                recordOCROutcome(.skippedBattery)
-                skippedForBattery = true
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
@@ -292,8 +279,7 @@ actor RewindIndexer {
                 frameOffset: encodedFrame.frameOffset,
                 ocrText: ocrText,
                 ocrDataJson: ocrDataJson,
-                isIndexed: isIndexed,
-                skippedForBattery: skippedForBattery
+                isIndexed: isIndexed
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -318,6 +304,7 @@ actor RewindIndexer {
     /// Process a frame with additional metadata (focus status, etc.)
     func processFrame(_ frame: CapturedFrame, focusStatus: String?, extractedTasks: [String]?, insight: String?) async {
         guard await ensureInitialized() else { return }
+        scheduleRetentionCleanupIfDue()
 
         do {
             // Convert JPEG to CGImage for video encoding.
@@ -346,7 +333,6 @@ actor RewindIndexer {
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
-            var skippedForBattery = false
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -355,10 +341,6 @@ actor RewindIndexer {
             } else if await RewindOCRService.shared.shouldSkipOCR(for: cgImage) {
                 recordOCROutcome(.skippedDedup)
                 isIndexed = true
-            } else if shouldPauseOCRForBattery() {
-                framesSinceLastOCR = 0
-                recordOCROutcome(.skippedBattery)
-                skippedForBattery = true
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
@@ -397,8 +379,7 @@ actor RewindIndexer {
                 isIndexed: isIndexed,
                 focusStatus: focusStatus,
                 extractedTasksJson: tasksJson,
-                adviceJson: adviceJson,
-                skippedForBattery: skippedForBattery
+                adviceJson: adviceJson
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
@@ -423,11 +404,32 @@ actor RewindIndexer {
 
     // MARK: - Cleanup
 
+    /// Enforce the data-retention window if a cleanup is due. Throttled to once
+    /// per `retentionCleanupInterval` and fire-and-forget so frame ingestion is
+    /// never blocked by deletion. Called from the frame pipeline; the first frame
+    /// after launch prunes anything past the retention setting.
+    private func scheduleRetentionCleanupIfDue() {
+        guard Date().timeIntervalSince(lastRetentionCleanupAt) >= retentionCleanupInterval else { return }
+        lastRetentionCleanupAt = Date()
+        Task { await self.runCleanup() }
+    }
+
     /// Run cleanup to remove old screenshots
     func runCleanup() async {
+        guard !isRetentionCleanupRunning else {
+            log("RewindIndexer: Cleanup already in progress, skipping")
+            return
+        }
+        isRetentionCleanupRunning = true
+        defer { isRetentionCleanupRunning = false }
+
         let retentionDays = RewindSettings.shared.retentionDays
 
         do {
+            // Ensure recovery has a chance to run if a previous cleanup closed the DB
+            // after a corruption/I/O error.
+            try await RewindDatabase.shared.initialize()
+
             // Get cutoff date
             let cutoffDate = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())!
 
@@ -490,8 +492,7 @@ actor RewindIndexer {
 
         do {
             while true {
-                // Stop backfill if we went back to battery
-                if shouldPauseOCRForBattery() {
+                if PowerMonitor.cachedBatteryState() {
                     log("RewindIndexer: Backfill paused — back on battery after \(totalProcessed) screenshots")
                     return
                 }
@@ -500,8 +501,7 @@ actor RewindIndexer {
                 if pending.isEmpty { break }
 
                 for screenshot in pending {
-                    // Check battery again between frames
-                    if shouldPauseOCRForBattery() {
+                    if PowerMonitor.cachedBatteryState() {
                         log("RewindIndexer: Backfill paused — back on battery after \(totalProcessed) screenshots")
                         return
                     }

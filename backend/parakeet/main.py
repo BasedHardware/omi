@@ -29,6 +29,10 @@ from transcribe import (
 from stream_handler import StreamSession, warmup_rnnt_decoder
 
 logging.basicConfig(level=logging.INFO)
+# httpx logs every outbound request at INFO; the per-segment diarizer embedding
+# calls (one per audio segment) flood the log pipeline with 200 OK noise. Keep
+# only warnings/errors (4xx/5xx, timeouts) from httpx. See issue #8080.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 _ASR_BUCKETS = (0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0)

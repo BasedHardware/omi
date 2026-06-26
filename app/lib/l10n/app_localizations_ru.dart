@@ -9336,6 +9336,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get backgroundModeNote => 'Пока работает только с устройствами Omi и постоянно улучшается.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Фоновый режим недоступен, потому что не подключено совместимое устройство. Подключите устройство Omi, OpenGlass или Friend Pendant, чтобы использовать эту функцию.';
+
+  @override
   String get regenerateRecap => 'Создать резюме заново';
 
   @override
@@ -9356,4 +9360,40 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Вы используете собственный сервис транскрипции. Синхронизация этих записей расшифрует их на серверах Omi, и они будут засчитаны в лимит транскрипции вашего тарифа.';
+
+  @override
+  String get transcribeLaterTitle => 'Расшифровать позже';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Записывайте звук сейчас и расшифровывайте его по запросу, а не в реальном времени. Записи сохраняются на вашем телефоне, после чего вы загружаете их, чтобы создать беседы.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Пока работает с устройствами Omi. Звук остаётся на вашем телефоне, пока вы сами не решите его загрузить.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'На телефоне заканчивается память, поэтому запись приостановлена. Освободите место или загрузите записи — и она возобновится автоматически.';
+
+  @override
+  String get recordingMode => 'Режим записи';
+
+  @override
+  String get captureModeLater => 'Позже';
+
+  @override
+  String get captureModeLiveDescription => 'Расшифровка в реальном времени, пока вы говорите.';
+
+  @override
+  String get captureModeLaterDescription => 'Сохраните аудио сейчас и расшифруйте, когда захотите.';
+
+  @override
+  String get unmute => 'Включить звук';
+
+  @override
+  String get newRecording => 'Новая запись';
+
+  @override
+  String get transcribeLaterPaused => 'Пауза — аудио не записывается';
 }

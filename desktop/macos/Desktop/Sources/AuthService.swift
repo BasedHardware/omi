@@ -338,6 +338,9 @@ class AuthService {
             state.startTrialMetadataRefresh()
             TrialBannerService.shared.start(appState: state)
         }
+        // Refresh the chat usage limiter for the new account (PTT gate + floating
+        // bar read it); without this it stays nil/old until the next app launch.
+        Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
         if !AnalyticsManager.isDevBuild {
             let sentryUser = User(userId: userId)
@@ -460,6 +463,9 @@ class AuthService {
                 state.startTrialMetadataRefresh()
                 TrialBannerService.shared.start(appState: state)
             }
+            // Refresh the chat usage limiter for the new account (PTT gate +
+            // floating bar read it); without this it stays nil/old until launch.
+            Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
             // Set Sentry user context for error tracking (skip in dev builds)
             if !AnalyticsManager.isDevBuild {

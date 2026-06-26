@@ -1,5 +1,7 @@
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -11,6 +13,27 @@ logger = logging.getLogger(__name__)
 
 # Collection name
 action_items_collection = 'action_items'
+
+
+@dataclass
+class BatchMutationResult:
+    """Outcome for partial batch mutations where missing ids must be explicit."""
+
+    updated_ids: List[str] = field(default_factory=list)
+    missing_ids: List[str] = field(default_factory=list)
+    noop_ids: List[str] = field(default_factory=list)
+
+    @property
+    def updated_count(self) -> int:
+        return len(self.updated_ids)
+
+    def model(self) -> dict:
+        return {
+            'updated_count': len(self.updated_ids),
+            'updated_ids': self.updated_ids,
+            'missing_ids': self.missing_ids,
+            'noop_ids': self.noop_ids,
+        }
 
 
 def get_action_item_ids(uid: str) -> List[str]:
@@ -428,43 +451,42 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
     return True
 
 
-def batch_update_action_items(uid: str, items: list) -> None:
+def batch_update_action_items(uid: str, items: list) -> BatchMutationResult:
     """
     Batch update sort_order and/or indent_level for multiple action items.
 
-    Args:
-        uid: User ID
-        items: List of objects with id, sort_order (optional), indent_level (optional)
+    Missing IDs are returned explicitly. Each document update is applied
+    independently so a concurrent delete cannot make Firestore reject an entire
+    mutation after an earlier existence pre-read succeeded.
     """
+    result = BatchMutationResult()
     if not items:
-        return
+        return result
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
     now = datetime.now(timezone.utc)
 
-    batch = db.batch()
-    count = 0
-
     for item in items:
+        doc_ref = action_items_ref.document(item.id)
         update_data = {'updated_at': now}
         if item.sort_order is not None:
             update_data['sort_order'] = item.sort_order
         if item.indent_level is not None:
             update_data['indent_level'] = item.indent_level
 
-        if len(update_data) > 1:  # More than just updated_at
-            doc_ref = action_items_ref.document(item.id)
-            batch.update(doc_ref, update_data)
-            count += 1
+        if len(update_data) == 1:
+            result.noop_ids.append(item.id)
+            continue
 
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = db.batch()
-            count = 0
+        try:
+            doc_ref.update(update_data)
+        except NotFound:
+            result.missing_ids.append(item.id)
+            continue
+        result.updated_ids.append(item.id)
 
-    if count > 0:
-        batch.commit()
+    return result
 
 
 def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = True) -> bool:
@@ -635,41 +657,38 @@ def get_pending_apple_reminders_sync(uid: str) -> dict:
     return {"pending_export": pending_export, "synced_items": synced_items}
 
 
-def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
+def batch_sync_update_action_items(uid: str, updates: List[dict]) -> BatchMutationResult:
     """
-    Batch update action items during reminders sync. Single Firestore batch commit.
+    Batch update action items during reminders sync.
 
-    Args:
-        uid: User ID
-        updates: List of {'id': str, 'data': dict} entries
+    Missing IDs are returned explicitly; each document update is applied
+    independently so a concurrent delete cannot fail the whole request after an
+    existence pre-read. Callers should use only updated_ids for downstream
+    vector/cache work.
     """
+    result = BatchMutationResult()
     if not updates:
-        return
+        return result
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
     now = datetime.now(timezone.utc)
 
-    batch = db.batch()
-    count = 0
-
     for entry in updates:
+        doc_ref = action_items_ref.document(entry['id'])
         update_data = _prepare_action_item_for_write(entry['data'])
         update_data['updated_at'] = now
         # Clear sync_requested when item is successfully exported
         if update_data.get('exported') is True:
             update_data['sync_requested'] = False
-        doc_ref = action_items_ref.document(entry['id'])
-        batch.update(doc_ref, update_data)
-        count += 1
+        try:
+            doc_ref.update(update_data)
+        except NotFound:
+            result.missing_ids.append(entry['id'])
+            continue
+        result.updated_ids.append(entry['id'])
 
-        if count >= 499:
-            batch.commit()
-            batch = db.batch()
-            count = 0
-
-    if count > 0:
-        batch.commit()
+    return result
 
 
 def unlock_all_action_items(uid: str):

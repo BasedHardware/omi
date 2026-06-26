@@ -9310,6 +9310,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get backgroundModeNote => 'আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।';
 
   @override
+  String get backgroundModeUnavailable =>
+      'কোনো সামঞ্জস্যপূর্ণ ডিভাইস সংযুক্ত না থাকায় ব্যাকগ্রাউন্ড মোড উপলভ্য নয়। এই ফিচারটি ব্যবহার করতে একটি Omi, OpenGlass বা Friend Pendant ডিভাইস সংযুক্ত করুন।';
+
+  @override
   String get regenerateRecap => 'রিক্যাপ পুনরায় তৈরি করুন';
 
   @override
@@ -9330,4 +9334,40 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।';
+
+  @override
+  String get transcribeLaterTitle => 'পরে ট্রান্সক্রাইব করুন';
+
+  @override
+  String get transcribeLaterDescription =>
+      'এখন অডিও রেকর্ড করুন এবং লাইভ না করে পরে নিজের প্রয়োজনমতো ট্রান্সক্রাইব করুন। রেকর্ডিংগুলো আপনার ফোনেই সংরক্ষিত থাকে, এরপর আপনি সেগুলো আপলোড করে কথোপকথন তৈরি করতে পারেন।';
+
+  @override
+  String get transcribeLaterNote =>
+      'আপাতত শুধু Omi ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'আপনার ফোনে জায়গা কম থাকায় রেকর্ডিং সাময়িকভাবে বন্ধ রাখা হয়েছে। কিছু জায়গা খালি করুন অথবা আপনার রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি আপনাআপনি আবার শুরু হবে।';
+
+  @override
+  String get recordingMode => 'রেকর্ডিং মোড';
+
+  @override
+  String get captureModeLater => 'পরে';
+
+  @override
+  String get captureModeLiveDescription => 'আপনি কথা বলার সাথে সাথে রিয়েল-টাইমে ট্রান্সক্রাইব করুন।';
+
+  @override
+  String get captureModeLaterDescription => 'এখন অডিও সংরক্ষণ করুন এবং যখন খুশি ট্রান্সক্রাইব করুন।';
+
+  @override
+  String get unmute => 'আনমিউট করুন';
+
+  @override
+  String get newRecording => 'নতুন রেকর্ডিং';
+
+  @override
+  String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
 }

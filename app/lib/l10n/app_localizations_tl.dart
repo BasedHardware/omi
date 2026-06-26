@@ -9388,6 +9388,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Hindi available ang Background Mode dahil walang nakakonektang compatible na device. Magkonekta ng Omi, OpenGlass, o Friend Pendant device para magamit ang feature na ito.';
+
+  @override
   String get regenerateRecap => 'Buuin muli ang buod';
 
   @override
@@ -9408,4 +9412,40 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.';
+
+  @override
+  String get transcribeLaterTitle => 'I-transcribe Mamaya';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Gumagana muna sa mga Omi device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.';
+
+  @override
+  String get recordingMode => 'Mode ng pag-record';
+
+  @override
+  String get captureModeLater => 'Mamaya';
+
+  @override
+  String get captureModeLiveDescription => 'I-transcribe nang real time habang nagsasalita ka.';
+
+  @override
+  String get captureModeLaterDescription => 'I-save ang audio ngayon at i-transcribe kahit kailan mo gusto.';
+
+  @override
+  String get unmute => 'I-unmute';
+
+  @override
+  String get newRecording => 'Bagong recording';
+
+  @override
+  String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
 }

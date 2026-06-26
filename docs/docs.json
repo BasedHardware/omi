@@ -27,6 +27,7 @@
             "pages": [
               "doc/developer/AppSetup",
               "doc/developer/Cursor",
+              "doc/developer/agent-control-plane",
               {
                 "group": "Backend",
                 "pages": [

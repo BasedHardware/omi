@@ -49,7 +49,9 @@ class SettingsSyncManager {
             if let v = shared.cooldownInterval { AssistantSettings.shared.cooldownInterval = v }
             if let v = shared.glowOverlayEnabled { AssistantSettings.shared.glowOverlayEnabled = v }
             if let v = shared.analysisDelay { AssistantSettings.shared.analysisDelay = v }
-            if let v = shared.screenAnalysisEnabled { AssistantSettings.shared.screenAnalysisEnabled = v }
+            if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
+                AssistantSettings.shared.screenAnalysisEnabled = v
+            }
         }
 
         // Focus settings
@@ -92,11 +94,8 @@ class SettingsSyncManager {
             if let v = memory.excludedApps { MemoryAssistantSettings.shared.excludedApps = Set(v) }
         }
 
-        if let floatingBar = remote.floatingBar {
-            if let v = floatingBar.voiceAnswersEnabled {
-                ShortcutSettings.shared.floatingBarVoiceAnswersEnabled = v
-            }
-        }
+        // Push-to-talk voice replies are no longer configurable. Ignore the legacy
+        // server field so old synced `false` values cannot suppress spoken answers.
 
         // Update channel (server-authoritative override)
         // Note: updateChannel.didSet already calls checkForUpdatesInBackground()
@@ -109,6 +108,10 @@ class SettingsSyncManager {
     }
 
     // MARK: - Build Local → Response
+
+    private var shouldKeepLocalScreenAnalysisDefault: Bool {
+        AppBuild.usesLazyDevPermissions
+    }
 
     private func buildFromLocal() -> AssistantSettingsResponse {
         let shared = SharedAssistantSettingsResponse(

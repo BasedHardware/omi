@@ -17337,6 +17337,12 @@ abstract class AppLocalizations {
   /// **'Works with Omi devices only for now, and is being improved continuously.'**
   String get backgroundModeNote;
 
+  /// Warning shown in Background Mode sheet when no device with a native BLE audio route is connected
+  ///
+  /// In en, this message translates to:
+  /// **'Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.'**
+  String get backgroundModeUnavailable;
+
   /// No description provided for @regenerateRecap.
   ///
   /// In en, this message translates to:
@@ -17378,6 +17384,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.'**
   String get syncCustomSttWarningMessage;
+
+  /// Title for the 'transcribe later' capture-mode toggle in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe Later'**
+  String get transcribeLaterTitle;
+
+  /// Subtitle explaining the transcribe-later mode toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.'**
+  String get transcribeLaterDescription;
+
+  /// Caveat note shown in the Transcribe Later sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.'**
+  String get transcribeLaterNote;
+
+  /// Warning shown when storage is too low to keep recording in Transcribe Later mode
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.'**
+  String get transcribeLaterStorageFull;
+
+  /// Title of the bottom sheet for choosing between Live and Transcribe Later recording modes
+  ///
+  /// In en, this message translates to:
+  /// **'Recording mode'**
+  String get recordingMode;
+
+  /// Short label for the Transcribe Later mode shown on the home app-bar mode chip
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get captureModeLater;
+
+  /// Subtitle for the Live option in the recording mode picker
+  ///
+  /// In en, this message translates to:
+  /// **'Transcribe in real time as you speak.'**
+  String get captureModeLiveDescription;
+
+  /// Subtitle for the Transcribe Later option in the recording mode picker
+  ///
+  /// In en, this message translates to:
+  /// **'Save audio now and transcribe whenever you want.'**
+  String get captureModeLaterDescription;
+
+  /// Button to resume Transcribe Later capture after muting
+  ///
+  /// In en, this message translates to:
+  /// **'Unmute'**
+  String get unmute;
+
+  /// Button to finalize the current recording and start a new one
+  ///
+  /// In en, this message translates to:
+  /// **'New recording'**
+  String get newRecording;
+
+  /// Capture-card subtitle shown while Transcribe Later capture is muted/paused
+  ///
+  /// In en, this message translates to:
+  /// **'Paused — audio isn\'t being recorded'**
+  String get transcribeLaterPaused;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

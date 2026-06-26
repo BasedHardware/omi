@@ -62,6 +62,7 @@ from models.structured import Structured
 from models.transcript_segment import TranscriptSegment
 from models.message_event import (
     ConversationEvent,
+    ConversationSessionEvent,
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
     LastConversationEvent,
@@ -83,6 +84,7 @@ from utils.notifications import send_credit_limit_notification, send_silent_user
 from utils.other import endpoints as auth
 from utils.other.storage import get_profile_audio_if_exists, get_user_has_speech_profile
 from utils.pusher import connect_to_trigger_pusher, PusherCircuitBreakerOpen, get_circuit_breaker, CircuitState
+from utils.request_validation import ImageChunkEnvelope
 from utils.speaker_identification import detect_speaker_from_text
 from utils.stt.streaming import (
     STTService,
@@ -235,6 +237,8 @@ def mix_n_channel_buffers(buffers: List[bytearray]) -> bytes:
 def resample_pcm(pcm_data: bytes, source_rate: int, target_rate: int) -> bytes:
     """Simple resampling by sample duplication/decimation."""
     if source_rate == target_rate:
+        return pcm_data
+    if source_rate <= 0 or target_rate <= 0:
         return pcm_data
     num_samples = len(pcm_data) // 2
     if num_samples == 0:
@@ -918,6 +922,7 @@ async def _stream_handler(
             redis_db.set_conversation_meeting_id(new_conversation_id, detected_meeting_id)
 
         current_conversation_id = new_conversation_id
+        _send_message_event(ConversationSessionEvent(conversation_id=new_conversation_id))
 
         logger.info(f"Created new stub conversation: {new_conversation_id} {uid} {session_id}")
 
@@ -956,6 +961,7 @@ async def _stream_handler(
 
             # Continue with the existing conversation
             current_conversation_id = existing_conversation['id']
+            _send_message_event(ConversationSessionEvent(conversation_id=current_conversation_id))
             logger.info(
                 f"Resuming conversation {current_conversation_id}. Will timeout in {conversation_creation_timeout - seconds_since_last_segment:.1f}s {uid} {session_id}"
             )
@@ -2036,13 +2042,12 @@ async def _stream_handler(
             best_match = None
             best_distance = float('inf')
 
-            # Print all candidates with scores for tuning
-            logger.info(
+            logger.debug(
                 f"Speaker ID: comparing speaker {speaker_id} against {len(person_embeddings_cache)} people: {uid} {session_id}"
             )
             for person_id, data in person_embeddings_cache.items():
                 distance = compare_embeddings(query_embedding, data['embedding'])
-                logger.info(f"  - {sanitize_pii(data['name'])}: {distance:.4f} {uid} {session_id}")
+                logger.debug(f"  - {sanitize_pii(data['name'])}: {distance:.4f} {uid} {session_id}")
                 if distance < best_distance:
                     best_distance = distance
                     best_match = (person_id, data['name'])
@@ -2407,21 +2412,21 @@ async def _stream_handler(
         await send_event_func(PhotoDescribedEvent(photo_id=photo_id, description=description, discarded=discarded))
 
     async def handle_image_chunk(uid: str, chunk_data: dict, image_chunks_cache: dict, send_event_func, photo_buffer):
-        temp_id = chunk_data.get('id')
-        index = chunk_data.get('index')
-        total = chunk_data.get('total')
-        data = chunk_data.get('data')
+        try:
+            chunk = ImageChunkEnvelope.model_validate(chunk_data)
+        except ValueError as e:
+            logger.error(f"Invalid image chunk received: {sanitize(chunk_data)} {uid} {session_id}: {e}")
+            raise ValueError('invalid image chunk') from e
 
-        if not temp_id or not isinstance(index, int) or not isinstance(total, int) or not data:
-            logger.error(f"Invalid image chunk received: {sanitize(chunk_data)} {uid} {session_id}")
-            return
+        temp_id = chunk.id
+        index = chunk.index
+        total = chunk.total
+        data = chunk.data
 
         # Cleanup expired chunks periodically
         _cleanup_expired_image_chunks()
 
         if temp_id not in image_chunks_cache:
-            if total <= 0:
-                return
             # Enforce max concurrent uploads - O(1) with OrderedDict
             if len(image_chunks_cache) >= MAX_IMAGE_CHUNKS:
                 # Remove oldest entry (first inserted)
@@ -2430,7 +2435,13 @@ async def _stream_handler(
             image_chunks_cache[temp_id] = {'chunks': [None] * total, 'created_at': time.time()}
 
         chunks_data = image_chunks_cache[temp_id]['chunks']
-        if index < total and chunks_data[index] is None:
+        try:
+            chunk.validate_against_cached_total(len(chunks_data))
+        except ValueError as e:
+            logger.error(f"Invalid image chunk sequence received: {sanitize(chunk_data)} {uid} {session_id}: {e}")
+            raise ValueError('invalid image chunk sequence') from e
+
+        if chunks_data[index] is None:
             chunks_data[index] = data
 
         if all(chunk is not None for chunk in chunks_data):
@@ -2635,9 +2646,14 @@ async def _stream_handler(
                     try:
                         json_data = json.loads(message.get("text"))
                         if json_data.get('type') == 'image_chunk':
-                            await handle_image_chunk(
-                                uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
-                            )
+                            try:
+                                await handle_image_chunk(
+                                    uid, json_data, image_chunks, _asend_message_event, realtime_photo_buffers
+                                )
+                            except ValueError:
+                                websocket_close_code = 1008
+                                websocket_active = False
+                                break
                         elif json_data.get('type') == 'skip_question':
                             if onboarding_handler and not onboarding_handler.completed:
                                 await onboarding_handler.skip_current_question()

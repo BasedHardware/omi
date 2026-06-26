@@ -22,6 +22,23 @@ final class AgentPill: ObservableObject, Identifiable {
             case .failed: return "Failed"
             }
         }
+
+        var machineLabel: String {
+            switch self {
+            case .queued: return "queued"
+            case .starting: return "starting"
+            case .running: return "running"
+            case .done: return "done"
+            case .failed: return "failed"
+            }
+        }
+
+        var isFinished: Bool {
+            switch self {
+            case .done, .failed: return true
+            default: return false
+            }
+        }
     }
 
     let id = UUID()
@@ -86,8 +103,16 @@ final class AgentPillsManager: ObservableObject {
     /// parallel with the others.
     private var providersByPill: [UUID: ChatProvider] = [:]
     private var streamsByPill: [UUID: AnyCancellable] = [:]
+    private var projectionStreamsByPill: [UUID: AnyCancellable] = [:]
     private var messageCountByPill: [UUID: Int] = [:]
+    private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var bootChain: Task<Void, Never> = Task {}
+
+    private static let backgroundAgentSystemPromptSuffix = """
+    You are running inside a visible floating background agent pill. Do the requested work now; do not merely acknowledge, promise, or say that you are working on it. Use the available tools when the task requires local data, browser/app/file actions, or multi-step investigation. Finish only after you have either completed the task or hit a concrete blocker, then give a concise final summary of the outcome.
+
+    This is already the spawned background agent. Do not call spawn_agent or delegate_agent just to hand off this same task.
+    """
 
     /// Which pill (if any) is currently capturing a voice follow-up — drives the
     /// pill popover's mic button state.
@@ -105,6 +130,16 @@ final class AgentPillsManager: ObservableObject {
         let route: Route
         let title: String?
         let ack: String?
+    }
+
+    struct Snapshot: Encodable {
+        let id: String
+        let title: String
+        let status: String
+        let latestActivity: String
+        let query: String
+        let createdAt: String
+        let completedAt: String?
     }
 
     /// Ask Claude Haiku whether the message is a quick info question (→ chat)
@@ -335,6 +370,13 @@ final class AgentPillsManager: ObservableObject {
                 guard let self, let pill else { return }
                 self.handle(messages: messages, since: messageCountBefore, for: pill)
             }
+        let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
+        projectionStreamsByPill[pill.id] = AgentRuntimeStatusStore.shared.$projectionsBySurface
+            .receive(on: DispatchQueue.main)
+            .sink { [weak pill] projections in
+                guard let pill, let projection = projections[surfaceRef.key] else { return }
+                AgentPillsManager.apply(projection: projection, to: pill)
+            }
 
         // Stagger bridge boots: chain this pill's warmup after the previous
         // pill's. Once warmed, the actual sendMessage runs in parallel with
@@ -377,21 +419,28 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
-        Task { [weak self, weak pill, weak provider] in
+        let runTask = Task { [weak self, weak pill, weak provider] in
             await myBoot.value
+            guard !Task.isCancelled else { return }
             guard let self, let pill, let provider else { return }
             // Bridge is up; flip to running and fire the prompt. Concurrent
             // with any other pill that's already past this point.
             pill.status = .running
+            pill.completedAt = nil
+            pill.suggestedFollowUps = []
             await provider.sendMessage(
                 pill.query,
                 model: pill.model,
-                systemPromptSuffix: systemPromptSuffix,
+                systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
-                sessionKey: "agent-\(pill.id.uuidString)"
+                sessionKey: "agent-\(pill.id.uuidString)",
+                surfaceRef: surfaceRef,
+                legacyClientScope: "floating-pill"
             )
+            guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider)
         }
+        runTasksByPill[pill.id] = runTask
 
         return pill
     }
@@ -423,14 +472,24 @@ final class AgentPillsManager: ObservableObject {
             return
         }
         pill.status = .running
+        pill.completedAt = nil
+        pill.suggestedFollowUps = []
         pill.latestActivity = "Working on your follow-up…"
-        Task { @MainActor [weak self, weak pill, weak provider] in
+        runTasksByPill[pill.id]?.cancel()
+        let runTask = Task { @MainActor [weak self, weak pill, weak provider] in
             guard let self, let pill, let provider else { return }
+            let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
             await provider.sendMessage(
-                text, model: pill.model, systemPromptStyle: .floating,
-                sessionKey: "agent-\(pill.id.uuidString)")
+                text, model: pill.model,
+                systemPromptSuffix: Self.backgroundAgentSystemPromptSuffix,
+                systemPromptStyle: .floating,
+                sessionKey: "agent-\(pill.id.uuidString)",
+                surfaceRef: surfaceRef,
+                legacyClientScope: "floating-pill")
+            guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider)
         }
+        runTasksByPill[pill.id] = runTask
     }
 
     /// Force-dismiss a pill.
@@ -440,9 +499,24 @@ final class AgentPillsManager: ObservableObject {
         if pinnedPillID == pillID { pinnedPillID = nil }
     }
 
+    func dismiss(pillIdString: String) -> Bool {
+        guard let id = findPillId(from: pillIdString) else { return false }
+        dismiss(pillID: id)
+        return true
+    }
+
     private func cleanup(pillID: UUID) {
+        if recordingPillID == pillID {
+            recordingPillID = nil
+            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
+        }
+        runTasksByPill[pillID]?.cancel()
+        runTasksByPill[pillID] = nil
+        providersByPill[pillID]?.stopAgent()
         streamsByPill[pillID]?.cancel()
         streamsByPill[pillID] = nil
+        projectionStreamsByPill[pillID]?.cancel()
+        projectionStreamsByPill[pillID] = nil
         providersByPill[pillID] = nil
         messageCountByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
@@ -450,14 +524,85 @@ final class AgentPillsManager: ObservableObject {
 
     /// Remove all completed (done or failed) pills.
     func clearCompleted() {
-        pills.removeAll { isFinished($0.status) }
+        let ids = pills.filter { $0.status.isFinished }.map(\.id)
+        for id in ids {
+            cleanup(pillID: id)
+        }
     }
 
     private func isFinished(_ status: AgentPill.Status) -> Bool {
-        switch status {
-        case .done, .failed: return true
-        default: return false
+        status.isFinished
+    }
+
+    func snapshots(limit: Int = 20) -> [Snapshot] {
+        let formatter = ISO8601DateFormatter()
+        return pills
+            .sorted { $0.createdAt > $1.createdAt }
+            .prefix(limit)
+            .map { pill in
+                Snapshot(
+                    id: pill.id.uuidString,
+                    title: pill.title,
+                    status: pill.status.machineLabel,
+                    latestActivity: pill.latestActivity,
+                    query: pill.query,
+                    createdAt: formatter.string(from: pill.createdAt),
+                    completedAt: pill.completedAt.map { formatter.string(from: $0) }
+                )
+            }
+    }
+
+    func snapshotJSON(limit: Int = 20) -> String {
+        let payload: [String: [Snapshot]] = ["floating_agent_pills": snapshots(limit: limit)]
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        guard let data = try? encoder.encode(payload), let json = String(data: data, encoding: .utf8) else {
+            return "{\"floating_agent_pills\":[]}"
         }
+        return json
+    }
+
+    func statusSummary(limit: Int = 8) -> String {
+        let recent = snapshots(limit: limit)
+        guard !recent.isEmpty else {
+            return "No floating agent pills are running or recently finished."
+        }
+        let lines = recent.map { snapshot in
+            "- \(snapshot.title) [\(snapshot.id.prefix(8))]: \(snapshot.status); \(snapshot.latestActivity)"
+        }
+        return "Floating agent pills:\n" + lines.joined(separator: "\n")
+    }
+
+    func manage(action: String, agentId: String?) -> String {
+        switch action.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "list", "status":
+            return statusSummary()
+        case "dismiss":
+            guard let agentId, !agentId.isEmpty else {
+                return "Missing agent_id. Call get_task_agent_status first and pass the floating_agent_pills id."
+            }
+            return dismiss(pillIdString: agentId)
+                ? "Dismissed floating agent pill \(agentId)."
+                : "No floating agent pill matched \(agentId)."
+        case "clear_completed":
+            let count = pills.filter { $0.status.isFinished }.count
+            clearCompleted()
+            return "Cleared \(count) completed floating agent pill(s)."
+        default:
+            return "Unknown action. Use list, dismiss, or clear_completed."
+        }
+    }
+
+    private func findPillId(from text: String) -> UUID? {
+        let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return nil }
+        if let exact = UUID(uuidString: text) {
+            return pills.first(where: { $0.id == exact })?.id
+        }
+        return pills.first { pill in
+            let id = pill.id.uuidString.lowercased()
+            return id == needle || id.hasPrefix(needle)
+        }?.id
     }
 
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
@@ -466,18 +611,26 @@ final class AgentPillsManager: ObservableObject {
         guard let aiMessage = recent.last(where: { $0.sender == .ai }) else { return }
         pill.aiMessage = aiMessage
 
+        if pill.status.isFinished {
+            return
+        }
+
         if pill.status == .starting {
             pill.status = .running
         }
 
-        let activity = describeActivity(for: aiMessage)
+        let activity = Self.describeActivity(for: aiMessage)
         if !activity.isEmpty && activity != pill.latestActivity {
             pill.latestActivity = activity
             pill.transcript.append(activity)
         }
     }
 
-    private func describeActivity(for message: ChatMessage) -> String {
+    /// Pill-bar activity string for an AI message. While a message is still
+    /// streaming, skip partial text chunks so the pill does not flicker through
+    /// mid-token labels like "O..." or "Open..." before the final response lands.
+    /// Tool calls still show immediately because they are atomic activity.
+    private static func describeActivity(for message: ChatMessage) -> String {
         for block in message.contentBlocks.reversed() {
             switch block {
             case .toolCall(_, let name, _, _, let input, _):
@@ -487,6 +640,7 @@ final class AgentPillsManager: ObservableObject {
                 }
                 return display
             case .text(_, let text):
+                guard !message.isStreaming else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     return String(trimmed.prefix(110))
@@ -496,30 +650,66 @@ final class AgentPillsManager: ObservableObject {
             }
         }
         let trimmedFallback = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedFallback.isEmpty {
+        if !message.isStreaming, !trimmedFallback.isEmpty {
             return String(trimmedFallback.prefix(110))
         }
         return "Working…"
     }
 
     private func complete(pill: AgentPill, provider: ChatProvider) {
+        if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
+            Self.apply(projection: projection, to: pill)
+            if projection.status.isTerminal {
+                pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+                return
+            }
+        }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
             pill.status = .failed(errorText)
+            pill.completedAt = Date()
             pill.latestActivity = errorText
         } else {
+            pill.status = .failed("Agent ended before reporting a final result")
+            pill.completedAt = Date()
+            pill.latestActivity = "Agent ended before reporting a final result"
+        }
+        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        // Keep the provider + stream alive after completion so a voice/text follow-up
+        // can continue THIS agent's session with full context. They're torn down on
+        // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
+    }
+
+    private static func apply(projection: AgentRunProjection, to pill: AgentPill) {
+        switch projection.status {
+        case .queued:
+            pill.status = .queued
+        case .starting, .running, .waitingInput, .waitingApproval, .cancelling:
+            pill.status = .running
+            pill.completedAt = nil
+        case .succeeded:
             pill.status = .done
+            pill.completedAt = projection.completedAt ?? Date()
             if let last = pill.aiMessage, !last.text.isEmpty {
                 let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 pill.latestActivity = String(trimmed.prefix(140))
             } else {
                 pill.latestActivity = "Done"
             }
+        case .failed, .timedOut, .orphaned:
+            let message = projection.errorMessage ?? "Agent failed"
+            pill.status = .failed(message)
+            pill.latestActivity = message
+            pill.completedAt = projection.completedAt ?? Date()
+        case .cancelled:
+            pill.status = .failed("Stopped by user")
+            pill.latestActivity = "Stopped by user"
+            pill.completedAt = projection.completedAt ?? Date()
+        case .idle:
+            break
         }
-        pill.completedAt = Date()
-        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
-        // Keep the provider + stream alive after completion so a voice/text follow-up
-        // can continue THIS agent's session with full context. They're torn down on
-        // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
+        if !projection.status.isTerminal, let statusText = projection.statusText, !statusText.isEmpty {
+            pill.latestActivity = statusText
+        }
     }
 
     /// Tiny heuristic to suggest 1–2 follow-ups based on the original query.

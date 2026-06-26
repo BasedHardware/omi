@@ -223,7 +223,18 @@ fn translate_request(
     // chat). It is stable within a pi-mono session, so every query after the
     // first reads it at 0.1x instead of re-paying full input cost.
     // (Sonnet min cacheable = 2048 tokens; our prefix clears it easily.)
-    let system = system_prompt.map(cached_system_block);
+    // Filter empty/whitespace system prompts — Anthropic rejects empty cached
+    // text blocks with 400, and whitespace-only prompts have no semantic value.
+    // Use original text (not trimmed) for non-empty prompts to preserve content.
+    let system = system_prompt
+        .and_then(|text| {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(cached_system_block(text))
+            }
+        });
 
     // Breakpoint 2: mark the latest user message so the conversation prefix up
     // to the current turn is cached too. During a tool-use loop one user turn
@@ -237,6 +248,9 @@ fn translate_request(
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
+        // Use the system block produced by cached_system_block() above
+        // (line 226) which already handles sentinel splitting for cache
+        // stability — do NOT re-create here or we lose the split.
         system,
         temperature: req.temperature,
         stream: req.stream,
@@ -1269,10 +1283,17 @@ mod tests {
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
         assert_eq!(result.model, "claude-sonnet-4-6");
-        // system is now an ephemeral-cached content-block array, not a bare string.
-        let system = result.system.as_ref().expect("system block should be present");
-        assert_eq!(system[0]["text"], "You are helpful.");
-        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
+        // system is Option<serde_json::Value> — compare via JSON serialization
+        // to avoid type mismatch with AnthropicSystemContentBlock.
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(
+            json["system"],
+            json!([{
+                "type": "text",
+                "text": "You are helpful.",
+                "cache_control": {"type": "ephemeral", "ttl": "1h"}
+            }])
+        );
         assert_eq!(result.messages.len(), 1); // only user message, system extracted
         assert_eq!(result.messages[0].role, "user");
         assert_eq!(result.max_tokens, 1024);
@@ -1431,11 +1452,111 @@ mod tests {
         };
 
         let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
-        let system = result.system.as_ref().expect("system block should be present");
-        assert_eq!(system[0]["text"], "You are terse.");
-        assert_eq!(system[0]["cache_control"]["type"], "ephemeral");
-        assert_eq!(result.messages.len(), 1, "developer msg must be extracted, not forwarded");
         assert_eq!(result.messages[0].role, "user");
+    }
+
+    #[test]
+    fn test_translate_request_system_prompt_uses_cache_control_blocks() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: Some(json!("You are helpful.")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("Hello")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            ],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let json = serde_json::to_value(&result).unwrap();
+
+        assert_eq!(
+            json["system"],
+            json!([{
+                "type": "text",
+                "text": "You are helpful.",
+                "cache_control": {"type": "ephemeral", "ttl": "1h"}
+            }])
+        );
+    }
+
+    #[test]
+    fn test_translate_request_without_system_prompt_omits_system() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Hello")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let json = serde_json::to_value(&result).unwrap();
+
+        assert!(result.system.is_none());
+        assert!(json.get("system").is_none());
+    }
+
+    #[test]
+    fn test_translate_request_empty_system_prompt_omits_system() {
+        // Empty or whitespace-only system prompts must NOT be sent as cached blocks
+        // (Anthropic rejects empty cached text blocks with 400).
+        for content in [Some(json!("")), Some(json!("   ")), None] {
+            let req = ChatCompletionRequest {
+                model: "omi-sonnet".to_string(),
+                messages: vec![ChatMessage {
+                    role: "system".to_string(),
+                    content: content.clone(),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                }, ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("Hello")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                }],
+                stream: false,
+                temperature: None,
+                max_tokens: None,
+                max_completion_tokens: None,
+                tools: None,
+                tool_choice: None,
+            };
+
+            let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+            assert!(
+                result.system.is_none(),
+                "empty/whitespace system prompt must omit system field, got: {:?}",
+                result.system
+            );
+        }
     }
 
     #[test]

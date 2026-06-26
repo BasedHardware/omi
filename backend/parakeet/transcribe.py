@@ -24,6 +24,37 @@ try:
 except ImportError:
     nemo_asr = None
 
+try:
+    import torch as _torch
+except ImportError:
+    _torch = None
+
+
+def has_builtin_embedding():
+    return _gpu_worker is not None and _gpu_worker.is_ready and _gpu_worker._embedding_model is not None
+
+
+def wav_bytes_to_waveform(wav_bytes: bytes):
+    buf = io.BytesIO(wav_bytes)
+    with _wave.open(buf, "rb") as wf:
+        sr = wf.getframerate()
+        nch = wf.getnchannels()
+        sw = wf.getsampwidth()
+        pcm = wf.readframes(wf.getnframes())
+
+    if sw == 1:
+        samples = np.frombuffer(pcm, dtype=np.uint8).astype(np.float32) / 128.0 - 1.0
+    elif sw == 2:
+        samples = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
+    elif sw == 4:
+        samples = np.frombuffer(pcm, dtype=np.int32).astype(np.float32) / 2147483648.0
+    else:
+        raise ValueError(f"Unsupported WAV sample width: {sw} bytes")
+    if nch > 1:
+        samples = samples.reshape(-1, nch).mean(axis=1)
+    waveform = _torch.from_numpy(samples).unsqueeze(0)
+    return waveform, sr
+
 
 def set_gpu_worker(worker) -> None:
     global _gpu_worker
@@ -52,9 +83,7 @@ def _load_nemo_model(model_name: str):
     except AttributeError:
         pass
 
-    import torch
-
-    use_bf16 = os.getenv("PARAKEET_BF16", "1") == "1" and torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+    use_bf16 = os.getenv("PARAKEET_BF16", "1") == "1" and _torch.cuda.is_available() and _torch.cuda.is_bf16_supported()
 
     last_err = None
     for cls in model_classes:
@@ -63,11 +92,11 @@ def _load_nemo_model(model_name: str):
             model = cls.from_pretrained(model_name=model_name, map_location="cpu")
             if use_bf16:
                 logger.info(f"Converting {model_name} to BF16 (halves GPU memory)")
-                model = model.to(torch.bfloat16)
-            model = model.cuda() if torch.cuda.is_available() else model
+                model = model.to(_torch.bfloat16)
+            model = model.cuda() if _torch.cuda.is_available() else model
             model.eval()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            if _torch.cuda.is_available():
+                _torch.cuda.empty_cache()
             logger.info(f"Model {model_name} loaded via {cls.__name__} (bf16={use_bf16})")
             return model
         except (TypeError, Exception) as e:
@@ -197,7 +226,7 @@ def _transcribe_nim(file_path: str):
 
 
 def _diarize_segments(file_path: str, base: dict) -> dict:
-    if not SPEAKER_EMBEDDING_URL:
+    if not SPEAKER_EMBEDDING_URL and not has_builtin_embedding():
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
         return base
@@ -270,7 +299,34 @@ def _extract_segment_wav(wav_bytes: bytes, start: float, end: float) -> bytes:
 
 
 def _get_embedding(wav_bytes: bytes):
+    if has_builtin_embedding():
+        emb = _get_embedding_builtin(wav_bytes)
+        if emb is not None:
+            return emb
+    if SPEAKER_EMBEDDING_URL:
+        return _get_embedding_http(wav_bytes)
+    return None
 
+
+def _get_embedding_builtin(wav_bytes: bytes):
+    try:
+        waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
+        dur = waveform.shape[1] / sample_rate
+        if dur < MIN_SEGMENT_DURATION:
+            return None
+        emb = _gpu_worker.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
+        if emb is None:
+            return None
+        emb = np.array(emb, dtype=np.float32)
+        if emb.ndim == 1:
+            emb = emb.reshape(1, -1)
+        return emb
+    except Exception as e:
+        logger.warning(f"Built-in embedding failed: {e}")
+        return None
+
+
+def _get_embedding_http(wav_bytes: bytes):
     try:
         with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:
             resp = client.post(
@@ -289,5 +345,5 @@ def _get_embedding(wav_bytes: bytes):
             emb = emb.reshape(1, -1)
         return emb
     except Exception as e:
-        logger.warning(f"Embedding extraction failed: {e}")
+        logger.warning(f"HTTP embedding failed: {e}")
         return None

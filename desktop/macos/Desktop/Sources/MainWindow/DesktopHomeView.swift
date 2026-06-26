@@ -15,6 +15,7 @@ extension NSHostingView: HostingSizingConfigurable {}
 struct DesktopHomeView: View {
   private let minimumWindowWidth: CGFloat = 1200
   private let minimumWindowHeight: CGFloat = 680
+  private static let pageNavigationAnimation = Animation.easeOut(duration: 0.08)
 
   @StateObject private var appState = AppState()
   @StateObject private var viewModelContainer = ViewModelContainer()
@@ -117,7 +118,7 @@ struct DesktopHomeView: View {
                   onUpgrade: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .planUsage
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }
                   },
@@ -127,7 +128,7 @@ struct DesktopHomeView: View {
                   onBringYourOwnKeys: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .advanced
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }
                   }
@@ -144,7 +145,9 @@ struct DesktopHomeView: View {
               appState.checkAllPermissions()
 
               // For existing users who haven't indexed files yet, run a background scan
-              if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
+              if !AppBuild.usesLazyDevPermissions
+                && !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing")
+              {
                 UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
                 Task {
                   log("DesktopHomeView: Running background file scan for existing user")
@@ -318,6 +321,7 @@ struct DesktopHomeView: View {
               while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3 * 60 * 60))
                 guard !Task.isCancelled else { break }
+                guard !AppBuild.usesLazyDevPermissions else { continue }
                 guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else {
                   continue
                 }
@@ -381,6 +385,10 @@ struct DesktopHomeView: View {
       // Removing .minSize from sizingOptions prevents this full-tree traversal.
       // The window's min size is enforced at the AppKit level instead.
       enforceMainWindowMinimumSize()
+      // SwiftUI's automatic resizability later re-derives the window min from content
+      // extrema and resets our pin, after which the window can be dragged small enough
+      // to hide content. Re-pin on every live resize so AppKit keeps clamping the drag.
+      installMinimumSizeGuardIfNeeded()
       // Redirect if current page isn't visible at current tier
       redirectIfPageHidden()
       reportAutomationState()
@@ -389,7 +397,12 @@ struct DesktopHomeView: View {
       redirectIfPageHidden()
       reportAutomationState()
     }
-    .onChange(of: selectedIndex) { _, _ in reportAutomationState() }
+    .onChange(of: selectedIndex) { _, _ in
+      // Page nav recreates the content hosting view with default sizingOptions, which
+      // resets the window min — re-pin + re-disable to hold the minimum.
+      enforceMainWindowMinimumSize()
+      reportAutomationState()
+    }
     .onChange(of: selectedSettingsSection) { _, _ in reportAutomationState() }
     .onChange(of: highlightedSettingId) { _, _ in reportAutomationState() }
     .onChange(of: authState.isSignedIn) { _, _ in reportAutomationState() }
@@ -436,6 +449,30 @@ struct DesktopHomeView: View {
     }
   }
 
+  /// Re-pin the window minimum on every live resize. SwiftUI's `.automatic` window
+  /// resizability periodically recomputes content-size extrema and overwrites the
+  /// one-shot pin from `enforceMainWindowMinimumSize()`, after which the window can be
+  /// dragged small enough to hide content. Observing `didResize` and re-pinning keeps
+  /// AppKit clamping the live drag at the minimum. Installed once for the app's lifetime.
+  private static var minimumSizeGuardInstalled = false
+  private func installMinimumSizeGuardIfNeeded() {
+    guard !Self.minimumSizeGuardInstalled else { return }
+    Self.minimumSizeGuardInstalled = true
+    let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didResizeNotification, object: nil, queue: .main
+    ) { note in
+      guard let window = note.object as? NSWindow,
+        window.title.lowercased().hasPrefix("omi")
+      else { return }
+      let frameMin = window.frameRect(
+        forContentRect: NSRect(origin: .zero, size: minimumContentSize)
+      ).size
+      if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
+      if window.minSize != frameMin { window.minSize = frameMin }
+    }
+  }
+
   /// Recursively find all NSHostingViews in a window and set sizingOptions to [],
   /// disabling ALL size computations to prevent full-tree sizeThatFits() traversals.
   /// Window min/max sizes are enforced at the AppKit level via NSWindow.minSize instead.
@@ -448,14 +485,14 @@ struct DesktopHomeView: View {
         // that needs intrinsicContentSize for the sidebar's .fixedSize() to work.
         let typeName = String(describing: type(of: view))
         guard !typeName.contains("ClickThroughHostingView") else {
-          log("DesktopHomeView: Skipping sizingOptions on \(typeName) (needs intrinsic size)")
           // Still visit children
           for subview in view.subviews { visit(subview) }
           return
         }
         let before = hosting.sizingOptions
-        hosting.sizingOptions = []
-        log("DesktopHomeView: Set sizingOptions on \(type(of: view)): \(before) → []")
+        if before != [] {
+          hosting.sizingOptions = []
+        }
       }
       for subview in view.subviews {
         visit(subview)
@@ -529,12 +566,14 @@ struct DesktopHomeView: View {
       isRestoringAuth: authState.isRestoringAuth,
       isAppActive: NSApp.isActive,
       mainWindowTitle: currentWindow?.title,
+      floatingBarVisible: FloatingControlBarManager.shared.automationState.isVisible,
+      askOmiOpen: FloatingControlBarManager.shared.automationState.isAskOmiOpen,
+      askOmiFocused: FloatingControlBarManager.shared.automationState.isAskOmiFocused,
+      floatingBarFrame: FloatingControlBarManager.shared.automationState.frame,
       updatedAt: ISO8601DateFormatter().string(from: Date())
     )
 
-    Task {
-      await DesktopAutomationStateStore.shared.update(snapshot)
-    }
+    DesktopAutomationStateStore.shared.update(snapshot)
   }
 
   private func handleAutomationNavigation(_ notification: Notification) {
@@ -560,9 +599,7 @@ struct DesktopHomeView: View {
     highlightedSettingId = settingId
 
     if let item = resolvedAutomationTarget(target) {
-      withAnimation(.easeInOut(duration: 0.15)) {
-        selectedIndex = item.rawValue
-      }
+      selectedIndex = item.rawValue
     }
 
     reportAutomationState()
@@ -650,7 +687,7 @@ struct DesktopHomeView: View {
             selectedSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
             onBack: {
-              withAnimation(.easeInOut(duration: 0.2)) {
+              withAnimation(Self.pageNavigationAnimation) {
                 selectedIndex =
                   previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
                   ? SidebarNavItem.dashboard.rawValue
@@ -705,9 +742,7 @@ struct DesktopHomeView: View {
           if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue {
             PageChromeBar(
               onHome: {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                  selectedIndex = SidebarNavItem.dashboard.rawValue
-                }
+                selectedIndex = SidebarNavItem.dashboard.rawValue
               }
             )
             .padding(.horizontal, 18)
@@ -723,9 +758,6 @@ struct DesktopHomeView: View {
             highlightedSettingId: $highlightedSettingId,
             selectedTabIndex: $selectedIndex
           )
-          .id(selectedIndex)
-          .transition(.opacity.combined(with: .move(edge: .trailing)))
-          .animation(.easeInOut(duration: 0.2), value: selectedIndex)
         }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
@@ -736,12 +768,12 @@ struct DesktopHomeView: View {
         NeoDesktopBanner(
           onUpgrade: {
             selectedSettingsSection = .planUsage
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(Self.pageNavigationAnimation) {
               selectedIndex = SidebarNavItem.settings.rawValue
             }
           },
           onDismiss: {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(Self.pageNavigationAnimation) {
               neoDesktopBannerDismissed = true
             }
           }
@@ -779,9 +811,7 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
       // Set the section directly and navigate to settings
       selectedSettingsSection = .rewind
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      selectedIndex = SidebarNavItem.settings.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
       if let url = URL(string: "https://www.omi.me") {
@@ -791,57 +821,41 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
       // Navigate to settings > advanced > task assistant subsection
       selectedSettingsSection = .advanced
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      selectedIndex = SidebarNavItem.settings.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSettingsSection = .floatingBar
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      selectedIndex = SidebarNavItem.settings.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
       selectedSettingsSection = .advanced
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      selectedIndex = SidebarNavItem.settings.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
       // Navigate to Rewind page (index 6) - triggered by global hotkey Cmd+Option+R
       log(
         "DesktopHomeView: Received navigateToRewind notification, navigating to Rewind (index \(SidebarNavItem.rewind.rawValue))"
       )
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.rewind.rawValue
-      }
+      selectedIndex = SidebarNavItem.rewind.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindNotes)) { _ in
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.rewind.rawValue
-      }
+      selectedIndex = SidebarNavItem.rewind.rawValue
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
         NotificationCenter.default.post(name: .expandRewindTranscript, object: nil)
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
       // Chat now lives on the Dashboard page.
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.dashboard.rawValue
-      }
+      selectedIndex = SidebarNavItem.dashboard.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.tasks.rawValue
-      }
+      selectedIndex = SidebarNavItem.tasks.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
       if let rawValue = notification.userInfo?["rawValue"] as? Int,
         let item = SidebarNavItem(rawValue: rawValue)
       {
-        withAnimation(.easeInOut(duration: 0.2)) {
-          selectedIndex = item.rawValue
-        }
+        selectedIndex = item.rawValue
       }
     }
     .onChange(of: selectedIndex) { oldValue, newValue in
@@ -976,7 +990,6 @@ private struct PageContentView: View {
   @Binding var selectedTabIndex: Int
 
   var body: some View {
-    let _ = log("RENDER: PageContentView body evaluated (index=\(selectedIndex))")
     Group {
       switch selectedIndex {
       case 0:

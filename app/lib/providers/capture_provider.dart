@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
@@ -168,6 +169,7 @@ class CaptureProvider extends ChangeNotifier
       onConnectionStateChanged(isConnected);
     });
     _startAudioInterruptionListener();
+    BleBridge.instance.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
   }
 
   // iOS phone-call interruption events from AudioInterruptionManager.swift.
@@ -244,29 +246,29 @@ class CaptureProvider extends ChangeNotifier
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
     await ServiceManager.instance().mic.start(
-      onByteReceived: (bytes) {
-        final frames = _activeSource?.processBytes(bytes) ?? [];
-        for (final frame in frames) {
-          _wal.getSyncs().phone.onFrameCaptured(frame);
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(frame.payload);
-            _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-          }
-        }
-      },
-      onRecording: () {
-        updateRecordingState(RecordingState.record);
-      },
-      onStop: () {
-        if (!_callActive) {
-          updateRecordingState(RecordingState.stop);
-        }
-      },
-      onInitializing: () {
-        updateRecordingState(RecordingState.initialising);
-      },
-      onStalled: _onMicStalled,
-    );
+          onByteReceived: (bytes) {
+            final frames = _activeSource?.processBytes(bytes) ?? [];
+            for (final frame in frames) {
+              _wal.getSyncs().phone.onFrameCaptured(frame);
+              if (_socket?.state == SocketServiceState.connected) {
+                _socket?.send(frame.payload);
+                _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              }
+            }
+          },
+          onRecording: () {
+            updateRecordingState(RecordingState.record);
+          },
+          onStop: () {
+            if (!_callActive) {
+              updateRecordingState(RecordingState.stop);
+            }
+          },
+          onInitializing: () {
+            updateRecordingState(RecordingState.initialising);
+          },
+          onStalled: _onMicStalled,
+        );
   }
 
   void _onMicStalled() {
@@ -336,6 +338,63 @@ class CaptureProvider extends ChangeNotifier
 
   @visibleForTesting
   set testSessionStartSeconds(int v) => _sessionStartSeconds = v;
+
+  /// Unix timestamp (seconds) when the current offline/batch device-recording
+  /// session started. Set only in offline mode (the websocket path that sets
+  /// [_sessionStartSeconds] is skipped there); drives the "captured so far"
+  /// timer on the offline capture card. 0 when not offline-recording.
+  int _offlineSessionStartSeconds = 0;
+  int? get offlineRecordingStartedAt => _offlineSessionStartSeconds == 0 ? null : _offlineSessionStartSeconds;
+
+  /// Wall-clock seconds when the current recording was muted, or null when not
+  /// muted — the "captured so far" timer freezes at this point.
+  int? _offlineMuteStartedAt;
+
+  bool get offlineMuted => SharedPreferencesUtil().batchMuted;
+
+  /// Elapsed seconds of the *current* recording for the capture-card timer:
+  /// frozen while muted, and reset on each cut (manual or the 15-min rotation).
+  int? get offlineRecordingElapsedSeconds {
+    if (_offlineSessionStartSeconds == 0) return null;
+    final end = _offlineMuteStartedAt ?? (DateTime.now().millisecondsSinceEpoch ~/ 1000);
+    final secs = end - _offlineSessionStartSeconds;
+    return secs < 0 ? 0 : secs;
+  }
+
+  int get _nowSeconds => DateTime.now().millisecondsSinceEpoch ~/ 1000;
+
+  /// Mute/unmute Transcribe Later capture. The native writer drops packets while
+  /// muted and resumes into the same recording; the card timer freezes meanwhile.
+  void toggleOfflineMute() {
+    if (SharedPreferencesUtil().batchMuted) {
+      if (_offlineMuteStartedAt != null) {
+        _offlineSessionStartSeconds += _nowSeconds - _offlineMuteStartedAt!;
+        _offlineMuteStartedAt = null;
+      }
+      SharedPreferencesUtil().batchMuted = false;
+    } else {
+      _offlineMuteStartedAt = _nowSeconds;
+      SharedPreferencesUtil().batchMuted = true;
+    }
+    notifyListeners();
+  }
+
+  /// Manually finalize the current recording and start a fresh one. The native
+  /// writer cuts on the next packet; the timer resets immediately for feedback.
+  void startNewOfflineRecording() {
+    SharedPreferencesUtil().batchCutRequested = true;
+    if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
+    _offlineSessionStartSeconds = _nowSeconds;
+    _offlineMuteStartedAt = null;
+    notifyListeners();
+  }
+
+  void _onOfflineRecordingFinalized(String _) {
+    if (_offlineSessionStartSeconds == 0) return;
+    _offlineSessionStartSeconds = _nowSeconds;
+    _offlineMuteStartedAt = SharedPreferencesUtil().batchMuted ? _nowSeconds : null;
+    notifyListeners();
+  }
 
   bool _orphanRecoveryDone = false;
 
@@ -447,6 +506,7 @@ class CaptureProvider extends ChangeNotifier
   void _updateRecordingDevice(BtDevice? device) {
     Logger.debug('connected device changed from ${_recordingDevice?.id} to ${device?.id}');
     _recordingDevice = device;
+    if (device == null) _endOfflineSession();
     notifyListeners();
   }
 
@@ -463,11 +523,40 @@ class CaptureProvider extends ChangeNotifier
     _conversation = null;
     taggingSegmentIds = [];
     _sessionStartSeconds = 0;
+    _endOfflineSession();
     notifyListeners();
+  }
+
+  void _endOfflineSession() {
+    _offlineSessionStartSeconds = 0;
+    _offlineMuteStartedAt = null;
+    if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
+    if (SharedPreferencesUtil().batchCutRequested) SharedPreferencesUtil().batchCutRequested = false;
   }
 
   Future<void> onRecordProfileSettingChanged() async {
     await _resetState();
+  }
+
+  bool get deviceSupportsTranscribeLater {
+    final t = _recordingDevice?.type;
+    return t == DeviceType.omi || t == DeviceType.openglass || t == DeviceType.friendPendant;
+  }
+
+  Future<void> setBatchMode(bool enabled) async {
+    if (SharedPreferencesUtil().batchModeEnabled == enabled) return;
+    SharedPreferencesUtil().batchModeEnabled = enabled;
+    PlatformManager.instance.analytics.transcribeLaterToggled(enabled: enabled);
+    final docs = await getApplicationDocumentsDirectory();
+    await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
+    // Only re-enable native streaming when turning batch OFF, a device with a
+    // native BLE route is connected, and background mode is opted in.
+    final enableNativeStreaming = !enabled && hasNativeBleAudioRoute && SharedPreferencesUtil().backgroundModeEnabled;
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
+    notifyListeners();
+    try {
+      await onRecordProfileSettingChanged();
+    } catch (_) {}
   }
 
   /// Called when transcription settings are changed (e.g., custom STT provider)
@@ -523,6 +612,14 @@ class CaptureProvider extends ChangeNotifier
   }) async {
     Logger.debug('initiateWebsocket in capture_provider');
 
+    // Batch (offline) mode: never open the realtime transcription socket. The
+    // native layer stores incoming BLE audio to local .bin files instead, and
+    // the user uploads recordings later. See _saveNativeBleStreamConfig.
+    if (SharedPreferencesUtil().batchModeEnabled) {
+      Logger.debug('Batch mode enabled — skipping transcription websocket');
+      return;
+    }
+
     BleAudioCodec codec = audioCodec;
     sampleRate ??= mapCodecToSampleRate(codec);
     channels ??= (codec == BleAudioCodec.pcm16 || codec == BleAudioCodec.pcm8) ? 1 : 2;
@@ -531,9 +628,8 @@ class CaptureProvider extends ChangeNotifier
     Logger.debug('Initiating WebSocket with: codec=$codec, sampleRate=$sampleRate, channels=$channels, isPcm=$isPcm');
 
     // Get language and custom STT config
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
 
     Logger.debug('Custom STT enabled: ${customSttConfig.isEnabled}, provider: ${customSttConfig.provider}');
@@ -547,13 +643,13 @@ class CaptureProvider extends ChangeNotifier
 
     // Connect to the transcript socket
     _socket = await ServiceManager.instance().socket.conversation(
-      codec: codec,
-      sampleRate: sampleRate,
-      language: language,
-      force: force,
-      source: source,
-      customSttConfig: effectiveConfig,
-    );
+          codec: codec,
+          sampleRate: sampleRate,
+          language: language,
+          force: force,
+          source: source,
+          customSttConfig: effectiveConfig,
+        );
     if (_socket == null) {
       _startKeepAliveServices();
       Logger.debug("Can not create new conversation socket");
@@ -661,24 +757,20 @@ class CaptureProvider extends ChangeNotifier
             _isProcessingButtonEvent = true;
             if (_isPaused) {
               PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
-              resumeDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error resuming device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              resumeDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error resuming device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             } else {
               PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
-              pauseDeviceRecording()
-                  .then((_) {
-                    _isProcessingButtonEvent = false;
-                  })
-                  .catchError((e) {
-                    Logger.debug("Error pausing device recording: $e");
-                    _isProcessingButtonEvent = false;
-                  });
+              pauseDeviceRecording().then((_) {
+                _isProcessingButtonEvent = false;
+              }).catchError((e) {
+                Logger.debug("Error pausing device recording: $e");
+                _isProcessingButtonEvent = false;
+              });
             }
           } else if (doubleTapAction == 2) {
             // Star ongoing conversation (doesn't end it)
@@ -770,8 +862,9 @@ class CaptureProvider extends ChangeNotifier
           _commandBytes.add(payload);
         }
 
-        // Local storage syncs
-        var checkWalSupported =
+        // Local storage syncs. In batch mode the native layer owns writing the
+        // .bin files, so the Dart WAL writer must stay off to avoid double-writes.
+        var checkWalSupported = !SharedPreferencesUtil().batchModeEnabled &&
             (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass) &&
             codec.isOpusSupported() &&
             (_socket?.state != SocketServiceState.connected || SharedPreferencesUtil().unlimitedLocalStorageEnabled);
@@ -879,9 +972,8 @@ class CaptureProvider extends ChangeNotifier
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
-    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    var language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     final customSttConfig = SharedPreferencesUtil().customSttConfig;
     final sttConfigId = customSttConfig.sttConfigId;
 
@@ -923,6 +1015,11 @@ class CaptureProvider extends ChangeNotifier
     }
 
     // Update state
+    if (SharedPreferencesUtil().batchModeEnabled && _offlineSessionStartSeconds == 0) {
+      _offlineSessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      _offlineMuteStartedAt = null;
+      if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
+    }
     updateRecordingState(RecordingState.deviceRecord);
     notifyListeners();
   }
@@ -930,8 +1027,14 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
     final audioTarget = _nativeBleAudioTarget(device);
     if (audioTarget == null) {
+      // No native route — clear all background/streaming state and stale config.
+      Logger.debug(
+        '[saveNativeBleStreamConfig] no native BLE route for device ${device.id} type=${device.type} — clearing state',
+      );
       await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+      SharedPreferencesUtil().backgroundModeEnabled = false;
+      await SharedPreferencesUtil().remove('nativeBleStreamConfig');
       return;
     }
 
@@ -948,8 +1051,22 @@ class CaptureProvider extends ChangeNotifier
         'deviceType': device.type.name,
       }),
     );
+    // Batch (offline) capture: tell the native writer where to store .bin files
+    // and ensure the native realtime socket is disabled while batch mode is on
+    // (batch mode takes precedence over background streaming).
+    final batchMode = SharedPreferencesUtil().batchModeEnabled;
+    final docsDir = await getApplicationDocumentsDirectory();
+    await SharedPreferencesUtil().saveString('batchAudioDir', docsDir.path);
+
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', SharedPreferencesUtil().backgroundModeEnabled);
+    await SharedPreferencesUtil().saveBool(
+      'nativeBleStreamingEnabled',
+      !batchMode && SharedPreferencesUtil().backgroundModeEnabled,
+    );
+    Logger.debug(
+      '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
+      'deviceId=${device.id} svc=${audioTarget.key} char=${audioTarget.value} type=${device.type.name}',
+    );
   }
 
   MapEntry<String, String>? _nativeBleAudioTarget(BtDevice device) {
@@ -967,6 +1084,89 @@ class CaptureProvider extends ChangeNotifier
       case DeviceType.plaud:
         return null;
     }
+  }
+
+  /// Whether the currently-connected recording device has a concrete native BLE
+  /// audio route that the Background Mode / native streaming layer can use.
+  /// Returns false for device types with no native route (Apple Watch, Bee,
+  /// Fieldy, Frame, Limitless, Plaud) and for empty-device-id sentinel entries
+  /// that may linger in preferences from stale state.
+  @visibleForTesting
+  bool get hasNativeBleAudioRoute {
+    final device = _recordingDevice;
+    if (device == null) return false;
+    if (device.id.isEmpty) return false;
+    return _nativeBleAudioTarget(device) != null;
+  }
+
+  /// Enable or disable Background Mode through CaptureProvider so the provider
+  /// can validate against the actual native BLE route before committing prefs.
+  ///
+  /// Returns `true` if the change was accepted, `false` if rejected (e.g. no
+  /// connected device or the device lacks a native BLE audio route).
+  ///
+  /// When disabling: clears `backgroundModeEnabled`, `nativeBleStreamingEnabled`,
+  /// and `nativeBleForegroundReady`. It keeps `nativeBleStreamConfig` only when
+  /// batch mode is still enabled and the current device has a valid native route,
+  /// because native batch writers use the same config for offline capture.
+  ///
+  /// When enabling with no concrete device or no native route: rejects the
+  /// change and leaves all prefs false / removes stale config.
+  ///
+  /// When enabling with a valid route: sets global opt-in and enables effective
+  /// native streaming only when batch mode is off.
+  Future<bool> setBackgroundModeEnabled(bool requested) async {
+    if (!requested) {
+      // Disable realtime background streaming. Preserve nativeBleStreamConfig
+      // whenever Transcribe Later remains enabled; batch capture uses the same
+      // config for offline audio and may need it even while no route is
+      // currently live. Reconnect/setup paths will refresh it when needed.
+      final keepBatchConfig = SharedPreferencesUtil().batchModeEnabled;
+      SharedPreferencesUtil().backgroundModeEnabled = false;
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+      if (!keepBatchConfig) {
+        await SharedPreferencesUtil().remove('nativeBleStreamConfig');
+      }
+      Logger.debug('[BackgroundMode] disabled — keepBatchConfig=$keepBatchConfig');
+      notifyListeners();
+      return true;
+    }
+
+    // Enable: must have a concrete device with a native BLE audio route.
+    if (!hasNativeBleAudioRoute) {
+      Logger.debug(
+        '[BackgroundMode] enable rejected — no device with native BLE route '
+        '(device=${_recordingDevice?.id}, type=${_recordingDevice?.type})',
+      );
+      // Defensive: ensure prefs stay false and remove any stale config.
+      SharedPreferencesUtil().backgroundModeEnabled = false;
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+      await SharedPreferencesUtil().remove('nativeBleStreamConfig');
+      notifyListeners();
+      return false;
+    }
+
+    // Valid route — enable and recreate the native config immediately. A user
+    // can toggle Background Mode off and back on without reconnecting; in that
+    // case the disable/reject paths may have removed nativeBleStreamConfig and
+    // the native background streamer cannot start from nativeBleStreamingEnabled
+    // alone.
+    SharedPreferencesUtil().backgroundModeEnabled = true;
+    final device = _recordingDevice!;
+    final codec = await _getAudioCodec(device.id);
+    final wasForegroundReady = SharedPreferencesUtil().getBool('nativeBleForegroundReady');
+    await _saveNativeBleStreamConfig(device, codec);
+    if (wasForegroundReady) {
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', true);
+    }
+    Logger.debug(
+      '[BackgroundMode] enabled — device ${device.id} '
+      'type=${device.type}, batchMode=${SharedPreferencesUtil().batchModeEnabled}',
+    );
+    notifyListeners();
+    return true;
   }
 
   Future<void> _initiateDevicePhotoStreaming() async {
@@ -1119,6 +1319,7 @@ class CaptureProvider extends ChangeNotifier
     _metricsTimer?.cancel();
     _autoSyncFallbackTimer?.cancel();
     _peopleRefreshFuture = null; // Clear in-flight tracker
+    BleBridge.instance.removeBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
 
     super.dispose();
   }
@@ -1176,32 +1377,32 @@ class CaptureProvider extends ChangeNotifier
 
     // record
     await ServiceManager.instance().mic.start(
-      onByteReceived: (bytes) {
-        // Process through AudioSource for frame splitting and sync key generation
-        final frames = _activeSource?.processBytes(bytes) ?? [];
+          onByteReceived: (bytes) {
+            // Process through AudioSource for frame splitting and sync key generation
+            final frames = _activeSource?.processBytes(bytes) ?? [];
 
-        for (final frame in frames) {
-          _wal.getSyncs().phone.onFrameCaptured(frame);
+            for (final frame in frames) {
+              _wal.getSyncs().phone.onFrameCaptured(frame);
 
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(frame.payload);
-            _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-          }
-        }
-      },
-      onRecording: () {
-        updateRecordingState(RecordingState.record);
-      },
-      onStop: () {
-        if (!_callActive) {
-          updateRecordingState(RecordingState.stop);
-        }
-      },
-      onInitializing: () {
-        updateRecordingState(RecordingState.initialising);
-      },
-      onStalled: _onMicStalled,
-    );
+              if (_socket?.state == SocketServiceState.connected) {
+                _socket?.send(frame.payload);
+                _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+              }
+            }
+          },
+          onRecording: () {
+            updateRecordingState(RecordingState.record);
+          },
+          onStop: () {
+            if (!_callActive) {
+              updateRecordingState(RecordingState.stop);
+            }
+          },
+          onInitializing: () {
+            updateRecordingState(RecordingState.initialising);
+          },
+          onStalled: _onMicStalled,
+        );
   }
 
   stopStreamRecording() async {

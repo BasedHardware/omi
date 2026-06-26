@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -58,6 +60,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   AudioPlayer? _audioPlayer;
   bool _isAudioLoading = false;
   bool _isAudioInitialized = false;
+  Completer<void>? _initCompleter;
   Duration _totalDuration = Duration.zero;
   List<Duration> _trackStartOffsets = [];
 
@@ -213,6 +216,16 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return;
     }
 
+    // If a concurrent init is already in flight, wait for it instead of starting
+    // a second one — otherwise both calls would create/init the same AudioPlayer
+    // and trigger PlatformException "Platform player already exists".
+    if (_initCompleter != null) {
+      await _initCompleter!.future;
+      return;
+    }
+
+    _initCompleter = Completer<void>();
+
     setState(() {
       _isAudioLoading = true;
     });
@@ -270,11 +283,14 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       Logger.debug('Error initializing audio: $e');
       AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation?.id ?? '', reason: e.toString());
     } finally {
+      final completer = _initCompleter;
+      _initCompleter = null;
       if (mounted) {
         setState(() {
           _isAudioLoading = false;
         });
       }
+      completer?.complete();
     }
   }
 

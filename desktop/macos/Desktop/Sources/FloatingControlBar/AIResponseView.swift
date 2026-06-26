@@ -500,18 +500,17 @@ struct MessageHoverOverlay<Content: View>: View {
         (isHovered || isBarHovered || showInfoPopover) && !message.isStreaming
     }
 
-    private var actionBarWidth: CGFloat {
-        message.metadata == nil ? 56 : 76
-    }
-
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        VStack(alignment: .leading, spacing: 4) {
             VStack(alignment: .leading, spacing: 8) {
                 content()
             }
-            .padding(.trailing, actionBarWidth)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            actionBar
+            if shouldShowBar {
+                actionBar
+                    .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -542,77 +541,77 @@ struct MessageHoverOverlay<Content: View>: View {
         // `self.message` happens to point to when the click is dispatched.
         let messageText = message.text
         let currentRating = message.rating
-        return VStack(alignment: .trailing, spacing: 2) {
-            HStack(spacing: 6) {
-                // Thumbs up
-                Button(action: { [currentRating] in
-                    let newRating = currentRating == 1 ? nil : 1
-                    guard newRating != lastSubmittedRating else { return }
-                    lastSubmittedRating = newRating
-                    onRate(newRating)
-                    if newRating != nil { showRatingFeedbackBriefly() }
-                }) {
-                    Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                        .scaledFont(size: 11)
-                        .foregroundColor(currentRating == 1 ? .green : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Helpful response")
+        return HStack(alignment: .top, spacing: 6) {
+            Spacer(minLength: 0)
 
-                // Thumbs down
-                Button(action: { [currentRating] in
-                    let newRating = currentRating == -1 ? nil : -1
-                    guard newRating != lastSubmittedRating else { return }
-                    lastSubmittedRating = newRating
-                    onRate(newRating)
-                    if newRating != nil { showRatingFeedbackBriefly() }
-                }) {
-                    Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                        .scaledFont(size: 11)
-                        .foregroundColor(currentRating == -1 ? .red : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Not helpful")
-
-                // Copy — captures `messageText` explicitly so we always copy the
-                // message this button was drawn for, even if SwiftUI reuses the
-                // overlay view across re-renders.
-                Button(action: { [messageText] in copyText(messageText) }) {
-                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                        .scaledFont(size: 11)
-                        .foregroundColor(showCopied ? .green : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Copy response")
-
-                // Info (developer context)
-                if message.metadata != nil {
-                    Button(action: { showInfoPopover.toggle() }) {
-                        Image(systemName: "info.circle")
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(spacing: 6) {
+                    // Thumbs up
+                    Button(action: { [currentRating] in
+                        let newRating = currentRating == 1 ? nil : 1
+                        guard newRating != lastSubmittedRating else { return }
+                        lastSubmittedRating = newRating
+                        onRate(newRating)
+                        if newRating != nil { showRatingFeedbackBriefly() }
+                    }) {
+                        Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
                             .scaledFont(size: 11)
-                            .foregroundColor(showInfoPopover ? .white : .secondary)
+                            .foregroundColor(currentRating == 1 ? .green : .secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("View response context")
-                    .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
-                        MessageMetadataPopover(metadata: message.metadata!)
+                    .help("Helpful response")
+
+                    // Thumbs down
+                    Button(action: { [currentRating] in
+                        let newRating = currentRating == -1 ? nil : -1
+                        guard newRating != lastSubmittedRating else { return }
+                        lastSubmittedRating = newRating
+                        onRate(newRating)
+                        if newRating != nil { showRatingFeedbackBriefly() }
+                    }) {
+                        Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                            .scaledFont(size: 11)
+                            .foregroundColor(currentRating == -1 ? .red : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Not helpful")
+
+                    // Copy — captures `messageText` explicitly so we always copy the
+                    // message this button was drawn for, even if SwiftUI reuses the
+                    // overlay view across re-renders.
+                    Button(action: { [messageText] in copyText(messageText) }) {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                            .scaledFont(size: 11)
+                            .foregroundColor(showCopied ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy response")
+
+                    // Info (developer context)
+                    if message.metadata != nil {
+                        Button(action: { showInfoPopover.toggle() }) {
+                            Image(systemName: "info.circle")
+                                .scaledFont(size: 11)
+                                .foregroundColor(showInfoPopover ? .white : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("View response context")
+                        .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+                            MessageMetadataPopover(metadata: message.metadata!)
+                        }
                     }
                 }
-            }
 
-            if showRatingFeedback {
-                Text("Thank you!")
-                    .scaledFont(size: 9)
-                    .foregroundColor(.secondary)
-                    .transition(.opacity)
+                if showRatingFeedback {
+                    Text("Thank you!")
+                        .scaledFont(size: 9)
+                        .foregroundColor(.secondary)
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showRatingFeedback)
-        .frame(width: actionBarWidth, alignment: .trailing)
-        .padding(.top, 1)
-        .opacity(shouldShowBar ? 1 : 0)
-        .allowsHitTesting(shouldShowBar)
-        .animation(.easeInOut(duration: 0.15), value: shouldShowBar)
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .onHover { hovering in
             isBarHovered = hovering
             if hovering {

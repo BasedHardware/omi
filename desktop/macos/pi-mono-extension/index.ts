@@ -28,10 +28,15 @@ import {
   type ToolResultEvent,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@mariozechner/pi-ai";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
+import {
+  agentControlCapabilityManifest,
+  type AgentControlManifestProperty,
+  type AgentControlManifestTool,
+} from "../agent/src/runtime/control-tool-manifest.ts";
 
 // ---------------------------------------------------------------------------
 // Denylist patterns
@@ -421,15 +426,16 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
 let omiPipeConnection: Socket | null = null;
 let omiPipeBuffer = "";
 let omiCallIdCounter = 0;
-const omiPendingCalls = new Map<string, { resolve: (result: string) => void }>();
+const omiPendingCalls = new Map<string, { connection: Socket; resolve: (result: string) => void }>();
 
 function connectOmiPipe(pipePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    omiPipeConnection = createConnection(pipePath, () => {
+    const connection = createConnection(pipePath, () => {
       process.stderr.write(`[omi-tools] Connected to bridge pipe\n`);
       resolve();
     });
-    omiPipeConnection.on("data", (data: Buffer) => {
+    omiPipeConnection = connection;
+    connection.on("data", (data: Buffer) => {
       omiPipeBuffer += data.toString();
       let idx;
       while ((idx = omiPipeBuffer.indexOf("\n")) >= 0) {
@@ -449,32 +455,43 @@ function connectOmiPipe(pipePath: string): Promise<void> {
         }
       }
     });
-    omiPipeConnection.on("error", (err) => {
+    connection.on("error", (err) => {
       process.stderr.write(`[omi-tools] Pipe error: ${err.message}\n`);
       reject(err);
     });
     // Handle pipe close — resolve all pending tool calls with an error
     // so they don't hang forever if the bridge disconnects mid-call.
-    omiPipeConnection.on("close", () => {
+    connection.on("close", () => {
       process.stderr.write("[omi-tools] Pipe disconnected\n");
-      omiPipeConnection = null;
-      for (const [, pending] of omiPendingCalls) {
-        pending.resolve("Error: Omi bridge disconnected");
+      if (omiPipeConnection === connection) {
+        omiPipeConnection = null;
+        for (const [callId, pending] of omiPendingCalls) {
+          if (pending.connection === connection) {
+            pending.resolve("Error: Omi bridge disconnected");
+            omiPendingCalls.delete(callId);
+          }
+        }
       }
-      omiPendingCalls.clear();
     });
   });
 }
 
-function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
-  if (!omiPipeConnection) return Promise.resolve("Error: not connected to Omi bridge");
+async function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
+  const connection: Socket | null = omiPipeConnection;
+  if (!connection) return Promise.resolve("Error: not connected to Omi bridge");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
+  const correlation = await omiRelayCorrelation();
+  if (correlation.disableSwiftBackedTools === true) {
+    return Promise.resolve("Error: Swift-backed Omi tools are disabled for this control-created run");
+  }
+  if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
+  if (omiPipeConnection !== connection) return Promise.resolve("Error: Omi bridge disconnected");
   return new Promise<string>((resolve) => {
     const timer = setTimeout(() => {
       omiPendingCalls.delete(callId);
-      resolve(`Error: tool '${name}' timed out after ${OMI_TOOL_TIMEOUT_MS / 1000}s`);
-    }, OMI_TOOL_TIMEOUT_MS);
+      resolve(`Error: tool '${name}' timed out after ${timeoutMs / 1000}s`);
+    }, timeoutMs);
     const cleanup = () => {
       clearTimeout(timer);
       omiPendingCalls.delete(callId);
@@ -482,17 +499,75 @@ function callSwiftTool(name: string, input: Record<string, unknown>, signal?: Ab
     };
     signal?.addEventListener("abort", cleanup, { once: true });
     omiPendingCalls.set(callId, {
+      connection,
       resolve: (result: string) => {
         clearTimeout(timer);
         signal?.removeEventListener("abort", cleanup);
         resolve(result);
       },
     });
-    omiPipeConnection!.write(JSON.stringify({ type: "tool_use", callId, name, input }) + "\n");
+    connection.write(JSON.stringify({
+      type: "tool_use",
+      callId,
+      name,
+      input,
+      ...correlation,
+    }) + "\n");
   });
 }
 
+async function omiRelayCorrelation(): Promise<Record<string, string | number | boolean>> {
+  const correlation: Record<string, string | number | boolean> = {};
+  if (process.env.OMI_ADAPTER_ID) correlation.adapterId = process.env.OMI_ADAPTER_ID;
+  if (process.env.OMI_REQUEST_ID) correlation.requestId = process.env.OMI_REQUEST_ID;
+  if (process.env.OMI_CLIENT_ID) correlation.clientId = process.env.OMI_CLIENT_ID;
+  if (process.env.OMI_SESSION_ID) correlation.sessionId = process.env.OMI_SESSION_ID;
+  if (process.env.OMI_RUN_ID) correlation.runId = process.env.OMI_RUN_ID;
+  if (process.env.OMI_ATTEMPT_ID) correlation.attemptId = process.env.OMI_ATTEMPT_ID;
+  if (process.env.OMI_ADAPTER_SESSION_ID) correlation.adapterSessionId = process.env.OMI_ADAPTER_SESSION_ID;
+  if (process.env.OMI_LEGACY_ADAPTER_SESSION_ID) {
+    correlation.legacyAdapterSessionId = process.env.OMI_LEGACY_ADAPTER_SESSION_ID;
+  }
+  const protocolVersion = Number(process.env.OMI_PROTOCOL_VERSION);
+  if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+  Object.assign(correlation, await omiContextFileCorrelation());
+  return correlation;
+}
+
+async function omiContextFileCorrelation(): Promise<Record<string, string | number | boolean>> {
+  const path = process.env.OMI_CONTEXT_FILE;
+  if (!path) return {};
+  try {
+    const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    const correlation: Record<string, string | number | boolean> = {};
+    for (const key of [
+      "adapterId",
+      "requestId",
+      "clientId",
+      "sessionId",
+      "runId",
+      "attemptId",
+      "adapterSessionId",
+      "legacyAdapterSessionId",
+    ]) {
+      const value = parsed[key];
+      if (typeof value === "string" && value.length > 0) correlation[key] = value;
+    }
+    const protocolVersion = parsed.protocolVersion;
+    if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+    if (parsed.disableSwiftBackedTools === true) correlation.disableSwiftBackedTools = true;
+    return correlation;
+  } catch {
+    return {};
+  }
+}
+
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
+export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
+
+export function isSafeSkillName(name: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(name) && name !== "." && name !== ".." && !name.includes("..");
+}
 
 // ---------------------------------------------------------------------------
 // Omi tool definitions — pi-mono defineTool() with TypeBox schemas
@@ -507,21 +582,68 @@ function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
   promptGuidelines?: string[];
   properties: T;
   required: (keyof T)[];
+  schemaOptions?: Record<string, unknown>;
+  timeoutMs?: number;
 }) {
-  return defineTool({
+  const parameters = Type.Object(
+    spec.properties,
+    { additionalProperties: false },
+  );
+  Object.assign(parameters, spec.schemaOptions);
+  const tool = defineTool({
     name: spec.name,
     label: spec.label,
     description: spec.description,
     promptSnippet: spec.promptSnippet,
     promptGuidelines: spec.promptGuidelines,
-    parameters: Type.Object(
-      spec.properties,
-      { additionalProperties: false },
-    ),
+    parameters,
     async execute(_toolCallId, params, signal) {
-      const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal);
+      const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal, spec.timeoutMs);
       return { content: [{ type: "text" as const, text: result }], details: undefined };
     },
+  });
+  Object.defineProperty(tool, "__omiTimeoutMsForTest", {
+    value: spec.timeoutMs ?? OMI_TOOL_TIMEOUT_MS,
+    enumerable: false,
+  });
+  return tool;
+}
+
+function typeBoxSchemaForManifestProperty(property: AgentControlManifestProperty): unknown {
+  const options: Record<string, unknown> = {};
+  if (property.description) options.description = property.description;
+  if (property.enum) options.enum = property.enum;
+  switch (property.type) {
+    case "string":
+      return Type.String(options);
+    case "number":
+      return Type.Number(options);
+    case "boolean":
+      return Type.Boolean(options);
+    case "object":
+      return Type.Object({}, { ...options, additionalProperties: property.additionalProperties ?? true });
+  }
+}
+
+function typeBoxPropertiesForManifestTool(tool: AgentControlManifestTool): Parameters<typeof Type.Object>[0] {
+  return Object.fromEntries(
+    Object.entries(tool.properties).map(([name, property]) => {
+      const schema = typeBoxSchemaForManifestProperty(property);
+      return [name, tool.required.includes(name) ? schema : Type.Optional(schema as never)];
+    })
+  ) as Parameters<typeof Type.Object>[0];
+}
+
+function omiControlTool(tool: AgentControlManifestTool) {
+  return omiTool({
+    name: tool.name,
+    label: tool.label,
+    description: tool.description,
+    promptSnippet: tool.promptSnippet,
+    promptGuidelines: tool.promptGuidelines,
+    properties: typeBoxPropertiesForManifestTool(tool),
+    required: tool.required,
+    timeoutMs: tool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS,
   });
 }
 
@@ -566,6 +688,51 @@ export const OMI_TOOLS = [
     required: [],
   }),
   omiTool({
+    name: "get_task_agent_status",
+    label: "Task Agent Status",
+    description: "Inspect Omi's local task-chat agents/subagents and floating agent pills. Use when the user asks about your subagents, task agents, running agents, finished agents, errors, or timeouts.",
+    promptSnippet: "get_task_agent_status - Inspect Omi task-chat agents and floating agent pills",
+    promptGuidelines: [
+      "If the user says 'your subagents', interpret that as Omi task-chat agents, not Cursor or external IDE agents.",
+      "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
+      "The floating_agent_pills array is the circular agent UI below the floating bar, and includes running and finished pill agents.",
+    ],
+    properties: {},
+    required: [],
+  }),
+  ...agentControlCapabilityManifest.map(omiControlTool),
+  omiTool({
+    name: "spawn_agent",
+    label: "Spawn Agent",
+    description: "Start a floating background agent pill through the legacy floating-bar UI workflow. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
+    promptSnippet: "spawn_agent - Start a floating background agent pill",
+    promptGuidelines: [
+      "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
+      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
+      "Return immediately after spawning; the pill keeps working in the background.",
+    ],
+    properties: {
+      brief: Type.String({ description: "Clear, self-contained task brief for the background agent." }),
+      title: Type.Optional(Type.String({ description: "Short Title Case label for the agent pill." })),
+    },
+    required: ["brief"],
+  }),
+  omiTool({
+    name: "manage_agent_pills",
+    label: "Manage Agent Pills",
+    description: "List, dismiss, or clear completed floating agent pills shown below the floating bar.",
+    promptSnippet: "manage_agent_pills - List, dismiss, or clear completed floating agent pills",
+    promptGuidelines: [
+      "Call get_task_agent_status first when dismissing a specific pill so you have its id.",
+      "Use clear_completed only when the user asks to clear finished/done agents.",
+    ],
+    properties: {
+      action: Type.String({ enum: ["list", "dismiss", "clear_completed"], description: "Management action." }),
+      agent_id: Type.Optional(Type.String({ description: "Floating agent pill id from get_task_agent_status; required for dismiss." })),
+    },
+    required: ["action"],
+  }),
+  omiTool({
     name: "search_tasks",
     label: "Search Tasks",
     description: "Vector similarity search on tasks. Find tasks by meaning or topic.",
@@ -595,6 +762,90 @@ export const OMI_TOOLS = [
       task_id: Type.String({ description: "backendId from action_items" }),
     },
     required: ["task_id"],
+  }),
+  defineTool({
+    name: "load_skill",
+    label: "Load Skill",
+    description: "Load the full instructions for a named skill listed in available_skills.",
+    promptSnippet: "load_skill - Load the full SKILL.md instructions for an available skill",
+    parameters: Type.Object({
+      name: Type.String({ description: "Skill name exactly as listed in available_skills" }),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const name = String((params as { name?: unknown }).name ?? "").trim();
+      if (!isSafeSkillName(name)) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "Invalid skill name. Use the exact skill name listed in available_skills.",
+          }],
+          details: undefined,
+        };
+      }
+      const workspace = process.env.OMI_WORKSPACE || "";
+      const roots = [
+        workspace ? resolve(workspace, ".claude", "skills") : "",
+        resolve(homedir(), ".claude", "skills"),
+      ].filter(Boolean);
+
+      let content: string | null = null;
+      for (const root of roots) {
+        let realRoot: string;
+        let realFilePath: string;
+        try {
+          realRoot = await realpath(root);
+          realFilePath = await realpath(resolve(root, name, "SKILL.md"));
+        } catch {
+          continue;
+        }
+        if (!realFilePath.startsWith(`${realRoot}/`)) {
+          continue;
+        }
+        try {
+          content = await readFile(realFilePath, "utf8");
+          break;
+        } catch {
+          // Try the next configured skill location.
+        }
+      }
+      if (content && name === "dev-mode" && workspace) {
+        content = `Workspace: ${workspace}\n\n${content}`;
+      }
+      return {
+        content: [{
+          type: "text" as const,
+          text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
+        }],
+        details: undefined,
+      };
+    },
+  }),
+  omiTool({
+    name: "save_knowledge_graph",
+    label: "Save Knowledge Graph",
+    description: "Save a knowledge graph of entities and relationships discovered about the user.",
+    promptSnippet: "save_knowledge_graph - Save entities and relationships to the user's knowledge graph",
+    promptGuidelines: [
+      "Use when exploring the user's files during onboarding or knowledge-graph building.",
+      "Deduplication is handled automatically; include all meaningful entities and relationships you found.",
+    ],
+    properties: {
+      nodes: Type.Array(Type.Object({
+        id: Type.String({ description: "Stable node id, referenced by edges." }),
+        label: Type.String({ description: "Human-readable entity label." }),
+        node_type: Type.String({
+          enum: ["person", "organization", "place", "thing", "concept"],
+          description: "Entity type.",
+        }),
+        aliases: Type.Optional(Type.Array(Type.String({ description: "Alternate labels for the same entity." }))),
+      })),
+      edges: Type.Array(Type.Object({
+        source_id: Type.String({ description: "Source node id." }),
+        target_id: Type.String({ description: "Target node id." }),
+        label: Type.String({ description: "Relationship label, such as works_on, uses, built_with, part_of, or knows." }),
+      })),
+    },
+    required: ["nodes", "edges"],
   }),
   omiTool({
     name: "get_conversations",
@@ -843,6 +1094,7 @@ export const __connectOmiPipeForTest = connectOmiPipe;
 
 /** Test-only: call a Swift tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool;
+export const __omiRelayCorrelationForTest = omiRelayCorrelation;
 
 /** Test-only: access to pending calls map for assertions. */
 export const __omiPendingCallsForTest = omiPendingCalls;

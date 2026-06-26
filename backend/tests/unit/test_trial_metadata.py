@@ -131,6 +131,9 @@ def _get_trial_metadata_fn():
         'get_plan_display_name': lambda p: 'Free' if p == PlanType.basic else p.value.capitalize(),
         'FREE_CHAT_QUESTIONS_PER_MONTH': 30,
         '_request_has_all_byok_keys': lambda: False,
+        # These tests exercise the trial-expiry computation, which only runs when the
+        # paywall is enabled (it's OFF by default in prod / freemium).
+        'TRIAL_PAYWALL_ENABLED': True,
     }
     exec(compile(cutoff_line, '<subscription.py>', 'exec'), namespace)
 

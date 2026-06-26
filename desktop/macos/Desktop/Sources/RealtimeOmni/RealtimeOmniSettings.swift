@@ -59,9 +59,11 @@ final class RealtimeOmniSettings {
 
     private init() {
         UserDefaults.standard.register(defaults: [
-            // Default to OpenAI (GPT Realtime 2); the user can switch to Gemini or Auto
-            // in Advanced → Voice Model. This default also drives the realtime hub provider.
-            providerKey: RealtimeOmniProvider.gptRealtime2.rawValue,
+            // Default to Auto: AutoModelSelector picks the best provider (currently Gemini),
+            // and the hub fails over to the other realtime model (GPT Realtime), then the
+            // Claude cascade, if it can't connect. The user can pin a provider in
+            // Advanced → Voice Model. This default also drives the realtime hub provider.
+            providerKey: RealtimeOmniProvider.auto.rawValue,
             enabledKey: false,
         ])
     }

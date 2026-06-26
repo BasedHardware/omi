@@ -215,7 +215,12 @@ sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
-    from routers.sync import decode_opus_file_to_wav, decode_files_to_wav  # noqa: E402
+    from routers.sync import (  # noqa: E402
+        decode_opus_file_to_wav,
+        decode_files_to_wav,
+        _merge_and_cap_vad_segments,
+        MAX_VAD_SEGMENT_SECONDS,
+    )
 finally:
     if _remove_python_multipart_stub:
         sys.modules.pop('python_multipart', None)
@@ -621,3 +626,49 @@ class TestDecodeFilesToWavOpus:
             assert len(wav_files) == 1
             assert not os.path.exists(valid_bin)
             assert not os.path.exists(corrupt_bin)
+
+
+class TestMergeAndCapVadSegments:
+    """VAD merge + per-segment length cap that guards the STT worker from GPU OOM."""
+
+    def _assert_within_cap(self, segments):
+        for s in segments:
+            assert s['end'] - s['start'] <= MAX_VAD_SEGMENT_SECONDS
+
+    def test_close_spans_merge(self):
+        out = _merge_and_cap_vad_segments([{'start': 0, 'end': 2}, {'start': 3, 'end': 5}])
+        assert out == [{'start': 0, 'end': 5}]
+
+    def test_far_apart_spans_not_merged(self):
+        spans = [{'start': 0, 'end': 2}, {'start': 300, 'end': 320}]
+        assert _merge_and_cap_vad_segments(spans) == [{'start': 0, 'end': 2}, {'start': 300, 'end': 320}]
+
+    def test_continuous_audio_is_capped(self):
+        # 50s spans 1s apart spanning ~900s would merge into one giant segment without the cap.
+        spans = [{'start': i, 'end': i + 50} for i in range(0, 900, 51)]
+        out = _merge_and_cap_vad_segments(spans)
+        assert len(out) > 1
+        self._assert_within_cap(out)
+        for a, b in zip(out, out[1:]):
+            assert b['start'] >= a['end']
+
+    def test_single_long_span_is_split(self):
+        out = _merge_and_cap_vad_segments([{'start': 0, 'end': 800}])
+        self._assert_within_cap(out)
+        assert out[0]['start'] == 0
+        assert out[-1]['end'] == 800
+        for a, b in zip(out, out[1:]):
+            assert b['start'] == a['end']
+
+    def test_exact_multiple_of_cap(self):
+        cap = MAX_VAD_SEGMENT_SECONDS
+        out = _merge_and_cap_vad_segments([{'start': 0, 'end': 2 * cap}])
+        assert out == [{'start': 0, 'end': cap}, {'start': cap, 'end': 2 * cap}]
+
+    def test_empty(self):
+        assert _merge_and_cap_vad_segments([]) == []
+
+    def test_input_not_mutated(self):
+        spans = [{'start': 0, 'end': 2}, {'start': 3, 'end': 5}]
+        _merge_and_cap_vad_segments(spans)
+        assert spans == [{'start': 0, 'end': 2}, {'start': 3, 'end': 5}]

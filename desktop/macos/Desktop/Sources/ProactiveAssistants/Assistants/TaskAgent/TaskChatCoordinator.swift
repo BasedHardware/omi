@@ -65,10 +65,13 @@ class TaskChatCoordinator: ObservableObject {
                 guard let self else { return }
                 if isSending {
                     self.streamingTaskIds.insert(taskId)
+                    TaskAgentStatusRegistry.shared.markRunning(taskId: taskId)
                 } else {
                     // Streaming finished — remove from active set
                     self.streamingTaskIds.remove(taskId)
                     self.streamingStatuses.removeValue(forKey: taskId)
+                    // Terminal task-agent status is owned by TaskChatState (completed/failed/stopped).
+                    // Do not infer completion here; stopped runs have no error but are not completed.
                     // Mark unread if panel not showing this task
                     if !self.isPanelOpen || self.activeTaskId != taskId {
                         self.unreadTaskIds.insert(taskId)
@@ -84,6 +87,7 @@ class TaskChatCoordinator: ObservableObject {
                 guard let self, let state, state.isSending,
                       self.streamingTaskIds.contains(taskId) else { return }
                 self.streamingStatuses[taskId] = self.deriveStreamingStatus(from: messages)
+                TaskAgentStatusRegistry.shared.updateStatus(taskId: taskId, statusText: self.streamingStatuses[taskId])
             }
             .store(in: &subs)
 
@@ -144,6 +148,7 @@ class TaskChatCoordinator: ObservableObject {
 
         activeTaskId = task.id
         markAsRead(task.id)
+        TaskAgentStatusRegistry.shared.registerTask(taskId: task.id, title: task.description)
 
         // Get or create TaskChatState
         let state: TaskChatState
@@ -191,6 +196,7 @@ class TaskChatCoordinator: ObservableObject {
     /// Uses the agent bridge via TaskChatState. Skips tasks already sending.
     func investigateInBackground(for task: TaskActionItem) async {
         log("TaskChatCoordinator: investigateInBackground for \(task.id)")
+        TaskAgentStatusRegistry.shared.registerTask(taskId: task.id, title: task.description)
 
         let state: TaskChatState
         if let existing = taskStates[task.id] {

@@ -9314,6 +9314,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın.';
+
+  @override
   String get regenerateRecap => 'Özeti yeniden oluştur';
 
   @override
@@ -9334,4 +9338,39 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.';
+
+  @override
+  String get transcribeLaterTitle => 'Sonradan Transkribe Et';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.';
+
+  @override
+  String get transcribeLaterNote => 'Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.';
+
+  @override
+  String get recordingMode => 'Kayıt modu';
+
+  @override
+  String get captureModeLater => 'Sonra';
+
+  @override
+  String get captureModeLiveDescription => 'Siz konuşurken gerçek zamanlı olarak yazıya dökün.';
+
+  @override
+  String get captureModeLaterDescription => 'Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün.';
+
+  @override
+  String get unmute => 'Sesi aç';
+
+  @override
+  String get newRecording => 'Yeni kayıt';
+
+  @override
+  String get transcribeLaterPaused => 'Duraklatıldı — ses kaydedilmiyor';
 }

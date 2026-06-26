@@ -50,6 +50,9 @@ def get_flagged_users(
     limit: int = Query(default=50, le=200),
 ):
     """Get users with active fair-use enforcement."""
+    # Clamp in-function (not only via Query) so direct/non-HTTP callers can't pass a
+    # negative or huge limit straight through to the Firestore query.
+    limit = max(1, min(limit, 200))
     users = fair_use_db.get_flagged_users(stage_filter=stage, limit=limit)
     return {'users': users, 'fair_use_enabled': FAIR_USE_ENABLED}
 

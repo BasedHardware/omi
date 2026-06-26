@@ -231,6 +231,7 @@ struct SettingsContentView: View {
   @State private var isLoadingChatUsage: Bool = false
   @State private var overageInfo: OverageInfoResponse?
   @State private var isLoadingOverage: Bool = false
+  @State private var planUsageDetailsRequestID: Int = 0
   @State private var showOverageExplainer: Bool = false
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
@@ -272,7 +273,7 @@ struct SettingsContentView: View {
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
-  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.gptRealtime2.rawValue
+  @AppStorage("realtimeOmniProvider") private var realtimeOmniProvider: String = RealtimeOmniProvider.auto.rawValue
   @AppStorage("askModeEnabled") private var askModeEnabled = false
   @AppStorage("claudeMdEnabled") private var claudeMdEnabled = true
   @AppStorage("projectClaudeMdEnabled") private var projectClaudeMdEnabled = true
@@ -511,7 +512,13 @@ struct SettingsContentView: View {
         return
       }
       if newValue == .planUsage {
+        // Refetch everything for the CURRENT account. Without the trial + limiter
+        // refresh, switching accounts leaves the previous user's "Trial Ended" /
+        // over-limit state painted here (trialMetadata + serverQuota aren't reset
+        // per-account on a section switch).
         loadSubscriptionInfo()
+        AppState.current?.fetchTrialMetadata()
+        Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
@@ -1021,7 +1028,7 @@ struct SettingsContentView: View {
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(
-                "Pause text recognition on battery to save energy. OCR runs automatically when plugged back in."
+                "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
               )
               .scaledFont(size: 13)
               .foregroundColor(OmiColors.textTertiary)
@@ -1029,9 +1036,9 @@ struct SettingsContentView: View {
 
             Spacer()
 
-            Toggle("", isOn: $rewindSettings.pauseOCROnBattery)
-              .toggleStyle(.switch)
-              .labelsHidden()
+            Text("Automatic")
+              .scaledFont(size: 13, weight: .medium)
+              .foregroundColor(OmiColors.textSecondary)
           }
         }
       }
@@ -2480,23 +2487,6 @@ struct SettingsContentView: View {
           }
           Spacer()
           Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
-            .toggleStyle(.switch)
-            .tint(OmiColors.purplePrimary)
-        }
-      }
-
-      settingsCard(settingId: "floatingbar.voiceanswers") {
-        HStack(spacing: 16) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Voice Questions")
-              .scaledFont(size: 16, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-            Text("Speak answers aloud when you ask with push to talk.")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textSecondary)
-          }
-          Spacer()
-          Toggle("", isOn: floatingBarVoiceAnswersBinding)
             .toggleStyle(.switch)
             .tint(OmiColors.purplePrimary)
         }
@@ -5711,20 +5701,6 @@ struct SettingsContentView: View {
     }
   }
 
-  private var floatingBarVoiceAnswersBinding: Binding<Bool> {
-    Binding(
-      get: { shortcutSettings.floatingBarVoiceAnswersEnabled },
-      set: { newValue in
-        shortcutSettings.floatingBarVoiceAnswersEnabled = newValue
-        SettingsSyncManager.shared.pushPartialUpdate(
-          AssistantSettingsResponse(
-            floatingBar: FloatingBarSettingsResponse(voiceAnswersEnabled: newValue)
-          )
-        )
-      }
-    )
-  }
-
   private var floatingBarTypedVoiceAnswersBinding: Binding<Bool> {
     Binding(
       get: { shortcutSettings.floatingBarTypedQuestionVoiceAnswersEnabled },
@@ -6134,6 +6110,7 @@ struct SettingsContentView: View {
             .background(OmiColors.backgroundQuaternary)
 
           // Links
+          linkRow(title: "What's New", url: AppBuild.changelogURLString)
           linkRow(title: "Visit Website", url: "https://omi.me")
           linkRow(title: "Help Center", url: "https://help.omi.me")
           Button(action: {
@@ -7240,6 +7217,7 @@ struct SettingsContentView: View {
     guard !isLoadingSubscription else { return }
     isLoadingSubscription = true
     subscriptionError = nil
+    refreshPlanUsageDetails()
 
     Task {
       do {
@@ -7275,39 +7253,73 @@ struct SettingsContentView: View {
         }
       }
     }
-    loadChatUsageQuota()
-    loadOverageInfo()
   }
 
-  private func loadChatUsageQuota() {
-    guard !isLoadingChatUsage else { return }
+  private func refreshPlanUsageDetails() {
+    planUsageDetailsRequestID += 1
+    let requestID = planUsageDetailsRequestID
     isLoadingChatUsage = true
+    isLoadingOverage = true
+    chatUsageQuota = nil
+    overageInfo = nil
+
     Task {
-      let quota = await APIClient.shared.fetchChatUsageQuota()
-      await MainActor.run {
-        chatUsageQuota = quota
-        isLoadingChatUsage = false
-      }
+      async let quota = APIClient.shared.fetchChatUsageQuota()
+      async let overageInfo = fetchOverageInfoForPlanUsage()
+      let (quotaValue, overageInfoValue) = await (quota, overageInfo)
+      applyPlanUsageDetails(
+        requestID: requestID,
+        quota: quotaValue,
+        overageInfo: overageInfoValue
+      )
     }
   }
 
-  private func loadOverageInfo() {
-    guard !isLoadingOverage else { return }
-    isLoadingOverage = true
-    Task {
-      do {
-        let info = try await APIClient.shared.getOverageInfo()
-        await MainActor.run {
-          overageInfo = info
-          isLoadingOverage = false
-        }
-      } catch {
-        logError("Failed to load overage info", error: error)
-        await MainActor.run {
-          isLoadingOverage = false
-        }
-      }
+  private func fetchOverageInfoForPlanUsage() async -> OverageInfoResponse? {
+    do {
+      return try await APIClient.shared.getOverageInfo()
+    } catch {
+      logError("Failed to load overage info", error: error)
+      return nil
     }
+  }
+
+  @MainActor
+  private func applyPlanUsageDetails(
+    requestID: Int,
+    quota: APIClient.ChatUsageQuota?,
+    overageInfo: OverageInfoResponse?
+  ) {
+    guard requestID == planUsageDetailsRequestID else { return }
+    chatUsageQuota = quota
+    if let quota {
+      FloatingBarUsageLimiter.shared.applyQuota(quota)
+    }
+    self.overageInfo = overageInfo
+    isLoadingChatUsage = false
+    isLoadingOverage = false
+  }
+
+  private func applySuccessfulSubscriptionRefresh(_ subscription: UserSubscriptionResponse) {
+    userSubscription = subscription
+    subscriptionError = nil
+    pendingSubscriptionPriceId = nil
+    pendingCheckoutSessionId = nil
+    selectedPlanIdForCheckout = nil
+
+    FloatingBarUsageLimiter.shared.applyPlan(
+      plan: subscription.subscription.plan,
+      status: subscription.subscription.status
+    )
+
+    if subscription.subscription.plan != .basic,
+       subscription.subscription.status == .active,
+       AppState.current?.isPaywalled == true {
+      AppState.current?.isPaywalled = false
+      log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
+    }
+
+    refreshPlanUsageDetails()
   }
 
   private func startCheckout(for priceId: String) {
@@ -7469,12 +7481,8 @@ struct SettingsContentView: View {
             subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
-            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
-              userSubscription = subscription
-              subscriptionError = nil
-              pendingSubscriptionPriceId = nil
-              pendingCheckoutSessionId = nil
+              applySuccessfulSubscriptionRefresh(subscription)
             }
             return
           }

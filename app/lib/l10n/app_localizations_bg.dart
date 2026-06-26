@@ -9338,6 +9338,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get backgroundModeNote => 'Засега работи само с устройства Omi и непрекъснато се подобрява.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Фоновият режим не е наличен, защото няма свързано съвместимо устройство. Свържете устройство Omi, OpenGlass или Friend Pendant, за да използвате тази функция.';
+
+  @override
   String get regenerateRecap => 'Регенерирай резюмето';
 
   @override
@@ -9358,4 +9362,40 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Използвате собствен доставчик за транскрипция. Синхронизирането на тези записи ги транскрибира на сървърите на Omi и те се отчитат към лимита за транскрипция на вашия план.';
+
+  @override
+  String get transcribeLaterTitle => 'Транскрибиране по-късно';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Записвайте аудио сега и го транскрибирайте при поискване, вместо на живо. Записите се запазват на телефона ви, след което ги качвате, за да създадете разговори.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Засега работи с устройства Omi. Аудиото остава на телефона ви, докато не решите да го качите.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Паметта на телефона ви е на изчерпване, затова записването е спряно на пауза. Освободете място или качете записите си и то ще се възобнови автоматично.';
+
+  @override
+  String get recordingMode => 'Режим на запис';
+
+  @override
+  String get captureModeLater => 'По-късно';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрибиране в реално време, докато говорите.';
+
+  @override
+  String get captureModeLaterDescription => 'Запазете звука сега и го транскрибирайте, когато пожелаете.';
+
+  @override
+  String get unmute => 'Включи звука';
+
+  @override
+  String get newRecording => 'Нов запис';
+
+  @override
+  String get transcribeLaterPaused => 'На пауза — звукът не се записва';
 }

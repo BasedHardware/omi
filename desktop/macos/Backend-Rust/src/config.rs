@@ -73,6 +73,12 @@ pub struct Config {
     pub desktop_legacy_anthropic_key: Option<String>,
     /// Google Calendar API key (served to desktop clients)
     pub google_calendar_api_key: Option<String>,
+    /// GitHub Release tag deployed to this backend revision.
+    pub desktop_release_tag: Option<String>,
+    /// Git commit SHA deployed to this backend revision.
+    pub desktop_release_sha: Option<String>,
+    /// Release channel this backend revision serves.
+    pub desktop_release_channel: Option<String>,
     /// When true, route Gemini calls through Vertex AI instead of AI Studio.
     /// Uses service account auth (GOOGLE_APPLICATION_CREDENTIALS) instead of API key.
     pub use_vertex_ai: bool,
@@ -141,6 +147,9 @@ impl Config {
             anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
             desktop_legacy_anthropic_key: env::var("DESKTOP_LEGACY_ANTHROPIC_KEY").ok(),
             google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
+            desktop_release_tag: env::var("OMI_DESKTOP_RELEASE_TAG").ok(),
+            desktop_release_sha: env::var("OMI_DESKTOP_RELEASE_SHA").ok(),
+            desktop_release_channel: env::var("OMI_DESKTOP_RELEASE_CHANNEL").ok(),
             use_vertex_ai: env::var("USE_VERTEX_AI")
                 .map(|v| v != "false" && v != "0")
                 .unwrap_or(true),
@@ -170,7 +179,9 @@ impl Config {
             tracing::warn!("REDIS_DB_HOST not set - conversation visibility/sharing will not work");
         }
         if self.encryption_secret.is_none() {
-            tracing::warn!("ENCRYPTION_SECRET not set — encrypted user data will not be decryptable");
+            tracing::warn!(
+                "ENCRYPTION_SECRET not set — encrypted user data will not be decryptable"
+            );
         }
         Ok(())
     }
@@ -181,7 +192,10 @@ impl Config {
             if let Some(password) = &self.redis_password {
                 // URL-encode the password to handle special characters
                 let encoded_password = urlencoding::encode(password);
-                format!("redis://default:{}@{}:{}", encoded_password, host, self.redis_port)
+                format!(
+                    "redis://default:{}@{}:{}",
+                    encoded_password, host, self.redis_port
+                )
             } else {
                 format!("redis://{}:{}", host, self.redis_port)
             }

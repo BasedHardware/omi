@@ -213,6 +213,133 @@ final class StopReconciliationTests: XCTestCase {
             sessionStartedAt: sessionStartTime
         ))
     }
+    // MARK: - Backend Conversation ID Binding
+
+    func testBoundBackendConversationIdAcceptsExactMatchBeforeTimestampFallback() {
+        let sessionStartTime = Date()
+        let boundBackendId = "backend-conversation-123"
+        let returnedBackendId = "backend-conversation-123"
+        let convStartedAt = sessionStartTime.addingTimeInterval(30)
+        let convSource: ConversationSource = .phone
+
+        let exactIdMatches = returnedBackendId == boundBackendId
+        let timestampMatches = DesktopConversationMatchPolicy.matchesDesktopConversation(
+            startedAt: convStartedAt,
+            source: convSource,
+            sessionStartedAt: sessionStartTime
+        )
+
+        XCTAssertTrue(exactIdMatches, "A bound listen conversation id should identify the stopped session exactly")
+        XCTAssertFalse(timestampMatches, "This fixture would be rejected by the old timestamp/source fallback")
+    }
+
+    func testBoundBackendConversationIdRejectsDifferentForceProcessConversation() {
+        let boundBackendId = "backend-conversation-123"
+        let returnedBackendId = "backend-conversation-456"
+
+        XCTAssertNotEqual(returnedBackendId, boundBackendId,
+            "Force-process must not bind a different conversation when the listen session id is known")
+    }
+
+    func testBoundBackendConversationCompletionRejectsNonDesktopExactMatch() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: "backend-conversation-123",
+            boundBackendId: "backend-conversation-123",
+            status: .completed,
+            source: .phone
+        ), "Exact listen ids still need source validation before completing a desktop session")
+    }
+
+    func testBoundBackendConversationCompletionRejectsInProgressExactMatch() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: "backend-conversation-123",
+            boundBackendId: "backend-conversation-123",
+            status: .inProgress,
+            source: .desktop
+        ), "Exact listen ids must not complete a session until backend processing finishes")
+    }
+
+    func testBoundBackendConversationCompletionAcceptsCompletedDesktopExactMatch() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: "backend-conversation-123",
+            boundBackendId: "backend-conversation-123",
+            status: .completed,
+            source: .desktop
+        ))
+    }
+
+    func testRecordingSessionWithBackendIdCanStillBeFinishedForRetryReconciliation() {
+        var session = TranscriptionSessionRecord(
+            source: "desktop",
+            status: .recording,
+            backendId: "backend-conversation-123",
+            backendSynced: false
+        )
+
+        XCTAssertEqual(session.backendId, "backend-conversation-123")
+        XCTAssertFalse(session.backendSynced)
+        XCTAssertEqual(session.status, .recording)
+        session.status = .pendingUpload
+        XCTAssertEqual(session.status, .pendingUpload,
+            "Binding the backend id is not completion; stop flow must still be able to mark the session pending")
+    }
+
+    func testActiveBackendConversationIdAcceptsMatchingReemit() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "active-conversation",
+            activeBackendId: "active-conversation",
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testActiveBackendConversationIdRejectsDifferentRollover() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "rolled-over-conversation",
+            activeBackendId: "active-conversation",
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testRejectedRolloverBackendConversationIdIsCarriedAcrossRotation() {
+        let activeBackendId = "active-conversation"
+        let rejectedRolloverId = "rolled-over-conversation"
+        let ignoredAfterFinish: Set<String> = [activeBackendId, rejectedRolloverId]
+
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: rejectedRolloverId,
+            activeBackendId: activeBackendId,
+            ignoredRotatedBackendIds: []
+        ))
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: rejectedRolloverId,
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: ignoredAfterFinish
+        ), "A backend conversation rejected as an active-session rollover must not bind after local rotation")
+    }
+
+    func testRotatedBackendConversationIdIsNotBoundToFreshSession() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "previous-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: ["previous-conversation"]
+        ))
+    }
+
+    func testNewBackendConversationIdAfterRotationCanBindFreshSession() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "new-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: ["previous-conversation"]
+        ))
+    }
+
+    func testEmptyConversationSessionIdIsRejected() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
 }
 
 private extension Date {

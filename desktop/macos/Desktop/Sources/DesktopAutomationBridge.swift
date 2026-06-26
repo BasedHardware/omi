@@ -5,6 +5,7 @@ import Network
 enum DesktopAutomationLaunchOptions {
   static let enableFlag = "--automation-bridge"
   static let portPrefix = "--automation-port="
+  static let captureRootPrefix = "--automation-capture-root="
   static let defaultPort: UInt16 = 47777
 
   static var isEnabled: Bool {
@@ -37,6 +38,26 @@ enum DesktopAutomationLaunchOptions {
 
     return defaultPort
   }
+
+  static var captureRoot: URL {
+    for argument in CommandLine.arguments {
+      guard argument.hasPrefix(captureRootPrefix) else { continue }
+      let rawValue = String(argument.dropFirst(captureRootPrefix.count))
+      if !rawValue.isEmpty {
+        return URL(fileURLWithPath: rawValue).standardizedFileURL
+      }
+    }
+
+    if let rawValue = ProcessInfo.processInfo.environment["OMI_AUTOMATION_CAPTURE_ROOT"],
+      !rawValue.isEmpty
+    {
+      return URL(fileURLWithPath: rawValue).standardizedFileURL
+    }
+
+    return URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("omi-harness", isDirectory: true)
+      .standardizedFileURL
+  }
 }
 
 struct DesktopAutomationSnapshot: Codable {
@@ -56,6 +77,10 @@ struct DesktopAutomationSnapshot: Codable {
   var isRestoringAuth: Bool
   var isAppActive: Bool
   var mainWindowTitle: String?
+  var floatingBarVisible: Bool
+  var askOmiOpen: Bool
+  var askOmiFocused: Bool
+  var floatingBarFrame: String?
   var updatedAt: String
 }
 
@@ -64,12 +89,25 @@ struct DesktopAutomationNavigationRequest: Codable {
   let settingsSection: String?
   let highlightedSettingId: String?
   let activateApp: Bool?
+  let settleMs: Int?
 }
 
 struct DesktopAutomationOpenConversationRequest: Codable {
   let conversationId: String
   let showTranscript: Bool?
   let activateApp: Bool?
+  let settleMs: Int?
+}
+
+struct DesktopAutomationVisualExportRequest: Codable {
+  let path: String
+  let target: String?
+}
+
+struct DesktopAutomationVisualExportResult: Codable {
+  let path: String
+  let width: Int
+  let height: Int
 }
 
 struct DesktopAutomationExecuteExportRequest: Codable {
@@ -92,6 +130,24 @@ struct DesktopAutomationActionResult: Codable {
   let state: DesktopAutomationSnapshot
 }
 
+struct DesktopAutomationCapabilities: Codable {
+  let schemaVersion: Int
+  let routes: [String]
+  let lanes: [String]
+  let waits: [String]
+  let assertions: [String]
+  let artifactTypes: [String]
+  let actions: [DesktopAutomationActionDescriptor]
+}
+
+struct DesktopAutomationRouteTrace: Codable {
+  let method: String
+  let path: String
+  let statusCode: Int
+  let durationMs: Double
+  let finishedAt: String
+}
+
 enum DesktopAutomationActionError: LocalizedError {
   case unknownAction(String)
   case invalidParams(String)
@@ -110,8 +166,9 @@ private struct DesktopAutomationResponse<T: Codable>: Codable {
   let error: String?
 }
 
-actor DesktopAutomationStateStore {
+final class DesktopAutomationStateStore {
   static let shared = DesktopAutomationStateStore()
+  private let lock = NSLock()
 
   private var snapshot = DesktopAutomationSnapshot(
     bridgeEnabled: DesktopAutomationLaunchOptions.isEnabled,
@@ -130,15 +187,87 @@ actor DesktopAutomationStateStore {
     isRestoringAuth: true,
     isAppActive: false,
     mainWindowTitle: nil,
+    floatingBarVisible: false,
+    askOmiOpen: false,
+    askOmiFocused: false,
+    floatingBarFrame: nil,
     updatedAt: ISO8601DateFormatter().string(from: Date())
   )
 
   func update(_ snapshot: DesktopAutomationSnapshot) {
+    lock.lock()
+    defer { lock.unlock() }
     self.snapshot = snapshot
   }
 
+  func updateLiveFields(_ update: (inout DesktopAutomationSnapshot) -> Void) -> DesktopAutomationSnapshot {
+    lock.lock()
+    defer { lock.unlock() }
+    update(&snapshot)
+    return snapshot
+  }
+
   func current() -> DesktopAutomationSnapshot {
-    snapshot
+    lock.lock()
+    defer { lock.unlock() }
+    return snapshot
+  }
+}
+
+private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
+  let floating = await MainActor.run {
+    let floating = FloatingControlBarManager.shared.automationState
+    return (
+      isVisible: floating.isVisible,
+      isAskOmiOpen: floating.isAskOmiOpen,
+      isAskOmiFocused: floating.isAskOmiFocused,
+      frame: floating.frame,
+      isAppActive: NSApp.isActive
+    )
+  }
+  return DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+    snapshot.floatingBarVisible = floating.isVisible
+    snapshot.askOmiOpen = floating.isAskOmiOpen
+    snapshot.askOmiFocused = floating.isAskOmiFocused
+    snapshot.floatingBarFrame = floating.frame
+    snapshot.isAppActive = floating.isAppActive
+    snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+  }
+}
+
+private func cachedAutomationSnapshot() async -> DesktopAutomationSnapshot {
+  var snapshot = DesktopAutomationStateStore.shared.current()
+  snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+  return snapshot
+}
+
+actor DesktopAutomationTraceStore {
+  static let shared = DesktopAutomationTraceStore()
+
+  private var traces: [DesktopAutomationRouteTrace] = []
+  private let formatter = ISO8601DateFormatter()
+
+  func record(method: String, path: String, statusCode: Int, durationMs: Double) {
+    traces.append(
+      DesktopAutomationRouteTrace(
+        method: method,
+        path: path,
+        statusCode: statusCode,
+        durationMs: durationMs,
+        finishedAt: formatter.string(from: Date())
+      )
+    )
+    if traces.count > 200 {
+      traces.removeFirst(traces.count - 200)
+    }
+  }
+
+  func recent(limit: Int = 50) -> [DesktopAutomationRouteTrace] {
+    Array(traces.suffix(max(1, min(limit, 200))))
+  }
+
+  func clear() {
+    traces.removeAll(keepingCapacity: true)
   }
 }
 
@@ -245,6 +374,26 @@ final class DesktopAutomationActionRegistry {
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.
     register(
+      name: "open_ask_omi",
+      summary: "Open the Ask Omi input panel and return app-side open/focus timing",
+      params: ["reset", "wait"]
+    ) { params in
+      let reset = boolParam(params["reset"], default: false)
+      let wait = boolParam(params["wait"], default: true)
+      return await FloatingControlBarManager.shared.openAskOmiForAutomation(
+        reset: reset, wait: wait)
+    }
+
+    register(
+      name: "close_ask_omi",
+      summary: "Close the Ask Omi input panel if it is open",
+      params: ["wait"]
+    ) { params in
+      let wait = boolParam(params["wait"], default: true)
+      return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
+    }
+
+    register(
       name: "ask",
       summary: "Send a query to the floating-bar AI (typed path); exercises the full chat pipeline",
       params: ["query"]
@@ -268,6 +417,13 @@ private func boolParam(_ raw: String?, default fallback: Bool) -> Bool {
   return ["1", "true", "yes", "on"].contains(raw)
 }
 
+private func intParam(_ raw: String?, default fallback: Int) -> Int {
+  guard let raw = raw?.trimmingCharacters(in: .whitespaces), !raw.isEmpty else {
+    return fallback
+  }
+  return Int(raw) ?? fallback
+}
+
 final class DesktopAutomationBridge {
   static let shared = DesktopAutomationBridge()
 
@@ -287,7 +443,13 @@ final class DesktopAutomationBridge {
         log("DesktopAutomationBridge: invalid port \(DesktopAutomationLaunchOptions.port)")
         return
       }
-      let listener = try NWListener(using: parameters, on: port)
+      guard let loopback = IPv4Address("127.0.0.1") else {
+        log("DesktopAutomationBridge: failed to resolve loopback address")
+        return
+      }
+      parameters.requiredLocalEndpoint = .hostPort(host: .ipv4(loopback), port: port)
+
+      let listener = try NWListener(using: parameters)
       listener.newConnectionHandler = { [weak self] connection in
         self?.handleConnection(connection)
       }
@@ -410,20 +572,39 @@ final class DesktopAutomationBridge {
   }
 
   private func route(request: HTTPRequest) async -> HTTPResponse {
+    let started = DispatchTime.now().uptimeNanoseconds
+    let response = await routeUntimed(request: request)
+    let elapsedMs = Double(DispatchTime.now().uptimeNanoseconds - started) / 1_000_000
+    await DesktopAutomationTraceStore.shared.record(
+      method: request.method,
+      path: request.path,
+      statusCode: response.statusCode,
+      durationMs: (elapsedMs * 100).rounded() / 100
+    )
+    return response
+  }
+
+  private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
     switch (request.method, request.path) {
     case ("GET", "/health"):
-      let snapshot = await DesktopAutomationStateStore.shared.current()
+      let snapshot = await cachedAutomationSnapshot()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
     case ("GET", "/state"):
-      let snapshot = await DesktopAutomationStateStore.shared.current()
+      let snapshot = await liveAutomationSnapshot()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
+    case ("GET", "/traces/recent"):
+      let traces = await DesktopAutomationTraceStore.shared.recent()
+      return jsonResponse(DesktopAutomationResponse(ok: true, result: traces, error: nil))
+    case ("POST", "/traces/clear"):
+      await DesktopAutomationTraceStore.shared.clear()
+      return jsonResponse(DesktopAutomationResponse(ok: true, result: "cleared", error: nil))
     case ("POST", "/navigate"):
       do {
         let payload = try JSONDecoder().decode(
           DesktopAutomationNavigationRequest.self, from: request.body)
         try await dispatchNavigation(payload)
-        try await Task.sleep(for: .milliseconds(150))
-        let snapshot = await DesktopAutomationStateStore.shared.current()
+        try await sleepForAutomationSettle(payload.settleMs)
+        let snapshot = await cachedAutomationSnapshot()
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {
         return jsonResponse(
@@ -440,8 +621,8 @@ final class DesktopAutomationBridge {
         let payload = try JSONDecoder().decode(
           DesktopAutomationOpenConversationRequest.self, from: request.body)
         try await dispatchOpenConversation(payload)
-        try await Task.sleep(for: .milliseconds(350))
-        let snapshot = await DesktopAutomationStateStore.shared.current()
+        try await sleepForAutomationSettle(payload.settleMs)
+        let snapshot = await cachedAutomationSnapshot()
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {
         return jsonResponse(
@@ -477,6 +658,29 @@ final class DesktopAutomationBridge {
     case ("GET", "/actions"):
       let descriptors = await DesktopAutomationActionRegistry.shared.descriptors()
       return jsonResponse(DesktopAutomationResponse(ok: true, result: descriptors, error: nil))
+    case ("GET", "/capabilities"):
+      let descriptors = await DesktopAutomationActionRegistry.shared.descriptors()
+      let capabilities = DesktopAutomationCapabilities(
+        schemaVersion: 1,
+        routes: [
+          "GET /health",
+          "GET /state",
+          "GET /capabilities",
+          "GET /actions",
+          "GET /traces/recent",
+          "POST /traces/clear",
+          "POST /navigate",
+          "POST /conversation/open",
+          "POST /action",
+          "POST /visual/export",
+        ],
+        lanes: ["bridge", "visual", "ui"],
+        waits: ["state", "log", "trace"],
+        assertions: ["state", "log", "trace", "ax"],
+        artifactTypes: ["state", "bridge_response", "visual_png", "logs", "traces", "summary"],
+        actions: descriptors
+      )
+      return jsonResponse(DesktopAutomationResponse(ok: true, result: capabilities, error: nil))
     case ("POST", "/action"):
       guard let parsed = parseActionRequest(from: request.body) else {
         return jsonResponse(
@@ -488,8 +692,8 @@ final class DesktopAutomationBridge {
       do {
         let detail = try await DesktopAutomationActionRegistry.shared.perform(
           parsed.name, params: parsed.params)
-        try await Task.sleep(for: .milliseconds(150))
-        let snapshot = await DesktopAutomationStateStore.shared.current()
+        try await sleepForAutomationSettle(intParam(parsed.params["settleMs"], default: 0))
+        let snapshot = await liveAutomationSnapshot()
         let result = DesktopAutomationActionResult(
           action: parsed.name, detail: detail, state: snapshot)
         return jsonResponse(DesktopAutomationResponse(ok: true, result: result, error: nil))
@@ -498,6 +702,19 @@ final class DesktopAutomationBridge {
           DesktopAutomationResponse<DesktopAutomationActionResult>(
             ok: false, result: nil, error: error.localizedDescription),
           statusCode: 400
+        )
+      }
+    case ("POST", "/visual/export"):
+      do {
+        let payload = try JSONDecoder().decode(
+          DesktopAutomationVisualExportRequest.self, from: request.body)
+        let result = try await exportWindow(payload)
+        return jsonResponse(DesktopAutomationResponse(ok: true, result: result, error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<DesktopAutomationVisualExportResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 500
         )
       }
     case ("POST", "/open-export"):
@@ -615,6 +832,81 @@ final class DesktopAutomationBridge {
       if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
         window.makeKeyAndOrderFront(nil)
       }
+    }
+  }
+
+  private func sleepForAutomationSettle(_ milliseconds: Int?) async throws {
+    let clamped = max(0, min(milliseconds ?? 0, 5_000))
+    guard clamped > 0 else { return }
+    try await Task.sleep(for: .milliseconds(clamped))
+  }
+
+  private func exportWindow(
+    _ payload: DesktopAutomationVisualExportRequest
+  ) async throws -> DesktopAutomationVisualExportResult {
+    try await MainActor.run {
+      let fileManager = FileManager.default
+      let url = URL(fileURLWithPath: payload.path).standardizedFileURL
+      let captureRoot = DesktopAutomationLaunchOptions.captureRoot.resolvingSymlinksInPath()
+      try fileManager.createDirectory(at: captureRoot, withIntermediateDirectories: true)
+      let parent = url.deletingLastPathComponent()
+      let resolvedParent = parent.resolvingSymlinksInPath()
+      let resolvedURL = resolvedParent.appendingPathComponent(url.lastPathComponent)
+      guard resolvedURL.path == captureRoot.path || resolvedURL.path.hasPrefix(captureRoot.path + "/") else {
+        throw DesktopAutomationActionError.invalidParams(
+          "visual export path must be under \(captureRoot.path)")
+      }
+      if let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey]),
+        values.isSymbolicLink == true
+      {
+        throw DesktopAutomationActionError.invalidParams("visual export path must not be a symlink")
+      }
+      try fileManager.createDirectory(
+        at: parent, withIntermediateDirectories: true)
+      let postCreateParent = parent.resolvingSymlinksInPath()
+      let writeURL = postCreateParent.appendingPathComponent(url.lastPathComponent)
+      guard writeURL.path == captureRoot.path || writeURL.path.hasPrefix(captureRoot.path + "/") else {
+        throw DesktopAutomationActionError.invalidParams(
+          "visual export path must be under \(captureRoot.path)")
+      }
+
+      let window: NSWindow?
+      if payload.target == "floating" {
+        window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
+      } else {
+        window = NSApp.windows.first(where: { window in
+          window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow
+        })
+      }
+
+      guard
+        let window,
+        let contentView = window.contentView
+      else {
+        throw DesktopAutomationActionError.invalidParams("\(payload.target ?? "main") window not available")
+      }
+
+      contentView.needsLayout = true
+      contentView.layoutSubtreeIfNeeded()
+
+      let bounds = contentView.bounds
+      guard !bounds.isEmpty,
+        let bitmap = contentView.bitmapImageRepForCachingDisplay(in: bounds)
+      else {
+        throw DesktopAutomationActionError.invalidParams("\(payload.target ?? "main") window has no renderable content")
+      }
+
+      contentView.cacheDisplay(in: bounds, to: bitmap)
+      guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
+        throw DesktopAutomationActionError.invalidParams("failed to encode png")
+      }
+
+      try pngData.write(to: writeURL, options: [.atomic])
+      return DesktopAutomationVisualExportResult(
+        path: writeURL.path,
+        width: bitmap.pixelsWide,
+        height: bitmap.pixelsHigh
+      )
     }
   }
 

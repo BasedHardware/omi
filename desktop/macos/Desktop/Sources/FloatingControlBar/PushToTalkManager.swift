@@ -46,6 +46,8 @@ class PushToTalkManager: ObservableObject {
   // in-session STT + reasoning + routing (tool choice) + speaks the reply. Mic PCM is
   // streamed to RealtimeHubController; there is no transcript→router→ChatProvider hop.
   private var isHubMode = false
+  private var isWaitingForHub = false
+  private var hubWaitTask: Task<Void, Never>?
   /// When set, the next finalized PTT turn is a voice follow-up to this agent pill:
   /// it uses the realtime omni STT and routes the transcript into the pill's agent
   /// session (RealtimeHub pipeline), NOT the floating bar or the hub model.
@@ -58,6 +60,7 @@ class PushToTalkManager: ObservableObject {
   private var omniReceivedTranscript = false
   private var omniTurnSent = false  // dedup: send/fallback the omni turn at most once
   private var audioCaptureService: AudioCaptureService?
+  private var micCaptureStartInFlight = false
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
   private var finalizeWorkItem: DispatchWorkItem?
@@ -72,6 +75,7 @@ class PushToTalkManager: ObservableObject {
 
   // Live mode: timeout for waiting on final transcript after CloseStream
   private var liveFinalizationTimeout: DispatchWorkItem?
+  private static let hubWarmGraceSeconds: TimeInterval = 1.0
 
   private init() {}
 
@@ -235,7 +239,25 @@ class PushToTalkManager: ObservableObject {
 
   // MARK: - Listening Lifecycle
 
+  /// True iff the user is on the Omi account (not BYOK) and has hit the monthly free-tier
+  /// chat-question limit. PTT turns count toward that limit (desktop_chat_realtime), so they
+  /// must be gated by it too — same as typed chat (ChatProvider / floating bar). Without this,
+  /// a free user over 30 questions could keep talking for free. Posts the same usage-limit
+  /// popup and returns true so the caller early-returns.
+  private func isBlockedByUsageLimit() -> Bool {
+    guard !APIKeyService.isByokActive, FloatingBarUsageLimiter.shared.isLimitReached else { return false }
+    log("PushToTalkManager: PTT blocked — monthly free-tier chat limit reached")
+    NotificationCenter.default.post(
+      name: .showUsageLimitPopup, object: nil, userInfo: ["reason": "ptt"])
+    return true
+  }
+
   private func startListening() {
+    guard state == .idle || state == .pendingLockDecision else {
+      log("PushToTalkManager: startListening ignored — state=\(state)")
+      return
+    }
+    if isBlockedByUsageLimit() { return }
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -266,6 +288,7 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func enterLockedListening() {
+    if isBlockedByUsageLimit() { return }
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -305,6 +328,7 @@ class PushToTalkManager: ObservableObject {
 
     state = .pendingLockDecision
     audioCaptureService?.stopCapture()
+    micCaptureStartInFlight = false
     updateBarState()
 
     let workItem = DispatchWorkItem { [weak self] in
@@ -326,6 +350,10 @@ class PushToTalkManager: ObservableObject {
     liveFinalizationTimeout = nil
     contextCaptureTask?.cancel()
     contextCaptureTask = nil
+    hubWaitTask?.cancel()
+    hubWaitTask = nil
+    isWaitingForHub = false
+    micCaptureStartInFlight = false
     if isHubMode {
       isHubMode = false
       RealtimeHubController.shared.cancelTurn()
@@ -377,6 +405,13 @@ class PushToTalkManager: ObservableObject {
     guard followUpPill != nil, state != .idle else { return }
     log("PushToTalkManager: voice follow-up END — finalizing")
     finalize()
+  }
+
+  /// Cancel an in-progress voice follow-up for a pill that was dismissed.
+  func cancelPillFollowUp(for pillID: UUID) {
+    guard followUpPill?.id == pillID else { return }
+    log("PushToTalkManager: voice follow-up CANCEL for dismissed agent")
+    stopListening()
   }
 
   private var finalizedMode: String = "hold"
@@ -523,6 +558,13 @@ class PushToTalkManager: ObservableObject {
     activeTracer?.end("audio_capture")
     activeTracer?.end("ptt_recording")
 
+    if isWaitingForHub {
+      barState?.isVoiceResponseActive = true
+      updateBarState()
+      log("PushToTalkManager: finalizing while realtime hub warms — holding buffered audio")
+      return
+    }
+
     // Realtime hub: silence-gate the turn first. An accidental ⌥ tap (or a hold
     // with nothing said) records near-silence — committing it makes the model
     // answer anyway (often a generic "looking at your screen"). Drop those before
@@ -587,6 +629,13 @@ class PushToTalkManager: ObservableObject {
 
     // Realtime omni: commit the turn and wait for the final transcript.
     if isOmniSTT {
+      // The relay already died this turn (omniDidError nilled it) — don't wait on a dead
+      // socket; transcribe the buffered turn audio via Deepgram now so PTT still answers.
+      if realtimeOmniService == nil {
+        log("PushToTalkManager: omni relay unavailable — transcribing turn via Deepgram")
+        fallBackToDeepgram()
+        return
+      }
       // QueryTracer: the omni provider's post-commit finalization (VAD close +
       // final STT inference + round-trip) — closed at the top of sendTranscript().
       activeTracer?.begin(
@@ -596,8 +645,11 @@ class PushToTalkManager: ObservableObject {
       let timeout = DispatchWorkItem { [weak self] in
         Task { @MainActor in
           guard let self, self.state == .finalizing else { return }
-          log("PushToTalkManager: omni finalization timeout — sending transcript")
-          self.sendTranscript()
+          // No clean final transcript from the relay in time — don't ship the garbage
+          // interim it may have left behind; fall back to Deepgram on the full buffered
+          // turn audio. fallBackToDeepgram() no-ops if the turn was already sent.
+          log("PushToTalkManager: omni finalization timeout — falling back to Deepgram")
+          self.fallBackToDeepgram()
         }
       }
       liveFinalizationTimeout = timeout
@@ -829,17 +881,36 @@ class PushToTalkManager: ObservableObject {
     }
 
     if RealtimeHubController.shared.isActive {
-      isHubMode = true
-      // Retain the turn's raw audio so finalize() can silence-gate it.
+      startRealtimeHubCapture(bufferWhileWarming: false)
+      return
+    }
+
+    startRealtimeHubWarmWait()
+    return
+  }
+
+  private func startRealtimeHubCapture(bufferWhileWarming: Bool) {
+    isHubMode = true
+    isWaitingForHub = false
+    if !bufferWhileWarming {
       batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
-      RealtimeHubController.shared.beginTurn()
-      // Bluetooth output: opening a BT mic forces the device into 16 kHz HFP mode,
-      // which drops the OUTPUT rate too and chops the spoken reply (the A2DP↔HFP
-      // flap). So when output is Bluetooth, capture from the built-in mic instead —
-      // the BT device stays in A2DP and the reply plays full-quality. Trade-off: it
-      // then listens via the Mac mic, so the user must speak toward the laptop
-      // (talking into far AirPods won't register). The gentle hub silence gate
-      // (170 RMS) lets the built-in mic register far better than the old 300-RMS one.
+    }
+    RealtimeHubController.shared.beginTurn()
+    if bufferWhileWarming {
+      batchAudioLock.lock()
+      let bufferedAudio = batchAudioBuffer
+      batchAudioLock.unlock()
+      if !bufferedAudio.isEmpty {
+        RealtimeHubController.shared.feedAudio(bufferedAudio)
+      }
+      log(
+        "PushToTalkManager: realtime hub became ready — flushed "
+          + "\(String(format: "%.2f", Double(bufferedAudio.count / 2) / 16000.0))s buffered audio")
+    }
+    // Bluetooth output: opening a BT mic forces the device into 16 kHz HFP mode,
+    // which drops the OUTPUT rate too and chops the spoken reply (the A2DP↔HFP
+    // flap). So when output is Bluetooth, capture from the built-in mic instead.
+    if !bufferWhileWarming {
       if AudioCaptureService.isDefaultOutputBluetooth(),
         let builtIn = AudioCaptureService.findBuiltInMicDeviceID()
       {
@@ -848,65 +919,127 @@ class PushToTalkManager: ObservableObject {
       } else {
         startMicCapture()
       }
-      log("PushToTalkManager: realtime hub active — model is the voice hub")
+    }
+    log("PushToTalkManager: realtime hub active — model is the voice hub")
+  }
+
+  private func startRealtimeHubWarmWait() {
+    isWaitingForHub = true
+    isHubMode = false
+    batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
+    RealtimeHubController.shared.ensureWarm()
+    if AudioCaptureService.isDefaultOutputBluetooth(),
+      let builtIn = AudioCaptureService.findBuiltInMicDeviceID()
+    {
+      log("PushToTalkManager: waiting for realtime hub — buffering built-in mic audio")
+      startMicCapture(batchMode: true, overrideDeviceID: builtIn)
+    } else {
+      log("PushToTalkManager: waiting for realtime hub — buffering mic audio")
+      startMicCapture(batchMode: true)
+    }
+    hubWaitTask?.cancel()
+    hubWaitTask = Task { @MainActor [weak self] in
+      let ready = await RealtimeHubController.shared.waitUntilActive(timeout: Self.hubWarmGraceSeconds)
+      self?.resolveRealtimeHubWarmWait(ready: ready)
+    }
+  }
+
+  private func resolveRealtimeHubWarmWait(ready: Bool) {
+    guard isWaitingForHub else { return }
+    hubWaitTask = nil
+    guard state == .listening || state == .lockedListening || state == .pendingLockDecision || state == .finalizing else {
+      isWaitingForHub = false
+      return
+    }
+    if ready {
+      isWaitingForHub = false
+      startRealtimeHubCapture(bufferWhileWarming: true)
+      if state == .finalizing {
+        commitBufferedRealtimeHubTurn()
+      }
       return
     }
 
-    // The floating bar's STT is the realtime omni model (replaces Deepgram):
-    // one omni model transcribes; reasoning/tools/TTS are untouched (the final
-    // transcript still goes to ChatProvider via sendTranscript()/sendQuery()).
-    // Falls back to legacy Deepgram STT only if no provider key is available.
-    if startOmniTranscription() { return }
-
-    let isBatchMode = ShortcutSettings.shared.pttTranscriptionMode == .batch
-
-    if isBatchMode {
-      // Batch mode: just capture audio into buffer, no streaming connection
-      batchAudioLock.lock()
-      batchAudioBuffer = Data()
-      batchAudioLock.unlock()
-      startMicCapture(batchMode: true)
-      log("PushToTalkManager: started audio capture (batch mode)")
+    isWaitingForHub = false
+    if state == .finalizing {
+      log("PushToTalkManager: realtime hub warm wait timed out after release — transcribing buffered audio")
+      transcribeBufferedWarmWaitAudio()
     } else {
-      // Live mode: start mic capture and stream to Deepgram
-      startMicCapture()
+      log("PushToTalkManager: realtime hub warm wait timed out — using omni STT")
+      _ = startOmniTranscription(captureAlreadyRunning: true)
+    }
+  }
 
+  private func commitBufferedRealtimeHubTurn() {
+    guard isHubMode else { return }
+    isHubMode = false
+    activeTracer = nil
+    batchAudioLock.lock()
+    let turnAudio = batchAudioBuffer
+    batchAudioBuffer = Data()
+    batchAudioLock.unlock()
+    let totalSec = Double(turnAudio.count / 2) / 16000.0
+    if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
+      let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
+      let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+      log(
+        "PushToTalkManager: discarding buffered hub turn — audio \(String(format: "%.2f", totalSec))s "
+          + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] — not committing")
+      RealtimeHubController.shared.cancelTurn()
+      AnalyticsManager.shared.floatingBarPTTEnded(
+        mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+      state = .idle
+      updateBarState()
+      return
+    }
+    RealtimeHubController.shared.commitTurn()
+    state = .idle
+    updateBarState()
+    AnalyticsManager.shared.floatingBarPTTEnded(
+      mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
+    log("PushToTalkManager: buffered hub turn committed after warm wait")
+  }
+
+  private func transcribeBufferedWarmWaitAudio() {
+    batchAudioLock.lock()
+    let audio = batchAudioBuffer
+    batchAudioLock.unlock()
+    let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: audio)
+    guard totalSec >= Self.minTurnAudioSeconds, voicedSec >= Self.minVoicedSeconds else {
+      log(
+        "PushToTalkManager: discarding warm-wait fallback turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s)")
+      AnalyticsManager.shared.floatingBarPTTEnded(
+        mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+      stopListening()
+      return
+    }
+    Task { @MainActor [weak self] in
+      guard let self else { return }
       do {
         let language = AssistantSettings.shared.effectiveTranscriptionLanguage
-        let service = try TranscriptionService(
+        self.activeTracer?.begin("batch_transcribe", metadata: ["reason": "hub_warm_timeout"])
+        let transcript = try await TranscriptionService.batchTranscribe(
+          audioData: audio,
           language: language,
-          channels: 1,
-          contextKeywords: currentContextSnapshot?.keywords ?? []
+          contextKeywords: self.currentContextSnapshot?.keywords ?? []
         )
-        transcriptionService = service
-
-        service.start(
-          onSegments: { [weak self] segments in
-            Task { @MainActor in
-              self?.handleTranscriptSegments(segments)
-            }
-          },
-          onEvent: { _ in },  // PTT doesn't use events
-          onError: { [weak self] error in
-            Task { @MainActor in
-              logError("PushToTalkManager: transcription error", error: error)
-              self?.stopListening()
-            }
-          },
-          onConnected: {
-            Task { @MainActor in
-              log("PushToTalkManager: backend connected")
-            }
-          }
-        )
+        self.activeTracer?.end("batch_transcribe")
+        if let transcript, !transcript.isEmpty {
+          self.transcriptSegments = [transcript]
+        }
       } catch {
-        logError("PushToTalkManager: failed to create TranscriptionService", error: error)
-        stopListening()
+        logError("PushToTalkManager: warm-wait fallback transcription failed", error: error)
       }
+      self.sendTranscript()
     }
   }
 
   private func startMicCapture(batchMode: Bool = false, overrideDeviceID: AudioDeviceID? = nil) {
+    guard !micCaptureStartInFlight && !(audioCaptureService?.capturing ?? false) else {
+      log("PushToTalkManager: mic capture start ignored — already active")
+      return
+    }
+    micCaptureStartInFlight = true
     if audioCaptureService == nil {
       if let override = overrideDeviceID {
         audioCaptureService = AudioCaptureService(overrideDeviceID: override)
@@ -967,8 +1100,10 @@ class PushToTalkManager: ObservableObject {
             AudioLevelMonitor.shared.updateMicrophoneLevel(level)
           }
         )
+        self.micCaptureStartInFlight = false
         log("PushToTalkManager: mic capture started (batch=\(batchMode))")
       } catch {
+        self.micCaptureStartInFlight = false
         logError("PushToTalkManager: mic capture failed", error: error)
         self.stopListening()
       }
@@ -993,7 +1128,11 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func stopAudioTranscription() {
+    hubWaitTask?.cancel()
+    hubWaitTask = nil
+    isWaitingForHub = false
     audioCaptureService?.stopCapture()
+    micCaptureStartInFlight = false
     transcriptionService?.stop()
     transcriptionService = nil
     realtimeOmniService?.stop()
@@ -1031,6 +1170,9 @@ class PushToTalkManager: ObservableObject {
     barState.isVoiceListening = isShowingVoiceUI
     barState.isVoiceLocked = (state == .lockedListening)
     barState.isVoiceFollowUp = isCurrentSessionFollowUp && isShowingVoiceUI
+    if isShowingVoiceUI {
+      barState.isVoiceResponseActive = false
+    }
     if !isShowingVoiceUI {
       barState.voiceTranscript = ""
       barState.voiceFollowUpTranscript = ""
@@ -1059,16 +1201,26 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
   /// Starts realtime omni STT via the omi backend relay. Always returns true
   /// (omni is the floating bar's STT); on auth failure it stops the turn.
   @discardableResult
-  fileprivate func startOmniTranscription() -> Bool {
+  fileprivate func startOmniTranscription(captureAlreadyRunning: Bool = false) -> Bool {
     let provider = RealtimeOmniSettings.shared.effectiveProvider
     isOmniSTT = true
     omniReceivedTranscript = false
     omniTurnSent = false
-    omniPreconnectBuffer.removeAll()
-    // Keep a copy of the whole turn so we can fall back to Deepgram if the relay
-    // is unreachable (e.g. backend not yet on prod) — PTT must never break.
-    batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
-    startMicCapture()  // capture immediately; chunks buffer until the relay connects
+    if captureAlreadyRunning {
+      batchAudioLock.lock()
+      let bufferedAudio = batchAudioBuffer
+      batchAudioLock.unlock()
+      omniPreconnectBuffer = bufferedAudio.isEmpty ? [] : [bufferedAudio]
+      log(
+        "PushToTalkManager: omni STT reusing "
+          + "\(String(format: "%.2f", Double(bufferedAudio.count / 2) / 16000.0))s buffered audio")
+    } else {
+      omniPreconnectBuffer.removeAll()
+      // Keep a copy of the whole turn so we can fall back to Deepgram if the relay
+      // is unreachable (e.g. backend not yet on prod) — PTT must never break.
+      batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
+      startMicCapture()  // capture immediately; chunks buffer until the relay connects
+    }
     Task { @MainActor [weak self] in
       guard let self, self.isOmniSTT else { return }
       do {
@@ -1174,14 +1326,23 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
 
   func omniDidError(_ message: String) {
     logError("PushToTalkManager: omni STT error: \(message)")
-    // If the omni model already gave us a transcript this turn, the error is a
-    // benign teardown — ignore it. Otherwise the relay is unreachable (e.g. the
-    // backend isn't on prod yet): fall back to Deepgram so PTT never breaks.
-    guard !omniReceivedTranscript,
+    // Benign ONLY if the turn already completed (final transcript sent). A mid-turn relay
+    // death — even after a spurious interim like "Olha olha" that set omniReceivedTranscript
+    // — must NOT be ignored, or the turn is lost (garbage/no reply). The full turn audio is
+    // always buffered in batchAudioBuffer, so we re-transcribe it via Deepgram.
+    guard !omniTurnSent,
           state == .listening || state == .lockedListening
             || state == .pendingLockDecision || state == .finalizing
     else { return }
-    fallBackToDeepgram()
+    // Kill the dead relay so finalize() doesn't wait on it; the mic keeps buffering.
+    realtimeOmniService?.stop()
+    realtimeOmniService = nil
+    // If the user already released, transcribe the buffered turn now. If they're still
+    // holding, keep capturing — finalize()'s dead-relay branch falls back to Deepgram with
+    // the full turn audio (avoids cutting them off mid-sentence).
+    if state == .finalizing {
+      fallBackToDeepgram()
+    }
   }
 
   /// Transcribe the buffered turn audio via Deepgram when omni is unavailable.
