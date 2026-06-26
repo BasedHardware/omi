@@ -267,7 +267,7 @@ def test_background_wipe_user_data_swallows_failures(monkeypatch):
 
 
 def test_background_wipe_continues_when_running_marker_persist_fails(monkeypatch):
-    """A failure to transition to ``running`` is non-fial — the wipe still runs."""
+    """A failure to transition to ``running`` is non-fatal — the wipe still runs."""
     monkeypatch.setattr(
         account_deletion.users_db, 'mark_user_deletion_wipe_running', MagicMock(side_effect=Exception('firestore down'))
     )
