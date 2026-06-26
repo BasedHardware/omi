@@ -366,6 +366,9 @@ actor WhatsAppService {
     if eventName.contains("message.received") || eventName == "message" || eventName.contains("received") {
       let summary = summarizeMessageEvent(event)
       await MainActor.run { WhatsAppState.shared.update(lastEventSummary: summary) }
+      if let message = WAIncomingMessage(event: event) {
+        await WhatsAppReplyCoordinator.shared.handle(message)
+      }
     } else if isNeedsReauthEvent(eventName, event: event) {
       await setState(.needsReauth)
     } else if isConnectedEvent(eventName, event: event) {
