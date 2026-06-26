@@ -1499,6 +1499,8 @@ private struct NotchAgentMorphField: View {
                         } label: {
                             NotchAgentListRow(
                                 title: pill.title,
+                                status: pill.status,
+                                activity: pill.latestActivity,
                                 isSelected: pill.id == activePillID,
                                 progress: rowRevealProgress
                             )
@@ -1580,6 +1582,8 @@ private struct NotchLogoPlaceholderDot: View {
 
 private struct NotchAgentListRow: View {
     let title: String
+    let status: AgentPill.Status
+    let activity: String
     let isSelected: Bool
     let progress: CGFloat
 
@@ -1588,12 +1592,27 @@ private struct NotchAgentListRow: View {
             Color.clear
                 .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 1)
 
-            Text(title)
-                .scaledFont(size: 13, weight: .semibold)
-                .foregroundStyle(.white.opacity(0.92))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .opacity(progress)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundStyle(.white.opacity(0.94))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                HStack(spacing: 4) {
+                    Image(systemName: activityIcon)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(statusColor.opacity(0.95))
+                        .frame(width: 9, height: 9)
+
+                    Text(progressSummary)
+                        .scaledFont(size: 9, weight: .medium)
+                        .foregroundStyle(.white.opacity(0.52))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            .opacity(progress)
 
             Spacer(minLength: 0)
         }
@@ -1610,6 +1629,34 @@ private struct NotchAgentListRow: View {
                 .frame(height: 0.6)
         }
         .contentShape(Rectangle())
+    }
+
+    private var progressSummary: String {
+        let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == status.displayLabel {
+            return status.displayLabel
+        }
+        if trimmed.lowercased().hasPrefix(status.displayLabel.lowercased()) {
+            return trimmed
+        }
+        return "\(status.displayLabel) — \(trimmed)"
+    }
+
+    private var statusColor: Color {
+        status.tintColor
+    }
+
+    private var activityIcon: String {
+        switch status {
+        case .queued:
+            return "clock"
+        case .starting, .running:
+            return "sparkles"
+        case .done:
+            return "checkmark"
+        case .failed:
+            return "exclamationmark"
+        }
     }
 }
 
