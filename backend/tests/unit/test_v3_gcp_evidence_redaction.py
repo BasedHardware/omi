@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from utils.memory.v3_gcp_evidence_redaction import (
+from testing.memory.v3_f6.redaction import (
     RedactionContractError,
     fingerprint,
     render_redacted_evidence_json,
