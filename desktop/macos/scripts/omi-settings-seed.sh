@@ -128,6 +128,11 @@ else:
     selected.update(
         {
             "devLazyPermissionsEnabled": False,
+            # Restore capture flags so a previously quiet-seeded bundle runs
+            # the full eager startup path. Fall back to True (normal default)
+            # when the source domain doesn't define them.
+            "screenAnalysisEnabled": source.get("screenAnalysisEnabled", True),
+            "transcriptionEnabled": source.get("transcriptionEnabled", True),
             "systemAudioCaptureMode": source.get("systemAudioCaptureMode", "always"),
         }
     )
@@ -139,6 +144,12 @@ with tempfile.NamedTemporaryFile(suffix=".plist") as plist:
     plistlib.dump(target_data, plist)
     plist.flush()
     subprocess.run(["defaults", "import", target, plist.name], check=True)
+
+# Keys removed from target_data above need to be explicitly deleted from the
+# target domain — `defaults import` merges and never removes keys.
+for key in ("disableSystemAudioCapture", "screenAnalysisAutoStartFixed_v2"):
+    if key not in target_data:
+        subprocess.run(["defaults", "delete", target, key], check=False)
 
 print(f"Seeded {len(selected)} settings from {src} -> {target}")
 PY

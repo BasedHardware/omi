@@ -68,4 +68,21 @@ assert_defaults "$missing_target" screenAnalysisEnabled 0
 assert_defaults "$missing_target" transcriptionEnabled 0
 assert_defaults "$missing_target" devLazyPermissionsEnabled 1
 
+# Verify eager mode fully undoes quiet defaults when re-seeding the same target.
+# Seed quiet first, then eager on the same target without source capture flags.
+quiet_then_eager_target="com.omi.codex-settings-qe-$$"
+cleanup_domains+=("$quiet_then_eager_target")
+"$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_then_eager_target" "$source_domain" >/dev/null
+# Source without capture flags to verify eager defaults kick in.
+bare_source="com.omi.codex-settings-bare-$$"
+cleanup_domains+=("$bare_source")
+defaults write "$bare_source" shortcut_askOmiEnabled -bool true
+OMI_DEV_EAGER_PERMISSIONS=1 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_then_eager_target" "$bare_source" >/dev/null
+assert_defaults "$quiet_then_eager_target" screenAnalysisEnabled 1
+assert_defaults "$quiet_then_eager_target" transcriptionEnabled 1
+assert_defaults "$quiet_then_eager_target" devLazyPermissionsEnabled 0
+assert_defaults "$quiet_then_eager_target" systemAudioCaptureMode always
+assert_unset "$quiet_then_eager_target" disableSystemAudioCapture
+assert_unset "$quiet_then_eager_target" screenAnalysisAutoStartFixed_v2
+
 echo "settings-seed tests passed"
