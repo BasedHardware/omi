@@ -17,6 +17,7 @@ enum ConnectorBrand: String, Sendable {
   case openclaw
   case hermes
   case x
+  case whatsapp
 
   fileprivate var appPath: String? {
     switch self {
@@ -34,7 +35,7 @@ enum ConnectorBrand: String, Sendable {
     case .codex:
       // Codex is OpenAI's CLI — reuse the ChatGPT app icon as the brand mark.
       return "/Applications/ChatGPT.app"
-    case .calendar, .gmail, .localFiles, .gemini, .agents, .openclaw, .hermes, .x:
+    case .calendar, .gmail, .localFiles, .gemini, .agents, .openclaw, .hermes, .x, .whatsapp:
       return nil
     }
   }
@@ -98,6 +99,8 @@ enum ConnectorBrand: String, Sendable {
     case .x:
       // SF Symbols has no X/Twitter mark — rendered as the 𝕏 glyph in the view.
       return "at"
+    case .whatsapp:
+      return "message.fill"
     }
   }
 }

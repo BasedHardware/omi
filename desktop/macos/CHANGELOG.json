@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added a WhatsApp connector setup flow with QR linking and connection status"
+  ],
   "releases": [
     {
       "version": "0.11.539",

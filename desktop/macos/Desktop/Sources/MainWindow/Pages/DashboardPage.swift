@@ -446,7 +446,14 @@ struct DashboardPage: View {
         }
     }
 
-                centerMemoryColumn
+    private var homeRoutingColumns: some View {
+        HStack(alignment: .center, spacing: 32) {
+            homeSourceColumn
+            centerMemoryColumn
+            destinationStack
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
 
     private var homeSourceColumn: some View {
         VStack(alignment: .leading, spacing: 12) {

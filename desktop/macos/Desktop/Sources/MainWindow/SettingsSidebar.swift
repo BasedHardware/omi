@@ -160,6 +160,28 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["sign out", "log out", "logout", "signout"], section: .account,
       icon: "person.circle", settingId: "account.signout"),
 
+    // WhatsApp
+    SettingsSearchItem(
+      name: "WhatsApp Connection",
+      subtitle: "Link or disconnect your WhatsApp account",
+      keywords: ["whatsapp", "messages", "connect", "disconnect", "linked device", "qr"],
+      section: .whatsapp, icon: "message", settingId: "whatsapp.connection"),
+    SettingsSearchItem(
+      name: "WhatsApp Reply Mode",
+      subtitle: "Draft and auto-reply controls",
+      keywords: ["whatsapp", "reply", "draft", "auto reply", "mode"],
+      section: .whatsapp, icon: "message", settingId: "whatsapp.mode"),
+    SettingsSearchItem(
+      name: "WhatsApp Auto-Send Allowlist",
+      subtitle: "Contacts allowed for automatic replies",
+      keywords: ["whatsapp", "allowlist", "contacts", "auto send"],
+      section: .whatsapp, icon: "message", settingId: "whatsapp.allowlist"),
+    SettingsSearchItem(
+      name: "WhatsApp Kill Switch",
+      subtitle: "Pause all WhatsApp sending",
+      keywords: ["whatsapp", "kill switch", "pause", "stop sending"],
+      section: .whatsapp, icon: "message", settingId: "whatsapp.killswitch"),
+
     // Plan and Usage
     SettingsSearchItem(
       name: "Plan and Usage", subtitle: "Subscription status and usage limits",
@@ -325,6 +347,7 @@ struct SettingsSidebar: View {
     .privacy,
     .account,
     .planUsage,
+    .whatsapp,
     .floatingBar,
     .shortcuts,
     .advanced,
@@ -510,6 +533,7 @@ struct SettingsSidebarItem: View {
     case .account: return "person.circle"
     case .planUsage: return "creditcard"
     case .aiChat: return "cpu"
+    case .whatsapp: return "message"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"

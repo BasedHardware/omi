@@ -279,14 +279,20 @@ struct AppsPage: View {
                 }
         }
         .dismissableSheet(item: $selectedConnector) { connector in
-            ImportConnectorSheet(
-                connector: connector,
-                appState: appState,
-                statusStore: connectorStatusStore,
-                onDismiss: {
-                selectedConnector = nil
-            })
-            .frame(width: 520, height: 620)
+            if connector.id == "whatsapp" {
+                WhatsAppConnectView(onDismiss: {
+                    selectedConnector = nil
+                })
+            } else {
+                ImportConnectorSheet(
+                    connector: connector,
+                    appState: appState,
+                    statusStore: connectorStatusStore,
+                    onDismiss: {
+                        selectedConnector = nil
+                    })
+                .frame(width: 520, height: 620)
+            }
         }
         .dismissableSheet(item: $selectedExportDestination) { destination in
             ConnectDestinationSheet(
@@ -575,6 +581,17 @@ struct ImportConnector: Identifiable {
             isConnected: false
         ),
         ImportConnector(
+            id: "whatsapp",
+            title: "WhatsApp",
+            subtitle: "Your account",
+            description: "Let Omi read and reply to your WhatsApp messages.",
+            brand: .whatsapp,
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
+        ),
+        ImportConnector(
             id: "local-files",
             title: "Local files",
             subtitle: "This Mac",
@@ -667,7 +684,17 @@ final class ImportConnectorStatusStore: ObservableObject {
         load()
     }
 
-    func snapshot(for connector: ImportConnector) -> Snapshot {
+    func snapshot(for connector: ImportConnector, whatsappState: WAConnectionState? = nil) -> Snapshot {
+        if connector.id == "whatsapp" {
+            let state = whatsappState ?? WhatsAppState.shared.connectionState
+            return Snapshot(
+                isConnected: state.isConnected,
+                actionTitle: state.isConnected ? "Manage" : "Connect",
+                primaryText: state.statusText,
+                secondaryText: state.isConnected ? "Messages mirror locally" : nil
+            )
+        }
+
         let metrics = metricsByID[connector.id] ?? ConnectorMetrics()
         let isConnected =
             metrics.memoryCount.map { $0 > 0 } ?? false
@@ -898,6 +925,7 @@ final class ImportConnectorStatusStore: ObservableObject {
 struct ImportsSection: View {
     private let connectors = ImportConnector.all
     @ObservedObject var statusStore: ImportConnectorStatusStore
+    @ObservedObject private var whatsappState = WhatsAppState.shared
     let onSelectConnector: (ImportConnector) -> Void
 
     var body: some View {
@@ -914,7 +942,10 @@ struct ImportsSection: View {
                     }
                     ImportConnectorRow(
                         connector: connector,
-                        snapshot: statusStore.snapshot(for: connector)
+                        snapshot: statusStore.snapshot(
+                            for: connector,
+                            whatsappState: connector.id == "whatsapp" ? whatsappState.connectionState : nil
+                        )
                     ) {
                         onSelectConnector(connector)
                     }
