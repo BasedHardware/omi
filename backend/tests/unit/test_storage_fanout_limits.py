@@ -19,6 +19,14 @@ def _read_source(rel_path):
         return f.read()
 
 
+def _function_body(src, function_name):
+    func_start = src.index(f'def {function_name}')
+    next_def_idx = src.find('\ndef ', func_start + 1)
+    if next_def_idx == -1:
+        return src[func_start:]
+    return src[func_start:next_def_idx]
+
+
 class TestChunkDownloadSlidingWindow:
     """download_audio_chunks_and_merge must use a sliding window, not submit all at once."""
 
@@ -136,18 +144,28 @@ class TestPrecacheSyncImport:
         assert '_PRECACHE_FILE_SEM' in src
 
     def test_sync_precache_all_uses_semaphore(self):
-        """_precache_all_parallel in utils/sync/playback.py must reference _PRECACHE_FILE_SEM."""
+        """_precache_all_parallel must delegate to the semaphore-gated helper."""
         src = _read_source('utils/sync/playback.py')
+        helper_body = _function_body(src, '_run_parallel_precache')
+        assert '_PRECACHE_FILE_SEM.acquire()' in helper_body
+        assert '_PRECACHE_FILE_SEM.release()' in helper_body
+        assert 'add_done_callback' in helper_body
+
         func_start = src.index('def _precache_all_parallel')
-        func_body = src[func_start : func_start + 600]
-        assert '_PRECACHE_FILE_SEM' in func_body
+        func_body = src[func_start : func_start + 400]
+        assert '_run_parallel_precache(' in func_body
 
     def test_sync_cache_uncached_uses_semaphore(self):
-        """_cache_uncached_parallel in utils/sync/playback.py must reference _PRECACHE_FILE_SEM."""
+        """_cache_uncached_parallel must delegate to the semaphore-gated helper."""
         src = _read_source('utils/sync/playback.py')
+        helper_body = _function_body(src, '_run_parallel_precache')
+        assert '_PRECACHE_FILE_SEM.acquire()' in helper_body
+        assert '_PRECACHE_FILE_SEM.release()' in helper_body
+        assert 'add_done_callback' in helper_body
+
         func_start = src.index('def _cache_uncached_parallel')
-        func_body = src[func_start : func_start + 600]
-        assert '_PRECACHE_FILE_SEM' in func_body
+        func_body = src[func_start : func_start + 400]
+        assert '_run_parallel_precache(' in func_body
 
 
 class TestKGRebuildExecutorAndSemaphore:
