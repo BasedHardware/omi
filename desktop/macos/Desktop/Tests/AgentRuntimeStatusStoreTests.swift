@@ -53,7 +53,9 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
 
     let projection = store.projection(for: surface)
     XCTAssertEqual(projection?.status, .succeeded)
-    XCTAssertNil(projection?.statusText)
+    // Terminal result text "done" is preserved; the late updateActivity is
+    // correctly ignored because the projection is already terminal.
+    XCTAssertEqual(projection?.statusText, "done")
     XCTAssertNotNil(projection?.completedAt)
   }
 
@@ -72,7 +74,9 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
 
     let projection = store.projection(for: surface)
     XCTAssertEqual(projection?.status, .succeeded)
-    XCTAssertNil(projection?.statusText)
+    // Terminal result text "done" is preserved; the late text_delta is
+    // correctly ignored because the projection is already terminal.
+    XCTAssertEqual(projection?.statusText, "done")
     XCTAssertNotNil(projection?.completedAt)
   }
 
@@ -94,7 +98,7 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertEqual(store.knownSessionId(for: surface), "ses-terminal")
   }
 
-  func testTerminalResultClearsStaleStatusText() {
+  func testTerminalResultPreservesResultStatusText() {
     let store = AgentRuntimeStatusStore()
     let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
     store.beginRequest(surface: surface)
@@ -107,7 +111,8 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
 
     let projection = store.projection(for: surface)
     XCTAssertEqual(projection?.status, .succeeded)
-    XCTAssertNil(projection?.statusText)
+    // Terminal result text "done" replaces the stale running text "Working...".
+    XCTAssertEqual(projection?.statusText, "done")
     XCTAssertNotNil(projection?.completedAt)
   }
 

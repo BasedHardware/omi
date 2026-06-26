@@ -255,6 +255,25 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)"))
   }
 
+  func testTerminalProjectionPreservesStatusText() throws {
+    let source = try agentRuntimeStatusStoreSource()
+
+    // Terminal projections must preserve the final result text so consumers
+    // (floating pill latestActivity, task agent voice summary) can display it.
+    XCTAssertFalse(source.contains("projection.statusText = terminal ? nil : statusText"))
+    XCTAssertTrue(source.contains("projection.statusText = statusText"))
+  }
+
+  func testFloatingAgentHandoffExcludesQuestionStarters() throws {
+    let source = try agentPillSource()
+
+    // Informational questions that mention agents + action words must not be
+    // treated as explicit spawn requests.
+    XCTAssertTrue(source.contains("questionStarters"))
+    XCTAssertTrue(source.contains("\"how do i\""))
+    XCTAssertTrue(source.contains("trimmedLower.hasPrefix"))
+  }
+
   func testFloatingPillDoesNotTreatMissingTerminalProjectionAsSuccess() throws {
     let source = try agentPillSource()
 

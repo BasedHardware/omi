@@ -320,6 +320,19 @@ final class AgentPillsManager: ObservableObject {
         let original = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !original.isEmpty else { return nil }
         let lower = text.lowercased()
+        // Exclude question-style starters — informational queries like
+        // "how do I start a background agent?" or "can you explain how to run
+        // agents?" should answer inline, not spawn a pill.
+        let questionStarters = [
+            "how do i", "how do you", "how to", "what is", "what are", "what does",
+            "what can", "whats", "can you explain", "could you explain",
+            "explain how", "tell me about", "tell me how", "why", "is it",
+            "are agents", "do agents", "does the agent"
+        ]
+        let trimmedLower = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        if questionStarters.contains(where: { trimmedLower.hasPrefix($0) }) {
+            return nil
+        }
         let agentPattern = #"\b(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#
         let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run)\b"#
         guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
