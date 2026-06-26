@@ -109,7 +109,7 @@ def test_legacy_memory_vector_filters_exclude_memory_schema_records():
 
 def test_shared_ns2_docs_reference_non_claims_and_remaining_provider_proof():
     root = Path(__file__).resolve().parents[2].parent
-    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    oracle = (root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md").read_text()
     tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
     for text in (oracle, tickets):
