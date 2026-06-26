@@ -39,7 +39,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
   }
 
-  func testNotchResponseGlowDrawsAboveDockSurface() throws {
+  func testNotchResponseGlowStaysBehindDockSurface() throws {
     let source = try floatingControlBarViewSource()
 
     guard let dockRange = source.range(of: "NotchDockShape(bottomRadius: 22)") else {
@@ -50,21 +50,27 @@ final class AgentPillLifecycleTests: XCTestCase {
     }
 
     XCTAssertLessThan(
-      dockRange.lowerBound,
       glowRange.lowerBound,
-      "The response glow must be drawn after the black dock fill so the straight left, right, and bottom strokes stay visible in expanded chat.")
+      dockRange.lowerBound,
+      "The response glow must be drawn behind the black dock fill so glow never cuts into the pure-black notch island.")
   }
 
-  func testNotchAgentSwitcherUsesStackedPersistentList() throws {
+  func testNotchAgentIndicatorUsesOmiDotsAndHorizontalFanout() throws {
     let source = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()
 
-    XCTAssertTrue(source.contains("state.showingAIConversation || agentSwitcherPinned || agentSwitcherHovering"))
-    XCTAssertTrue(source.contains("NotchAgentStackMetrics.overlapStep"))
-    XCTAssertTrue(source.contains(".offset(x: CGFloat(index) * NotchAgentStackMetrics.overlapStep)"))
-    XCTAssertTrue(source.contains("NotchAgentSwitcherMenu("))
+    XCTAssertTrue(source.contains("agentSwitcherPinned || agentSwitcherHovering"))
+    XCTAssertTrue(source.contains("static let maxAgents = 8"))
+    XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
+    XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
+    XCTAssertTrue(source.contains("NotchAgentFanoutRow("))
+    XCTAssertTrue(source.contains("HStack(spacing: NotchAgentStackMetrics.fanoutSpacing)"))
+    XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
+    XCTAssertTrue(source.contains("group?.color ?? Color.white.opacity(0.94)"))
     XCTAssertTrue(source.contains("state.activeAgentChatPillID = pill.id"))
-    XCTAssertFalse(source.contains(".popover(isPresented: groupPopoverBinding"))
+    XCTAssertFalse(source.contains("NotchAgentSwitcherMenu("))
+    XCTAssertFalse(source.contains("Text(\"Subagents\")"))
+    XCTAssertFalse(source.contains(".fill(Color.white.opacity(0.025))"))
     XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
   }
 

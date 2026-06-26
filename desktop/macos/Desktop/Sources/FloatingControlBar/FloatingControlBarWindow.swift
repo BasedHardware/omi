@@ -1102,7 +1102,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         else { return }
 
         let targetSize = visible
-            ? NSSize(width: collapsedBarSize.width, height: Self.notchChromeHeight + 318)
+            ? NSSize(width: collapsedBarSize.width, height: Self.notchChromeHeight + 38)
             : collapsedBarSize
         resizeAnchored(to: targetSize, makeResizable: false, animated: true, anchorTop: true)
     }
