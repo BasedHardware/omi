@@ -12,6 +12,7 @@ import {
   PLACEHOLDER_RUNTIME_ADAPTERS,
   PLACEHOLDER_ADAPTER_IDS,
   PRODUCTION_ADAPTER_IDS,
+  adapterCapabilitiesFor,
 } from "../src/adapters/interface.js";
 import type {
   AdapterAttemptContext,
@@ -170,8 +171,8 @@ describe("adapter capability matrix", () => {
     expect(Object.keys(ADAPTER_CAPABILITY_MATRIX).sort()).toEqual(
       [...PRODUCTION_ADAPTER_IDS, ...PLACEHOLDER_ADAPTER_IDS].sort()
     );
-    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono"]);
-    expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["hermes", "openclaw", "a2a"]);
+    expect(PRODUCTION_ADAPTER_IDS).toEqual(["acp", "pi-mono", "hermes", "openclaw"]);
+    expect(PLACEHOLDER_ADAPTER_IDS).toEqual(["a2a"]);
 
     expect(ADAPTER_CAPABILITY_MATRIX.acp.expectations).toMatchObject({
       nativeResume: { status: "required" },
@@ -184,6 +185,26 @@ describe("adapter capability matrix", () => {
       restartOrphanSemantics: { status: "required" },
     });
     expect(ADAPTER_CAPABILITY_MATRIX["pi-mono"].expectations).toMatchObject({
+      nativeResume: { status: "unsupported" },
+      cancellationDispatch: { status: "required" },
+      cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
+      pinnedWorker: { status: "required" },
+      modelSwitching: { status: "required" },
+      artifactEmission: { status: "unsupported" },
+      toolSupport: { status: "required" },
+      restartOrphanSemantics: { status: "required" },
+    });
+    expect(ADAPTER_CAPABILITY_MATRIX.hermes.expectations).toMatchObject({
+      nativeResume: { status: "required" },
+      cancellationDispatch: { status: "required" },
+      cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
+      pinnedWorker: { status: "unsupported" },
+      modelSwitching: { status: "required" },
+      artifactEmission: { status: "required" },
+      toolSupport: { status: "required" },
+      restartOrphanSemantics: { status: "required" },
+    });
+    expect(ADAPTER_CAPABILITY_MATRIX.openclaw.expectations).toMatchObject({
       nativeResume: { status: "unsupported" },
       cancellationDispatch: { status: "required" },
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
@@ -264,11 +285,33 @@ describe("adapter capability matrix", () => {
       supportsTools: true,
       restartBehavior: "process_local_bindings_stale",
     });
+    expect(adapterCapabilitiesFor("hermes")).toEqual({
+      resumeFidelity: "native",
+      supportsNativeResume: true,
+      supportsCancellation: true,
+      acknowledgesCancellation: false,
+      requiresPinnedWorker: false,
+      supportsModelSwitching: true,
+      supportsArtifactEmission: true,
+      supportsTools: true,
+      restartBehavior: "native_bindings_survive",
+    });
+    expect(adapterCapabilitiesFor("openclaw")).toEqual({
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      supportsCancellation: true,
+      acknowledgesCancellation: false,
+      requiresPinnedWorker: true,
+      supportsModelSwitching: true,
+      supportsArtifactEmission: false,
+      supportsTools: true,
+      restartBehavior: "process_local_bindings_stale",
+    });
   });
 });
 
 describe("AdapterRegistry", () => {
-  it("rejects known placeholder adapters on the production registration path", () => {
+  it("rejects only known placeholder adapters on the production registration path", () => {
     const registry = new AdapterRegistry();
 
     for (const adapterId of PLACEHOLDER_ADAPTER_IDS) {
@@ -277,6 +320,11 @@ describe("AdapterRegistry", () => {
       );
       expect(registry.has(adapterId)).toBe(false);
     }
+
+    registry.register("hermes", () => fakeAdapter("hermes"));
+    registry.register("openclaw", () => fakeAdapter("openclaw"));
+    expect(registry.has("hermes")).toBe(true);
+    expect(registry.has("openclaw")).toBe(true);
   });
 
   it("continues to allow unlisted test adapters", () => {

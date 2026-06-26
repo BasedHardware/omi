@@ -223,13 +223,31 @@ export const ADAPTER_CAPABILITY_MATRIX = {
   },
   hermes: {
     adapterId: "hermes",
-    productionAdapter: false,
-    expectations: placeholderExpectations("Hermes", "TICKET-hermes-adapter"),
+    productionAdapter: true,
+    expectations: {
+      nativeResume: required("Hermes exposes native session ids that can be resumed after adapter process restart."),
+      cancellationDispatch: required("Hermes supports cancellation dispatch for active attempts."),
+      cancellationAck: knownLimitation("Hermes cancellation is dispatchable but no terminal adapter ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: unsupported("Hermes bindings are resumable by native session id and do not require process-local pinning."),
+      modelSwitching: required("Hermes supports model selection during session open and resume."),
+      artifactEmission: required("Hermes emits artifact references through the canonical adapter event stream."),
+      toolSupport: required("Hermes projects tool calls through canonical adapter tool events."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable Hermes bindings."),
+    },
   },
   openclaw: {
     adapterId: "openclaw",
-    productionAdapter: false,
-    expectations: placeholderExpectations("OpenClaw", "TICKET-openclaw-adapter"),
+    productionAdapter: true,
+    expectations: {
+      nativeResume: unsupported("OpenClaw session ids are process-local and are stale after daemon restart."),
+      cancellationDispatch: required("OpenClaw supports cancellation dispatch for active attempts."),
+      cancellationAck: knownLimitation("OpenClaw cancellation resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: required("OpenClaw keeps session state in the adapter process and must stay worker-pinned while active."),
+      modelSwitching: required("OpenClaw supports model selection during session open."),
+      artifactEmission: unsupported("OpenClaw runtime does not emit artifact references yet."),
+      toolSupport: required("OpenClaw projects tool calls through canonical adapter tool events."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks non-resumable OpenClaw bindings stale."),
+    },
   },
   a2a: {
     adapterId: "a2a",
@@ -239,11 +257,11 @@ export const ADAPTER_CAPABILITY_MATRIX = {
 } as const satisfies Record<string, AdapterCapabilityMatrixEntry>;
 
 export type KnownAdapterId = keyof typeof ADAPTER_CAPABILITY_MATRIX;
-export type ProductionAdapterId = "acp" | "pi-mono";
+export type ProductionAdapterId = "acp" | "pi-mono" | "hermes" | "openclaw";
 export type PlaceholderAdapterId = Exclude<KnownAdapterId, ProductionAdapterId>;
 
-export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono"] as const satisfies readonly ProductionAdapterId[];
-export const PLACEHOLDER_ADAPTER_IDS = ["hermes", "openclaw", "a2a"] as const satisfies readonly PlaceholderAdapterId[];
+export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono", "hermes", "openclaw"] as const satisfies readonly ProductionAdapterId[];
+export const PLACEHOLDER_ADAPTER_IDS = ["a2a"] as const satisfies readonly PlaceholderAdapterId[];
 
 export function isKnownAdapterId(adapterId: string): adapterId is KnownAdapterId {
   return Object.prototype.hasOwnProperty.call(ADAPTER_CAPABILITY_MATRIX, adapterId);
@@ -260,6 +278,8 @@ export function isPlaceholderAdapterId(adapterId: string): adapterId is Placehol
 const PRODUCTION_ADAPTER_RESTART_BEHAVIOR: Record<ProductionAdapterId, AdapterCapabilities["restartBehavior"]> = {
   acp: "native_bindings_survive",
   "pi-mono": "process_local_bindings_stale",
+  hermes: "native_bindings_survive",
+  openclaw: "process_local_bindings_stale",
 };
 
 export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterCapabilities {
