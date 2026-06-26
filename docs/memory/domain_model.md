@@ -341,7 +341,7 @@ Authoritative record of the §10 blocking decisions. Ratified by product owner b
 make the `CanonicalMemoryBackend` real for **both write and read**, route `process_conversation`
 extraction to canonical-only, and route the cohort's read path (at least `/v3` GET) to canonical — so a
 canonical user is fully self-consistent. The canonical cohort stays **empty in production**
-(`MEMORY_CANONICAL_USERS` unset); only explicitly-added test users are affected. Legacy-cohort behavior
+(`CANONICAL_MEMORY_USERS` empty in `memory_system.py`); only explicitly-added test users are affected. Legacy-cohort behavior
 must remain byte-unchanged.
 
 ### Backfill & reversibility directive (locked 2026-06-23)
