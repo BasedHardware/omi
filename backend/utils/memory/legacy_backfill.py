@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BATCH_SIZE = 50
 LEGACY_SCAN_PAGE_SIZE = 500
-COHORT_GATE_REASON = "cohort_gate: uid not in MEMORY_CANONICAL_USERS (use allow_admin_override=True to bypass)"
+COHORT_GATE_REASON = "cohort_gate: uid not in CANONICAL_MEMORY_USERS (use allow_admin_override=True to bypass)"
 COHORT_OVERRIDE_ACK_REQUIRED_REASON = (
     "cohort_gate: allow_admin_override requires acknowledge_non_canonical_uid=True "
     "(CLI: --i-understand-uid-not-whitelisted)"
@@ -499,7 +499,7 @@ def backfill_user(
     """Copy active legacy memories into canonical long_term items.
 
       **Does not modify or delete legacy data** — read-only on ``database.memories``.
-      Requires ``uid`` in ``MEMORY_CANONICAL_USERS`` unless ``allow_admin_override=True``
+      Requires ``uid`` in ``CANONICAL_MEMORY_USERS`` unless ``allow_admin_override=True``
     and ``acknowledge_non_canonical_uid=True``.
     """
     client = db_client if db_client is not None else default_db_client
