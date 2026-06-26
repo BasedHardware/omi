@@ -57,6 +57,10 @@ vi.mock('../observability', () => ({
   captureMainException: vi.fn()
 }))
 
+vi.mock('../skills/loader', () => ({
+  loadSkillPromptSections: vi.fn(async () => [])
+}))
+
 function jsonResponse(body: unknown): Response {
   return {
     ok: true,
@@ -107,6 +111,7 @@ describe('Pi/Omi chat bridge', () => {
 
   it('routes model tool calls through the Windows local tool executor', async () => {
     const requests: unknown[] = []
+    const streamEvents: unknown[] = []
     const fetchImpl = vi.fn().mockImplementation(async (_url: string, init: RequestInit) => {
       requests.push(JSON.parse(String(init.body)))
       if (requests.length === 1) {
@@ -164,7 +169,8 @@ describe('Pi/Omi chat bridge', () => {
         toolDefinitions: () => toolDefinitions,
         runtimeContext,
         loadActiveByokChatKey: () => null,
-        desktopApiBaseUrl: 'https://desktop.example.test'
+        desktopApiBaseUrl: 'https://desktop.example.test',
+        onStreamEvent: (event) => streamEvents.push(event)
       }
     )
 
@@ -192,6 +198,62 @@ describe('Pi/Omi chat bridge', () => {
       toolCalls: [{ id: 'toolu_1', name: 'execute_sql' }],
       usage: { promptTokens: 18, completionTokens: 7, totalTokens: 25 }
     })
+    expect(streamEvents).toEqual(
+      expect.arrayContaining([
+        { type: 'started' },
+        expect.objectContaining({
+          type: 'tool_start',
+          toolCall: { id: 'toolu_1', name: 'execute_sql' }
+        }),
+        expect.objectContaining({
+          type: 'tool_result',
+          toolCall: { id: 'toolu_1', name: 'execute_sql' },
+          ok: true
+        }),
+        { type: 'delta', text: 'You have 3 screenshots.' },
+        { type: 'done', response: result }
+      ])
+    )
+  })
+
+  it('aborts an active native Pi provider request', async () => {
+    const streamEvents: unknown[] = []
+    const abortError = new Error('The operation was aborted')
+    abortError.name = 'AbortError'
+    const fetchImpl = vi.fn().mockImplementation(
+      async (_url: string, init: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init.signal
+          if (!signal) {
+            reject(new Error('missing abort signal'))
+            return
+          }
+          signal.addEventListener('abort', () => reject(abortError), { once: true })
+        })
+    )
+
+    await expect(
+      sendPiChat(
+        {
+          token: 'firebase-token',
+          messages: [{ role: 'user', content: 'stop me' }]
+        },
+        {
+          fetchImpl,
+          toolDefinitions: () => toolDefinitions,
+          runtimeContext,
+          loadActiveByokChatKey: () => null,
+          desktopApiBaseUrl: 'https://desktop.example.test',
+          onController: (controller) => {
+            setTimeout(() => controller.abort(), 0)
+          },
+          onStreamEvent: (event) => streamEvents.push(event)
+        }
+      )
+    ).rejects.toThrow(/abort/i)
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(streamEvents).toEqual(expect.arrayContaining([{ type: 'aborted' }]))
   })
 
   it('routes native Pi model calls through active OpenRouter BYOK when configured', async () => {
