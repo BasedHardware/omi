@@ -236,11 +236,13 @@ def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
     from config.memory_rollout import MemoryRolloutConfig
     from utils.memory.memory_system import resolve_memory_system, MemorySystem
 
+    from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
     monkeypatch.delenv("MEMORY_MODE", raising=False)
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
     monkeypatch.delenv("MEMORY_MODE", raising=False)
     monkeypatch.delenv("MEMORY_ENABLED_USERS", raising=False)
-    monkeypatch.setenv("MEMORY_CANONICAL_USERS", "cohort-user")
+    set_canonical_cohort(monkeypatch, "cohort-user")
     monkeypatch.setenv("MEMORY_MODE", "read")
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-user")
 
@@ -253,7 +255,9 @@ def test_rollout_mode_does_not_flip_cohort_membership(monkeypatch):
     from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig
     from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
     monkeypatch.setenv("MEMORY_MODE", MemoryRolloutMode.read.value)
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-only-user")
 
