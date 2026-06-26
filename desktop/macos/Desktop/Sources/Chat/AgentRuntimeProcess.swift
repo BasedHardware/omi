@@ -440,6 +440,7 @@ actor AgentRuntimeProcess {
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
+    applyLocalAgentEnvironment(to: &env)
 
     let rustBase = await APIClient.shared.rustBackendURL
     if !rustBase.isEmpty {
@@ -534,6 +535,46 @@ actor AgentRuntimeProcess {
       await cleanupFailedStart(process: proc, error: error)
       throw error
     }
+  }
+
+  private func applyLocalAgentEnvironment(to env: inout [String: String]) {
+    let home = NSHomeDirectory()
+    let localAgentDirs = [
+      "\(home)/.hermes/node/bin",
+      "\(home)/.hermes/hermes-agent",
+      "\(home)/.hermes/hermes-agent/venv/bin",
+      "\(home)/.local/bin",
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ]
+    let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+    let prefix = localAgentDirs.filter { !existingPath.contains($0) }.joined(separator: ":")
+    if !prefix.isEmpty {
+      env["PATH"] = "\(prefix):\(existingPath)"
+    }
+
+    if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let openClaw = firstExecutable(named: "openclaw", in: localAgentDirs)
+    {
+      env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(openClaw) acp"
+    }
+
+    if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let hermes = firstExecutable(named: "hermes", in: localAgentDirs)
+    {
+      env["OMI_HERMES_ADAPTER_COMMAND"] = "\(hermes) acp"
+    }
+  }
+
+  private func firstExecutable(named name: String, in directories: [String]) -> String? {
+    let fileManager = FileManager.default
+    for dir in directories {
+      let path = (dir as NSString).appendingPathComponent(name)
+      if fileManager.isExecutableFile(atPath: path) {
+        return path
+      }
+    }
+    return nil
   }
 
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {

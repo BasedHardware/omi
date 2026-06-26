@@ -560,6 +560,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// When set, the bridge uses this model instead of the default (Opus).
     /// e.g. "claude-sonnet-4-6" for faster floating bar responses.
     var modelOverride: String?
+    /// Optional per-provider bridge override for spawned/background agents.
+    /// This lets a single pill run Hermes/OpenClaw without changing the user's
+    /// global chat provider preference stored in `chatBridgeMode`.
+    var bridgeHarnessOverride: String?
 
     /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
     /// When true, user can create multiple chat sessions
@@ -573,8 +577,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // with the user's Firebase ID token). Claude Code remains as an opt-in harness that
     // uses the user's own Claude OAuth.
     private lazy var agentBridge: AgentBridge = {
-        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
-        let harness = mode == BridgeMode.piMono.rawValue ? "piMono" : "acp"
+        let harness = resolvedHarnessMode()
         activeBridgeHarness = harness
         return AgentBridge(harnessMode: harness)
     }()
@@ -594,11 +597,31 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         case omiAI = "agentSDK"     // Legacy, auto-migrated to piMono
         case userClaude = "claudeCode"
         case piMono = "piMono"
+        case hermes = "hermes"
+        case openClaw = "openclaw"
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
     var isUsingOmiAccountProvider: Bool {
-        bridgeMode != BridgeMode.userClaude.rawValue
+        bridgeMode == BridgeMode.piMono.rawValue || bridgeMode == BridgeMode.omiAI.rawValue
+    }
+
+    nonisolated static func harnessMode(for mode: BridgeMode) -> String {
+        switch mode {
+        case .omiAI, .piMono: return "piMono"
+        case .userClaude: return "acp"
+        case .hermes: return "hermes"
+        case .openClaw: return "openclaw"
+        }
+    }
+
+    private func resolvedHarnessMode() -> String {
+        if let override = bridgeHarnessOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
+            !override.isEmpty {
+            return override
+        }
+        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
+        return Self.harnessMode(for: BridgeMode(rawValue: mode) ?? .piMono)
     }
 
     /// The legacy "$50 lifetime Omi AI spend" upgrade nudge (`showOmiThresholdAlert`)
@@ -1017,7 +1040,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     func switchBridgeMode(to mode: BridgeMode) async {
         // Normalize legacy omiAI to piMono
         let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
-        let newHarness = resolvedMode == .piMono ? "piMono" : "acp"
+        let newHarness = Self.harnessMode(for: resolvedMode)
         let previousHarness = activeBridgeHarness
         // Compare against the actual running harness, NOT @AppStorage (which may
         // already reflect the new value because another view wrote the same key).
@@ -1969,7 +1992,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
                 // Show upgrade prompt if over threshold but don't block chat. Never for
                 // paid/BYOK users — they aren't subject to the free Omi spend cap.
-                if self.bridgeMode != BridgeMode.userClaude.rawValue && serverCost >= 50.0
+                if self.isUsingOmiAccountProvider && serverCost >= 50.0
                     && !self.isExemptFromOmiUpgradeNudge {
                     log("ChatProvider: Omi AI cost at $\(String(format: "%.2f", serverCost)) on startup — showing upgrade prompt")
                     self.showOmiThresholdAlert = true
@@ -2767,7 +2790,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Show upgrade prompt if over threshold but don't block the message.
         // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
-        if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0
+        if isUsingOmiAccountProvider && omiAICumulativeCostUsd >= 50.0
             && !isExemptFromOmiUpgradeNudge {
             showOmiThresholdAlert = true
         }

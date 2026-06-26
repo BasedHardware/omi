@@ -616,6 +616,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     case .spawnAgent:
       let brief = arg("brief")
       let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let providerName = ((arguments["provider"] as? String) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: " ", with: "")
+      let directedProvider: AgentPillsManager.DirectedProvider?
+      switch providerName {
+      case "openclaw": directedProvider = .openclaw
+      case "hermes": directedProvider = .hermes
+      case "": directedProvider = nil
+      default: directedProvider = nil
+      }
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
@@ -624,8 +635,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // must NOT also speak its canned randomAck ("on it") or we double up.
       let pill = AgentPillsManager.shared.spawnFromUserQuery(
         brief, model: model, fromVoice: false,
-        preFetchedTitle: (title?.isEmpty == false) ? title : nil)
-      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) titled=\(title?.isEmpty == false)")
+        preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
+        bridgeHarnessOverride: directedProvider?.harnessMode)
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
       if !audioReceivedThisTurn {
         let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
         let ack = existingAck.isEmpty ? "Starting a background agent." : existingAck

@@ -248,13 +248,13 @@ describe("adapter capability matrix", () => {
       restartOrphanSemantics: { status: "required" },
     });
     expect(ADAPTER_CAPABILITY_MATRIX.openclaw.expectations).toMatchObject({
-      nativeResume: { status: "unsupported" },
-      cancellationDispatch: { status: "known_limitation", followUpTicket: "TICKET-openclaw-native-cancel" },
+      nativeResume: { status: "required" },
+      cancellationDispatch: { status: "required" },
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
       pinnedWorker: { status: "unsupported" },
-      modelSwitching: { status: "known_limitation", followUpTicket: "TICKET-openclaw-native-session-adapter" },
-      artifactEmission: { status: "unsupported" },
-      toolSupport: { status: "unsupported" },
+      modelSwitching: { status: "unsupported" },
+      artifactEmission: { status: "required" },
+      toolSupport: { status: "required" },
       restartOrphanSemantics: { status: "required" },
     });
 
@@ -340,15 +340,15 @@ describe("adapter capability matrix", () => {
       restartBehavior: "native_bindings_survive",
     });
     expect(adapterCapabilitiesFor("openclaw")).toEqual({
-      resumeFidelity: "none",
-      supportsNativeResume: false,
-      supportsCancellation: false,
+      resumeFidelity: "native",
+      supportsNativeResume: true,
+      supportsCancellation: true,
       acknowledgesCancellation: false,
       requiresPinnedWorker: false,
       supportsModelSwitching: false,
-      supportsArtifactEmission: false,
-      supportsTools: false,
-      restartBehavior: "process_local_bindings_stale",
+      supportsArtifactEmission: true,
+      supportsTools: true,
+      restartBehavior: "native_bindings_survive",
     });
   });
 });

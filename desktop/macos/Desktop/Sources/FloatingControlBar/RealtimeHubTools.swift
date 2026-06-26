@@ -144,6 +144,8 @@ enum RealtimeHubTools {
     user. So always emit the spawn_agent call. You may add one short natural sentence as you \
     call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
     with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
+    - If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \
+    "openclaw" or "hermes". Treat those as available local providers, not as sessions to inspect.
     - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
     and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \
     You are fully capable; do it directly, even when the ask is long or open-ended. Do \
@@ -391,6 +393,11 @@ enum RealtimeHubTools {
               "description":
                 "A short Title Case label for the task pill (≤ ~5 words, no trailing "
                 + "punctuation), e.g. 'Draft Launch Email'.",
+            ],
+            "provider": [
+              "type": "string",
+              "enum": ["openclaw", "hermes"],
+              "description": "Optional local provider to run this background agent through.",
             ],
           ],
           "required": ["brief"],

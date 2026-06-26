@@ -239,14 +239,14 @@ export const ADAPTER_CAPABILITY_MATRIX = {
     adapterId: "openclaw",
     productionAdapter: true,
     expectations: {
-      nativeResume: unsupported("OpenClaw one-shot CLI runs do not expose native session ids."),
-      cancellationDispatch: knownLimitation("OpenClaw one-shot CLI can be process-terminated locally but exposes no native cancel protocol.", "TICKET-openclaw-native-cancel"),
+      nativeResume: required("OpenClaw ACP exposes native sessions through the Gateway-backed ACP bridge."),
+      cancellationDispatch: required("OpenClaw ACP accepts cancellation through the shared ACP interrupt path."),
       cancellationAck: knownLimitation("OpenClaw cancellation resolves locally without an independent adapter ack.", "TICKET-03-follow-up-cancel-ack"),
-      pinnedWorker: unsupported("OpenClaw one-shot CLI does not keep adapter process-local session state across runs."),
-      modelSwitching: knownLimitation("OpenClaw one-shot CLI model forwarding is a best-effort flag, not canonical model-switch state.", "TICKET-openclaw-native-session-adapter"),
-      artifactEmission: unsupported("OpenClaw runtime does not emit artifact references yet."),
-      toolSupport: unsupported("OpenClaw one-shot CLI returns final text only and does not project tool events."),
-      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks non-resumable OpenClaw one-shot bindings stale."),
+      pinnedWorker: unsupported("OpenClaw ACP sessions are native and do not require process-local pinned workers."),
+      modelSwitching: unsupported("OpenClaw ACP does not currently expose session/set_model; model selection is configured in the OpenClaw gateway/agent."),
+      artifactEmission: required("OpenClaw ACP projects artifacts through the canonical adapter event stream."),
+      toolSupport: required("OpenClaw ACP projects tool calls through canonical adapter tool events."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable OpenClaw bindings."),
     },
   },
   a2a: {
@@ -279,7 +279,7 @@ const PRODUCTION_ADAPTER_RESTART_BEHAVIOR: Record<ProductionAdapterId, AdapterCa
   acp: "native_bindings_survive",
   "pi-mono": "process_local_bindings_stale",
   hermes: "native_bindings_survive",
-  openclaw: "process_local_bindings_stale",
+  openclaw: "native_bindings_survive",
 };
 
 export function adapterCapabilitiesFor(adapterId: ProductionAdapterId): AdapterCapabilities {

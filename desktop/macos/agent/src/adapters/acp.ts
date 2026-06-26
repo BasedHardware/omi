@@ -43,6 +43,8 @@ export interface AcpRuntimeAdapterOptions {
   acpEntry?: string;
   command?: string;
   envCommandName?: string;
+  sessionMcpServersMode?: "passthrough" | "empty";
+  supportsSessionSetModel?: boolean;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -64,6 +66,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private readonly acpEntry: string;
   private readonly command?: string;
   private readonly envCommandName?: string;
+  private readonly sessionMcpServersMode: "passthrough" | "empty";
+  private readonly supportsSessionSetModel: boolean;
 
   constructor(options: AcpRuntimeAdapterOptions = {}) {
     this.adapterId = options.adapterId ?? "acp";
@@ -74,6 +78,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       options.acpEntry ?? join(__dirname, "..", "patched-acp-entry.mjs");
     this.command = options.command;
     this.envCommandName = options.envCommandName;
+    this.sessionMcpServersMode = options.sessionMcpServersMode ?? "passthrough";
+    this.supportsSessionSetModel = options.supportsSessionSetModel ?? true;
   }
 
   async start(): Promise<void> {
@@ -233,11 +239,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
     const result = (await this.request("session/new", {
       cwd: input.cwd,
-      mcpServers: input.mcpServers ?? [],
+      mcpServers: this.sessionMcpServersMode === "empty" ? [] : input.mcpServers ?? [],
       ...(input.systemPrompt ? { _meta: { systemPrompt: input.systemPrompt } } : {}),
     })) as { sessionId: string };
 
-    if (input.model) {
+    if (input.model && this.supportsSessionSetModel) {
       await this.request("session/set_model", {
         sessionId: result.sessionId,
         modelId: input.model,
@@ -251,10 +257,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     await this.request("session/resume", {
       sessionId: input.adapterNativeSessionId,
       cwd: input.cwd,
-      mcpServers: input.mcpServers ?? [],
+      mcpServers: this.sessionMcpServersMode === "empty" ? [] : input.mcpServers ?? [],
     });
 
-    if (input.model) {
+    if (input.model && this.supportsSessionSetModel) {
       await this.request("session/set_model", {
         sessionId: input.adapterNativeSessionId,
         modelId: input.model,

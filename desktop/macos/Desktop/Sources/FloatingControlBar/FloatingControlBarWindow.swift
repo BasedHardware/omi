@@ -1627,13 +1627,34 @@ class FloatingControlBarManager {
             prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
         }
 
+        let routerTracer = QueryTracerContext.current
+        if let directive = AgentPillsManager.providerDirective(from: message) {
+            routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
+            _ = AgentPillsManager.shared.spawnFromUserQuery(
+                directive.rewrittenQuery,
+                model: selectedFloatingModel,
+                fromVoice: presentation.fromVoice,
+                preFetchedTitle: directive.title,
+                preFetchedAck: directive.ack,
+                bridgeHarnessOverride: directive.provider.harnessMode
+            )
+            switch presentation {
+            case .visible:
+                barWindow.state.aiInputText = ""
+                barWindow.closeAIConversation()
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+            }
+            return
+        }
+
         // Skip the Haiku router for obviously-conversational queries (short, no
         // task/agent signal): they're the common case, almost always route to "chat"
         // anyway, and skipping removes a ~1.1s round-trip from the critical path.
         // Ambiguous / task-like queries still go through the router so genuine
         // background-agent work isn't misrouted. Inline chat is the safe fallback —
         // it's also what the router defaults to on timeout.
-        let routerTracer = QueryTracerContext.current
         if Self.routerCanSkipToChat(message) {
             routerTracer?.mark("router_classify", metadata: ["route": "chat"])
             await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)

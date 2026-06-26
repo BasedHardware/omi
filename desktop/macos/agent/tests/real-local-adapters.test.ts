@@ -152,11 +152,41 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     await adapter.stop();
   });
 
-  it("runs OpenClaw through its real one-shot message command", async () => {
+  it("runs OpenClaw through its real ACP command", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
-    process.env.OMI_OPENCLAW_ADAPTER_COMMAND = "openclaw agent";
+    process.env.OMI_OPENCLAW_ADAPTER_COMMAND = "openclaw acp";
     const adapter = new OpenClawRuntimeAdapter();
+    const requests: Record<string, unknown>[] = [];
+
+    collectJsonRpc(proc, (request) => {
+      requests.push(request);
+      if (request.method === "initialize") {
+        writeJsonRpcResult(proc, request, { protocolVersion: 1 });
+      }
+      if (request.method === "session/new") {
+        writeJsonRpcResult(proc, request, { sessionId: "openclaw-native-session" });
+      }
+      if (request.method === "session/set_model") {
+        writeJsonRpcResult(proc, request, {});
+      }
+      if (request.method === "session/prompt") {
+        proc.stdout.write(`${JSON.stringify({
+          jsonrpc: "2.0",
+          method: "session/update",
+          params: {
+            update: {
+              sessionUpdate: "agent_message_chunk",
+              content: { type: "text", text: "OMI_OPENCLAW_DOGFOOD_OK" },
+            },
+          },
+        })}\n`);
+        writeJsonRpcResult(proc, request, {
+          usage: { inputTokens: 11, outputTokens: 12 },
+          _meta: { cacheReadTokens: 1, cacheWriteTokens: 2 },
+        });
+      }
+    });
 
     await adapter.start();
     const binding = await adapter.openBinding({
@@ -164,54 +194,79 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       cwd: "/tmp/work",
       model: "glm-5",
     });
-    const execution = adapter.executeAttempt(
+    const result = await adapter.executeAttempt(
       makeOpenClawContext(binding),
       () => {},
       new AbortController().signal
     );
-    proc.stdout.write("2026-06-26T04:10:23.585417Z  INFO openclaw: Config loaded\n");
-    proc.stdout.write(JSON.stringify({
-      payloads: [{ text: "OMI_OPENCLAW_DOGFOOD_OK" }],
-      meta: {
-        agentMeta: {
-          sessionId: "openclaw-native-session",
-          usage: { input: 11, output: 12 },
-          lastCallUsage: { input: 11, output: 12, cacheRead: 1, cacheWrite: 2 },
-        },
-      },
-    }));
-    proc.stdout.write("\n");
-    proc.emit("exit", 0);
 
-    await expect(execution).resolves.toMatchObject({
+    expect(binding).toMatchObject({
+      adapterId: "openclaw",
+      adapterNativeSessionId: "openclaw-native-session",
+      resumeFidelity: "native",
+    });
+    expect(result).toMatchObject({
       text: "OMI_OPENCLAW_DOGFOOD_OK",
-      adapterSessionId: "openclaw:omi-session",
+      adapterSessionId: "openclaw-native-session",
       terminalStatus: "succeeded",
       inputTokens: 11,
       outputTokens: 12,
-      cacheReadTokens: 1,
-      cacheWriteTokens: 2,
     });
     expect(spawn).toHaveBeenCalledWith(
-      "openclaw agent --local --json --session-key 'openclaw:omi-session' --model 'glm-5' --message 'Reply exactly: OMI_OPENCLAW_DOGFOOD_OK'",
-      expect.objectContaining({
-        shell: true,
-        cwd: "/tmp/work",
-        stdio: ["ignore", "pipe", "pipe"],
-        env: expect.objectContaining({ OMI_ADAPTER_ID: "openclaw" }),
-      })
+      "openclaw acp",
+      expect.objectContaining({ shell: true, stdio: ["pipe", "pipe", "pipe"] })
     );
+    expect(requests.map((request) => request.method).filter(Boolean)).toEqual([
+      "initialize",
+      "session/new",
+      "session/prompt",
+    ]);
+    expect(requests.find((request) => request.method === "session/new")?.params).toMatchObject({ mcpServers: [] });
     await adapter.stop();
   });
 
-  it("keeps OpenClaw continuation on the Omi stable session key", async () => {
+  it("resumes OpenClaw through its native ACP session id", async () => {
     const firstProc = createMockProcess();
     const secondProc = createMockProcess();
     vi.mocked(spawn)
       .mockReturnValueOnce(firstProc as any)
       .mockReturnValueOnce(secondProc as any);
-    process.env.OMI_OPENCLAW_ADAPTER_COMMAND = "openclaw agent";
+    process.env.OMI_OPENCLAW_ADAPTER_COMMAND = "openclaw acp";
     const adapter = new OpenClawRuntimeAdapter();
+    const requests: Record<string, unknown>[] = [];
+    let promptCount = 0;
+
+    for (const proc of [firstProc, secondProc]) {
+      collectJsonRpc(proc, (request) => {
+        requests.push(request);
+        if (request.method === "initialize") {
+          writeJsonRpcResult(proc, request, { protocolVersion: 1 });
+        }
+        if (request.method === "session/resume") {
+          writeJsonRpcResult(proc, request, {});
+        }
+        if (request.method === "session/new") {
+          writeJsonRpcResult(proc, request, { sessionId: "openclaw-native-session" });
+        }
+        if (request.method === "session/set_model") {
+          writeJsonRpcResult(proc, request, {});
+        }
+        if (request.method === "session/prompt") {
+          promptCount += 1;
+          proc.stdout.write(`${JSON.stringify({
+            jsonrpc: "2.0",
+            method: "session/update",
+            params: {
+              update: {
+                sessionUpdate: "agent_message_chunk",
+                content: { type: "text", text: promptCount === 1 ? "remembered" : "BLUEFJORD" },
+              },
+            },
+          })}\n`);
+          writeJsonRpcResult(proc, request, {});
+        }
+      });
+    }
 
     const binding = await adapter.openBinding({
       sessionId: "omi-session",
@@ -227,19 +282,14 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       () => {},
       new AbortController().signal
     );
-    firstProc.stdout.write(JSON.stringify({
-      payloads: [{ text: "remembered" }],
-      meta: { agentMeta: { sessionId: "openclaw-native-session" } },
-    }));
-    firstProc.stdout.write("\n");
-    firstProc.emit("exit", 0);
     const firstResult = await firstExecution;
 
     expect(firstResult).toMatchObject({
       text: "remembered",
-      adapterSessionId: "openclaw:omi-session",
+      adapterSessionId: "openclaw-native-session",
       terminalStatus: "succeeded",
     });
+    expect(requests.find((request) => request.method === "session/new")?.params).toMatchObject({ mcpServers: [] });
 
     const resumedBinding = await adapter.resumeBinding({
       sessionId: "omi-session",
@@ -256,28 +306,15 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       () => {},
       new AbortController().signal
     );
-    secondProc.stdout.write(JSON.stringify({
-      payloads: [{ text: "BLUEFJORD" }],
-      meta: { agentMeta: { sessionId: "openclaw-native-session" } },
-    }));
-    secondProc.stdout.write("\n");
-    secondProc.emit("exit", 0);
 
     await expect(secondExecution).resolves.toMatchObject({
       text: "BLUEFJORD",
-      adapterSessionId: "openclaw:omi-session",
+      adapterSessionId: "openclaw-native-session",
       terminalStatus: "succeeded",
     });
-    expect(spawn).toHaveBeenNthCalledWith(
-      1,
-      expect.stringContaining("--session-key 'openclaw:omi-session'"),
-      expect.any(Object)
-    );
-    expect(spawn).toHaveBeenNthCalledWith(
-      2,
-      expect.stringContaining("--session-key 'openclaw:omi-session'"),
-      expect.any(Object)
-    );
-    expect(vi.mocked(spawn).mock.calls[1]?.[0]).not.toContain("openclaw-native-session");
+    expect(requests.map((request) => request.method)).toContain("session/resume");
+    expect(requests.map((request) => request.method)).not.toContain("session/set_model");
+    expect(requests.find((request) => request.method === "session/resume")?.params).toMatchObject({ mcpServers: [] });
+    await adapter.stop();
   });
 });

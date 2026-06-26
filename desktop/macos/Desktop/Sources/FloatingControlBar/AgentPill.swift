@@ -132,6 +132,32 @@ final class AgentPillsManager: ObservableObject {
         let ack: String?
     }
 
+    enum DirectedProvider: String, Equatable {
+        case hermes
+        case openclaw
+
+        var displayName: String {
+            switch self {
+            case .hermes: return "Hermes"
+            case .openclaw: return "OpenClaw"
+            }
+        }
+
+        var harnessMode: String {
+            switch self {
+            case .hermes: return "hermes"
+            case .openclaw: return "openclaw"
+            }
+        }
+    }
+
+    struct ProviderDirective: Equatable {
+        let provider: DirectedProvider
+        let rewrittenQuery: String
+        let title: String
+        let ack: String
+    }
+
     struct Snapshot: Encodable {
         let id: String
         let title: String
@@ -285,6 +311,51 @@ final class AgentPillsManager: ObservableObject {
         return 1
     }
 
+    nonisolated static func providerDirective(from text: String) -> ProviderDirective? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let providerPattern = "(open\\s*claw|openclaw|hermes)"
+        let patterns = [
+            #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
+            #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]?\s*(.*)$"#,
+        ]
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(trimmed.startIndex..., in: trimmed)
+            guard let match = regex.firstMatch(in: trimmed, range: range), match.numberOfRanges >= 2 else { continue }
+            guard let providerRange = Range(match.range(at: 1), in: trimmed) else { continue }
+            let providerToken = trimmed[providerRange]
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "")
+            let provider: DirectedProvider
+            switch providerToken {
+            case "openclaw": provider = .openclaw
+            case "hermes": provider = .hermes
+            default: continue
+            }
+
+            let restIndex = match.numberOfRanges > 2 ? 2 : NSNotFound
+            let rest: String
+            if restIndex != NSNotFound,
+                let restRange = Range(match.range(at: restIndex), in: trimmed) {
+                rest = String(trimmed[restRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                rest = ""
+            }
+            let objective = rest.isEmpty ? "Say how it's going." : rest
+            return ProviderDirective(
+                provider: provider,
+                rewrittenQuery: objective,
+                title: provider.displayName,
+                ack: "Asking \(provider.displayName)."
+            )
+        }
+
+        return nil
+    }
+
     /// Spawn one or more pills for a user query. If the query says "spawn 3
     /// agents" we create 3 pills (each runs the same task on the shared
     /// queue). Returns the first pill so callers can inspect it.
@@ -294,7 +365,8 @@ final class AgentPillsManager: ObservableObject {
         model: String,
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
-        preFetchedAck: String? = nil
+        preFetchedAck: String? = nil,
+        bridgeHarnessOverride: String? = nil
     ) -> AgentPill {
         let count = AgentPillsManager.parseAgentCount(from: query)
         if count <= 1 {
@@ -303,7 +375,8 @@ final class AgentPillsManager: ObservableObject {
                 model: model,
                 fromVoice: fromVoice,
                 preFetchedTitle: preFetchedTitle,
-                preFetchedAck: preFetchedAck
+                preFetchedAck: preFetchedAck,
+                bridgeHarnessOverride: bridgeHarnessOverride
             )
         }
         var first: AgentPill?
@@ -319,11 +392,12 @@ final class AgentPillsManager: ObservableObject {
                 model: model,
                 fromVoice: fromVoice && first == nil,
                 preFetchedTitle: first == nil ? preFetchedTitle : nil,
-                preFetchedAck: first == nil ? preFetchedAck : nil
+                preFetchedAck: first == nil ? preFetchedAck : nil,
+                bridgeHarnessOverride: bridgeHarnessOverride
             )
             if first == nil { first = pill }
         }
-        return first ?? spawn(query: query, model: model, fromVoice: fromVoice)
+        return first ?? spawn(query: query, model: model, fromVoice: fromVoice, bridgeHarnessOverride: bridgeHarnessOverride)
     }
 
     /// Spawn a new agent pill. Each pill gets its own ChatProvider so the
@@ -337,7 +411,8 @@ final class AgentPillsManager: ObservableObject {
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
-        systemPromptSuffix: String? = nil
+        systemPromptSuffix: String? = nil,
+        bridgeHarnessOverride: String? = nil
     ) -> AgentPill {
         let pill = AgentPill(query: query, model: model)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
@@ -360,6 +435,7 @@ final class AgentPillsManager: ObservableObject {
             provider.workingDirectory = floating.workingDirectory
             provider.modelOverride = floating.modelOverride
         }
+        provider.bridgeHarnessOverride = bridgeHarnessOverride
         providersByPill[pill.id] = provider
 
         let messageCountBefore = provider.messages.count

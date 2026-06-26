@@ -1,20 +1,18 @@
-import { OneShotCliRuntimeAdapter } from "./one-shot-cli.js";
+import { AcpRuntimeAdapter } from "./acp.js";
 
 export interface OpenClawRuntimeAdapterOptions {
   command?: string;
   log?: (message: string) => void;
 }
 
-export class OpenClawRuntimeAdapter extends OneShotCliRuntimeAdapter {
+export class OpenClawRuntimeAdapter extends AcpRuntimeAdapter {
   constructor(options: OpenClawRuntimeAdapterOptions = {}) {
     super({
       adapterId: "openclaw",
       envCommandName: "OMI_OPENCLAW_ADAPTER_COMMAND",
       command: options.command,
-      fixedArgs: ["--local", "--json"],
-      promptFlag: "--message",
-      sessionKeyFlag: "--session-key",
-      parseJsonPayload: true,
+      sessionMcpServersMode: "empty",
+      supportsSessionSetModel: false,
       log: options.log,
     });
   }

@@ -5,39 +5,35 @@ import XCTest
 final class PiMonoWiringTests: XCTestCase {
 
   // MARK: - TaskChatState mode-mapping logic
-  // Mirrors the branching in TaskChatState.ensureBridge():
-  //   let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-  //   let harness = mode == "piMono" ? "piMono" : "acp"
+  // Mirrors the shared mapping used by ChatProvider and TaskChatState.
 
   func testTaskChatModeMappingDefaultNil() {
     // When chatBridgeMode is not set, defaults to "piMono"
     let mode: String? = nil
-    let resolved = mode ?? "piMono"
-    let harness = resolved == "piMono" ? "piMono" : "acp"
+    let resolved = ChatProvider.BridgeMode(rawValue: mode ?? "piMono") ?? .piMono
+    let harness = ChatProvider.harnessMode(for: resolved)
 
     XCTAssertEqual(harness, "piMono")
   }
 
   func testTaskChatModeMappingPiMono() {
-    let mode = "piMono"
-    let harness = mode == "piMono" ? "piMono" : "acp"
-
-    XCTAssertEqual(harness, "piMono")
+    XCTAssertEqual(ChatProvider.harnessMode(for: .piMono), "piMono")
   }
 
   func testTaskChatModeMappingClaudeCode() {
-    let mode = "claudeCode"
-    let harness = mode == "piMono" ? "piMono" : "acp"
+    XCTAssertEqual(ChatProvider.harnessMode(for: .userClaude), "acp")
+  }
 
-    XCTAssertEqual(harness, "acp")
+  func testTaskChatModeMappingHermes() {
+    XCTAssertEqual(ChatProvider.harnessMode(for: .hermes), "hermes")
+  }
+
+  func testTaskChatModeMappingOpenClaw() {
+    XCTAssertEqual(ChatProvider.harnessMode(for: .openClaw), "openclaw")
   }
 
   func testTaskChatModeMappingAgentSDK() {
-    // Legacy "agentSDK" mode should fall through to acp harness
-    let mode = "agentSDK"
-    let harness = mode == "piMono" ? "piMono" : "acp"
-
-    XCTAssertEqual(harness, "acp")
+    XCTAssertEqual(ChatProvider.harnessMode(for: .omiAI), "piMono")
   }
 
   // MARK: - ApiKeysResponse shape assertion
@@ -169,16 +165,40 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(p.tagline.isEmpty)
   }
 
-  func testAIProviderAllContainsBothProviders() {
-    XCTAssertEqual(AIProvider.all.count, 2)
-    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude"])
+  func testAIProviderAllContainsSupportedProviders() {
+    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw"])
   }
 
   func testAIProviderFromBridgeModeReturnsCorrectProvider() {
     XCTAssertEqual(AIProvider.from(bridgeMode: "piMono")?.id, "piMono")
     XCTAssertEqual(AIProvider.from(bridgeMode: "claudeCode")?.id, "claude")
+    XCTAssertEqual(AIProvider.from(bridgeMode: "hermes")?.id, "hermes")
+    XCTAssertEqual(AIProvider.from(bridgeMode: "openclaw")?.id, "openclaw")
     XCTAssertNil(AIProvider.from(bridgeMode: "unknown"))
     XCTAssertNil(AIProvider.from(bridgeMode: "agentSDK"))
+  }
+
+  func testProviderDirectiveRoutesAskOpenClawToOpenClawHarness() {
+    let directive = AgentPillsManager.providerDirective(from: "Please ask openclaw how it's going")
+
+    XCTAssertEqual(directive?.provider, .openclaw)
+    XCTAssertEqual(directive?.provider.harnessMode, "openclaw")
+    XCTAssertEqual(directive?.rewrittenQuery, "how it's going")
+    XCTAssertEqual(directive?.title, "OpenClaw")
+  }
+
+  func testProviderDirectiveRoutesHermesToHermesHarness() {
+    let directive = AgentPillsManager.providerDirective(from: "Hermes: summarize your current status")
+
+    XCTAssertEqual(directive?.provider, .hermes)
+    XCTAssertEqual(directive?.provider.harnessMode, "hermes")
+    XCTAssertEqual(directive?.rewrittenQuery, "summarize your current status")
+    XCTAssertEqual(directive?.title, "Hermes")
+  }
+
+  func testProviderDirectiveIgnoresNonProviderQuestions() {
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "what is openclaw?"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "how is it going?"))
   }
 
   // MARK: - Rename completeness: no ACPBridge / acp-bridge in Swift sources

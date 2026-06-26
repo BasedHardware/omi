@@ -133,7 +133,7 @@ class TaskChatState: ObservableObject {
         guard !bridgeStarted else { return true }
         do {
             let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-            let harness = mode == "piMono" ? "piMono" : "acp"
+            let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
             let bridge = AgentBridge(harnessMode: harness)
             try await bridge.start()
             agentBridge = bridge
