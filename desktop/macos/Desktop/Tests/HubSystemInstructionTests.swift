@@ -56,7 +56,8 @@ final class HubSystemInstructionTests: XCTestCase {
         let cancelParameters = cancelTool?["parameters"] as? [String: Any]
         let cancelProperties = cancelParameters?["properties"] as? [String: Any]
         XCTAssertNotNil(cancelProperties?["agentRef"])
-        XCTAssertNotNil(cancelParameters?["anyOf"])
+        // Schemas must stay flat (no root-level anyOf) for provider compatibility.
+        XCTAssertNil(cancelParameters?["anyOf"])
 
         let listTool = tools.first { ($0["name"] as? String) == HubTool.listAgentSessions.rawValue }
         let listParameters = listTool?["parameters"] as? [String: Any]
@@ -66,10 +67,7 @@ final class HubSystemInstructionTests: XCTestCase {
 
         let inspectTool = tools.first { ($0["name"] as? String) == HubTool.inspectAgentArtifacts.rawValue }
         let inspectParameters = inspectTool?["parameters"] as? [String: Any]
-        let inspectAnyOf = inspectParameters?["anyOf"] as? [[String: Any]]
-        XCTAssertEqual(
-            inspectAnyOf?.compactMap { $0["required"] as? [String] },
-            [["agentRef"], ["artifactRef"], ["artifactId"], ["sessionId"], ["runId"], ["attemptId"]]
-        )
+        // Schemas must stay flat (no root-level anyOf) for provider compatibility.
+        XCTAssertNil(inspectParameters?["anyOf"])
     }
 }

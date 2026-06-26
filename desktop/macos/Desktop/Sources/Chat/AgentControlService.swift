@@ -26,6 +26,9 @@ final class AgentControlService {
 
   func executeVoiceTool(name: String, arguments: [String: Any]) async throws -> String {
     let input = resolveVoiceHandles(in: arguments)
+    if let missing = missingScopeError(name: name, input: input) {
+      return missing
+    }
     let raw = try await runtime.directControlTool(
       clientId: "realtime-hub",
       harnessMode: Self.currentHarnessMode(),
@@ -33,6 +36,31 @@ final class AgentControlService {
       input: input
     )
     return summarizeVoiceResult(name: name, raw: raw)
+  }
+
+  /// Enforces the "agentRef or runId" / "artifactRef or artifactId" preconditions
+  /// that were previously expressed as root-level `anyOf` in the provider-facing
+  /// tool schemas. Keeping the schemas flat avoids provider compatibility issues
+  /// (some Realtime/Gemini environments reject or ignore root composite keywords),
+  /// while this guard gives the model a helpful voice message instead of a raw
+  /// runtime error when it omits the identifying reference.
+  func missingScopeError(name: String, input: [String: Any]) -> String? {
+    switch name {
+    case ToolName.getAgentRun, ToolName.cancelAgentRun:
+      let hasScope = stringValue(input["runId"]) != nil || stringValue(input["sessionId"]) != nil
+      return hasScope ? nil
+        : "I need an agent reference or run id for that. Try listing the agents first with list_agent_sessions."
+    case ToolName.inspectAgentArtifacts:
+      let hasScope = ["artifactId", "sessionId", "runId", "attemptId"].contains { stringValue(input[$0]) != nil }
+      return hasScope ? nil
+        : "I need an agent, artifact, session, run, or attempt reference to inspect artifacts. Try listing the agents first."
+    case ToolName.updateAgentArtifactLifecycle:
+      let hasArtifact = stringValue(input["artifactId"]) != nil
+      return hasArtifact ? nil
+        : "I need an artifact reference or id to update its lifecycle. Try inspecting the artifacts first."
+    default:
+      return nil
+    }
   }
 
   static func currentHarnessMode() -> String {

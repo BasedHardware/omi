@@ -389,10 +389,6 @@ enum RealtimeHubTools {
             "includeEvents": ["type": "boolean", "description": "Include ordered kernel events. Default true."],
             "eventLimit": ["type": "number", "description": "Maximum events to return. Default 100."],
           ],
-          "anyOf": [
-            ["required": ["agentRef"]],
-            ["required": ["runId"]],
-          ],
         ],
       ],
       [
@@ -405,10 +401,6 @@ enum RealtimeHubTools {
           "properties": [
             "agentRef": ["type": "string", "description": "Opaque agent handle from list_agent_sessions."],
             "runId": ["type": "string", "description": "Canonical Omi run id to cancel."]
-          ],
-          "anyOf": [
-            ["required": ["agentRef"]],
-            ["required": ["runId"]],
           ],
         ],
       ],
@@ -433,14 +425,6 @@ enum RealtimeHubTools {
             ],
             "limit": ["type": "number", "description": "Maximum artifacts to return. Default 50."],
           ],
-          "anyOf": [
-            ["required": ["agentRef"]],
-            ["required": ["artifactRef"]],
-            ["required": ["artifactId"]],
-            ["required": ["sessionId"]],
-            ["required": ["runId"]],
-            ["required": ["attemptId"]],
-          ],
         ],
       ],
       [
@@ -464,10 +448,6 @@ enum RealtimeHubTools {
             "reason": ["type": "string", "description": "Optional short reason."],
           ],
           "required": ["state"],
-          "anyOf": [
-            ["required": ["artifactRef"]],
-            ["required": ["artifactId"]],
-          ],
         ],
       ],
       [

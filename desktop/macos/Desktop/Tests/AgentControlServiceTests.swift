@@ -162,4 +162,56 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertFalse(summary.contains("run_123"))
     XCTAssertFalse(summary.contains("session_123"))
   }
+
+  // MARK: - Handler-side precondition guards (replacing root-level anyOf)
+
+  func testGetAgentRunRequiresScopeReference() {
+    let service = AgentControlService()
+
+    // With an agentRef that resolves to a handle, the guard passes and the
+    // runtime is reached (it returns ok:false here, proving we got past the guard).
+    _ = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: """
+      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"}}]}
+      """)
+    let resolvedWithHandle = service.resolveVoiceHandles(in: ["agentRef": "agent_1"])
+    XCTAssertNil(service.missingScopeError(name: HubTool.getAgentRun.rawValue, input: resolvedWithHandle))
+
+    // With a raw runId, the guard passes.
+    XCTAssertNil(service.missingScopeError(name: HubTool.getAgentRun.rawValue, input: ["runId": "run_abc"]))
+
+    // With neither agentRef nor runId, the guard returns a helpful message.
+    let missing = service.missingScopeError(name: HubTool.getAgentRun.rawValue, input: [:])
+    XCTAssertNotNil(missing)
+    XCTAssertTrue(missing!.contains("agent reference or run id"))
+  }
+
+  func testCancelAgentRunRequiresScopeReference() {
+    let service = AgentControlService()
+    XCTAssertNil(service.missingScopeError(name: HubTool.cancelAgentRun.rawValue, input: ["runId": "run_abc"]))
+
+    let missing = service.missingScopeError(name: HubTool.cancelAgentRun.rawValue, input: [:])
+    XCTAssertNotNil(missing)
+    XCTAssertTrue(missing!.contains("agent reference or run id"))
+  }
+
+  func testInspectAgentArtifactsRequiresAnyScopeReference() {
+    let service = AgentControlService()
+    XCTAssertNil(service.missingScopeError(name: HubTool.inspectAgentArtifacts.rawValue, input: ["artifactId": "art_1"]))
+    XCTAssertNil(service.missingScopeError(name: HubTool.inspectAgentArtifacts.rawValue, input: ["sessionId": "sess_1"]))
+    XCTAssertNil(service.missingScopeError(name: HubTool.inspectAgentArtifacts.rawValue, input: ["runId": "run_1"]))
+    XCTAssertNil(service.missingScopeError(name: HubTool.inspectAgentArtifacts.rawValue, input: ["attemptId": "att_1"]))
+
+    let missing = service.missingScopeError(name: HubTool.inspectAgentArtifacts.rawValue, input: [:])
+    XCTAssertNotNil(missing)
+    XCTAssertTrue(missing!.contains("reference to inspect artifacts"))
+  }
+
+  func testUpdateAgentArtifactLifecycleRequiresArtifactReference() {
+    let service = AgentControlService()
+    XCTAssertNil(service.missingScopeError(name: HubTool.updateAgentArtifactLifecycle.rawValue, input: ["artifactId": "art_1"]))
+
+    let missing = service.missingScopeError(name: HubTool.updateAgentArtifactLifecycle.rawValue, input: ["state": "retained"])
+    XCTAssertNotNil(missing)
+    XCTAssertTrue(missing!.contains("artifact reference or id"))
+  }
 }
