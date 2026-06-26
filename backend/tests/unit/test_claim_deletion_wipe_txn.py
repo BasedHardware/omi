@@ -61,6 +61,12 @@ _utils_sub = types.ModuleType('utils.subscription')
 setattr(_utils_sub, 'get_default_basic_subscription', MagicMock())
 _install_stub('utils.subscription', _utils_sub)
 
+# database.users is imported against the stubs above, so record its prior
+# sys.modules entry now; the autouse fixture below restores/removes it so the
+# half-stubbed module does not leak into other unit-test modules.
+if 'database.users' not in _STUB_PRIORS:
+    _STUB_PRIORS['database.users'] = sys.modules.get('database.users')
+
 from database import users as users_db  # noqa: E402
 
 
