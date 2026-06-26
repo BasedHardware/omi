@@ -11,6 +11,9 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instr.contains("spawn_agent"))                          // guardrails preserved
         XCTAssertTrue(instr.contains("get_task_agent_status"))
         XCTAssertTrue(instr.contains("manage_agent_pills"))
+        XCTAssertTrue(instr.contains("list_agent_sessions"))
+        XCTAssertTrue(instr.contains("get_agent_run"))
+        XCTAssertTrue(instr.contains("cancel_agent_run"))
         XCTAssertTrue(instr.contains("floating agent pills"))
         XCTAssertTrue(instr.contains("subagents"))
         XCTAssertTrue(instr.contains("get_daily_recap"))
@@ -37,5 +40,20 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertNotNil(manageTool)
         XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("dismiss"))
         XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("clear completed"))
+    }
+
+    func testRealtimeCanonicalAgentControlToolsAreExposed() {
+        let tools = RealtimeHubTools.openAITools
+        let toolNames = Set(tools.compactMap { $0["name"] as? String })
+        XCTAssertTrue(toolNames.contains(HubTool.listAgentSessions.rawValue))
+        XCTAssertTrue(toolNames.contains(HubTool.getAgentRun.rawValue))
+        XCTAssertTrue(toolNames.contains(HubTool.cancelAgentRun.rawValue))
+        XCTAssertTrue(toolNames.contains(HubTool.inspectAgentArtifacts.rawValue))
+        XCTAssertTrue(toolNames.contains(HubTool.updateAgentArtifactLifecycle.rawValue))
+
+        let cancelTool = tools.first { ($0["name"] as? String) == HubTool.cancelAgentRun.rawValue }
+        XCTAssertTrue((cancelTool?["description"] as? String ?? "").contains("canonical"))
+        let parameters = cancelTool?["parameters"] as? [String: Any]
+        XCTAssertEqual(parameters?["required"] as? [String], ["runId"])
     }
 }
