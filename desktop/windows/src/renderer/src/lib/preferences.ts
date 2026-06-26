@@ -50,6 +50,8 @@ export type Preferences = {
   // continuous recording remains available even when voice is off/unavailable.
   realtimeVoiceEnabled?: boolean
   realtimeVoiceProvider?: RealtimeVoiceProvider
+  focusModeEnabled?: boolean
+  focusModeLabel?: string
   localTtsVoice?: string
   elevenLabsVoiceId?: string
   // Auto-cleanup of empty conversations + junk memories. 'dry-run' (default) logs
