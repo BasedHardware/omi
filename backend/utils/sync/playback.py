@@ -105,8 +105,28 @@ def precache_audio_file(
             sample_rate=AUDIO_SAMPLE_RATE,
             caller=caller,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error pre-caching audio file {audio_file.get('id')}: {e}")
+
+
+def _run_parallel_precache(uid: str, conversation_id: str, audio_files: list, caller: str, error_label: str):
+    futures = []
+    for af in audio_files:
+        _PRECACHE_FILE_SEM.acquire()
+        try:
+            f = submit_with_context(storage_executor, precache_audio_file, uid, conversation_id, af, caller=caller)
+            f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
+            futures.append(f)
+        except Exception:
+            _PRECACHE_FILE_SEM.release()
+            raise
+    for future in futures:
+        try:
+            future.result()
+        except Exception as e:
+            logger.error(f"Error in parallel {error_label}: {e}")
 
 
 def precache_audio_files(uid: str, conversation_id: str, audio_files: list) -> dict:
@@ -120,23 +140,7 @@ def precache_audio_files(uid: str, conversation_id: str, audio_files: list) -> d
     # Start background parallel pre-caching with bounded concurrency (#7387)
     def _precache_all_parallel():
         logger.info(f"Pre-caching all {len(audio_files)} audio files for conversation {conversation_id} (parallel)")
-        futures = []
-        for af in audio_files:
-            _PRECACHE_FILE_SEM.acquire()
-            try:
-                f = submit_with_context(
-                    storage_executor, precache_audio_file, uid, conversation_id, af, caller='precache_endpoint'
-                )
-                f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
-                futures.append(f)
-            except Exception:
-                _PRECACHE_FILE_SEM.release()
-                raise
-        for future in futures:
-            try:
-                future.result()
-            except Exception as e:
-                logger.error(f"Error in parallel precache: {e}")
+        _run_parallel_precache(uid, conversation_id, audio_files, caller='precache_endpoint', error_label='precache')
         logger.info(f"Completed pre-cache for conversation {conversation_id}")
 
     submit_with_context(postprocess_executor, _precache_all_parallel)
@@ -265,23 +269,7 @@ def _get_audio_urls_inline(uid: str, conversation_id: str, audio_files: list) ->
     if uncached_files:
 
         def _cache_uncached_parallel():
-            futures = []
-            for af in uncached_files:
-                _PRECACHE_FILE_SEM.acquire()
-                try:
-                    f = submit_with_context(
-                        storage_executor, precache_audio_file, uid, conversation_id, af, caller='sync_urls_bg'
-                    )
-                    f.add_done_callback(lambda _: _PRECACHE_FILE_SEM.release())
-                    futures.append(f)
-                except Exception:
-                    _PRECACHE_FILE_SEM.release()
-                    raise
-            for future in futures:
-                try:
-                    future.result()
-                except Exception as e:
-                    logger.error(f"Error in parallel cache: {e}")
+            _run_parallel_precache(uid, conversation_id, uncached_files, caller='sync_urls_bg', error_label='cache')
 
         submit_with_context(postprocess_executor, _cache_uncached_parallel)
 
@@ -421,6 +409,8 @@ def download_audio_file_response(
             )
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Audio chunks not found in storage")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error downloading audio file: {e}")
         raise HTTPException(status_code=500, detail="Failed to download audio file")

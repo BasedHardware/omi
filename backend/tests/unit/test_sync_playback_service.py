@@ -306,7 +306,7 @@ def test_download_errors_preserve_contract(monkeypatch):
     with pytest.raises(HTTPException) as exc:
         playback.download_audio_file_response('u', 'c', 'a', {'id': 'a'}, FakeRequest(), 'wav')
     assert exc.value.status_code == 500
-    assert exc.value.detail == "Failed to download audio file"
+    assert exc.value.detail == "Audio file has no chunk timestamps"
 
     monkeypatch.setattr(
         playback, 'get_or_create_merged_audio', lambda **kwargs: (_ for _ in ()).throw(FileNotFoundError)
