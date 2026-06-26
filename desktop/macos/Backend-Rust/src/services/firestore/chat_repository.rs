@@ -140,6 +140,14 @@ fn chat_session_matches_app(fields: &Value, app_id: Option<&str>) -> bool {
     }
 }
 
+fn update_mask_query(field_paths: &[&str]) -> String {
+    field_paths
+        .iter()
+        .map(|field| format!("updateMask.fieldPaths={}", urlencoding::encode(field)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
 impl FirestoreService {
     /// Create a chat session
     /// Path: users/{uid}/chat_sessions/{session_id}
@@ -339,30 +347,23 @@ impl FirestoreService {
             .await?
             .ok_or_else(|| format!("Chat session {} not found", session_id))?;
 
+        let update_mask = update_mask_query(&["title", "starred", "updated_at"]);
         let url = format!(
-            "{}/{}/{}/{}/{}",
+            "{}/{}/{}/{}/{}?{}",
             self.base_url(),
             USERS_COLLECTION,
             uid,
             CHAT_SESSIONS_SUBCOLLECTION,
-            session_id
+            session_id,
+            update_mask
         );
 
         let now = Utc::now();
-        let mut fields = json!({
+        let fields = json!({
             "title": {"stringValue": title.unwrap_or(&existing.title)},
             "starred": {"booleanValue": starred.unwrap_or(existing.starred)},
-            "updated_at": {"timestampValue": now.to_rfc3339()},
-            "created_at": {"timestampValue": existing.created_at.to_rfc3339()},
-            "message_count": {"integerValue": existing.message_count.to_string()}
+            "updated_at": {"timestampValue": now.to_rfc3339()}
         });
-
-        if let Some(preview) = &existing.preview {
-            fields["preview"] = json!({"stringValue": preview});
-        }
-        if let Some(app) = &existing.app_id {
-            fields["app_id"] = json!({"stringValue": app});
-        }
 
         let doc = json!({"fields": fields});
 
@@ -406,13 +407,15 @@ impl FirestoreService {
             None => return Ok(()), // Session doesn't exist, skip update
         };
 
+        let update_mask = update_mask_query(&["title", "preview", "updated_at", "message_count"]);
         let url = format!(
-            "{}/{}/{}/{}/{}",
+            "{}/{}/{}/{}/{}?{}",
             self.base_url(),
             USERS_COLLECTION,
             uid,
             CHAT_SESSIONS_SUBCOLLECTION,
-            session_id
+            session_id,
+            update_mask
         );
 
         let now = Utc::now();
@@ -421,18 +424,12 @@ impl FirestoreService {
         // Use provided title or keep existing (title is auto-generated from first message)
         let final_title = title.unwrap_or(&existing.title);
 
-        let mut fields = json!({
+        let fields = json!({
             "title": {"stringValue": final_title},
             "preview": {"stringValue": preview.chars().take(100).collect::<String>()},
             "updated_at": {"timestampValue": now.to_rfc3339()},
-            "created_at": {"timestampValue": existing.created_at.to_rfc3339()},
-            "message_count": {"integerValue": new_count.to_string()},
-            "starred": {"booleanValue": existing.starred}
+            "message_count": {"integerValue": new_count.to_string()}
         });
-
-        if let Some(app) = &existing.app_id {
-            fields["app_id"] = json!({"stringValue": app});
-        }
 
         let doc = json!({"fields": fields});
 
@@ -500,56 +497,68 @@ impl FirestoreService {
         session_id: &str,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
-
-        // Query messages with this session_id
-        let structured_query = json!({
-            "from": [{"collectionId": MESSAGES_SUBCOLLECTION}],
-            "where": {
-                "fieldFilter": {
-                    "field": {"fieldPath": "session_id"},
-                    "op": "EQUAL",
-                    "value": {"stringValue": session_id}
-                }
-            },
-            "limit": 500
-        });
-
-        let query = json!({
-            "structuredQuery": structured_query
-        });
-
-        let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
-            .await?
-            .json(&query)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Failed to query messages: {}", error_text).into());
-        }
-
-        let results: Vec<Value> = response.json().await?;
         let mut deleted_count = 0;
 
-        // Delete each message
-        for result in results {
-            if let Some(doc) = result.get("document") {
-                if let Some(name) = doc.get("name").and_then(|n| n.as_str()) {
-                    // Extract the full document path for deletion
-                    let delete_url = format!("https://firestore.googleapis.com/v1/{}", name);
+        loop {
+            // Query messages with this session_id. Re-query after each batch because
+            // runQuery does not return a continuation token; once a batch is deleted,
+            // the next matching documents move into the first page.
+            let structured_query = json!({
+                "from": [{"collectionId": MESSAGES_SUBCOLLECTION}],
+                "where": {
+                    "fieldFilter": {
+                        "field": {"fieldPath": "session_id"},
+                        "op": "EQUAL",
+                        "value": {"stringValue": session_id}
+                    }
+                },
+                "limit": 500
+            });
 
-                    let delete_response = self
-                        .build_request(reqwest::Method::DELETE, &delete_url)
-                        .await?
-                        .send()
-                        .await?;
+            let query = json!({
+                "structuredQuery": structured_query
+            });
 
-                    if delete_response.status().is_success() {
-                        deleted_count += 1;
+            let response = self
+                .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+                .await?
+                .json(&query)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Failed to query messages: {}", error_text).into());
+            }
+
+            let results: Vec<Value> = response.json().await?;
+            let mut found_count = 0;
+            let mut batch_count = 0;
+
+            // Delete each message in the current batch.
+            for result in results {
+                if let Some(doc) = result.get("document") {
+                    found_count += 1;
+                    if let Some(name) = doc.get("name").and_then(|n| n.as_str()) {
+                        // Extract the full document path for deletion
+                        let delete_url = format!("https://firestore.googleapis.com/v1/{}", name);
+
+                        let delete_response = self
+                            .build_request(reqwest::Method::DELETE, &delete_url)
+                            .await?
+                            .send()
+                            .await?;
+
+                        if delete_response.status().is_success() {
+                            deleted_count += 1;
+                            batch_count += 1;
+                        }
                     }
                 }
+            }
+
+            if found_count < 500 || batch_count == 0 {
+                break;
             }
         }
 
@@ -645,13 +654,28 @@ impl FirestoreService {
             CHAT_SESSIONS_SUBCOLLECTION
         );
 
-        let response = self
-            .build_request(reqwest::Method::GET, &list_url)
-            .await?
-            .send()
-            .await?;
+        let mut page_token: Option<String> = None;
+        loop {
+            let paged_url = if let Some(token) = &page_token {
+                format!(
+                    "{}?pageSize=100&pageToken={}",
+                    list_url,
+                    urlencoding::encode(token)
+                )
+            } else {
+                format!("{}?pageSize=100", list_url)
+            };
 
-        if response.status().is_success() {
+            let response = self
+                .build_request(reqwest::Method::GET, &paged_url)
+                .await?
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                break;
+            }
+
             let body: Value = response.json().await?;
             if let Some(documents) = body.get("documents").and_then(|d| d.as_array()) {
                 for doc in documents {
@@ -676,6 +700,16 @@ impl FirestoreService {
                         }
                     }
                 }
+            }
+
+            page_token = body
+                .get("nextPageToken")
+                .and_then(|token| token.as_str())
+                .filter(|token| !token.is_empty())
+                .map(ToOwned::to_owned);
+
+            if page_token.is_none() {
+                break;
             }
         }
 
@@ -885,6 +919,14 @@ mod tests {
         DateTime::parse_from_rfc3339("2026-06-26T12:34:56Z")
             .unwrap()
             .with_timezone(&Utc)
+    }
+
+    #[test]
+    fn update_mask_query_encodes_requested_field_paths() {
+        assert_eq!(
+            update_mask_query(&["title", "structured.title"]),
+            "updateMask.fieldPaths=title&updateMask.fieldPaths=structured.title"
+        );
     }
 
     #[test]
