@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added AI Clone: respond to iMessage and Telegram messages in your voice, powered by your Omi memories"
+  ],
   "releases": [
     {
       "version": "0.11.539",

@@ -5256,3 +5256,53 @@ struct XSyncResult: Decodable {
 struct XSimpleOK: Decodable {
   let success: Bool
 }
+
+// MARK: - AI Clone
+
+struct CloneGenerateReplyRequest: Encodable {
+  let platform: String
+  let sender: String
+  let message: String
+  let conversationHistory: [CloneHistoryTurn]?
+  enum CodingKeys: String, CodingKey {
+    case platform, sender, message
+    case conversationHistory = "conversation_history"
+  }
+}
+
+struct CloneHistoryTurn: Encodable {
+  let role: String
+  let content: String
+}
+
+struct CloneGenerateReplyResponse: Decodable {
+  let reply: String
+  let messageId: String
+  enum CodingKeys: String, CodingKey {
+    case reply
+    case messageId = "message_id"
+  }
+}
+
+struct CloneSimpleOK: Decodable {
+  let status: String
+}
+
+extension APIClient {
+  func generateCloneReply(platform: String, sender: String, message: String) async throws -> CloneGenerateReplyResponse {
+    let body = CloneGenerateReplyRequest(platform: platform, sender: sender, message: message, conversationHistory: nil)
+    return try await post("/v1/ai-clone/generate-reply", body: body)
+  }
+
+  func updateCloneMessage(id: String, status: String, editedReply: String?) async throws {
+    struct Req: Encodable {
+      let status: String
+      let editedReply: String?
+      enum CodingKeys: String, CodingKey {
+        case status
+        case editedReply = "edited_reply"
+      }
+    }
+    let _: CloneSimpleOK = try await patch("/v1/ai-clone/messages/\(id)", body: Req(status: status, editedReply: editedReply))
+  }
+}
