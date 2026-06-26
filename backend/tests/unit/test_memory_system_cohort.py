@@ -84,6 +84,9 @@ class TestResolveMemorySystemIgnoresMemoryFlags:
         assert resolve_memory_system("uid-memory-dogfood", db_client=_Db(db_docs)) == MemorySystem.LEGACY
 
 
-def test_production_cohort_constant_starts_empty():
-    """Guardrail: real Firebase UIDs belong in CANONICAL_MEMORY_USERS via an intentional code change."""
-    assert CANONICAL_MEMORY_USERS == frozenset()
+_EXPECTED_CANONICAL_OWNER_UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"  # david.d.zhang@gmail.com
+
+
+def test_production_cohort_constant_contains_single_owner():
+    """Guardrail: canonical rollout stays intentionally limited to one production owner."""
+    assert CANONICAL_MEMORY_USERS == frozenset({_EXPECTED_CANONICAL_OWNER_UID})
