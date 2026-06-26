@@ -34,12 +34,16 @@ def _should_stub(name: str) -> bool:
 
 
 class _StubFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    def __init__(self):
+        self._created: set[str] = set()
+
     def find_spec(self, name, path=None, target=None):
         if _should_stub(name):
             return importlib.machinery.ModuleSpec(name, self, is_package=True)
         return None
 
     def create_module(self, spec):
+        self._created.add(spec.name)
         return _AutoMockModule(spec.name)
 
     def exec_module(self, module):
@@ -51,12 +55,13 @@ sys.meta_path.insert(0, _finder)
 try:
     from services.users import data_export  # noqa: E402
 finally:
-    # Remove the meta-path finder and clear stubbed modules so they don't
-    # leak into sys.modules and interfere with other tests collected in the
-    # same pytest process (e.g. utils.executors resolving to a MagicMock).
+    # Remove the meta-path finder and clear *only* the modules that the
+    # stub finder actually created. Broadly deleting every module matching
+    # _STUB_PREFIXES (database, utils, …) would also evict real project
+    # modules imported by other tests collected in the same pytest process.
     sys.meta_path.remove(_finder)
-    for _name in [n for n in sys.modules if _should_stub(n)]:
-        del sys.modules[_name]
+    for _name in list(_finder._created):
+        sys.modules.pop(_name, None)
 
 
 def test_iter_user_data_export_streams_all_top_level_sections(monkeypatch):

@@ -90,12 +90,41 @@ def background_wipe_user_data(uid: str):
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
 
 
-def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
-    """Persist the pending-deletion marker, retrying transient Firestore failures.
+def _persist_wipe_intent_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
+    """Persist the non-actionable deletion intent, retrying transient Firestore failures.
+
+    Writes ``wipe_status='deleting_auth'`` which the reconciler does NOT query
+    for. A crash or deploy between this write and ``auth.delete_account()``
+    therefore leaves a benign record that cannot trigger a premature data wipe
+    for a user whose Firebase account still exists.
 
     Raises on persistent failure so the caller can surface the error to the user
     rather than proceeding to the irreversible Firebase user deletion without a
     durable recovery marker.
+    """
+    last_err = None
+    for attempt in range(max_attempts):
+        try:
+            users_db.mark_user_deletion_wipe_intent(uid)
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < max_attempts - 1:
+                time.sleep(retry_delay * (attempt + 1))
+    raise Exception(
+        f'Failed to persist deletion-wipe intent after {max_attempts} attempts for {uid}: {sanitize(str(last_err))}'
+    )
+
+
+def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
+    """Transition the marker to the actionable ``'pending'`` state after auth deletion is confirmed.
+
+    Called only after ``auth.delete_account()`` has succeeded (or the user was
+    already gone). On persistent Firestore failure, logs a critical error rather
+    than raising — the Firebase user is already deleted, so raising would
+    surface a misleading error. The background wipe may not be queued, but no
+    dangerous state is possible (the marker remains ``'deleting_auth'``, which
+    the reconciler ignores).
     """
     last_err = None
     for attempt in range(max_attempts):
@@ -106,8 +135,9 @@ def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay
             last_err = e
             if attempt < max_attempts - 1:
                 time.sleep(retry_delay * (attempt + 1))
-    raise Exception(
-        f'Failed to persist deletion-wipe marker after {max_attempts} attempts for {uid}: {sanitize(str(last_err))}'
+    logger.critical(
+        f'delete_account marker transition to pending failed after {max_attempts} attempts for {uid}: '
+        f'{sanitize(str(last_err))} — Firebase user already deleted, wipe may need manual re-queue.'
     )
 
 
@@ -143,11 +173,13 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         except Exception as e:
             logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
 
-    # Persist the pending-deletion marker FIRST, before any irreversible action
-    # (Stripe cancel, Firebase user delete). Retry transient Firestore failures.
-    # If the marker cannot be written, do NOT proceed — without it, a deploy/restart
-    # that cancels the queued wipe leaves no recovery path for the user's data.
-    _persist_wipe_marker_with_retry(uid)
+    # Phase 1 — persist a NON-ACTIONABLE intent ('deleting_auth') before any
+    # irreversible action. The reconciler never queries for 'deleting_auth', so
+    # a crash/deploy between this write and the confirmed auth deletion cannot
+    # trigger a premature data wipe for a user whose Firebase account still
+    # exists. Retry transient Firestore failures; if the intent cannot be
+    # written, do NOT proceed.
+    _persist_wipe_intent_with_retry(uid)
 
     try:
         sub = users_db.get_user_subscription(uid)
@@ -165,11 +197,16 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
             logger.info(f'delete_account firebase user already gone for {uid}')
         else:
-            # Auth deletion failed — cancel the pending marker so the
-            # reconciliation worker doesn't wipe data for a user whose
-            # Firebase account still exists. Retry transient Firestore failures.
+            # Auth deletion failed — cancel the intent so the record doesn't
+            # linger in 'deleting_auth'. This is cosmetic cleanup, not a safety
+            # requirement: the reconciler never acts on 'deleting_auth'.
             _cancel_wipe_marker_with_retry(uid)
             raise
+
+    # Phase 2 — auth deletion confirmed. Transition the marker to the
+    # actionable 'pending' state so the reconciler can recover the wipe if
+    # the queued executor future is lost to a deploy/restart.
+    _persist_wipe_marker_with_retry(uid)
 
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 

@@ -248,6 +248,23 @@ def mark_user_deletion_wipe_started(uid: str):
     )
 
 
+def mark_user_deletion_wipe_intent(uid: str):
+    """Persist a non-actionable deletion intent *before* auth deletion.
+
+    Written BEFORE ``auth.delete_account()`` succeeds. The reconciler does not
+    query for ``'deleting_auth'`` records, so a crash or deploy between this
+    write and the confirmed auth deletion leaves a benign record that cannot
+    trigger a data wipe for a user whose Firebase account still exists.
+
+    Call ``mark_user_deletion_wipe_started`` to transition the marker to the
+    actionable ``'pending'`` state once auth deletion is confirmed.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'deleting_auth', 'wipe_intent_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
 def mark_user_deletion_wipe_completed(uid: str):
     """Mark the background data wipe as finished."""
     db.collection('account_deletions').document(uid).set(
