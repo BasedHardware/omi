@@ -606,6 +606,7 @@ actor AgentRuntimeProcess {
 
   private func startReadingStdout() {
     guard let stdoutPipe else { return }
+    let expectedGeneration = processGeneration
 
     let handle = stdoutPipe.fileHandleForReading
     handle.readabilityHandler = { [weak self] handle in
@@ -614,11 +615,22 @@ actor AgentRuntimeProcess {
         handle.readabilityHandler = nil
         return
       }
-      Task { await self?.processStdoutData(data) }
+      Task { [weak self] in
+        await self?.processStdoutData(data, generation: expectedGeneration)
+      }
     }
   }
 
-  private func processStdoutData(_ data: Data) {
+  private func processStdoutData(_ data: Data, generation: UInt64) {
+    // Drop stdout chunks from a previous process generation. When the bridge is
+    // restarted or startup cleanup closes the pipe, a readability callback that
+    // already captured the old data can still fire after the new process has
+    // begun. Without this guard, stale init/result lines from the old Node
+    // process could mutate the new process state or resume the wrong continuation.
+    if generation != processGeneration {
+      log("AgentRuntimeProcess: dropping stale stdout chunk (gen=\(generation), current=\(processGeneration))")
+      return
+    }
     stdoutLineBuffer.append(data)
 
     while let newlineIndex = stdoutLineBuffer.firstIndex(of: UInt8(ascii: "\n")) {

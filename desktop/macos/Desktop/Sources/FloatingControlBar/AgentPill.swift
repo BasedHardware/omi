@@ -26,7 +26,7 @@ final class AgentPill: ObservableObject, Identifiable {
         var tintColor: Color {
             switch self {
             case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
-            case .starting, .running: return Color(red: 0.74, green: 0.32, blue: 1.0)
+            case .starting, .running: return Color(red: 1.0, green: 0.80, blue: 0.40)
             case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
             case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
             }
