@@ -109,7 +109,12 @@ if not env_truthy("OMI_DEV_EAGER_PERMISSIONS"):
             "devLazyPermissionsEnabled": True,
             "screenAnalysisEnabled": False,
             "transcriptionEnabled": False,
-            "disableSystemAudioCapture": True,
+            # Use systemAudioCaptureMode="never" (a user-visible setting) instead of
+            # disableSystemAudioCapture (a hidden kill switch). The hidden flag is
+            # checked by AppState.effectiveSystemAudioMode BEFORE the user-visible
+            # mode, so seeding it would trap system audio off even after the
+            # developer picks "Always" in Settings. systemAudioCaptureMode can be
+            # toggled freely from the Settings UI.
             "systemAudioCaptureMode": "never",
             # Prevent the main-window startup migration from re-enabling screen
             # analysis immediately after the quiet default is seeded.
@@ -117,7 +122,15 @@ if not env_truthy("OMI_DEV_EAGER_PERMISSIONS"):
         }
     )
 else:
-    selected["devLazyPermissionsEnabled"] = False
+    # Eager mode: fully undo quiet-permission defaults so permission-flow
+    # parity testing can exercise the normal startup paths.
+    selected.update(
+        {
+            "devLazyPermissionsEnabled": False,
+            "systemAudioCaptureMode": source.get("systemAudioCaptureMode", "always"),
+        }
+    )
+    target_data.pop("screenAnalysisAutoStartFixed_v2", None)
 
 target_data.update(selected)
 with tempfile.NamedTemporaryFile(suffix=".plist") as plist:

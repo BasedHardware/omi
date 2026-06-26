@@ -46,10 +46,10 @@ defaults write "$source_domain" shortcut_askOmiEnabled -bool true
 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_target" "$source_domain" >/tmp/omi-settings-seed-quiet.out
 assert_defaults "$quiet_target" screenAnalysisEnabled 0
 assert_defaults "$quiet_target" transcriptionEnabled 0
-assert_defaults "$quiet_target" disableSystemAudioCapture 1
 assert_defaults "$quiet_target" systemAudioCaptureMode never
 assert_defaults "$quiet_target" devLazyPermissionsEnabled 1
 assert_defaults "$quiet_target" screenAnalysisAutoStartFixed_v2 1
+assert_unset "$quiet_target" disableSystemAudioCapture
 assert_defaults "$quiet_target" shortcut_askOmiEnabled 1
 assert_unset "$quiet_target" hasCompletedFileIndexing
 
@@ -58,7 +58,7 @@ assert_defaults "$eager_target" screenAnalysisEnabled 1
 assert_defaults "$eager_target" transcriptionEnabled 1
 assert_defaults "$eager_target" devLazyPermissionsEnabled 0
 assert_unset "$eager_target" disableSystemAudioCapture
-assert_unset "$eager_target" systemAudioCaptureMode
+assert_defaults "$eager_target" systemAudioCaptureMode always
 assert_unset "$eager_target" screenAnalysisAutoStartFixed_v2
 
 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$missing_target" "com.omi.missing-source-$$" >/tmp/omi-settings-seed-missing.out

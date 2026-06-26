@@ -183,7 +183,9 @@ struct OnboardingView: View {
           requiresRestart: true,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "ScreenRecording")
-            startMonitoringIfNeeded()
+            if !AppBuild.usesLazyDevPermissions {
+              startMonitoringIfNeeded()
+            }
             currentStep = 5
           },
           onSkip: {
@@ -421,7 +423,7 @@ struct OnboardingView: View {
           totalSteps: OnboardingFlow.introStepCount,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Goal")
-            if !ProactiveAssistantsPlugin.shared.isMonitoring {
+            if !AppBuild.usesLazyDevPermissions, !ProactiveAssistantsPlugin.shared.isMonitoring {
               ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
             }
             currentStep = 17
@@ -429,7 +431,7 @@ struct OnboardingView: View {
           onSkip: {
             AnalyticsManager.shared.onboardingStepCompleted(
               step: 16, stepName: "Goal_Skipped")
-            if !ProactiveAssistantsPlugin.shared.isMonitoring {
+            if !AppBuild.usesLazyDevPermissions, !ProactiveAssistantsPlugin.shared.isMonitoring {
               ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
             }
             currentStep = 17
