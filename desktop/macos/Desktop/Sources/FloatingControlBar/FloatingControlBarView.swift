@@ -152,14 +152,14 @@ struct FloatingControlBarView: View {
                     : notchChromeHeight
 
                 ZStack(alignment: .top) {
+                    NotchDockShape(bottomRadius: bottomRadius)
+                        .fill(Color.black)
+                        .frame(width: surfaceWidth, height: surfaceHeight)
+
                     if state.isVoiceResponseActive {
                         NotchResponseGlowView(bottomRadius: bottomRadius)
                             .frame(width: surfaceWidth, height: surfaceHeight)
                     }
-
-                    NotchDockShape(bottomRadius: bottomRadius)
-                        .fill(Color.black)
-                        .frame(width: surfaceWidth, height: surfaceHeight)
                 }
                 .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
             }
