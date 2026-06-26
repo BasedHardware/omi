@@ -140,3 +140,37 @@ class TestBuildSubscriptionFromStripeObject:
         """Result always includes current_period_end."""
         result = self.fn(_make_stripe_sub())
         assert result.current_period_end == 1700000000
+
+
+class TestStripeWebhookDuplicateAndCustomerSourceLevel:
+    """Regression coverage for duplicate checkout + stale downgrade race.
+
+    Scenario seen in prod: Stripe emits customer.subscription.created with
+    status=incomplete before checkout.session.completed. The created event stored
+    a Basic subscription with the same Stripe sub id, so checkout completion was
+    treated as a duplicate and returned before storing stripe_customer_id. One
+    day later, the first failed Checkout's incomplete_expired event downgraded
+    the user because the active paid sub lived on a second customer and could not
+    be discovered from Firestore.
+    """
+
+    PAYMENT_SOURCE_FILE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"
+
+    def _read_source(self):
+        return self.PAYMENT_SOURCE_FILE.read_text(encoding="utf-8")
+
+    def test_checkout_duplicate_return_only_applies_to_paid_existing_subscription(self):
+        source = self._read_source()
+        duplicate_idx = source.find('Duplicate webhook event for existing subscription')
+        assert duplicate_idx != -1, "duplicate checkout guard not found"
+        guard_block = source[max(0, duplicate_idx - 600) : duplicate_idx]
+        assert 'is_paid_plan(existing_subscription.plan)' in guard_block
+
+    def test_subscription_events_persist_customer_id_for_uid_metadata_path(self):
+        source = self._read_source()
+        sub_idx = source.find("'customer.subscription.updated'")
+        assert sub_idx != -1, "customer.subscription handler not found"
+        next_idx = source.find("subscription_schedule.completed", sub_idx)
+        block = source[sub_idx:next_idx]
+        assert 'users_db.set_stripe_customer_id' in block
+        assert "subscription_obj.get('customer')" in block

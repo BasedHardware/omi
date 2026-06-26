@@ -725,9 +725,18 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 )
                 return {"status": "success"}
 
-            # Check if user already has an active subscription to prevent duplicates
+            # Check if user already has an active *paid* subscription to prevent duplicates.
+            # Stripe sends customer.subscription.created while Checkout subscriptions are still
+            # incomplete; our subscription event handler represents those as Basic with a Stripe
+            # subscription id. Do not treat that transient Basic record as a duplicate checkout,
+            # otherwise checkout.session.completed returns before persisting the real paid
+            # subscription/customer id and later stale incomplete_expired events can clobber access.
             existing_subscription = await run_blocking(db_executor, users_db.get_user_valid_subscription, uid)
-            if existing_subscription and existing_subscription.stripe_subscription_id:
+            if (
+                existing_subscription
+                and existing_subscription.stripe_subscription_id
+                and is_paid_plan(existing_subscription.plan)
+            ):
                 # If user already has a Stripe subscription, verify it's not the same one
                 if existing_subscription.stripe_subscription_id == session.get('subscription'):
                     logger.warning(f"Duplicate webhook event for existing subscription: {session.get('subscription')}")
@@ -833,6 +842,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         new_subscription = active_paid
                 try:
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
+                        customer_id = subscription_obj.get('customer')
+                        if customer_id:
+                            await run_blocking(db_executor, users_db.set_stripe_customer_id, uid, customer_id)
                         await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
                         await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                         await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
