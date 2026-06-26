@@ -11,7 +11,7 @@ from tests.unit.v3_router_probes.stubs import import_memories_router, install_ro
 
 MEMORY_ADAPTER_MODULES = [
     "utils.memory.v3_request_adapter",
-    "utils.memory.v3_route_planner",
+    "testing.memory.v3_route_planner",
     "utils.memory.v3_response_adapter",
 ]
 
