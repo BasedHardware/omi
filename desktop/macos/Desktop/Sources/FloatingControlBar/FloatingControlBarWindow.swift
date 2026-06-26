@@ -46,6 +46,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let notchAgentListRowHeight: CGFloat = 44
     static let notchAgentListRowSpacing: CGFloat = 0
     static let notchAgentListVerticalPadding: CGFloat = 0
+    static let notchAgentListBottomMargin: CGFloat = 8
     private static let responseStreamingResizeStep: CGFloat = 56
     private static let legacyPillGlowOutsetX: CGFloat = 22
     private static let legacyPillGlowOutsetY: CGFloat = 18
@@ -63,6 +64,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return notchAgentListVerticalPadding * 2
             + CGFloat(visibleCount) * notchAgentListRowHeight
             + CGFloat(max(0, visibleCount - 1)) * notchAgentListRowSpacing
+            + notchAgentListBottomMargin
     }
     static let expandedBarSize = NSSize(width: 210, height: 50)
     private static let voiceBarSize = NSSize(width: 224, height: 42)

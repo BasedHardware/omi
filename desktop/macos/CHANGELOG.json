@@ -11,7 +11,8 @@
     "Made Notch Mode subagent chat independent from main chat content and reduced idle animation work",
     "Added an Ask Omi chat power benchmark harness for repeatable CPU and memory sampling",
     "Added compact status summaries to Notch Mode subagent rows",
-    "Made Notch Mode switch between subagent list and chat instead of stacking both"
+    "Made Notch Mode switch between subagent list and chat instead of stacking both",
+    "Made the Notch Mode Omi logo return from chat to the subagent list and added bottom spacing to the subagent list"
   ],
   "releases": [
     {

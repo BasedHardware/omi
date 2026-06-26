@@ -133,6 +133,9 @@ struct FloatingControlBarView: View {
                 .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchAgentListHeight)
                 .onHover { setAgentSwitcherHovering($0) }
                 .allowsHitTesting(notchSwitcherProgress > 0.6)
+
+                notchAgentLogoHitTarget
+                    .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchAgentListHeight)
             }
         }
         .onAppear { notchSwitcherProgress = shouldShowAgentSwitcher ? 1 : 0 }
@@ -248,7 +251,7 @@ struct FloatingControlBarView: View {
                     .onHover { setAgentSwitcherHovering($0) }
                     .simultaneousGesture(
                         TapGesture().onEnded {
-                            toggleAgentSwitcherPinned()
+                            handleAgentLogoTap()
                         }
                     )
                     .onTapGesture {
@@ -259,6 +262,27 @@ struct FloatingControlBarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    }
+
+    private var notchAgentLogoHitTarget: some View {
+        GeometryReader { geometry in
+            let logoCenterX = NotchAgentStackMetrics.logoCenterX(
+                rowWidth: geometry.size.width,
+                notchHiddenCenterWidth: notchHiddenCenterWidth,
+                notchSideWidth: notchSideWidth
+            )
+
+            Color.clear
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .position(x: logoCenterX, y: notchChromeHeight / 2)
+                .onHover { setAgentSwitcherHovering($0) }
+                .onTapGesture {
+                    handleAgentLogoTap()
+                }
+                .accessibilityLabel("Subagents")
+                .accessibilityHint("Show subagent list")
+        }
     }
 
     private var notchControlLobe: some View {
@@ -483,6 +507,15 @@ struct FloatingControlBarView: View {
         } else {
             barWindow?.resizeForActiveAgentChatPublic(pillID: nil, animated: true)
         }
+    }
+
+    private func handleAgentLogoTap() {
+        guard !agentPills.pills.isEmpty else { return }
+        if state.showingAIConversation {
+            showAgentListFromConversation()
+            return
+        }
+        toggleAgentSwitcherPinned()
     }
 
     private func openAgentInChat(_ pill: AgentPill) {
