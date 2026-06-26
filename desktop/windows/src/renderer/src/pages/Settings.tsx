@@ -10,6 +10,9 @@ import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
 import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
 import { NotificationsTab } from '../components/settings/tabs/NotificationsTab'
 import { FloatingBarTab } from '../components/settings/tabs/FloatingBarTab'
+import { FocusInsightsTab } from '../components/settings/tabs/FocusInsightsTab'
+import { PermissionsHelpTab } from '../components/settings/tabs/PermissionsHelpTab'
+import { SystemTab } from '../components/settings/tabs/SystemTab'
 import { PlanUsageTab } from '../components/settings/tabs/PlanUsageTab'
 import { AboutTab } from '../components/settings/tabs/AboutTab'
 import { RewindTab } from '../components/settings/tabs/RewindTab'
@@ -29,6 +32,9 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   transcription: TranscriptionTab,
   notifications: NotificationsTab,
   'floating-bar': FloatingBarTab,
+  'focus-insights': FocusInsightsTab,
+  'permissions-help': PermissionsHelpTab,
+  system: SystemTab,
   'plan-usage': PlanUsageTab,
   about: AboutTab,
   rewind: RewindTab,
