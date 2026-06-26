@@ -239,3 +239,40 @@ def delete_knowledge_graph(uid: str) -> None:
 
     edges_ref = user_ref.collection(knowledge_edges_collection)
     _batch_delete(edges_ref)
+
+
+def prune_memory_citations_from_kg(uid: str, memory_ids: List[str]) -> int:
+    """Remove memory_ids from KG nodes/edges; delete entities with no remaining citations."""
+    if not memory_ids:
+        return 0
+    retracted = set(memory_ids)
+    user_ref = db.collection(users_collection).document(uid)
+    nodes_ref = user_ref.collection(knowledge_nodes_collection)
+    edges_ref = user_ref.collection(knowledge_edges_collection)
+    pruned = 0
+
+    for doc in nodes_ref.stream():
+        data = doc.to_dict() or {}
+        existing_ids = set(data.get("memory_ids") or [])
+        if not existing_ids.intersection(retracted):
+            continue
+        remaining = sorted(existing_ids - retracted)
+        if remaining:
+            doc.reference.set({**data, "memory_ids": remaining, "updated_at": datetime.now(timezone.utc)}, merge=True)
+        else:
+            doc.reference.delete()
+        pruned += 1
+
+    for doc in edges_ref.stream():
+        data = doc.to_dict() or {}
+        existing_ids = set(data.get("memory_ids") or [])
+        if not existing_ids.intersection(retracted):
+            continue
+        remaining = sorted(existing_ids - retracted)
+        if remaining:
+            doc.reference.set({**data, "memory_ids": remaining}, merge=True)
+        else:
+            doc.reference.delete()
+        pruned += 1
+
+    return pruned
