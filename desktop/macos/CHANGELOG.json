@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added PTT access to inspect and stop canonical Omi agent runs created from chat or other Omi surfaces"
+  ],
   "releases": [
     {
       "version": "0.11.540",
