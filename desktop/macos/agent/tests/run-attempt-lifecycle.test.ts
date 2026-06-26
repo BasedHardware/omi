@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -80,6 +80,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
           env: [
             { name: "OMI_REQUEST_ID", value: "request-1" },
             { name: "OMI_CLIENT_ID", value: "client-a" },
+            { name: "OMI_CONTEXT_FILE", value: "/tmp/stale-request-path-a.json" },
             { name: "OMI_QUERY_MODE", value: "act" },
           ],
         },
@@ -89,6 +90,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       ...baseRunInput,
       requestId: "request-2",
       clientId: "client-b",
+      legacyAdapterSessionId: "legacy-native-2",
       mcpServers: [
         {
           command: "node",
@@ -98,6 +100,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
             { value: "client-b", name: "OMI_CLIENT_ID" },
             { value: "canonical-session-1", name: "OMI_SESSION_ID" },
             { value: "/tmp/omi-tools-999.sock", name: "OMI_BRIDGE_PIPE" },
+            { value: "/tmp/stale-request-path-b.json", name: "OMI_CONTEXT_FILE" },
             { value: "act", name: "OMI_QUERY_MODE" },
           ],
           args: ["tools.js"],
@@ -110,6 +113,18 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     const bindings = store.allRows("SELECT binding_generation, status, metadata_json FROM adapter_bindings ORDER BY binding_generation");
     expect(bindings).toHaveLength(1);
     expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "active" });
+    const openedContextFile = mcpEnvValue(adapter.opened[0].mcpServers, "OMI_CONTEXT_FILE");
+    const resumedContextFile = mcpEnvValue(adapter.resumed[0].mcpServers, "OMI_CONTEXT_FILE");
+    expect(openedContextFile).toBeTruthy();
+    expect(resumedContextFile).toBe(openedContextFile);
+    expect(openedContextFile).not.toContain("stale-request-path");
+    expect(JSON.parse(readFileSync(openedContextFile!, "utf8"))).toMatchObject({
+      requestId: "request-2",
+      clientId: "client-b",
+      runId: adapter.executed[1].runId,
+      attemptId: adapter.executed[1].attemptId,
+      legacyAdapterSessionId: "legacy-native-2",
+    });
     store.close();
   });
 
@@ -411,7 +426,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(second.run.status).toBe("succeeded");
     expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [firstBinding.binding_id]).status).toBe("closed");
     expect(store.getRow("SELECT COUNT(*) AS count FROM adapter_bindings WHERE adapter_id = ? AND adapter_native_session_id = ? AND status = 'active'", ["pi-mono", "native-1"]).count).toBe(1);
-    expect(JSON.parse(store.getRow("SELECT payload_json FROM events WHERE type = 'binding.closed'").payload_json)).toMatchObject({
+    expect(JSON.parse(store.getRow("SELECT payload_json FROM events WHERE type = 'binding.stale' AND payload_json LIKE '%native_session_reused%'").payload_json)).toMatchObject({
       bindingId: firstBinding.binding_id,
       adapterId: "pi-mono",
       adapterNativeSessionId: "native-1",
@@ -795,16 +810,35 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [nativeBinding.bindingId]).status).toBe("active");
     expect(store.getRow("SELECT status FROM adapter_bindings WHERE binding_id = ?", [processLocalBinding.bindingId]).status).toBe("stale");
     expect(store.allRows("SELECT type FROM events ORDER BY event_seq").map((row) => row.type)).toEqual([
-      "runtime.attempt_orphaned",
-      "runtime.run_orphaned",
-      "runtime.binding_stale",
+      "attempt.orphaned",
+      "run.orphaned",
+      "binding.stale",
     ]);
     store.close();
   });
 });
 
 function newDatabasePath(): string {
-  const dir = mkdtempSync(join(tmpdir(), "omi-agent-kernel-"));
-  createdDirs.push(dir);
+  const dir = mkdtempTracked("omi-agent-kernel-");
   return join(dir, "omi-agentd.sqlite3");
+}
+
+function mkdtempTracked(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  createdDirs.push(dir);
+  return dir;
+}
+
+function mcpEnvValue(mcpServers: Record<string, unknown>[] | undefined, name: string): string | undefined {
+  const env = mcpServers?.[0]?.env;
+  if (!Array.isArray(env)) return undefined;
+  const entry = env.find((candidate) =>
+    candidate &&
+    typeof candidate === "object" &&
+    !Array.isArray(candidate) &&
+    (candidate as Record<string, unknown>).name === name
+  );
+  return entry && typeof entry === "object" && !Array.isArray(entry)
+    ? String((entry as Record<string, unknown>).value ?? "")
+    : undefined;
 }

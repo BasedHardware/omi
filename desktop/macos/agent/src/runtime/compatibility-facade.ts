@@ -25,6 +25,8 @@ export interface McpServerBuildContext {
   clientId: string;
   protocolVersion?: ProtocolVersion;
   sessionId?: string;
+  runId?: string;
+  attemptId?: string;
   includeSwiftBackedTools?: boolean;
 }
 export type McpServerBuilder = (
@@ -263,28 +265,69 @@ export class JsonlCompatibilityFacade {
   }
 
   async handleInterrupt(message: { protocolVersion?: ProtocolVersion; requestId?: string; id?: string; clientId?: string; ownerId?: string; sessionId?: string; runId?: string; attemptId?: string }): Promise<void> {
-    const requestId = requestIdFor(message);
-    const clientId = message.clientId ?? this.defaultClientId;
+    const requestId = message.protocolVersion === 2 ? message.requestId?.trim() : requestIdFor(message);
+    const clientId = message.protocolVersion === 2 ? message.clientId : message.clientId ?? this.defaultClientId;
+    if (message.protocolVersion === 2 && !clientId?.trim()) {
+      this.send({
+        type: "cancel_ack",
+        protocolVersion: 2,
+        ...(requestId ? { requestId } : {}),
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      } as CancelAckMessage & { protocolVersion: 2; requestId?: string });
+      return;
+    }
+    if (message.protocolVersion === 2 && !requestId?.trim()) {
+      this.send({
+        type: "cancel_ack",
+        protocolVersion: 2,
+        clientId,
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      } as CancelAckMessage & { protocolVersion: 2; clientId: string });
+      return;
+    }
+    const effectiveClientId = clientId ?? this.defaultClientId;
     const hasExplicitClientId = message.clientId !== undefined;
     const activeRequestContext = requestId
       ? (hasExplicitClientId
-        ? this.activeByRequest.get(this.activeRequestKey(requestId, clientId))
+        ? this.activeByRequest.get(this.activeRequestKey(requestId, effectiveClientId))
         : message.protocolVersion === 2
           ? undefined
           : this.legacyUnscopedActiveRequestContext(requestId))
       : undefined;
     const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
+    if (message.protocolVersion === 2 && requestId && !activeRequestContext && !message.runId && !message.attemptId) {
+      const cancelAck: CancelAckMessage = {
+        type: "cancel_ack",
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      };
+      this.send(this.withCorrelation(cancelAck, {
+        protocolVersion: message.protocolVersion,
+        requestId,
+        clientId: effectiveClientId,
+        ownerId,
+        adapterId: this.defaultAdapterId,
+        sessionId: message.sessionId,
+        attemptId: message.attemptId,
+      }));
+      return;
+    }
     const runId =
       message.runId ??
       activeRequestContext?.runId ??
-      this.latestRunByClient.get(this.latestRunByClientKey(ownerId, clientId)) ??
+      this.latestRunByClient.get(this.latestRunByClientKey(ownerId, effectiveClientId)) ??
       this.latestRunByOwner.get(ownerId);
     const context =
       activeRequestContext ??
       (runId ? this.activeByRun.get(runId) : undefined) ?? {
         protocolVersion: message.protocolVersion,
         requestId: requestId ?? randomUUID(),
-        clientId,
+        clientId: effectiveClientId,
         ownerId,
         adapterId: this.defaultAdapterId,
         sessionId: message.sessionId,
@@ -362,7 +405,14 @@ export class JsonlCompatibilityFacade {
   }
 
   private buildRunInput(message: QueryMessage): ExecuteAgentRunInput {
-    const requestId = requestIdFor(message) ?? randomUUID();
+    const suppliedRequestId = message.protocolVersion === 2 ? message.requestId : requestIdFor(message);
+    if (message.protocolVersion === 2 && !suppliedRequestId?.trim()) {
+      throw new Error("protocol v2 query requires requestId");
+    }
+    const requestId = suppliedRequestId?.trim() || randomUUID();
+    if (message.protocolVersion === 2 && !message.clientId?.trim()) {
+      throw new Error("protocol v2 query requires clientId");
+    }
     const clientId = message.clientId ?? this.defaultClientId;
     const mode = message.mode ?? "act";
     const requestedModel = message.model ?? this.defaultModel();
@@ -403,6 +453,7 @@ export class JsonlCompatibilityFacade {
       recoverAfterError: this.recoverAfterError(),
       metadata: {
         protocolVersion: message.protocolVersion ?? 1,
+        legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
         source: "jsonl_compatibility_facade",
       },
     };
@@ -456,7 +507,7 @@ export class JsonlCompatibilityFacade {
   private handleKernelEvent(event: AgentEvent): void {
     if (!event.runId) return;
     const payload = parsePayload(event.payloadJson);
-    if (event.type === "run.created") {
+    if (event.type === "run.queued") {
       const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined;
       const clientId = typeof payload.clientId === "string" ? payload.clientId : undefined;
       const context =
@@ -498,10 +549,11 @@ export class JsonlCompatibilityFacade {
         this.latestRunByOwner.delete(context.ownerId);
       }
     }
-    if (!event.type.startsWith("adapter.")) return;
+    if (!isAdapterPayloadEvent(event.type)) return;
 
     const adapterEvent = payload as Partial<OutboundMessage> & { adapterSessionId?: string };
-    const type = event.type.slice("adapter.".length);
+    const type = typeof adapterEvent.type === "string" ? adapterEvent.type : undefined;
+    if (!type) return;
     context.adapterSessionId = adapterEvent.adapterSessionId ?? context.adapterSessionId;
 
     switch (type) {
@@ -620,4 +672,13 @@ function parsePayload(payloadJson: string): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function isAdapterPayloadEvent(type: string): boolean {
+  return type === "message.delta" ||
+    type === "progress.updated" ||
+    type === "tool.started" ||
+    type === "tool.updated" ||
+    type === "tool.completed" ||
+    type === "tool.failed";
 }

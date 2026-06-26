@@ -30,6 +30,8 @@ import type {
   DelegationStatus,
 } from "./types.js";
 import { createHash } from "node:crypto";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 
 const ACTIVE_STATUSES: readonly RunStatus[] = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"];
 const TERMINAL_STATUSES: readonly RunStatus[] = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"];
@@ -42,7 +44,18 @@ function stableHash(value: string | undefined): string {
   return createHash("sha256").update(value ?? "").digest("hex");
 }
 
-const REQUEST_SCOPED_MCP_ENV_KEYS = new Set(["OMI_BRIDGE_PIPE", "OMI_REQUEST_ID", "OMI_CLIENT_ID", "OMI_SESSION_ID"]);
+const REQUEST_SCOPED_MCP_ENV_KEYS = new Set([
+  "OMI_BRIDGE_PIPE",
+  "OMI_CONTEXT_FILE",
+  "OMI_REQUEST_ID",
+  "OMI_CLIENT_ID",
+  "OMI_PROTOCOL_VERSION",
+  "OMI_SESSION_ID",
+  "OMI_RUN_ID",
+  "OMI_ATTEMPT_ID",
+  "OMI_ADAPTER_SESSION_ID",
+  "OMI_LEGACY_ADAPTER_SESSION_ID",
+]);
 
 function stableJsonStringify(value: unknown): string {
   if (value === null || typeof value !== "object") {
@@ -454,13 +467,13 @@ export class AgentRuntimeKernel {
         requestedModelId: input.model ?? null,
         cwd: input.cwd ?? session.defaultCwd,
       });
-      this.touchSession(session.sessionId);
       this.appendEvent({
         sessionId: session.sessionId,
         runId: run.runId,
-        type: "run.created",
+        type: "run.queued",
         payload: { runId: run.runId, requestId: run.requestId, clientId: run.clientId },
       });
+      this.touchSession(session.sessionId);
       return { session, run };
     });
   }
@@ -571,6 +584,17 @@ export class AgentRuntimeKernel {
             binding: handle,
             attemptId: attempt.attemptId,
             sessionId: accepted.session.sessionId,
+          });
+          refreshMcpAttemptContext(mcpServersForBinding(input.mcpServers ?? [], accepted.session.sessionId, adapterId, this.runtimeNodeId), {
+            ownerId: input.ownerId,
+            requestId: accepted.run.requestId,
+            clientId: accepted.run.clientId,
+            protocolVersion: input.metadata?.protocolVersion,
+            sessionId: accepted.session.sessionId,
+            runId: accepted.run.runId,
+            attemptId: attempt.attemptId,
+            adapterSessionId: handle.adapterNativeSessionId,
+            legacyAdapterSessionId: input.legacyAdapterSessionId,
           });
           this.markAttemptRunning(attempt, binding);
           return worker.adapter.executeAttempt(
@@ -720,18 +744,6 @@ export class AgentRuntimeKernel {
           type: "attempt.cancel_dispatch",
           payload: dispatch,
         });
-        this.appendEvent({
-          sessionId: run.sessionId,
-          runId,
-          attemptId: attempt.attemptId,
-          type: "run.cancel_ack",
-          payload: {
-            accepted: true,
-            dispatchAttempted,
-            adapterAcknowledged,
-            message: dispatch.message,
-          },
-        });
       });
     }
 
@@ -827,20 +839,7 @@ export class AgentRuntimeKernel {
         [input.state, now, artifact.artifactId],
       );
       const updatedArtifact = this.readArtifact(artifact.artifactId);
-      const event = this.appendEvent({
-        sessionId: updatedArtifact.sessionId,
-        runId: updatedArtifact.runId,
-        attemptId: updatedArtifact.attemptId,
-        type: `artifact.${input.state}`,
-        payload: {
-          artifactId: updatedArtifact.artifactId,
-          previousState: artifact.lifecycleState,
-          state: updatedArtifact.lifecycleState,
-          reason: input.reason ?? null,
-          metadata: input.metadata ?? {},
-        },
-      });
-      return { artifact: updatedArtifact, changed: true, event };
+      return { artifact: updatedArtifact, changed: true, event: null };
     });
   }
 
@@ -916,7 +915,7 @@ export class AgentRuntimeKernel {
           sessionId: String(rows.find((row) => String(row.binding_id) === bindingId)?.session_id),
           runId: null,
           attemptId: null,
-          type: "binding.invalidated",
+          type: "binding.stale",
           payload: {
             bindingId,
             adapterId: input.adapterId,
@@ -1026,7 +1025,6 @@ export class AgentRuntimeKernel {
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         delegationValues(delegation),
       );
-      this.touchSession(session.sessionId);
       this.appendEvent({
         sessionId: parentSession.sessionId,
         runId: parentRun.runId,
@@ -1041,7 +1039,7 @@ export class AgentRuntimeKernel {
       this.appendEvent({
         sessionId: session.sessionId,
         runId: run.runId,
-        type: "run.created",
+        type: "run.queued",
         payload: {
           runId: run.runId,
           requestId: run.requestId,
@@ -1050,6 +1048,7 @@ export class AgentRuntimeKernel {
           delegationId: delegation.delegationId,
         },
       });
+      this.touchSession(session.sessionId);
       return { session, run, delegation };
     });
   }
@@ -1101,18 +1100,20 @@ export class AgentRuntimeKernel {
          WHERE delegation_id = ?`,
         [status, status === "running" || status === "pending" ? null : now, delegation.delegationId],
       );
-      this.appendEvent({
-        sessionId: delegation.parentSessionId,
-        runId: delegation.parentRunId,
-        type: status === "running" ? "delegation.running" : "delegation.completed",
-        payload: {
-          delegationId: delegation.delegationId,
-          childSessionId: delegation.childSessionId,
-          childRunId: delegation.childRunId,
-          status,
-          errorMessage,
-        },
-      });
+      if (status !== "running") {
+        this.appendEvent({
+          sessionId: delegation.parentSessionId,
+          runId: delegation.parentRunId,
+          type: "delegation.completed",
+          payload: {
+            delegationId: delegation.delegationId,
+            childSessionId: delegation.childSessionId,
+            childRunId: delegation.childRunId,
+            status,
+            errorMessage,
+          },
+        });
+      }
     });
     return this.readDelegation(delegation.delegationId);
   }
@@ -1136,7 +1137,7 @@ export class AgentRuntimeKernel {
     const existing = this.findExistingSession(input);
     if (existing) return existing;
     const shouldStoreLegacyAlias = !(input.externalRefKind && input.externalRefId);
-    return this.store.insertSession({
+    const session = this.store.insertSession({
       ownerId: input.ownerId,
       surfaceKind: input.surfaceKind,
       externalRefKind: input.externalRefKind ?? null,
@@ -1146,6 +1147,12 @@ export class AgentRuntimeKernel {
       title: input.title ?? null,
       defaultAdapterId: input.defaultAdapterId ?? "acp",
     });
+    this.appendEvent({
+      sessionId: session.sessionId,
+      type: "session.created",
+      payload: { sessionId: session.sessionId, ownerId: session.ownerId, surfaceKind: session.surfaceKind },
+    });
+    return session;
   }
 
   private findExistingSession(input: KernelSessionResolutionInput): AgentSession | undefined {
@@ -1212,6 +1219,12 @@ export class AgentRuntimeKernel {
         retryable: input.retryReason ? 1 : 0,
       });
       const run = this.readRun(input.runId);
+      this.appendEvent({
+        sessionId: run.sessionId,
+        runId: input.runId,
+        type: "run.starting",
+        payload: { runId: input.runId, attemptNo: input.attemptNo },
+      });
       this.appendEvent({
         sessionId: run.sessionId,
         runId: input.runId,
@@ -1348,7 +1361,7 @@ export class AgentRuntimeKernel {
         cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? process.cwd(),
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
-        mcpServers: input.input.mcpServers,
+        mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
       });
       this.withTransaction(() => {
         this.updateBinding(binding.bindingId, {
@@ -1400,7 +1413,7 @@ export class AgentRuntimeKernel {
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
-      mcpServers: input.input.mcpServers,
+      mcpServers: mcpServersForBinding(input.input.mcpServers ?? [], input.session.sessionId, input.adapterId, this.runtimeNodeId),
       metadata: input.input.metadata,
     });
     const binding = this.withTransaction(() => {
@@ -1560,13 +1573,37 @@ export class AgentRuntimeKernel {
       completedAtMs: now,
       updatedAtMs: now,
     });
-    this.appendEvent({
-      sessionId: input.sessionId,
-      runId: input.runId,
-      attemptId: input.attemptId,
-      type: `attempt.${completedStatus}`,
-      payload: { attemptId: input.attemptId, status: completedStatus },
-    });
+    if (completedStatus === "failed" || completedStatus === "cancelled") {
+      this.appendEvent({
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+        type: completedStatus === "failed" ? "attempt.failed" : "attempt.cancelled",
+        payload: { attemptId: input.attemptId, status: completedStatus },
+      });
+    }
+    if (completedStatus === "succeeded") {
+      this.appendEvent({
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+        type: "message.completed",
+        payload: { text: input.finalText ?? "" },
+      });
+      this.appendEvent({
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+        type: "usage.updated",
+        payload: {
+          inputTokens: input.result?.inputTokens ?? null,
+          outputTokens: input.result?.outputTokens ?? null,
+          cacheReadTokens: input.result?.cacheReadTokens ?? null,
+          cacheWriteTokens: input.result?.cacheWriteTokens ?? null,
+          costUsd: input.result?.costUsd ?? null,
+        },
+      });
+    }
     this.appendEvent({
       sessionId: input.sessionId,
       runId: input.runId,
@@ -1640,6 +1677,10 @@ export class AgentRuntimeKernel {
     if (this.isTerminalAttempt(attemptId) || this.isTerminalRun(runId)) {
       return;
     }
+    const eventType = canonicalAdapterEventType(event);
+    if (!eventType) {
+      return;
+    }
     this.withTransaction(() => {
       if (this.isTerminalAttempt(attemptId) || this.isTerminalRun(runId)) {
         return;
@@ -1648,7 +1689,7 @@ export class AgentRuntimeKernel {
         sessionId,
         runId,
         attemptId,
-        type: `adapter.${event.type}`,
+        type: eventType,
         retentionClass: event.type === "text_delta" || event.type === "thinking_delta" ? "transient" : "core",
         payload: event,
       });
@@ -1686,7 +1727,7 @@ export class AgentRuntimeKernel {
       sessionId: String(row.session_id),
       runId: attempt.runId,
       attemptId: attempt.attemptId,
-      type: "binding.closed",
+      type: "binding.stale",
       payload: { bindingId, adapterId, adapterNativeSessionId, reason },
     });
   }
@@ -2087,6 +2128,11 @@ export class AgentRuntimeKernel {
 
   private touchSession(sessionId: string): void {
     this.store.execute("UPDATE sessions SET updated_at_ms = ?, last_activity_at_ms = ? WHERE session_id = ?", [Date.now(), Date.now(), sessionId]);
+    this.appendEvent({
+      sessionId,
+      type: "session.updated",
+      payload: { sessionId },
+    });
   }
 
   private updateRun(runId: string, patch: Partial<AgentRun>): void {
@@ -2330,6 +2376,97 @@ function artifactFromRow(row: Record<string, unknown>): AgentArtifact {
     metadataJson: text(row.metadata_json),
     createdAtMs: Number(row.created_at_ms),
   };
+}
+
+function canonicalAdapterEventType(event: OutboundMessage): string | undefined {
+  switch (event.type) {
+    case "text_delta":
+      return "message.delta";
+    case "thinking_delta":
+      return "progress.updated";
+    case "tool_activity":
+      if (event.status === "started") return "tool.started";
+      if (event.status === "completed") return "tool.completed";
+      if (event.status === "failed") return "tool.failed";
+      return "tool.updated";
+    case "tool_use":
+      return "tool.started";
+    case "tool_result_display":
+      return "tool.completed";
+    case "error":
+      return "progress.updated";
+    default:
+      return undefined;
+  }
+}
+
+function refreshMcpAttemptContext(
+  mcpServers: Record<string, unknown>[],
+  context: {
+    ownerId: string;
+    requestId: string;
+    clientId: string;
+    protocolVersion?: unknown;
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    adapterSessionId?: string;
+    legacyAdapterSessionId?: string;
+  }
+): void {
+  for (const server of mcpServers) {
+    const env = Array.isArray(server.env) ? server.env : [];
+    const contextFile = env.find((entry) =>
+      entry &&
+      typeof entry === "object" &&
+      !Array.isArray(entry) &&
+      (entry as Record<string, unknown>).name === "OMI_CONTEXT_FILE"
+    );
+    const contextFilePath =
+      contextFile && typeof contextFile === "object" && !Array.isArray(contextFile)
+        ? (contextFile as Record<string, unknown>).value
+        : undefined;
+    if (typeof contextFilePath !== "string" || !contextFilePath.trim()) {
+      continue;
+    }
+    writeFileSync(contextFilePath, JSON.stringify(context), { encoding: "utf8" });
+  }
+}
+
+function mcpServersForBinding(
+  mcpServers: Record<string, unknown>[],
+  sessionId: string,
+  adapterId: string,
+  runtimeNodeId: string
+): Record<string, unknown>[] {
+  return mcpServers.map((server) => {
+    if (!server || typeof server !== "object" || Array.isArray(server)) {
+      return server;
+    }
+    const normalized: Record<string, unknown> = { ...server };
+    const env = Array.isArray(normalized.env) ? normalized.env : [];
+    normalized.env = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    return normalized;
+  });
+}
+
+function upsertEnv(env: unknown[], name: string, value: string): unknown[] {
+  let replaced = false;
+  const next = env.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry) || (entry as Record<string, unknown>).name !== name) {
+      return entry;
+    }
+    replaced = true;
+    return { ...entry, value };
+  });
+  if (!replaced) {
+    next.push({ name, value });
+  }
+  return next;
+}
+
+function contextFileForBinding(sessionId: string, adapterId: string, runtimeNodeId: string): string {
+  return `${tmpdir()}/omi-tools-context-${process.pid}-${encodeURIComponent(runtimeNodeId)}-${encodeURIComponent(sessionId)}-${encodeURIComponent(adapterId)}.json`;
 }
 
 const runColumnMap: Record<string, string> = {

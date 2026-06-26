@@ -158,7 +158,9 @@ export interface ControlRequestKeyInput {
 
 export interface ControlRequestContextInput extends ControlRequestKeyInput {
   ownerGuard?: string;
-  fallbackOwnerId?: string;
+  activeOwnerId?: string;
+  requireActiveOwner?: boolean;
+  requireOwnerGuard?: boolean;
 }
 
 export interface ResolvedControlRequestContext {
@@ -183,10 +185,16 @@ export function resolveControlRequestContext(input: ControlRequestContextInput):
   if (input.ownerGuard !== undefined && !ownerGuard) {
     throw new Error("ownerId cannot be empty");
   }
-  const fallbackOwnerId = input.fallbackOwnerId?.trim();
-  const activeOwnerId = fallbackOwnerId && fallbackOwnerId !== DEFAULT_LOCAL_OWNER_ID
-    ? fallbackOwnerId
-    : ownerGuard || fallbackOwnerId || DEFAULT_LOCAL_OWNER_ID;
+  const activeContextOwnerId = input.activeOwnerId?.trim();
+  if (input.requireOwnerGuard && !ownerGuard) {
+    throw new Error("missing owner guard");
+  }
+  if (input.requireActiveOwner && (!activeContextOwnerId || activeContextOwnerId === DEFAULT_LOCAL_OWNER_ID)) {
+    throw new Error("missing active control owner");
+  }
+  const activeOwnerId = activeContextOwnerId && activeContextOwnerId !== DEFAULT_LOCAL_OWNER_ID
+    ? activeContextOwnerId
+    : ownerGuard || activeContextOwnerId || DEFAULT_LOCAL_OWNER_ID;
   if (ownerGuard && ownerGuard !== activeOwnerId) {
     throw new Error("ownerId does not match active control owner");
   }

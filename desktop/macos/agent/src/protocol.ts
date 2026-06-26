@@ -155,7 +155,7 @@ export interface ResultMessage extends QueryScopedOutbound {
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
-  status: "started" | "completed";
+  status: "started" | "completed" | "failed";
   toolUseId?: string;
   input?: Record<string, unknown>;
 }

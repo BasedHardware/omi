@@ -153,7 +153,7 @@ const pendingToolCalls = new Map<
   }
 >();
 const TERMINAL_RUN_EVENT_TYPES = new Set(["run.succeeded", "run.failed", "run.cancelled", "run.timed_out", "run.orphaned"]);
-const TERMINAL_ATTEMPT_EVENT_TYPES = new Set(["attempt.succeeded", "attempt.failed", "attempt.cancelled", "attempt.timed_out", "attempt.orphaned"]);
+const TERMINAL_ATTEMPT_EVENT_TYPES = new Set(["attempt.failed", "attempt.cancelled", "attempt.timed_out", "attempt.orphaned"]);
 
 function registerActiveControlOwner(requestKey: string, ownerId: string): void {
   const existingOwnerId = activeControlToolOwnersByRequest.get(requestKey);
@@ -236,6 +236,24 @@ function startOmiToolsRelay(): Promise<string> {
               const protocolVersion: ProtocolVersion | undefined =
                 msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
               if (isAgentControlToolName(msg.name)) {
+                const resolvedCorrelation =
+                  toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
+                const messageRequestIsActive = Boolean(
+                  msg.requestId?.trim() &&
+                    msg.clientId?.trim() &&
+                    resolvedCorrelation.requestId === msg.requestId &&
+                    resolvedCorrelation.clientId === msg.clientId
+                );
+                if (protocolVersion === 2 && !messageRequestIsActive) {
+                  client.write(
+                    JSON.stringify({
+                      type: "tool_result",
+                      callId: msg.callId,
+                      result: "Error: missing active Omi request context for v2 control tool relay",
+                    }) + "\n"
+                  );
+                  continue;
+                }
                 void (async () => {
                   const controlToolContext = agentControlToolContext
                     ? {
@@ -244,8 +262,8 @@ function startOmiToolsRelay(): Promise<string> {
                         getOwnerId: () =>
                           activeControlToolOwnerId({
                             requestKey: controlRequestKey(msg) ?? (protocolVersion === 2 ? undefined : legacyControlRequestKey(msg)),
-                            runId: msg.runId,
-                            attemptId: msg.attemptId,
+                            runId: protocolVersion === 2 ? undefined : msg.runId,
+                            attemptId: protocolVersion === 2 ? undefined : msg.attemptId,
                             ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
                             ownerIdForRun: (runId) => activeControlToolOwnersByRun.get(runId),
                             ownerIdForAttempt: (attemptId) => activeControlToolOwnersByAttempt.get(attemptId),
@@ -276,7 +294,13 @@ function startOmiToolsRelay(): Promise<string> {
               // Forward tool call to Swift via stdout
               const resolvedCorrelation =
                 toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
-              if (protocolVersion === 2 && (!msg.requestId || !msg.clientId || !resolvedCorrelation.requestId)) {
+              const messageRequestIsActive = Boolean(
+                msg.requestId &&
+                  msg.clientId &&
+                  resolvedCorrelation.requestId === msg.requestId &&
+                  resolvedCorrelation.clientId === msg.clientId
+              );
+              if (protocolVersion === 2 && !messageRequestIsActive) {
                 client.write(
                   JSON.stringify({
                     type: "tool_result",
@@ -286,12 +310,6 @@ function startOmiToolsRelay(): Promise<string> {
                 );
                 continue;
               }
-              const messageRequestIsActive = Boolean(
-                msg.requestId &&
-                  msg.clientId &&
-                  resolvedCorrelation.requestId === msg.requestId &&
-                  resolvedCorrelation.clientId === msg.clientId
-              );
               const correlation = {
                 ...resolvedCorrelation,
                 ...(messageRequestIsActive && msg.requestId ? { requestId: msg.requestId } : {}),
@@ -587,6 +605,12 @@ function buildMcpServers(
       if (context.sessionId) {
         omiToolsEnv.push({ name: "OMI_SESSION_ID", value: context.sessionId });
       }
+      if (context.runId) {
+        omiToolsEnv.push({ name: "OMI_RUN_ID", value: context.runId });
+      }
+      if (context.attemptId) {
+        omiToolsEnv.push({ name: "OMI_ATTEMPT_ID", value: context.attemptId });
+      }
     }
     if (cwd) {
       omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
@@ -786,7 +810,7 @@ async function main(): Promise<void> {
   const kernel = new AgentRuntimeKernel({ store, registry });
   kernel.subscribe((event) => {
     if (!event.runId) return;
-    if (event.type === "run.created") {
+    if (event.type === "run.queued") {
       const payload = payloadObject(event.payloadJson);
       const requestId = typeof payload.requestId === "string" ? payload.requestId : undefined;
       const clientId = typeof payload.clientId === "string" ? payload.clientId : undefined;
@@ -918,9 +942,14 @@ async function main(): Promise<void> {
         (async () => {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
+          if (query.protocolVersion === 2 && !query.clientId?.trim()) {
+            throw new Error("protocol v2 query requires clientId");
+          }
+          if (query.protocolVersion === 2 && !query.requestId?.trim()) {
+            throw new Error("protocol v2 query requires requestId");
+          }
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
-          currentOwnerId = queryOwnerId;
-          query.requestId = requestIdFor(query) ?? randomUUID();
+          query.requestId = query.protocolVersion === 2 ? query.requestId!.trim() : requestIdFor(query)?.trim() || randomUUID();
           const queryRequestId = requestIdFor(query);
           const queryOwnerKey =
             controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
@@ -928,6 +957,7 @@ async function main(): Promise<void> {
           if (queryOwnerKey) {
             registerActiveControlOwner(queryOwnerKey, queryOwnerId);
           }
+          currentOwnerId = queryOwnerId;
           try {
             if (adapterId === "acp") {
               await initializeAcp();
@@ -963,12 +993,16 @@ async function main(): Promise<void> {
 
       case "control_tool": {
         const control = msg as ControlToolRequestMessage;
-        const requestId = requestIdFor(control);
+        const requestId = control.protocolVersion === 2 ? control.requestId?.trim() : requestIdFor(control);
+        const requestKey = controlRequestKey({ requestId, clientId: control.clientId });
+        const activeOwnerId = requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined;
         let controlContext;
         try {
           controlContext = resolveControlRequestContext({
             ownerGuard: control.ownerId,
-            fallbackOwnerId: currentOwnerId,
+            activeOwnerId,
+            requireActiveOwner: true,
+            requireOwnerGuard: true,
             requestId,
             clientId: control.clientId,
           });
@@ -1037,8 +1071,8 @@ async function main(): Promise<void> {
           break;
         }
         try {
-          if (controlOwnerKey) {
-            registerActiveControlOwner(controlOwnerKey, controlContext.activeOwnerId);
+          if (controlOwnerKey && activeControlToolOwnersByRequest.get(controlOwnerKey) !== controlContext.activeOwnerId) {
+            throw new Error("Request owner context is not active for clientId/requestId");
           }
         } catch (error) {
           if (controlRunOwnerKey) {
@@ -1082,9 +1116,6 @@ async function main(): Promise<void> {
                 preserveControlRunOwner = isLongLivedControlRun(control.name, controlInput) && controlToolResultOk(toolResult);
                 return toolResult;
               } finally {
-                if (controlOwnerKey && (!preserveControlRunOwner || controlOwnerKey !== controlRunOwnerKey)) {
-                  activeControlToolOwnersByRequest.delete(controlOwnerKey);
-                }
                 if (controlRunOwnerKey && !preserveControlRunOwner) {
                   activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
                 }
@@ -1094,9 +1125,6 @@ async function main(): Promise<void> {
               }
             })()
           : (() => {
-              if (controlOwnerKey && (!preserveControlRunOwner || controlOwnerKey !== controlRunOwnerKey)) {
-                activeControlToolOwnersByRequest.delete(controlOwnerKey);
-              }
               if (controlRunOwnerKey && !preserveControlRunOwner) {
                 activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
               }
@@ -1133,7 +1161,7 @@ async function main(): Promise<void> {
       case "refresh_token": {
         const rtm = msg as RefreshTokenMessage;
         process.env.OMI_AUTH_TOKEN = rtm.token;
-        currentOwnerId = rtm.ownerId ?? currentOwnerId;
+        currentOwnerId = rtm.ownerId ?? DEFAULT_LOCAL_OWNER_ID;
         try {
           await ensurePiMonoAdapter(rtm.token);
           for (const adapter of piMonoAdapters) {

@@ -22,6 +22,26 @@ afterEach(() => {
 });
 
 describe("JsonlCompatibilityFacade", () => {
+  it("rejects protocol v2 queries that only provide legacy id", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    await expect(
+      facade.handleQuery({
+        ...v1Query({ id: "legacy-id-only", prompt: "missing v2 request id" }),
+        protocolVersion: 2,
+        requestId: undefined,
+        clientId: "client-v2",
+      }),
+    ).rejects.toThrow("protocol v2 query requires requestId");
+    store.close();
+  });
+
   it("selects the sole running request for unscoped tool-call correlation", () => {
     expect(
       selectUnscopedToolCallCorrelation([
@@ -552,11 +572,11 @@ describe("JsonlCompatibilityFacade", () => {
     expect(cancelAck).toMatchObject({
       protocolVersion: 2,
       requestId: "request-without-client",
-      clientId: "legacy-jsonl-client",
       accepted: false,
       dispatchAttempted: false,
       adapterAcknowledged: false,
     });
+    expect(cancelAck).not.toHaveProperty("clientId");
 
     adapter.resolveDeferred({
       text: "cancelled",
@@ -610,7 +630,7 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
-  it("treats an explicit empty client id as scoped rather than omitted", async () => {
+  it("rejects an explicit empty v2 client id instead of using scoped fallback", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
@@ -642,9 +662,9 @@ describe("JsonlCompatibilityFacade", () => {
     expect(cancelAck).toMatchObject({
       protocolVersion: 2,
       requestId: "empty-client-request",
-      clientId: "",
       accepted: false,
     });
+    expect(cancelAck).not.toHaveProperty("clientId");
 
     adapter.resolveDeferred({
       text: "still running",
@@ -709,7 +729,7 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
-  it("uses owner-scoped latest runs when interrupt omits request and run ids", async () => {
+  it("rejects v2 interrupt when requestId is missing", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
@@ -741,18 +761,25 @@ describe("JsonlCompatibilityFacade", () => {
     await facade.handleInterrupt({
       type: "interrupt",
       protocolVersion: 2,
+      id: "legacy-interrupt-id",
       clientId: "shared-client",
       ownerId: "owner-a",
     });
 
-    expect(adapter.cancelled).toHaveLength(1);
-    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    expect(adapter.cancelled).toHaveLength(0);
     const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
-    expect(cancelAck?.runId).toBe(adapter.executed[0].runId);
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      clientId: "shared-client",
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
+    expect(cancelAck).not.toHaveProperty("runId");
 
     adapter.resolveDeferred({
-      text: "cancelled",
-      terminalStatus: "cancelled",
+      text: "owner a finished",
+      terminalStatus: "succeeded",
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await Promise.all([ownerA, ownerB]);
     store.close();
@@ -794,12 +821,19 @@ describe("JsonlCompatibilityFacade", () => {
       ownerId: "a",
     });
 
-    expect(adapter.cancelled).toHaveLength(1);
-    expect(adapter.cancelled[0].runId).toBe(adapter.executed[0].runId);
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> => message.type === "cancel_ack");
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      clientId: "b:c",
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
 
     adapter.resolveDeferred({
-      text: "cancelled",
-      terminalStatus: "cancelled",
+      text: "first finished",
+      terminalStatus: "succeeded",
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await Promise.all([first, second]);
     store.close();

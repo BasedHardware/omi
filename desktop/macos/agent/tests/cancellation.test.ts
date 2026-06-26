@@ -53,18 +53,20 @@ describe("AgentRuntimeKernel cancellation", () => {
     adapter.emitLate(attemptId, {
       type: "text_delta",
       text: "late after cancel",    });
-    expect(store.allRows("SELECT payload_json FROM events WHERE type = 'adapter.text_delta'")).toHaveLength(1);
+    expect(store.allRows("SELECT payload_json FROM events WHERE type = 'message.delta'")).toHaveLength(1);
     expect(store.allRows("SELECT type FROM events ORDER BY event_seq").map((row) => row.type)).toEqual([
-      "run.created",
+      "session.created",
+      "run.queued",
+      "session.updated",
+      "run.starting",
       "attempt.created",
       "binding.created",
       "attempt.started",
       "run.running",
-      "adapter.text_delta",
+      "message.delta",
       "run.cancellation_requested",
       "run.cancelling",
       "attempt.cancel_dispatch",
-      "run.cancel_ack",
       "attempt.cancelled",
       "run.cancelled",
     ]);
