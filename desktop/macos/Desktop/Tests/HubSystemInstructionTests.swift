@@ -53,18 +53,20 @@ final class HubSystemInstructionTests: XCTestCase {
 
         let cancelTool = tools.first { ($0["name"] as? String) == HubTool.cancelAgentRun.rawValue }
         XCTAssertTrue((cancelTool?["description"] as? String ?? "").contains("canonical"))
-        let parameters = cancelTool?["parameters"] as? [String: Any]
-        XCTAssertEqual(parameters?["required"] as? [String], ["runId"])
+        let cancelParameters = cancelTool?["parameters"] as? [String: Any]
+        let cancelProperties = cancelParameters?["properties"] as? [String: Any]
+        XCTAssertNotNil(cancelProperties?["agentRef"])
+        XCTAssertNotNil(cancelParameters?["anyOf"])
 
         let listTool = tools.first { ($0["name"] as? String) == HubTool.listAgentSessions.rawValue }
         let listParameters = listTool?["parameters"] as? [String: Any]
         let listProperties = listParameters?["properties"] as? [String: Any]
         let surfaceKind = listProperties?["surfaceKind"] as? [String: Any]
-        XCTAssertEqual(surfaceKind?["enum"] as? [String], ["main_chat", "task_chat", "realtime", "delegated_agent"])
+        XCTAssertEqual(surfaceKind?["enum"] as? [String], ["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"])
 
         let inspectTool = tools.first { ($0["name"] as? String) == HubTool.inspectAgentArtifacts.rawValue }
         let inspectParameters = inspectTool?["parameters"] as? [String: Any]
         let inspectAnyOf = inspectParameters?["anyOf"] as? [[String: Any]]
-        XCTAssertEqual(inspectAnyOf?.compactMap { $0["required"] as? [String] }, [["sessionId"], ["runId"], ["attemptId"]])
+        XCTAssertEqual(inspectAnyOf?.compactMap { $0["required"] as? [String] }, [["agentRef"], ["sessionId"], ["runId"], ["attemptId"]])
     }
 }
