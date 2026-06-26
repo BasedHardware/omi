@@ -243,10 +243,10 @@ describe("adapter capability matrix", () => {
       restartOrphanSemantics: { status: "required" },
     });
     expect(ADAPTER_CAPABILITY_MATRIX.hermes.expectations).toMatchObject({
-      nativeResume: { status: "required" },
+      nativeResume: { status: "unsupported" },
       cancellationDispatch: { status: "required" },
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
-      pinnedWorker: { status: "unsupported" },
+      pinnedWorker: { status: "required" },
       modelSwitching: { status: "required" },
       artifactEmission: { status: "unsupported" },
       toolSupport: { status: "required" },
@@ -334,15 +334,15 @@ describe("adapter capability matrix", () => {
       restartBehavior: "process_local_bindings_stale",
     });
     expect(adapterCapabilitiesFor("hermes")).toEqual({
-      resumeFidelity: "native",
-      supportsNativeResume: true,
+      resumeFidelity: "none",
+      supportsNativeResume: false,
       supportsCancellation: true,
       acknowledgesCancellation: false,
-      requiresPinnedWorker: false,
+      requiresPinnedWorker: true,
       supportsModelSwitching: true,
       supportsArtifactEmission: false,
       supportsTools: true,
-      restartBehavior: "native_bindings_survive",
+      restartBehavior: "process_local_bindings_stale",
     });
     expect(adapterCapabilitiesFor("openclaw")).toEqual({
       resumeFidelity: "native",

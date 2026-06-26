@@ -354,7 +354,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       sessionId: input.sessionId,
       adapterId: this.adapterId,
       adapterNativeSessionId,
-      resumeFidelity: "native",
+      resumeFidelity: this.capabilities.resumeFidelity,
       cwd: input.cwd,
       model: modelApplied ? input.model : undefined,
       metadata: input.metadata,

@@ -133,7 +133,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
     expect(binding).toMatchObject({
       adapterId: "hermes",
       adapterNativeSessionId: "hermes-native-session",
-      resumeFidelity: "native",
+      resumeFidelity: "none",
     });
     expect(result).toMatchObject({
       text: "OMI_HERMES_DOGFOOD_OK",

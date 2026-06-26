@@ -225,14 +225,18 @@ export const ADAPTER_CAPABILITY_MATRIX = {
     adapterId: "hermes",
     productionAdapter: true,
     expectations: {
-      nativeResume: required("Hermes exposes native session ids that can be resumed after adapter process restart."),
+      // Hermes ACP sessions are tracked by the running server's in-memory
+      // session manager and are only valid for that process. After a restart
+      // the old session ids are stale, so bindings must not be marked as
+      // native-resumable. See https://hermes-agent.nousresearch.com/docs/user-guide/features/acp
+      nativeResume: unsupported("Hermes ACP session ids are process-local and are stale after adapter process restart."),
       cancellationDispatch: required("Hermes supports cancellation dispatch for active attempts."),
       cancellationAck: knownLimitation("Hermes cancellation is dispatchable but no terminal adapter ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
-      pinnedWorker: unsupported("Hermes bindings are resumable by native session id and do not require process-local pinning."),
+      pinnedWorker: required("Hermes keeps session state in the adapter process and must stay worker-pinned while active."),
       modelSwitching: required("Hermes supports model selection during session open and resume."),
       artifactEmission: unsupported("Hermes ACP adapter does not emit artifact references yet."),
       toolSupport: required("Hermes projects tool calls through canonical adapter tool events."),
-      restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable Hermes bindings."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks process-local Hermes bindings stale."),
     },
   },
   openclaw: {

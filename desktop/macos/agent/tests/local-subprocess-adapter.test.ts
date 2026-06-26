@@ -50,7 +50,7 @@ function makeBinding(adapterId: "hermes" | "openclaw", adapterNativeSessionId: s
     sessionId: "omi-session",
     adapterId,
     adapterNativeSessionId,
-    resumeFidelity: adapterId === "hermes" ? "native" : "none",
+    resumeFidelity: adapterId === "openclaw" ? "native" : "none",
     cwd: "/tmp/work",
     model: "model-a",
   };
@@ -233,7 +233,7 @@ describe("env-command local subprocess adapters", () => {
     expect(opened).toMatchObject({
       sessionId: "omi-session",
       adapterNativeSessionId: "hermes-native-1",
-      resumeFidelity: "native",
+      resumeFidelity: "none",
     });
     expect(result).toMatchObject({
       text: "hello world",
