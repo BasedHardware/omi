@@ -86,6 +86,13 @@ def auth_dependency(authorization: Optional[str] = Header(None)) -> str:
     would break parity with upstream endpoints. The upstream function
     `get_current_user_uid` itself declares `authorization: str = Header(None)`,
     so we must mirror that.
+
+    Import-path stability note: `utils.other.endpoints.get_current_user_uid`
+    is the canonical auth function used by ~30 other routers in this repo
+    (transcribe.py, memories.py, action_items.py, etc.). Moving it would
+    require a coordinated change across the codebase, so the path is
+    effectively stable. If it ever moves, this wrapper is the single point
+    that needs updating.
     """
     from utils.other.endpoints import get_current_user_uid  # lazy
 
@@ -520,18 +527,19 @@ async def auto_router_set_prefs(
 
 
 def _benchmarks_source_and_refresh() -> tuple:
-    """Return (source, refreshed_at_iso) for the metrics endpoint."""
+    """Return (source, refreshed_at_iso) for the metrics endpoint.
+
+    Uses the public `cache_file_modified_iso()` accessor on BenchmarksFetcher
+    instead of poking at the private `_cache_path` attribute (which was a
+    minor coupling smell — the fetcher owns its cache; callers should ask
+    the fetcher for the data, not reach into its internals).
+    """
     from utils.auto_router.benchmarks_fetcher import get_benchmarks_fetcher
 
     fetcher = get_benchmarks_fetcher()
-    cache_path = Path(fetcher._cache_path)  # noqa: SLF001
-    if cache_path.exists():
-        try:
-            mtime = cache_path.stat().st_mtime
-            refreshed_iso = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z")
-            return "aa", refreshed_iso
-        except OSError:
-            pass
+    refreshed_iso = fetcher.cache_file_modified_iso()
+    if refreshed_iso is not None:
+        return "aa", refreshed_iso
     return "example", None
 
 

@@ -453,6 +453,48 @@ measurements. They are sufficient for development and demo. For production,
 replace with your own measurements (latency from load tests, quality from
 your eval set, cost from your actual usage).
 
+## Configuration (production)
+
+### `ADMIN_KEY` — when to set it
+
+The `/v1/auto-router/metrics` and `/v1/auto-router/refresh-benchmarks`
+endpoints are admin-gated by `X-Admin-Key`. The endpoint compares the
+incoming key against `ADMIN_KEY` using `hmac.compare_digest` (constant-time).
+
+**Behavior matrix:**
+
+| `ADMIN_KEY` env var | `X-Admin-Key` header | Result |
+|---|---|---|
+| Unset | — | All admin endpoints return empty body + flag `admin_not_configured: true` |
+| Set | Missing | 401 / empty body + flag `admin_required: true` |
+| Set | Wrong | 401 / empty body + flag `admin_required: true` |
+| Set | Correct | Full admin response |
+
+**When to set `ADMIN_KEY` in production:**
+
+- **Set it if** you want operators to inspect pick history, force a
+  benchmarks refresh, or verify cache state. The pick history reveals
+  which users picked which models — treat it like any other user-activity
+  log.
+- **Leave it unset if** the metrics endpoint is not part of your
+  operational workflow. The auto-router's `/pick` and `/prefs` endpoints
+  work without `ADMIN_KEY` — only the observability + admin actions are
+  gated.
+
+The fail-closed default (empty body + flag, instead of fail-open "show
+everything") is intentional: it prevents configuration drift where an
+operator forgets to set `ADMIN_KEY` in a new environment and
+accidentally exposes per-user pick history.
+
+### Other environment variables
+
+| Variable | Default | Effect |
+|---|---|---|
+| `AUTO_ROUTER_PREFS_BACKEND` | `firestore` | Storage backend for user prefs. Set to `memory` for dev/testing (resets on restart). |
+| `AUTO_ROUTER_ADMIN_KEY` | unset | Alias for `ADMIN_KEY` (matches the pattern used by other admin endpoints in this repo). |
+| `BENCHMARKS_CACHE_PATH` | `<repo>/backend/utils/auto_router/benchmarks.json` | Where to cache successful AA responses. Gitignored. |
+| `ASSEMBLYAI_API_KEY` | unset | Required for live AA benchmark fetching. Without it, falls back to `benchmarks.example.json` (curated mock data). |
+
 ### Out of scope (v6+)
 
 - AA audio-models / text-embedding-models endpoints (if AA supports them)

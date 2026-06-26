@@ -162,7 +162,7 @@ class BenchmarksFetcher:
         if not force:
             cached = self._read_cache_if_fresh()
             if cached is not None:
-                return cached, "aa", self._cache_file_modified_iso()
+                return cached, "aa", self.cache_file_modified_iso()
 
         # 2-4. Try AA, fall back to example.
         api_key = os.environ.get(AA_ENV_VAR, "").strip()
@@ -190,7 +190,7 @@ class BenchmarksFetcher:
 
         # Cache the merged result for next time.
         self._write_cache(merged)
-        return merged, "aa", self._cache_file_modified_iso()
+        return merged, "aa", self.cache_file_modified_iso()
 
     async def fetch_with_metadata(self, force: bool = False) -> Dict[str, Any]:
         """Convenience: fetch + wrap the result with source/refreshed_at metadata.
@@ -347,8 +347,13 @@ class BenchmarksFetcher:
         except OSError as e:
             logger.warning("BenchmarksFetcher: cache write failed (%s)", e)
 
-    def _cache_file_modified_iso(self) -> Optional[str]:
-        """ISO 8601 timestamp of the cache file's last modification, or None if missing."""
+    def cache_file_modified_iso(self) -> Optional[str]:
+        """ISO 8601 timestamp of the cache file's last modification, or None if missing.
+
+        Public accessor (was `_cache_file_modified_iso`) so callers like the
+        `/metrics` endpoint can report cache freshness without depending on
+        the private `_cache_path` attribute.
+        """
         if not self._cache_path.exists():
             return None
         mtime = self._cache_path.stat().st_mtime

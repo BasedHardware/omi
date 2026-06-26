@@ -503,3 +503,41 @@ class TestConstants:
 
     def test_uncovered_tasks_are_stt_and_embedding(self):
         assert AA_UNCOVERED_TASKS == frozenset({"transcription", "screenshot_embedding"})
+
+
+# ---------------------------------------------------------------------------
+# Public cache_file_modified_iso accessor (cubic / maintainer review)
+# ---------------------------------------------------------------------------
+
+
+class TestCacheFileModifiedIsoAccessor:
+    """Public accessor for the cache file's modification time.
+
+    Was `_cache_file_modified_iso` (private). Promoted to public so callers
+    like the `/metrics` endpoint can ask the fetcher for cache freshness
+    without depending on the private `_cache_path` attribute (coupling smell).
+    """
+
+    def test_returns_iso_when_cache_file_exists(self, tmp_path):
+        cache_path = tmp_path / "benchmarks.json"
+        cache_path.write_text("{}")  # exists, mtime = now
+        fetcher = BenchmarksFetcher(cache_path=cache_path)
+        result = fetcher.cache_file_modified_iso()
+        assert result is not None
+        # ISO 8601 with 'Z' suffix (UTC).
+        assert result.endswith("Z")
+
+    def test_returns_none_when_cache_file_missing(self, tmp_path):
+        cache_path = tmp_path / "nonexistent.json"
+        fetcher = BenchmarksFetcher(cache_path=cache_path)
+        assert fetcher.cache_file_modified_iso() is None
+
+    def test_public_method_exists(self, tmp_path):
+        """Regression guard: the method is public, not private."""
+        cache_path = tmp_path / "benchmarks.json"
+        cache_path.write_text("{}")
+        fetcher = BenchmarksFetcher(cache_path=cache_path)
+        # Should be callable without name-mangling underscore prefix.
+        assert callable(fetcher.cache_file_modified_iso)
+        # The private version is intentionally gone.
+        assert not hasattr(fetcher, "_cache_file_modified_iso")
