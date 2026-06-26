@@ -508,4 +508,12 @@ describe("env-command local subprocess adapters", () => {
       expect(source).not.toContain("legacy-permission-policy");
     }
   });
+
+  it("tracks local ACP adapters for bridge shutdown", () => {
+    const source = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
+    expect(source).toContain("const localAcpAdapters = new Set<RuntimeAdapter>()");
+    expect(source).toContain("localAcpAdapters.add(adapter)");
+    expect(source).toContain("await stopLocalAcpAdapters()");
+    expect(source).toContain("void stopLocalAcpAdapters()");
+  });
 });

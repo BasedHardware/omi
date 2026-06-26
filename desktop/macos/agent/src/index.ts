@@ -47,7 +47,7 @@ import type {
 } from "./protocol.js";
 import { requestIdFor } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
-import type { PromptBlock } from "./adapters/interface.js";
+import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
@@ -868,6 +868,10 @@ async function main(): Promise<void> {
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
+  const localAcpAdapters = new Set<RuntimeAdapter>();
+  const stopLocalAcpAdapters = async (): Promise<void> => {
+    await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
+  };
   let currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
     if (!authToken) return false;
@@ -892,7 +896,11 @@ async function main(): Promise<void> {
     if (!adapterIsActivated("hermes")) return false;
     if (!registry.has("hermes")) {
       const { HermesRuntimeAdapter } = await import("./adapters/hermes.js");
-      registry.register("hermes", () => new HermesRuntimeAdapter({ log: logErr }), 1);
+      registry.register("hermes", () => {
+        const adapter = new HermesRuntimeAdapter({ log: logErr });
+        localAcpAdapters.add(adapter);
+        return adapter;
+      }, 1);
       logErr("Hermes adapter registered (maxWorkers=1)");
     }
     return true;
@@ -901,7 +909,11 @@ async function main(): Promise<void> {
     if (!adapterIsActivated("openclaw")) return false;
     if (!registry.has("openclaw")) {
       const { OpenClawRuntimeAdapter } = await import("./adapters/openclaw.js");
-      registry.register("openclaw", () => new OpenClawRuntimeAdapter({ log: logErr }), configuredPiMonoMaxWorkers());
+      registry.register("openclaw", () => {
+        const adapter = new OpenClawRuntimeAdapter({ log: logErr });
+        localAcpAdapters.add(adapter);
+        return adapter;
+      }, configuredPiMonoMaxWorkers());
       logErr(`OpenClaw adapter registered (maxWorkers=${configuredPiMonoMaxWorkers()})`);
     }
     return true;
@@ -1241,6 +1253,7 @@ async function main(): Promise<void> {
         store.close();
         await acpAdapter.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
+        await stopLocalAcpAdapters();
         process.exit(0);
         break;
 
@@ -1255,6 +1268,7 @@ async function main(): Promise<void> {
     store.close();
     void acpAdapter.stop();
     void Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
+    void stopLocalAcpAdapters();
     process.exit(0);
   });
 }
