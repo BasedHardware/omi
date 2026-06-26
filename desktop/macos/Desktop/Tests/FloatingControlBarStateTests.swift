@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import Omi_Computer
 
@@ -26,6 +27,31 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertEqual(state.conversationSurface, .mainInput)
         XCTAssertTrue(state.showingAIConversation)
         XCTAssertFalse(state.showingAIResponse)
+    }
+
+    func testContentHeightReportsOnlyMeaningfulChanges() {
+        let state = FloatingControlBarState()
+        state.present(.mainResponse)
+
+        var publishCount = 0
+        let cancellable = state.$responseContentHeights.dropFirst().sink { _ in
+            publishCount += 1
+        }
+
+        state.reportContentHeight(120.1, for: .mainResponse)
+        XCTAssertEqual(state.measuredContentHeight(for: .mainResponse), 120.5)
+        XCTAssertEqual(state.responseContentHeight, 120.5)
+        XCTAssertEqual(publishCount, 1)
+
+        state.reportContentHeight(120.2, for: .mainResponse)
+        XCTAssertEqual(state.measuredContentHeight(for: .mainResponse), 120.5)
+        XCTAssertEqual(publishCount, 1)
+
+        state.reportContentHeight(121.0, for: .mainResponse)
+        XCTAssertEqual(state.measuredContentHeight(for: .mainResponse), 121)
+        XCTAssertEqual(publishCount, 2)
+
+        cancellable.cancel()
     }
 
     func testVoiceResponseGlowClearsIfNoOwnerTurnsItOff() {

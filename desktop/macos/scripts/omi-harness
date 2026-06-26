@@ -40,6 +40,7 @@ class HarnessContext:
     log_path: Path
     log_start: int
     bundle_id: str | None
+    process_match: str | None
 
 
 def now_iso() -> str:
@@ -195,6 +196,111 @@ def collect_logs(ctx: HarnessContext) -> dict[str, typing.Any]:
     out.write_text(text, encoding="utf-8")
     error_count = len(re.findall(r"\b(error|failed|exception|crash)\b", text, flags=re.IGNORECASE))
     return {"path": str(out), "available": ctx.log_path.exists(), "bytes": len(text.encode("utf-8")), "error_count": error_count}
+
+
+def process_matches(match: str) -> list[dict[str, typing.Any]]:
+    completed = subprocess.run(
+        ["pgrep", "-fl", match],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=5,
+    )
+    matches: list[dict[str, typing.Any]] = []
+    for line in completed.stdout.splitlines():
+        parts = line.strip().split(maxsplit=1)
+        if not parts or not parts[0].isdigit():
+            continue
+        command = parts[1] if len(parts) > 1 else ""
+        if str(os.getpid()) == parts[0] or "omi-harness" in command:
+            continue
+        matches.append({"pid": int(parts[0]), "command": command})
+    return matches
+
+
+def resolve_sample_pid(ctx: HarnessContext, spec: dict[str, typing.Any]) -> tuple[int, str]:
+    if spec.get("pid") is not None:
+        return int(spec["pid"]), f"pid:{spec['pid']}"
+    match = str(spec.get("process_match") or ctx.process_match or "").strip()
+    if not match:
+        raise RuntimeError("power.sample requires pid, process_match, or --process-match")
+    matches = process_matches(match)
+    if not matches:
+        raise RuntimeError(f"no process matched {match!r}")
+    if len(matches) > 1:
+        commands = ", ".join(f"{item['pid']}:{item['command']}" for item in matches[:5])
+        raise RuntimeError(f"process_match {match!r} matched {len(matches)} processes: {commands}")
+    return int(matches[0]["pid"]), match
+
+
+def read_process_sample(pid: int) -> dict[str, typing.Any] | None:
+    completed = subprocess.run(
+        ["ps", "-o", "%cpu=", "-o", "rss=", "-p", str(pid)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=5,
+    )
+    if completed.returncode != 0:
+        return None
+    parts = completed.stdout.strip().split()
+    if len(parts) < 2:
+        return None
+    return {
+        "at": now_iso(),
+        "cpu_percent": float(parts[0]),
+        "rss_mb": round(float(parts[1]) / 1024, 2),
+    }
+
+
+def sample_process_power(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None, dict[str, typing.Any]]:
+    pid, match = resolve_sample_pid(ctx, spec)
+    duration_ms = max(250, int(spec.get("duration_ms", 5000)))
+    interval_ms = max(100, int(spec.get("interval_ms", 250)))
+    warmup_ms = max(0, int(spec.get("warmup_ms", 0)))
+    if warmup_ms:
+        time.sleep(warmup_ms / 1000)
+
+    deadline = time.monotonic() + duration_ms / 1000
+    samples: list[dict[str, typing.Any]] = []
+    while time.monotonic() < deadline:
+        sample = read_process_sample(pid)
+        if sample:
+            samples.append(sample)
+        time.sleep(interval_ms / 1000)
+
+    if not samples:
+        raise RuntimeError(f"no samples collected for pid {pid}")
+
+    cpu_values = [float(sample["cpu_percent"]) for sample in samples]
+    rss_values = [float(sample["rss_mb"]) for sample in samples]
+    summary = {
+        "pid": pid,
+        "process_match": match,
+        "duration_ms": duration_ms,
+        "interval_ms": interval_ms,
+        "sample_count": len(samples),
+        "avg_cpu_percent": round(statistics.fmean(cpu_values), 2),
+        "peak_cpu_percent": round(max(cpu_values), 2),
+        "avg_rss_mb": round(statistics.fmean(rss_values), 2),
+        "peak_rss_mb": round(max(rss_values), 2),
+    }
+
+    errors: list[str] = []
+    max_avg_cpu = spec.get("max_avg_cpu_percent")
+    if max_avg_cpu is not None and summary["avg_cpu_percent"] > float(max_avg_cpu):
+        errors.append(f"avg_cpu_percent {summary['avg_cpu_percent']} exceeded {max_avg_cpu}")
+    max_peak_cpu = spec.get("max_peak_cpu_percent")
+    if max_peak_cpu is not None and summary["peak_cpu_percent"] > float(max_peak_cpu):
+        errors.append(f"peak_cpu_percent {summary['peak_cpu_percent']} exceeded {max_peak_cpu}")
+    max_avg_rss = spec.get("max_avg_rss_mb")
+    if max_avg_rss is not None and summary["avg_rss_mb"] > float(max_avg_rss):
+        errors.append(f"avg_rss_mb {summary['avg_rss_mb']} exceeded {max_avg_rss}")
+
+    write_json(path, {"summary": summary, "samples": samples})
+    return not errors, "; ".join(errors) if errors else None, summary
 
 
 def step_prefix(index: int, step: dict[str, typing.Any]) -> str:
@@ -463,6 +569,14 @@ def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -
             elif error:
                 result["error"] = error
 
+        elif "power.sample" in step:
+            path = ctx.steps_dir / f"{prefix}-power.json"
+            ok, error, summary = sample_process_power(ctx, dict(step["power.sample"] or {}), path)
+            result.update(operation="power.sample", ok=ok, metrics=summary)
+            result["artifacts"]["power"] = str(path)
+            if error:
+                result["error"] = error
+
         else:
             result.update(operation="unsupported", ok=False, error="step has no typed harness operation")
 
@@ -487,6 +601,7 @@ def create_context(args: argparse.Namespace, flow_path: Path, run_dir: Path, lan
         log_path=Path(args.log),
         log_start=log_cursor(Path(args.log)),
         bundle_id=getattr(args, "bundle_id", None),
+        process_match=getattr(args, "process_match", None),
     )
 
 
@@ -547,6 +662,7 @@ def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing
             "port": args.port,
             "base_url": ctx.base_url,
             "bundle_id": args.bundle_id,
+            "process_match": args.process_match,
             "agent_swift_version": tool_version(["agent-swift", "--version"]),
         },
         "cursor_safety": {"coordinate_clicks": 0, "external_screenshot_tool": False},
@@ -595,6 +711,14 @@ def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
             lines.append(f"  error: {step['error']}")
         for warning in step.get("warnings", []):
             lines.append(f"  warning: {warning}")
+        step_metrics = step.get("metrics")
+        if step.get("operation") == "power.sample" and isinstance(step_metrics, dict):
+            lines.append(
+                "  power: "
+                f"avg_cpu={step_metrics.get('avg_cpu_percent')}%, "
+                f"peak_cpu={step_metrics.get('peak_cpu_percent')}%, "
+                f"avg_rss={step_metrics.get('avg_rss_mb')}MB"
+            )
     screenshots = [
         step["artifacts"]["screenshot"]
         for step in metrics["steps"]
@@ -825,6 +949,11 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
     parser.add_argument("--log", default=str(DEFAULT_LOG))
     parser.add_argument("--bundle-id")
+    parser.add_argument(
+        "--process-match",
+        default=os.environ.get("OMI_HARNESS_PROCESS_MATCH"),
+        help="unique pgrep pattern for power.sample steps",
+    )
 
 
 def main() -> int:

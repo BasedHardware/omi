@@ -193,9 +193,16 @@ class FloatingControlBarState: NSObject, ObservableObject {
 
     func reportContentHeight(_ height: CGFloat, for surface: FloatingConversationSurface) {
         guard height > 0, conversationSurface == surface else { return }
-        responseContentHeights[surface.measurementKey] = height
+        let measuredHeight = (height * 2).rounded(.up) / 2
+        let key = surface.measurementKey
+        if let previousHeight = responseContentHeights[key],
+           abs(previousHeight - measuredHeight) < 0.5
+        {
+            return
+        }
+        responseContentHeights[key] = measuredHeight
         if surface == .mainResponse {
-            responseContentHeight = height
+            responseContentHeight = measuredHeight
         }
     }
 
