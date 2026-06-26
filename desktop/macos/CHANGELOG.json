@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "New Settings → Auto-router page for tuning per-task weights (quality/latency/cost) with auto-balancing sliders and debounced save"
+  ],
   "releases": [
     {
       "version": "0.11.524",
