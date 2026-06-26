@@ -91,6 +91,7 @@ export class KgWriteQueue {
     this.worker = w
 
     w.on('message', (msg: { type: string; ms?: number; message?: string }) => {
+      if (this.worker !== w) return // stale worker — discard buffered messages after terminate/exit
       if (msg.type === 'done') {
         this._snapshot = this.lastDispatched
         const waiters = this.activeWaiters.splice(0)

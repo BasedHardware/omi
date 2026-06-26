@@ -289,6 +289,22 @@ describe('KgWriteQueue', () => {
     expect(() => queue.terminate()).not.toThrow()
   })
 
+  it('late message from stale worker after terminate() does not corrupt snapshot or waiters', async () => {
+    const graphA = makeGraph('A')
+    const p = queue.enqueue(graphA)
+
+    // Terminate while write is in flight — rejects the waiter.
+    queue.terminate()
+    await expect(p).rejects.toThrow('terminated')
+    expect(queue.snapshot).toBeNull()
+
+    // A buffered 'done' arrives from the now-stale worker after terminate().
+    // The 'message' guard (this.worker !== w) must discard it so snapshot stays
+    // null and no new flush is triggered.
+    worker.emitDone()
+    expect(queue.snapshot).toBeNull()
+  })
+
   // -------------------------------------------------------------------------
   // Snapshot hot-path correctness
   // -------------------------------------------------------------------------
