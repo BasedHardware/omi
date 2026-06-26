@@ -373,6 +373,7 @@ export interface AdapterAttemptResult {
 
 export interface CancelAttemptContext {
   sessionId: string;
+  ownerId?: string;
   requestId?: string;
   clientId?: string;
   runId?: string;

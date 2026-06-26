@@ -324,6 +324,9 @@ describe("env-command local subprocess adapters", () => {
         expect(request).toMatchObject({
           adapterNativeSessionId: "openclaw-native-1",
           omiSessionId: "omi-session",
+          ownerId: "owner-runtime",
+          requestId: "omi-request",
+          clientId: "desktop",
         });
         writeResponse(proc, request, {
           type: "cancelled",
@@ -372,6 +375,9 @@ describe("env-command local subprocess adapters", () => {
     });
     await expect(adapter.cancelAttempt({
       sessionId: "omi-session",
+      ownerId: "owner-runtime",
+      requestId: "omi-request",
+      clientId: "desktop",
       runId: "omi-run",
       attemptId: "omi-attempt",
       binding: opened,
@@ -382,6 +388,9 @@ describe("env-command local subprocess adapters", () => {
     });
     await expect(adapter.cancelAttempt({
       sessionId: "omi-session",
+      ownerId: "owner-runtime",
+      requestId: "omi-request",
+      clientId: "desktop",
       runId: "omi-run",
       attemptId: "omi-attempt",
       binding: opened,
@@ -439,11 +448,42 @@ describe("env-command local subprocess adapters", () => {
       terminalStatus: "succeeded",
     });
 
-    await expect(execution).resolves.toMatchObject({
-      adapterSessionId: "hermes-native-1",
-      terminalStatus: "cancelled",
-    });
+    await expect(execution).rejects.toThrow("hermes adapter request aborted");
     expect(cancelRequests).toBe(0);
+    await adapter.stop();
+  });
+
+  it("rejects missing or unknown terminal statuses instead of assuming success", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new HermesRuntimeAdapter({ command: "hermes-adapter" });
+
+    collectRequests(proc, (request) => {
+      if (request.type === "open") {
+        writeResponse(proc, request, {
+          type: "opened",
+          adapterNativeSessionId: "hermes-native-1",
+        });
+      }
+      if (request.type === "execute") {
+        writeResponse(proc, request, {
+          type: "result",
+          text: "looks done",
+          adapterSessionId: "hermes-native-1",
+          terminalStatus: "adapter_native_done",
+        });
+      }
+    });
+
+    await adapter.start();
+    const opened = await adapter.openBinding({
+      sessionId: "omi-session",
+      cwd: "/tmp/work",
+    });
+
+    await expect(
+      adapter.executeAttempt(makeAttemptContext(opened), () => {}, new AbortController().signal)
+    ).rejects.toThrow("hermes result missing valid terminalStatus");
     await adapter.stop();
   });
 

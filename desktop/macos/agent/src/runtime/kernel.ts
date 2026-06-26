@@ -715,6 +715,7 @@ export class AgentRuntimeKernel {
       try {
         dispatch = await active.adapter.cancelAttempt({
           sessionId: active.sessionId,
+          ownerId: this.readSession(run.sessionId).ownerId,
           requestId: run.requestId,
           clientId: run.clientId,
           runId,

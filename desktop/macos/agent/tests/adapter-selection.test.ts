@@ -39,6 +39,7 @@ describe("adapter selection and activation", () => {
     expect(indexSource).toContain("ensureOpenClawAdapter");
     expect(indexSource).toContain("OMI_HERMES_ADAPTER_COMMAND");
     expect(indexSource).toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
+    expect(indexSource).toContain("query.ownerId = queryOwnerId");
     expect(indexSource).toContain('{ name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" }');
     expect(indexSource).not.toContain('{ name: "OMI_ADAPTER_ID", value: "acp" }');
   });

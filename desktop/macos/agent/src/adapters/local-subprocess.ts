@@ -69,6 +69,8 @@ type PendingRequest = {
   eventSink?: AdapterEventSink;
   artifacts?: AdapterArtifactReference[];
   textParts?: string[];
+  abortSignal?: AbortSignal;
+  abortHandler?: () => void;
 };
 
 export interface LocalSubprocessRuntimeAdapterOptions {
@@ -209,7 +211,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       eventSink: sink,
       artifacts: streamState.artifacts,
       textParts: streamState.textParts,
-    });
+    }, signal);
 
     const response = await responsePromise;
     const result = this.resultFrom(response, context, streamState);
@@ -229,9 +231,10 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
 
     const response = await this.request({
       type: "cancel",
-      requestId: "",
+      requestId: context.requestId ?? "",
       adapterId: this.adapterId,
       omiSessionId: context.sessionId,
+      ownerId: context.ownerId,
       clientId: context.clientId,
       adapterNativeSessionId,
       runId: context.runId,
@@ -279,7 +282,8 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
 
   private async request(
     request: LocalSubprocessRequest,
-    pendingOverrides: Partial<PendingRequest> = {}
+    pendingOverrides: Partial<PendingRequest> = {},
+    signal?: AbortSignal
   ): Promise<LocalSubprocessMessage> {
     await this.start();
     const adapterRequestId = `${this.adapterId}-${this.nextRequestId++}`;
@@ -290,11 +294,28 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     };
 
     return new Promise((resolve, reject) => {
-      this.pending.set(adapterRequestId, { resolve, reject, ...pendingOverrides });
+      const pending: PendingRequest = { resolve, reject, ...pendingOverrides };
+      if (signal) {
+        const abortHandler = (): void => {
+          this.pending.delete(adapterRequestId);
+          reject(new Error(`${this.adapterId} adapter request aborted`));
+        };
+        pending.abortSignal = signal;
+        pending.abortHandler = abortHandler;
+        if (signal.aborted) {
+          reject(new Error(`${this.adapterId} adapter request aborted`));
+          return;
+        }
+        signal.addEventListener("abort", abortHandler, { once: true });
+      }
+      this.pending.set(adapterRequestId, pending);
       try {
         this.write(message);
       } catch (error) {
         this.pending.delete(adapterRequestId);
+        if (signal && pending.abortHandler) {
+          signal.removeEventListener("abort", pending.abortHandler);
+        }
         reject(error instanceof Error ? error : new Error(String(error)));
       }
     });
@@ -337,6 +358,9 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     }
 
     this.pending.delete(requestId);
+    if (pending.abortSignal && pending.abortHandler) {
+      pending.abortSignal.removeEventListener("abort", pending.abortHandler);
+    }
     if (message.ok === false || message.type === "error") {
       pending.reject(new Error(this.errorMessage(message)));
       return;
@@ -409,10 +433,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     }
   ): AdapterAttemptResult {
     const result = isRecord(response.result) ? response.result : response;
-    const terminalStatus =
-      result.terminalStatus === "failed" || result.terminalStatus === "cancelled"
-        ? result.terminalStatus
-        : "succeeded";
+    const terminalStatus = this.terminalStatusFrom(result.terminalStatus);
     const artifacts = this.capabilities.supportsArtifactEmission
       ? [
           ...streamState.artifacts,
@@ -451,6 +472,13 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       sizeBytes: nullableNumber(value.sizeBytes),
       metadata: isRecord(value.metadata) ? value.metadata : undefined,
     };
+  }
+
+  private terminalStatusFrom(value: unknown): AdapterAttemptResult["terminalStatus"] {
+    if (value === "succeeded" || value === "failed" || value === "cancelled") {
+      return value;
+    }
+    throw new Error(`${this.adapterId} result missing valid terminalStatus`);
   }
 
   private artifactsFrom(value: unknown): AdapterArtifactReference[] {

@@ -581,6 +581,58 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("rejects runId-only v2 interrupts without active context or explicit owner guard", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "reject bare run id cancel" }),
+      protocolVersion: 2,
+      requestId: "request-bare-run-cancel",
+      clientId: "client-bare-run-cancel",
+      ownerId: "owner-bare-run-cancel",
+      legacySessionKey: "bare-run-cancel-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      protocolVersion: 2,
+      runId: adapter.executed[0].runId,
+      attemptId: adapter.executed[0].attemptId,
+      requestId: "external-cancel-request",
+      clientId: "external-client",
+    });
+
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> =>
+      message.type === "cancel_ack" && message.requestId === "external-cancel-request"
+    );
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "external-cancel-request",
+      clientId: "external-client",
+      runId: adapter.executed[0].runId,
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
+
+    adapter.resolveDeferred({
+      text: "done",
+      terminalStatus: "succeeded",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await running;
+    store.close();
+  });
+
   it("rejects v2 interrupt when the supplied owner does not match the active request owner", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();

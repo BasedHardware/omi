@@ -301,6 +301,25 @@ export class JsonlCompatibilityFacade {
           : this.legacyUnscopedActiveRequestContext(requestId))
       : undefined;
     const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
+    if (message.protocolVersion === 2 && explicitRunId && !activeRequestContext && !message.ownerId?.trim()) {
+      const cancelAck: CancelAckMessage = {
+        type: "cancel_ack",
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      };
+      this.send(this.withCorrelation(cancelAck, {
+        protocolVersion: message.protocolVersion,
+        requestId: requestId ?? randomUUID(),
+        clientId: effectiveClientId,
+        ownerId,
+        adapterId: this.defaultAdapterId,
+        runId: explicitRunId,
+        sessionId: message.sessionId,
+        attemptId: message.attemptId,
+      }));
+      return;
+    }
     if (message.protocolVersion === 2 && requestId && !activeRequestContext && !message.runId && !message.attemptId) {
       const cancelAck: CancelAckMessage = {
         type: "cancel_ack",

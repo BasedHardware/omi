@@ -986,6 +986,7 @@ async function main(): Promise<void> {
             throw new Error("protocol v2 query requires requestId");
           }
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
+          query.ownerId = queryOwnerId;
           query.requestId = query.protocolVersion === 2 ? query.requestId!.trim() : requestIdFor(query)?.trim() || randomUUID();
           const queryRequestId = requestIdFor(query);
           const queryOwnerKey =
