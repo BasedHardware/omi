@@ -98,6 +98,12 @@ jobs:
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
           CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || true)
 
+          if ! git show "$TARGET_SHA:desktop/macos/Backend-Rust/src/routes/health.rs" | grep -q "release_tag"; then
+            echo "$RELEASE_TAG does not include /health release identity support." >&2
+            echo "Choose a release built after the stable-promotion workflow landed; older tags cannot be promoted or rolled back safely." >&2
+            exit 1
+          fi
+
           if [ -n "$CURRENT_SHA" ] && [ "$TARGET_SHA" != "$CURRENT_SHA" ] \
             && git merge-base --is-ancestor "$TARGET_SHA" "$CURRENT_SHA" \
             && [ "$FORCE" != "true" ]; then
@@ -120,6 +126,51 @@ jobs:
 
       - name: Login to GCR
         run: gcloud auth configure-docker
+
+      - name: Preflight Firestore bridge release
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          FIRESTORE_DOC_ID: ${{ steps.plan.outputs.firestore_doc_id }}
+        run: |
+          set -euo pipefail
+          ACCESS_TOKEN=$(gcloud auth print-access-token)
+          DOC_URL="https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/desktop_releases/${FIRESTORE_DOC_ID}"
+          FIRESTORE_DOC=$(curl -fsS \
+            -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+            "$DOC_URL")
+
+          FIRESTORE_DOC="$FIRESTORE_DOC" python3 - <<'PY'
+          import json
+          import os
+          import sys
+
+          doc = json.loads(os.environ["FIRESTORE_DOC"])
+          fields = doc.get("fields", {})
+
+          def string_field(name):
+              return fields.get(name, {}).get("stringValue", "")
+
+          def bool_field(name):
+              return fields.get(name, {}).get("booleanValue")
+
+          channel = string_field("channel")
+          is_live = bool_field("is_live")
+          missing = [
+              name
+              for name in ("version", "download_url", "ed_signature")
+              if not string_field(name)
+          ]
+          if channel not in {"beta", "stable"}:
+              print(f"Firestore bridge release must be beta or stable before prod promotion, got {channel!r}", file=sys.stderr)
+              sys.exit(1)
+          if is_live is not True:
+              print(f"Firestore bridge release must have is_live=true before prod promotion, got {is_live!r}", file=sys.stderr)
+              sys.exit(1)
+          if missing:
+              print(f"Firestore bridge release is missing required field(s): {', '.join(missing)}", file=sys.stderr)
+              sys.exit(1)
+          print(f"Firestore bridge release preflight OK: channel={channel}")
+          PY
 
       - name: Check current prod backend
         id: current

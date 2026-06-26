@@ -62,6 +62,8 @@ def main() -> int:
             fail(f"desktop backend prod promotion must not use automatic trigger {trigger.strip()}")
 
     require("check-desktop-release-promotion.py", text, "workflow must run pre-release sanity checks")
+    require("does not include /health release identity support", text, "workflow must reject tags that cannot report release identity")
+    require("Preflight Firestore bridge release", text, "workflow must verify the Firestore bridge release before prod deploy")
     require("Deploy Desktop Backend to Production", text, "guard should cover the prod deploy workflow")
     require("Verify prod backend release identity", text, "prod deploy must verify the backend release identity before release metadata changes")
     require("Promote Firestore release stable", text, "workflow must promote the Rust appcast Firestore release")
