@@ -26,12 +26,26 @@ def _clear_cache_between_tests():
 
 @pytest.fixture
 def client() -> TestClient:
-    """Build a TestClient against the endpoint.
+    """Build a TestClient against the endpoint, with auth mocked to return a test uid.
 
-    We import `routers.auto_router` lazily (inside the fixture) because the
-    router module reads env at import time and we want each test to start
-    from a clean state.
+    The auto-router endpoints require authentication via `auth_dependency`.
+    We override that dependency in the test app to return a stable test uid
+    without requiring a real Firebase token.
     """
+    from routers.auto_router import router
+    from routers.auto_router import auth_dependency
+
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[auth_dependency] = lambda: "test-uid"
+    return TestClient(app)
+
+
+@pytest.fixture
+def client_no_auth() -> TestClient:
+    """Build a TestClient WITHOUT auth override — for testing 401 responses."""
     from routers.auto_router import router
 
     from fastapi import FastAPI
@@ -79,6 +93,28 @@ class TestHappyPath:
         # Weights should sum to ~1.0
         w = detail["weights"]
         assert abs(w["quality"] + w["latency"] + w["cost"] - 1.0) < 1e-3
+
+
+# ---------------------------------------------------------------------------
+# AC: Auth required (maintainer review)
+# ---------------------------------------------------------------------------
+
+
+class TestAuthRequired:
+    """/v1/auto-router/pick requires authentication (matches upstream
+    /v1/auto/model-pick). The auth_dependency uses the canonical
+    get_current_user_uid which raises HTTPException(401) when the
+    Authorization header is missing or invalid.
+    """
+
+    def test_unauthenticated_returns_401(self, client_no_auth: TestClient):
+        resp = client_no_auth.get("/v1/auto-router/pick?task=ptt_response")
+        assert resp.status_code == 401
+
+    def test_authenticated_with_override_succeeds(self, client: TestClient):
+        """Sanity check: the test fixture's auth override works."""
+        resp = client.get("/v1/auto-router/pick?task=ptt_response")
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------
@@ -236,6 +272,7 @@ class TestNoCandidates:
 
         app = FastAPI()
         app.include_router(auto_router.router)
+        app.dependency_overrides[auto_router.auth_dependency] = lambda: "test-uid"
         c = TestClient(app)
 
         resp = c.get("/v1/auto-router/pick?task=ptt_response")

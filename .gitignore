@@ -229,3 +229,10 @@ builds-snapshot.md
 
 # Per-worktree dev isolation (pidfiles, scratch) — scripts/dev-instance.sh
 .dev/
+
+# Auto-router process artifacts (AI dev process — should not be tracked)
+# These were created by cubic / UAT sweeps during development.
+# Same rule as .aidlc/ above: local-only, never commit.
+UAT-REPORT.md
+review-report.md
+uat-findings.json

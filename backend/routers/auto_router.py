@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Header, Query
 
 from utils.auto_router.daily_refresh import DailyRefreshCache
 from utils.auto_router.model_registry import ModelRegistry
@@ -114,15 +114,63 @@ def _get_registry_cache() -> DailyRefreshCache[tuple[TaskRegistry, ModelRegistry
 
 
 # ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+# Mirror the pattern from the upstream `/v1/auto/model-pick` router
+# (utils/other/endpoints.py:get_current_user_uid). We require auth on
+# `/v1/auto-router/pick` to avoid expanding the public attack surface with
+# an unauthenticated internal-metadata endpoint (maintainer feedback).
+#
+# The function is lazy-imported so the unit tests don't need firebase_admin.
+# In production, the lazy import resolves to the real upstream auth function
+# (which validates the Firebase token, records the user's platform, and
+# validates BYOK headers).
+
+
+def auth_dependency(authorization: Optional[str] = Header(None)) -> str:
+    """FastAPI dependency for the auto-router endpoints.
+
+    Lazy-imports the upstream `get_current_user_uid` so the unit tests don't
+    need firebase_admin. In production, this delegates to the real auth
+    function (which validates the Firebase token, records the user's
+    platform, and validates BYOK headers). In tests, the dependency is
+    overridden with a lambda that returns a test uid.
+
+    The `Header(None)` annotation is required: without it, FastAPI would treat
+    `authorization` as a query parameter (not the Authorization header),
+    which would break parity with upstream endpoints. The upstream function
+    `get_current_user_uid` itself declares `authorization: str = Header(None)`,
+    so we must mirror that.
+
+    Import-path stability note: `utils.other.endpoints.get_current_user_uid`
+    is the canonical auth function used by ~30 other routers in this repo
+    (transcribe.py, memories.py, action_items.py, etc.). Moving it would
+    require a coordinated change across the codebase, so the path is
+    effectively stable. If it ever moves, this wrapper is the single point
+    that needs updating.
+    """
+    from utils.other.endpoints import get_current_user_uid  # lazy
+
+    return get_current_user_uid(authorization=authorization)
+
+
+# ---------------------------------------------------------------------------
 # Pick endpoint
 # ---------------------------------------------------------------------------
 
 
 @router.get("/v1/auto-router/pick")
-async def auto_router_pick(task: str = Query(..., description="Task name to pick a model for")):
+async def auto_router_pick(
+    task: str = Query(..., description="Task name to pick a model for"),
+    uid: str = Depends(auth_dependency),
+):
     """Return the recommended model for `task` plus full scoring detail.
 
-    Returns HTTP 400 if `task` is not a known task name.
+    Requires authentication (matches the upstream `/v1/auto/model-pick`
+    pattern). Returns HTTP 400 if `task` is not a known task name.
+    The `uid` parameter is unused by the scoring logic but required to
+    enforce the auth gate (FastAPI evaluates the dependency before the
+    handler runs).
     """
     cache = _get_registry_cache()
 
