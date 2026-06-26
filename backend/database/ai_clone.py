@@ -46,6 +46,14 @@ def update_clone_message(uid: str, message_id: str, updates: dict) -> None:
     db.collection('users').document(uid).collection('ai_clone_messages').document(message_id).update(updates)
 
 
+def get_chat_messages(uid: str, platform: str, chat_identifier: str, limit: int = 5) -> list[dict]:
+    """Return the last `limit` messages for a specific chat, oldest-first, for conversation continuity."""
+    recent = get_clone_messages(uid, limit=100)
+    chat = [m for m in recent if m.get('platform') == platform and m.get('chat_identifier') == chat_identifier]
+    # get_clone_messages returns newest-first; reverse to chronological, take tail
+    return list(reversed(chat[:limit]))
+
+
 def get_platform_settings(uid: str, platform: str) -> Optional[dict]:
     settings = get_clone_settings(uid)
     return settings.get('platforms', {}).get(platform)

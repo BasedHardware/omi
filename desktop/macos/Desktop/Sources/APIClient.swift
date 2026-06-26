@@ -5304,6 +5304,22 @@ struct CloneSimpleOK: Decodable {
   let status: String
 }
 
+struct CloneActivityMessage: Decodable, Identifiable {
+  let id: String
+  let platform: String
+  let sender: String
+  let incoming: String
+  let draftReply: String
+  let status: String
+  let createdAt: Date
+
+  enum CodingKeys: String, CodingKey {
+    case id, platform, sender, incoming, status
+    case draftReply = "draft_reply"
+    case createdAt = "created_at"
+  }
+}
+
 struct CloneTelegramConnectResponse: Decodable {
   let botUsername: String
   let botName: String
@@ -5370,5 +5386,9 @@ extension APIClient {
       enum CodingKeys: String, CodingKey { case chatId = "chat_id"; case text }
     }
     let _: CloneSimpleOK = try await post("/v1/ai-clone/telegram/send", body: Req(chatId: chatId, text: text))
+  }
+
+  func getCloneMessages(limit: Int = 20) async throws -> [CloneActivityMessage] {
+    return try await get("v1/ai-clone/messages?limit=\(limit)")
   }
 }

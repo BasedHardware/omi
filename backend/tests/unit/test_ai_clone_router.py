@@ -85,6 +85,7 @@ _db_ai_clone.update_clone_message = MagicMock()
 _db_ai_clone.get_platform_settings = MagicMock(return_value=None)
 _db_ai_clone.update_platform_settings = MagicMock()
 _db_ai_clone.set_platform_field = MagicMock()
+_db_ai_clone.get_chat_messages = MagicMock(return_value=[])
 sys.modules.setdefault('database', types.ModuleType('database'))
 sys.modules['database.ai_clone'] = _db_ai_clone
 
@@ -182,6 +183,8 @@ def _reset_mocks():
     _db_ai_clone.get_platform_settings.return_value = None
     _db_ai_clone.update_platform_settings.reset_mock()
     _db_ai_clone.set_platform_field.reset_mock()
+    _db_ai_clone.get_chat_messages.reset_mock()
+    _db_ai_clone.get_chat_messages.return_value = []
     _clone_stub.generate_clone_reply.reset_mock()
     _clone_stub.generate_clone_reply.return_value = 'Mock reply from AI clone'
     _tg_stub.connect.reset_mock()

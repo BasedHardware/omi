@@ -24,7 +24,10 @@ struct AIClonePage: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .onAppear { service.refreshConnectivity() }
+    .onAppear {
+      service.refreshConnectivity()
+      Task { await service.fetchMessages() }
+    }
   }
 
   // MARK: - Header
@@ -231,6 +234,13 @@ struct AIClonePage: View {
           .scaledFont(size: 13, weight: .semibold)
           .foregroundColor(OmiColors.textSecondary)
         Spacer()
+        Button(action: { Task { await service.fetchMessages() } }) {
+          Image(systemName: "arrow.clockwise")
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        .buttonStyle(.plain)
+        .padding(.trailing, 8)
         Image(systemName: "checkmark.circle.fill")
           .scaledFont(size: 13)
           .foregroundColor(OmiColors.success)
@@ -243,17 +253,84 @@ struct AIClonePage: View {
 
       Divider().opacity(0.15)
 
-      VStack(spacing: 16) {
-        Spacer()
-        Image(systemName: "waveform.path.ecg").scaledFont(size: 40).foregroundColor(OmiColors.textQuaternary)
-        Text("Watching for messages…").scaledFont(size: 15).foregroundColor(OmiColors.textTertiary)
-        Text("Omi auto-replies to iMessage, Telegram, and WhatsApp on your behalf.\nMessages appear here after sending.")
-          .scaledFont(size: 13).foregroundColor(OmiColors.textQuaternary)
-          .multilineTextAlignment(.center)
-        Spacer()
+      if service.recentMessages.isEmpty {
+        VStack(spacing: 16) {
+          Spacer()
+          Image(systemName: "waveform.path.ecg").scaledFont(size: 40).foregroundColor(OmiColors.textQuaternary)
+          Text("Watching for messages…").scaledFont(size: 15).foregroundColor(OmiColors.textTertiary)
+          Text("Omi auto-replies to iMessage, Telegram, and WhatsApp on your behalf.\nMessages appear here after sending.")
+            .scaledFont(size: 13).foregroundColor(OmiColors.textQuaternary)
+            .multilineTextAlignment(.center)
+          Spacer()
+        }
+        .padding(.horizontal, 40)
+      } else {
+        ScrollView {
+          LazyVStack(spacing: 8) {
+            ForEach(service.recentMessages) { msg in
+              messageCard(msg)
+            }
+          }
+          .padding(16)
+        }
       }
-      .padding(.horizontal, 40)
     }
+  }
+
+  private func messageCard(_ msg: CloneActivityMessage) -> some View {
+    let (icon, color) = platformMeta(msg.platform)
+    return VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 8) {
+        ZStack {
+          Circle().fill(color.opacity(0.18)).frame(width: 26, height: 26)
+          Image(systemName: icon).scaledFont(size: 11).foregroundColor(color)
+        }
+        Text(msg.sender)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Spacer()
+        Text(relativeTime(msg.createdAt))
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textQuaternary)
+      }
+
+      Text(msg.incoming)
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textTertiary)
+        .lineLimit(2)
+
+      HStack(alignment: .top, spacing: 4) {
+        Text("Omi:")
+          .scaledFont(size: 12, weight: .semibold)
+          .foregroundColor(OmiColors.purplePrimary)
+        Text(msg.draftReply)
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(3)
+      }
+    }
+    .padding(12)
+    .background(
+      RoundedRectangle(cornerRadius: 10)
+        .fill(OmiColors.backgroundSecondary.opacity(0.6))
+    )
+  }
+
+  private func platformMeta(_ platform: String) -> (String, Color) {
+    switch platform {
+    case "imessage": return ("message.fill", Color.green)
+    case "telegram": return ("paperplane.fill", Color(red: 0.2, green: 0.6, blue: 1.0))
+    case "whatsapp": return ("phone.fill", Color(red: 0.15, green: 0.7, blue: 0.3))
+    default: return ("bubble.left.fill", OmiColors.textTertiary)
+    }
+  }
+
+  private func relativeTime(_ date: Date) -> String {
+    let seconds = Int(Date().timeIntervalSince(date))
+    if seconds < 60 { return "just now" }
+    if seconds < 3600 { return "\(seconds / 60)m ago" }
+    if seconds < 86400 { return "\(seconds / 3600)h ago" }
+    return "\(seconds / 86400)d ago"
   }
 
   // MARK: - Helpers

@@ -215,6 +215,12 @@ async def telegram_webhook_receive(uid: str, request: Request):
         )
 
         if text and chat_id:
+            prev_msgs = await run_blocking(db_executor, clone_db.get_chat_messages, uid, 'telegram', str(chat_id), 5)
+            history = []
+            for m in prev_msgs:
+                history.append({'role': 'user', 'content': m.get('incoming', '')})
+                if m.get('draft_reply'):
+                    history.append({'role': 'assistant', 'content': m.get('draft_reply', '')})
             reply = await run_blocking(
                 llm_executor,
                 generate_clone_reply,
@@ -222,7 +228,7 @@ async def telegram_webhook_receive(uid: str, request: Request):
                 sender_name,
                 text,
                 'telegram',
-                None,
+                history or None,
             )
             await tg.send_message(uid, chat_id, reply)
             message_doc = {
@@ -293,6 +299,14 @@ async def whatsapp_webhook_receive(uid: str, request: Request):
                         sender,
                     )
                     if text:
+                        prev_msgs = await run_blocking(
+                            db_executor, clone_db.get_chat_messages, uid, 'whatsapp', sender, 5
+                        )
+                        history = []
+                        for m in prev_msgs:
+                            history.append({'role': 'user', 'content': m.get('incoming', '')})
+                            if m.get('draft_reply'):
+                                history.append({'role': 'assistant', 'content': m.get('draft_reply', '')})
                         reply = await run_blocking(
                             llm_executor,
                             generate_clone_reply,
@@ -300,7 +314,7 @@ async def whatsapp_webhook_receive(uid: str, request: Request):
                             contact_name,
                             text,
                             'whatsapp',
-                            None,
+                            history or None,
                         )
                         await wa.send_message(sender, reply)
                         message_doc = {
