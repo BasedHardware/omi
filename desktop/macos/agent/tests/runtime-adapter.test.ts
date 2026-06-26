@@ -126,7 +126,7 @@ describe("AcpRuntimeAdapter process spawning", () => {
     ]);
   });
 
-  it("scrubs Omi credentials from external ACP adapter subprocess env", async () => {
+  it("uses a minimal allowlist for external ACP adapter subprocess env", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
     const adapter = new AcpRuntimeAdapter({
@@ -136,7 +136,11 @@ describe("AcpRuntimeAdapter process spawning", () => {
     });
 
     const saved: Record<string, string | undefined> = {};
-    for (const key of ["OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM", "ANTHROPIC_API_KEY"]) {
+    const secretKeys = [
+      "OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM",
+      "ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "CI_JOB_TOKEN",
+    ];
+    for (const key of secretKeys) {
       saved[key] = process.env[key];
       process.env[key] = "secret-value";
     }
@@ -145,13 +149,13 @@ describe("AcpRuntimeAdapter process spawning", () => {
       await adapter.start();
 
       const callEnv = (vi.mocked(spawn).mock.calls[0] as readonly unknown[])[1] as { env: Record<string, string> };
-      expect(callEnv.env).not.toHaveProperty("OMI_AUTH_TOKEN");
-      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_OPENAI");
-      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_ANTHROPIC");
-      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_GEMINI");
-      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_DEEPGRAM");
-      // ANTHROPIC_API_KEY is scrubbed by the pre-existing env cleanup in start().
-      expect(callEnv.env).not.toHaveProperty("ANTHROPIC_API_KEY");
+      // No secrets are forwarded under the allowlist model.
+      for (const key of secretKeys) {
+        expect(callEnv.env).not.toHaveProperty(key);
+      }
+      // Allowlisted OS vars and OMI_ADAPTER_ID are present.
+      expect(callEnv.env).toHaveProperty("OMI_ADAPTER_ID", "hermes");
+      expect(callEnv.env).toHaveProperty("PATH", process.env.PATH);
       await adapter.stop();
     } finally {
       for (const [key, val] of Object.entries(saved)) {

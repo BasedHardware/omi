@@ -107,11 +107,13 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       method: "session/request_permission",
       params: { options: [{ kind: "allow_always", optionId: "allow" }] },
     })}\n`);
-    await vi.waitUntil(() => requests.some((request) => request.id === 99 && "error" in request));
+    await vi.waitUntil(() => requests.some((request) => request.id === 99 && "result" in request));
     expect(requests.find((request) => request.id === 99)).toMatchObject({
-      error: {
-        code: -32001,
-        message: "hermes permission requests require adapter-owned approval policy",
+      result: {
+        outcome: {
+          outcome: "selected",
+          optionId: "allow",
+        },
       },
     });
     expect(spawn).toHaveBeenCalledWith(

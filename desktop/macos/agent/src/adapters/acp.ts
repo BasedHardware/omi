@@ -24,17 +24,24 @@ type ResponseHandler = {
 };
 
 /**
- * Omi-owned credentials that must not leak to external adapter subprocesses.
- * The Firebase ID token and BYOK API keys are intended only for Omi's own
- * pi-mono runtime; third-party adapters (hermes, openclaw) run user-installed
- * commands and must not receive them.
+ * Minimal environment allowlist for user-installed external adapter
+ * subprocesses. Only OS-level essentials needed for a CLI tool to function
+ * are forwarded — never the full parent environment. This prevents accidental
+ * leakage of cloud credentials, CI tokens, or other host secrets to untrusted
+ * third-party commands spawned with `shell: true`.
  */
-const OMI_CREDENTIAL_ENV_KEYS = [
-  "OMI_AUTH_TOKEN",
-  "OMI_BYOK_OPENAI",
-  "OMI_BYOK_ANTHROPIC",
-  "OMI_BYOK_GEMINI",
-  "OMI_BYOK_DEEPGRAM",
+const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "TERM",
 ] as const;
 
 export class AcpError extends Error {
@@ -112,16 +119,22 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     }
 
     if (command) {
-      // Scrub Omi-owned credentials before spawning user-installed external
-      // adapter commands (Hermes, OpenClaw). These subprocesses do not need
-      // the Firebase token or BYOK keys and must not receive them.
-      for (const key of OMI_CREDENTIAL_ENV_KEYS) {
-        delete env[key];
+      // Construct a minimal environment from an allowlist rather than spreading
+      // the full process.env. User-installed external adapters (Hermes,
+      // OpenClaw) run untrusted commands with `shell: true`; a denylist leaves
+      // cloud credentials, CI tokens, and other host secrets exposed.
+      const externalEnv: NodeJS.ProcessEnv = {
+        OMI_ADAPTER_ID: this.adapterId,
+      };
+      for (const key of EXTERNAL_ADAPTER_ENV_ALLOWLIST) {
+        if (process.env[key] !== undefined) {
+          externalEnv[key] = process.env[key];
+        }
       }
       this.log(`Starting ${this.adapterId} ACP subprocess: ${command}`);
       this.process = spawn(command, {
         shell: true,
-        env,
+        env: externalEnv,
         stdio: ["pipe", "pipe", "pipe"],
         detached: true,
       });
@@ -413,18 +426,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const method = msg.method as string;
 
     if (method === "session/request_permission") {
-      if (this.adapterId !== "acp") {
-        this.log(`Rejecting ${this.adapterId} ACP permission request without adapter-owned policy (id=${id})`);
-        this.stdinWriter?.(JSON.stringify({
-          jsonrpc: "2.0",
-          id,
-          error: {
-            code: -32001,
-            message: `${this.adapterId} permission requests require adapter-owned approval policy`,
-          },
-        }));
-        return;
-      }
+      // Forward permission requests to the shared legacy policy for all ACP
+      // adapters, including external ones (hermes, openclaw). Hermes ACP routes
+      // dangerous commands back through this approval path; hard-denying them
+      // caused provider runs to fail on the first command that needs approval.
       const params = msg.params as Record<string, unknown> | undefined;
       const options =
         (params?.options as Array<{ kind: string; optionId: string }>) ?? [];

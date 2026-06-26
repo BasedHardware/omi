@@ -517,14 +517,18 @@ describe("env-command local subprocess adapters", () => {
     expect(source).toContain("void stopLocalAcpAdapters()");
   });
 
-  it("scrubs Omi credentials from the external adapter subprocess environment", async () => {
+  it("uses a minimal allowlist for the external adapter subprocess environment", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
     const adapter = new LocalSubprocessRuntimeAdapter({ adapterId: "hermes", envCommandName: "OMI_HERMES_ADAPTER_COMMAND", command: "hermes-adapter" });
 
-    // Simulate Omi injecting credentials into process.env (as AgentRuntimeProcess does for pi-mono).
+    // Simulate Omi injecting credentials and host secrets into process.env.
     const saved: Record<string, string | undefined> = {};
-    for (const key of ["OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM"]) {
+    const secretKeys = [
+      "OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM",
+      "ANTHROPIC_API_KEY", "AWS_SECRET_ACCESS_KEY", "GITHUB_TOKEN", "CI_JOB_TOKEN",
+    ];
+    for (const key of secretKeys) {
       saved[key] = process.env[key];
       process.env[key] = "secret-value";
     }
@@ -532,13 +536,14 @@ describe("env-command local subprocess adapters", () => {
       await adapter.start();
 
       const callEnv = (vi.mocked(spawn).mock.calls[0] as readonly unknown[])[1] as { env: Record<string, string> };
-      expect(callEnv.env).not.toHaveProperty("OMI_AUTH_TOKEN");
-      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_OPENAI");
-      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_ANTHROPIC");
-      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_GEMINI");
-      expect(callEnv.env).not.toHaveProperty("OMI_BYOK_DEEPGRAM");
-      // Non-Omi env keys are preserved.
+      // No secrets are forwarded.
+      for (const key of secretKeys) {
+        expect(callEnv.env).not.toHaveProperty(key);
+      }
+      // OMI_ADAPTER_ID is always injected.
       expect(callEnv.env).toHaveProperty("OMI_ADAPTER_ID", "hermes");
+      // Allowlisted OS vars are forwarded.
+      expect(callEnv.env).toHaveProperty("PATH", process.env.PATH);
       await adapter.stop();
     } finally {
       for (const [key, val] of Object.entries(saved)) {

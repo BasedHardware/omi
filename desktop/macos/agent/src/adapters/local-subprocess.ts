@@ -90,17 +90,24 @@ const artifactRoles = new Set<ArtifactRole>([
 ]);
 
 /**
- * Omi-owned credentials that must not leak to external adapter subprocesses.
- * The Firebase ID token and BYOK API keys are intended only for Omi's own
- * pi-mono runtime; third-party adapters run user-installed commands and
- * must not receive them.
+ * Minimal environment allowlist for user-installed external adapter
+ * subprocesses. Only OS-level essentials needed for a CLI tool to function
+ * are forwarded — never the full parent environment. This prevents accidental
+ * leakage of cloud credentials, CI tokens, or other host secrets to untrusted
+ * third-party commands spawned with `shell: true`.
  */
-const OMI_CREDENTIAL_ENV_KEYS = [
-  "OMI_AUTH_TOKEN",
-  "OMI_BYOK_OPENAI",
-  "OMI_BYOK_ANTHROPIC",
-  "OMI_BYOK_GEMINI",
-  "OMI_BYOK_DEEPGRAM",
+const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
+  "PATH",
+  "HOME",
+  "USER",
+  "LOGNAME",
+  "SHELL",
+  "TMPDIR",
+  "LANG",
+  "LC_ALL",
+  "LC_CTYPE",
+  "TZ",
+  "TERM",
 ] as const;
 
 export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
@@ -131,12 +138,17 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       throw new Error(`${this.adapterId} adapter requires ${this.envCommandName}`);
     }
 
-    // Scrub Omi-owned credentials before spawning user-installed external
-    // adapter commands. These subprocesses do not need the Firebase token or
-    // BYOK keys and must not receive them.
-    const scrubbedEnv: NodeJS.ProcessEnv = { ...process.env, OMI_ADAPTER_ID: this.adapterId };
-    for (const key of OMI_CREDENTIAL_ENV_KEYS) {
-      delete scrubbedEnv[key];
+    // Construct a minimal environment from an allowlist rather than spreading
+    // the full process.env and then deleting known credentials. User-installed
+    // external adapters run untrusted commands with `shell: true`; a denylist
+    // leaves cloud credentials, CI tokens, and other host secrets exposed.
+    const scrubbedEnv: NodeJS.ProcessEnv = {
+      OMI_ADAPTER_ID: this.adapterId,
+    };
+    for (const key of EXTERNAL_ADAPTER_ENV_ALLOWLIST) {
+      if (process.env[key] !== undefined) {
+        scrubbedEnv[key] = process.env[key];
+      }
     }
 
     this.process = spawn(command, {
