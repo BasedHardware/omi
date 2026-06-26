@@ -3,7 +3,7 @@ import importlib.abc
 import importlib.machinery
 import sys
 import types
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
@@ -67,35 +67,46 @@ _endpoints.delete_account = MagicMock()
 _endpoints.get_user = MagicMock()
 sys.modules['utils.other.endpoints'] = _endpoints
 
-_services_users = types.ModuleType('services.users')
-_services_users.iter_user_data_export = MagicMock(return_value=iter(['{"ok": true}\n']))
-_services_users.start_account_deletion = MagicMock(return_value={'status': 'ok', 'message': 'Account deletion started'})
-sys.modules['services.users'] = _services_users
-
 import firebase_admin.auth as _fa_auth  # noqa: E402
 
 _fa_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
 from routers import users as users_router  # noqa: E402
 
+sys.meta_path.remove(_finder)
+for _module_name, _module in list(sys.modules.items()):
+    if isinstance(_module, _AutoMockModule):
+        del sys.modules[_module_name]
+
+
+def _account_deletion_module(start_account_deletion):
+    module = types.ModuleType('services.users.account_deletion')
+    module.start_account_deletion = start_account_deletion
+    return module
+
 
 def test_delete_account_delegates_to_service():
-    users_router.start_account_deletion = MagicMock(
-        return_value={'status': 'ok', 'message': 'Account deletion started'}
-    )
+    start_account_deletion = MagicMock(return_value={'status': 'ok', 'message': 'Account deletion started'})
     request = users_router.DeleteAccountRequest(reason='reason', reason_details='details')
 
-    result = users_router.delete_account(request=request, uid='uid1')
+    with patch.dict(
+        sys.modules,
+        {'services.users.account_deletion': _account_deletion_module(start_account_deletion)},
+    ):
+        result = users_router.delete_account(request=request, uid='uid1')
 
     assert result == {'status': 'ok', 'message': 'Account deletion started'}
-    users_router.start_account_deletion.assert_called_once_with('uid1', reason='reason', reason_details='details')
+    start_account_deletion.assert_called_once_with('uid1', reason='reason', reason_details='details')
 
 
 def test_delete_account_maps_unexpected_service_error_to_500():
-    users_router.start_account_deletion = MagicMock(side_effect=Exception('boom'))
-
-    with pytest.raises(HTTPException) as exc:
-        users_router.delete_account(request=users_router.DeleteAccountRequest(), uid='uid1')
+    start_account_deletion = MagicMock(side_effect=Exception('boom'))
+    with patch.dict(
+        sys.modules,
+        {'services.users.account_deletion': _account_deletion_module(start_account_deletion)},
+    ):
+        with pytest.raises(HTTPException) as exc:
+            users_router.delete_account(request=users_router.DeleteAccountRequest(), uid='uid1')
 
     assert exc.value.status_code == 500
     assert exc.value.detail == 'Could not delete account. Please try again.'

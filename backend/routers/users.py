@@ -21,7 +21,7 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
-from services.users import iter_user_data_export, start_account_deletion
+from services.users.data_export import iter_user_data_export
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
 from database.conversations import get_in_progress_conversation, get_conversation
@@ -145,6 +145,8 @@ def delete_account(
     request: DeleteAccountRequest = DeleteAccountRequest(),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    from services.users.account_deletion import start_account_deletion
+
     try:
         return start_account_deletion(uid, reason=request.reason, reason_details=request.reason_details)
     except Exception as e:

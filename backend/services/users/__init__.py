@@ -1,9 +1,5 @@
-from .account_deletion import background_wipe_user_data, purge_derived_user_data, start_account_deletion
-from .data_export import iter_user_data_export
+"""User service modules.
 
-__all__ = [
-    'background_wipe_user_data',
-    'iter_user_data_export',
-    'purge_derived_user_data',
-    'start_account_deletion',
-]
+Keep this package initializer dependency-free so importing one user service does
+not pull unrelated integrations such as Stripe.
+"""
