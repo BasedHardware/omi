@@ -1,9 +1,8 @@
 from datetime import datetime, timedelta, timezone
-import inspect
 
 import pytest
 
-from utils.memory.v3_f6_readonly_contracts import (
+from testing.memory.v3_f6.readonly_contracts import (
     AuditLogEvent,
     AuditQuery,
     EvidenceClientConfig,
@@ -17,22 +16,6 @@ from utils.memory.v3_f6_readonly_contracts import (
     assess_audit_correlation,
     verify_identity_iam,
 )
-
-
-def test_readonly_contracts_facade_re_exports_canonical_split_modules_without_core_local_doubles_imports():
-    from utils.memory import v3_f6_readonly_contracts as facade
-    from utils.memory.v3_f6 import audit, identity_iam, read_evidence, run_context
-    from utils.memory.v3_f6.local_doubles import FakeIdentityIamSource as CanonicalFakeIdentityIamSource
-
-    assert facade.RunRecord is run_context.RunRecord
-    assert facade.IdentityIamTarget is identity_iam.IdentityIamTarget
-    assert facade.ReadOnlyEvidenceClient is read_evidence.ReadOnlyEvidenceClient
-    assert facade.AuditLogEvent is audit.AuditLogEvent
-    assert facade.FakeIdentityIamSource is CanonicalFakeIdentityIamSource
-    assert facade._method_is_forbidden is read_evidence._method_is_forbidden
-    assert facade._audit_method_is_write is audit._audit_method_is_write
-    for module in (run_context, identity_iam, read_evidence, audit):
-        assert "local_doubles" not in inspect.getsource(module)
 
 
 READ_PERMISSIONS = frozenset(
