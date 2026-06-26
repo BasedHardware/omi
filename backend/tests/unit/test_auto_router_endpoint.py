@@ -4,6 +4,8 @@ Uses FastAPI's TestClient to exercise the full request → response cycle
 without spinning up a real uvicorn server.
 """
 
+import hmac
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -1104,3 +1106,80 @@ class TestFirestoreWriteReturns503OnError:
         # But the router's reset helper resets to memory on next call.
         # So this test is tricky. Let me verify by skipping for now.
         pass  # covered by direct FirestoreUserPrefsStore tests
+
+
+# ---------------------------------------------------------------------------
+# AC: Admin key uses constant-time comparison (security)
+# ---------------------------------------------------------------------------
+
+
+class TestAdminKeyTimingSafe:
+    """The X-Admin-Key comparison must use hmac.compare_digest (constant-time).
+
+    Plain `==` short-circuits on the first differing byte, leaking length-prefix
+    info via response timing. This is a low-severity issue (admin-only endpoint,
+    503 when ADMIN_KEY is unset by default) but idiomatic to fix.
+
+    These tests verify the behavior, not the implementation detail. They would
+    pass even if someone reverted to `==` — the goal is to catch regressions
+    in the test surface (e.g., whitespace stripping) while the constant-time
+    property is enforced by code review.
+
+    For a true timing-attack test we'd need statistical analysis over many
+    requests; that's out of scope for unit tests.
+    """
+
+    def test_whitespace_in_header_is_stripped_and_compared(self, client, monkeypatch):
+        """Leading/trailing whitespace in X-Admin-Key is stripped before compare."""
+        monkeypatch.setenv("ADMIN_KEY", "secret-123")
+        r = client.post(
+            "/v1/auto-router/refresh-benchmarks",
+            headers={"X-Admin-Key": "  secret-123  "},
+        )
+        # Stripped header matches stripped env var → 200.
+        assert r.status_code == 200
+
+    def test_whitespace_in_env_is_stripped(self, client, monkeypatch):
+        """Leading/trailing whitespace in ADMIN_KEY env var is stripped."""
+        monkeypatch.setenv("ADMIN_KEY", "  secret-123  ")
+        r = client.post(
+            "/v1/auto-router/refresh-benchmarks",
+            headers={"X-Admin-Key": "secret-123"},
+        )
+        assert r.status_code == 200
+
+    def test_empty_header_string_after_strip_rejected(self, client, monkeypatch):
+        """Whitespace-only header (empty after strip) is rejected."""
+        monkeypatch.setenv("ADMIN_KEY", "secret-123")
+        r = client.post(
+            "/v1/auto-router/refresh-benchmarks",
+            headers={"X-Admin-Key": "\t\n  "},
+        )
+        assert r.status_code == 401
+
+    def test_hmac_compare_digest_handles_utf8_bytes(self):
+        """hmac.compare_digest correctly compares UTF-8 encoded bytes.
+
+        This verifies the encoding we use in the router is correct.
+        We test the function directly rather than through the HTTP layer
+        because the test client can't send non-ASCII header values.
+        """
+        a = "pässwörd-🔑"
+        b = "pässwörd-🔑"
+        c = "different"
+        assert hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+        assert not hmac.compare_digest(a.encode("utf-8"), c.encode("utf-8"))
+
+    def test_hmac_module_imported(self):
+        """The router imports `hmac` to use compare_digest.
+
+        This is a static check — if someone removes the import, the next
+        endpoint call would crash. We catch the regression here so it
+        fails fast in CI rather than at first request.
+        """
+        import routers.auto_router as router_module
+
+        # `hmac` is imported at module level for the constant-time comparison
+        assert hasattr(
+            router_module, "hmac"
+        ), "routers.auto_router must import hmac for constant-time admin key comparison"

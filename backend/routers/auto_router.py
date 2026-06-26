@@ -35,6 +35,7 @@ Distinct from upstream `/v1/auto/model-pick`:
 import logging
 import os
 import json
+import hmac
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -482,7 +483,14 @@ async def auto_router_refresh_benchmarks(
                 "message": "ADMIN_KEY env var is not set; admin endpoints are disabled",
             },
         )
-    if not x_admin_key or x_admin_key.strip() != expected_key:
+    # Use `hmac.compare_digest` for constant-time comparison. Plain `==`
+    # short-circuits on the first differing byte, leaking length-prefix
+    # info via response timing. Low-severity (admin-only endpoint, 503
+    # when ADMIN_KEY is unset by default) but idiomatic to fix.
+    if not x_admin_key or not hmac.compare_digest(
+        x_admin_key.strip().encode("utf-8"),
+        expected_key.encode("utf-8"),
+    ):
         raise HTTPException(
             status_code=401,
             detail={"code": "invalid_admin_key", "message": "X-Admin-Key header is missing or invalid"},

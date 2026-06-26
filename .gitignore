@@ -229,3 +229,9 @@ builds-snapshot.md
 
 # Per-worktree dev isolation (pidfiles, scratch) — scripts/dev-instance.sh
 .dev/
+
+# AIDLC process artifacts (development noise, not product docs)
+# These belong in PR comments / .aidlc/ (gitignored) / .github/ if needed.
+review-report.md
+UAT-REPORT.md
+uat-findings.json
