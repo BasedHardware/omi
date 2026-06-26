@@ -46,6 +46,12 @@ struct FloatingControlBarView: View {
             ? max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
             : notchChromeWidth
     }
+    private var notchSurfaceHorizontalInset: CGFloat {
+        state.isVoiceResponseActive ? FloatingControlBarWindow.notchGlowOutsetX : 0
+    }
+    private var notchSurfaceBottomInset: CGFloat {
+        state.isVoiceResponseActive ? FloatingControlBarWindow.notchGlowOutsetBottom : 0
+    }
     var body: some View {
         Group {
             if state.usesNotchIsland {
@@ -85,11 +91,13 @@ struct FloatingControlBarView: View {
                 NotchAgentFanoutRow(
                     manager: agentPills,
                     activePillID: state.activeAgentChatPillID,
+                    notchHiddenCenterWidth: notchHiddenCenterWidth,
+                    notchSideWidth: notchSideWidth,
                     onSelect: openAgentInChat
                 )
                 .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchAgentFanoutRowHeight)
                 .onHover { setAgentSwitcherHovering($0) }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                .transition(.identity)
                 .zIndex(10)
             }
 
@@ -108,23 +116,30 @@ struct FloatingControlBarView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+        .padding(.horizontal, notchSurfaceHorizontalInset)
+        .padding(.bottom, notchSurfaceBottomInset)
         .background(alignment: .top) {
-            ZStack(alignment: .top) {
-                if state.isVoiceResponseActive {
-                    NotchResponseGlowView(
-                        bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18
-                    )
-                }
+            GeometryReader { geometry in
+                let hasExpandedSurface = state.showingAIConversation || state.currentNotification != nil || shouldShowAgentSwitcher
+                let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
+                let surfaceWidth = hasExpandedSurface
+                    ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
+                    : notchChromeWidth
+                let surfaceHeight = hasExpandedSurface
+                    ? max(notchChromeHeight, geometry.size.height - notchSurfaceBottomInset)
+                    : notchChromeHeight
 
-                if state.showingAIConversation || state.currentNotification != nil || shouldShowAgentSwitcher {
-                    NotchDockShape(bottomRadius: state.showingAIConversation || state.currentNotification != nil ? 22 : 18)
+                ZStack(alignment: .top) {
+                    if state.isVoiceResponseActive {
+                        NotchResponseGlowView(bottomRadius: bottomRadius)
+                            .frame(width: surfaceWidth, height: surfaceHeight)
+                    }
+
+                    NotchDockShape(bottomRadius: bottomRadius)
                         .fill(Color.black)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    NotchDockShape(bottomRadius: 18)
-                        .fill(Color.black)
-                        .frame(width: notchChromeWidth, height: notchChromeHeight)
+                        .frame(width: surfaceWidth, height: surfaceHeight)
                 }
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
             }
         }
         .overlay(alignment: .bottomTrailing) {
@@ -176,7 +191,7 @@ struct FloatingControlBarView: View {
                 .frame(width: notchHiddenCenterWidth, height: notchChromeHeight)
                 .allowsHitTesting(false)
         }
-        .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)
+        .frame(width: notchChromeWidth, height: notchChromeHeight)
     }
 
     private var notchAgentLobe: some View {
@@ -195,8 +210,8 @@ struct FloatingControlBarView: View {
                 NotchAgentPillsRowView(manager: agentPills, barWindow: window)
                     .opacity(shouldShowAgentSwitcher ? 0 : 1)
                     .scaleEffect(shouldShowAgentSwitcher ? 0.72 : 1, anchor: .center)
-                    .frame(width: notchSideWidth - 6, height: notchChromeHeight, alignment: .trailing)
-                    .padding(.trailing, 4)
+                    .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
+                    .padding(.trailing, 2)
                     .onHover { setAgentSwitcherHovering($0) }
                     .simultaneousGesture(
                         TapGesture().onEnded {
@@ -221,13 +236,13 @@ struct FloatingControlBarView: View {
                 Image(systemName: "gearshape.fill")
                     .scaledFont(size: 15, weight: .semibold)
                     .foregroundColor(.white.opacity(0.86))
-                    .frame(width: 40, height: 27)
+                    .frame(width: 30, height: 27)
             }
             .buttonStyle(.plain)
             .help("Floating Bar Settings")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.leading, 4)
+        .padding(.leading, 2)
     }
 
     private var notchChromeHeight: CGFloat {
@@ -1278,8 +1293,11 @@ private enum NotchAgentStackMetrics {
     static let maxAgents = 8
     static let fanoutOrbSize: CGFloat = 11
     static let fanoutSpacing: CGFloat = 0
-    static let fanoutHorizontalInset: CGFloat = 42
-    static let fanoutOriginYOffset: CGFloat = -31
+    static let fanoutHorizontalInset: CGFloat = 38
+    static let logoFrameSize: CGFloat = 21
+    static let logoTrailingInset: CGFloat = 2
+    static let logoDotDiameterRatio: CGFloat = 0.18
+    static let logoRingRadiusRatio: CGFloat = 0.33
 
     static func sortedPills(_ pills: [AgentPill]) -> [AgentPill] {
         let newestIndex = Dictionary(uniqueKeysWithValues: pills.reversed().enumerated().map { ($0.element.id, $0.offset) })
@@ -1297,6 +1315,25 @@ private enum NotchAgentStackMetrics {
         guard maxAgents > 1 else { return width / 2 }
         let usableWidth = max(0, width - fanoutHorizontalInset * 2)
         return fanoutHorizontalInset + usableWidth * CGFloat(index) / CGFloat(maxAgents - 1)
+    }
+
+    static func logoCenterX(
+        rowWidth: CGFloat,
+        notchHiddenCenterWidth: CGFloat,
+        notchSideWidth: CGFloat
+    ) -> CGFloat {
+        let chromeWidth = notchHiddenCenterWidth + notchSideWidth * 2
+        let chromeMinX = (rowWidth - chromeWidth) / 2
+        return chromeMinX + notchSideWidth - logoTrailingInset - logoFrameSize / 2
+    }
+
+    static func logoDotSourceOffset(for index: Int) -> CGSize {
+        let angle = Double(index) / Double(maxAgents) * Double.pi * 2 - Double.pi
+        let ringRadius = logoFrameSize * logoRingRadiusRatio
+        return CGSize(
+            width: CGFloat(cos(angle)) * ringRadius,
+            height: CGFloat(sin(angle)) * ringRadius
+        )
     }
 }
 
@@ -1317,6 +1354,8 @@ private struct NotchAgentOmiIndicatorView: View {
 private struct NotchAgentFanoutRow: View {
     @ObservedObject var manager: AgentPillsManager
     let activePillID: UUID?
+    let notchHiddenCenterWidth: CGFloat
+    let notchSideWidth: CGFloat
     let onSelect: (AgentPill) -> Void
     @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
     @State private var pillStatusChangeToken = 0
@@ -1331,11 +1370,20 @@ private struct NotchAgentFanoutRow: View {
         GeometryReader { geometry in
             let rowWidth = geometry.size.width
             let rowHeight = max(geometry.size.height, FloatingControlBarWindow.notchAgentFanoutRowHeight)
-            let originX = NotchAgentStackMetrics.fanoutX(for: 0, width: rowWidth)
+            let logoCenterX = NotchAgentStackMetrics.logoCenterX(
+                rowWidth: rowWidth,
+                notchHiddenCenterWidth: notchHiddenCenterWidth,
+                notchSideWidth: notchSideWidth
+            )
+            let logoCenterY = -(FloatingControlBarWindow.notchChromeHeight / 2)
 
             ZStack {
                 ForEach(0..<NotchAgentStackMetrics.maxAgents, id: \.self) { index in
                     let targetX = NotchAgentStackMetrics.fanoutX(for: index, width: rowWidth)
+                    let targetY = rowHeight / 2
+                    let sourceOffset = NotchAgentStackMetrics.logoDotSourceOffset(for: index)
+                    let sourceX = logoCenterX + sourceOffset.width
+                    let sourceY = logoCenterY + sourceOffset.height
                     if sortedPills.indices.contains(index) {
                         let pill = sortedPills[index]
                         Button {
@@ -1349,12 +1397,15 @@ private struct NotchAgentFanoutRow: View {
                             .fanoutSlotAnimation(
                                 index: index,
                                 didFanOut: didFanOut,
-                                initialXOffset: originX - targetX
+                                initialOffset: CGSize(
+                                    width: sourceX - targetX,
+                                    height: sourceY - targetY
+                                )
                             )
                         }
                         .buttonStyle(.plain)
                         .help(pill.title)
-                        .position(x: targetX, y: rowHeight / 2)
+                        .position(x: targetX, y: targetY)
                     } else {
                         NotchAgentFanoutDot(
                             group: nil,
@@ -1364,10 +1415,13 @@ private struct NotchAgentFanoutRow: View {
                         .fanoutSlotAnimation(
                             index: index,
                             didFanOut: didFanOut,
-                            initialXOffset: originX - targetX
+                            initialOffset: CGSize(
+                                width: sourceX - targetX,
+                                height: sourceY - targetY
+                            )
                         )
                         .allowsHitTesting(false)
-                        .position(x: targetX, y: rowHeight / 2)
+                        .position(x: targetX, y: targetY)
                     }
                 }
             }
@@ -1406,17 +1460,17 @@ private struct NotchAgentFanoutRow: View {
 }
 
 private extension View {
-    func fanoutSlotAnimation(index: Int, didFanOut: Bool, initialXOffset: CGFloat) -> some View {
+    func fanoutSlotAnimation(index: Int, didFanOut: Bool, initialOffset: CGSize) -> some View {
         self
             .offset(
-                x: didFanOut ? 0 : initialXOffset,
-                y: didFanOut ? 0 : NotchAgentStackMetrics.fanoutOriginYOffset
+                x: didFanOut ? 0 : initialOffset.width,
+                y: didFanOut ? 0 : initialOffset.height
             )
-            .scaleEffect(didFanOut ? 1 : 0.72)
-            .opacity(didFanOut ? 1 : 0.2)
+            .scaleEffect(didFanOut ? 1 : 0.34)
+            .opacity(didFanOut ? 1 : 0.96)
             .animation(
-                .spring(response: 0.18, dampingFraction: 0.74)
-                    .delay(Double(index) * 0.018),
+                .spring(response: 0.28, dampingFraction: 0.78)
+                    .delay(Double(index) * 0.012),
                 value: didFanOut
             )
     }

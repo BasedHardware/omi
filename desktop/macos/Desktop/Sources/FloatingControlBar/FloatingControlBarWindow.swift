@@ -34,7 +34,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         fallbackNotchHiddenCenterWidth + notchHiddenCenterSafetyPadding
     }
     static let notchCompactSideWidth: CGFloat = 30
-    static let notchActiveSideWidth: CGFloat = 54
+    static let notchActiveSideWidth: CGFloat = 42
     static let notchChromeHeight: CGFloat = 34
     static let notchGlowOutsetX: CGFloat = 24
     static let notchGlowOutsetBottom: CGFloat = 24
