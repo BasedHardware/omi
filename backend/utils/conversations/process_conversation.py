@@ -49,7 +49,7 @@ from models.structured import Structured
 from utils.notifications import send_important_conversation_message
 from models.task import Task, TaskStatus, TaskAction, TaskActionProvider
 from models.notification_message import NotificationMessage
-from utils.apps import get_available_apps, update_personas_async, update_persona_prompt
+from utils.apps import get_available_apps, update_persona_prompt
 from utils.executors import db_executor, llm_executor, postprocess_executor, submit_with_context
 from utils.llm.conversation_processing import (
     get_transcript_structure,
@@ -932,7 +932,6 @@ def process_conversation(
             asyncio.run(conversation_created_webhook(uid, conversation))
 
         submit_with_context(postprocess_executor, _run_webhook)
-        submit_with_context(postprocess_executor, update_personas_async, uid)
 
         # Disable important conversation for now
         # Send important conversation notification for long conversations (>30 minutes)
