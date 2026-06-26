@@ -48,3 +48,10 @@ def update_clone_message(uid: str, message_id: str, updates: dict) -> None:
 def get_platform_settings(uid: str, platform: str) -> Optional[dict]:
     settings = get_clone_settings(uid)
     return settings.get('platforms', {}).get(platform)
+
+
+def update_platform_settings(uid: str, platform: str, data: dict) -> None:
+    """Update a single platform's settings without clobbering other platforms."""
+    ref = db.collection('users').document(uid).collection('ai_clone').document('settings')
+    # Use Firestore .update() with dot-notation path so only this platform's sub-doc changes.
+    ref.update({f'platforms.{platform}': data})
