@@ -235,7 +235,9 @@ def _fresh_short_term_item(*, uid: str, memory_id: str, conversation_id: str, co
 
 @pytest.fixture(autouse=True)
 def _clear_canonical_env(monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
     from utils.memory.memory_system_pin import clear_memory_system_pin
 
     clear_memory_system_pin()
@@ -581,7 +583,9 @@ def test_legal_state_short_term_active_processed():
 
 @pytest.fixture
 def _clear_canonical_env_ws_i2(monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
     from utils.memory.memory_system_pin import clear_memory_system_pin
 
     clear_memory_system_pin()
