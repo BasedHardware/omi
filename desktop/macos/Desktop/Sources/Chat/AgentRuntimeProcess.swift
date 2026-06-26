@@ -443,7 +443,7 @@ actor AgentRuntimeProcess {
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
-    applyLocalAgentEnvironment(to: &env, adapterId: preferredAdapterId)
+    applyLocalAgentEnvironment(to: &env)
 
     let rustBase = await APIClient.shared.rustBackendURL
     if !rustBase.isEmpty {
@@ -540,10 +540,11 @@ actor AgentRuntimeProcess {
     }
   }
 
-  private func applyLocalAgentEnvironment(to env: inout [String: String], adapterId: AgentAdapterId) {
-    guard adapterId == .hermes || adapterId == .openclaw else {
-      return
-    }
+  private func applyLocalAgentEnvironment(to env: inout [String: String]) {
+    // Seed auto-discovered commands for every local adapter so the shared Node
+    // process can route to Hermes or OpenClaw even when it was launched for a
+    // different adapter. registerClient returns early once isRunning, so the
+    // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
     let adapterSearchDirs = [
       "\(home)/.hermes/node/bin",
@@ -564,21 +565,15 @@ actor AgentRuntimeProcess {
       env["PATH"] = "\(existingPath):\(suffix)"
     }
 
-    switch adapterId {
-    case .openclaw:
-      if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-        let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
-      {
-        env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(shellQuote(openClaw)) acp"
-      }
-    case .hermes:
-      if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-        let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
-      {
-        env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
-      }
-    case .acp, .piMono:
-      break
+    if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
+    {
+      env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
+    }
+    if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
+    {
+      env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(shellQuote(openClaw)) acp"
     }
   }
 

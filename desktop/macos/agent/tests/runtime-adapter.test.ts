@@ -248,7 +248,7 @@ describe("adapter capability matrix", () => {
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
       pinnedWorker: { status: "unsupported" },
       modelSwitching: { status: "required" },
-      artifactEmission: { status: "required" },
+      artifactEmission: { status: "unsupported" },
       toolSupport: { status: "required" },
       restartOrphanSemantics: { status: "required" },
     });
@@ -258,7 +258,7 @@ describe("adapter capability matrix", () => {
       cancellationAck: { status: "known_limitation", followUpTicket: "TICKET-03-follow-up-cancel-ack" },
       pinnedWorker: { status: "unsupported" },
       modelSwitching: { status: "unsupported" },
-      artifactEmission: { status: "required" },
+      artifactEmission: { status: "unsupported" },
       toolSupport: { status: "unsupported" },
       restartOrphanSemantics: { status: "required" },
     });
@@ -340,7 +340,7 @@ describe("adapter capability matrix", () => {
       acknowledgesCancellation: false,
       requiresPinnedWorker: false,
       supportsModelSwitching: true,
-      supportsArtifactEmission: true,
+      supportsArtifactEmission: false,
       supportsTools: true,
       restartBehavior: "native_bindings_survive",
     });
@@ -351,7 +351,7 @@ describe("adapter capability matrix", () => {
       acknowledgesCancellation: false,
       requiresPinnedWorker: false,
       supportsModelSwitching: false,
-      supportsArtifactEmission: true,
+      supportsArtifactEmission: false,
       supportsTools: false,
       restartBehavior: "native_bindings_survive",
     });
