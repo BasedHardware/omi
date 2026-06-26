@@ -68,11 +68,11 @@ struct PermissionsPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
         .onAppear {
-            appState.checkAllPermissions()
+            appState.checkAllPermissions(forceRefresh: true)
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             // Auto-refresh when app becomes active (user may have granted permission in System Settings)
-            appState.checkAllPermissions()
+            appState.checkAllPermissions(forceRefresh: true)
         }
     }
 }

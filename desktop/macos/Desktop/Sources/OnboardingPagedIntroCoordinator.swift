@@ -134,7 +134,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   func refreshPermissions(appState: AppState) {
     ChatToolExecutor.onboardingAppState = appState
-    appState.checkAllPermissions()
+    appState.checkAllPermissions(forceRefresh: true)
   }
 
   func clearLastActionError() {

@@ -990,14 +990,17 @@ class AppState: ObservableObject {
 
   // MARK: - Permission Status Checks
 
-  /// Check and update all permission states
-  func checkAllPermissions() {
+  /// Check and update all permission states.
+  /// - Parameter forceRefresh: When true (e.g. Permissions page, didBecomeActive),
+  ///   always checks every permission regardless of lazy dev mode. Startup callers
+  ///   use the default (false) to skip proactive probes in lazy bundles.
+  func checkAllPermissions(forceRefresh: Bool = false) {
     checkNotificationPermission()
     checkScreenRecordingPermission()
     checkMicrophonePermission()
     checkSystemAudioPermission()
 
-    if AppBuild.usesLazyDevPermissions {
+    if AppBuild.usesLazyDevPermissions && !forceRefresh {
       log("Permissions: lazy dev mode enabled, skipping startup automation/accessibility/FDA probes")
       return
     }

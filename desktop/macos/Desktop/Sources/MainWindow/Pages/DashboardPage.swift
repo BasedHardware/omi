@@ -284,7 +284,7 @@ struct DashboardPage: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
-            appState.checkAllPermissions()
+            appState.checkAllPermissions(forceRefresh: true)
             syncCaptureState()
             Task { await loadScreenshotCount() }
             Task { await loadKnowledgeCounts() }

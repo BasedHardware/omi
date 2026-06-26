@@ -323,7 +323,7 @@ struct SidebarView: View {
     .frame(width: currentWidth)
     .onAppear {
       syncMonitoringState()
-      appState.checkAllPermissions()
+      appState.checkAllPermissions(forceRefresh: true)
       updatePermissionPulse(hasPermissionDenied)
     }
     .onChange(of: currentTierLevel) { _, newTier in
@@ -382,7 +382,7 @@ struct SidebarView: View {
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
     { _ in
       // Refresh permissions when app becomes active (user may have changed them in System Settings)
-      appState.checkAllPermissions()
+      appState.checkAllPermissions(forceRefresh: true)
     }
     .onReceive(NotificationCenter.default.publisher(for: .rewindPageDidLoad)) { _ in
       isRewindPageLoading = false

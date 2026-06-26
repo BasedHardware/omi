@@ -60,7 +60,9 @@ assert_defaults "$eager_target" screenAnalysisEnabled 1
 assert_defaults "$eager_target" transcriptionEnabled 1
 assert_defaults "$eager_target" devLazyPermissionsEnabled 0
 assert_unset "$eager_target" disableSystemAudioCapture
-assert_defaults "$eager_target" systemAudioCaptureMode always
+# source_domain doesn't define systemAudioCaptureMode, so eager mode should
+# not write it — the app's registered default (.onlyDuringMeetings) applies.
+assert_unset "$eager_target" systemAudioCaptureMode
 assert_unset "$eager_target" screenAnalysisAutoStartFixed_v2
 
 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$missing_target" "com.omi.missing-source-$$" >/tmp/omi-settings-seed-missing.out
@@ -81,7 +83,9 @@ OMI_DEV_EAGER_PERMISSIONS=1 "$MACOS_DIR/scripts/omi-settings-seed.sh" "$quiet_th
 assert_defaults "$quiet_then_eager_target" screenAnalysisEnabled 1
 assert_defaults "$quiet_then_eager_target" transcriptionEnabled 1
 assert_defaults "$quiet_then_eager_target" devLazyPermissionsEnabled 0
-assert_defaults "$quiet_then_eager_target" systemAudioCaptureMode always
+# systemAudioCaptureMode should be unset when source doesn't define it,
+# so the app's registered default (.onlyDuringMeetings) applies cleanly.
+assert_unset "$quiet_then_eager_target" systemAudioCaptureMode
 assert_unset "$quiet_then_eager_target" disableSystemAudioCapture
 assert_unset "$quiet_then_eager_target" screenAnalysisAutoStartFixed_v2
 

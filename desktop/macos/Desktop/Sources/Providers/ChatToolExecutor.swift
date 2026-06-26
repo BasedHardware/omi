@@ -1072,7 +1072,7 @@ class ChatToolExecutor {
       return "Error: onboarding not active"
     }
 
-    appState.checkAllPermissions()
+    appState.checkAllPermissions(forceRefresh: true)
     try? await Task.sleep(nanoseconds: 500_000_000)
 
     let statuses: [String: String] = [

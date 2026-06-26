@@ -133,9 +133,17 @@ else:
             # when the source domain doesn't define them.
             "screenAnalysisEnabled": source.get("screenAnalysisEnabled", True),
             "transcriptionEnabled": source.get("transcriptionEnabled", True),
-            "systemAudioCaptureMode": source.get("systemAudioCaptureMode", "always"),
         }
     )
+    # Only carry over systemAudioCaptureMode if the source explicitly defines it.
+    # The app registers .onlyDuringMeetings as its default; writing "always" here
+    # would override that for fresh eager bundles, deviating from Omi Dev behavior.
+    if "systemAudioCaptureMode" in source:
+        selected["systemAudioCaptureMode"] = source["systemAudioCaptureMode"]
+    else:
+        # Clear any stale value (e.g. "never" from a prior quiet seed) so the
+        # app's registered default (.onlyDuringMeetings) applies cleanly.
+        target_data.pop("systemAudioCaptureMode", None)
     target_data.pop("screenAnalysisAutoStartFixed_v2", None)
     target_data.pop("disableSystemAudioCapture", None)
 
@@ -147,7 +155,7 @@ with tempfile.NamedTemporaryFile(suffix=".plist") as plist:
 
 # Keys removed from target_data above need to be explicitly deleted from the
 # target domain — `defaults import` merges and never removes keys.
-for key in ("disableSystemAudioCapture", "screenAnalysisAutoStartFixed_v2"):
+for key in ("disableSystemAudioCapture", "screenAnalysisAutoStartFixed_v2", "systemAudioCaptureMode"):
     if key not in target_data:
         subprocess.run(["defaults", "delete", target, key], check=False)
 
