@@ -312,7 +312,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     let prompt = buildPrompt(for: message)
     let result = try await bridge.query(
       prompt: prompt,
-      systemPrompt: Self.systemPrompt,
+      systemPrompt: "\(Self.systemPrompt)\n\n\(WhatsAppToneProfile.shared.styleGuide())",
       sessionKey: "whatsapp-reply-\(message.chatJid)",
       surfaceKind: "whatsapp",
       externalRefKind: "message",

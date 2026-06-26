@@ -55,6 +55,9 @@ final class WhatsAppReplySettings: ObservableObject {
   @Published var quietHoursEnd: Int {
     didSet { defaults.set(quietHoursEnd, forKey: Keys.quietHoursEnd) }
   }
+  @Published var toneMatchEnabled: Bool {
+    didSet { defaults.set(toneMatchEnabled, forKey: Keys.toneMatchEnabled) }
+  }
 
   private let defaults: UserDefaults
   private var autoSendHistory: [String: [Date]] = [:]
@@ -68,6 +71,7 @@ final class WhatsAppReplySettings: ObservableObject {
     static let quietHoursEnabled = "whatsapp.reply.quietHoursEnabled"
     static let quietHoursStart = "whatsapp.reply.quietHoursStart"
     static let quietHoursEnd = "whatsapp.reply.quietHoursEnd"
+    static let toneMatchEnabled = "whatsapp.reply.toneMatchEnabled"
   }
 
   private init(defaults: UserDefaults = .standard) {
@@ -82,6 +86,7 @@ final class WhatsAppReplySettings: ObservableObject {
     self.quietHoursEnabled = defaults.bool(forKey: Keys.quietHoursEnabled)
     self.quietHoursStart = storedQuietStart ?? 22
     self.quietHoursEnd = storedQuietEnd ?? 7
+    self.toneMatchEnabled = defaults.object(forKey: Keys.toneMatchEnabled) as? Bool ?? true
   }
 
   func addAllowlistedJid(_ jid: String) {
