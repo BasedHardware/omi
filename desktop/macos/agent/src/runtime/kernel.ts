@@ -1312,7 +1312,8 @@ export class AgentRuntimeKernel {
     }
   ): boolean {
     const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? process.cwd();
-    if (binding.cwd !== requestedCwd) {
+    const bindingCwd = binding.cwd ?? process.cwd();
+    if (bindingCwd !== requestedCwd) {
       return false;
     }
     if (input.input.model !== undefined && binding.modelId !== input.input.model) {
