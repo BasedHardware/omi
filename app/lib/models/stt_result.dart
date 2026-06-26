@@ -191,3 +191,32 @@ class SttTranscriptionResult {
     return SttTranscriptionResult(segments: segments, rawText: rawText);
   }
 }
+
+List<Map<String, dynamic>> mergeTranscriptSegmentsBySpeaker(Iterable<SttSegment> sourceSegments) {
+  final segments = <Map<String, dynamic>>[];
+
+  for (final segment in sourceSegments) {
+    if (segment.text.trim().isEmpty) continue;
+
+    final segmentJson = segment.toTranscriptSegmentJson();
+    final hasTranslations = segment.translations != null && segment.translations!.isNotEmpty;
+    final lastTranslations = segments.isNotEmpty ? segments.last['translations'] : null;
+    final lastHasTranslations = lastTranslations is List && lastTranslations.isNotEmpty;
+
+    if (segments.isEmpty ||
+        segments.last['speaker'] != segmentJson['speaker'] ||
+        segments.last['speaker_id'] != segmentJson['speaker_id'] ||
+        segments.last['is_user'] != segmentJson['is_user'] ||
+        segments.last['person_id'] != segmentJson['person_id'] ||
+        lastHasTranslations ||
+        hasTranslations) {
+      segments.add(segmentJson);
+    } else {
+      final last = segments.last;
+      last['text'] = '${last['text']} ${segment.text.trim()}';
+      last['end'] = segment.end;
+    }
+  }
+
+  return segments;
+}

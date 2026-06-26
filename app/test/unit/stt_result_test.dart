@@ -94,5 +94,19 @@ void main() {
       expect(segment.speakerId, 3);
       expect(segment.speaker, 'SPEAKER_3');
     });
+
+    test('merges adjacent transcript segments only when speaker identity matches', () {
+      final merged = mergeTranscriptSegmentsBySpeaker([
+        SttSegment(text: 'same', start: 0, end: 1, speaker: 'Participant', speakerId: 1),
+        SttSegment(text: 'speaker', start: 1, end: 2, speaker: 'Participant', speakerId: 1),
+        SttSegment(text: 'different id', start: 2, end: 3, speaker: 'Participant', speakerId: 2),
+      ]);
+
+      expect(merged, hasLength(2));
+      expect(merged.first['text'], 'same speaker');
+      expect(merged.first['speaker_id'], 1);
+      expect(merged.last['text'], 'different id');
+      expect(merged.last['speaker_id'], 2);
+    });
   });
 }
