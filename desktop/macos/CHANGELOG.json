@@ -1,7 +1,8 @@
 {
   "unreleased": [
     "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons",
-    "Hermes connect now also adds a 'search Omi first' note to its system prompt, like OpenClaw"
+    "Hermes connect now also adds a 'search Omi first' note to its system prompt, like OpenClaw",
+    "Cleaner Apps page (removed list borders, renamed Featured to Other) and dashboard polish (white + icons, subtle Connected labels, no purple)"
   ],
   "releases": [
     {
