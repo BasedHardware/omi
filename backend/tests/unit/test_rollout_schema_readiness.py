@@ -161,7 +161,7 @@ def test_rollout_schema_docs_use_canonical_v1_shape_and_label_legacy_aliases_as_
     for legacy_alias in FORBIDDEN_LEGACY_ALIASES:
         assert legacy_alias not in canonical_section
 
-    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    oracle = (root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md").read_text()
     tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
     for doc_text in (oracle, tickets):
         assert "rollout_schema_readiness.py" in doc_text
