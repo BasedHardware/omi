@@ -397,8 +397,6 @@ def build_v3_production_runtime(*, uid: str, db_client, env: dict[str, str] | No
         return V3GetRuntime(enabled=False, source_decision='disabled')
 
     source_decision = _source_decision_for_uid(uid=uid, db_client=db_client, rollout_config=rollout_config)
-    if source_decision == 'disabled':
-        return V3GetRuntime(enabled=False, source_decision='disabled')
     if source_decision == 'legacy_primary':
         return V3GetRuntime(enabled=True, source_decision='legacy_primary')
 
