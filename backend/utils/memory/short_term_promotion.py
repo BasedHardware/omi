@@ -25,9 +25,10 @@ the lifecycle worker records audit transitions (reused semantics from
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -51,6 +52,8 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
+from utils.memory.canonical_consolidation import ConsolidationReport, run_canonical_consolidation
+from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_lifecycle import ShortTermDisposition, evaluate_short_term_lifecycle
@@ -61,6 +64,12 @@ logger = logging.getLogger(__name__)
 DEFAULT_PROMOTION_BATCH_THRESHOLD = 25
 PROMOTION_DAILY_INTERVAL = timedelta(hours=24)
 PROMOTION_BY = "canonical_short_term_promotion"
+MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED_ENV = "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED"
+
+
+def promotion_fast_track_enabled() -> bool:
+    raw = os.getenv(MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED_ENV, "false")
+    return raw.lower() == "true"
 
 
 def promotion_batch_threshold() -> int:
@@ -100,6 +109,26 @@ def list_promotable_short_term_items(
     items = fetch_short_term_memory_items_firestore(uid=uid, db_client=client)
     promotable = [item for item in items if is_promotable_short_term_item(item, now=current_time)]
     return sorted(promotable, key=lambda item: item.memory_id)
+
+
+def is_fast_track_promotable(item: MemoryItem) -> bool:
+    """O-W7 default: user_asserted only (env-gated, default-off)."""
+    return promotion_fast_track_enabled() and bool(item.user_asserted)
+
+
+def list_fast_track_promotable_items(
+    uid: str,
+    *,
+    db_client=None,
+    now: Optional[datetime] = None,
+) -> List[MemoryItem]:
+    client = db_client if db_client is not None else default_db_client
+    current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
+    return [
+        item
+        for item in list_promotable_short_term_items(uid, db_client=client, now=current_time)
+        if is_fast_track_promotable(item)
+    ]
 
 
 def promotion_trigger_reason(
@@ -253,6 +282,7 @@ def promote_short_term_item_via_apply(
         vector_sync_failed = True
 
     sync_canonical_memory_vector(promoted, on_hard_failure=_record_vector_sync_failure)
+    extract_kg_for_promoted_memory(uid, promoted, db_client=client)
     return promoted, vector_sync_failed
 
 
@@ -301,6 +331,7 @@ class CanonicalShortTermLifecycleReport:
 class CanonicalShortTermMaintenanceReport:
     uid: str
     skipped_reason: Optional[str] = None
+    consolidation: Optional[ConsolidationReport] = None
     promotion: Optional[ShortTermPromotionReport] = None
     lifecycle: Optional[CanonicalShortTermLifecycleReport] = None
 
@@ -321,6 +352,7 @@ def run_canonical_short_term_promotion(
         return ShortTermPromotionReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     promotable = list_promotable_short_term_items(uid, db_client=client, now=current_time)
+    fast_track = list_fast_track_promotable_items(uid, db_client=client, now=current_time)
     control = _read_control_state(uid, db_client=client)
     trigger = promotion_trigger_reason(
         promotable_count=len(promotable),
@@ -328,7 +360,10 @@ def run_canonical_short_term_promotion(
         now=current_time,
         batch_threshold=batch_threshold,
     )
-    if trigger is None:
+    if trigger is None and fast_track:
+        trigger = "user_asserted_fast_track"
+        promotable = fast_track
+    elif trigger is None:
         return ShortTermPromotionReport(
             uid=uid,
             skipped_reason="promotion_not_due",
@@ -420,16 +455,29 @@ def run_canonical_short_term_maintenance(
     db_client=None,
     now: Optional[datetime] = None,
     run_id: str,
+    llm_invoke: Optional[Callable[[str], str]] = None,
 ) -> CanonicalShortTermMaintenanceReport:
-    """Canonical-only wrapper: TTL audit then batch-or-daily promotion."""
+    """Canonical-only wrapper: TTL audit → consolidation → batch-or-daily promotion."""
     client = db_client if db_client is not None else default_db_client
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         return CanonicalShortTermMaintenanceReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     lifecycle = run_canonical_short_term_ttl_lifecycle(uid, db_client=client, now=current_time, run_id=run_id)
+    consolidation = run_canonical_consolidation(
+        uid,
+        db_client=client,
+        now=current_time,
+        run_id=run_id,
+        llm_invoke=llm_invoke,
+    )
     promotion = run_canonical_short_term_promotion(uid, db_client=client, now=current_time, run_id=run_id)
-    return CanonicalShortTermMaintenanceReport(uid=uid, promotion=promotion, lifecycle=lifecycle)
+    return CanonicalShortTermMaintenanceReport(
+        uid=uid,
+        consolidation=consolidation,
+        promotion=promotion,
+        lifecycle=lifecycle,
+    )
 
 
 def count_promotable_short_term_items(uid: str, *, db_client=None, now: Optional[datetime] = None) -> int:
