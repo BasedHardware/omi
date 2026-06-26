@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Developer named bundles now start quiet — lazy permissions, no auto screen/audio capture — unless explicitly seeded eager"
+  ],
   "releases": [
     {
       "version": "0.11.538",
