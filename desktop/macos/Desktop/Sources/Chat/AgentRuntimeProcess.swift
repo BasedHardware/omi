@@ -234,7 +234,9 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func controlTool(
+  // Request-scoped control is only valid while Node has an active owner context
+  // for this exact client/request key. App surfaces should use directControlTool.
+  func requestScopedControlTool(
     clientId: String,
     harnessMode: String,
     name: String,
@@ -264,6 +266,41 @@ actor AgentRuntimeProcess {
       let sent = sendJson(dict)
       if !sent, let request = activeControlRequests.removeValue(forKey: requestKey) {
         request.continuation.resume(throwing: BridgeError.agentError("Failed to send control tool request"))
+      }
+    }
+  }
+
+  func directControlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any]
+  ) async throws -> String {
+    guard let ownerId = currentOwnerId() else {
+      throw BridgeError.agentError("Agent control requires a signed-in owner")
+    }
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeControlRequests[requestKey] = ActiveControlRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      let dict: [String: Any] = [
+        "type": "direct_control_tool",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "name": name,
+        "input": input,
+        "ownerId": ownerId,
+      ]
+      let sent = sendJson(dict)
+      if !sent, let request = activeControlRequests.removeValue(forKey: requestKey) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send direct control tool request"))
       }
     }
   }

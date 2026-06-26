@@ -565,11 +565,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       session?.sendToolResult(callId: callId, name: name, output: result)
     case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle:
       runToolAndSpeak(
-        callId: callId, name: name, detail: canonicalAgentControlLogDetail(tool: tool, arguments: arguments),
+        callId: callId, name: name, detail: AgentControlService.shared.logDetail(name: name, arguments: arguments),
         emptyText: "No canonical agent data came back.",
         errorText: "Could not reach the agent control plane right now."
       ) {
-        try await Self.executeCanonicalAgentControlTool(name: name, arguments: arguments)
+        try await AgentControlService.shared.executeVoiceTool(name: name, arguments: arguments)
       }
     case .searchScreenHistory:
       // Fast LOCAL semantic search over screen history (same executor as chat).
@@ -664,132 +664,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         callId: callId, name: name,
         output: ok ? "Clicked at \(Int(x)), \(Int(y))." : "Could not click.")
     }
-  }
-
-  private func canonicalAgentControlLogDetail(tool: HubTool, arguments: [String: Any]) -> String {
-    switch tool {
-    case .getAgentRun, .cancelAgentRun:
-      if let runId = (arguments["runId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !runId.isEmpty {
-        return "runId=\(runId.prefix(12))"
-      }
-    case .inspectAgentArtifacts:
-      for key in ["sessionId", "runId", "attemptId"] {
-        if let value = (arguments[key] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty {
-          return "\(key)=\(value.prefix(12))"
-        }
-      }
-    case .updateAgentArtifactLifecycle:
-      if let artifactId = (arguments["artifactId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines), !artifactId.isEmpty {
-        return "artifactId=\(artifactId.prefix(12))"
-      }
-    default:
-      break
-    }
-    return ""
-  }
-
-  private static func executeCanonicalAgentControlTool(name: String, arguments: [String: Any]) async throws -> String {
-    let harness = currentAgentHarnessMode()
-    let raw = try await AgentRuntimeProcess.shared.controlTool(
-      clientId: "realtime-hub",
-      harnessMode: harness,
-      name: name,
-      input: arguments
-    )
-    return summarizeCanonicalAgentControlResult(name: name, raw: raw)
-  }
-
-  private static func currentAgentHarnessMode() -> String {
-    let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-    return mode == "piMono" ? "piMono" : "acp"
-  }
-
-  private static func summarizeCanonicalAgentControlResult(name: String, raw: String) -> String {
-    guard let data = raw.data(using: .utf8),
-      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
-    else {
-      return raw
-    }
-    if object["ok"] as? Bool == false {
-      let error = object["error"] as? [String: Any]
-      return "Agent control failed: \(error?["message"] as? String ?? "unknown error")."
-    }
-    switch name {
-    case HubTool.listAgentSessions.rawValue:
-      return summarizeAgentSessions(object)
-    case HubTool.getAgentRun.rawValue:
-      return summarizeAgentRun(object)
-    case HubTool.cancelAgentRun.rawValue:
-      return summarizeAgentCancellation(object)
-    case HubTool.inspectAgentArtifacts.rawValue:
-      return summarizeAgentArtifacts(object)
-    case HubTool.updateAgentArtifactLifecycle.rawValue:
-      return summarizeArtifactLifecycle(object)
-    default:
-      return raw
-    }
-  }
-
-  private static func summarizeAgentSessions(_ object: [String: Any]) -> String {
-    let sessions = object["sessions"] as? [[String: Any]] ?? []
-    if sessions.isEmpty { return "No canonical Omi agent sessions found." }
-    let rows = sessions.prefix(8).map { summary -> String in
-      let session = summary["session"] as? [String: Any] ?? [:]
-      let latestRun = summary["latestRun"] as? [String: Any] ?? [:]
-      let title = (session["title"] as? String) ?? (session["surfaceKind"] as? String) ?? "Untitled agent"
-      let status = (latestRun["status"] as? String) ?? (session["status"] as? String) ?? "unknown"
-      return "- \(title): \(status)"
-    }.joined(separator: "\n")
-    let handles = sessions.prefix(8).compactMap { summary -> String? in
-      let session = summary["session"] as? [String: Any] ?? [:]
-      let latestRun = summary["latestRun"] as? [String: Any] ?? [:]
-      let title = (session["title"] as? String) ?? (session["surfaceKind"] as? String) ?? "Untitled agent"
-      let sessionId = (session["omiSessionId"] as? String) ?? (session["sessionId"] as? String)
-      let runId = latestRun["runId"] as? String
-      let parts = [sessionId.map { "sessionId=\($0)" }, runId.map { "runId=\($0)" }].compactMap { $0 }
-      return parts.isEmpty ? nil : "- \(title): \(parts.joined(separator: ", "))"
-    }.joined(separator: "\n")
-    let suffix = sessions.count > 8 ? "\nShowing 8 of \(sessions.count)." : ""
-    let handleNote = handles.isEmpty ? "" : "\nFollow-up handles for tool calls only; do not read aloud:\n\(handles)"
-    return "Canonical Omi agent sessions:\n\(rows)\(suffix)\(handleNote)"
-  }
-
-  private static func summarizeAgentRun(_ object: [String: Any]) -> String {
-    let run = object["run"] as? [String: Any] ?? [:]
-    let attempts = object["attempts"] as? [[String: Any]] ?? []
-    let status = (run["status"] as? String) ?? "unknown"
-    let mode = (run["mode"] as? String) ?? "unknown"
-    let events = object["events"] as? [[String: Any]] ?? []
-    return "Canonical run is \(status), mode \(mode). Attempts: \(attempts.count). Events returned: \(events.count)."
-  }
-
-  private static func summarizeAgentCancellation(_ object: [String: Any]) -> String {
-    let cancellation = object["cancellation"] as? [String: Any] ?? [:]
-    let run = object["run"] as? [String: Any] ?? [:]
-    let status = (run["status"] as? String) ?? "unknown"
-    let accepted = cancellation["accepted"] as? Bool
-    let dispatched = cancellation["dispatchAttempted"] as? Bool
-    let acknowledged = cancellation["adapterAcknowledged"] as? Bool
-    return "Cancel request: accepted=\(accepted?.description ?? "unknown"), dispatchAttempted=\(dispatched?.description ?? "unknown"), adapterAcknowledged=\(acknowledged?.description ?? "unknown"). Current status: \(status)."
-  }
-
-  private static func summarizeAgentArtifacts(_ object: [String: Any]) -> String {
-    let artifacts = object["artifacts"] as? [[String: Any]] ?? []
-    if artifacts.isEmpty { return "No canonical agent artifacts found for that scope." }
-    let rows = artifacts.prefix(8).map { artifact -> String in
-      let role = (artifact["role"] as? String) ?? "unknown"
-      let state = (artifact["lifecycleState"] as? String) ?? (artifact["state"] as? String) ?? "unknown"
-      return "- role=\(role), state=\(state)"
-    }.joined(separator: "\n")
-    let suffix = artifacts.count > 8 ? "\nShowing 8 of \(artifacts.count)." : ""
-    return "Canonical agent artifacts:\n\(rows)\(suffix)"
-  }
-
-  private static func summarizeArtifactLifecycle(_ object: [String: Any]) -> String {
-    let artifact = object["artifact"] as? [String: Any] ?? [:]
-    let state = (artifact["lifecycleState"] as? String) ?? (artifact["state"] as? String) ?? "unknown"
-    let changed = object["changed"] as? Bool
-    return "Artifact lifecycle is now \(state). Changed: \(changed?.description ?? "unknown")."
   }
 
   func hubDidFinishTurn() {

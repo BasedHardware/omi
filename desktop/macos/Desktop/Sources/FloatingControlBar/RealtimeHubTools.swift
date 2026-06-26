@@ -165,6 +165,9 @@ enum RealtimeHubTools {
     referring to); then speak a natural, spoken-length version of what comes back.
     - When you need to see what's on screen, call screenshot first. Use point_click only \
     when the user clearly asks you to click something.
+    - For canonical Omi agent/subagent management, call list_agent_sessions first, then use \
+    its agentRef values internally for get_agent_run, cancel_agent_run, or artifact inspection. \
+    Never read agentRef, artifactRef, canonical IDs, or tool JSON aloud.
 
     Keep latency low: prefer answering directly when you can.
     """
@@ -363,8 +366,8 @@ enum RealtimeHubTools {
             ],
             "surfaceKind": [
               "type": "string",
-              "enum": ["main_chat", "task_chat", "realtime", "delegated_agent"],
-              "description": "Optional surface filter such as main_chat, task_chat, realtime, or delegated_agent.",
+              "enum": ["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"],
+              "description": "Optional canonical surface filter.",
             ],
             "limit": [
               "type": "number",
@@ -377,15 +380,19 @@ enum RealtimeHubTools {
         "type": "function",
         "name": HubTool.getAgentRun.rawValue,
         "description":
-          "Inspect one canonical Omi-managed agent run by runId. Use a runId from list_agent_sessions or a correlated Omi response.",
+          "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
         "parameters": [
           "type": "object",
           "properties": [
+            "agentRef": ["type": "string", "description": "Opaque agent handle from list_agent_sessions."],
             "runId": ["type": "string", "description": "Canonical Omi run id."],
             "includeEvents": ["type": "boolean", "description": "Include ordered kernel events. Default true."],
             "eventLimit": ["type": "number", "description": "Maximum events to return. Default 100."],
           ],
-          "required": ["runId"],
+          "anyOf": [
+            ["required": ["agentRef"]],
+            ["required": ["runId"]],
+          ],
         ],
       ],
       [
@@ -396,9 +403,13 @@ enum RealtimeHubTools {
         "parameters": [
           "type": "object",
           "properties": [
+            "agentRef": ["type": "string", "description": "Opaque agent handle from list_agent_sessions."],
             "runId": ["type": "string", "description": "Canonical Omi run id to cancel."]
           ],
-          "required": ["runId"],
+          "anyOf": [
+            ["required": ["agentRef"]],
+            ["required": ["runId"]],
+          ],
         ],
       ],
       [
@@ -409,6 +420,7 @@ enum RealtimeHubTools {
         "parameters": [
           "type": "object",
           "properties": [
+            "agentRef": ["type": "string", "description": "Opaque agent handle from list_agent_sessions."],
             "sessionId": ["type": "string", "description": "Canonical Omi session id."],
             "runId": ["type": "string", "description": "Canonical Omi run id."],
             "attemptId": ["type": "string", "description": "Canonical Omi attempt id."],
@@ -420,6 +432,7 @@ enum RealtimeHubTools {
             "limit": ["type": "number", "description": "Maximum artifacts to return. Default 50."],
           ],
           "anyOf": [
+            ["required": ["agentRef"]],
             ["required": ["sessionId"]],
             ["required": ["runId"]],
             ["required": ["attemptId"]],
@@ -434,6 +447,7 @@ enum RealtimeHubTools {
         "parameters": [
           "type": "object",
           "properties": [
+            "artifactRef": ["type": "string", "description": "Opaque artifact handle from inspect_agent_artifacts."],
             "artifactId": ["type": "string", "description": "Canonical Omi artifact id."],
             "state": [
               "type": "string",
@@ -445,7 +459,11 @@ enum RealtimeHubTools {
             "attemptId": ["type": "string", "description": "Optional canonical Omi attempt id scope guard."],
             "reason": ["type": "string", "description": "Optional short reason."],
           ],
-          "required": ["artifactId", "state"],
+          "required": ["state"],
+          "anyOf": [
+            ["required": ["artifactRef"]],
+            ["required": ["artifactId"]],
+          ],
         ],
       ],
       [
