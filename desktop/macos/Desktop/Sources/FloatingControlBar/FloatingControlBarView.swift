@@ -20,8 +20,6 @@ struct FloatingControlBarView: View {
     var onShareLink: (() async -> String?)?
 
     @State private var isHovering = false
-    @State private var agentSwitcherHovering = false
-    @State private var agentSwitcherPinned = false
     @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
     /// 0 = agent dots collapsed into the logo ring, 1 = fanned into the row. A single
     /// continuously-animated value so the same dots morph both ways (and reverse exactly).
@@ -87,7 +85,7 @@ struct FloatingControlBarView: View {
     }
 
     private var shouldShowAgentSwitcher: Bool {
-        !agentPills.pills.isEmpty && (state.showingAIConversation || agentSwitcherPinned || agentSwitcherHovering)
+        !agentPills.pills.isEmpty && (state.showingAIConversation || state.agentSwitcherPinned || state.agentSwitcherHovering)
     }
 
     private var showingNotchWaveform: Bool {
@@ -207,8 +205,8 @@ struct FloatingControlBarView: View {
         }
         .onChange(of: agentPills.pills.isEmpty) { _, isEmpty in
             if isEmpty {
-                agentSwitcherPinned = false
-                agentSwitcherHovering = false
+                state.agentSwitcherPinned = false
+                state.agentSwitcherHovering = false
             }
         }
     }
@@ -412,17 +410,17 @@ struct FloatingControlBarView: View {
         agentSwitcherCollapseWorkItem = nil
 
         if hovering {
-            agentSwitcherHovering = true
+            state.agentSwitcherHovering = true
             return
         }
 
-        guard !agentSwitcherPinned, !state.showingAIConversation else {
-            agentSwitcherHovering = false
+        guard !state.agentSwitcherPinned, !state.showingAIConversation else {
+            state.agentSwitcherHovering = false
             return
         }
 
         let workItem = DispatchWorkItem {
-            agentSwitcherHovering = false
+            state.agentSwitcherHovering = false
         }
         agentSwitcherCollapseWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.14, execute: workItem)
@@ -432,18 +430,23 @@ struct FloatingControlBarView: View {
         guard !agentPills.pills.isEmpty else { return }
         agentSwitcherCollapseWorkItem?.cancel()
         agentSwitcherCollapseWorkItem = nil
-        agentSwitcherPinned.toggle()
-        agentSwitcherHovering = agentSwitcherPinned
+        state.agentSwitcherPinned.toggle()
+        state.agentSwitcherHovering = state.agentSwitcherPinned
     }
 
     private func exitAgentSurface() {
         state.leaveAgentSurface()
-        // Reinstall the response-height observer for the restored main surface.
-        // Without this the window keeps observing the .agent surface and ignores
-        // subsequent .mainResponse height reports, leaving the panel stuck at
-        // agent-chat size. Centralized so every agent-exit path stays consistent.
-        (window as? FloatingControlBarWindow)?
-            .resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+        let barWindow = window as? FloatingControlBarWindow
+        // When backing out of an agent chat with no main Omi conversation,
+        // leaveAgentSurface() lands on .mainInput. The response-sizing helper
+        // would force at least response height and install a response-height
+        // observer, leaving an oversized blank input panel. Route to the input
+        // height path instead so the panel shrinks to the normal Ask Omi size.
+        if state.conversationSurface == .mainInput {
+            barWindow?.resizeForMainInputAfterAgentExit()
+        } else {
+            barWindow?.resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+        }
     }
 
     private func openAgentInChat(_ pill: AgentPill) {

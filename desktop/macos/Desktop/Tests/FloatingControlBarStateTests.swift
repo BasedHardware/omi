@@ -88,4 +88,79 @@ final class FloatingControlBarStateTests: XCTestCase {
 
         XCTAssertFalse(state.isVoiceResponseActive)
     }
+
+    // MARK: - Review feedback P2 fixes
+
+    /// Thread 1: After leaving an agent surface and clearing, the surface must be
+    /// fully closed (not stale .agent(id)) so canRestoreVisibleConversation returns false.
+    func testLeaveAgentSurfaceThenClearDoesNotRestoreStaleAgent() {
+        let state = FloatingControlBarState()
+        let agentID = UUID()
+        state.present(.agent(agentID))
+        state.markConversationActivity()
+
+        // Simulate closeAIConversation clearing the surface
+        state.activeAgentChatPillID = nil
+        state.conversationSurface = .closed
+        state.showingAIConversation = false
+        state.showingAIResponse = false
+
+        // Stale .agent surface must not trigger a restore
+        XCTAssertFalse(state.canRestoreVisibleConversation,
+                       "Stale agent surface should not be restorable after close")
+        XCTAssertFalse(state.hasVisibleConversation,
+                       "hasVisibleConversation should be false after full clear")
+    }
+
+    /// Thread 3: leaveAgentSurface lands on .mainInput when there is no main conversation.
+    func testLeaveAgentSurfaceLandsOnMainInputWhenNoMainConversation() {
+        let state = FloatingControlBarState()
+        let agentID = UUID()
+        state.present(.agent(agentID))
+
+        state.leaveAgentSurface()
+
+        XCTAssertEqual(state.conversationSurface, .mainInput,
+                       "Backing out of a lone agent should land on .mainInput")
+        XCTAssertNil(state.activeAgentChatPillID)
+        XCTAssertTrue(state.showingAIConversation)
+        XCTAssertFalse(state.showingAIResponse)
+    }
+
+    /// Thread 3: leaveAgentSurface lands on .mainResponse when there IS a main conversation.
+    func testLeaveAgentSurfaceLandsOnMainResponseWhenMainConversationExists() {
+        let state = FloatingControlBarState()
+        // Seed a main conversation
+        state.displayedQuery = "What is the weather?"
+        state.currentAIMessage = ChatMessage(text: "Sunny.", sender: .ai)
+
+        let agentID = UUID()
+        state.present(.agent(agentID))
+
+        state.leaveAgentSurface()
+
+        XCTAssertEqual(state.conversationSurface, .mainResponse,
+                       "Backing out with a main conversation should land on .mainResponse")
+        XCTAssertNil(state.activeAgentChatPillID)
+        XCTAssertTrue(state.showingAIResponse)
+    }
+
+    /// Thread 2: isAgentSwitcherExpanded reflects pinned and hovering states.
+    func testIsAgentSwitcherExpanded() {
+        let state = FloatingControlBarState()
+
+        XCTAssertFalse(state.isAgentSwitcherExpanded)
+
+        state.agentSwitcherHovering = true
+        XCTAssertTrue(state.isAgentSwitcherExpanded)
+
+        state.agentSwitcherHovering = false
+        XCTAssertFalse(state.isAgentSwitcherExpanded)
+
+        state.agentSwitcherPinned = true
+        XCTAssertTrue(state.isAgentSwitcherExpanded)
+
+        state.agentSwitcherHovering = true
+        XCTAssertTrue(state.isAgentSwitcherExpanded)
+    }
 }

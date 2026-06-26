@@ -629,9 +629,14 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func expireViewedFinishedPills(now: Date = Date()) {
+        let activeChatPillID = FloatingControlBarManager.shared.activeAgentChatPillID
         let expiredIDs = pills
             .filter { pill in
                 guard pill.status.isFinished, let viewedAt = pill.viewedAt else { return false }
+                // Never expire the pill the user is actively viewing in the
+                // floating bar's agent chat — otherwise the active chat
+                // disappears/reverts while they are still reading it.
+                guard pill.id != activeChatPillID else { return false }
                 return now.timeIntervalSince(viewedAt) >= viewedFinishedTTL
             }
             .map(\.id)

@@ -549,9 +549,20 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                       self.state.currentNotification == nil
                 else { return }
 
-                let targetSize = self.state.showingAIConversation
-                    ? self.currentSurfaceSizeForCurrentScreen()
-                    : self.collapsedBarSize
+                let targetSize: NSSize
+                if self.state.showingAIConversation {
+                    targetSize = self.currentSurfaceSizeForCurrentScreen()
+                } else if self.state.isAgentSwitcherExpanded && !AgentPillsManager.shared.pills.isEmpty {
+                    // Keep the notch switcher expanded so pinned/hover-open rows
+                    // are not clipped when pills are added or removed.
+                    targetSize = NSSize(
+                        width: max(self.collapsedBarSize.width, Self.notchExpandedWidth),
+                        height: Self.notchChromeHeight
+                            + Self.notchAgentListHeight(agentCount: AgentPillsManager.shared.pills.count)
+                    )
+                } else {
+                    targetSize = self.collapsedBarSize
+                }
                 self.resizeAnchored(
                     to: targetSize,
                     makeResizable: self.styleMask.contains(.resizable),
@@ -705,6 +716,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             state.showingAIConversation = false
             state.showingAIResponse = false
             state.activeAgentChatPillID = nil
+            // Also clear conversationSurface so a stale .agent(id) doesn't keep
+            // hasVisibleConversation true. Without this, canRestoreVisibleConversation
+            // treats the dead agent surface as restorable and the next Ask Omi open
+            // restores into a blank response panel instead of a fresh input.
+            state.conversationSurface = .closed
             state.aiInputText = ""
             state.isVoiceFollowUp = false
             state.voiceFollowUpTranscript = ""
@@ -1474,6 +1490,11 @@ class FloatingControlBarManager {
     /// Public read-only access to the floating bar's chat provider so the
     /// agent pills manager can inherit the working directory / model.
     var sharedFloatingProvider: ChatProvider? { floatingChatProvider }
+
+    /// Public read-only access to the currently-active agent chat pill in the
+    /// floating bar, so viewed-pill expiration can skip the one the user is
+    /// actively reading.
+    var activeAgentChatPillID: UUID? { window?.state.activeAgentChatPillID }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
     private var notificationWasTemporarilyShown = false
@@ -3071,6 +3092,20 @@ extension FloatingControlBarWindow {
             )
         }
         setupResponseHeightObserver(for: surface, maxHeight: maxHeight)
+    }
+
+    /// Resize the window to the normal Ask Omi input height after exiting an
+    /// agent surface to `.mainInput`. Cancels the response-height observer and
+    /// installs the input-height observer so the panel sizes to the input view
+    /// instead of staying at the oversized response height.
+    func resizeForMainInputAfterAgentExit() {
+        responseHeightCancellable?.cancel()
+        responseHeightCancellable = nil
+        state.responseContentHeight = 0
+        state.inputViewHeight = inputPanelHeight
+        let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
+        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+        setupInputHeightObserver()
     }
 
     /// Save the current center point so closeAIConversation can restore position.

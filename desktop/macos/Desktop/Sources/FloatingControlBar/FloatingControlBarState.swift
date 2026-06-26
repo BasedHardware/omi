@@ -116,6 +116,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var activeAgentChatPillID: UUID? = nil
     @Published var conversationSurface: FloatingConversationSurface = .closed
 
+    /// Notch subagent switcher visibility state. Mirrored from the SwiftUI view
+    /// so the window can account for an expanded switcher when resizing.
+    @Published var agentSwitcherPinned: Bool = false
+    @Published var agentSwitcherHovering: Bool = false
+    var isAgentSwitcherExpanded: Bool { agentSwitcherPinned || agentSwitcherHovering }
+
     /// Convenience accessor for plain-text response (used by window geometry and error handling).
     var aiResponseText: String {
         get { currentAIMessage?.text ?? "" }

@@ -108,7 +108,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()
 
-    XCTAssertTrue(source.contains("state.showingAIConversation || agentSwitcherPinned || agentSwitcherHovering"))
+    XCTAssertTrue(source.contains("state.showingAIConversation || state.agentSwitcherPinned || state.agentSwitcherHovering"))
     XCTAssertTrue(source.contains("state.showingAIConversation || shouldShowAgentSwitcher"))
     XCTAssertTrue(source.contains("static let maxAgents = FloatingControlBarWindow.notchAgentListMaxVisibleAgents"))
     XCTAssertTrue(source.contains("static let dotDiameterRatio: CGFloat = 0.18"))
