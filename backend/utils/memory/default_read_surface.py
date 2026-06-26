@@ -99,11 +99,12 @@ def fetch_default_read_list(
     now: Optional[datetime] = None,
     item_filter: Optional[Callable[[dict], bool]] = None,
     item_formatter: Callable[[dict, MemoryAccessPolicy], Any],
+    max_limit: int = 500,
 ) -> DefaultReadSearchResult:
     if decision.read_decision != MemoryReadDecision.USE_MEMORY:
         return deny_default_read_search(decision)
 
-    bounded_limit = max(1, min(limit, 500))
+    bounded_limit = max(1, min(limit, max_limit))
     bounded_offset = max(0, offset)
     policy = MemoryAccessPolicy(
         consumer=consumer,

@@ -10,13 +10,16 @@ from typing import Any, Callable, Optional
 
 from models.product_memory import MemoryAccessPolicy, MemoryConsumer
 from utils.memory.default_read_rollout import (
-    DefaultReadRolloutDecision,
     MemoryReadDecision,
     legacy_safe_default_read_rollout_decision,
     read_default_read_rollout,
 )
+from utils.memory.default_read_surface import (
+    fetch_default_read_list,
+    fetch_default_read_vector,
+    parse_optional_default_read_datetime,
+)
 from utils.memory.product_memory_read_service import fetch_default_product_memory_search
-from utils.memory.vector_search_service import fetch_default_vector_memory_search
 
 
 @dataclass(frozen=True)
@@ -79,7 +82,7 @@ def search_memory_default_chat_memories_text(
 
     lines = _chat_memory_header(f"Found {len(items)} memory default memories matching '{query}':")
     for item in items:
-        updated_at = _parse_datetime(item.get('date'))
+        updated_at = parse_optional_default_read_datetime(item.get('date'))
         date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
         lines.append(
             _format_chat_memory_evidence_line(
@@ -129,42 +132,36 @@ def list_default_chat_memories_decision_text(
             fallback_reason=decision.fallback_reason,
         )
 
-    bounded_limit = max(1, min(limit, 5000))
-    bounded_offset = max(0, offset)
-    policy = MemoryAccessPolicy(
-        consumer=MemoryConsumer.omi_chat,
-        app_has_default_memory_grant=True,
-        archive_capability=False,
-        raw_provenance_capability=False,
-    )
-    response = fetch_default_product_memory_search(
+    def _list_line(item: dict[str, Any], _policy: MemoryAccessPolicy) -> str:
+        updated_at = parse_optional_default_read_datetime(item.get('date') or item.get('updated_at'))
+        date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
+        return _format_chat_memory_evidence_line(
+            item,
+            source_marker='memory_default_memory',
+            suffix=f"tier: {item.get('tier')}, date: {date_str}",
+        )
+
+    result = fetch_default_read_list(
         uid=uid,
         query='',
+        limit=limit,
+        offset=offset,
         db_client=db_client,
-        policy=policy,
+        decision=decision,
+        consumer=MemoryConsumer.omi_chat,
         now=now,
-        limit=bounded_limit,
-        offset=bounded_offset,
+        item_formatter=_list_line,
+        max_limit=5000,
     )
-    items = response['items']
-    if not items:
+    if not result.items:
         return ChatMemorySearchResult(
             text="No memory default memories found.",
             read_decision=decision.read_decision,
             fallback_reason=decision.fallback_reason,
         )
 
-    lines = _chat_memory_header(f"User memory default memories ({len(items)} total):")
-    for item in items:
-        updated_at = _parse_datetime(item.get('date') or item.get('updated_at'))
-        date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
-        lines.append(
-            _format_chat_memory_evidence_line(
-                item,
-                source_marker='memory_default_memory',
-                suffix=f"tier: {item.get('tier')}, date: {date_str}",
-            )
-        )
+    lines = _chat_memory_header(f"User memory default memories ({len(result.items)} total):")
+    lines.extend(result.items)
     lines.append('')
     lines.append('archive_default_visible=False')
     return ChatMemorySearchResult(
@@ -243,51 +240,46 @@ def search_memory_default_chat_memories_vector_decision_text(
             fallback_reason=decision.fallback_reason,
         )
 
-    bounded_limit = max(1, min(limit, 20))
-    projection_commit_id = required_projection_commit_id or decision.vector_projection_commit_id
-    if not projection_commit_id:
-        return ChatMemorySearchResult(
-            text="No memories available for this request.",
-            read_decision=MemoryReadDecision.DENY_MEMORY,
-            fallback_reason='missing_vector_projection_commit_id',
+    def _vector_line(_item: dict[str, Any], _policy: MemoryAccessPolicy) -> dict[str, Any]:
+        return _item
+
+    def _attach_vector_line(memory: dict[str, Any], item: dict[str, Any], scores: dict[str, float]) -> str:
+        updated_at = parse_optional_default_read_datetime(item.get('updated_at') or item.get('date'))
+        date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
+        score = float(scores.get(item.get('memory_id'), 0))
+        return _format_chat_memory_evidence_line(
+            item,
+            source_marker='vector_memory',
+            suffix=f"relevance: {score:.2f}, tier: {item.get('tier')}, date: {date_str}",
         )
-    policy = MemoryAccessPolicy(
-        consumer=MemoryConsumer.omi_chat,
-        app_has_default_memory_grant=True,
-        archive_capability=False,
-        raw_provenance_capability=False,
-    )
-    response = fetch_default_vector_memory_search(
+
+    result = fetch_default_read_vector(
         uid=uid,
         query=query,
+        limit=limit,
         db_client=db_client,
-        policy=policy,
+        decision=decision,
+        consumer=MemoryConsumer.omi_chat,
         vector_query=vector_query,
-        limit=bounded_limit,
-        required_projection_commit_id=projection_commit_id,
-        required_account_generation=decision.rollout_capabilities.account_generation,
+        required_projection_commit_id=required_projection_commit_id,
+        item_formatter=_vector_line,
+        score_attacher=_attach_vector_line,
     )
-    items = response['items']
-    if not items:
+    if result.read_decision != MemoryReadDecision.USE_MEMORY:
+        return ChatMemorySearchResult(
+            text="No memories available for this request.",
+            read_decision=result.read_decision,
+            fallback_reason=result.fallback_reason,
+        )
+    if not result.items:
         return ChatMemorySearchResult(
             text=f"No memory vector memories found matching '{query}'.",
             read_decision=decision.read_decision,
             fallback_reason=decision.fallback_reason,
         )
 
-    scores_by_memory_id = response.get('scores_by_memory_id', {})
-    lines = _chat_memory_header(f"Found {len(items)} memory vector memories matching '{query}':")
-    for item in items:
-        updated_at = _parse_datetime(item.get('updated_at') or item.get('date'))
-        date_str = updated_at.strftime('%Y-%m-%d') if updated_at else 'Unknown'
-        score = float(scores_by_memory_id.get(item.get('memory_id'), 0))
-        lines.append(
-            _format_chat_memory_evidence_line(
-                item,
-                source_marker='vector_memory',
-                suffix=f"relevance: {score:.2f}, tier: {item.get('tier')}, date: {date_str}",
-            )
-        )
+    lines = _chat_memory_header(f"Found {len(result.items)} memory vector memories matching '{query}':")
+    lines.extend(result.items)
     lines.append('')
     lines.append('archive_default_visible=False')
     return ChatMemorySearchResult(
@@ -312,14 +304,6 @@ def _quote_chat_memory_content(content: str) -> str:
     if len(normalized) > CHAT_MEMORY_CONTENT_MAX_CHARS:
         normalized = normalized[: CHAT_MEMORY_CONTENT_MAX_CHARS - 1].rstrip() + '…'
     return json.dumps(normalized, ensure_ascii=False)
-
-
-def _parse_datetime(value) -> Optional[datetime]:
-    if isinstance(value, datetime):
-        return value
-    if isinstance(value, str):
-        return datetime.fromisoformat(value.replace('Z', '+00:00'))
-    return None
 
 
 # Neutral symbol aliases (memory names remain valid via shim)
