@@ -5,7 +5,7 @@ import { gatherLocalContext } from '../lib/localAgent'
 import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
-import type { AutomationPlan } from '../../../shared/types'
+import type { AutomationPlan, PiChatStreamEvent } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 import { speakAssistantText } from '../lib/localTtsPlayback'
@@ -31,6 +31,8 @@ export type UseChat = {
   loadConversation: (id: string) => Promise<boolean>
   /** Clear the thread to a fresh conversation (used by the overlay's Esc). */
   reset: () => void
+  /** Stop the active native Pi run, if any. */
+  stop: () => Promise<void>
 }
 
 /**
@@ -70,6 +72,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   // message firing right as a previous reply finishes), which would wrongly drop
   // the new send; the ref is always current.
   const sendingRef = useRef(false)
+  const activePiSessionRef = useRef<string | null>(null)
 
   // In infinite mode the MAIN window shows the ongoing thread, so load it once on
   // mount (and backfill ids on any legacy id-less messages so the merge can match
@@ -235,6 +238,13 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       userMsg,
       { id: assistantId, role: 'assistant', content: assistant }
     ]
+    const setAssistantBubble = (content: string): void => {
+      setHistory((h) => {
+        const next = [...h]
+        next[next.length - 1] = { id: assistantId, role: 'assistant', content }
+        return next
+      })
+    }
     setHistory((h) => [...h, { id: assistantId, role: 'assistant', content: '' }])
     setSending(true)
 
@@ -242,6 +252,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     let lastPersist = Date.now()
 
     let assistantText = ''
+    let speakFinal = true
     try {
       const token = await auth.currentUser?.getIdToken()
       const prefs = getPreferences()
@@ -251,17 +262,87 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         if (!window.omi.piChatEnabled) {
           throw new Error('Pi/Omi chat is not enabled in this build.')
         }
-        const result = await window.omi.piChatSend({
-          token: token ?? '',
-          messages: [...baseHistory, userMsg],
-          skillIds: prefs.enabledSkillIds ?? [],
-          modelId: prefs.defaultModelByPurpose?.chat
-        })
-        assistantText = result.text
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
+        const sessionId = crypto.randomUUID()
+        activePiSessionRef.current = sessionId
+        const toolStatuses = new Map<string, string>()
+        const statusText = (): string =>
+          Array.from(toolStatuses.values()).slice(-3).join('\n') || 'Thinking...'
+
+        await new Promise<void>((resolve, reject) => {
+          let settled = false
+          let unsubscribe = (): void => undefined
+          const finish = (): void => {
+            if (settled) return
+            settled = true
+            unsubscribe()
+            if (activePiSessionRef.current === sessionId) activePiSessionRef.current = null
+            resolve()
+          }
+          const fail = (error: unknown): void => {
+            if (settled) return
+            settled = true
+            unsubscribe()
+            if (activePiSessionRef.current === sessionId) activePiSessionRef.current = null
+            reject(error)
+          }
+          const updateStatus = (): void => {
+            if (!assistantText) setAssistantBubble(statusText())
+          }
+          const onEvent = (event: PiChatStreamEvent): void => {
+            if (event.sessionId !== sessionId) return
+            if (event.type === 'started') {
+              updateStatus()
+              return
+            }
+            if (event.type === 'delta') {
+              assistantText += event.text
+              setAssistantBubble(assistantText)
+              return
+            }
+            if (event.type === 'thinking') {
+              updateStatus()
+              return
+            }
+            if (event.type === 'tool_start' || event.type === 'tool_delta') {
+              toolStatuses.set(event.toolCall.id, `Using ${event.toolCall.name}...`)
+              updateStatus()
+              return
+            }
+            if (event.type === 'tool_result') {
+              toolStatuses.set(
+                event.toolCall.id,
+                `${event.ok ? 'Checked' : 'Could not use'} ${event.toolCall.name}`
+              )
+              updateStatus()
+              return
+            }
+            if (event.type === 'done') {
+              assistantText = event.response.text
+              setAssistantBubble(assistantText)
+              finish()
+              return
+            }
+            if (event.type === 'aborted') {
+              speakFinal = false
+              assistantText = assistantText || 'Stopped.'
+              setAssistantBubble(assistantText)
+              finish()
+              return
+            }
+            if (event.type === 'error') {
+              fail(new Error(event.message))
+            }
+          }
+          unsubscribe = window.omi.onPiChatEvent(onEvent)
+          void window.omi
+            .piChatStart({
+              sessionId,
+              token: token ?? '',
+              messages: [...baseHistory, userMsg],
+              skillIds: prefs.enabledSkillIds ?? [],
+              modelId: prefs.defaultModelByPurpose?.chat
+            })
+            .catch(fail)
         })
         return
       }
@@ -287,11 +368,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           messages: [...baseHistory, { ...userMsg, content: textToSend }]
         })
         assistantText = result.text
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
+        setAssistantBubble(assistantText)
         return
       }
 
@@ -306,11 +383,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           modelId: prefs.defaultModelByPurpose?.chat
         })
         assistantText = result.text
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
+        setAssistantBubble(assistantText)
         return
       }
       const res = await fetch(`${OMI_BASE}/v2/messages`, {
@@ -350,11 +423,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
           const chunk = parseChunk(line)
           if (chunk === null) continue
           assistantText += chunk
-          setHistory((h) => {
-            const next = [...h]
-            next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-            return next
-          })
+          setAssistantBubble(assistantText)
         }
         if (Date.now() - lastPersist > 1500) {
           lastPersist = Date.now()
@@ -364,11 +433,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const tail = parseChunk(buffer)
       if (tail !== null) {
         assistantText += tail
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
+        setAssistantBubble(assistantText)
       }
       // The conversational backend sometimes answers an action-intent message
       // with raw plan JSON (when it reached chat WITHOUT our planner — e.g. a
@@ -376,25 +441,24 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
           'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
+        setAssistantBubble(assistantText)
       }
     } catch (e) {
       assistantText = `Error: ${(e as Error).message}`
-      setHistory((h) => {
-        const next = [...h]
-        next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-        return next
-      })
+      setAssistantBubble(assistantText)
     } finally {
+      activePiSessionRef.current = null
       sendingRef.current = false
       setSending(false)
       await persistChat(buildThread(assistantText))
-      void speakAssistantText(assistantText)
+      if (speakFinal) void speakAssistantText(assistantText)
     }
+  }
+
+  const stop = async (): Promise<void> => {
+    const sessionId = activePiSessionRef.current
+    if (!sessionId) return
+    await window.omi.piChatAbort(sessionId).catch(() => undefined)
   }
 
   // Start a fresh thread: drop the history and forget the persisted-conversation
@@ -402,6 +466,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   // when this is called will keep writing into the (now-empty) history — Esc-reset
   // mid-stream is a rare edge we don't guard against here.
   const reset = (): void => {
+    void stop()
     setHistory([])
     setSending(false)
     sendingRef.current = false
@@ -437,5 +502,5 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
-  return { history, sending, send, loadConversation, reset }
+  return { history, sending, send, loadConversation, reset, stop }
 }
