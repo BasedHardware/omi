@@ -38,10 +38,10 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = Self.hasBridgeHarnessOverride(bridgeHarnessOverride)"))
+    XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = bridgeHarnessOverride != nil"))
     XCTAssertTrue(source.contains("if !hasBridgeHarnessOverride {\n                provider.modelOverride = floating.modelOverride\n            }"))
     XCTAssertTrue(source.contains("model: Self.modelForSend(pill: pill, provider: provider)"))
-    XCTAssertTrue(source.contains("hasBridgeHarnessOverride(provider.bridgeHarnessOverride) ? nil : pill.model"))
+    XCTAssertTrue(source.contains("provider.hasBridgeHarnessOverride ? nil : pill.model"))
   }
 
   private func agentPillSource() throws -> String {
