@@ -165,7 +165,7 @@ def test_provider_readiness_proof_cases_cover_oracle_p0_7_matrix_without_claimin
 
 def test_provider_readiness_docs_reference_non_claims_and_runner():
     root = Path(__file__).resolve().parents[2].parent
-    oracle = (root / "docs" / "epics" / "memory_t20_oracle_milestone_review.md").read_text()
+    oracle = (root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md").read_text()
     tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
     for text in (oracle, tickets):
