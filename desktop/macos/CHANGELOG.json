@@ -1,9 +1,14 @@
 {
-  "unreleased": [
-    "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons",
-    "Added get_work_context tool to the local AI-agent API so agents can pull your current screen + last few minutes of activity in one call (no manual screenshots)"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.536",
+      "date": "2026-06-26",
+      "changes": [
+        "Fixed OpenClaw and Hermes brand logos not appearing on release builds; matched the two More tile icons",
+        "Added get_work_context tool to the local AI-agent API so agents can pull your current screen + last few minutes of activity in one call (no manual screenshots)"
+      ]
+    },
     {
       "version": "0.11.535",
       "date": "2026-06-25",
