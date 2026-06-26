@@ -105,6 +105,37 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertNil(resolved["artifactId"])
   }
 
+  func testFailureResponsesClearAllStaleVoiceHandles() {
+    let service = AgentControlService()
+    let withSession = """
+      {"ok":true,"sessions":[{"session":{"omiSessionId":"session_123","title":"Draft launch note"},"latestRun":{"runId":"run_123"},"latestAttempt":{"attemptId":"attempt_123"}}]}
+      """
+    let withArtifact = """
+      {"ok":true,"artifacts":[{"artifactId":"artifact_123","role":"result","lifecycleState":"retained"}]}
+      """
+
+    _ = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: withSession)
+    _ = service.summarizeVoiceResult(name: HubTool.inspectAgentArtifacts.rawValue, raw: withArtifact)
+    _ = service.summarizeVoiceResult(name: HubTool.getAgentRun.rawValue, raw: "{\"ok\":false,\"error\":{\"message\":\"boom\"}}")
+
+    XCTAssertNil(service.resolveVoiceHandles(in: ["agentRef": "agent_1"])["sessionId"])
+    XCTAssertNil(service.resolveVoiceHandles(in: ["artifactRef": "artifact_1"])["artifactId"])
+
+    _ = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: withSession)
+    _ = service.summarizeVoiceResult(name: HubTool.inspectAgentArtifacts.rawValue, raw: withArtifact)
+    _ = service.summarizeVoiceResult(name: HubTool.cancelAgentRun.rawValue, raw: "{\"ok\":false,\"error\":{\"message\":\"boom\"}}")
+
+    XCTAssertNil(service.resolveVoiceHandles(in: ["agentRef": "agent_1"])["sessionId"])
+    XCTAssertNil(service.resolveVoiceHandles(in: ["artifactRef": "artifact_1"])["artifactId"])
+
+    _ = service.summarizeVoiceResult(name: HubTool.listAgentSessions.rawValue, raw: withSession)
+    _ = service.summarizeVoiceResult(name: HubTool.inspectAgentArtifacts.rawValue, raw: withArtifact)
+    _ = service.summarizeVoiceResult(name: HubTool.updateAgentArtifactLifecycle.rawValue, raw: "{\"ok\":false,\"error\":{\"message\":\"boom\"}}")
+
+    XCTAssertNil(service.resolveVoiceHandles(in: ["agentRef": "agent_1"])["sessionId"])
+    XCTAssertNil(service.resolveVoiceHandles(in: ["artifactRef": "artifact_1"])["artifactId"])
+  }
+
   func testErrorSummaryDoesNotExposeRawCanonicalIds() {
     let service = AgentControlService()
     let raw = """

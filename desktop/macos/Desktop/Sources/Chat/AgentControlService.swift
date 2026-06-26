@@ -181,9 +181,12 @@ final class AgentControlService {
 
   private func clearVoiceHandles(for name: String) {
     switch name {
-    case ToolName.listAgentSessions:
+    case ToolName.listAgentSessions,
+      ToolName.getAgentRun,
+      ToolName.cancelAgentRun,
+      ToolName.inspectAgentArtifacts,
+      ToolName.updateAgentArtifactLifecycle:
       agentHandles.removeAll()
-    case ToolName.inspectAgentArtifacts:
       artifactHandles.removeAll()
     default:
       break
