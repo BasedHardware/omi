@@ -83,34 +83,16 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
 def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
     memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        memory.category = identify_category_for_memory(memory.content)
-        memory_db = MemoryDB.from_memory(memory, uid, None, True)
-        committed_id = MemoryService(db_client=db).write(uid, memory_db.model_dump())
-        item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=db)
-        if item is not None:
-            memory_db = memory_item_to_memorydb(item)
-        postprocess_executor.submit(update_personas_async, uid)
-        return memory_db
-
-    memory_write_guard = guard_legacy_memory_write(uid, db, consumer='mcp', operation="mcp_memory_create")
-    if not memory_write_guard.allowed:
-        raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
-
-    # Auto-categorize memories from external sources
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
-    memories_db.create_memory(uid, memory_db.model_dump())
-    try:
-        upsert_memory_vector(
-            uid,
-            memory_db.id,
-            memory_db.content,
-            memory_db.category.value,
-            subject_entity_id=memory_db.subject_entity_id,
-        )
-    except Exception:
-        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
+    memory_service = MemoryService(db_client=db)
+    memory_db = memory_service.create_external_memory(
+        uid,
+        memory_db,
+        memory_system=memory_system,
+        consumer='mcp',
+        operation="mcp_memory_create",
+    )
     postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
@@ -122,42 +104,30 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
     memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        MemoryService(db_client=db).delete(uid, memory_id)
-        return {"status": "ok"}
-
-    memory_write_guard = guard_legacy_memory_write(uid, db, consumer='mcp', operation="mcp_memory_delete")
-    if not memory_write_guard.allowed:
-        raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
-
-    _validate_mcp_memory(uid, memory_id)
-    memories_db.delete_memory(uid, memory_id)
-    try:
-        delete_memory_vector(uid, memory_id)
-    except Exception:
-        logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
+    if memory_system != MemorySystem.CANONICAL:
+        _validate_mcp_memory(uid, memory_id)
+    MemoryService(db_client=db).delete_external_memory(
+        uid,
+        memory_id,
+        memory_system=memory_system,
+        consumer='mcp',
+        operation="mcp_memory_delete",
+    )
     return {"status": "ok"}
 
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
 def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
-    if pin_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
-        _validate_mcp_memory(uid, memory_id)
-        MemoryService(db_client=db).update_content(uid, memory_id, value)
-        return {"status": "ok"}
-
-    memory_write_guard = guard_legacy_memory_write(uid, db, consumer='mcp', operation="mcp_memory_edit")
-    if not memory_write_guard.allowed:
-        raise HTTPException(status_code=memory_write_guard.status_code, detail=memory_write_guard.detail)
-
-    memory = _validate_mcp_memory(uid, memory_id)
-    memories_db.edit_memory(uid, memory_id, value)
-    try:
-        upsert_memory_vector(
-            uid, memory_id, value, memory.get('category', 'other'), subject_entity_id=memory.get('subject_entity_id')
-        )
-    except Exception:
-        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
+    memory_system = pin_memory_system(uid, db_client=db)
+    _validate_mcp_memory(uid, memory_id)
+    MemoryService(db_client=db).update_external_memory_content(
+        uid,
+        memory_id,
+        value,
+        memory_system=memory_system,
+        consumer='mcp',
+        operation="mcp_memory_edit",
+    )
     return {"status": "ok"}
 
 
