@@ -530,19 +530,19 @@ class PureStreamingSttSocket implements IPureSocket {
         for (final segment in result.segments) {
           if (segment.text.trim().isEmpty) continue;
 
-          final speakerId = segment.speakerId;
-          final speaker = 'SPEAKER_$speakerId';
+          final segmentJson = segment.toTranscriptSegmentJson();
+          final speaker = segmentJson['speaker'];
+          final hasTranslations = segment.translations != null && segment.translations!.isNotEmpty;
+          final lastTranslations = segments.isNotEmpty ? segments.last['translations'] : null;
+          final lastHasTranslations = lastTranslations is List && lastTranslations.isNotEmpty;
 
-          if (segments.isEmpty || segments.last['speaker'] != speaker) {
-            segments.add({
-              'text': segment.text.trim(),
-              'speaker': speaker,
-              'speaker_id': speakerId,
-              'is_user': false,
-              'start': segment.start,
-              'end': segment.end,
-              'person_id': null,
-            });
+          if (segments.isEmpty ||
+              segments.last['speaker'] != speaker ||
+              segments.last['is_user'] != segmentJson['is_user'] ||
+              segments.last['person_id'] != segmentJson['person_id'] ||
+              lastHasTranslations ||
+              hasTranslations) {
+            segments.add(segmentJson);
           } else {
             final last = segments.last;
             last['text'] = '${last['text']} ${segment.text.trim()}';
