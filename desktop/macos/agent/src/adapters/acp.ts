@@ -123,6 +123,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         shell: true,
         env,
         stdio: ["pipe", "pipe", "pipe"],
+        detached: true,
       });
     } else {
       this.log(`Starting ${this.adapterId} ACP subprocess: ${this.nodeBin} ${this.acpEntry}`);
@@ -191,7 +192,16 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const exitPromise = new Promise<void>((resolve) => {
       proc.once("exit", () => resolve());
     });
-    proc.kill();
+    // For shell-spawned external commands (detached process group), send the
+    // signal to the entire group so the real adapter child is terminated too.
+    try {
+      if (proc.pid) {
+        process.kill(-proc.pid, "SIGTERM");
+      }
+    } catch {
+      // EPERM/E SRCH — fall back to direct kill.
+      proc.kill();
+    }
     await exitPromise;
   }
 

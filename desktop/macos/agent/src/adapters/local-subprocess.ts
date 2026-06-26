@@ -143,6 +143,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       shell: true,
       stdio: ["pipe", "pipe", "pipe"],
       env: scrubbedEnv,
+      detached: true,
     });
     const proc = this.process;
 
@@ -178,7 +179,15 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     const exitPromise = new Promise<void>((resolve) => {
       proc.once("exit", () => resolve());
     });
-    proc.kill("SIGTERM");
+    // For shell-spawned external commands (detached process group), send the
+    // signal to the entire group so the real adapter child is terminated too.
+    try {
+      if (proc.pid) {
+        process.kill(-proc.pid, "SIGTERM");
+      }
+    } catch {
+      proc.kill("SIGTERM");
+    }
     await exitPromise;
   }
 
