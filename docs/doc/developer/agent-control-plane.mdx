@@ -1012,6 +1012,7 @@ get_agent_run
 send_agent_message
 cancel_agent_run
 inspect_agent_artifacts
+update_agent_artifact_lifecycle
 ```
 
 ### 16.2 Implementation decision
@@ -1028,10 +1029,16 @@ Required sequence:
 4. Implement `delegate_agent` after child session/run/delegation creation is transactional and the scheduler supports it.
 5. Generate MCP, Swift, documentation, and permission metadata from a capability manifest in the later capability-consolidation phase.
 
-The Phase 1 baseline includes all six hand-written local control tools: `list_agent_sessions`, `get_agent_run`,
-`cancel_agent_run`, `inspect_agent_artifacts`, `send_agent_message`, and `delegate_agent`. `send_agent_message`
-creates a follow-up run in an existing Omi session. `delegate_agent` creates or continues a distinct child Omi
-session linked to a parent run and records the delegation through kernel-owned state.
+The Phase 1 baseline includes seven hand-written local control tools: `list_agent_sessions`, `get_agent_run`,
+`cancel_agent_run`, `inspect_agent_artifacts`, `update_agent_artifact_lifecycle`, `send_agent_message`, and
+`delegate_agent`. `send_agent_message` creates a follow-up run in an existing Omi session. `delegate_agent`
+creates or continues a distinct child Omi session linked to a parent run and records the delegation through
+kernel-owned state.
+
+Observe/manage-by-id tools (`list_agent_sessions`, `get_agent_run`, `cancel_agent_run`,
+`inspect_agent_artifacts`, and `update_agent_artifact_lifecycle`) are cross-surface capabilities for desktop chat
+and PTT/realtime. Creation/continuation tools (`send_agent_message`, `delegate_agent`) remain desktop-chat-only
+until realtime has an equally explicit creation UX, control envelope, and correlation policy.
 
 ### 16.3 Delegation semantics
 
