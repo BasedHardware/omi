@@ -18,7 +18,6 @@ from utils.memory.default_read_rollout import (
     read_default_read_rollout,
     read_global_read_gate,
 )
-from utils.memory.memory_read_rollout_core import surface_rollout_allows_memory_read
 
 
 @dataclass(frozen=True)
@@ -450,20 +449,10 @@ def authorize_memory_product_memory_route(
     rollout = rollout_reader(uid=context.uid, db_client=db_client, consumer=context.consumer)
     rollout_observability = _rollout_observability(rollout, context)
 
-    # Shared enrolled read-gate evaluation. The global read gate is already
-    # confirmed open above, and surface reads never require write convergence
-    # (surface_rollout_allows_memory_read keeps require_write_convergence off), so
-    # this re-decides only the grant + projection gate shared with the `/v3` path.
-    # `read_decision` continues to own the surface-specific SHADOW_ONLY /
-    # USE_LEGACY_SAFE / explicit-deny and Archive-capability outcomes and their
-    # exact reason strings. Because a blocked shared gate implies the surface
-    # decision is not USE_MEMORY, denials and reasons are unchanged.
-    surface_gate = surface_rollout_allows_memory_read(
-        global_read_gate_open=True,
-        default_memory_grant=rollout.app_has_default_memory_grant,
-        memory_reads_enabled=rollout.rollout_capabilities.memory_reads_enabled,
-    )
-    if surface_gate.blocked or rollout.read_decision != MemoryReadDecision.USE_MEMORY:
+    # Rollout normalization already encodes grant + projection gates in
+    # `read_decision` (including SHADOW_ONLY / USE_LEGACY_SAFE / explicit-deny
+    # and Archive-capability outcomes with their exact reason strings).
+    if rollout.read_decision != MemoryReadDecision.USE_MEMORY:
         return _deny(
             context=context,
             db_client=db_client,
@@ -475,16 +464,6 @@ def authorize_memory_product_memory_route(
         )
 
     if context.requires_archive_capability:
-        if not rollout.archive_capability:
-            return _deny(
-                context=context,
-                db_client=db_client,
-                read_decision=MemoryReadDecision.DENY_MEMORY,
-                reason=rollout.fallback_reason or f'missing_{rollout.grant_reason_key}_archive_capability',
-                observability=rollout_observability,
-                global_gate=global_gate,
-                rollout=rollout,
-            )
         policy = MemoryAccessPolicy.for_omi_chat(archive_capability=True)
     else:
         policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
