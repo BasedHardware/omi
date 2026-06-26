@@ -22,7 +22,7 @@ function DragHandle(): React.JSX.Element {
  *  hide/show so chat history persists within a session; Esc resets the thread in
  *  place (useChat.reset) and replays the entrance animation via `replayEnter`. */
 function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.Element {
-  const { history, sending, send, reset } = useChat({ surface: 'overlay' })
+  const { history, sending, send, reset, stop } = useChat({ surface: 'overlay' })
   const [draft, setDraft] = useState('')
   const [leaving, setLeaving] = useState(false)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -33,7 +33,9 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // reply is still streaming (which `useChat.send` would no-op). Each send is
   // chained after the prior one resolves and dispatched through the latest `send`.
   const sendRef = useRef(send)
-  sendRef.current = send
+  useEffect(() => {
+    sendRef.current = send
+  }, [send])
   const sendChainRef = useRef<Promise<void>>(Promise.resolve())
   const enqueueSend = useCallback((text: string): void => {
     // Single send choke-point (typed Enter + voice commit) — tell onboarding the
@@ -47,7 +49,9 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // auto-sends it (queued behind any in-flight reply).
   // Latest draft, read by the window-level (textarea-unfocused) push-to-talk path.
   const draftRef = useRef(draft)
-  draftRef.current = draft
+  useLayoutEffect(() => {
+    draftRef.current = draft
+  }, [draft])
 
   const ptt = usePushToTalk({
     onTranscript: (text) => setDraft(text),
@@ -124,6 +128,8 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
       e.preventDefault()
       if (ptt.recording || ptt.finalizing) {
         ptt.cancel()
+      } else if (sending) {
+        void stop()
       } else {
         reset()
         setDraft('')
@@ -200,11 +206,11 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
               className="max-h-32 flex-1 resize-none rounded-xl bg-neutral-800/70 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:ring-1 focus:ring-neutral-500"
             />
             <button
-              onClick={submit}
-              disabled={sending || ptt.recording || ptt.finalizing || !draft.trim()}
+              onClick={sending ? () => void stop() : submit}
+              disabled={!sending && (ptt.recording || ptt.finalizing || !draft.trim())}
               className="rounded-xl bg-neutral-200 px-3 py-2 text-sm font-medium text-neutral-900 disabled:opacity-40"
             >
-              Send
+              {sending ? 'Stop' : 'Send'}
             </button>
           </div>
 
