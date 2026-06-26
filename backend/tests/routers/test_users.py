@@ -66,12 +66,21 @@ _endpoints.with_rate_limit = lambda dependency, _policy: dependency
 _endpoints.delete_account = MagicMock()
 _endpoints.get_user = MagicMock()
 
-# Save the prior entry so it can be restored after the test module finishes —
-# otherwise this minimal shim leaks into sys.modules and can be reused by later
-# test modules (e.g. ones expecting the real _enforce_rate_limit), making
-# results depend on collection order.
+# Save prior sys.modules entries BEFORE any stubbed import runs so the
+# module-scoped teardown restores the real modules (not the stub-loaded
+# versions) — otherwise the mock-backed shim leaks into later test modules.
 _prior_endpoints = sys.modules.get('utils.other.endpoints')
 sys.modules['utils.other.endpoints'] = _endpoints
+
+_prior_routers_users = sys.modules.get('routers.users')
+_prior_service_modules = {
+    name: sys.modules.get(name)
+    for name in (
+        'services.users',
+        'services.users.account_deletion',
+        'services.users.data_export',
+    )
+}
 
 import firebase_admin.auth as _fa_auth  # noqa: E402
 
@@ -85,12 +94,23 @@ for _module_name, _module in list(sys.modules.items()):
         del sys.modules[_module_name]
 
 # Pop ``routers.users`` and the service modules it transitively imported under
-# the stub finder. Without this, later test modules in a full ``pytest tests``
-# run reuse the mock-backed router/service symbols instead of the real module.
-_prior_routers_users = sys.modules.get('routers.users')
+# the stub finder so later test modules in a full ``pytest tests`` run re-import
+# the real modules instead of reusing mock-backed symbols.
 sys.modules.pop('routers.users', None)
-for _svc_name in ('services.users', 'services.users.account_deletion'):
+for _svc_name in _prior_service_modules:
     sys.modules.pop(_svc_name, None)
+# Clear parent package attributes so ``from routers import users`` and
+# ``from services.users import ...`` don't resolve to stub-loaded modules via
+# attribute lookup on the already-imported package objects.
+for _pkg_name, _attr in (
+    ('routers', 'users'),
+    ('services', 'users'),
+    ('services.users', 'account_deletion'),
+    ('services.users', 'data_export'),
+):
+    _pkg = sys.modules.get(_pkg_name)
+    if _pkg is not None and hasattr(_pkg, _attr):
+        delattr(_pkg, _attr)
 
 
 @pytest.fixture(autouse=True, scope='module')
@@ -100,12 +120,15 @@ def _restore_endpoints_shim():
         sys.modules.pop('utils.other.endpoints', None)
     else:
         sys.modules['utils.other.endpoints'] = _prior_endpoints
-    # Also restore or pop routers.users so the stub-loaded version doesn't
-    # leak into later test modules.
     if _prior_routers_users is None:
         sys.modules.pop('routers.users', None)
     else:
         sys.modules['routers.users'] = _prior_routers_users
+    for _svc_name, _prior in _prior_service_modules.items():
+        if _prior is None:
+            sys.modules.pop(_svc_name, None)
+        else:
+            sys.modules[_svc_name] = _prior
 
 
 def _account_deletion_module(start_account_deletion):

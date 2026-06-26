@@ -76,7 +76,9 @@ def _restore_sys_modules():
 
     After all tests in this module finish, each stubbed name is either removed
     (if it was absent before) or restored to its prior object, so the stubs do
-    not leak into later test modules in a multi-file pytest run.
+    not leak into later test modules in a multi-file pytest run.  We also clear
+    the parent ``database`` package attribute so ``from database import users``
+    doesn't resolve to the half-stubbed module via attribute lookup.
     """
     yield
     for _name, _prior in _STUB_PRIORS.items():
@@ -84,6 +86,9 @@ def _restore_sys_modules():
             sys.modules.pop(_name, None)
         else:
             sys.modules[_name] = _prior
+    _db_pkg = sys.modules.get('database')
+    if _db_pkg is not None and hasattr(_db_pkg, 'users'):
+        delattr(_db_pkg, 'users')
 
 
 def _make_snapshot(data):
