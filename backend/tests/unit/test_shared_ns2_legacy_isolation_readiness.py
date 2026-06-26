@@ -109,10 +109,10 @@ def test_legacy_memory_vector_filters_exclude_memory_schema_records():
 
 def test_shared_ns2_docs_reference_non_claims_and_remaining_provider_proof():
     root = Path(__file__).resolve().parents[2].parent
-    oracle = (root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md").read_text()
+    evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
     tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
-    for text in (oracle, tickets):
+    for text in (evidence_markers, tickets):
         assert "shared_ns2_legacy_isolation_readiness.py" in text
         assert "legacy queries exclude memory schema" in text
         assert "No real Pinecone shared `ns2` proof" in text
