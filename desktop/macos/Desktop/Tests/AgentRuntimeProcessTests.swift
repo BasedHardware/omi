@@ -50,6 +50,15 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(message?.requestKey)
   }
 
+  func testHarnessModeMapsNamedAdapters() {
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "piMono"), "pi-mono")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "pi-mono"), "pi-mono")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "hermes"), "hermes")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openclaw"), "openclaw")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openClaw"), "openclaw")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"), "acp")
+  }
+
   func testNamedBundleStateDirectoriesAreIsolated() {
     let home = URL(fileURLWithPath: "/tmp/test-home")
 
@@ -108,6 +117,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertFalse(source.contains("currentHarnessMode"))
     XCTAssertFalse(source.contains("harness changed"))
+    XCTAssertFalse(source.contains(#""adapterId": harnessMode == "piMono" ? "pi-mono" : "acp""#))
   }
 
   func testFailedRuntimeStartCleansUpLatchedRunningState() throws {

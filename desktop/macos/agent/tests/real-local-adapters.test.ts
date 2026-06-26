@@ -174,6 +174,7 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       payloads: [{ text: "OMI_OPENCLAW_DOGFOOD_OK" }],
       meta: {
         agentMeta: {
+          sessionId: "openclaw-native-session",
           usage: { input: 11, output: 12 },
           lastCallUsage: { input: 11, output: 12, cacheRead: 1, cacheWrite: 2 },
         },
@@ -201,5 +202,82 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       })
     );
     await adapter.stop();
+  });
+
+  it("keeps OpenClaw continuation on the Omi stable session key", async () => {
+    const firstProc = createMockProcess();
+    const secondProc = createMockProcess();
+    vi.mocked(spawn)
+      .mockReturnValueOnce(firstProc as any)
+      .mockReturnValueOnce(secondProc as any);
+    process.env.OMI_OPENCLAW_ADAPTER_COMMAND = "openclaw agent";
+    const adapter = new OpenClawRuntimeAdapter();
+
+    const binding = await adapter.openBinding({
+      sessionId: "omi-session",
+      cwd: "/tmp/work",
+      model: "openrouter/openai/gpt-4.1-mini",
+    });
+    const firstExecution = adapter.executeAttempt(
+      {
+        ...makeOpenClawContext(binding),
+        prompt: "Remember BLUEFJORD.",
+        model: "openrouter/openai/gpt-4.1-mini",
+      },
+      () => {},
+      new AbortController().signal
+    );
+    firstProc.stdout.write(JSON.stringify({
+      payloads: [{ text: "remembered" }],
+      meta: { agentMeta: { sessionId: "openclaw-native-session" } },
+    }));
+    firstProc.stdout.write("\n");
+    firstProc.emit("exit", 0);
+    const firstResult = await firstExecution;
+
+    expect(firstResult).toMatchObject({
+      text: "remembered",
+      adapterSessionId: "openclaw:omi-session",
+      terminalStatus: "succeeded",
+    });
+
+    const resumedBinding = await adapter.resumeBinding({
+      sessionId: "omi-session",
+      cwd: "/tmp/work",
+      model: "openrouter/openai/gpt-4.1-mini",
+      adapterNativeSessionId: firstResult.adapterSessionId,
+    });
+    const secondExecution = adapter.executeAttempt(
+      {
+        ...makeOpenClawContext(resumedBinding),
+        prompt: "What codeword did I ask you to remember?",
+        model: "openrouter/openai/gpt-4.1-mini",
+      },
+      () => {},
+      new AbortController().signal
+    );
+    secondProc.stdout.write(JSON.stringify({
+      payloads: [{ text: "BLUEFJORD" }],
+      meta: { agentMeta: { sessionId: "openclaw-native-session" } },
+    }));
+    secondProc.stdout.write("\n");
+    secondProc.emit("exit", 0);
+
+    await expect(secondExecution).resolves.toMatchObject({
+      text: "BLUEFJORD",
+      adapterSessionId: "openclaw:omi-session",
+      terminalStatus: "succeeded",
+    });
+    expect(spawn).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("--session-key 'openclaw:omi-session'"),
+      expect.any(Object)
+    );
+    expect(spawn).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("--session-key 'openclaw:omi-session'"),
+      expect.any(Object)
+    );
+    expect(vi.mocked(spawn).mock.calls[1]?.[0]).not.toContain("openclaw-native-session");
   });
 });

@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Improved OpenClaw multi-turn continuity in desktop agent chats"
+  ],
   "releases": [
     {
       "version": "0.11.539",

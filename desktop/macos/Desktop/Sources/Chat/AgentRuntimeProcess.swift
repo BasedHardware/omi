@@ -122,6 +122,19 @@ actor AgentRuntimeProcess {
 
   var isAlive: Bool { isRunning }
 
+  static func adapterId(forHarnessMode harnessMode: String) -> String {
+    switch harnessMode {
+    case "piMono", "pi-mono":
+      return "pi-mono"
+    case "hermes":
+      return "hermes"
+    case "openclaw", "openClaw":
+      return "openclaw"
+    default:
+      return "acp"
+    }
+  }
+
   func registerClient(clientId: String, harnessMode: String) async throws {
     guard !isRestarting else {
       throw BridgeError.restarting
@@ -351,7 +364,7 @@ actor AgentRuntimeProcess {
         "clientId": clientId,
         "prompt": prompt,
         "systemPrompt": systemPrompt,
-        "adapterId": harnessMode == "piMono" ? "pi-mono" : "acp",
+        "adapterId": Self.adapterId(forHarnessMode: harnessMode),
       ]
       if let sessionKey {
         queryDict["sessionKey"] = sessionKey
