@@ -65,8 +65,9 @@ void main() {
   });
 
   test('retry delay sequence starts with the first backoff slot', () {
-    expect(AnalyticsManager.retryDelayForTesting(1), const Duration(seconds: 1));
-    expect(AnalyticsManager.retryDelayForTesting(2), const Duration(seconds: 5));
+    expect(AnalyticsManager.retryDelayForTesting(0), const Duration(seconds: 1));
+    expect(AnalyticsManager.retryDelayForTesting(1), const Duration(seconds: 5));
+    expect(AnalyticsManager.retryDelayForTesting(2), const Duration(seconds: 30));
     expect(AnalyticsManager.retryDelayForTesting(3), const Duration(seconds: 30));
     expect(AnalyticsManager.retryDelayForTesting(4), const Duration(seconds: 30));
   });

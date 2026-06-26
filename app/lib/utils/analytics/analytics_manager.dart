@@ -329,7 +329,7 @@ class AnalyticsManager {
           final retriedEvent = event.nextAttempt();
           _requeueOrDrop(retriedEvent);
           retryLater = _queuedEvents.isNotEmpty;
-          retryDelay = _retryDelayForAttempt(retriedEvent.attempts);
+          retryDelay = _retryDelayForAttempt(event.attempts);
           return;
         }
       }
@@ -353,15 +353,14 @@ class AnalyticsManager {
   }
 
   static Duration _retryDelayForAttempt(int attempts) {
-    final delayIndex = attempts <= 1 ? 0 : attempts - 1;
+    final delayIndex = attempts <= 0 ? 0 : attempts;
     if (delayIndex >= _retryDelays.length) return _retryDelays.last;
     return _retryDelays[delayIndex];
   }
 
-  static void _scheduleRetry([Duration? delay]) {
+  static void _scheduleRetry(Duration delay) {
     if (_retryTimer?.isActive ?? false) return;
-    final attempts = _queuedEvents.isEmpty ? 0 : _queuedEvents.first.attempts;
-    _retryTimer = Timer(delay ?? _retryDelayForAttempt(attempts), _scheduleFlush);
+    _retryTimer = Timer(delay, _scheduleFlush);
   }
 
   void startTimingEvent(String eventName) =>
