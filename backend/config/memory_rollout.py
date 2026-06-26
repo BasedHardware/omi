@@ -2,7 +2,7 @@
 
 Neutral ``MemoryRollout*`` symbols are the source of truth. Legacy ``memory*`` names
 remain importable aliases until later rename waves. Env vars read neutral ``MEMORY_*``
-keys only; cohort membership stays on ``MEMORY_CANONICAL_USERS`` only.
+keys only; cohort membership is code-defined in ``utils.memory.memory_system.CANONICAL_MEMORY_USERS``.
 """
 
 import os
@@ -217,7 +217,7 @@ def _env_raw_value(
 def rollout_mode_env_value(env: Mapping[str, str] | None = None) -> str:
     """Read rollout mode from ``MEMORY_MODE``.
 
-    Does **not** read ``MEMORY_CANONICAL_USERS`` — cohort membership is separate (WS-E).
+    Does **not** read ``CANONICAL_MEMORY_USERS`` — cohort membership is separate (WS-E).
     """
     raw = _env_raw_value(env, key=MEMORY_MODE_ENV, default="")
     return (raw or MemoryRolloutMode.off.value).strip() or MemoryRolloutMode.off.value
