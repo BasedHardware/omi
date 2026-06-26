@@ -22,7 +22,7 @@ from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3Comp
 from utils.memory.v3_production_runtime import build_v3_production_runtime
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
-from utils.client_device import resolve_client_device
+from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
@@ -159,10 +159,10 @@ def _raise_memory_http_exception(memory_response: V3ComposedResponse) -> None:
 
 
 def _normalize_device_scope(device_scope: str) -> str:
-    scope = (device_scope or 'all').strip().lower()
-    if scope not in ('all', 'current', 'explicit'):
-        raise HTTPException(status_code=400, detail='device_scope must be one of: all, current, explicit')
-    return scope
+    try:
+        return DeviceScopeRequest._normalize_device_scope(device_scope)
+    except DeviceScopeValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _resolve_get_memories_device_scope(
@@ -171,15 +171,16 @@ def _resolve_get_memories_device_scope(
     *,
     x_app_platform: Optional[str],
     x_device_id_hash: Optional[str],
-) -> tuple[str, Optional[str]]:
-    scope = _normalize_device_scope(device_scope)
-    resolved_device_id = client_device_id
-    if scope == 'current':
-        resolved_device_id = resolve_client_device(
+) -> DeviceScopeRequest:
+    try:
+        return DeviceScopeRequest.resolve_from_headers(
+            device_scope=device_scope,
+            client_device_id=client_device_id,
             x_app_platform=x_app_platform,
             x_device_id_hash=x_device_id_hash,
-        ).client_device_id
-    return scope, resolved_device_id
+        )
+    except DeviceScopeValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _validate_device_scope_request(device_scope: str, resolved_device_id: Optional[str]) -> None:
@@ -358,7 +359,7 @@ def get_memories(
     x_app_platform: str = Header(None, alias='X-App-Platform'),
     x_device_id_hash: str = Header(None, alias='X-Device-Id-Hash'),
 ):
-    scope, resolved_device_id = _resolve_get_memories_device_scope(
+    scope_request = _resolve_get_memories_device_scope(
         device_scope,
         client_device_id,
         x_app_platform=x_app_platform,
@@ -366,21 +367,20 @@ def get_memories(
     )
     is_canonical = pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL
 
-    if scope != 'all' and not is_canonical:
+    if scope_request.device_scope != 'all' and not is_canonical:
         raise HTTPException(
             status_code=400,
             detail='device_scope filtering is only supported for canonical memory users',
         )
 
     if is_canonical:
-        _validate_device_scope_request(scope, resolved_device_id)
+        _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
         _set_device_scope_capability_header(response, supported=True)
         return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(
             uid,
             limit=limit,
             offset=offset,
-            device_scope=scope,
-            client_device_id=resolved_device_id,
+            device_scope_request=scope_request,
         )
 
     _set_device_scope_capability_header(response, supported=False)

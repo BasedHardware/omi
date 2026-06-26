@@ -15,6 +15,43 @@ from typing import Optional
 from starlette.requests import Request
 
 
+class DeviceScopeValidationError(ValueError):
+    """Invalid device_scope query value."""
+
+
+@dataclass(frozen=True)
+class DeviceScopeRequest:
+    """Resolved device-scope filter for canonical memory reads."""
+
+    device_scope: str
+    client_device_id: Optional[str] = None
+
+    @classmethod
+    def resolve_from_headers(
+        cls,
+        *,
+        device_scope: str = "all",
+        client_device_id: Optional[str] = None,
+        x_app_platform: Optional[str] = None,
+        x_device_id_hash: Optional[str] = None,
+    ) -> "DeviceScopeRequest":
+        scope = cls._normalize_device_scope(device_scope)
+        resolved_device_id = client_device_id
+        if scope == "current":
+            resolved_device_id = resolve_client_device(
+                x_app_platform=x_app_platform,
+                x_device_id_hash=x_device_id_hash,
+            ).client_device_id
+        return cls(device_scope=scope, client_device_id=resolved_device_id)
+
+    @staticmethod
+    def _normalize_device_scope(device_scope: str) -> str:
+        scope = (device_scope or "all").strip().lower()
+        if scope not in ("all", "current", "explicit"):
+            raise DeviceScopeValidationError("device_scope must be one of: all, current, explicit")
+        return scope
+
+
 @dataclass(frozen=True)
 class ClientDeviceContext:
     client_device_id: Optional[str] = None
