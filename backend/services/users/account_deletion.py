@@ -15,7 +15,7 @@ from database.vector_db import (
     delete_transcript_chunk_vectors_batch,
 )
 from utils import stripe as stripe_utils
-from utils.executors import postprocess_executor, submit_with_context
+from utils.executors import cleanup_executor, submit_with_context
 from utils.log_sanitizer import sanitize
 from utils.other import endpoints as auth
 from utils.other.storage import delete_all_conversation_recordings
@@ -103,6 +103,6 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         else:
             raise
 
-    submit_with_context(postprocess_executor, background_wipe_user_data, uid)
+    submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 
     return {'status': 'ok', 'message': 'Account deletion started'}

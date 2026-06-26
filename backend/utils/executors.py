@@ -11,6 +11,9 @@ Provides shared executors with strict separation (bulkhead pattern):
 - sync_executor: sync pipeline VAD/STT/segment processing.
 - postprocess_executor: best-effort post-processing (memories, trends, vectors,
   action items, goals, conversation processing, webhook delivery).
+- cleanup_executor: long-running account-deletion wipes (vectors, recordings,
+  Firestore subcollections). Bulkheaded so bursts of account deletions cannot
+  starve normal post-processing.
 - storage_executor: audio file precaching, GCS operations.
 
 These replace ad-hoc ThreadPoolExecutor creation throughout the codebase,
@@ -61,6 +64,7 @@ llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_nam
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
+cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
 
 _ALL_EXECUTORS = [
@@ -70,6 +74,7 @@ _ALL_EXECUTORS = [
     stripe_executor,
     sync_executor,
     postprocess_executor,
+    cleanup_executor,
     storage_executor,
 ]
 

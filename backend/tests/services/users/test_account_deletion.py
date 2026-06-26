@@ -82,7 +82,7 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
         ('sub', 'uid1'),
         ('stripe', 'sub_123'),
         ('auth', 'uid1'),
-        ('enqueue', account_deletion.postprocess_executor, account_deletion.background_wipe_user_data, 'uid1'),
+        ('enqueue', account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1'),
     ]
 
 
@@ -103,7 +103,7 @@ def test_start_account_deletion_tolerates_best_effort_failures_and_missing_fireb
     assert result['status'] == 'ok'
     account_deletion.stripe_utils.cancel_subscription.assert_not_called()
     submit.assert_called_once_with(
-        account_deletion.postprocess_executor, account_deletion.background_wipe_user_data, 'uid1'
+        account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1'
     )
 
 
