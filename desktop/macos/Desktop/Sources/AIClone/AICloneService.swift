@@ -24,19 +24,15 @@ struct CloneMessage: Identifiable, Sendable {
 final class AICloneService: ObservableObject {
     static let shared = AICloneService()
 
-    @Published var pendingMessages: [CloneMessage] = []
     @Published var isEnabled: Bool = false
-    @Published var autoReply: Bool = false
 
     // iMessage
     @Published var iMessageConnected: Bool = false
 
-    // Telegram — personal account (Telethon) state
+    // Telegram — Bot API state
     @Published var telegramConnected: Bool = false
-    @Published var telegramDisplayName: String = ""
-    @Published var telegramPhone: String = ""
-    @Published var telegramSendingCode: Bool = false
-    @Published var telegramVerifying: Bool = false
+    @Published var telegramBotUsername: String = ""
+    @Published var telegramConnecting: Bool = false
     @Published var telegramError: String = ""
 
     // WhatsApp — Cloud API bot state
@@ -45,23 +41,15 @@ final class AICloneService: ObservableObject {
 
     private var pollingTask: Task<Void, Never>?
     private var lastIMessageDate: Double = 0
-    private var lastTelegramPollTime: Double = 0
-
-    // phone_code_hash from send-code response, needed for verify step
-    var telegramPendingHash: String = ""
 
     private init() {
         isEnabled = UserDefaults.standard.bool(forKey: "aiCloneEnabled")
-        autoReply = UserDefaults.standard.bool(forKey: "aiCloneAutoReply")
         lastIMessageDate = UserDefaults.standard.double(forKey: "aiCloneLastIMessageDate")
-        lastTelegramPollTime = UserDefaults.standard.double(forKey: "aiCloneLastTelegramPoll")
         telegramConnected = UserDefaults.standard.bool(forKey: "aiCloneTelegramConnected")
-        telegramDisplayName = UserDefaults.standard.string(forKey: "aiCloneTelegramName") ?? ""
-        telegramPhone = UserDefaults.standard.string(forKey: "aiCloneTelegramPhone") ?? ""
+        telegramBotUsername = UserDefaults.standard.string(forKey: "aiCloneTelegramBotUsername") ?? ""
         iMessageConnected = checkIMessagePermission()
         whatsAppConfigured = UserDefaults.standard.bool(forKey: "aiCloneWhatsAppConfigured")
         whatsAppBotPhone = UserDefaults.standard.string(forKey: "aiCloneWhatsAppBotPhone") ?? ""
-        // Resume polling if AI Clone was enabled before the app was quit.
         if isEnabled { startPolling() }
     }
 
@@ -75,21 +63,15 @@ final class AICloneService: ObservableObject {
     func enable(_ enabled: Bool) {
         isEnabled = enabled
         UserDefaults.standard.set(enabled, forKey: "aiCloneEnabled")
-        Task { try? await APIClient.shared.updateCloneSettings(enabled: enabled, autoReply: autoReply) }
+        Task { try? await APIClient.shared.updateCloneSettings(enabled: enabled, autoReply: true) }
         if enabled { startPolling() } else { stopPolling() }
-    }
-
-    func setAutoReply(_ value: Bool) {
-        autoReply = value
-        UserDefaults.standard.set(value, forKey: "aiCloneAutoReply")
-        Task { try? await APIClient.shared.updateCloneSettings(enabled: isEnabled, autoReply: value) }
     }
 
     func startPolling() {
         pollingTask?.cancel()
         pollingTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.pollAllPlatforms()
+                await self?.pollIMessage()
                 try? await Task.sleep(for: .seconds(15))
             }
         }
@@ -100,25 +82,13 @@ final class AICloneService: ObservableObject {
         pollingTask = nil
     }
 
-    // MARK: - Polling
-
-    private func pollAllPlatforms() async {
-        async let iMsg: Void = pollIMessage()
-        async let tg: Void = pollTelegram()
-        _ = await (iMsg, tg)
-    }
-
     // MARK: - iMessage (AppleScript)
 
     private func checkIMessagePermission() -> Bool {
-        // Full disk access check — if the app can query Messages.app via AppleScript, it'll work.
-        // We just verify Messages.app exists.
         return FileManager.default.fileExists(atPath: "/System/Applications/Messages.app")
     }
 
     private func pollIMessage() async {
-        // Use AppleScript to read recent incoming messages from Messages.app.
-        // The app has com.apple.security.automation.apple-events = true, so this works without sandbox.
         let cutoffInterval = max(lastIMessageDate, Date().timeIntervalSince1970 - 900)
         let script = """
         tell application "Messages"
@@ -164,12 +134,11 @@ final class AICloneService: ObservableObject {
                 lastIMessageDate = msgDate.timeIntervalSince1970
                 UserDefaults.standard.set(lastIMessageDate, forKey: "aiCloneLastIMessageDate")
             }
-            await handleIncoming(platform: "imessage", sender: name.isEmpty ? handle : name, chatId: handle, message: text)
+            await handleIMessage(sender: name.isEmpty ? handle : name, handle: handle, message: text)
         }
     }
 
     private func parseAppleScriptDate(_ str: String) -> Date? {
-        // AppleScript date strings vary by locale; try a few formatters
         let formatters = [
             "EEEE, MMMM d, yyyy 'at' h:mm:ss a",
             "EEEE, d MMMM yyyy 'at' HH:mm:ss",
@@ -184,162 +153,50 @@ final class AICloneService: ObservableObject {
         return nil
     }
 
-    // MARK: - Telegram (personal account via backend Telethon)
+    // MARK: - Telegram (Bot API)
 
-    private func pollTelegram() async {
-        guard telegramConnected else { return }
-        let since = lastTelegramPollTime
-        guard let result = try? await APIClient.shared.telegramPollMessages(since: since) else { return }
-        for msg in result.messages {
-            if msg.timestamp > lastTelegramPollTime {
-                lastTelegramPollTime = msg.timestamp
-                UserDefaults.standard.set(lastTelegramPollTime, forKey: "aiCloneLastTelegramPoll")
-            }
-            await handleIncoming(
-                platform: "telegram",
-                sender: msg.sender,
-                chatId: String(msg.chatId),
-                message: msg.message
-            )
-        }
-    }
-
-    // MARK: - Telegram Auth
-
-    func telegramSendCode(phone: String) async {
-        telegramSendingCode = true
+    func telegramConnect(botToken: String) async {
+        telegramConnecting = true
         telegramError = ""
         do {
-            let hash = try await APIClient.shared.telegramSendCode(phone: phone)
-            telegramPendingHash = hash
-        } catch {
-            telegramError = "Failed to send code. Check your phone number and try again."
-        }
-        telegramSendingCode = false
-    }
-
-    func telegramVerify(phone: String, code: String) async {
-        telegramVerifying = true
-        telegramError = ""
-        do {
-            let info = try await APIClient.shared.telegramVerify(
-                phone: phone,
-                code: code,
-                phoneCodeHash: telegramPendingHash
-            )
+            let result = try await APIClient.shared.telegramConnect(botToken: botToken)
             telegramConnected = true
-            telegramDisplayName = info.displayName
-            telegramPhone = phone
-            telegramPendingHash = ""
+            telegramBotUsername = result.botUsername
             UserDefaults.standard.set(true, forKey: "aiCloneTelegramConnected")
-            UserDefaults.standard.set(info.displayName, forKey: "aiCloneTelegramName")
-            UserDefaults.standard.set(phone, forKey: "aiCloneTelegramPhone")
+            UserDefaults.standard.set(result.botUsername, forKey: "aiCloneTelegramBotUsername")
         } catch {
-            telegramError = "Wrong code. Please try again."
+            telegramError = "Invalid bot token. Create one at @BotFather and try again."
         }
-        telegramVerifying = false
+        telegramConnecting = false
     }
 
     func telegramDisconnect() async {
         try? await APIClient.shared.telegramDisconnect()
         telegramConnected = false
-        telegramDisplayName = ""
-        telegramPhone = ""
-        telegramPendingHash = ""
+        telegramBotUsername = ""
         UserDefaults.standard.set(false, forKey: "aiCloneTelegramConnected")
-        UserDefaults.standard.removeObject(forKey: "aiCloneTelegramName")
-        UserDefaults.standard.removeObject(forKey: "aiCloneTelegramPhone")
+        UserDefaults.standard.removeObject(forKey: "aiCloneTelegramBotUsername")
     }
 
-    // MARK: - Handle Incoming
+    // MARK: - Handle iMessage (auto-reply)
 
-    private func handleIncoming(platform: String, sender: String, chatId: String, message: String) async {
-        // Only deduplicate against messages still awaiting action (status == .pending).
-        // Allowing the same text from the same chat after it has been sent/dismissed lets
-        // legitimate repeated short messages (e.g. "ok", "thanks") through.
-        let isDuplicate = pendingMessages.contains {
-            $0.status == .pending && $0.platform == platform && $0.chatIdentifier == chatId && $0.incoming == message
-        }
-        guard !isDuplicate else { return }
-
+    private func handleIMessage(sender: String, handle: String, message: String) async {
         do {
             let reply = try await APIClient.shared.generateCloneReply(
-                platform: platform,
+                platform: "imessage",
                 sender: sender,
                 message: message
             )
-            let cloneMsg = CloneMessage(
-                id: reply.messageId,
-                platform: platform,
-                sender: sender,
-                chatIdentifier: chatId,
-                incoming: message,
-                draftReply: reply.reply,
-                status: .pending,
-                createdAt: Date()
-            )
-            pendingMessages.insert(cloneMsg, at: 0)
-
-            if autoReply {
-                await performSend(cloneMsg)
-            }
+            // Append "— Omi" signature so the recipient knows this is an AI reply
+            let signedReply = reply.reply + "\n— Omi"
+            await sendViaIMessage(handle: handle, text: signedReply)
+            try? await APIClient.shared.updateCloneMessage(id: reply.messageId, status: "sent", editedReply: nil)
         } catch {
-            log("AICloneService: Failed to generate reply: \(error)")
+            log("AICloneService: Failed to handle iMessage: \(error)")
         }
-    }
-
-    // MARK: - Actions
-
-    func approveMessage(_ id: String) async {
-        guard let idx = pendingMessages.firstIndex(where: { $0.id == id }) else { return }
-        let msg = pendingMessages[idx]
-        await performSend(msg)
-        pendingMessages[idx].status = .sent
-        try? await APIClient.shared.updateCloneMessage(id: id, status: "sent", editedReply: nil)
-    }
-
-    func dismissMessage(_ id: String) async {
-        guard let idx = pendingMessages.firstIndex(where: { $0.id == id }) else { return }
-        pendingMessages[idx].status = .dismissed
-        try? await APIClient.shared.updateCloneMessage(id: id, status: "dismissed", editedReply: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.pendingMessages.removeAll { $0.id == id }
-        }
-    }
-
-    func editAndSend(_ id: String, editedText: String) async {
-        guard let idx = pendingMessages.firstIndex(where: { $0.id == id }) else { return }
-        pendingMessages[idx].draftReply = editedText
-        var edited = pendingMessages[idx]
-        edited = CloneMessage(
-            id: edited.id,
-            platform: edited.platform,
-            sender: edited.sender,
-            chatIdentifier: edited.chatIdentifier,
-            incoming: edited.incoming,
-            draftReply: editedText,
-            status: edited.status,
-            createdAt: edited.createdAt
-        )
-        await performSend(edited)
-        pendingMessages[idx].status = .sent
-        try? await APIClient.shared.updateCloneMessage(id: id, status: "sent", editedReply: editedText)
     }
 
     // MARK: - Platform Send
-
-    private func performSend(_ msg: CloneMessage) async {
-        switch msg.platform {
-        case "telegram":
-            await sendViaTelegram(chatId: msg.chatIdentifier, text: msg.draftReply)
-        case "imessage":
-            await sendViaIMessage(handle: msg.chatIdentifier, text: msg.draftReply)
-        case "whatsapp":
-            await sendViaWhatsApp(to: msg.chatIdentifier, text: msg.draftReply)
-        default:
-            break
-        }
-    }
 
     private func sendViaTelegram(chatId: String, text: String) async {
         guard let id = Int(chatId) else { return }
@@ -359,7 +216,6 @@ final class AICloneService: ObservableObject {
     }
 
     private func sendViaIMessage(handle: String, text: String) async {
-        // Escape text for AppleScript string literal
         let escaped = text
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")

@@ -6,21 +6,19 @@ struct AIClonePage: View {
   @StateObject private var service = AICloneService.shared
   @State private var showTelegramSetup = false
   @State private var showWhatsAppSetup = false
-  @State private var editingMessageId: String? = nil
-  @State private var editText = ""
 
   var body: some View {
     VStack(spacing: 0) {
       pageHeader
       Divider().opacity(0.2)
 
-      if service.pendingMessages.isEmpty && !service.isEnabled {
+      if !service.isEnabled {
         emptyState
       } else {
         HStack(alignment: .top, spacing: 0) {
           platformPanel.frame(width: 260)
           Divider().opacity(0.2)
-          messageFeed
+          activityLog
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
@@ -76,7 +74,7 @@ struct AIClonePage: View {
         Text("Meet Your AI Clone")
           .scaledFont(size: 22, weight: .bold)
           .foregroundColor(OmiColors.textPrimary)
-        Text("Omi reads your messages and drafts replies in your voice,\nbased on your memories and communication style.")
+        Text("Omi reads your messages and auto-replies in your voice,\nbased on your memories and communication style.")
           .scaledFont(size: 14)
           .foregroundColor(OmiColors.textSecondary)
           .multilineTextAlignment(.center)
@@ -85,7 +83,7 @@ struct AIClonePage: View {
       HStack(spacing: 12) {
         platformSetupCard(
           icon: "message.fill", color: .green, name: "iMessage",
-          description: "Reads & sends via\nMessages.app",
+          description: "Reads & auto-replies\nvia Messages.app",
           isConnected: service.iMessageConnected,
           action: {
             if !service.iMessageConnected {
@@ -96,7 +94,7 @@ struct AIClonePage: View {
         )
         platformSetupCard(
           icon: "paperplane.fill", color: Color(red: 0.2, green: 0.6, blue: 1.0), name: "Telegram",
-          description: "Your personal account\nvia phone + OTP",
+          description: "Your Telegram bot\nauto-replies for you",
           isConnected: service.telegramConnected,
           action: { showTelegramSetup = true }
         )
@@ -137,7 +135,7 @@ struct AIClonePage: View {
         platformRow(
           icon: "message.fill", color: .green, name: "iMessage",
           isConnected: service.iMessageConnected,
-          statusLabel: service.iMessageConnected ? "Reads & sends via Messages" : "Grant Automation access",
+          statusLabel: service.iMessageConnected ? "Auto-replies via Messages" : "Grant Automation access",
           action: {
             if !service.iMessageConnected {
               NSWorkspace.shared.open(
@@ -149,7 +147,9 @@ struct AIClonePage: View {
         platformRow(
           icon: "paperplane.fill", color: Color(red: 0.2, green: 0.6, blue: 1.0), name: "Telegram",
           isConnected: service.telegramConnected,
-          statusLabel: service.telegramConnected ? service.telegramDisplayName : "Tap to connect account",
+          statusLabel: service.telegramConnected
+            ? (service.telegramBotUsername.isEmpty ? "Bot connected" : "@\(service.telegramBotUsername)")
+            : "Tap to connect bot",
           action: { showTelegramSetup = true }
         )
 
@@ -159,38 +159,6 @@ struct AIClonePage: View {
           statusLabel: service.whatsAppConfigured ? service.whatsAppBotPhone : "Tap to set up bot",
           action: { showWhatsAppSetup = true }
         )
-
-        Divider().opacity(0.2).padding(.horizontal, 16)
-
-        VStack(alignment: .leading, spacing: 4) {
-          Text("Auto-Reply")
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
-            .padding(.horizontal, 16)
-          Toggle(isOn: Binding(
-            get: { service.autoReply },
-            set: { v in service.setAutoReply(v) }
-          )) {
-            VStack(alignment: .leading, spacing: 2) {
-              Text("Send automatically")
-                .scaledFont(size: 13, weight: .medium).foregroundColor(OmiColors.textPrimary)
-              Text("Skips approval step")
-                .scaledFont(size: 11).foregroundColor(OmiColors.textTertiary)
-            }
-          }
-          .toggleStyle(.switch).tint(OmiColors.purplePrimary)
-          .padding(.horizontal, 16).padding(.vertical, 8)
-        }
-
-        let pending = service.pendingMessages.filter { $0.status == .pending }.count
-        if pending > 0 {
-          HStack {
-            Image(systemName: "clock.fill").scaledFont(size: 12).foregroundColor(OmiColors.warning)
-            Text("\(pending) waiting for approval")
-              .scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
-          }
-          .padding(.horizontal, 16)
-        }
 
         Spacer()
       }
@@ -232,176 +200,41 @@ struct AIClonePage: View {
     .disabled(isDisabled)
   }
 
-  // MARK: - Message Feed
+  // MARK: - Activity Log
 
-  private var messageFeed: some View {
-    Group {
-      if service.pendingMessages.isEmpty {
-        VStack(spacing: 16) {
-          Spacer()
-          Image(systemName: "tray").scaledFont(size: 40).foregroundColor(OmiColors.textQuaternary)
-          Text("No messages yet").scaledFont(size: 15).foregroundColor(OmiColors.textTertiary)
-          Text("New messages will appear here when they arrive")
-            .scaledFont(size: 13).foregroundColor(OmiColors.textQuaternary)
-          Spacer()
-        }
-      } else {
-        ScrollView {
-          LazyVStack(spacing: 12) {
-            ForEach(service.pendingMessages) { msg in
-              messageCard(msg)
-                .transition(.asymmetric(
-                  insertion: .move(edge: .top).combined(with: .opacity),
-                  removal: .opacity
-                ))
-            }
-          }
-          .padding(20)
-          .animation(.easeInOut(duration: 0.25), value: service.pendingMessages.count)
-        }
-      }
-    }
-  }
-
-  // MARK: - Message Card
-
-  @ViewBuilder
-  private func messageCard(_ msg: CloneMessage) -> some View {
-    let isEditing = editingMessageId == msg.id
-
-    VStack(alignment: .leading, spacing: 12) {
-      HStack(spacing: 10) {
-        platformIcon(msg.platform)
-        VStack(alignment: .leading, spacing: 1) {
-          Text(msg.sender).scaledFont(size: 13, weight: .semibold).foregroundColor(OmiColors.textPrimary)
-          Text(relativeTime(msg.createdAt)).scaledFont(size: 11).foregroundColor(OmiColors.textTertiary)
-        }
+  private var activityLog: some View {
+    VStack(spacing: 0) {
+      HStack {
+        Text("Recent Omi Replies")
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
         Spacer()
-        statusBadge(msg.status)
+        Image(systemName: "checkmark.circle.fill")
+          .scaledFont(size: 13)
+          .foregroundColor(OmiColors.success)
+        Text("Auto-sending")
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.success)
       }
+      .padding(.horizontal, 20)
+      .padding(.vertical, 14)
 
-      VStack(alignment: .leading, spacing: 4) {
-        Text("Received").scaledFont(size: 10, weight: .semibold)
-          .foregroundColor(OmiColors.textQuaternary).textCase(.uppercase)
-        Text(msg.incoming).scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
-          .padding(.horizontal, 12).padding(.vertical, 8)
-          .background(RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary.opacity(0.7)))
+      Divider().opacity(0.15)
+
+      VStack(spacing: 16) {
+        Spacer()
+        Image(systemName: "waveform.path.ecg").scaledFont(size: 40).foregroundColor(OmiColors.textQuaternary)
+        Text("Watching for messages…").scaledFont(size: 15).foregroundColor(OmiColors.textTertiary)
+        Text("Omi auto-replies to iMessage, Telegram, and WhatsApp on your behalf.\nMessages appear here after sending.")
+          .scaledFont(size: 13).foregroundColor(OmiColors.textQuaternary)
+          .multilineTextAlignment(.center)
+        Spacer()
       }
-
-      VStack(alignment: .leading, spacing: 4) {
-        HStack {
-          Text("AI Draft").scaledFont(size: 10, weight: .semibold)
-            .foregroundColor(OmiColors.purplePrimary.opacity(0.8)).textCase(.uppercase)
-          Spacer()
-          if msg.status == .pending {
-            Button(action: {
-              if isEditing { editingMessageId = nil }
-              else { editText = msg.draftReply; editingMessageId = msg.id }
-            }) {
-              Text(isEditing ? "Done" : "Edit")
-                .scaledFont(size: 11, weight: .medium).foregroundColor(OmiColors.purplePrimary)
-            }
-            .buttonStyle(.plain)
-          }
-        }
-
-        if isEditing {
-          TextEditor(text: $editText)
-            .scaledFont(size: 13).foregroundColor(OmiColors.textPrimary)
-            .frame(minHeight: 60, maxHeight: 120)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(
-              RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary)
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(OmiColors.purplePrimary.opacity(0.4), lineWidth: 1))
-            )
-            .scrollContentBackground(.hidden)
-        } else {
-          Text(msg.draftReply).scaledFont(size: 13).foregroundColor(OmiColors.textPrimary)
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(
-              RoundedRectangle(cornerRadius: 10).fill(OmiColors.purplePrimary.opacity(0.12))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1))
-            )
-        }
-      }
-
-      if msg.status == .pending {
-        HStack(spacing: 10) {
-          Button(action: {
-            Task {
-              if isEditing {
-                await service.editAndSend(msg.id, editedText: editText)
-                editingMessageId = nil
-              } else {
-                await service.approveMessage(msg.id)
-              }
-            }
-          }) {
-            Label(isEditing ? "Send Edited" : "Send", systemImage: "paperplane.fill")
-              .scaledFont(size: 13, weight: .semibold).foregroundColor(.white)
-              .padding(.horizontal, 16).padding(.vertical, 8)
-              .background(RoundedRectangle(cornerRadius: 9).fill(OmiColors.purplePrimary))
-          }
-          .buttonStyle(.plain)
-
-          Button(action: { Task { await service.dismissMessage(msg.id) } }) {
-            Text("Dismiss").scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
-              .padding(.horizontal, 16).padding(.vertical, 8)
-              .background(RoundedRectangle(cornerRadius: 9).fill(OmiColors.backgroundTertiary))
-          }
-          .buttonStyle(.plain)
-        }
-      }
+      .padding(.horizontal, 40)
     }
-    .padding(16)
-    .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
-        .fill(OmiColors.backgroundSecondary.opacity(0.7))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-          .stroke(OmiColors.border.opacity(0.15), lineWidth: 1))
-    )
   }
 
   // MARK: - Helpers
-
-  @ViewBuilder
-  private func platformIcon(_ platform: String) -> some View {
-    let (icon, color): (String, Color) = {
-      switch platform {
-      case "imessage": return ("message.fill", .green)
-      case "telegram": return ("paperplane.fill", Color(red: 0.2, green: 0.6, blue: 1.0))
-      case "whatsapp": return ("phone.fill", Color(red: 0.15, green: 0.7, blue: 0.3))
-      default: return ("bubble.left.fill", OmiColors.purplePrimary)
-      }
-    }()
-    ZStack {
-      Circle().fill(color.opacity(0.18)).frame(width: 32, height: 32)
-      Image(systemName: icon).scaledFont(size: 13).foregroundColor(color)
-    }
-  }
-
-  @ViewBuilder
-  private func statusBadge(_ status: CloneMessage.CloneMessageStatus) -> some View {
-    switch status {
-    case .pending:
-      Text("Pending").scaledFont(size: 10, weight: .semibold).foregroundColor(OmiColors.warning)
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(RoundedRectangle(cornerRadius: 5).fill(OmiColors.warning.opacity(0.15)))
-    case .sent:
-      Label("Sent", systemImage: "checkmark").scaledFont(size: 10, weight: .semibold).foregroundColor(OmiColors.success)
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(RoundedRectangle(cornerRadius: 5).fill(OmiColors.success.opacity(0.15)))
-    case .dismissed:
-      Text("Dismissed").scaledFont(size: 10, weight: .semibold).foregroundColor(OmiColors.textQuaternary)
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(RoundedRectangle(cornerRadius: 5).fill(OmiColors.backgroundTertiary))
-    case .approved:
-      Label("Approved", systemImage: "checkmark").scaledFont(size: 10, weight: .semibold)
-        .foregroundColor(OmiColors.purplePrimary)
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(RoundedRectangle(cornerRadius: 5).fill(OmiColors.purplePrimary.opacity(0.15)))
-    }
-  }
 
   private func platformSetupCard(
     icon: String, color: Color, name: String, description: String,
@@ -444,21 +277,6 @@ struct AIClonePage: View {
     .disabled(isComingSoon)
   }
 
-  private static let shortDateFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateStyle = .short
-    f.timeStyle = .none
-    return f
-  }()
-
-  private func relativeTime(_ date: Date) -> String {
-    let seconds = Int(-date.timeIntervalSinceNow)
-    if seconds < 60 { return "just now" }
-    if seconds < 3600 { return "\(seconds / 60)m ago" }
-    if seconds < 86400 { return "\(seconds / 3600)h ago" }
-    return AIClonePage.shortDateFormatter.string(from: date)
-  }
-
   // MARK: - WhatsApp Setup Sheet
 
   private var whatsAppSetupSheet: some View {
@@ -466,7 +284,7 @@ struct AIClonePage: View {
       .environmentObject(service)
   }
 
-  // MARK: - Telegram Setup Sheet (Phone + OTP)
+  // MARK: - Telegram Setup Sheet (Bot API)
 
   private var telegramSetupSheet: some View {
     TelegramSetupSheet(isPresented: $showTelegramSetup)
@@ -497,13 +315,12 @@ private struct WhatsAppSetupSheet: View {
       Divider().opacity(0.2)
 
       if service.whatsAppConfigured {
-        // Connected state
         VStack(spacing: 20) {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: 48).foregroundColor(OmiColors.success)
           Text(service.whatsAppBotPhone)
             .scaledFont(size: 15, weight: .semibold).foregroundColor(OmiColors.textPrimary)
-          Text("Omi is replying to WhatsApp messages sent to this bot number.")
+          Text("Omi is auto-replying to WhatsApp messages sent to this bot number.")
             .scaledFont(size: 13).foregroundColor(OmiColors.textSecondary).multilineTextAlignment(.center)
           Button(action: { service.configureWhatsApp(botPhone: ""); isPresented = false }) {
             Text("Disconnect").scaledFont(size: 13).foregroundColor(OmiColors.warning)
@@ -513,11 +330,10 @@ private struct WhatsAppSetupSheet: View {
         .padding(28)
       } else {
         VStack(alignment: .leading, spacing: 20) {
-          // How it works
           VStack(alignment: .leading, spacing: 6) {
             Label("How it works", systemImage: "info.circle")
               .scaledFont(size: 12, weight: .semibold).foregroundColor(OmiColors.textTertiary)
-            Text("Omi uses a WhatsApp Cloud API bot number. Your contacts message the bot, and Omi replies using your memories.\n\nGet your phone number ID and access token at developers.facebook.com → WhatsApp.")
+            Text("Omi uses a WhatsApp Cloud API bot number. Your contacts message the bot, and Omi auto-replies using your memories.\n\nGet your phone number ID and access token at developers.facebook.com → WhatsApp.")
               .scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
           }
           .padding(14)
@@ -564,45 +380,32 @@ private struct WhatsAppSetupSheet: View {
   }
 }
 
-// MARK: - Telegram Setup Sheet (separate view for state management)
+// MARK: - Telegram Setup Sheet (Bot API — bot token)
 
 private struct TelegramSetupSheet: View {
   @Binding var isPresented: Bool
   @EnvironmentObject var service: AICloneService
-
-  // Auth state machine: .phone → .code → .done
-  @State private var step: Step = .phone
-  @State private var phoneDraft = ""
-  @State private var codeDraft = ""
-
-  enum Step { case phone, code, done }
+  @State private var tokenDraft = ""
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       sheetHeader
       Divider().opacity(0.2)
 
-      if service.telegramConnected && step != .code {
+      if service.telegramConnected {
         connectedView
       } else {
-        switch step {
-        case .phone: phoneStep
-        case .code: codeStep
-        case .done: connectedView
-        }
+        setupView
       }
     }
     .frame(width: 420)
     .background(OmiColors.backgroundPrimary)
     .preferredColorScheme(.dark)
-    .onAppear {
-      if service.telegramConnected { step = .done }
-    }
   }
 
   private var sheetHeader: some View {
     HStack {
-      Text(service.telegramConnected ? "Telegram Connected" : "Connect Telegram")
+      Text(service.telegramConnected ? "Telegram Bot Connected" : "Connect Telegram Bot")
         .scaledFont(size: 18, weight: .bold).foregroundColor(OmiColors.textPrimary)
       Spacer()
       Button(action: { isPresented = false }) {
@@ -613,27 +416,28 @@ private struct TelegramSetupSheet: View {
     .padding(24)
   }
 
-  // Connected state
   private var connectedView: some View {
     VStack(spacing: 20) {
       Image(systemName: "checkmark.circle.fill")
         .scaledFont(size: 48).foregroundColor(OmiColors.success)
 
       VStack(spacing: 4) {
-        Text(service.telegramDisplayName)
-          .scaledFont(size: 16, weight: .semibold).foregroundColor(OmiColors.textPrimary)
-        Text(service.telegramPhone)
+        if !service.telegramBotUsername.isEmpty {
+          Text("@\(service.telegramBotUsername)")
+            .scaledFont(size: 16, weight: .semibold).foregroundColor(OmiColors.textPrimary)
+        }
+        Text("Bot connected")
           .scaledFont(size: 13).foregroundColor(OmiColors.textTertiary)
       }
 
-      Text("Omi is monitoring your personal Telegram messages and will draft replies in your voice.")
+      Text("Friends message your bot and Omi auto-replies in your voice.\nShare your bot link so people can find it.")
         .scaledFont(size: 13).foregroundColor(OmiColors.textSecondary)
         .multilineTextAlignment(.center)
 
       Button(action: {
         Task {
           await service.telegramDisconnect()
-          step = .phone
+          isPresented = false
         }
       }) {
         Text("Disconnect")
@@ -644,32 +448,27 @@ private struct TelegramSetupSheet: View {
     .padding(28)
   }
 
-  // Step 1: Enter phone number
-  private var phoneStep: some View {
+  private var setupView: some View {
     VStack(alignment: .leading, spacing: 20) {
       VStack(alignment: .leading, spacing: 6) {
         Label("How it works", systemImage: "info.circle")
           .scaledFont(size: 12, weight: .semibold).foregroundColor(OmiColors.textTertiary)
-        Text("Omi connects to your actual Telegram account (not a bot) using Telegram's official MTProto protocol — the same one the official app uses. Your session is encrypted and stored securely.")
+        Text("1. Open Telegram and message @BotFather\n2. Send /newbot and follow the prompts\n3. Copy the bot token and paste it below\n4. Share your new bot link with friends — they message the bot and Omi auto-replies")
           .scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
       }
       .padding(14)
       .background(RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary.opacity(0.5)))
 
       VStack(alignment: .leading, spacing: 8) {
-        Text("Your phone number")
+        Text("Bot token from @BotFather")
           .scaledFont(size: 13, weight: .semibold).foregroundColor(OmiColors.textSecondary)
-        TextField("+1 555 000 0000", text: $phoneDraft)
-          .textFieldStyle(.plain)
-          .scaledFont(size: 14)
-          .foregroundColor(OmiColors.textPrimary)
+        TextField("1234567890:ABCdef...", text: $tokenDraft)
+          .textFieldStyle(.plain).scaledFont(size: 13).foregroundColor(OmiColors.textPrimary)
           .padding(12)
           .background(
             RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary)
               .overlay(RoundedRectangle(cornerRadius: 10).stroke(OmiColors.border.opacity(0.3), lineWidth: 1))
           )
-        Text("Include country code, e.g. +1 for US")
-          .scaledFont(size: 11).foregroundColor(OmiColors.textQuaternary)
       }
 
       if !service.telegramError.isEmpty {
@@ -683,90 +482,26 @@ private struct TelegramSetupSheet: View {
 
         Button(action: {
           Task {
-            await service.telegramSendCode(phone: phoneDraft)
-            if service.telegramError.isEmpty { step = .code }
+            await service.telegramConnect(botToken: tokenDraft)
+            if service.telegramConnected { isPresented = false }
           }
         }) {
           Group {
-            if service.telegramSendingCode {
+            if service.telegramConnecting {
               ProgressView().scaleEffect(0.75)
             } else {
-              Text("Send Code")
+              Text("Connect")
             }
           }
           .scaledFont(size: 13, weight: .semibold).foregroundColor(.white)
           .padding(.horizontal, 20).padding(.vertical, 9)
           .background(
             RoundedRectangle(cornerRadius: 10)
-              .fill(phoneDraft.count > 5 ? OmiColors.purplePrimary : OmiColors.textQuaternary.opacity(0.3))
+              .fill(tokenDraft.count > 20 ? OmiColors.purplePrimary : OmiColors.textQuaternary.opacity(0.3))
           )
         }
         .buttonStyle(.plain)
-        .disabled(phoneDraft.count < 6 || service.telegramSendingCode)
-      }
-    }
-    .padding(24)
-  }
-
-  // Step 2: Enter OTP code
-  private var codeStep: some View {
-    VStack(alignment: .leading, spacing: 20) {
-      VStack(alignment: .leading, spacing: 6) {
-        Label("Check Telegram", systemImage: "bell.badge.fill")
-          .scaledFont(size: 12, weight: .semibold).foregroundColor(OmiColors.purplePrimary)
-        Text("A code was sent to your Telegram account on your phone. Open Telegram and enter the 5-digit code you received.")
-          .scaledFont(size: 12).foregroundColor(OmiColors.textSecondary)
-      }
-      .padding(14)
-      .background(RoundedRectangle(cornerRadius: 10).fill(OmiColors.purplePrimary.opacity(0.08)))
-
-      VStack(alignment: .leading, spacing: 8) {
-        Text("Verification code")
-          .scaledFont(size: 13, weight: .semibold).foregroundColor(OmiColors.textSecondary)
-        TextField("12345", text: $codeDraft)
-          .textFieldStyle(.plain)
-          .scaledFont(size: 22, weight: .semibold)
-          .multilineTextAlignment(.center)
-          .foregroundColor(OmiColors.textPrimary)
-          .padding(14)
-          .background(
-            RoundedRectangle(cornerRadius: 10).fill(OmiColors.backgroundTertiary)
-              .overlay(RoundedRectangle(cornerRadius: 10).stroke(OmiColors.purplePrimary.opacity(0.4), lineWidth: 1))
-          )
-      }
-
-      if !service.telegramError.isEmpty {
-        Text(service.telegramError).scaledFont(size: 12).foregroundColor(OmiColors.warning)
-      }
-
-      HStack(spacing: 12) {
-        Button("Back") { step = .phone; service.telegramError = "" }
-          .buttonStyle(.plain).foregroundColor(OmiColors.textSecondary)
-
-        Spacer()
-
-        Button(action: {
-          Task {
-            await service.telegramVerify(phone: phoneDraft, code: codeDraft)
-            if service.telegramError.isEmpty { step = .done }
-          }
-        }) {
-          Group {
-            if service.telegramVerifying {
-              ProgressView().scaleEffect(0.75)
-            } else {
-              Text("Verify")
-            }
-          }
-          .scaledFont(size: 13, weight: .semibold).foregroundColor(.white)
-          .padding(.horizontal, 20).padding(.vertical, 9)
-          .background(
-            RoundedRectangle(cornerRadius: 10)
-              .fill(codeDraft.count >= 4 ? OmiColors.purplePrimary : OmiColors.textQuaternary.opacity(0.3))
-          )
-        }
-        .buttonStyle(.plain)
-        .disabled(codeDraft.count < 4 || service.telegramVerifying)
+        .disabled(tokenDraft.count < 20 || service.telegramConnecting)
       }
     }
     .padding(24)

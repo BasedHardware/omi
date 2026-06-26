@@ -94,12 +94,10 @@ sys.modules.setdefault('utils', types.ModuleType('utils'))
 sys.modules.setdefault('utils.llm', types.ModuleType('utils.llm'))
 sys.modules['utils.llm.clone'] = _clone_stub
 
-# Stub telegram_client
+# Stub telegram_client (Bot API)
 _tg_stub = types.ModuleType('utils.integrations.telegram_client')
-_tg_stub.send_code = AsyncMock(return_value={'phone_code_hash': 'hash-123'})
-_tg_stub.verify_code = AsyncMock(return_value={'display_name': 'Alice', 'phone': '+1234'})
+_tg_stub.connect = AsyncMock(return_value={'bot_username': 'omibot', 'bot_name': 'Omi'})
 _tg_stub.disconnect = AsyncMock()
-_tg_stub.poll_new_messages = AsyncMock(return_value=[])
 _tg_stub.send_message = AsyncMock(return_value=True)
 
 # Stub whatsapp_client
@@ -179,8 +177,13 @@ def _reset_mocks():
     _db_ai_clone.update_clone_message.reset_mock()
     _clone_stub.generate_clone_reply.reset_mock()
     _clone_stub.generate_clone_reply.return_value = 'Mock reply from AI clone'
-    _tg_stub.send_code.reset_mock()
-    _tg_stub.verify_code.reset_mock()
+    _tg_stub.connect.reset_mock()
+    _tg_stub.connect.return_value = {'bot_username': 'omibot', 'bot_name': 'Omi'}
+    _tg_stub.disconnect.reset_mock()
+    _tg_stub.send_message.reset_mock()
+    _tg_stub.send_message.return_value = True
+    _wa_stub.send_message.reset_mock()
+    _wa_stub.send_message.return_value = True
 
 
 # ── POST /v1/ai-clone/generate-reply ─────────────────────────────────────────
@@ -331,83 +334,113 @@ class TestUpdateMessage:
         assert 'final_reply' not in updates
 
 
-# ── POST /v1/ai-clone/telegram/send-code ─────────────────────────────────────
+# ── POST /v1/ai-clone/telegram/connect ───────────────────────────────────────
 
 
-class TestTelegramSendCode:
-    def test_returns_phone_code_hash(self):
+class TestTelegramConnect:
+    def test_returns_bot_info_on_valid_token(self):
         _reset_mocks()
-        _tg_stub.send_code.return_value = {'phone_code_hash': 'abc123'}
-        r = client.post('/v1/ai-clone/telegram/send-code', json={'phone': '+1234567890'})
+        r = client.post('/v1/ai-clone/telegram/connect', json={'bot_token': 'valid-token'})
         assert r.status_code == 200
-        assert r.json()['phone_code_hash'] == 'abc123'
+        assert r.json()['bot_username'] == 'omibot'
 
-    def test_returns_503_when_api_not_configured(self):
+    def test_calls_tg_connect_with_token(self):
         _reset_mocks()
-        _tg_stub.send_code.side_effect = RuntimeError('TELEGRAM_API_ID / TELEGRAM_API_HASH not set')
-        r = client.post('/v1/ai-clone/telegram/send-code', json={'phone': '+1234567890'})
-        assert r.status_code == 503
-        _tg_stub.send_code.side_effect = None
+        client.post('/v1/ai-clone/telegram/connect', json={'bot_token': 'tok-123'})
+        _tg_stub.connect.assert_called_once()
+        call_args = _tg_stub.connect.call_args[0]
+        assert call_args[0] == 'uid-test'
+        assert call_args[1] == 'tok-123'
+
+    def test_returns_400_on_invalid_token(self):
+        _reset_mocks()
+        _tg_stub.connect.side_effect = ValueError('invalid_bot_token')
+        r = client.post('/v1/ai-clone/telegram/connect', json={'bot_token': 'bad'})
+        assert r.status_code == 400
+        _tg_stub.connect.side_effect = None
 
     def test_returns_500_on_unexpected_error(self):
         _reset_mocks()
-        _tg_stub.send_code.side_effect = Exception('network down')
-        r = client.post('/v1/ai-clone/telegram/send-code', json={'phone': '+1234567890'})
+        _tg_stub.connect.side_effect = Exception('network failure')
+        r = client.post('/v1/ai-clone/telegram/connect', json={'bot_token': 'tok'})
         assert r.status_code == 500
-        _tg_stub.send_code.side_effect = None
+        _tg_stub.connect.side_effect = None
 
 
-# ── POST /v1/ai-clone/telegram/verify ────────────────────────────────────────
+# ── POST /v1/ai-clone/telegram/disconnect ────────────────────────────────────
 
 
-class TestTelegramVerify:
-    def test_returns_display_name_on_success(self):
+class TestTelegramDisconnect:
+    def test_returns_ok(self):
         _reset_mocks()
-        _tg_stub.verify_code.return_value = {'display_name': 'Karthik Y', 'phone': '+1999'}
-        r = client.post(
-            '/v1/ai-clone/telegram/verify',
-            json={'phone': '+1999', 'code': '12345', 'phone_code_hash': 'hash-h'},
-        )
+        r = client.post('/v1/ai-clone/telegram/disconnect', json={})
         assert r.status_code == 200
-        assert r.json()['display_name'] == 'Karthik Y'
+        assert r.json()['status'] == 'ok'
 
-    def test_returns_400_on_bad_code(self):
+    def test_calls_tg_disconnect_with_uid(self):
         _reset_mocks()
-        _tg_stub.verify_code.side_effect = Exception('PhoneCodeInvalidError')
-        r = client.post(
-            '/v1/ai-clone/telegram/verify',
-            json={'phone': '+1999', 'code': '00000', 'phone_code_hash': 'hash-bad'},
-        )
-        assert r.status_code == 400
-        _tg_stub.verify_code.side_effect = None
+        client.post('/v1/ai-clone/telegram/disconnect', json={})
+        _tg_stub.disconnect.assert_called_with('uid-test')
 
 
-# ── GET /v1/ai-clone/telegram/messages ───────────────────────────────────────
+# ── POST /v1/ai-clone/telegram/webhook/{uid} ──────────────────────────────────
 
 
-class TestTelegramPollMessages:
-    def test_returns_messages_list(self):
+class TestTelegramWebhook:
+    def test_returns_ok_for_valid_message(self):
         _reset_mocks()
-        _tg_stub.poll_new_messages.return_value = [
-            {'sender': 'Bob', 'sender_id': 1, 'chat_id': 1, 'message': 'hey', 'timestamp': 1700000000.0}
-        ]
-        r = client.get('/v1/ai-clone/telegram/messages?since=0')
+        payload = {
+            'message': {
+                'text': 'Hey!',
+                'chat': {'id': 12345},
+                'from': {'first_name': 'Bob', 'last_name': None},
+            }
+        }
+        r = client.post('/v1/ai-clone/telegram/webhook/uid-test', json=payload)
         assert r.status_code == 200
-        assert len(r.json()['messages']) == 1
+        assert r.json()['ok'] is True
 
-    def test_returns_empty_on_error(self):
+    def test_generates_reply_and_saves_to_db(self):
         _reset_mocks()
-        _tg_stub.poll_new_messages.side_effect = Exception('telethon error')
-        r = client.get('/v1/ai-clone/telegram/messages?since=0')
+        payload = {
+            'message': {
+                'text': 'What are you up to?',
+                'chat': {'id': 9876},
+                'from': {'first_name': 'Alice', 'last_name': None},
+            }
+        }
+        client.post('/v1/ai-clone/telegram/webhook/uid-webhook', json=payload)
+        _clone_stub.generate_clone_reply.assert_called_once()
+        _db_ai_clone.save_clone_message.assert_called_once()
+        saved = _db_ai_clone.save_clone_message.call_args[0][1]
+        assert saved['platform'] == 'telegram'
+        assert saved['status'] == 'sent'
+
+    def test_auto_sends_reply(self):
+        _reset_mocks()
+        payload = {
+            'message': {
+                'text': 'Hello',
+                'chat': {'id': 555},
+                'from': {'first_name': 'Charlie', 'last_name': None},
+            }
+        }
+        client.post('/v1/ai-clone/telegram/webhook/uid-auto', json=payload)
+        _tg_stub.send_message.assert_called_once()
+
+    def test_ignores_empty_text(self):
+        _reset_mocks()
+        payload = {'message': {'text': '', 'chat': {'id': 1}, 'from': {'first_name': 'X'}}}
+        client.post('/v1/ai-clone/telegram/webhook/uid-empty', json=payload)
+        _clone_stub.generate_clone_reply.assert_not_called()
+
+    def test_returns_ok_even_on_error(self):
+        _reset_mocks()
+        _clone_stub.generate_clone_reply.side_effect = Exception('LLM down')
+        payload = {'message': {'text': 'hi', 'chat': {'id': 1}, 'from': {'first_name': 'X'}}}
+        r = client.post('/v1/ai-clone/telegram/webhook/uid-err', json=payload)
         assert r.status_code == 200
-        assert r.json()['messages'] == []
-        _tg_stub.poll_new_messages.side_effect = None
-
-    def test_passes_since_param(self):
-        _reset_mocks()
-        _tg_stub.poll_new_messages.return_value = []
-        client.get('/v1/ai-clone/telegram/messages?since=1700000000.5')
-        _tg_stub.poll_new_messages.assert_called_with('uid-test', 1700000000.5)
+        _clone_stub.generate_clone_reply.side_effect = None
 
 
 # ── POST /v1/ai-clone/telegram/send ──────────────────────────────────────────
@@ -426,19 +459,3 @@ class TestTelegramSend:
         _tg_stub.send_message.return_value = False
         r = client.post('/v1/ai-clone/telegram/send', json={'chat_id': 456, 'text': 'hey'})
         assert r.status_code == 503
-
-
-# ── POST /v1/ai-clone/telegram/disconnect ────────────────────────────────────
-
-
-class TestTelegramDisconnect:
-    def test_returns_ok(self):
-        _reset_mocks()
-        r = client.post('/v1/ai-clone/telegram/disconnect', json={})
-        assert r.status_code == 200
-        assert r.json()['status'] == 'ok'
-
-    def test_calls_tg_disconnect_with_uid(self):
-        _reset_mocks()
-        client.post('/v1/ai-clone/telegram/disconnect', json={})
-        _tg_stub.disconnect.assert_called_with('uid-test')

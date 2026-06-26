@@ -34,27 +34,26 @@ class GenerateReplyResponse(BaseModel):
 
 class CloneSettings(BaseModel):
     enabled: bool = False
-    auto_reply: bool = False
+    auto_reply: bool = True
     platforms: dict = {}
 
 
 class UpdateMessageRequest(BaseModel):
-    status: str  # approved | dismissed | sent
+    status: str  # sent | dismissed
     edited_reply: Optional[str] = None
 
 
-class TelegramSendCodeRequest(BaseModel):
-    phone: str
-
-
-class TelegramVerifyRequest(BaseModel):
-    phone: str
-    code: str
-    phone_code_hash: str
+class TelegramConnectRequest(BaseModel):
+    bot_token: str
 
 
 class TelegramSendRequest(BaseModel):
     chat_id: int
+    text: str
+
+
+class WhatsAppSendRequest(BaseModel):
+    to: str  # recipient phone number in E.164 format, e.g. +15551234567
     text: str
 
 
@@ -81,6 +80,12 @@ async def generate_reply(
     body: GenerateReplyRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    """
+    Generate a reply draft in the user's voice and save it to the message log.
+    Called by the desktop for iMessage (the only platform where reply generation
+    happens on-device after polling). Telegram and WhatsApp are webhook-driven and
+    auto-reply without hitting this endpoint.
+    """
     if not body.message.strip():
         raise HTTPException(status_code=400, detail='message cannot be empty')
 
@@ -132,65 +137,85 @@ async def update_message(
     return {'status': 'ok'}
 
 
-# ── Telegram personal-account auth (Telethon MTProto) ─────────────────────────
+# ── Telegram Bot API ───────────────────────────────────────────────────────────
 
 
-@router.post('/v1/ai-clone/telegram/send-code')
-async def telegram_send_code(
-    body: TelegramSendCodeRequest,
+@router.post('/v1/ai-clone/telegram/connect')
+async def telegram_connect(
+    body: TelegramConnectRequest,
+    request: Request,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Send OTP to the user's personal Telegram account via MTProto."""
+    """
+    Validate the user's Telegram bot token and register the per-user webhook.
+    The webhook URL is derived from the incoming request's base URL so it works
+    in both local dev (with a tunnel) and production automatically.
+    """
+    webhook_url = f'{request.base_url}v1/ai-clone/telegram/webhook/{uid}'
     try:
-        result = await tg.send_code(body.phone)
-        return result  # {'phone_code_hash': str}
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except Exception as e:
-        logger.error(f'Telegram send_code error uid={uid}: {e}')
-        raise HTTPException(status_code=500, detail='Failed to send code')
-
-
-@router.post('/v1/ai-clone/telegram/verify')
-async def telegram_verify(
-    body: TelegramVerifyRequest,
-    uid: str = Depends(auth.get_current_user_uid),
-):
-    """Verify OTP and establish Telethon session for the user."""
-    try:
-        result = await tg.verify_code(uid, body.phone, body.code, body.phone_code_hash)
-        return result  # {'display_name': str, 'phone': str}
+        result = await tg.connect(uid, body.bot_token, str(webhook_url))
+        return result  # {'bot_username': str, 'bot_name': str}
     except ValueError as e:
-        if str(e) == 'two_factor_required':
-            raise HTTPException(status_code=403, detail='two_factor_required')
-        raise HTTPException(status_code=400, detail='Verification failed — check code and try again')
+        if str(e) == 'invalid_bot_token':
+            raise HTTPException(status_code=400, detail='Invalid bot token — create one at @BotFather')
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f'Telegram verify error uid={uid}: {e}')
-        raise HTTPException(status_code=400, detail='Verification failed — check code and try again')
+        logger.error(f'Telegram connect error uid={uid}: {e}')
+        raise HTTPException(status_code=500, detail='Failed to connect Telegram bot')
 
 
 @router.post('/v1/ai-clone/telegram/disconnect')
 async def telegram_disconnect(uid: str = Depends(auth.get_current_user_uid)):
-    """Log out of Telegram and remove the session."""
+    """Remove the Telegram webhook and delete the stored bot token."""
     await tg.disconnect(uid)
     return {'status': 'ok'}
 
 
-@router.get('/v1/ai-clone/telegram/messages')
-async def telegram_poll_messages(
-    since: float = 0,
-    uid: str = Depends(auth.get_current_user_uid),
-):
+@router.post('/v1/ai-clone/telegram/webhook/{uid}')
+async def telegram_webhook_receive(uid: str, request: Request):
     """
-    Return personal Telegram DMs newer than `since` (Unix timestamp).
-    The desktop polls this every 15s to surface new messages.
+    Receive incoming Telegram messages from the Bot API webhook.
+    Generates a reply using the user's memories and sends it immediately —
+    no desktop approval step.
+    Meta expects a 200 response quickly; reply generation runs inline but
+    returns 200 regardless to avoid Telegram retry storms.
     """
     try:
-        messages = await tg.poll_new_messages(uid, since)
-        return {'messages': messages}
+        payload = await request.json()
+        message = payload.get('message', {})
+        text = (message.get('text') or '').strip()
+        chat_id = (message.get('chat') or {}).get('id')
+        from_info = message.get('from') or {}
+        sender_name = (
+            ' '.join(filter(None, [from_info.get('first_name'), from_info.get('last_name')]))
+            or from_info.get('username')
+            or 'Unknown'
+        )
+
+        if text and chat_id:
+            reply = await run_blocking(
+                llm_executor,
+                generate_clone_reply,
+                uid,
+                sender_name,
+                text,
+                'telegram',
+                None,
+            )
+            await tg.send_message(uid, chat_id, reply)
+            message_doc = {
+                'platform': 'telegram',
+                'sender': sender_name,
+                'chat_identifier': str(chat_id),
+                'incoming': text,
+                'draft_reply': reply,
+                'status': 'sent',
+                'conversation_history': [],
+            }
+            await run_blocking(db_executor, clone_db.save_clone_message, uid, message_doc)
     except Exception as e:
-        logger.error(f'Telegram poll error uid={uid}: {e}')
-        return {'messages': []}
+        logger.error(f'Telegram webhook error uid={uid}: {e}')
+    return {'ok': True}
 
 
 @router.post('/v1/ai-clone/telegram/send')
@@ -198,27 +223,19 @@ async def telegram_send(
     body: TelegramSendRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """Send a message from the user's personal Telegram account."""
+    """Send a message via the user's Telegram bot. Used for desktop-initiated sends."""
     ok = await tg.send_message(uid, body.chat_id, body.text)
     if not ok:
-        raise HTTPException(status_code=503, detail='Not connected to Telegram or send failed')
+        raise HTTPException(status_code=503, detail='Telegram bot not configured or send failed')
     return {'status': 'ok'}
 
 
-# ── WhatsApp Cloud API (bot approach, webhook-driven) ─────────────────────────
-
-
-class WhatsAppSendRequest(BaseModel):
-    to: str  # recipient phone number in E.164 format, e.g. +15551234567
-    text: str
+# ── WhatsApp Cloud API (bot, webhook-driven) ───────────────────────────────────
 
 
 @router.get('/v1/ai-clone/whatsapp/webhook')
 async def whatsapp_webhook_verify(request: Request):
-    """
-    Meta webhook verification handshake.
-    Meta sends a GET with hub.challenge; we must echo it back if the verify token matches.
-    """
+    """Meta webhook verification handshake."""
     params = dict(request.query_params)
     if params.get('hub.verify_token') != wa.VERIFY_TOKEN:
         raise HTTPException(status_code=403, detail='Invalid verify token')
@@ -228,9 +245,8 @@ async def whatsapp_webhook_verify(request: Request):
 @router.post('/v1/ai-clone/whatsapp/webhook/{uid}')
 async def whatsapp_webhook_receive(uid: str, request: Request):
     """
-    Receive incoming WhatsApp messages from Meta. Per-user webhook URL ensures we know
-    which Omi account the message belongs to.
-    Meta expects a 200 response quickly — reply generation is fire-and-forget.
+    Receive incoming WhatsApp messages from Meta. Generates a reply and sends
+    it immediately — no desktop approval step.
     """
     try:
         payload = await request.json()
@@ -241,7 +257,7 @@ async def whatsapp_webhook_receive(uid: str, request: Request):
                     if msg.get('type') != 'text':
                         continue
                     sender = msg.get('from', '')
-                    text = msg.get('text', {}).get('body', '')
+                    text = (msg.get('text') or {}).get('body', '').strip()
                     contact_name = next(
                         (
                             c.get('profile', {}).get('name', sender)
@@ -260,13 +276,14 @@ async def whatsapp_webhook_receive(uid: str, request: Request):
                             'whatsapp',
                             None,
                         )
+                        await wa.send_message(sender, reply)
                         message_doc = {
                             'platform': 'whatsapp',
                             'sender': contact_name,
                             'chat_identifier': sender,
                             'incoming': text,
                             'draft_reply': reply,
-                            'status': 'pending',
+                            'status': 'sent',
                             'conversation_history': [],
                         }
                         await run_blocking(db_executor, clone_db.save_clone_message, uid, message_doc)

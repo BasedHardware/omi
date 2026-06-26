@@ -5304,30 +5304,12 @@ struct CloneSimpleOK: Decodable {
   let status: String
 }
 
-struct CloneTelegramMessage: Decodable {
-  let sender: String
-  let senderId: Int
-  let chatId: Int
-  let message: String
-  let timestamp: Double
+struct CloneTelegramConnectResponse: Decodable {
+  let botUsername: String
+  let botName: String
   enum CodingKeys: String, CodingKey {
-    case sender
-    case senderId = "sender_id"
-    case chatId = "chat_id"
-    case message, timestamp
-  }
-}
-
-struct CloneTelegramPollResponse: Decodable {
-  let messages: [CloneTelegramMessage]
-}
-
-struct CloneTelegramUserInfo: Decodable {
-  let displayName: String
-  let phone: String
-  enum CodingKeys: String, CodingKey {
-    case displayName = "display_name"
-    case phone
+    case botUsername = "bot_username"
+    case botName = "bot_name"
   }
 }
 
@@ -5366,30 +5348,16 @@ extension APIClient {
     let _: CloneSimpleOK = try await patch("/v1/ai-clone/messages/\(id)", body: Req(status: status, editedReply: editedReply))
   }
 
-  func telegramSendCode(phone: String) async throws -> String {
-    struct Req: Encodable { let phone: String }
-    struct Resp: Decodable { let phoneCodeHash: String
-      enum CodingKeys: String, CodingKey { case phoneCodeHash = "phone_code_hash" }
+  func telegramConnect(botToken: String) async throws -> CloneTelegramConnectResponse {
+    struct Req: Encodable { let botToken: String
+      enum CodingKeys: String, CodingKey { case botToken = "bot_token" }
     }
-    let resp: Resp = try await post("/v1/ai-clone/telegram/send-code", body: Req(phone: phone))
-    return resp.phoneCodeHash
-  }
-
-  func telegramVerify(phone: String, code: String, phoneCodeHash: String) async throws -> CloneTelegramUserInfo {
-    struct Req: Encodable {
-      let phone, code, phoneCodeHash: String
-      enum CodingKeys: String, CodingKey { case phone, code; case phoneCodeHash = "phone_code_hash" }
-    }
-    return try await post("/v1/ai-clone/telegram/verify", body: Req(phone: phone, code: code, phoneCodeHash: phoneCodeHash))
+    return try await post("/v1/ai-clone/telegram/connect", body: Req(botToken: botToken))
   }
 
   func telegramDisconnect() async throws {
     struct Empty: Encodable {}
     let _: CloneSimpleOK = try await post("/v1/ai-clone/telegram/disconnect", body: Empty())
-  }
-
-  func telegramPollMessages(since: Double) async throws -> CloneTelegramPollResponse {
-    return try await get("/v1/ai-clone/telegram/messages?since=\(since)")
   }
 
   func telegramSend(chatId: Int, text: String) async throws {
