@@ -353,11 +353,20 @@ class BenchmarksFetcher:
         Public accessor (was `_cache_file_modified_iso`) so callers like the
         `/metrics` endpoint can report cache freshness without depending on
         the private `_cache_path` attribute.
+
+        Defensive against TOCTOU: if the file is deleted between the
+        `exists()` check and the `stat()` call, the OSError is caught
+        and we return None (treat as "no cache"). Without this guard,
+        a concurrent delete during the request would surface as a 500
+        from the `/metrics` endpoint.
         """
-        if not self._cache_path.exists():
+        try:
+            if not self._cache_path.exists():
+                return None
+            mtime = self._cache_path.stat().st_mtime
+            return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+        except OSError:
             return None
-        mtime = self._cache_path.stat().st_mtime
-        return datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat().replace("+00:00", "Z")
 
     # ---------------------------------------------------------------------------
     # Example data (fallback)

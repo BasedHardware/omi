@@ -541,3 +541,26 @@ class TestCacheFileModifiedIsoAccessor:
         assert callable(fetcher.cache_file_modified_iso)
         # The private version is intentionally gone.
         assert not hasattr(fetcher, "_cache_file_modified_iso")
+
+    def test_returns_none_on_oserror_during_stat(self, tmp_path):
+        """Regression guard (cubic P2): if the cache file is deleted
+        between the exists() check and the stat() call (TOCTOU race),
+        the OSError must be caught and treated as 'no cache'.
+        Without this, the OSError would bubble to /metrics as a 500.
+        """
+        cache_path = tmp_path / "benchmarks.json"
+        cache_path.write_text("{}")
+        fetcher = BenchmarksFetcher(cache_path=cache_path)
+
+        # Monkeypatch the fetcher's _cache_path.stat to raise OSError
+        # (simulates the race: exists() passed, but stat() sees the file
+        # gone). posixpath.stat is a C function on Path, so we patch the
+        # _cache_path instance to be a wrapper that delegates exists() but
+        # raises OSError on stat().
+        class _RacyPath(type(cache_path)):
+            def stat(self, *args, **kwargs):
+                raise OSError("file deleted between exists() and stat()")
+
+        fetcher._cache_path = _RacyPath(str(cache_path))
+        result = fetcher.cache_file_modified_iso()
+        assert result is None, "OSError should be caught and return None"
