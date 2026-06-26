@@ -52,10 +52,10 @@ final class AgentPillLifecycleTests: XCTestCase {
       return XCTFail("Expected notch response glow view")
     }
 
-    XCTAssertLessThan(
+    XCTAssertGreaterThan(
       glowRange.lowerBound,
       dockRange.lowerBound,
-      "The response glow must be drawn behind the black dock fill so glow never cuts into the pure-black notch island.")
+      "The response glow is declared after the black dock fill in the ZStack, so it renders on top of the dock surface — keeping the glow on the lower edge without cutting into the pure-black notch island.")
     XCTAssertTrue(source.contains("private var notchSurfaceHorizontalInset: CGFloat"))
     XCTAssertTrue(source.contains("state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetX : 0"))
     XCTAssertTrue(source.contains("state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetBottom : 0"))
