@@ -1,10 +1,7 @@
 import pytest
 
-from utils.memory.v3_gcp_evidence_config import (
-    DEFAULT_EVIDENCE_TARGETS,
-    EvidenceTargetRegistry,
-    ValidationError,
-)
+from testing.memory.v3_f6.config import EvidenceTargetRegistry, ValidationError
+from testing.memory.v3_f6.local_defaults import DEFAULT_EVIDENCE_TARGETS
 
 
 def test_default_registry_has_dev_and_prod_but_placeholders_do_not_authorize_real_execution():
