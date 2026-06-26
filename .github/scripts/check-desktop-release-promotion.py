@@ -102,6 +102,7 @@ def main() -> int:
         args.github_output,
         {
             "release_channel": channel,
+            "release_version": tag_match.group("version"),
             "firestore_doc_id": f"v{tag_match.group('version')}",
         },
     )
