@@ -824,15 +824,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             .sink { [weak self] _ in
                 Task { @MainActor in
                     guard let self = self else { return }
-                    guard self.agentBridgeStarted else { return }
-                    log("ChatProvider: userDidSignOut — stopping agent bridge so the next user gets a fresh subprocess")
-                    await self.agentBridge.stop()
-                    self.agentBridgeStarted = false
-                    self.messages.removeAll()
-                    self.resetMessagesPagination()
-                    self.pendingAttachments.removeAll()
-                    self.sessions.removeAll()
-                    self.currentSession = nil
+                    log("ChatProvider: userDidSignOut — clearing chat state so the next user gets fresh context")
+                    if self.agentBridgeStarted {
+                        await self.agentBridge.stop()
+                        self.agentBridgeStarted = false
+                    }
+                    self.resetSessionStateForAuthChange()
                     AgentRuntimeStatusStore.shared.reset()
                 }
             }
@@ -1006,11 +1003,27 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Ensures all prompt-backed local context is loaded before we build and cache the ACP session prompt.
     private func preparePromptContextIfNeeded() async {
-        await loadMemoriesIfNeeded()
-        await loadGoalsIfNeeded()
-        await loadTasksIfNeeded()
-        await loadAIProfileIfNeeded()
-        await loadSchemaIfNeeded()
+        await warmupPromptContext()
+    }
+
+    private func resetSessionStateForAuthChange() {
+        messages.removeAll()
+        resetMessagesPagination()
+        pendingAttachments.removeAll()
+        sessions.removeAll()
+        currentSession = nil
+        cachedMemories = []
+        memoriesLoaded = false
+        cachedGoals = []
+        goalsLoaded = false
+        cachedTasks = []
+        tasksLoaded = false
+        cachedAIProfile = ""
+        aiProfileLoaded = false
+        cachedDatabaseSchema = ""
+        schemaLoaded = false
+        cachedMainSystemPrompt = ""
+        cachedFloatingSystemPrompt = ""
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
@@ -1956,6 +1969,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Initialize chat: fetch sessions and load messages
     func initialize() async {
+        await initializeVisibleMessages()
+        await warmupPromptContext()
+    }
+
+    /// Load the chat state that is directly visible in Dashboard/Chat without warming prompt-only context.
+    func initializeVisibleMessages() async {
         // Seed cumulative Omi AI cost from backend now that auth is ready (background, no latency)
         Task.detached(priority: .background) { [weak self] in
             guard let serverCost = await APIClient.shared.fetchTotalOmiAICost() else { return }
@@ -1987,6 +2006,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             isLoadingSessions = false
             await loadDefaultChatMessages()
         }
+    }
+
+    /// Warm local prompt context used by first send / bridge startup.
+    func warmupPromptContext() async {
         await loadMemoriesIfNeeded()
         await loadGoalsIfNeeded()
         await loadTasksIfNeeded()

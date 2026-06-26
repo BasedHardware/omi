@@ -32,7 +32,49 @@ class AppProvider: ObservableObject {
 
     private let apiClient = APIClient.shared
 
+    // MARK: - Session Lifecycle
+
+    func resetSessionState() {
+        apps = []
+        popularApps = []
+        integrationApps = []
+        chatApps = []
+        summaryApps = []
+        notificationApps = []
+        enabledApps = []
+        categories = []
+        capabilities = []
+
+        isLoading = false
+        isSearching = false
+        appLoadingStates = [:]
+
+        searchQuery = ""
+        selectedCategory = nil
+        selectedCapability = nil
+        showInstalledOnly = false
+
+        errorMessage = nil
+        categoryFilteredApps = nil
+        hasMoreCategoryApps = false
+        isLoadingMore = false
+        categoryFilterOffset = 0
+    }
+
     // MARK: - Fetch Methods
+
+    /// Fetch only chat-capable apps for startup chat picker warmup.
+    /// The full Apps page still loads categories, capabilities, ratings, and all groups on first use.
+    func fetchChatAppsForStartup() async {
+        do {
+            let v2Response = try await apiClient.getAppsV2()
+            let chat = v2Response.groups.first { $0.capability.id == "chat" }?.data ?? []
+            chatApps = chat
+            log("Fetched \(chatApps.count) chat apps for startup")
+        } catch {
+            logError("Failed to fetch startup chat apps", error: error)
+        }
+    }
 
     /// Fetch all apps data using v2/apps endpoint (grouped by capability, matching Flutter)
     func fetchApps() async {
