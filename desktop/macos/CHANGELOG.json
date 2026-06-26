@@ -1,5 +1,6 @@
 {
   "unreleased": [
+    "Improved desktop agent session continuity across bridge restarts and control-tool ownership changes.",
     "Improves update release safety checks"
   ],
   "releases": [
