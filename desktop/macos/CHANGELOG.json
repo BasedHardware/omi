@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Improved desktop startup stability by staging non-critical warmup work after the first usable window"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.542",
+      "date": "2026-06-26",
+      "changes": [
+        "Improved desktop startup stability by staging non-critical warmup work after the first usable window"
+      ]
+    },
     {
       "version": "0.11.541",
       "date": "2026-06-26",
