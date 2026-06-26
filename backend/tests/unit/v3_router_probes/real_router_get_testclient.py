@@ -28,7 +28,7 @@ from tests.unit.v3_router_probes.real_router_dependency_map import (
 
 MEMORY_ADAPTER_MODULES = [
     "utils.memory.v3_request_adapter",
-    "utils.memory.v3_route_planner",
+    "testing.memory.v3_route_planner",
     "utils.memory.v3_response_adapter",
 ]
 
@@ -291,7 +291,7 @@ def _probe_code() -> str:
 
         memory_adapter_modules = [
             "utils.memory.v3_request_adapter",
-            "utils.memory.v3_route_planner",
+            "testing.memory.v3_route_planner",
             "utils.memory.v3_response_adapter",
         ]
         loaded_adapters = [name for name in memory_adapter_modules if name in sys.modules]
