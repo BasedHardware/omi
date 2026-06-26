@@ -136,7 +136,7 @@ describe("AcpRuntimeAdapter process spawning", () => {
     });
 
     const saved: Record<string, string | undefined> = {};
-    for (const key of ["OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM"]) {
+    for (const key of ["OMI_AUTH_TOKEN", "OMI_BYOK_OPENAI", "OMI_BYOK_ANTHROPIC", "OMI_BYOK_GEMINI", "OMI_BYOK_DEEPGRAM", "ANTHROPIC_API_KEY"]) {
       saved[key] = process.env[key];
       process.env[key] = "secret-value";
     }
@@ -150,7 +150,7 @@ describe("AcpRuntimeAdapter process spawning", () => {
       expect(callEnv.env).not.toHaveProperty("OMI_BYOK_ANTHROPIC");
       expect(callEnv.env).not.toHaveProperty("OMI_BYOK_GEMINI");
       expect(callEnv.env).not.toHaveProperty("OMI_BYOK_DEEPGRAM");
-      // Anthropic env keys that the adapter already scrubs are also absent.
+      // ANTHROPIC_API_KEY is scrubbed by the pre-existing env cleanup in start().
       expect(callEnv.env).not.toHaveProperty("ANTHROPIC_API_KEY");
       await adapter.stop();
     } finally {
