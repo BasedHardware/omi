@@ -379,13 +379,7 @@ struct FloatingControlBarView: View {
                     pill: activeAgentChatPill,
                     manager: agentPills,
                     onBackToOmi: {
-                        state.leaveAgentSurface()
-                        // Reinstall the response-height observer for the restored
-                        // main surface. Without this the window keeps observing the
-                        // .agent surface and ignores subsequent .mainResponse
-                        // height reports, leaving the panel stuck at agent-chat size.
-                        (window as? FloatingControlBarWindow)?
-                            .resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+                        exitAgentSurface()
                     },
                     onEscape: onEscape
                 )
@@ -438,16 +432,20 @@ struct FloatingControlBarView: View {
         agentSwitcherHovering = agentSwitcherPinned
     }
 
+    private func exitAgentSurface() {
+        state.leaveAgentSurface()
+        // Reinstall the response-height observer for the restored main surface.
+        // Without this the window keeps observing the .agent surface and ignores
+        // subsequent .mainResponse height reports, leaving the panel stuck at
+        // agent-chat size. Centralized so every agent-exit path stays consistent.
+        (window as? FloatingControlBarWindow)?
+            .resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+    }
+
     private func openAgentInChat(_ pill: AgentPill) {
         guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
         if state.conversationSurface == .agent(pill.id) {
-            state.leaveAgentSurface()
-            // Reinstall the response-height observer for the restored main surface,
-            // mirroring the Back-to-Omi button path. Without this the window keeps
-            // observing the .agent surface and ignores subsequent .mainResponse
-            // height reports, leaving the panel stuck at agent-chat size.
-            (window as? FloatingControlBarWindow)?
-                .resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+            exitAgentSurface()
             return
         }
         agentPills.markViewed(pillID: pill.id)
