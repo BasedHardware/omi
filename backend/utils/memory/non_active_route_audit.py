@@ -11,6 +11,8 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from database._client import db
+from database.memory_collections import MemoryCollections
 from database.memory_non_active_routes import NonActiveRoute, PersistedNonActiveRouteOutcome
 
 
@@ -147,3 +149,24 @@ def _observable_loss(outcome: PersistedNonActiveRouteOutcome) -> bool:
     if isinstance(value, bool):
         return value
     return outcome.route in {NonActiveRoute.reject, NonActiveRoute.skip}
+
+
+def fetch_non_active_route_audit_report(
+    uid: str,
+    *,
+    run_id: Optional[str] = None,
+    expected_source_ids: Optional[Iterable[str]] = None,
+    db_client=db,
+) -> NonActiveRouteAuditReport:
+    """Fetch route-store docs and build the memory non-active no-silent-loss audit report."""
+
+    route_docs = _fetch_non_active_route_docs(uid, run_id=run_id, db_client=db_client)
+    return build_non_active_route_audit_report(uid, route_docs, expected_source_ids=expected_source_ids)
+
+
+def _fetch_non_active_route_docs(uid: str, *, run_id: Optional[str], db_client):
+    collection_path = MemoryCollections(uid=uid).non_active_memory_routes
+    query = db_client.collection(collection_path)
+    if run_id:
+        query = query.where("run_id", "==", run_id)
+    return [snapshot.to_dict() or {} for snapshot in query.stream()]
