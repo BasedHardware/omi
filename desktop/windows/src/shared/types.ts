@@ -578,6 +578,11 @@ export type OmiBridgeApi = {
   insightTest: () => void
   /** Toast renderer subscribes to receive the payload to render. */
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
+  notificationsGetSettings: () => Promise<WindowsNotificationSettings>
+  notificationsSetSettings: (
+    patch: WindowsNotificationSettingsPatch
+  ) => Promise<WindowsNotificationSettings>
+  notificationsTest: (kind?: WindowsNotificationTestKind) => Promise<WindowsNotificationTestResult>
   perfFirstPaint: () => void
   perfMark: (name: string) => void
   // Animation bench (OMI_ANIM_BENCH): the renderer probe reports a jank summary
@@ -990,6 +995,55 @@ export type InsightSettings = {
   denylist: string[]
   lastRunAt: number | null
 }
+
+// --- Windows notification preferences ---
+export type WindowsNotificationChannel =
+  | 'focus'
+  | 'tasks'
+  | 'insights'
+  | 'memories'
+  | 'dailySummary'
+
+export type WindowsNotificationTestKind = WindowsNotificationChannel | 'system'
+
+export type WindowsNotificationCategorySettings = {
+  enabled: boolean
+}
+
+export type WindowsInsightNotificationSettings = WindowsNotificationCategorySettings & {
+  intervalMin: number
+  notificationStyle: InsightNotificationStyle
+  denylist: string[]
+  lastRunAt: number | null
+}
+
+export type WindowsDailySummaryNotificationSettings = WindowsNotificationCategorySettings & {
+  /** Preferred local hour, 0-23. */
+  hour: number
+}
+
+export type WindowsNotificationSettings = {
+  /** Master toggle for native Windows notifications delivered from Electron main. */
+  nativeEnabled: boolean
+  focus: WindowsNotificationCategorySettings
+  tasks: WindowsNotificationCategorySettings
+  insights: WindowsInsightNotificationSettings
+  memories: WindowsNotificationCategorySettings
+  dailySummary: WindowsDailySummaryNotificationSettings
+}
+
+export type WindowsNotificationSettingsPatch = {
+  nativeEnabled?: boolean
+  focus?: Partial<WindowsNotificationCategorySettings>
+  tasks?: Partial<WindowsNotificationCategorySettings>
+  insights?: Partial<WindowsInsightNotificationSettings>
+  memories?: Partial<WindowsNotificationCategorySettings>
+  dailySummary?: Partial<WindowsDailySummaryNotificationSettings>
+}
+
+export type WindowsNotificationTestResult =
+  | { ok: true }
+  | { ok: false; code: 'disabled' | 'unsupported' | 'failed'; reason: string }
 
 // ───────────────────────── Desktop Automation Bridge ─────────────────────────
 // A pruned UI Automation node. `ref` is a stable address resolvable at execute
