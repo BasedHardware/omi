@@ -1,10 +1,12 @@
 import {
   AudioLines,
+  BellRing,
   BotMessageSquare,
   CreditCard,
   History,
   Info,
   Keyboard,
+  Layers,
   ShieldCheck,
   CircleUserRound,
   SlidersHorizontal,
@@ -18,6 +20,8 @@ export type SettingsTabId =
   | 'byok'
   | 'shortcuts'
   | 'transcription'
+  | 'notifications'
+  | 'floating-bar'
   | 'plan-usage'
   | 'about'
   | 'memories'
@@ -31,6 +35,8 @@ export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon
   { id: 'byok', label: 'BYOK', Icon: KeyRound },
   { id: 'shortcuts', label: 'Shortcuts', Icon: Keyboard },
   { id: 'transcription', label: 'Transcription', Icon: AudioLines },
+  { id: 'notifications', label: 'Notifications', Icon: BellRing },
+  { id: 'floating-bar', label: 'Floating Bar', Icon: Layers },
   { id: 'plan-usage', label: 'Plan and Usage', Icon: CreditCard },
   { id: 'about', label: 'About', Icon: Info },
   { id: 'memories', label: 'Memories', Icon: Brain },
