@@ -8,6 +8,8 @@ import { AIChatTab } from '../components/settings/tabs/AIChatTab'
 import { ByokTab } from '../components/settings/tabs/ByokTab'
 import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
 import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
+import { NotificationsTab } from '../components/settings/tabs/NotificationsTab'
+import { FloatingBarTab } from '../components/settings/tabs/FloatingBarTab'
 import { PlanUsageTab } from '../components/settings/tabs/PlanUsageTab'
 import { AboutTab } from '../components/settings/tabs/AboutTab'
 import { RewindTab } from '../components/settings/tabs/RewindTab'
@@ -25,6 +27,8 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   byok: ByokTab,
   shortcuts: ShortcutsTab,
   transcription: TranscriptionTab,
+  notifications: NotificationsTab,
+  'floating-bar': FloatingBarTab,
   'plan-usage': PlanUsageTab,
   about: AboutTab,
   rewind: RewindTab,
