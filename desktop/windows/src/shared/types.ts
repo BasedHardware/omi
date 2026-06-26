@@ -451,6 +451,36 @@ export type FloatingBarStatus = {
   alwaysOnTopLevel: 'screen-saver' | 'normal'
 }
 
+export type WindowsPermissionStatus = 'granted' | 'denied' | 'not-determined' | 'unknown'
+
+export type WindowsSystemStatus = {
+  launchAtLogin: boolean
+  microphone: WindowsPermissionStatus
+  screenCapture: WindowsPermissionStatus
+  notificationsSupported: boolean
+  packaged: boolean
+}
+
+export type WindowsUpdateStatus = {
+  enabled: boolean
+  configured: boolean
+  feedUrl: string | null
+  checking: boolean
+  downloaded: boolean
+  lastEvent: string | null
+  lastVersion: string | null
+  lastError: string | null
+}
+
+export type WindowsExternalLinkKind =
+  | 'help'
+  | 'browserExtension'
+  | 'releaseNotes'
+  | 'windowsStartupSettings'
+  | 'windowsMicrophoneSettings'
+  | 'windowsNotificationSettings'
+  | 'windowsPrivacySettings'
+
 export type OmiBridgeApi = {
   getCaptureSources: () => Promise<CaptureSource[]>
   remapConversationId: (fromId: string, toId: string) => Promise<number>
@@ -511,6 +541,11 @@ export type OmiBridgeApi = {
   floatingBarSetSettings: (next: FloatingBarSettings) => Promise<FloatingBarSettings>
   floatingBarStatus: () => Promise<FloatingBarStatus>
   onFloatingBarSettings: (cb: (s: FloatingBarSettings) => void) => () => void
+  systemGetStatus: () => Promise<WindowsSystemStatus>
+  systemSetLaunchAtLogin: (enabled: boolean) => Promise<WindowsSystemStatus>
+  systemOpenExternal: (kind: WindowsExternalLinkKind) => Promise<void>
+  updaterGetStatus: () => Promise<WindowsUpdateStatus>
+  updaterCheckNow: () => Promise<WindowsUpdateStatus>
   // Bulk-delete memories from the main process (survives renderer navigation /
   // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
   // and the ids; progress streams via onMemoriesDeleteProgress.
