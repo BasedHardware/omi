@@ -52,6 +52,7 @@ import { registerClaudeAcpHandlers } from './ipc/claudeAcp'
 import { registerByokHandlers } from './ipc/byok'
 import { registerSkillsHandlers } from './ipc/skills'
 import { registerLocalTtsHandlers } from './ipc/localTts'
+import { registerSystemHandlers } from './ipc/system'
 import { getFloatingBarSettings } from './floatingBar/settings'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
@@ -363,6 +364,7 @@ app.whenReady().then(async () => {
   registerFileIndexHandlers()
   registerFloatingBarHandlers()
   registerLocalGraphHandlers()
+  registerSystemHandlers()
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()
   registerKgHandlers()
