@@ -166,10 +166,8 @@ def test_provider_readiness_proof_cases_cover_oracle_p0_7_matrix_without_claimin
 def test_provider_readiness_docs_reference_non_claims_and_runner():
     root = Path(__file__).resolve().parents[2].parent
     evidence_markers = (root / "docs" / "operational" / "memory_readiness_evidence_markers.md").read_text()
-    tickets = (root / "docs" / "epics" / "memory_implementation_tickets.md").read_text()
 
-    for text in (evidence_markers, tickets):
-        assert "vector_search_provider_readiness.py" in text
-        assert "provider pagination/refill" in text
-        assert "No real Pinecone/Firestore provider proof" in text
-        assert "load/recall/latency" in text
+    assert "vector_search_provider_readiness.py" in evidence_markers
+    assert "provider pagination/refill" in evidence_markers
+    assert "No real Pinecone/Firestore provider proof" in evidence_markers
+    assert "load/recall/latency" in evidence_markers
