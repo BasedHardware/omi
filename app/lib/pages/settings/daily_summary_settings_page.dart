@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class DailySummarySettingsPage extends StatefulWidget {
@@ -29,17 +30,16 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
   }
 
   Future<void> _loadSettings() async {
-    final settings = await getDailySummarySettings();
-    if (settings != null && mounted) {
-      setState(() {
-        _enabled = settings.enabled;
-        _selectedHour = settings.hour;
-        _isLoading = false;
-      });
-    } else if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
+    try {
+      final settings = await getDailySummarySettings();
+      if (settings != null && mounted) {
+        setState(() {
+          _enabled = settings.enabled;
+          _selectedHour = settings.hour;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -50,15 +50,29 @@ class _DailySummarySettingsPageState extends State<DailySummarySettingsPage> {
   }
 
   Future<void> _updateEnabled(bool value) async {
+    final previous = _enabled;
     setState(() => _enabled = value);
-    await setDailySummarySettings(enabled: value);
-    PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
+    final success = await setDailySummarySettings(enabled: value);
+    if (!mounted) return;
+    if (success) {
+      PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
+    } else if (_enabled == value) {
+      setState(() => _enabled = previous);
+      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+    }
   }
 
   Future<void> _updateHour(int hour) async {
+    final previous = _selectedHour;
     setState(() => _selectedHour = hour);
-    await setDailySummarySettings(hour: hour);
-    PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
+    final success = await setDailySummarySettings(hour: hour);
+    if (!mounted) return;
+    if (success) {
+      PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
+    } else if (_selectedHour == hour) {
+      setState(() => _selectedHour = previous);
+      AppSnackbar.showSnackbarError(context.l10n.somethingWentWrong);
+    }
   }
 
   Future<void> _showHourPicker() async {
