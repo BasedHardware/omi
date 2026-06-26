@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 import database.memories as memories_db
 import database.vector_db as vector_db
+from database.vector_db import delete_memory_vector, upsert_memory_vector, upsert_memory_vectors_batch
 from models.memories import MemoryDB
 from utils.memory.canonical_memory_adapter import (
     _read_canonical_memory_item,
@@ -26,8 +27,10 @@ from utils.memory.canonical_memory_adapter import (
     write_canonical_extraction_memory,
     write_canonical_external_memory,
 )
+from utils.client_device import DeviceScopeRequest
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import pin_memory_system, resolve_pinned_memory_system
+from utils.memory.default_read_rollout import guard_legacy_memory_write
 from utils.retrieval.hybrid import rrf_rerank
 
 logger = logging.getLogger(__name__)
@@ -35,6 +38,46 @@ logger = logging.getLogger(__name__)
 
 class DeviceScopeNotSupportedError(ValueError):
     """device_scope filtering is only supported on the canonical memory backend."""
+
+
+@dataclass(frozen=True)
+class ExternalMemoryWriteContext:
+    """Resolved cohort + legacy-write guard context for external memory mutations."""
+
+    memory_system: MemorySystem
+    legacy_write_allowed: bool = True
+    legacy_write_status_code: int = 200
+    legacy_write_detail: Any = None
+
+
+def _require_legacy_write_guard(uid: str, db_client, *, consumer: str, operation: str) -> None:
+    write_guard = guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)
+    if not write_guard.allowed:
+        raise HTTPException(status_code=write_guard.status_code, detail=write_guard.detail)
+
+
+def resolve_external_memory_write_context(
+    uid: str,
+    *,
+    db_client,
+    memory_system: MemorySystem,
+    consumer: str,
+    operation: str,
+) -> ExternalMemoryWriteContext:
+    if memory_system == MemorySystem.CANONICAL:
+        return ExternalMemoryWriteContext(memory_system=memory_system)
+    write_guard = guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)
+    return ExternalMemoryWriteContext(
+        memory_system=memory_system,
+        legacy_write_allowed=write_guard.allowed,
+        legacy_write_status_code=write_guard.status_code,
+        legacy_write_detail=write_guard.detail,
+    )
+
+
+def raise_if_legacy_write_blocked(context: ExternalMemoryWriteContext) -> None:
+    if not context.legacy_write_allowed:
+        raise HTTPException(status_code=context.legacy_write_status_code, detail=context.legacy_write_detail)
 
 
 def _truncate_locked_preview_text(content: str) -> str:
@@ -190,6 +233,17 @@ def _canonical_search_memories_mcp(uid: str, query: str, *, limit: int = 5, db_c
             }
         )
     return formatted
+
+
+def _resolve_device_scope_kwargs(
+    *,
+    device_scope: str = "all",
+    client_device_id: Optional[str] = None,
+    device_scope_request: Optional[DeviceScopeRequest] = None,
+) -> tuple[str, Optional[str]]:
+    if device_scope_request is not None:
+        return device_scope_request.device_scope, device_scope_request.client_device_id
+    return device_scope, client_device_id
 
 
 class LegacyMemoryBackend:
@@ -362,7 +416,13 @@ class MemoryService:
         offset: int = 0,
         device_scope: str = "all",
         client_device_id: Optional[str] = None,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
     ) -> List[MemoryDB]:
+        device_scope, client_device_id = _resolve_device_scope_kwargs(
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+            device_scope_request=device_scope_request,
+        )
         return self._resolve_backend(uid).read(
             uid,
             limit=limit,
@@ -379,7 +439,13 @@ class MemoryService:
         limit: int = 5,
         device_scope: str = "all",
         client_device_id: Optional[str] = None,
+        device_scope_request: Optional[DeviceScopeRequest] = None,
     ) -> List[MemorySearchMatch]:
+        device_scope, client_device_id = _resolve_device_scope_kwargs(
+            device_scope=device_scope,
+            client_device_id=client_device_id,
+            device_scope_request=device_scope_request,
+        )
         return self._resolve_backend(uid).search(
             uid,
             query,
@@ -429,3 +495,149 @@ class MemoryService:
         if resolve_pinned_memory_system(uid, db_client=self._db_client) != MemorySystem.CANONICAL:
             return None
         return retract_conversation_sourced_memories(uid, conversation_id, db_client=self._db_client)
+
+    def create_external_memory(
+        self,
+        uid: str,
+        memory_db: MemoryDB,
+        *,
+        memory_system: MemorySystem,
+        consumer: str,
+        operation: str,
+        upsert_vector: bool = True,
+    ) -> MemoryDB:
+        """Create one external memory on canonical or legacy backend with side effects."""
+        if memory_system == MemorySystem.CANONICAL:
+            committed_id = self.write(uid, memory_db.model_dump())
+            item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=self._db_client)
+            if item is not None:
+                return memory_item_to_memorydb(item)
+            return memory_db
+
+        _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
+        memories_db.create_memory(uid, memory_db.model_dump())
+        if upsert_vector:
+            try:
+                upsert_memory_vector(
+                    uid,
+                    memory_db.id,
+                    memory_db.content,
+                    memory_db.category.value,
+                    subject_entity_id=memory_db.subject_entity_id,
+                )
+            except Exception:
+                logger.exception(
+                    "Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)",
+                    uid,
+                    memory_db.id,
+                )
+        return memory_db
+
+    def create_external_memory_batch(
+        self,
+        uid: str,
+        memory_dbs: List[MemoryDB],
+        *,
+        memory_system: MemorySystem,
+        consumer: str,
+        operation: str,
+        upsert_vectors: bool = True,
+    ) -> List[MemoryDB]:
+        """Batch-create external memories with legacy vector upsert when applicable."""
+        if memory_system == MemorySystem.CANONICAL:
+            committed_ids = self.write_batch(uid, [memory.model_dump() for memory in memory_dbs])
+            results: List[MemoryDB] = []
+            for memory_id in committed_ids:
+                item = _read_canonical_memory_item(uid, memory_id, db_client=self._db_client)
+                if item is not None:
+                    results.append(memory_item_to_memorydb(item))
+                else:
+                    results.append(next(memory for memory in memory_dbs if memory.id == memory_id))
+            return results
+
+        _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
+        memories_db.save_memories(uid, [memory.model_dump() for memory in memory_dbs])
+        if upsert_vectors:
+            try:
+                upsert_memory_vectors_batch(
+                    uid,
+                    [
+                        {
+                            "memory_id": memory.id,
+                            "content": memory.content,
+                            "category": memory.category.value,
+                            "subject_entity_id": memory.subject_entity_id,
+                        }
+                        for memory in memory_dbs
+                    ],
+                )
+            except Exception:
+                logger.exception("Vector batch upsert failed uid=%s (memories saved, vectors missing)", uid)
+        return memory_dbs
+
+    def delete_external_memory(
+        self,
+        uid: str,
+        memory_id: str,
+        *,
+        memory_system: MemorySystem,
+        consumer: str,
+        operation: str,
+        delete_vector: bool = True,
+    ) -> None:
+        """Delete external memory with legacy vector cleanup when applicable."""
+        if memory_system == MemorySystem.CANONICAL:
+            self.delete(uid, memory_id)
+            return
+
+        _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
+        memory = memories_db.get_memory(uid, memory_id)
+        if not memory:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        if memory.get('is_locked', False):
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+        memories_db.delete_memory(uid, memory_id)
+        if delete_vector:
+            try:
+                delete_memory_vector(uid, memory_id)
+            except Exception:
+                logger.exception("Vector delete failed uid=%s memory_id=%s (Firestore deleted)", uid, memory_id)
+
+    def update_external_memory_content(
+        self,
+        uid: str,
+        memory_id: str,
+        content: str,
+        *,
+        memory_system: MemorySystem,
+        consumer: str,
+        operation: str,
+        upsert_vector: bool = True,
+    ) -> MemoryDB:
+        """Update external memory content with legacy vector upsert when applicable."""
+        if memory_system == MemorySystem.CANONICAL:
+            return self.update_content(uid, memory_id, content)
+
+        _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)
+        memory = memories_db.get_memory(uid, memory_id)
+        if not memory:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        if memory.get('is_locked', False):
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this memory.")
+        memories_db.edit_memory(uid, memory_id, content)
+        if upsert_vector:
+            try:
+                upsert_memory_vector(
+                    uid,
+                    memory_id,
+                    content,
+                    memory.get('category', 'other'),
+                    subject_entity_id=memory.get('subject_entity_id'),
+                )
+            except Exception:
+                logger.exception(
+                    "Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)",
+                    uid,
+                    memory_id,
+                )
+        return MemoryDB.model_validate(memories_db.get_memory(uid, memory_id))
