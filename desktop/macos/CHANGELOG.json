@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Developer named bundles now start quiet — lazy permissions, no auto screen/audio capture — unless explicitly seeded eager"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.539",
+      "date": "2026-06-26",
+      "changes": [
+        "Developer named bundles now start quiet \u2014 lazy permissions, no auto screen/audio capture \u2014 unless explicitly seeded eager"
+      ]
+    },
     {
       "version": "0.11.538",
       "date": "2026-06-26",
