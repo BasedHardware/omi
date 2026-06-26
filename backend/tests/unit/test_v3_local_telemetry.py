@@ -1,6 +1,6 @@
 import pytest
 
-from utils.memory.v3_local_telemetry import (
+from testing.memory.v3_local_telemetry import (
     FakeV3TelemetrySink,
     NullV3TelemetrySink,
     V3LocalTelemetryInput,
