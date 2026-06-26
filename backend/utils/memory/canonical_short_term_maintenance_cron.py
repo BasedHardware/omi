@@ -88,7 +88,7 @@ def run_canonical_short_term_maintenance_for_cohort(
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
 ) -> CanonicalShortTermMaintenanceCronSummary:
-    """Run maintenance for every uid in ``MEMORY_CANONICAL_USERS``."""
+    """Run maintenance for every uid in ``CANONICAL_MEMORY_USERS``."""
     client = db_client if db_client is not None else default_db_client
     current_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     effective_run_id = _coerce_run_id(run_id, now=current_time)
