@@ -109,8 +109,10 @@ def _load_memory_service(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _clear_canonical_env(monkeypatch):
-    monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+def _clear_canonical_cohort(monkeypatch):
+    from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+    clear_canonical_cohort(monkeypatch)
 
 
 class TestResolveMemorySystem:
@@ -132,8 +134,10 @@ class TestResolveMemorySystem:
         )
         assert resolve_memory_system("uid-memory", db_client=db) == MemorySystem.LEGACY
 
-    def test_explicit_canonical_env_assignment(self, monkeypatch):
-        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-canonical,uid-other")
+    def test_explicit_canonical_cohort_assignment(self, monkeypatch):
+        from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+
+        set_canonical_cohort(monkeypatch, "uid-canonical", "uid-other")
         assert resolve_memory_system("uid-canonical", db_client=_FirestoreFake()) == MemorySystem.CANONICAL
         assert resolve_memory_system("uid-not-canonical", db_client=_FirestoreFake()) == MemorySystem.LEGACY
 
@@ -148,6 +152,8 @@ class TestResolveMemorySystem:
         assert resolve_memory_system("uid-persisted", db_client=db) == MemorySystem.LEGACY
 
     def test_whitelist_removal_reverts_stale_persisted_canonical(self, monkeypatch):
+        from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
+
         db = _FirestoreFake(
             {
                 "users/uid-flip/memory_control/state": {
@@ -155,14 +161,16 @@ class TestResolveMemorySystem:
                 }
             }
         )
-        monkeypatch.setenv("MEMORY_CANONICAL_USERS", "uid-flip")
+        set_canonical_cohort(monkeypatch, "uid-flip")
         assert resolve_memory_system("uid-flip", db_client=db) == MemorySystem.CANONICAL
 
-        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        clear_canonical_cohort(monkeypatch)
         assert resolve_memory_system("uid-flip", db_client=db) == MemorySystem.LEGACY
 
     def test_empty_whitelist_is_global_kill_switch(self, monkeypatch):
-        monkeypatch.delenv("MEMORY_CANONICAL_USERS", raising=False)
+        from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
+
+        clear_canonical_cohort(monkeypatch)
         db = _FirestoreFake(
             {
                 "users/uid-a/memory_control/state": {"memory_system": "canonical"},
