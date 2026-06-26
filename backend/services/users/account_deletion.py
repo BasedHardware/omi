@@ -93,10 +93,11 @@ def background_wipe_user_data(uid: str):
 def _persist_wipe_intent_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
     """Persist the non-actionable deletion intent, retrying transient Firestore failures.
 
-    Writes ``wipe_status='deleting_auth'`` which the reconciler does NOT query
-    for. A crash or deploy between this write and ``auth.delete_account()``
-    therefore leaves a benign record that cannot trigger a premature data wipe
-    for a user whose Firebase account still exists.
+    Writes ``wipe_status='deleting_auth'`` which the reconciler only recovers
+    *after* verifying the Firebase auth user is actually gone. A crash or deploy
+    between this write and ``auth.delete_account()`` therefore leaves a benign
+    record that cannot trigger a premature data wipe for a user whose Firebase
+    account still exists.
 
     Raises on persistent failure so the caller can surface the error to the user
     rather than proceeding to the irreversible Firebase user deletion without a
@@ -122,9 +123,10 @@ def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay
     Called only after ``auth.delete_account()`` has succeeded (or the user was
     already gone). On persistent Firestore failure, logs a critical error rather
     than raising — the Firebase user is already deleted, so raising would
-    surface a misleading error. The background wipe may not be queued, but no
-    dangerous state is possible (the marker remains ``'deleting_auth'``, which
-    the reconciler ignores).
+    surface a misleading error. The background wipe may not be queued
+    immediately, but a stale ``'deleting_auth'`` marker is now recoverable:
+    ``reconcile_pending_deletion_wipes`` will verify the auth user is gone and
+    re-enqueue the wipe.
     """
     last_err = None
     for attempt in range(max_attempts):
@@ -174,11 +176,12 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
             logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
 
     # Phase 1 — persist a NON-ACTIONABLE intent ('deleting_auth') before any
-    # irreversible action. The reconciler never queries for 'deleting_auth', so
-    # a crash/deploy between this write and the confirmed auth deletion cannot
-    # trigger a premature data wipe for a user whose Firebase account still
-    # exists. Retry transient Firestore failures; if the intent cannot be
-    # written, do NOT proceed.
+    # irreversible action. The reconciler only recovers stale 'deleting_auth'
+    # records after verifying the Firebase auth user is gone, so a crash/deploy
+    # between this write and the confirmed auth deletion cannot trigger a
+    # premature data wipe for a user whose Firebase account still exists. Retry
+    # transient Firestore failures; if the intent cannot be written, do NOT
+    # proceed.
     _persist_wipe_intent_with_retry(uid)
 
     try:
@@ -199,7 +202,8 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         else:
             # Auth deletion failed — cancel the intent so the record doesn't
             # linger in 'deleting_auth'. This is cosmetic cleanup, not a safety
-            # requirement: the reconciler never acts on 'deleting_auth'.
+            # requirement: the reconciler verifies the auth user is gone before
+            # recovering any 'deleting_auth' record.
             _cancel_wipe_marker_with_retry(uid)
             raise
 
@@ -213,6 +217,26 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     return {'status': 'ok', 'message': 'Account deletion started'}
 
 
+def _is_auth_user_gone(uid: str) -> bool:
+    """Check whether the Firebase auth user for ``uid`` no longer exists.
+
+    Returns ``True`` if the user was already deleted (``USER_NOT_FOUND`` or
+    equivalent). Returns ``False`` on any other error — fail safe so a transient
+    Firebase outage does not trigger a data wipe for a user whose auth account
+    may still exist.
+    """
+    try:
+        auth.get_user(uid)
+        return False
+    except Exception as e:
+        err = str(e).upper()
+        if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
+            return True
+        # Indeterminate — do NOT treat as gone.
+        logger.warning(f'delete_account auth-user-gone check indeterminate for {uid}: {sanitize(str(e))}')
+        return False
+
+
 def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
     """Re-enqueue account-deletion wipes that were cancelled or failed.
 
@@ -220,6 +244,13 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
     the ``wipe_status in ('pending', 'failed', 'retrying')`` backlog left behind
     when a deploy or restart cancels in-process ``cleanup_executor`` futures
     before they start.
+
+    Also recovers stale ``'deleting_auth'`` records — markers where the deletion
+    intent was written but never transitioned to ``'pending'`` (usually a crash
+    or deploy after ``auth.delete_account()`` succeeded). For these records, the
+    Firebase auth user is verified gone *before* claiming and re-enqueueing, so a
+    transient Firebase outage or a record left by an in-progress deletion cannot
+    trigger a premature data wipe for a user whose auth account still exists.
 
     Each wipe is atomically claimed via a Firestore transaction before
     re-enqueueing, so concurrent workers or overlapping scheduler runs cannot
@@ -240,6 +271,17 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
         if not uid:
             skipped += 1
             continue
+        # P1 recovery: a 'deleting_auth' record means the intent was written but
+        # the marker was never transitioned to 'pending'. Verify the Firebase
+        # auth user is actually gone before claiming it, so we never wipe data
+        # for a user whose auth account may still exist.
+        if record.get('wipe_status') == 'deleting_auth':
+            if not _is_auth_user_gone(uid):
+                skipped += 1
+                logger.info(
+                    f'delete_account reconciliation skipping deleting_auth record for {uid} — auth user still exists'
+                )
+                continue
         # Atomically claim the wipe to prevent concurrent re-enqueueing by
         # multiple workers. If the claim fails, another worker owns it.
         try:

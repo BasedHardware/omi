@@ -251,10 +251,11 @@ def mark_user_deletion_wipe_started(uid: str):
 def mark_user_deletion_wipe_intent(uid: str):
     """Persist a non-actionable deletion intent *before* auth deletion.
 
-    Written BEFORE ``auth.delete_account()`` succeeds. The reconciler does not
-    query for ``'deleting_auth'`` records, so a crash or deploy between this
-    write and the confirmed auth deletion leaves a benign record that cannot
-    trigger a data wipe for a user whose Firebase account still exists.
+    Written BEFORE ``auth.delete_account()`` succeeds. The reconciler only
+    recovers stale ``'deleting_auth'`` records *after* verifying the Firebase
+    auth user is actually gone, so a crash between this write and the confirmed
+    auth deletion cannot trigger a premature data wipe for a user whose Firebase
+    account still exists.
 
     Call ``mark_user_deletion_wipe_started`` to transition the marker to the
     actionable ``'pending'`` state once auth deletion is confirmed.
@@ -298,10 +299,16 @@ def get_pending_deletion_wipes(limit: int = 100, stale_after: timedelta = timede
     """Return account_deletions documents whose wipe needs retry.
 
     Queries ``failed`` records (always actionable), stale ``pending`` records
-    (queued more than ``stale_after`` ago), and stale ``retrying`` claims
-    (worker probably crashed). Fresh ``pending`` markers from in-progress
-    deletions are excluded so the reconciler doesn't double-enqueue a wipe
-    that is still running.
+    (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
+    (intent written but never transitioned to ``pending`` — usually a crash
+    after ``auth.delete_account()`` succeeded), and stale ``retrying`` claims
+    (worker probably crashed). Fresh ``pending`` and ``deleting_auth`` markers
+    from in-progress deletions are excluded so the reconciler doesn't
+    double-enqueue a wipe that is still running.
+
+    The caller is responsible for verifying the Firebase auth user is actually
+    gone before recovering a ``deleting_auth`` record — this function returns
+    candidates, and ``claim_deletion_wipe`` also age-guards inside a transaction.
 
     All queries are single-field equality filters on ``wipe_status`` to avoid
     requiring Firestore composite indexes. Age filtering is done in Python.
@@ -328,6 +335,21 @@ def get_pending_deletion_wipes(limit: int = 100, stale_after: timedelta = timede
                 result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
+        # Over-fetch all 'deleting_auth' docs and age-filter in Python. A stale
+        # 'deleting_auth' record (intent written but never transitioned to
+        # 'pending') usually means a crash/deploy after auth.delete_account()
+        # succeeded. The reconciler verifies the Firebase user is gone before
+        # recovering these — see reconcile_pending_deletion_wipes.
+        deleting_auth_docs = db.collection('account_deletions').where('wipe_status', '==', 'deleting_auth').stream()
+        for doc in deleting_auth_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            intent_at = data.get('wipe_intent_at')
+            if intent_at and intent_at < stale_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
         retrying_docs = db.collection('account_deletions').where('wipe_status', '==', 'retrying').stream()
         for doc in retrying_docs:
             if len(result) >= limit:
@@ -344,12 +366,13 @@ def get_pending_deletion_wipes(limit: int = 100, stale_after: timedelta = timede
 def _claim_deletion_wipe_txn(transaction, doc_ref, stale_after: timedelta) -> str | None:
     """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
-    Transitions ``wipe_status`` from ``failed``, stale ``pending``, or stale
+    Transitions ``wipe_status`` from ``failed``, stale ``pending``, stale
+    ``deleting_auth`` (auth user verified gone by caller), or stale
     ``retrying`` to ``retrying`` so concurrent workers cannot re-enqueue the same
-    wipe. Fresh ``pending`` markers (recently queued by an in-progress deletion)
-    are left untouched to avoid wiping data before Firebase auth deletion
-    succeeds. ``retrying`` claims that are not yet stale are also refused (another
-    worker owns them).
+    wipe. Fresh ``pending`` and fresh ``deleting_auth`` markers (recently written
+    by an in-progress deletion) are left untouched to avoid wiping data before
+    Firebase auth deletion succeeds. ``retrying`` claims that are not yet stale
+    are also refused (another worker owns them).
     """
     snapshot = doc_ref.get(transaction=transaction)
     if not snapshot.exists:
@@ -357,6 +380,15 @@ def _claim_deletion_wipe_txn(transaction, doc_ref, stale_after: timedelta) -> st
     data = snapshot.to_dict()
     status = data.get('wipe_status')
     now = datetime.now(timezone.utc)
+    if status == 'deleting_auth':
+        # Recoverable only after the caller verified the Firebase auth user is
+        # gone. Re-validate the age inside the transaction so a fresh intent
+        # from an in-progress deletion is never claimed prematurely.
+        intent_at = data.get('wipe_intent_at')
+        if intent_at and intent_at >= now - stale_after:
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
     if status == 'pending':
         # Re-validate the pending marker age *inside* the transaction. The
         # reconciler query may have returned a stale record that was since

@@ -427,3 +427,79 @@ def test_reconcile_pending_deletion_wipes_handles_query_error(monkeypatch):
 
     assert result == {'requeued': 0, 'skipped': 0, 'error': 1}
     submit.assert_not_called()
+
+
+def test_reconcile_recovers_deleting_auth_when_user_gone(monkeypatch):
+    """Stale 'deleting_auth' record with Firebase user deleted → recovered."""
+    pending = [{'uid': 'uid1', 'wipe_status': 'deleting_auth'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
+    monkeypatch.setattr(account_deletion.auth, 'get_user', MagicMock(side_effect=Exception('USER_NOT_FOUND')))
+    enqueued = []
+    monkeypatch.setattr(
+        account_deletion,
+        'submit_with_context',
+        lambda executor, target, uid: enqueued.append(uid),
+    )
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 1, 'skipped': 0}
+    assert enqueued == ['uid1']
+
+
+def test_reconcile_skips_deleting_auth_when_user_exists(monkeypatch):
+    """Stale 'deleting_auth' record but Firebase user still exists → skipped."""
+    pending = [{'uid': 'uid1', 'wipe_status': 'deleting_auth'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    # get_user succeeds → user exists
+    monkeypatch.setattr(account_deletion.auth, 'get_user', MagicMock(return_value=object()))
+    claim = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', claim)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 0, 'skipped': 1}
+    claim.assert_not_called()
+    submit.assert_not_called()
+
+
+def test_reconcile_skips_deleting_auth_on_indeterminate_error(monkeypatch):
+    """Stale 'deleting_auth' with indeterminate Firebase error → skipped (fail safe)."""
+    pending = [{'uid': 'uid1', 'wipe_status': 'deleting_auth'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    # Indeterminate error — not USER_NOT_FOUND
+    monkeypatch.setattr(account_deletion.auth, 'get_user', MagicMock(side_effect=Exception('internal error')))
+    claim = MagicMock()
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', claim)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 0, 'skipped': 1}
+    claim.assert_not_called()
+    submit.assert_not_called()
+
+
+def test_is_auth_user_gone_returns_true_for_user_not_found(monpatch=None):
+    """_is_auth_user_gone returns True when Firebase reports USER_NOT_FOUND."""
+    # Direct unit test of the helper.
+    original_get_user = account_deletion.auth.get_user
+    account_deletion.auth.get_user = MagicMock(side_effect=Exception('USER_NOT_FOUND'))
+    try:
+        assert account_deletion._is_auth_user_gone('uid1') is True
+    finally:
+        account_deletion.auth.get_user = original_get_user
+
+
+def test_is_auth_user_gone_returns_false_for_indeterminate_error(monkeypatch=None):
+    """_is_auth_user_gone returns False (fail safe) on non-USER_NOT_FOUND errors."""
+    original_get_user = account_deletion.auth.get_user
+    account_deletion.auth.get_user = MagicMock(side_effect=Exception('internal error'))
+    try:
+        assert account_deletion._is_auth_user_gone('uid1') is False
+    finally:
+        account_deletion.auth.get_user = original_get_user
