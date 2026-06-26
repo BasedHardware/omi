@@ -146,9 +146,9 @@ def test_write_plan_requires_execute_and_allow_write_and_rejects_unknown_scopes(
 def test_docs_reference_non_claims_and_server_owned_scope_assignment():
     root = Path(__file__).resolve().parents[2].parent
     readiness_doc = root / "docs" / "epics" / "memory_mcp_app_key_scope_readiness.md"
-    oracle_doc = root / "docs" / "epics" / "archive" / "memory_t20_oracle_milestone_review.md"
+    evidence_markers_doc = root / "docs" / "operational" / "memory_readiness_evidence_markers.md"
     readiness = readiness_doc.read_text()
-    oracle = oracle_doc.read_text()
+    evidence_markers = evidence_markers_doc.read_text()
 
     assert "python3 backend/scripts/mcp_api_key_scope_readiness.py" in readiness
     assert "--execute --allow-write" in readiness
@@ -156,4 +156,4 @@ def test_docs_reference_non_claims_and_server_owned_scope_assignment():
     assert "do not infer scopes from advertised MCP tool metadata" in readiness
     assert "not executed against production" in readiness
     assert "no OAuth introspection" in readiness
-    assert "mcp_api_key_scope_readiness.py" in oracle
+    assert "mcp_api_key_scope_readiness.py" in evidence_markers
