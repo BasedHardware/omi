@@ -53,6 +53,10 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
   "SSL_CERT_FILE",
   "SSL_CERT_DIR",
   "NODE_EXTRA_CA_CERTS",
+  // Adapter-specific home directory. Swift seeds HERMES_HOME before launching
+  // the Node bridge; forwarding it lets the spawned `hermes acp` subprocess
+  // locate its config/state instead of falling back to defaults.
+  "HERMES_HOME",
 ] as const;
 
 /**

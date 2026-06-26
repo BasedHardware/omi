@@ -144,6 +144,9 @@ describe("AcpRuntimeAdapter process spawning", () => {
       saved[key] = process.env[key];
       process.env[key] = "secret-value";
     }
+    // HERMES_HOME is allowlisted, not secret — simulate Swift seeding it.
+    saved["HERMES_HOME"] = process.env.HERMES_HOME;
+    process.env.HERMES_HOME = "/custom/hermes/home";
     try {
       proc.stdin.on("data", () => {});
       await adapter.start();
@@ -156,6 +159,8 @@ describe("AcpRuntimeAdapter process spawning", () => {
       // Allowlisted OS vars and OMI_ADAPTER_ID are present.
       expect(callEnv.env).toHaveProperty("OMI_ADAPTER_ID", "hermes");
       expect(callEnv.env).toHaveProperty("PATH", process.env.PATH);
+      // Adapter-specific home is forwarded so the external adapter can locate config/state.
+      expect(callEnv.env).toHaveProperty("HERMES_HOME", "/custom/hermes/home");
       await adapter.stop();
     } finally {
       for (const [key, val] of Object.entries(saved)) {
