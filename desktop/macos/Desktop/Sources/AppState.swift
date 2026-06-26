@@ -160,6 +160,7 @@ class AppState: ObservableObject {
   @Published var conversationsError: String? = nil
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
+  private var pendingConversationMutations: [String: ConversationPendingMutation] = [:]
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -2738,7 +2739,13 @@ class AppState: ObservableObject {
     do {
       let fetchedConversations = try await conversationsTask
       if requestFiltersAreCurrent() {
-        conversations = fetchedConversations
+        let reconciliation = ConversationReconciliationPolicy.mergeList(
+          server: fetchedConversations,
+          current: conversations,
+          pendingMutations: pendingConversationMutations
+        )
+        pendingConversationMutations = reconciliation.pendingMutations
+        conversations = reconciliation.conversations
       } else {
         log("Conversations: Ignoring stale response for superseded filters")
       }
@@ -2845,11 +2852,15 @@ class AppState: ObservableObject {
       )
 
       if requestFiltersAreCurrent() {
-        // Merge in-place: update existing, add new, remove gone
-        let merged = mergeConversations(source: fetchedConversations, current: conversations)
-        if merged != conversations {
-          conversations = merged
-          log("Conversations: Auto-refresh updated (\(merged.count) items)")
+        let reconciliation = ConversationReconciliationPolicy.mergeList(
+          server: fetchedConversations,
+          current: conversations,
+          pendingMutations: pendingConversationMutations
+        )
+        pendingConversationMutations = reconciliation.pendingMutations
+        if reconciliation.conversations != conversations {
+          conversations = reconciliation.conversations
+          log("Conversations: Auto-refresh updated (\(reconciliation.conversations.count) items)")
         }
       } else {
         log("Conversations: Ignoring stale auto-refresh response for superseded filters")
@@ -2893,41 +2904,12 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Merge fetched conversations into the current list in-place.
-  /// Updates changed items, adds new ones, removes ones no longer in source.
-  private func mergeConversations(source: [ServerConversation], current: [ServerConversation])
-    -> [ServerConversation]
-  {
-    let sourceById = Dictionary(uniqueKeysWithValues: source.map { ($0.id, $0) })
-    let sourceIds = Set(source.map { $0.id })
-    let currentIds = Set(current.map { $0.id })
-
-    var result = current
-
-    // Update existing items in-place
-    for i in result.indices {
-      if let updated = sourceById[result[i].id], updated != result[i] {
-        result[i] = updated
-      }
-    }
-
-    // Remove items no longer in source
-    result.removeAll { !sourceIds.contains($0.id) }
-
-    // Add new items from source that aren't in current
-    let newIds = sourceIds.subtracting(currentIds)
-    if !newIds.isEmpty {
-      let newItems = source.filter { newIds.contains($0.id) }
-      result.append(contentsOf: newItems)
-      // Re-sort by createdAt descending (newest first) to maintain order
-      result.sort { $0.createdAt > $1.createdAt }
-    }
-
-    return result
-  }
-
-  /// Update the starred status of a conversation locally
+  /// Update the starred status of a conversation locally after a successful mutation.
   func setConversationStarred(_ conversationId: String, starred: Bool) {
+    var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
+    mutation.setStarred(starred)
+    pendingConversationMutations[conversationId] = mutation
+
     if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
       conversations[index].starred = starred
     }
@@ -3031,6 +3013,10 @@ class AppState: ObservableObject {
       try await TranscriptionStorage.shared.updateFolderByBackendId(
         conversationId, folderId: folderId)
 
+      var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
+      mutation.setFolderId(folderId)
+      pendingConversationMutations[conversationId] = mutation
+
       // Update local state
       if conversations.contains(where: { $0.id == conversationId }) {
         // Reload to get updated conversation
@@ -3054,8 +3040,12 @@ class AppState: ObservableObject {
     )
   }
 
-  /// Update a conversation title locally (after successful API call)
+  /// Update a conversation title locally after a successful mutation.
   func updateConversationTitle(_ conversationId: String, title: String) {
+    var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
+    mutation.setTitle(title)
+    pendingConversationMutations[conversationId] = mutation
+
     if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
       conversations[index].structured.title = title
     }

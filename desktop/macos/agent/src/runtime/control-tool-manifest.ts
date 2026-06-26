@@ -278,6 +278,5 @@ export function agentControlInputSchema(tool: AgentControlManifestTool): Record<
     type: "object",
     properties,
     required: tool.required,
-    ...tool.jsonSchemaOptions,
   };
 }

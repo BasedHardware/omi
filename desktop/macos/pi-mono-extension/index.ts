@@ -643,7 +643,6 @@ function omiControlTool(tool: AgentControlManifestTool) {
     promptGuidelines: tool.promptGuidelines,
     properties: typeBoxPropertiesForManifestTool(tool),
     required: tool.required,
-    schemaOptions: tool.jsonSchemaOptions,
     timeoutMs: tool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS,
   });
 }

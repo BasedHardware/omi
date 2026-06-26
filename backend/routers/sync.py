@@ -97,6 +97,7 @@ from utils.cloud_tasks import (
 )
 from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
+from utils.request_validation import parse_sync_filename_timestamp
 from utils.stt.pre_recorded import postprocess_words, prerecorded
 from utils.stt.vad import vad_is_empty
 from utils.fair_use import (
@@ -669,10 +670,7 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
 
 
 def get_timestamp_from_path(path: str):
-    timestamp = int(path.split('/')[-1].split('_')[-1].split('.')[0])
-    if timestamp > 1e10:
-        return int(timestamp / 1000)
-    return timestamp
+    return parse_sync_filename_timestamp(path)
 
 
 def retrieve_file_paths(files: List[UploadFile], uid: str):
@@ -682,6 +680,8 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
     for file in files:
         filename = file.filename
         # Validate the file is .bin and contains a _$timestamp.bin, if not, 400 bad request
+        if not filename:
+            raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
         if '_' not in filename:
@@ -689,10 +689,6 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
         try:
             timestamp = get_timestamp_from_path(filename)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
-
-        time = datetime.fromtimestamp(timestamp)
-        if time > datetime.now() or time < datetime(2024, 1, 1):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
         path = f"{directory}{filename}"
@@ -1648,8 +1644,8 @@ def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
-        time_val = datetime.fromtimestamp(timestamp)
-        if time_val > datetime.now() or time_val < datetime(2024, 1, 1):
+        time_val = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+        if time_val > datetime.now(timezone.utc) or time_val < datetime(2024, 1, 1, tzinfo=timezone.utc):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
         path = f"{directory}{filename}"

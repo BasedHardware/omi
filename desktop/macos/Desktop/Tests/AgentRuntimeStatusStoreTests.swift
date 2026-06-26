@@ -57,6 +57,23 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertNotNil(projection?.completedAt)
   }
 
+  func testTerminalResultClearsStaleStatusText() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    store.beginRequest(surface: surface)
+    store.updateActivity(surface: surface, statusText: "Working...")
+
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"result","protocolVersion":2,"requestId":"req","sessionId":"ses-terminal","runId":"run-terminal","attemptId":"attempt-terminal","terminalStatus":"succeeded","text":"done"}"#
+    )!
+    store.ingest(message: message, surface: surface)
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.status, .succeeded)
+    XCTAssertNil(projection?.statusText)
+    XCTAssertNotNil(projection?.completedAt)
+  }
+
   func testTaskRegistryMarkCompletedDoesNotCreateSuccessWithoutRuntimeResult() throws {
     TaskAgentStatusRegistry.shared.registerTask(taskId: "task-no-result", title: "No Result")
     TaskAgentStatusRegistry.shared.markRunning(taskId: "task-no-result")

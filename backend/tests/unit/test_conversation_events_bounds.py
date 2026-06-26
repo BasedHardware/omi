@@ -189,6 +189,7 @@ _surface_routing_stub.pin_memory_system = MagicMock()
 _register_module('utils.memory.surface_routing', _surface_routing_stub)
 
 from fastapi import HTTPException  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 _remove_module_for_fresh_import('routers.conversations')
 _remove_module_for_fresh_import('routers')
@@ -216,15 +217,9 @@ def _fake_conversation_with_events(count):
 
 
 def test_mismatched_lengths_returns_422():
-    """events_idx longer than values must 422, not IndexError -> 500."""
-    convo, _events = _fake_conversation_with_events(2)
-    with patch.object(conv, '_get_valid_conversation_by_id', return_value={'id': 'c1'}), patch.object(
-        conv, 'deserialize_conversation', return_value=convo
-    ):
-        data = SetConversationEventsStateRequest(events_idx=[0, 1], values=[True])
-        with pytest.raises(HTTPException) as exc:
-            conv.set_conversation_events_state('c1', data, uid='u1')
-        assert exc.value.status_code == 422
+    """events_idx longer than values must fail request validation before router code runs."""
+    with pytest.raises(ValidationError):
+        SetConversationEventsStateRequest(events_idx=[0, 1], values=[True])
 
 
 def test_negative_index_is_skipped_not_corrupting():

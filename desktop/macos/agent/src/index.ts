@@ -63,6 +63,7 @@ import {
   withMergedOwnerGuard,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
+import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -678,33 +679,25 @@ async function main(): Promise<void> {
   const registry = new AdapterRegistry();
   registry.register("acp", () => acpAdapter, 1);
   const kernel = new AgentRuntimeKernel({ store, registry });
-  let piMonoAdapter: import("./adapters/pi-mono.js").PiMonoAdapter | undefined;
-  let piMonoRuntimeAdapter: import("./adapters/pi-mono.js").PiMonoRuntimeAdapter | undefined;
+  let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
+  let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
+  const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
   let currentOwnerId = "desktop-local-user";
-  let piMonoOwnerId = "desktop-local-user";
-  const invalidatePiMonoBindings = (reason: string) => {
-    kernel.invalidateBindings({
-      ownerId: piMonoOwnerId,
-      surfaceKind: "legacy_jsonl",
-      defaultAdapterId: "pi-mono",
-      adapterId: "pi-mono",
-      reason,
-    });
-    logErr(`Pi-mono: subprocess restarted; active bindings invalidated (${reason})`);
-  };
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
-    if (piMonoRuntimeAdapter) return true;
     if (!authToken) return false;
-    const { PiMonoAdapter, PiMonoRuntimeAdapter } = await import("./adapters/pi-mono.js");
-    piMonoAdapter = new PiMonoAdapter({
-      omiApiBaseUrl: process.env.OMI_API_BASE_URL,
-      authToken,
-      onRestart: (reason) => invalidatePiMonoBindings(`pi_mono_restart_${reason}`),
-    });
-    piMonoRuntimeAdapter = new PiMonoRuntimeAdapter(piMonoAdapter);
-    await piMonoRuntimeAdapter.start();
-    registry.register("pi-mono", () => piMonoRuntimeAdapter!, 1);
-    logErr("Pi-mono adapter started");
+    piMonoAuthToken = authToken;
+    piMonoClasses ??= await import("./adapters/pi-mono.js");
+    if (!registry.has("pi-mono")) {
+      registry.register("pi-mono", () => {
+        const harness = new piMonoClasses!.PiMonoAdapter({
+          omiApiBaseUrl: process.env.OMI_API_BASE_URL,
+          authToken: piMonoAuthToken,
+        });
+        piMonoAdapters.add(harness);
+        return new piMonoClasses!.PiMonoRuntimeAdapter(harness);
+      }, configuredPiMonoMaxWorkers());
+      logErr(`Pi-mono adapter registered (maxWorkers=${configuredPiMonoMaxWorkers()})`);
+    }
     return true;
   };
 
@@ -778,9 +771,6 @@ async function main(): Promise<void> {
           }
           if (query.ownerId) {
             currentOwnerId = queryOwnerId;
-            if (adapterId === "pi-mono") {
-              piMonoOwnerId = queryOwnerId;
-            }
           }
           try {
             if (adapterId === "acp") {
@@ -942,15 +932,13 @@ async function main(): Promise<void> {
         const rtm = msg as RefreshTokenMessage;
         process.env.OMI_AUTH_TOKEN = rtm.token;
         currentOwnerId = rtm.ownerId ?? currentOwnerId;
-        piMonoOwnerId = rtm.ownerId ?? piMonoOwnerId;
         try {
-          if (!piMonoAdapter) {
-            await ensurePiMonoAdapter(rtm.token);
-            break;
-          }
-          const restarted = await piMonoAdapter.updateAuthToken(rtm.token);
-          if (restarted) {
-            logErr("Pi-mono: token refresh restarted subprocess");
+          await ensurePiMonoAdapter(rtm.token);
+          for (const adapter of piMonoAdapters) {
+            const restarted = await adapter.updateAuthToken(rtm.token);
+            if (restarted) {
+              logErr("Pi-mono: token refresh restarted subprocess");
+            }
           }
         } catch (err) {
           logErr(`Pi-mono token refresh error: ${err}`);
@@ -974,7 +962,7 @@ async function main(): Promise<void> {
         logErr("Received stop signal, exiting");
         store.close();
         await acpAdapter.stop();
-        await piMonoRuntimeAdapter?.stop();
+        await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
         process.exit(0);
         break;
 
@@ -988,7 +976,7 @@ async function main(): Promise<void> {
     logCrash("stdin closed, exiting");
     store.close();
     void acpAdapter.stop();
-    void piMonoRuntimeAdapter?.stop();
+    void Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
     process.exit(0);
   });
 }

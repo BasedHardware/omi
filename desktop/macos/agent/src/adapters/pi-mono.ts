@@ -179,6 +179,8 @@ function resolveBundledExtension(): string {
 }
 
 export class PiMonoAdapter implements HarnessAdapter {
+  private static nextAdapterInstanceId = 1;
+
   readonly name = "pi-mono";
 
   private config: PiMonoConfig;
@@ -218,6 +220,7 @@ export class PiMonoAdapter implements HarnessAdapter {
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
+  private readonly sessionPrefix: string;
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false;
   /** True when a system-prompt change was deferred because a prompt was active */
@@ -225,6 +228,7 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   constructor(config: PiMonoConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
+    this.sessionPrefix = `pi-worker-${PiMonoAdapter.nextAdapterInstanceId++}`;
     this.piPath = piPath || process.env.PI_MONO_PATH || resolveBundledPi();
     this.extensionPath =
       extensionPath ||
@@ -377,12 +381,14 @@ export class PiMonoAdapter implements HarnessAdapter {
       await this.setSystemPrompt(opts.systemPrompt);
     }
 
-    const sessionId = `pi-session-${this.nextSessionId++}`;
+    const sessionId = `${this.sessionPrefix}-session-${this.nextSessionId++}`;
     this.sessions.set(sessionId, {
       cwd: opts.cwd,
       model: mapped,
       systemPrompt: opts.systemPrompt,
     });
+
+    await this.start();
 
     // Set model if specified (map claude-* → omi-*)
     if (mapped) {
@@ -923,6 +929,7 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
+    await this.start();
     // pi-mono has no native resume after daemon/process loss, but while this
     // RuntimeAdapter instance is alive the opaque session id is still usable as
     // process-local state. Startup reconciliation marks these bindings stale.

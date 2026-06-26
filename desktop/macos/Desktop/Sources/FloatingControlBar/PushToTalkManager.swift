@@ -60,6 +60,7 @@ class PushToTalkManager: ObservableObject {
   private var omniReceivedTranscript = false
   private var omniTurnSent = false  // dedup: send/fallback the omni turn at most once
   private var audioCaptureService: AudioCaptureService?
+  private var micCaptureStartInFlight = false
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
   private var finalizeWorkItem: DispatchWorkItem?
@@ -252,6 +253,10 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func startListening() {
+    guard state == .idle || state == .pendingLockDecision else {
+      log("PushToTalkManager: startListening ignored — state=\(state)")
+      return
+    }
     if isBlockedByUsageLimit() { return }
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
@@ -323,6 +328,7 @@ class PushToTalkManager: ObservableObject {
 
     state = .pendingLockDecision
     audioCaptureService?.stopCapture()
+    micCaptureStartInFlight = false
     updateBarState()
 
     let workItem = DispatchWorkItem { [weak self] in
@@ -347,6 +353,7 @@ class PushToTalkManager: ObservableObject {
     hubWaitTask?.cancel()
     hubWaitTask = nil
     isWaitingForHub = false
+    micCaptureStartInFlight = false
     if isHubMode {
       isHubMode = false
       RealtimeHubController.shared.cancelTurn()
@@ -1028,6 +1035,11 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func startMicCapture(batchMode: Bool = false, overrideDeviceID: AudioDeviceID? = nil) {
+    guard !micCaptureStartInFlight && !(audioCaptureService?.capturing ?? false) else {
+      log("PushToTalkManager: mic capture start ignored — already active")
+      return
+    }
+    micCaptureStartInFlight = true
     if audioCaptureService == nil {
       if let override = overrideDeviceID {
         audioCaptureService = AudioCaptureService(overrideDeviceID: override)
@@ -1088,8 +1100,10 @@ class PushToTalkManager: ObservableObject {
             AudioLevelMonitor.shared.updateMicrophoneLevel(level)
           }
         )
+        self.micCaptureStartInFlight = false
         log("PushToTalkManager: mic capture started (batch=\(batchMode))")
       } catch {
+        self.micCaptureStartInFlight = false
         logError("PushToTalkManager: mic capture failed", error: error)
         self.stopListening()
       }
@@ -1118,6 +1132,7 @@ class PushToTalkManager: ObservableObject {
     hubWaitTask = nil
     isWaitingForHub = false
     audioCaptureService?.stopCapture()
+    micCaptureStartInFlight = false
     transcriptionService?.stop()
     transcriptionService = nil
     realtimeOmniService?.stop()
