@@ -113,29 +113,10 @@ def read_v3_control(*, uid: str, db_client, rollout_config, consumer: str = V3_D
             read_error_reason=V3ControlDecisionReason.MALFORMED_CONTROL_DOC,
         )
     if data.get('uid') != uid:
-        try:
-            state = V3ControlState(
-                uid=str(data.get('uid')),
-                schema_version=data.get('schema_version'),
-                configured_mode=_mode(getattr(rollout_config, 'mode', MemoryRolloutMode.off)),
-                persisted_mode=_mode(data.get('mode', MemoryRolloutMode.off.value)),
-                effective_mode=MemoryRolloutMode.off,
-                mode_epoch=0,
-                cutover_epoch=0,
-                account_generation=None,
-                default_memory_grant=False,
-                archive_allowed=False,
-                rollout_write_ready=False,
-                projection_ready=False,
-                global_read_gate_open=False,
-                write_convergence_ready=False,
-            )
-        except (TypeError, ValueError, AttributeError):
-            state = None
         return V3ControlReadResult(
             cohort_enrolled=True,
             source_path=source_path,
-            state=state,
+            state=None,
             read_error_reason=V3ControlDecisionReason.UID_MISMATCH,
         )
     if _missing_or_unsupported_schema(data):
