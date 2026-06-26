@@ -35,6 +35,15 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("let activity = Self.describeActivity(for: aiMessage)"))
   }
 
+  func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = Self.hasBridgeHarnessOverride(bridgeHarnessOverride)"))
+    XCTAssertTrue(source.contains("if !hasBridgeHarnessOverride {\n                provider.modelOverride = floating.modelOverride\n            }"))
+    XCTAssertTrue(source.contains("model: Self.modelForSend(pill: pill, provider: provider)"))
+    XCTAssertTrue(source.contains("hasBridgeHarnessOverride(provider.bridgeHarnessOverride) ? nil : pill.model"))
+  }
+
   private func agentPillSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

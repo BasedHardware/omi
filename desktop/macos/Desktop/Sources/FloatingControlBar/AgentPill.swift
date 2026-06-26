@@ -431,9 +431,16 @@ final class AgentPillsManager: ObservableObject {
         pills.append(pill)
 
         let provider = ChatProvider()
+        let hasBridgeHarnessOverride = Self.hasBridgeHarnessOverride(bridgeHarnessOverride)
         if let floating = FloatingControlBarManager.shared.sharedFloatingProvider {
             provider.workingDirectory = floating.workingDirectory
-            provider.modelOverride = floating.modelOverride
+            // Directed Hermes/OpenClaw pills must not inherit the floating bar's
+            // Claude model override. Those harnesses can reject Omi's Claude
+            // aliases during session/set_model, so leave model selection to the
+            // provider-native default when a harness override is present.
+            if !hasBridgeHarnessOverride {
+                provider.modelOverride = floating.modelOverride
+            }
         }
         provider.bridgeHarnessOverride = bridgeHarnessOverride
         providersByPill[pill.id] = provider
@@ -506,7 +513,7 @@ final class AgentPillsManager: ObservableObject {
             pill.suggestedFollowUps = []
             await provider.sendMessage(
                 pill.query,
-                model: pill.model,
+                model: Self.modelForSend(pill: pill, provider: provider),
                 systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
@@ -556,7 +563,7 @@ final class AgentPillsManager: ObservableObject {
             guard let self, let pill, let provider else { return }
             let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
             await provider.sendMessage(
-                text, model: pill.model,
+                text, model: Self.modelForSend(pill: pill, provider: provider),
                 systemPromptSuffix: Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
@@ -596,6 +603,15 @@ final class AgentPillsManager: ObservableObject {
         providersByPill[pillID] = nil
         messageCountByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
+    }
+
+    private static func hasBridgeHarnessOverride(_ override: String?) -> Bool {
+        guard let override = override?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
+        return !override.isEmpty
+    }
+
+    private static func modelForSend(pill: AgentPill, provider: ChatProvider) -> String? {
+        hasBridgeHarnessOverride(provider.bridgeHarnessOverride) ? nil : pill.model
     }
 
     /// Remove all completed (done or failed) pills.
