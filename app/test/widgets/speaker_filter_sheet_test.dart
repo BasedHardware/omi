@@ -56,6 +56,22 @@ void main() {
     expect(selected, 'person-1');
   });
 
+  testWidgets('returns user sentinel when you option is selected', (tester) async {
+    String? selected;
+    await tester.pumpWidget(
+      buildSheet(
+        onSelected: (speakerId) async {
+          selected = speakerId;
+        },
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('speaker_filter_user')));
+    await tester.pump();
+
+    expect(selected, 'user');
+  });
+
   testWidgets('returns null when all speakers is selected', (tester) async {
     String? selected = 'person-1';
     await tester.pumpWidget(
