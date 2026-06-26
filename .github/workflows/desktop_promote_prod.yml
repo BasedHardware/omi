@@ -100,17 +100,21 @@ jobs:
             exit 1
           fi
 
+          IS_ROLLBACK=false
           if [ -n "$CURRENT_SHA" ] && [ "$TARGET_SHA" != "$CURRENT_SHA" ] \
             && git merge-base --is-ancestor "$TARGET_SHA" "$CURRENT_SHA"; then
-            echo "$RELEASE_TAG ($TARGET_SHA) is older than tracked prod ($CURRENT_SHA)." >&2
-            echo "This promotion workflow is roll-forward only because both desktop update feeds choose the newest stable release." >&2
-            echo "Ship a newer fixed release for prod, or handle infrastructure rollback outside this stable-promotion path." >&2
-            exit 1
+            if [ "$FORCE" != "true" ]; then
+              echo "$RELEASE_TAG ($TARGET_SHA) is older than tracked prod ($CURRENT_SHA)." >&2
+              echo "Re-run with force=true only for an intentional rollback." >&2
+              exit 1
+            fi
+            IS_ROLLBACK=true
           fi
 
           {
             echo "target_sha=$TARGET_SHA"
             echo "target_image=gcr.io/${{ vars.GCP_PROJECT_ID }}/${SERVICE}:$TARGET_SHA"
+            echo "is_rollback=$IS_ROLLBACK"
           } >> "$GITHUB_OUTPUT"
 
           echo "Promotion target: $RELEASE_TAG ($TARGET_SHA)" >> "$GITHUB_STEP_SUMMARY"
@@ -355,6 +359,19 @@ jobs:
 
           echo "Prod backend did not report the promoted release identity." >&2
           exit 1
+
+      - name: Demote newer stable releases (rollback)
+        if: steps.plan.outputs.is_rollback == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/demote-newer-stable-releases.py \
+            --target-tag "${{ inputs.release_tag }}" \
+            --repo "$REPO" \
+            --project-id "$PROJECT_ID"
 
       - name: Promote Firestore release stable
         env:
