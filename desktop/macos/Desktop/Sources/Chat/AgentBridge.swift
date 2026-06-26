@@ -55,7 +55,7 @@ actor AgentBridge {
   }
 
   private var isPiMonoHarness: Bool {
-    AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == "pi-mono"
+    AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue
   }
 
   func setGlobalAuthHandlers(

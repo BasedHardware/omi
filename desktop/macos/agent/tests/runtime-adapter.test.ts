@@ -86,12 +86,12 @@ function fakeAdapter(adapterId = "fake"): RuntimeAdapter {
   };
 }
 
-describe("AcpRuntimeAdapter shell quoting", () => {
+describe("AcpRuntimeAdapter process spawning", () => {
   beforeEach(() => {
     vi.mocked(spawn).mockReset();
   });
 
-  it("quotes the node binary path in the default spawn command so paths with spaces do not break shell execution", async () => {
+  it("uses argv spawning for the default ACP bridge path", async () => {
     const proc = createMockProcess();
     vi.mocked(spawn).mockReturnValue(proc as any);
     const adapter = new AcpRuntimeAdapter({
@@ -102,8 +102,11 @@ describe("AcpRuntimeAdapter shell quoting", () => {
     proc.stdin.on("data", () => {});
     await adapter.start();
 
-    const spawnArg = vi.mocked(spawn).mock.calls[0][0];
-    expect(spawnArg).toBe("'/path with space/node' '/acp entry.mjs'");
+    expect(vi.mocked(spawn).mock.calls[0]).toMatchObject([
+      "/path with space/node",
+      ["/acp entry.mjs"],
+      expect.objectContaining({ shell: false, stdio: ["pipe", "pipe", "pipe"] }),
+    ]);
   });
 
   it("preserves a configured command override as-is (env command is responsible for its own quoting)", async () => {
@@ -117,8 +120,10 @@ describe("AcpRuntimeAdapter shell quoting", () => {
     proc.stdin.on("data", () => {});
     await adapter.start();
 
-    const spawnArg = vi.mocked(spawn).mock.calls[0][0];
-    expect(spawnArg).toBe("/usr/local/bin/hermes-agent");
+    expect(vi.mocked(spawn).mock.calls[0]).toMatchObject([
+      "/usr/local/bin/hermes-agent",
+      expect.objectContaining({ shell: true, stdio: ["pipe", "pipe", "pipe"] }),
+    ]);
   });
 });
 

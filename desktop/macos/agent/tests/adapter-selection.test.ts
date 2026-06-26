@@ -2,8 +2,10 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   adapterActivationEnv,
+  adapterActivationError,
   adapterIdForHarnessMode,
   adapterIsActivated,
+  adapterProfile,
 } from "../src/runtime/adapter-selection.js";
 
 describe("adapter selection and activation", () => {
@@ -15,6 +17,7 @@ describe("adapter selection and activation", () => {
     expect(adapterIdForHarnessMode("hermes")).toBe("hermes");
     expect(adapterIdForHarnessMode("openclaw")).toBe("openclaw");
     expect(adapterIdForHarnessMode("openClaw")).toBe("openclaw");
+    expect(() => adapterIdForHarnessMode("unknown")).toThrow("Unknown harness mode: unknown");
   });
 
   it("keeps activation separate from implementation", () => {
@@ -30,13 +33,32 @@ describe("adapter selection and activation", () => {
     expect(adapterIsActivated("openclaw", { OMI_OPENCLAW_ADAPTER_COMMAND: "openclaw-adapter" })).toBe(true);
   });
 
+  it("centralizes production adapter profiles and capabilities", () => {
+    expect(adapterProfile("acp")).toMatchObject({
+      adapterId: "acp",
+      activationEnv: undefined,
+      capabilities: { supportsTools: true },
+    });
+    expect(adapterProfile("hermes")).toMatchObject({
+      adapterId: "hermes",
+      activationEnv: "OMI_HERMES_ADAPTER_COMMAND",
+      capabilities: { supportsTools: true },
+    });
+    expect(adapterProfile("openclaw")).toMatchObject({
+      adapterId: "openclaw",
+      activationEnv: "OMI_OPENCLAW_ADAPTER_COMMAND",
+      capabilities: { supportsTools: false, supportsModelSwitching: false },
+    });
+    expect(adapterActivationError("openclaw")).toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
+  });
+
   it("source: daemon registers Hermes/OpenClaw explicitly and does not stamp MCP env as ACP", () => {
     const indexSource = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
 
     expect(indexSource).toContain("adapterIdForHarnessMode(defaultHarnessMode)");
     expect(indexSource).toContain('defaultAdapterId === "acp"');
-    expect(indexSource).toContain("ensureHermesAdapter");
-    expect(indexSource).toContain("ensureOpenClawAdapter");
+    expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"hermes\"");
+    expect(indexSource).toContain("ensureRegisteredAdapter(registry, \"openclaw\"");
     expect(indexSource).toContain("OMI_HERMES_ADAPTER_COMMAND");
     expect(indexSource).toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
     expect(indexSource).toContain("query.ownerId = queryOwnerId");

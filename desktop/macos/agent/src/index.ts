@@ -54,7 +54,11 @@ import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
-import { adapterIdForHarnessMode, adapterIsActivated } from "./runtime/adapter-selection.js";
+import {
+  adapterActivationError,
+  adapterIdForHarnessMode,
+  ensureRegisteredAdapter,
+} from "./runtime/adapter-selection.js";
 import {
   activeControlToolOwnerId,
   controlRequestKey,
@@ -893,30 +897,18 @@ async function main(): Promise<void> {
 
   const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
   const ensureHermesAdapter = async (): Promise<boolean> => {
-    if (!adapterIsActivated("hermes")) return false;
-    if (!registry.has("hermes")) {
-      const { HermesRuntimeAdapter } = await import("./adapters/hermes.js");
-      registry.register("hermes", () => {
-        const adapter = new HermesRuntimeAdapter({ log: logErr });
-        localAcpAdapters.add(adapter);
-        return adapter;
-      }, 1);
-      logErr("Hermes adapter registered (maxWorkers=1)");
-    }
-    return true;
+    return ensureRegisteredAdapter(registry, "hermes", {
+      log: logErr,
+      maxWorkers: 1,
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
   };
   const ensureOpenClawAdapter = async (): Promise<boolean> => {
-    if (!adapterIsActivated("openclaw")) return false;
-    if (!registry.has("openclaw")) {
-      const { OpenClawRuntimeAdapter } = await import("./adapters/openclaw.js");
-      registry.register("openclaw", () => {
-        const adapter = new OpenClawRuntimeAdapter({ log: logErr });
-        localAcpAdapters.add(adapter);
-        return adapter;
-      }, configuredPiMonoMaxWorkers());
-      logErr(`OpenClaw adapter registered (maxWorkers=${configuredPiMonoMaxWorkers()})`);
-    }
-    return true;
+    return ensureRegisteredAdapter(registry, "openclaw", {
+      log: logErr,
+      maxWorkers: configuredPiMonoMaxWorkers(),
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
   };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
@@ -1014,11 +1006,11 @@ async function main(): Promise<void> {
               await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
             } else if (adapterId === "hermes") {
               if (!(await ensureHermesAdapter())) {
-                throw new Error("Hermes adapter is not configured; set OMI_HERMES_ADAPTER_COMMAND before routing a query to Hermes");
+                throw new Error(adapterActivationError("hermes"));
               }
             } else if (adapterId === "openclaw") {
               if (!(await ensureOpenClawAdapter())) {
-                throw new Error("OpenClaw adapter is not configured; set OMI_OPENCLAW_ADAPTER_COMMAND before routing a query to OpenClaw");
+                throw new Error(adapterActivationError("openclaw"));
               }
             }
             await facade.handleQuery(query);

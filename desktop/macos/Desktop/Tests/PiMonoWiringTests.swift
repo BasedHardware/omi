@@ -36,6 +36,14 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(ChatProvider.harnessMode(for: .omiAI), "piMono")
   }
 
+  func testHarnessToAdapterMappingFailsClosed() {
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .piMono).rawValue, "pi-mono")
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .acp).rawValue, "acp")
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .hermes).rawValue, "hermes")
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .openclaw).rawValue, "openclaw")
+    XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
+  }
+
   // MARK: - ApiKeysResponse shape assertion
   // After #6594, the response must NOT contain anthropic_api_key.
 
@@ -182,7 +190,7 @@ final class PiMonoWiringTests: XCTestCase {
     let directive = AgentPillsManager.providerDirective(from: "Please ask openclaw how it's going")
 
     XCTAssertEqual(directive?.provider, .openclaw)
-    XCTAssertEqual(directive?.provider.harnessMode, "openclaw")
+    XCTAssertEqual(directive?.provider.harnessMode, .openclaw)
     XCTAssertEqual(directive?.rewrittenQuery, "how it's going")
     XCTAssertEqual(directive?.title, "OpenClaw")
   }
@@ -191,13 +199,16 @@ final class PiMonoWiringTests: XCTestCase {
     let directive = AgentPillsManager.providerDirective(from: "Hermes: summarize your current status")
 
     XCTAssertEqual(directive?.provider, .hermes)
-    XCTAssertEqual(directive?.provider.harnessMode, "hermes")
+    XCTAssertEqual(directive?.provider.harnessMode, .hermes)
     XCTAssertEqual(directive?.rewrittenQuery, "summarize your current status")
     XCTAssertEqual(directive?.title, "Hermes")
   }
 
   func testProviderDirectiveIgnoresNonProviderQuestions() {
     XCTAssertNil(AgentPillsManager.providerDirective(from: "what is openclaw?"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "openclaw architecture"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "hermes scarf"))
+    XCTAssertNil(AgentPillsManager.providerDirective(from: "compare hermes and openclaw"))
     XCTAssertNil(AgentPillsManager.providerDirective(from: "how is it going?"))
   }
 

@@ -563,7 +563,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Optional per-provider bridge override for spawned/background agents.
     /// This lets a single pill run Hermes/OpenClaw without changing the user's
     /// global chat provider preference stored in `chatBridgeMode`.
-    var bridgeHarnessOverride: String?
+    private let bridgeHarnessOverride: AgentHarnessMode?
+
+    var hasBridgeHarnessOverride: Bool {
+        bridgeHarnessOverride != nil
+    }
 
     /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
     /// When true, user can create multiple chat sessions
@@ -607,18 +611,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     nonisolated static func harnessMode(for mode: BridgeMode) -> String {
-        switch mode {
-        case .omiAI, .piMono: return "piMono"
-        case .userClaude: return "acp"
-        case .hermes: return "hermes"
-        case .openClaw: return "openclaw"
-        }
+        AgentRuntimeRouting.harnessMode(for: mode).rawValue
     }
 
     private func resolvedHarnessMode() -> String {
-        if let override = bridgeHarnessOverride?.trimmingCharacters(in: .whitespacesAndNewlines),
-            !override.isEmpty {
-            return override
+        if let override = bridgeHarnessOverride {
+            return override.rawValue
         }
         let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
         return Self.harnessMode(for: BridgeMode(rawValue: mode) ?? .piMono)
@@ -756,7 +754,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // MARK: - System Prompt
     // Prompts are defined in ChatPrompts.swift (converted from Python backend)
 
-    init() {
+    init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
+        self.bridgeHarnessOverride = bridgeHarnessOverride
         log("ChatProvider initialized, will start Claude bridge on first use")
 
         // When the last in-flight save completes, re-run any poll cycle

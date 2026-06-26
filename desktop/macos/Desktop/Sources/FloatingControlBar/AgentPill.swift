@@ -143,10 +143,10 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
-        var harnessMode: String {
+        var harnessMode: AgentHarnessMode {
             switch self {
-            case .hermes: return "hermes"
-            case .openclaw: return "openclaw"
+            case .hermes: return .hermes
+            case .openclaw: return .openclaw
             }
         }
     }
@@ -318,7 +318,7 @@ final class AgentPillsManager: ObservableObject {
         let providerPattern = "(open\\s*claw|openclaw|hermes)"
         let patterns = [
             #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
-            #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]?\s*(.*)$"#,
+            #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
         ]
 
         for pattern in patterns {
@@ -366,7 +366,7 @@ final class AgentPillsManager: ObservableObject {
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
-        bridgeHarnessOverride: String? = nil
+        bridgeHarnessOverride: AgentHarnessMode? = nil
     ) -> AgentPill {
         let count = AgentPillsManager.parseAgentCount(from: query)
         if count <= 1 {
@@ -412,7 +412,7 @@ final class AgentPillsManager: ObservableObject {
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
         systemPromptSuffix: String? = nil,
-        bridgeHarnessOverride: String? = nil
+        bridgeHarnessOverride: AgentHarnessMode? = nil
     ) -> AgentPill {
         let pill = AgentPill(query: query, model: model)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
@@ -430,8 +430,8 @@ final class AgentPillsManager: ObservableObject {
 
         pills.append(pill)
 
-        let provider = ChatProvider()
-        let hasBridgeHarnessOverride = Self.hasBridgeHarnessOverride(bridgeHarnessOverride)
+        let provider = ChatProvider(bridgeHarnessOverride: bridgeHarnessOverride)
+        let hasBridgeHarnessOverride = bridgeHarnessOverride != nil
         if let floating = FloatingControlBarManager.shared.sharedFloatingProvider {
             provider.workingDirectory = floating.workingDirectory
             // Directed Hermes/OpenClaw pills must not inherit the floating bar's
@@ -442,7 +442,6 @@ final class AgentPillsManager: ObservableObject {
                 provider.modelOverride = floating.modelOverride
             }
         }
-        provider.bridgeHarnessOverride = bridgeHarnessOverride
         providersByPill[pill.id] = provider
 
         let messageCountBefore = provider.messages.count
@@ -605,13 +604,8 @@ final class AgentPillsManager: ObservableObject {
         pills.removeAll { $0.id == pillID }
     }
 
-    private static func hasBridgeHarnessOverride(_ override: String?) -> Bool {
-        guard let override = override?.trimmingCharacters(in: .whitespacesAndNewlines) else { return false }
-        return !override.isEmpty
-    }
-
     private static func modelForSend(pill: AgentPill, provider: ChatProvider) -> String? {
-        hasBridgeHarnessOverride(provider.bridgeHarnessOverride) ? nil : pill.model
+        provider.hasBridgeHarnessOverride ? nil : pill.model
     }
 
     /// Remove all completed (done or failed) pills.

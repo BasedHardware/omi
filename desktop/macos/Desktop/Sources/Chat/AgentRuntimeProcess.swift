@@ -122,17 +122,11 @@ actor AgentRuntimeProcess {
 
   var isAlive: Bool { isRunning }
 
-  static func adapterId(forHarnessMode harnessMode: String) -> String {
-    switch harnessMode {
-    case "piMono", "pi-mono":
-      return "pi-mono"
-    case "hermes":
-      return "hermes"
-    case "openclaw", "openClaw":
-      return "openclaw"
-    default:
-      return "acp"
+  static func adapterId(forHarnessMode harnessMode: String) -> String? {
+    guard let harness = AgentRuntimeRouting.harnessMode(from: harnessMode) else {
+      return nil
     }
+    return AgentRuntimeRouting.adapterId(for: harness).rawValue
   }
 
   func registerClient(clientId: String, harnessMode: String) async throws {
@@ -326,6 +320,9 @@ actor AgentRuntimeProcess {
     onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
   ) async throws -> AgentBridge.QueryResult {
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    guard let adapterId = Self.adapterId(forHarnessMode: harnessMode) else {
+      throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
+    }
 
     return try await withCheckedThrowingContinuation { continuation in
       let surfaceRef: AgentSurfaceReference?
@@ -366,7 +363,7 @@ actor AgentRuntimeProcess {
         "clientId": clientId,
         "prompt": prompt,
         "systemPrompt": systemPrompt,
-        "adapterId": Self.adapterId(forHarnessMode: harnessMode),
+        "adapterId": adapterId,
       ]
       if let sessionKey {
         queryDict["sessionKey"] = sessionKey
@@ -406,7 +403,11 @@ actor AgentRuntimeProcess {
 
   private func startProcess(preferredHarnessMode: String) async throws {
     guard !isRunning else { return }
-    let preferredAdapterId = Self.adapterId(forHarnessMode: preferredHarnessMode)
+    guard let preferredHarness = AgentRuntimeRouting.harnessMode(from: preferredHarnessMode) else {
+      log("AgentRuntimeProcess: refusing unknown harness mode \(preferredHarnessMode)")
+      throw BridgeError.agentError("Unknown AI runtime mode: \(preferredHarnessMode)")
+    }
+    let preferredAdapterId = AgentRuntimeRouting.adapterId(for: preferredHarness)
 
     readTask?.cancel()
     readTask = nil
@@ -442,12 +443,12 @@ actor AgentRuntimeProcess {
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
-    applyLocalAgentEnvironment(to: &env)
+    applyLocalAgentEnvironment(to: &env, adapterId: preferredAdapterId)
 
     let rustBase = await APIClient.shared.rustBackendURL
     if !rustBase.isEmpty {
       env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
-    } else if preferredAdapterId == "pi-mono" {
+    } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
@@ -464,7 +465,7 @@ actor AgentRuntimeProcess {
     let authService = await MainActor.run { AuthService.shared }
     if let token = try? await authService.getIdToken(), !token.isEmpty {
       env["OMI_AUTH_TOKEN"] = token
-    } else if preferredAdapterId == "pi-mono" {
+    } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     }
@@ -539,7 +540,10 @@ actor AgentRuntimeProcess {
     }
   }
 
-  private func applyLocalAgentEnvironment(to env: inout [String: String]) {
+  private func applyLocalAgentEnvironment(to env: inout [String: String], adapterId: AgentAdapterId) {
+    guard adapterId == .hermes || adapterId == .openclaw else {
+      return
+    }
     let home = NSHomeDirectory()
     let adapterSearchDirs = [
       "\(home)/.hermes/node/bin",
@@ -560,16 +564,21 @@ actor AgentRuntimeProcess {
       env["PATH"] = "\(existingPath):\(suffix)"
     }
 
-    if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
-    {
-      env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(shellQuote(openClaw)) acp"
-    }
-
-    if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
-    {
-      env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
+    switch adapterId {
+    case .openclaw:
+      if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+        let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
+      {
+        env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(shellQuote(openClaw)) acp"
+      }
+    case .hermes:
+      if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+        let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
+      {
+        env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
+      }
+    case .acp, .piMono:
+      break
     }
   }
 

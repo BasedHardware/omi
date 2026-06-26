@@ -56,7 +56,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "hermes"), "hermes")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openclaw"), "openclaw")
     XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openClaw"), "openclaw")
-    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"), "acp")
+    XCTAssertNil(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"))
   }
 
   func testPiMonoAliasUsesCanonicalAdapterForAuthGuards() throws {
@@ -66,8 +66,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
 
-    XCTAssertTrue(processSource.contains("let preferredAdapterId = Self.adapterId(forHarnessMode: preferredHarnessMode)"))
-    XCTAssertTrue(processSource.contains(#"preferredAdapterId == "pi-mono""#))
+    XCTAssertTrue(processSource.contains("let preferredAdapterId = AgentRuntimeRouting.adapterId(for: preferredHarness)"))
+    XCTAssertTrue(processSource.contains("preferredAdapterId == .piMono"))
     XCTAssertFalse(processSource.contains(#"preferredHarnessMode == "piMono""#))
 
     let bridgeSourceURL = URL(fileURLWithPath: #filePath)
@@ -76,7 +76,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentBridge.swift")
     let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
 
-    XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == \"pi-mono\""))
+    XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
     XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness, tokenRefreshTask == nil"))
     XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))

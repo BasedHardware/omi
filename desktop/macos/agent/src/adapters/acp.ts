@@ -93,18 +93,25 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
     const configuredCommand = this.command ?? (this.envCommandName ? process.env[this.envCommandName] : undefined);
     const command = configuredCommand?.trim();
-    const spawnCommand = command ?? `${shellQuote(this.nodeBin)} ${shellQuote(this.acpEntry)}`;
     if (this.adapterId !== "acp" && !command) {
       throw new Error(`${this.adapterId} adapter requires ${this.envCommandName ?? "command"}`);
     }
 
-    this.log(`Starting ${this.adapterId} ACP subprocess: ${spawnCommand}`);
-
-    this.process = spawn(spawnCommand, {
-      shell: true,
-      env,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
+    if (command) {
+      this.log(`Starting ${this.adapterId} ACP subprocess: ${command}`);
+      this.process = spawn(command, {
+        shell: true,
+        env,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    } else {
+      this.log(`Starting ${this.adapterId} ACP subprocess: ${this.nodeBin} ${this.acpEntry}`);
+      this.process = spawn(this.nodeBin, [this.acpEntry], {
+        shell: false,
+        env,
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+    }
     const proc = this.process;
     let finalized = false;
     const finalizeProcess = (reason: string): void => {
@@ -558,8 +565,4 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const rawOutput = update.rawOutput as Record<string, unknown> | undefined;
     return rawOutput ? JSON.stringify(rawOutput) : "";
   }
-}
-
-function shellQuote(value: string): string {
-  return `'${value.replaceAll("'", "'\\''")}'`;
 }
