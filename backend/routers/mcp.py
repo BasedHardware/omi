@@ -130,15 +130,18 @@ def _get_user_contact(uid: str) -> dict:
         name = user.display_name or None
         email = user.email or None
         phone_number = user.phone_number or None
-    except Exception:
-        logger.exception("get_user_profile: firebase contact lookup failed uid=%s", uid)
+    except Exception as e:
+        # Expected for uids with no Firebase Auth record; warn (no traceback).
+        logger.warning("get_user_profile: firebase contact lookup failed uid=%s: %s", uid, e)
     if not phone_number:
         try:
+            # get_phone_numbers returns decrypted dicts; prefer the primary one.
             numbers = phone_calls_db.get_phone_numbers(uid) or []
-            if numbers:
-                phone_number = numbers[0].get("phone_number")
-        except Exception:
-            logger.exception("get_user_profile: phone_numbers lookup failed uid=%s", uid)
+            primary = next((n for n in numbers if n.get("is_primary")), None) or (numbers[0] if numbers else None)
+            if primary:
+                phone_number = primary.get("phone_number")
+        except Exception as e:
+            logger.warning("get_user_profile: phone_numbers lookup failed uid=%s: %s", uid, e)
     return {"name": name, "email": email, "phone_number": phone_number}
 
 
