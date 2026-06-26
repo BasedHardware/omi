@@ -111,6 +111,31 @@ def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay
     )
 
 
+def _cancel_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
+    """Cancel the pending-deletion marker, retrying transient Firestore failures.
+
+    Used when auth.delete_account() fails after the marker was already persisted.
+    Escalates to a critical log (not an exception) if cancellation ultimately
+    fails — the auth error still propagates to the caller, and the stale marker
+    will age out naturally (pending → stale → retried by reconciler, by which
+    point the auth user may be re-deleted).
+    """
+    last_err = None
+    for attempt in range(max_attempts):
+        try:
+            users_db.cancel_user_deletion_wipe(uid)
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < max_attempts - 1:
+                time.sleep(retry_delay * (attempt + 1))
+    logger.critical(
+        f'delete_account marker CANCEL failed after {max_attempts} attempts for {uid}: '
+        f'{sanitize(str(last_err))} — manual intervention may be needed to prevent '
+        f'unwanted data wipe by the reconciliation worker.'
+    )
+
+
 def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
     if reason or reason_details:
         try:
@@ -142,11 +167,8 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
         else:
             # Auth deletion failed — cancel the pending marker so the
             # reconciliation worker doesn't wipe data for a user whose
-            # Firebase account still exists.
-            try:
-                users_db.cancel_user_deletion_wipe(uid)
-            except Exception as cancel_err:
-                logger.error(f'delete_account marker cancel failed for {uid}: {sanitize(str(cancel_err))}')
+            # Firebase account still exists. Retry transient Firestore failures.
+            _cancel_wipe_marker_with_retry(uid)
             raise
 
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)

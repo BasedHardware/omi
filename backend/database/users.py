@@ -280,36 +280,38 @@ def cancel_user_deletion_wipe(uid: str):
 def get_pending_deletion_wipes(limit: int = 100, stale_after: timedelta = timedelta(minutes=10)) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
-    Queries ``failed`` records and ``pending`` records older than ``stale_after``
-    (always actionable), then adds stale ``retrying`` claims (worker probably
-    crashed) only if room remains under ``limit``. Fresh ``pending`` markers from
-    in-progress deletions are excluded so the reconciler doesn't double-enqueue a
-    wipe that is still running.
+    Queries ``failed`` records (always actionable), stale ``pending`` records
+    (queued more than ``stale_after`` ago), and stale ``retrying`` claims
+    (worker probably crashed). Fresh ``pending`` markers from in-progress
+    deletions are excluded so the reconciler doesn't double-enqueue a wipe
+    that is still running.
+
+    All queries are single-field equality filters on ``wipe_status`` to avoid
+    requiring Firestore composite indexes. Age filtering is done in Python.
     """
     stale_cutoff = datetime.now(timezone.utc) - stale_after
+    budget = limit
 
-    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(limit).stream()
+    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(budget).stream()
     result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
 
     if len(result) < limit:
-        stale_pending_docs = (
-            db.collection('account_deletions')
-            .where('wipe_status', '==', 'pending')
-            .where('wipe_queued_at', '<', stale_cutoff)
-            .limit(limit - len(result))
-            .stream()
-        )
-        result.extend(doc.to_dict() | {'uid': doc.id} for doc in stale_pending_docs)
+        budget = limit - len(result)
+        pending_docs = db.collection('account_deletions').where('wipe_status', '==', 'pending').limit(budget).stream()
+        for doc in pending_docs:
+            data = doc.to_dict()
+            queued_at = data.get('wipe_queued_at')
+            if queued_at and queued_at < stale_cutoff:
+                result.append(data | {'uid': doc.id})
 
     if len(result) < limit:
-        stale_retrying_docs = (
-            db.collection('account_deletions')
-            .where('wipe_status', '==', 'retrying')
-            .where('wipe_claimed_at', '<', stale_cutoff)
-            .limit(limit - len(result))
-            .stream()
-        )
-        result.extend(doc.to_dict() | {'uid': doc.id} for doc in stale_retrying_docs)
+        budget = limit - len(result)
+        retrying_docs = db.collection('account_deletions').where('wipe_status', '==', 'retrying').limit(budget).stream()
+        for doc in retrying_docs:
+            data = doc.to_dict()
+            claimed_at = data.get('wipe_claimed_at')
+            if claimed_at and claimed_at < stale_cutoff:
+                result.append(data | {'uid': doc.id})
 
     return result
 
