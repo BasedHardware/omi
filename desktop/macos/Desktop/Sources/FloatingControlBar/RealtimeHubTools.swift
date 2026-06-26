@@ -28,6 +28,16 @@ enum HubTool: String {
   case getTaskAgentStatus = "get_task_agent_status"
   /// Manage floating-bar agent pills. Fast local action.
   case manageAgentPills = "manage_agent_pills"
+  /// List canonical Omi-managed agent sessions and runs.
+  case listAgentSessions = "list_agent_sessions"
+  /// Inspect one canonical Omi-managed agent run.
+  case getAgentRun = "get_agent_run"
+  /// Request cancellation for one canonical Omi-managed agent run.
+  case cancelAgentRun = "cancel_agent_run"
+  /// Inspect metadata for canonical Omi-managed agent artifacts.
+  case inspectAgentArtifacts = "inspect_agent_artifacts"
+  /// Update metadata-only lifecycle state for a canonical Omi-managed artifact.
+  case updateAgentArtifactLifecycle = "update_agent_artifact_lifecycle"
   /// Read what Omi knows about the user (memories / facts) and return it inline to speak.
   /// Fast synchronous READ — the answer to "who am I" / "what do you know about me".
   case getMemories = "get_memories"
@@ -335,6 +345,101 @@ enum RealtimeHubTools {
             ],
           ],
           "required": ["action"],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.listAgentSessions.rawValue,
+        "description":
+          "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, and migrated surfaces. "
+          + "Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "status": [
+              "type": "string",
+              "enum": ["open", "archived", "closed"],
+              "description": "Optional session status filter.",
+            ],
+            "surfaceKind": [
+              "type": "string",
+              "description": "Optional surface filter such as main_chat, task_chat, realtime, or delegated_agent.",
+            ],
+            "limit": [
+              "type": "number",
+              "description": "Maximum sessions to return. Default 50.",
+            ],
+          ],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.getAgentRun.rawValue,
+        "description":
+          "Inspect one canonical Omi-managed agent run by runId. Use a runId from list_agent_sessions or a correlated Omi response.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "runId": ["type": "string", "description": "Canonical Omi run id."],
+            "includeEvents": ["type": "boolean", "description": "Include ordered kernel events. Default true."],
+            "eventLimit": ["type": "number", "description": "Maximum events to return. Default 100."],
+          ],
+          "required": ["runId"],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.cancelAgentRun.rawValue,
+        "description":
+          "Request cancellation for one canonical Omi-managed agent run. Use when the user asks to stop or kill a running canonical agent/subagent.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "runId": ["type": "string", "description": "Canonical Omi run id to cancel."]
+          ],
+          "required": ["runId"],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.inspectAgentArtifacts.rawValue,
+        "description":
+          "Inspect metadata and references for canonical Omi-managed agent artifacts. Does not read arbitrary artifact contents.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "sessionId": ["type": "string", "description": "Canonical Omi session id."],
+            "runId": ["type": "string", "description": "Canonical Omi run id."],
+            "attemptId": ["type": "string", "description": "Canonical Omi attempt id."],
+            "role": [
+              "type": "string",
+              "enum": ["input", "result", "checkpoint", "tool_output", "log", "other"],
+              "description": "Optional artifact role filter.",
+            ],
+            "limit": ["type": "number", "description": "Maximum artifacts to return. Default 50."],
+          ],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.updateAgentArtifactLifecycle.rawValue,
+        "description":
+          "Update metadata-only lifecycle state for one canonical Omi-managed agent artifact. Does not open, delete, retain, or read files.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "artifactId": ["type": "string", "description": "Canonical Omi artifact id."],
+            "state": [
+              "type": "string",
+              "enum": ["retained", "dismissed", "opened"],
+              "description": "Target metadata lifecycle state.",
+            ],
+            "sessionId": ["type": "string", "description": "Optional canonical Omi session id scope guard."],
+            "runId": ["type": "string", "description": "Optional canonical Omi run id scope guard."],
+            "attemptId": ["type": "string", "description": "Optional canonical Omi attempt id scope guard."],
+            "reason": ["type": "string", "description": "Optional short reason."],
+          ],
+          "required": ["artifactId", "state"],
         ],
       ],
       [
