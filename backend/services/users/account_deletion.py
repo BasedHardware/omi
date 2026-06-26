@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+import time
 from database import users as users_db
 from database.action_items import get_action_item_ids
 from database.conversations import get_conversation_ids
@@ -89,6 +90,27 @@ def background_wipe_user_data(uid: str):
             logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
 
 
+def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
+    """Persist the pending-deletion marker, retrying transient Firestore failures.
+
+    Raises on persistent failure so the caller can surface the error to the user
+    rather than proceeding to the irreversible Firebase user deletion without a
+    durable recovery marker.
+    """
+    last_err = None
+    for attempt in range(max_attempts):
+        try:
+            users_db.mark_user_deletion_wipe_started(uid)
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < max_attempts - 1:
+                time.sleep(retry_delay * (attempt + 1))
+    raise Exception(
+        f'Failed to persist deletion-wipe marker after {max_attempts} attempts for {uid}: {sanitize(str(last_err))}'
+    )
+
+
 def start_account_deletion(uid: str, reason: str | None = None, reason_details: str | None = None) -> dict[str, str]:
     if reason or reason_details:
         try:
@@ -105,6 +127,12 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     except Exception as e:
         logger.error(f'delete_account subscription lookup failed for {uid}: {sanitize(str(e))}')
 
+    # Persist the pending-deletion marker BEFORE the irreversible Firebase user
+    # deletion. Retry transient Firestore failures. If the marker cannot be
+    # written, do NOT proceed — without it, a deploy/restart that cancels the
+    # queued wipe leaves no recovery path for the user's Firestore/GCS/vector data.
+    _persist_wipe_marker_with_retry(uid)
+
     try:
         auth.delete_account(uid)
     except Exception as e:
@@ -113,14 +141,6 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
             logger.info(f'delete_account firebase user already gone for {uid}')
         else:
             raise
-
-    # Persist a pending-deletion marker before enqueueing so a deploy/restart that
-    # cancels the queued wipe future can be reconciled (the marker survives in
-    # Firestore; a worker can query for `wipe_status == 'pending'`).
-    try:
-        users_db.mark_user_deletion_wipe_started(uid)
-    except Exception as e:
-        logger.error(f'delete_account wipe status persist failed for {uid}: {sanitize(str(e))}')
 
     submit_with_context(cleanup_executor, background_wipe_user_data, uid)
 

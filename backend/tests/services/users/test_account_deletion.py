@@ -86,20 +86,21 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
         ('feedback', 'uid1', 'unused', 'details'),
         ('sub', 'uid1'),
         ('stripe', 'sub_123'),
-        ('auth', 'uid1'),
         ('wipe_started', 'uid1'),
+        ('auth', 'uid1'),
         ('enqueue', account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1'),
     ]
 
 
 def test_start_account_deletion_tolerates_best_effort_failures_and_missing_firebase_user(monkeypatch):
+    """Stripe/feedback failures are tolerated, but marker write must succeed."""
     monkeypatch.setattr(
         account_deletion.users_db, 'set_user_deletion_feedback', MagicMock(side_effect=Exception('db down'))
     )
     monkeypatch.setattr(
         account_deletion.users_db,
         'mark_user_deletion_wipe_started',
-        MagicMock(side_effect=Exception('marker down')),
+        MagicMock(),
     )
     monkeypatch.setattr(
         account_deletion.users_db, 'get_user_subscription', MagicMock(side_effect=Exception('read down'))
@@ -108,6 +109,7 @@ def test_start_account_deletion_tolerates_best_effort_failures_and_missing_fireb
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock(side_effect=Exception('USER_NOT_FOUND')))
     submit = MagicMock()
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+    monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
 
     result = account_deletion.start_account_deletion('uid1', reason='reason')
 
@@ -118,12 +120,36 @@ def test_start_account_deletion_tolerates_best_effort_failures_and_missing_fireb
     )
 
 
+def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
+    """If the durable marker cannot be written, the deletion must NOT proceed."""
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock(side_effect=Exception('firestore down'))
+    )
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    try:
+        account_deletion.start_account_deletion('uid1')
+    except Exception as exc:
+        assert 'marker' in str(exc).lower() or 'deletion-wipe' in str(exc).lower()
+    else:
+        raise AssertionError('expected marker failure to raise')
+
+    # Firebase user must NOT be deleted if the marker failed.
+    account_deletion.auth.delete_account.assert_not_called()
+    submit.assert_not_called()
+
+
 def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
+    """Firebase errors propagate. The marker IS written first (before auth.delete_account)."""
     monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
     monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock())
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock(side_effect=Exception('permission denied')))
     submit = MagicMock()
     monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+    monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
 
     try:
         account_deletion.start_account_deletion('uid1')
@@ -133,7 +159,8 @@ def test_start_account_deletion_raises_unexpected_firebase_error(monkeypatch):
         raise AssertionError('expected firebase error to propagate')
 
     submit.assert_not_called()
-    account_deletion.users_db.mark_user_deletion_wipe_started.assert_not_called()
+    # Marker is written BEFORE Firebase deletion, so it IS called even when Firebase fails.
+    account_deletion.users_db.mark_user_deletion_wipe_started.assert_called_once_with('uid1')
 
 
 def test_background_wipe_user_data_preserves_order(monkeypatch):

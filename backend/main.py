@@ -185,6 +185,9 @@ async def startup_event():
         run_blocking(db_executor, _drain_pending_deletion_wipes),
         name='startup_deletion_wipe_reconcile',
     )
+    # Periodic reconciliation ensures stale retrying claims (worker crashed) and
+    # new pending/failed wipes are retried without requiring a restart.
+    start_background_task(_periodic_deletion_wipe_reconcile(), name='periodic_deletion_wipe_reconcile')
 
 
 def _drain_pending_deletion_wipes():
@@ -195,6 +198,22 @@ def _drain_pending_deletion_wipes():
             logger.info(f"Startup deletion-wipe reconciliation: {result}")
     except Exception as e:
         logger.error(f"Startup deletion-wipe reconciliation failed: {e}")
+
+
+async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
+    """Periodically reconcile orphaned or failed account-deletion wipes.
+
+    Runs every 5 minutes (default) so stale retrying claims and new
+    pending/failed wipes are retried without requiring a restart.
+    """
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            result = await run_blocking(db_executor, reconcile_pending_deletion_wipes)
+            if result.get('requeued'):
+                logger.info(f"Periodic deletion-wipe reconciliation: {result}")
+        except Exception as e:
+            logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
 
 
 @app.on_event("shutdown")
