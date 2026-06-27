@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class TranscriptionDemoStep extends StatefulWidget {
   final VoidCallback onComplete;
@@ -42,8 +43,8 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
         }
 
         return OnboardingStepScaffold(
-          title: 'Speak Into Your Omi',
-          subtitle: provider.transcriptionComplete ? '' : 'Say a few words and watch them appear in real-time',
+          title: context.l10n.deviceOnboardingTranscriptionTitle,
+          subtitle: provider.transcriptionComplete ? '' : context.l10n.deviceOnboardingTranscriptionSubtitle,
           content: Column(
             children: [
               if (!provider.transcriptionComplete) ...[
@@ -73,12 +74,13 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
         color: const Color(0xFF4CAF50).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Row(
+      child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 24),
-          SizedBox(width: 12),
-          Text('Good job!', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 20, fontWeight: FontWeight.w600)),
+          const Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 24),
+          const SizedBox(width: 12),
+          Text(context.l10n.deviceOnboardingGoodJob,
+              style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 20, fontWeight: FontWeight.w600)),
         ],
       ),
     );
