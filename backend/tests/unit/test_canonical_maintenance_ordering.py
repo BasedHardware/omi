@@ -254,3 +254,45 @@ def test_promotion_defers_items_not_in_consolidation_batch():
 
     promoted_ids = {call.args[1].memory_id for call in mock_promote.call_args_list}
     assert promoted_ids == batched
+
+
+def test_fast_track_respects_consolidation_batch_gate():
+    uid = "uid-fast-track-gate"
+    batched_item = _promotable_item("mem_batched")
+    batched_item.user_asserted = True
+    excluded_item = _promotable_item("mem_excluded")
+    excluded_item.user_asserted = True
+
+    with (
+        patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.short_term_promotion.list_promotable_short_term_items",
+            return_value=[batched_item, excluded_item],
+        ),
+        patch(
+            "utils.memory.short_term_promotion.list_fast_track_promotable_items",
+            return_value=[batched_item, excluded_item],
+        ),
+        patch("utils.memory.short_term_promotion.promotion_fast_track_enabled", return_value=True),
+        patch("utils.memory.short_term_promotion._read_control_state") as mock_control,
+        patch(
+            "utils.memory.short_term_promotion.promote_short_term_item_via_apply",
+            return_value=(batched_item, False),
+        ) as mock_promote,
+        patch("utils.memory.short_term_promotion._persist_control_state"),
+        patch("utils.memory.short_term_promotion._audit_promotion_transition", return_value=MagicMock()),
+    ):
+        mock_control.return_value = MagicMock(last_promotion_run_at=NOW)
+        from utils.memory.short_term_promotion import run_canonical_short_term_promotion
+
+        report = run_canonical_short_term_promotion(
+            uid,
+            db_client=MagicMock(),
+            run_id="run-fast-track-gate",
+            now=NOW,
+            consolidation_batched_ids={"mem_batched"},
+        )
+
+    assert report.trigger_reason == "user_asserted_fast_track"
+    promoted_ids = {call.args[1].memory_id for call in mock_promote.call_args_list}
+    assert promoted_ids == {"mem_batched"}
