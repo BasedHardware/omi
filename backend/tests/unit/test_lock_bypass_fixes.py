@@ -12,6 +12,12 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType
 from zoneinfo import ZoneInfo
 
+from tests.unit.memory_import_isolation import (
+    WS_I_HEAVY_STUB_MODULE_NAMES,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -178,24 +184,116 @@ _stubs = [
     'utils.llm.usage_tracker',
     'websockets',
 ]
-for mod_name in _stubs:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = _AutoMockModule(mod_name)
 
-# Concrete attributes used by imported modules during lightweight tests.
-sys.modules['langchain_core.callbacks'].BaseCallbackHandler = object
-sys.modules['langchain_core.outputs'].LLMResult = object
-sys.modules['langchain_core.runnables'].RunnableConfig = dict
-sys.modules['langchain_core.tools'].tool = _tool
-sys.modules['pytz'].timezone = _PytzZoneInfo
-sys.modules['pytz'].utc = timezone.utc
 
-# Override specific attributes that need concrete values
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
-sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+def _install_lock_bypass_import_stubs() -> None:
+    for mod_name in _stubs:
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = _AutoMockModule(mod_name)
+
+    # Concrete attributes used by imported modules during lightweight tests.
+    sys.modules['langchain_core.callbacks'].BaseCallbackHandler = object
+    sys.modules['langchain_core.outputs'].LLMResult = object
+    sys.modules['langchain_core.runnables'].RunnableConfig = dict
+    sys.modules['langchain_core.tools'].tool = _tool
+    sys.modules['pytz'].timezone = _PytzZoneInfo
+    sys.modules['pytz'].utc = timezone.utc
+
+    # Override specific attributes that need concrete values
+    sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+    subscription_mod = sys.modules['utils.subscription']
+    subscription_mod.has_transcription_credits = MagicMock(return_value=True)
+
+
+def _repair_polluted_lock_bypass_stubs() -> None:
+    """Drop stub-only modules left by other test files so lock-bypass imports stay valid."""
+    from utils.memory.memory_system_pin import clear_memory_system_pin
+
+    clear_memory_system_pin()
+    for name in _LOCK_BYPASS_REAL_IMPORT_MODULES:
+        sys.modules.pop(name, None)
+    for name in (
+        *_LOCK_BYPASS_REAL_IMPORT_MODULES,
+        'google.api_core',
+        'google.api_core.exceptions',
+        'google.cloud',
+        'utils.cloud_tasks',
+        'utils.other.storage',
+        'utils.subscription',
+    ):
+        mod = sys.modules.get(name)
+        if mod is not None and getattr(mod, '__file__', None) is None:
+            sys.modules.pop(name, None)
+            if "." in name:
+                parent_name, child_name = name.rsplit(".", 1)
+                parent = sys.modules.get(parent_name)
+                if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is mod:
+                    delattr(parent, child_name)
+    _install_lock_bypass_import_stubs()
+    _rebind_memory_service_database_stubs()
+
+
+def _rebind_memory_service_database_stubs() -> None:
+    import importlib
+    import utils.memory.memory_service as memory_service_mod
+
+    memories = sys.modules.get('database.memories')
+    if memories is not None:
+        memory_service_mod.memories_db = memories
+    vector_db = sys.modules.get('database.vector_db')
+    if vector_db is not None:
+        memory_service_mod.vector_db = vector_db
+    importlib.reload(memory_service_mod)
+
+
+_LOCK_BYPASS_STUB_MODULE_NAMES = tuple(_stubs)
+
+# Sprint isolation stubs that must be dropped so lock-bypass tests import real tool/router code.
+_LOCK_BYPASS_REAL_IMPORT_MODULES = (
+    'utils.retrieval.tools.memory_tools',
+    'utils.retrieval.tools.conversation_tools',
+    'utils.retrieval.hybrid',
+    'utils.conversations.search',
+    'utils.llm.goals',
+    'utils.llm.memories',
+    'utils.llm.notifications',
+    'utils.llm.external_integrations',
+    'utils.llm.chat',
+    'utils.app_integrations',
+    'utils.apps',
+    'utils.webhooks',
+    'utils.other.notifications',
+    'routers.sync',
+    'routers.folders',
+    'routers.mcp',
+    'routers.mcp_sse',
+    'routers.action_items',
+    'routers.users',
+    'routers.integration',
+    'routers.conversations',
+    'routers.developer',
+    'routers.knowledge_graph',
+)
+
+_install_lock_bypass_import_stubs()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _lock_bypass_import_isolation():
+    saved = snapshot_sys_modules(_LOCK_BYPASS_STUB_MODULE_NAMES)
+    _install_lock_bypass_import_stubs()
+    yield
+    restore_sys_modules(saved)
+
+
+@pytest.fixture(autouse=True)
+def _reinstall_lock_bypass_import_stubs():
+    _repair_polluted_lock_bypass_stubs()
 
 
 def _install_legacy_safe_memory_defaults(monkeypatch):
