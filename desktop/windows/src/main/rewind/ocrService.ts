@@ -32,5 +32,10 @@ async function backfill(): Promise<void> {
 
 export function startRewindOcr(): void {
   if (timer) clearInterval(timer)
-  timer = setInterval(() => void backfill(), BACKFILL_INTERVAL_MS)
+  // A DB error inside backfill (e.g. SQLITE_BUSY from unindexedRewindFrames /
+  // setRewindFrameOcr) would otherwise reject this fire-and-forget call and
+  // recur as an unhandled rejection every interval.
+  timer = setInterval(() => {
+    backfill().catch((e) => console.warn('[rewind-ocr] backfill failed:', e))
+  }, BACKFILL_INTERVAL_MS)
 }
