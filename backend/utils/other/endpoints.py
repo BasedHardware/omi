@@ -365,6 +365,27 @@ def with_rate_limit(auth_dependency, policy_name: str):
     return dependency
 
 
+def with_rate_limit_context(auth_context_dependency, policy_name: str):
+    """Wrap a context-returning auth dependency with per-UID rate limiting.
+
+    After auth succeeds, checks the rate limit for that context's UID.
+    One Redis call per request. Fail-open on Redis errors.
+
+    Args:
+        auth_context_dependency: FastAPI dependency that returns an auth context
+            object with a ``uid`` attribute (e.g. ProductAuthorizationContext).
+        policy_name: Key in RATE_POLICIES (utils/rate_limit_config.py).
+    """
+    if policy_name not in RATE_POLICIES:
+        raise ValueError(f"Unknown rate limit policy: {policy_name}")
+
+    async def dependency(auth_context=Depends(auth_context_dependency)):
+        _enforce_rate_limit(auth_context.uid, policy_name)
+        return auth_context
+
+    return dependency
+
+
 def check_rate_limit_inline(key: str, policy_name: str):
     """Check rate limit inline (for endpoints with custom auth).
 

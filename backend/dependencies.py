@@ -216,6 +216,27 @@ async def get_developer_memory_default_memory_read_context(
     )
 
 
+async def get_developer_memory_default_memory_write_context(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+) -> ProductAuthorizationContext:
+    if not has_scope(auth.scopes, Scopes.MEMORIES_WRITE):
+        raise HTTPException(
+            status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_WRITE}"
+        )
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(
+            status_code=403, detail="Missing Developer API app/key identity for memory memory authorization"
+        )
+    return ProductAuthorizationContext(
+        uid=auth.uid,
+        consumer='developer_api',
+        surface='developer_default_memory_write',
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        scopes=_memory_memory_scopes_from_developer_scopes(auth.scopes),
+    )
+
+
 async def get_uid_with_memories_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:
     if not has_scope(auth.scopes, Scopes.MEMORIES_WRITE):
         raise HTTPException(

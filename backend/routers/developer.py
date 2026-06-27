@@ -34,14 +34,14 @@ from dependencies import (
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
     get_developer_memory_default_memory_read_context,
-    get_uid_with_memories_write,
+    get_developer_memory_default_memory_write_context,
     get_uid_with_action_items_read,
     get_uid_with_action_items_write,
     get_uid_with_goals_read,
     get_uid_with_goals_write,
 )
 from utils.apps import update_personas_async
-from utils.other.endpoints import with_rate_limit, get_current_user_uid
+from utils.other.endpoints import with_rate_limit, with_rate_limit_context, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
@@ -61,6 +61,7 @@ from utils.memory.developer_memory_adapter import (
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
+    authorize_memory_external_default_memory_write,
 )
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
@@ -248,7 +249,7 @@ class MemoryResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     manually_added: bool
-    scoring: str
+    scoring: Optional[str] = None
 
 
 class BatchMemoriesRequest(BaseModel):
@@ -465,7 +466,9 @@ def search_memories_vector(
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
 def create_memory(
     request: CreateMemoryRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories")),
+    auth_context: ProductAuthorizationContext = Depends(
+        with_rate_limit_context(get_developer_memory_default_memory_write_context, "dev:memories")
+    ),
 ):
     """
     Create a new memory for the authenticated user.
@@ -477,6 +480,18 @@ def create_memory(
     """
     if not request.content or len(request.content.strip()) == 0:
         raise HTTPException(status_code=422, detail="content cannot be empty")
+
+    # Fail closed: a legacy/read-only Developer key (no persisted memories.write
+    # grant) must not mutate canonical memories. The canonical branch skips the
+    # legacy write guard inside create_external_memory(), so the grant check must
+    # run first for both canonical and legacy paths.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
 
     category = request.category if request.category else identify_category_for_memory(request.content.strip())
 
@@ -544,13 +559,26 @@ def create_memory(
 @router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])
 def create_memories_batch(
     request: BatchMemoriesRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories_batch")),
+    auth_context: ProductAuthorizationContext = Depends(
+        with_rate_limit_context(get_developer_memory_default_memory_write_context, "dev:memories_batch")
+    ),
 ):
     """
     Create multiple memories in a batch.
 
     - **memories**: List of memories to create (max 25)
     """
+    # Fail closed: a legacy/read-only Developer key (no persisted memories.write
+    # grant) must not mutate canonical memories. Gated before any memory
+    # construction so rejected requests build no side effects.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
+
     if not request.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
 
@@ -607,13 +635,23 @@ def create_memories_batch(
 @router.delete("/v1/dev/user/memories/{memory_id}", tags=["developer"])
 def delete_memory(
     memory_id: str,
-    uid: str = Depends(get_uid_with_memories_write),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
 ):
     """
     Delete a memory by ID.
 
     - **memory_id**: The ID of the memory to delete
     """
+    # Fail closed: a legacy/read-only Developer key (no persisted memories.write
+    # grant) must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
+
     memory_system = pin_memory_system(uid, db_client=db)
     MemoryService(db_client=db).delete_external_memory(
         uid,
@@ -632,7 +670,7 @@ def delete_memory(
 def update_memory(
     memory_id: str,
     request: UpdateMemoryRequest,
-    uid: str = Depends(get_uid_with_memories_write),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
 ):
     """
     Update a memory's content, visibility, tags, or category.
@@ -643,6 +681,16 @@ def update_memory(
     - **tags**: New tags for the memory (optional)
     - **category**: New category for the memory (optional)
     """
+    # Fail closed: a legacy/read-only Developer key (no persisted memories.write
+    # grant) must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
+
     if request.content is None and request.visibility is None and request.tags is None and request.category is None:
         raise HTTPException(
             status_code=422, detail="At least one field (content, visibility, tags, or category) must be provided"
