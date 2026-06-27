@@ -31,6 +31,7 @@ from pydantic import BaseModel  # noqa: E402
 
 import simple_storage  # noqa: E402
 import telegram_client  # noqa: E402
+from persona_client import chat as _persona_chat  # noqa: E402  (re-export of plugins/_shared/persona_client.chat)
 
 # The shared persona client is imported lazily inside the webhook handler
 # (T-004) so the import is gated on auto-reply being enabled.
@@ -213,18 +214,98 @@ async def webhook(
     # Path 2: regular message. Look up the user; if known and auto_reply is off,
     # nudge. Otherwise (unknown chat, group, or auto_reply on) we fall through
     # to T-004.
+    # Safety filters for the auto-reply path: skip groups/channels (out of scope
+    # for v1), skip bot senders (own-message safety), skip non-text payloads.
+    if _is_group_or_channel(update):
+        return {"ok": True}
+    if _is_bot_sender(update):
+        return {"ok": True}
+    if not text:
+        return {"ok": True}
+
     user = simple_storage.get_user_by_chat_id(str(chat_id))
     if user is None:
         return {"ok": True}
 
-    if user.get("auto_reply_enabled"):
-        # T-004 territory — for now (T-003 skeleton) we just acknowledge.
-        # T-004 will replace this branch with the persona dispatch loop.
-        logger.debug("auto_reply is on for chat %s (T-004 will dispatch)", chat_id)
+    # Auto-reply disabled -> nudge, don't dispatch.
+    if not user.get("auto_reply_enabled"):
+        await _send_auto_reply_disabled_notice(user["bot_token"], chat_id)
         return {"ok": True}
 
-    await _send_auto_reply_disabled_notice(user["bot_token"], chat_id)
+    # Auto-reply on -> call the persona, send the reply.
+    await _dispatch_auto_reply(user, str(chat_id), text)
     return {"ok": True}
+
+
+async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
+    """Call the persona API and send the reply back to Telegram.
+
+    Empty replies (timeout/connect error) and HTTP errors are logged but do not
+    raise — the webhook must always return 200 to Telegram.
+    """
+    import httpx as _httpx
+
+    try:
+        reply = await _persona_chat(
+            app_id=user["persona_id"],
+            api_key=user["omi_dev_api_key"],
+            omi_base=OMI_BASE_URL,
+            text=text,
+        )
+    except _httpx.HTTPStatusError as e:
+        logger.error(
+            "persona chat HTTP error for chat %s: %s",
+            chat_id,
+            e,
+        )
+        return
+    except Exception as e:
+        # Catch-all: never crash the webhook on an unexpected error.
+        logger.exception("persona chat unexpected error for chat %s: %s", chat_id, e)
+        return
+
+    if not reply:
+        logger.info("persona chat returned empty reply for chat %s (skipping send)", chat_id)
+        return
+
+    await telegram_client.send_message(user["bot_token"], chat_id, reply)
+    logger.info("auto-reply sent to chat %s (%d chars)", chat_id, len(reply))
+
+
+def _is_group_or_channel(update: dict) -> bool:
+    chat = (update.get("message") or update.get("edited_message") or {}).get("chat") or {}
+    return chat.get("type") in {"group", "supergroup", "channel"}
+
+
+def _is_bot_sender(update: dict) -> bool:
+    sender = (update.get("message") or update.get("edited_message") or {}).get("from") or {}
+    return bool(sender.get("is_bot"))
+
+
+# ---------------------------------------------------------------------------
+# /toggle — flips auto_reply_enabled for a chat (called by Chat Tools).
+# ---------------------------------------------------------------------------
+class ToggleRequest(BaseModel):
+    chat_id: str
+    enabled: bool
+
+
+class ToggleResponse(BaseModel):
+    chat_id: str
+    auto_reply_enabled: bool
+
+
+@app.post("/toggle", response_model=ToggleResponse)
+async def toggle(req: ToggleRequest):
+    """Enable or disable auto-reply for the given chat_id.
+
+    Returns 404 if the chat_id is not registered. Called by the Chat Tools
+    manifest entry `toggle_auto_reply` (T-008).
+    """
+    if simple_storage.get_user_by_chat_id(req.chat_id) is None:
+        raise HTTPException(status_code=404, detail=f"Unknown chat_id: {req.chat_id}")
+    simple_storage.update_auto_reply(req.chat_id, req.enabled)
+    return ToggleResponse(chat_id=req.chat_id, auto_reply_enabled=req.enabled)
 
 
 def _bot_token_for_unknown_chat(chat_id: int | str) -> str:
