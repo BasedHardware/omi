@@ -684,12 +684,7 @@ _LEGACY_WRITE_CALLS = frozenset(
     }
 )
 
-_ALLOWLISTED_LEGACY_WRITES = frozenset(
-    {
-        ("utils/consolidation/worker.py", "memories_db.refine_memory"),
-        ("utils/consolidation/worker.py", "memories_db.merge_contradict_memory"),
-    }
-)
+_ALLOWLISTED_LEGACY_WRITES = frozenset()
 
 _COHORT_GATE_MARKERS = (
     "pin_memory_system",
