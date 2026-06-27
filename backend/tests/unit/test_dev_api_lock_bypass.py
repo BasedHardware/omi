@@ -10,6 +10,12 @@ import pytest
 import sys
 from types import ModuleType
 
+from tests.unit.memory_import_isolation import (
+    WS_I_HEAVY_STUB_MODULE_NAMES,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -73,16 +79,83 @@ _stubs = [
     'utils.llm.knowledge_graph',
     'database.dev_api_key',
 ]
-for mod_name in _stubs:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = _AutoMockModule(mod_name)
 
-# Override specific attributes
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
-sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+def _install_dev_api_lock_bypass_stubs() -> None:
+    for mod_name in _stubs:
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = _AutoMockModule(mod_name)
+
+    sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+
+def _repair_polluted_dev_api_lock_bypass_stubs() -> None:
+    from utils.memory.memory_system_pin import clear_memory_system_pin
+
+    clear_memory_system_pin()
+    for name in _DEV_API_REAL_IMPORT_MODULES:
+        sys.modules.pop(name, None)
+    for name in (
+        *_DEV_API_REAL_IMPORT_MODULES,
+        'google.api_core',
+        'google.api_core.exceptions',
+        'google.cloud',
+        'utils.cloud_tasks',
+        'utils.other.storage',
+        'utils.subscription',
+    ):
+        mod = sys.modules.get(name)
+        if mod is not None and getattr(mod, '__file__', None) is None:
+            sys.modules.pop(name, None)
+            if "." in name:
+                parent_name, child_name = name.rsplit(".", 1)
+                parent = sys.modules.get(parent_name)
+                if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is mod:
+                    delattr(parent, child_name)
+    _install_dev_api_lock_bypass_stubs()
+    _rebind_memory_service_database_stubs()
+
+
+def _rebind_memory_service_database_stubs() -> None:
+    import importlib
+    import utils.memory.memory_service as memory_service_mod
+
+    memories = sys.modules.get('database.memories')
+    if memories is not None:
+        memory_service_mod.memories_db = memories
+    vector_db = sys.modules.get('database.vector_db')
+    if vector_db is not None:
+        memory_service_mod.vector_db = vector_db
+    importlib.reload(memory_service_mod)
+
+
+_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES = tuple(_stubs)
+
+_DEV_API_REAL_IMPORT_MODULES = (
+    'routers.developer',
+    'routers.knowledge_graph',
+    'utils.conversations.process_conversation',
+    'utils.llm.knowledge_graph',
+)
+
+_install_dev_api_lock_bypass_stubs()
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _dev_api_lock_bypass_import_isolation():
+    saved = snapshot_sys_modules(_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES)
+    _install_dev_api_lock_bypass_stubs()
+    yield
+    restore_sys_modules(saved)
+
+
+@pytest.fixture(autouse=True)
+def _reinstall_dev_api_lock_bypass_stubs():
+    _repair_polluted_dev_api_lock_bypass_stubs()
 
 
 def _install_legacy_safe_memory_developer_defaults(monkeypatch):
