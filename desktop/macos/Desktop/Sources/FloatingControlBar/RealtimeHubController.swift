@@ -812,7 +812,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // on a wasListening→false transition) would see no change and leave the bar wide.
     let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
-    if clearResponseGlow || !audioReceivedThisTurn {
+    // When the turn fell back to local AVSpeechSynthesizer speech (no realtime audio)
+    // or the spawn_agent path spoke a local ack, audioReceivedThisTurn is false but
+    // the synthesizer is still speaking. Keep the glow active until the delegate
+    // (didFinish/didCancel) clears it, so the spoken-response indicator doesn't
+    // disappear mid-utterance.
+    if clearResponseGlow || (!audioReceivedThisTurn && !speech.isSpeaking) {
       responseGlowGate.clearImmediately()
     }
     barState.isVoiceListening = false

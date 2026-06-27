@@ -198,6 +198,38 @@ def collect_logs(ctx: HarnessContext) -> dict[str, typing.Any]:
     return {"path": str(out), "available": ctx.log_path.exists(), "bytes": len(text.encode("utf-8")), "error_count": error_count}
 
 
+def _ancestor_pids() -> set[int]:
+    """Return PIDs of this process and all its ancestors (parent chain).
+
+    macOS ``pgrep`` has no ``-A`` (exclude-ancestors) flag, so when the harness
+    is launched from a scripted shell/CI command whose command line contains the
+    process-match string (e.g. ``--process-match omi-harness-test``), ``pgrep``
+    returns that ancestor as well as the app.  Filtering the ancestor chain
+    here keeps ``resolve_sample_pid`` from failing the uniqueness check.
+    """
+    pids: set[int] = {os.getpid()}
+    try:
+        current = os.getppid()
+        while current > 1 and current not in pids:
+            pids.add(current)
+            # Walk up the parent chain via ps (portable; no /proc on macOS).
+            result = subprocess.run(
+                ["ps", "-o", "ppid=", "-p", str(current)],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
+            parent = result.stdout.strip()
+            if not parent.isdigit():
+                break
+            current = int(parent)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return pids
+
+
 def process_matches(match: str) -> list[dict[str, typing.Any]]:
     completed = subprocess.run(
         ["pgrep", "-fl", match],
@@ -207,18 +239,21 @@ def process_matches(match: str) -> list[dict[str, typing.Any]]:
         text=True,
         timeout=5,
     )
+    skip_pids = _ancestor_pids()
     matches: list[dict[str, typing.Any]] = []
     for line in completed.stdout.splitlines():
         parts = line.strip().split(maxsplit=1)
         if not parts or not parts[0].isdigit():
             continue
         command = parts[1] if len(parts) > 1 else ""
-        # Only skip the harness runner itself. Do NOT filter by the substring
-        # "omi-harness" because the target app may be launched as a named
-        # bundle like "omi-harness-test" that legitimately matches.
-        if str(os.getpid()) == parts[0]:
+        pid = int(parts[0])
+        # Only skip the harness runner itself and its ancestor shells (whose
+        # command lines may contain the match string). Do NOT filter by the
+        # substring "omi-harness" because the target app may be launched as a
+        # named bundle like "omi-harness-test" that legitimately matches.
+        if pid in skip_pids:
             continue
-        matches.append({"pid": int(parts[0]), "command": command})
+        matches.append({"pid": pid, "command": command})
     return matches
 
 
