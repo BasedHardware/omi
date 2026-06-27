@@ -177,11 +177,10 @@ _full_stub("database.cache", "get_memory_cache", "get_pubsub_manager")
 # database.users needs get_stripe_connect_account_id
 _users_mod = _full_stub("database.users", "get_user_name", "get_stripe_connect_account_id")
 # models.app needs App, UsageHistoryItem, UsageHistoryType
-_models_app = _full_stub("models.app", "App", "UsageHistoryItem", "UsageHistoryType")
-# Set non-MagicMock defaults for Pydantic-like types used in test
-_models_app.App = MagicMock()
-_models_app.UsageHistoryItem = MagicMock()
-_models_app.UsageHistoryType = MagicMock()
+# NOTE: models.app is NOT stubbed. The real App class is imported by
+# routers.integration at module load (line 23), and the endpoint calls
+# `App(**app_dict)` to coerce the Firestore dict to a Pydantic model.
+# Stubbing models.app would mask the real class and break the streaming test.
 _full_stub(
     "routers.conversations",
     "process_conversation",
@@ -253,6 +252,22 @@ class TestPersonaChatRequest:
 # ---------------------------------------------------------------------------
 # 3. Endpoint behavior
 # ---------------------------------------------------------------------------
+
+
+def _valid_app_dict(app_id="app-1", *, with_persona_chat_capability=True):
+    """Minimal valid App dict that the Pydantic App model will accept."""
+    return {
+        "id": app_id,
+        "name": "Test App",
+        "category": "test",
+        "author": "tester",
+        "description": "Test",
+        "image": "https://example.com/img.png",
+        "capabilities": {"persona"} if with_persona_chat_capability else set(),
+        "external_integration": {"actions": [{"action": "persona_chat"}] if with_persona_chat_capability else []},
+    }
+
+
 def _build_test_app():
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -343,7 +358,7 @@ class TestPersonaChatEndpoint:
         with patch("routers.integration.apps_db") as mock_apps_db, patch(
             "routers.integration.redis_db"
         ) as mock_redis_db:
-            mock_apps_db.get_app_by_id_db = MagicMock(return_value={"id": "app-1"})
+            mock_apps_db.get_app_by_id_db = MagicMock(return_value=_valid_app_dict())
             mock_redis_db.get_enabled_apps = MagicMock(return_value=[])
             stub_apps = mock_apps_db.get_app_by_id_db
             stub_redis = mock_redis_db.get_enabled_apps
@@ -366,7 +381,7 @@ class TestPersonaChatEndpoint:
         with patch("routers.integration.apps_db") as mock_apps_db, patch(
             "routers.integration.redis_db"
         ) as mock_redis_db, patch("routers.integration.apps_utils") as mock_apps_utils:
-            mock_apps_db.get_app_by_id_db = MagicMock(return_value={"id": "app-1"})
+            mock_apps_db.get_app_by_id_db = MagicMock(return_value=_valid_app_dict())
             mock_redis_db.get_enabled_apps = MagicMock(return_value=["app-1"])
             mock_apps_utils.app_can_persona_chat = MagicMock(return_value=False)
             stub_apps = mock_apps_db.get_app_by_id_db
@@ -397,7 +412,7 @@ class TestPersonaChatEndpoint:
         ) as mock_redis_db, patch("routers.integration.apps_utils") as mock_apps_utils, patch(
             "routers.integration.execute_chat_stream", side_effect=fake_chat_stream
         ):
-            mock_apps_db.get_app_by_id_db = MagicMock(return_value={"id": "app-1"})
+            mock_apps_db.get_app_by_id_db = MagicMock(return_value=_valid_app_dict())
             mock_redis_db.get_enabled_apps = MagicMock(return_value=["app-1"])
             mock_apps_utils.app_can_persona_chat = MagicMock(return_value=True)
             stub_apps = mock_apps_db.get_app_by_id_db

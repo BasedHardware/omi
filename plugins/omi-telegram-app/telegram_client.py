@@ -1,6 +1,9 @@
 """Async HTTP client for the Telegram Bot API.
 
-Wraps `httpx.AsyncClient` and provides three methods that the plugin uses:
+Wraps a module-level `httpx.AsyncClient` so the underlying TCP/TLS connection
+is reused across calls (avoids repeated handshake per Telegram API request).
+
+Three methods:
 - set_webhook(bot_token, url, secret_token): register the webhook with Telegram
 - get_me(bot_token): fetch the bot's username (needed to build the deep link)
 - send_message(bot_token, chat_id, text): post a reply back to a chat
@@ -17,19 +20,39 @@ logger = logging.getLogger("telegram_client")
 
 TELEGRAM_API_BASE = "https://api.telegram.org"
 
+# Shared client with connection pooling. timeout applies per call (overridable
+# via httpx.Timeout if needed). Created lazily so tests can patch httpx.AsyncClient
+# before the client is constructed; tests use their own client via patch.
+_client: Optional[httpx.AsyncClient] = None
+
+
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(timeout=10.0)
+    return _client
+
+
+async def aclose() -> None:
+    """Close the shared client on shutdown (called from FastAPI lifespan)."""
+    global _client
+    if _client is not None:
+        await _client.aclose()
+        _client = None
+
 
 async def set_webhook(bot_token: str, url: str, secret_token: str) -> dict:
     """Register the plugin's webhook URL with Telegram.
 
     Returns the parsed JSON body. Raises httpx.HTTPStatusError on failure.
     """
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.post(
-            f"{TELEGRAM_API_BASE}/bot{bot_token}/setWebhook",
-            json={"url": url, "secret_token": secret_token},
-        )
-        resp.raise_for_status()
-        return resp.json()
+    client = _get_client()
+    resp = await client.post(
+        f"{TELEGRAM_API_BASE}/bot{bot_token}/setWebhook",
+        json={"url": url, "secret_token": secret_token},
+    )
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def get_me(bot_token: str) -> dict:
@@ -37,10 +60,10 @@ async def get_me(bot_token: str) -> dict:
 
     Raises httpx.HTTPStatusError on failure (bad token, etc.).
     """
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.post(f"{TELEGRAM_API_BASE}/bot{bot_token}/getMe")
-        resp.raise_for_status()
-        return resp.json()
+    client = _get_client()
+    resp = await client.post(f"{TELEGRAM_API_BASE}/bot{bot_token}/getMe")
+    resp.raise_for_status()
+    return resp.json()
 
 
 async def send_message(bot_token: str, chat_id: int | str, text: str) -> Optional[dict]:
@@ -65,13 +88,25 @@ async def send_message(bot_token: str, chat_id: int | str, text: str) -> Optiona
         )
 
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(
-                f"{TELEGRAM_API_BASE}/bot{bot_token}/sendMessage",
-                json={"chat_id": chat_id, "text": text},
-            )
-            resp.raise_for_status()
-            return resp.json()
+        client = _get_client()
+        resp = await client.post(
+            f"{TELEGRAM_API_BASE}/bot{bot_token}/sendMessage",
+            json={"chat_id": chat_id, "text": text},
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        # httpx.HTTPStatusError.__str__ includes the full request URL — which
+        # contains the bot token. Log only the status code + chat_id to keep
+        # the token out of logs.
+        logger.error(
+            "send_message failed for chat_id=%s: HTTP %s",
+            chat_id,
+            e.response.status_code,
+        )
+        return None
     except httpx.HTTPError as e:
-        logger.error("send_message failed for chat_id=%s: %s", chat_id, e)
+        # Other HTTP errors (timeout, connect). These don't include the URL
+        # in their repr but log a generic message anyway.
+        logger.error("send_message failed for chat_id=%s: %s", chat_id, type(e).__name__)
         return None

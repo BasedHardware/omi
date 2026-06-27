@@ -168,6 +168,32 @@ class TestSseParsing:
         assert reply == "hello world"
 
     @pytest.mark.asyncio
+    async def test_blank_lines_in_sse_data_are_preserved(self):
+        # A single SSE event whose data spans multiple lines. Per the SSE spec
+        # (https://html.spec.whatwg.org/multipage/server-sent-events.html), the
+        # event data is the concatenation of all `data:` lines for that event,
+        # separated by newlines. So `data: line one\ndata: line two\n\n` is one
+        # event with data = "line one\nline two".
+        body = "data: line one\ndata: line two\n\n"
+        request = httpx.Request("POST", "https://api.omi.me/v2/integrations/app-1/user/persona-chat")
+        resp = httpx.Response(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            content=body.encode("utf-8"),
+            request=request,
+        )
+        client = _mock_async_client_post(resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            reply = await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+            )
+        assert reply == "line one\nline two"
+
+    @pytest.mark.asyncio
     async def test_empty_stream_returns_empty_string(self):
         request = httpx.Request("POST", "https://api.omi.me/v2/integrations/app-1/user/persona-chat")
         resp = httpx.Response(

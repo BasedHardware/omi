@@ -109,5 +109,14 @@ def _join_chunks(chunks: Iterable[str]) -> str:
 
 
 def _split_lines(data: str) -> str:
-    """For multi-line SSE data frames, join with newlines; else return as-is."""
-    return data if "\n" not in data else "\n".join(line for line in data.splitlines() if line)
+    """For multi-line SSE data frames, join with newlines; else return as-is.
+
+    Multi-line events happen when the backend streams a chunk whose text
+    itself contains a newline (rare but legitimate — code blocks, lists).
+    We preserve blank lines so the reply formatting survives intact.
+    """
+    if "\n" not in data:
+        return data
+    # Preserve blank lines (was previously filtered — fixed per review feedback
+    # from cubic). Each line as-is, joined with newlines.
+    return "\n".join(data.splitlines())
