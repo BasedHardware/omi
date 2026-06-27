@@ -20,6 +20,7 @@ struct FloatingControlBarView: View {
     var onShareLink: (() async -> String?)?
 
     @State private var isHovering = false
+    @State private var notchLogoHovering = false
     @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
     /// 0 = agent dots collapsed into the logo ring, 1 = fanned into the row. A single
     /// continuously-animated value so the same dots morph both ways (and reverse exactly).
@@ -121,7 +122,7 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if !agentPills.pills.isEmpty && !showingNotchWaveform {
+            if !agentPills.pills.isEmpty && !showingNotchWaveform && !state.showingAIConversation {
                 NotchAgentMorphField(
                     manager: agentPills,
                     activePillID: state.activeAgentChatPillID,
@@ -210,6 +211,7 @@ struct FloatingControlBarView: View {
             if isEmpty {
                 state.agentSwitcherPinned = false
                 state.agentSwitcherHovering = false
+                notchLogoHovering = false
             }
         }
     }
@@ -241,24 +243,29 @@ struct FloatingControlBarView: View {
                     .frame(width: 28, height: 15)
                     .frame(width: 38, height: 27)
             } else {
-                NotchAgentPillsRowView(manager: agentPills, barWindow: window)
-                    // Once there are pills the morph field owns the ring (and unfurls it),
-                    // so the lobe logo only renders for the empty Ask-AI state — never
-                    // both at once. The hidden view still handles hover/tap to expand.
-                    .opacity(agentPills.pills.isEmpty ? 1 : 0)
-                    .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
-                    .padding(.trailing, 2)
-                    .onHover { setAgentSwitcherHovering($0) }
-                    .simultaneousGesture(
-                        TapGesture().onEnded {
-                            handleAgentLogoTap()
-                        }
-                    )
-                    .onTapGesture {
-                        if agentPills.pills.isEmpty {
-                            onAskAI()
-                        }
-                    }
+                ZStack(alignment: .trailing) {
+                    NotchAgentPillsRowView(manager: agentPills, barWindow: window)
+                        // Compact mode lets the morph field own the ring while agents unfurl.
+                        // Chat mode hides that field, so the lobe owns the logo/settings slot.
+                        .opacity((agentPills.pills.isEmpty || state.showingAIConversation) && !notchLogoHovering ? 1 : 0)
+                        .scaleEffect(notchLogoHovering ? 0.72 : 1.0)
+                        .rotationEffect(.degrees(notchLogoHovering ? -28 : 0))
+
+                    Image(systemName: "gearshape.fill")
+                        .scaledFont(size: 15, weight: .semibold)
+                        .foregroundColor(.white.opacity(0.88))
+                        .frame(width: NotchAgentStackMetrics.logoFrameSize, height: NotchAgentStackMetrics.logoFrameSize)
+                        .opacity(notchLogoHovering ? 1 : 0)
+                        .scaleEffect(notchLogoHovering ? 1 : 0.5)
+                        .rotationEffect(.degrees(notchLogoHovering ? 0 : 42))
+                }
+                .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
+                .padding(.trailing, 2)
+                .contentShape(Rectangle())
+                .onHover { setNotchLogoHovering($0) }
+                .onTapGesture {
+                    openFloatingBarSettings()
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
@@ -276,28 +283,17 @@ struct FloatingControlBarView: View {
                 .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
                 .position(x: logoCenterX, y: notchChromeHeight / 2)
-                .onHover { setAgentSwitcherHovering($0) }
+                .onHover { setNotchLogoHovering($0) }
                 .onTapGesture {
-                    handleAgentLogoTap()
+                    openFloatingBarSettings()
                 }
-                .accessibilityLabel("Subagents")
-                .accessibilityHint("Show subagent list")
+                .accessibilityLabel("Floating Bar Settings")
+                .accessibilityHint("Open settings")
         }
     }
 
     private var notchControlLobe: some View {
-        HStack(spacing: 10) {
-            Button {
-                openFloatingBarSettings()
-            } label: {
-                Image(systemName: "gearshape.fill")
-                    .scaledFont(size: 15, weight: .semibold)
-                    .foregroundColor(.white.opacity(0.86))
-                    .frame(width: 30, height: 27)
-            }
-            .buttonStyle(.plain)
-            .help("Floating Bar Settings")
-        }
+        Color.clear
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.leading, 2)
     }
@@ -449,6 +445,10 @@ struct FloatingControlBarView: View {
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
+
+                    if state.hasVisibleConversation {
+                        escToClearHint
+                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
@@ -463,6 +463,20 @@ struct FloatingControlBarView: View {
     private var activeAgentChatPill: AgentPill? {
         guard let id = state.activeAgentChatPillID else { return nil }
         return agentPills.pills.first { $0.id == id }
+    }
+
+    private var escToClearHint: some View {
+        HStack(spacing: 4) {
+            Text("esc")
+                .scaledFont(size: 11)
+                .foregroundColor(.secondary)
+                .frame(width: 30, height: 16)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(4)
+            Text("to clear")
+                .scaledFont(size: 11)
+                .foregroundColor(.secondary)
+        }
     }
 
     private func setAgentSwitcherHovering(_ hovering: Bool) {
@@ -509,13 +523,11 @@ struct FloatingControlBarView: View {
         }
     }
 
-    private func handleAgentLogoTap() {
-        guard !agentPills.pills.isEmpty else { return }
-        if state.showingAIConversation {
-            showAgentListFromConversation()
-            return
+    private func setNotchLogoHovering(_ hovering: Bool) {
+        withAnimation(.spring(response: 0.18, dampingFraction: 0.74)) {
+            notchLogoHovering = hovering
         }
-        toggleAgentSwitcherPinned()
+        setAgentSwitcherHovering(hovering)
     }
 
     private func openAgentInChat(_ pill: AgentPill) {
@@ -529,6 +541,7 @@ struct FloatingControlBarView: View {
         let wasShowingConversation = state.showingAIConversation
         state.agentSwitcherPinned = false
         state.agentSwitcherHovering = false
+        notchLogoHovering = false
         barWindow?.makeKeyAndOrderFront(nil)
         withAnimation(agentChatSwitchTransition) {
             state.present(.agent(pill.id))
@@ -877,7 +890,7 @@ struct FloatingControlBarView: View {
                 get: { state.aiInputText },
                 set: { state.aiInputText = $0 }
             ),
-            canClearVisibleConversation: state.hasVisibleConversation,
+            canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
             onSend: { message in
                 state.displayedQuery = message
                 state.markConversationActivity()
@@ -922,7 +935,8 @@ struct FloatingControlBarView: View {
                 get: { state.voiceFollowUpTranscript },
                 set: { state.voiceFollowUpTranscript = $0 }
             ),
-            canClearVisibleConversation: state.hasVisibleConversation,
+            canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
+            showsHeader: !state.usesNotchIsland,
             onClearVisibleConversation: onClearVisibleConversation,
             onEscape: onEscape,
             onSendFollowUp: { message in

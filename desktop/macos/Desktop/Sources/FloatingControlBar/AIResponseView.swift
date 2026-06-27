@@ -14,6 +14,7 @@ struct AIResponseView: View {
     @Binding var isVoiceFollowUp: Bool
     @Binding var voiceFollowUpTranscript: String
     var canClearVisibleConversation: Bool = false
+    var showsHeader: Bool = true
 
     var onClearVisibleConversation: (() -> Void)?
     var onEscape: (() -> Void)?
@@ -23,8 +24,10 @@ struct AIResponseView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            headerView
-                .fixedSize(horizontal: false, vertical: true)
+            if showsHeader {
+                headerView
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -93,7 +96,7 @@ struct AIResponseView: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.top, state.usesNotchIsland ? 6 : 16)
+        .padding(.top, state.usesNotchIsland ? 0 : 16)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)

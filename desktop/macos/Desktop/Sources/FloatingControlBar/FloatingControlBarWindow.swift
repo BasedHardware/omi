@@ -708,8 +708,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resignKeyAnimationToken += 1
         let closeAnimationToken = resignKeyAnimationToken
 
-        // Cancel any in-flight chat streaming to prevent re-expansion
-        FloatingControlBarManager.shared.cancelChat()
+        // Collapsing the chat should not interrupt spoken playback. The voice
+        // response glow is owned by playback state and must survive surface
+        // transitions while audio is still being delivered.
+        let keepVoiceResponseAlive = state.isVoiceResponseActive
+        if !keepVoiceResponseAlive {
+            FloatingControlBarManager.shared.cancelChat()
+        }
 
         // Cancel dynamic response-height observer and reset its state
         responseHeightCancellable?.cancel()
@@ -1029,6 +1034,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         log("FloatingControlBar: resizeAnchored to \(constrainedSize) resizable=\(makeResizable) animated=\(animated) from=\(frame.size)")
 
         let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
+        if animated, anchorTop, notchModeEnabled {
+            let currentTopCenteredFrame = NSRect(
+                origin: originForTopCenterAnchor(newSize: frame.size),
+                size: frame.size
+            )
+            if abs(frame.midX - targetFrame.midX) > 0.5
+                || abs(currentTopCenteredFrame.minY - frame.minY) > 0.5
+            {
+                setFrame(currentTopCenteredFrame, display: true, animate: false)
+            }
+        }
         resizeToFrame(
             targetFrame,
             makeResizable: makeResizable,
