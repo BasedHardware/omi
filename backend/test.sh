@@ -44,6 +44,7 @@ pytest tests/unit/test_memories_validation.py -v
 pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_announcement_malformed_type.py -v
 pytest tests/unit/test_llm_gateway_service.py -v
+pytest tests/unit/test_llm_gateway_config.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v

@@ -1,0 +1,12 @@
+feature_bundles:
+  - feature: memories
+    lane_id: omi:auto:chat-structured
+    prompt_version: memory_extraction.v17
+    parser_version: memory_schema.v9
+    eval_suite: memory_precision_recall.v5
+    promotion_gates:
+      schema_valid_rate: ">= 99.5%"
+      precision_regression: none
+      recall_delta: ">= 0"
+      p95_latency_ms: "<= LKG + 10%"
+      cost_per_success: "<= LKG + 15%"

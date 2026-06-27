@@ -6,9 +6,9 @@ description: "Architecture spec for Omi's internal LLM routing gateway, auto lan
 
 # LLM Gateway Architecture
 
-> Status: architecture spec for implementation coordination.
+> Status: implemented architecture in progress.
 >
-> Scope: repo-owned gateway service, repo-checked configuration, first lane `omi:auto:chat-structured`.
+> Implemented so far: separate FastAPI service skeleton, `/health`, repo-local config schemas/loader, and checked-in `omi:auto:chat-structured` lane artifacts.
 
 ## Decision
 
@@ -87,7 +87,7 @@ Reasons:
 
 Do not make the gateway a Swift, Rust, Node, Go, or Kubernetes-controller project for v1. Those choices would increase operational and review burden without helping the first `chat-structured` lane.
 
-Recommended service layout:
+Current service layout:
 
 ```text
 backend/llm_gateway/
@@ -102,16 +102,23 @@ backend/llm_gateway/
   gateway/
     schemas.py
     config_loader.py
-    validator.py
-    resolver.py
-    executor.py
-    providers.py
-    metrics.py
-    errors.py
-  tests/
 ```
 
-The exact directory can change during implementation, but keep it a separate service entrypoint. Do not place a parallel `utils/auto_router` package under the main backend and do not wire a public task picker into `backend/main.py`.
+Planned modules:
+
+```text
+backend/llm_gateway/gateway/
+  auth.py
+  credentials.py
+  validator.py
+  resolver.py
+  executor.py
+  providers.py
+  metrics.py
+  errors.py
+```
+
+Keep it a separate service entrypoint. Do not place a parallel `utils/auto_router` package under the main backend and do not wire a public task picker into `backend/main.py`.
 
 ## Deployment Shape
 
@@ -232,6 +239,16 @@ Provider/model details stay internal by default.
 
 All config is checked into this repo for v1.
 
+Implemented config files:
+
+```text
+backend/llm_gateway/config/lanes.yaml
+backend/llm_gateway/config/route_artifacts.yaml
+backend/llm_gateway/config/feature_bundles.yaml
+```
+
+`backend/llm_gateway/gateway/config_loader.py` loads those files by default, validates cross-file references, rejects duplicate route IDs, validates active/LKG compatibility, rejects dev/mock evidence in prod mode, and validates route artifact digests.
+
 Lane config:
 
 ```yaml
@@ -309,7 +326,7 @@ promotion_gates:
 
 Route artifacts are immutable. Promotion creates a new artifact and updates the lane pointer. Rollback updates the lane pointer back to LKG.
 
-Validation must reject duplicate `route_artifact_id` values and expose a content digest for every artifact. Once an artifact ID has shipped, changing its content is treated as invalid operational behavior; create a new artifact ID instead.
+Validation rejects duplicate `route_artifact_id` values and exposes a content digest for every artifact. Checked-in artifacts should include `artifact_digest`; if the artifact content changes without changing the digest, validation fails. Once an artifact ID has shipped, changing its content is treated as invalid operational behavior; create a new artifact ID instead.
 
 ## Integration With Existing Backend Code
 
@@ -417,9 +434,9 @@ Do not log raw prompts, transcripts, screenshots, memory contents, provider resp
 
 ## Implementation Sequence
 
-1. Add this doc and an implementation checklist.
-2. Add `llm_gateway` service skeleton with health endpoint and config validation command.
-3. Add Pydantic schemas for lane config, route artifacts, feature bundles, capability declarations, retries, timeouts, rollout, and LKG.
+1. Add this doc and an implementation checklist. Done.
+2. Add `llm_gateway` service skeleton with health endpoint. Done.
+3. Add Pydantic schemas for lane config, route artifacts, feature bundles, capability declarations, retries, timeouts, rollout, evidence, credential policy, fallback policy, and LKG. Done.
 4. Add service-auth and credential-policy contracts.
 5. Add resolver tests with no network calls.
 6. Add capability validator tests for `chat-structured`.
