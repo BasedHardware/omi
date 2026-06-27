@@ -7,6 +7,8 @@ import uuid
 import logging
 import io as _io
 import wave as _wave
+
+import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -85,6 +87,11 @@ _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
 
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
+    try:
+        info = sf.info(_io.BytesIO(data))
+        return info.duration
+    except Exception:
+        pass
     try:
         with _wave.open(_io.BytesIO(data), 'rb') as wf:
             return wf.getnframes() / wf.getframerate()
