@@ -201,6 +201,7 @@ struct DashboardPage: View {
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
     @ObservedObject private var deviceProvider = DeviceProvider.shared
+    @ObservedObject private var waCoordinator = WhatsAppReplyCoordinator.shared
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
     @State private var isLoadingCitation = false
@@ -538,10 +539,12 @@ struct DashboardPage: View {
             taskValue: taskMetricValue,
             memoryValue: memoryMetricValue,
             screenshotValue: screenshotMetricValue,
+            messageValue: messageMetricValue,
             onConversations: { navigate(to: .conversations) },
             onTasks: { navigate(to: .tasks) },
             onMemories: { navigate(to: .memories) },
-            onScreenshots: { navigate(to: .rewind) }
+            onScreenshots: { navigate(to: .rewind) },
+            onMessages: { navigate(to: .messages) }
         )
     }
 
@@ -693,6 +696,10 @@ struct DashboardPage: View {
 
     private var screenshotMetricValue: String {
         screenshotCount.map(formattedCount) ?? "—"
+    }
+
+    private var messageMetricValue: String {
+        formattedCount(waCoordinator.pendingDrafts.count)
     }
 
     private func navigate(to item: SidebarNavItem) {
@@ -2040,10 +2047,12 @@ private struct HomeCenterMemoryColumn: View {
     let taskValue: String
     let memoryValue: String
     let screenshotValue: String
+    let messageValue: String
     let onConversations: () -> Void
     let onTasks: () -> Void
     let onMemories: () -> Void
     let onScreenshots: () -> Void
+    let onMessages: () -> Void
 
     var body: some View {
         content
@@ -2056,7 +2065,7 @@ private struct HomeCenterMemoryColumn: View {
         }
         // Group the title directly above the cards and center the unit in a
         // column the same height as the side lists.
-        let columnHeight = CGFloat(422)
+        let columnHeight = CGFloat(512)
         let framed = stack.frame(width: CGFloat(340), height: columnHeight, alignment: Alignment.center)
         return AnyView(framed)
     }
@@ -2109,6 +2118,13 @@ private struct HomeCenterMemoryColumn: View {
                     action: onScreenshots
                 )
             }
+
+            HomeCenterMetricTile(
+                title: "Messages",
+                value: messageValue,
+                systemImage: "message",
+                action: onMessages
+            )
         }
         .frame(maxWidth: .infinity))
     }
