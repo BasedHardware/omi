@@ -29,6 +29,12 @@ enum CloudConnectorFormAutomation {
     }
   }
 
+  private enum ClaudeConnectorPageState: Equatable {
+    case addCustomConnectorModal
+    case connectorDetail
+    case other
+  }
+
   static func fill(_ args: [String: Any]) async -> String {
     let provider = ((args["provider"] as? String) ?? "").lowercased()
     guard provider == "claude" || provider == "chatgpt" else {
@@ -197,15 +203,25 @@ enum CloudConnectorFormAutomation {
     submit: Bool
   ) async -> String? {
     guard provider == "claude" else { return nil }
-    guard let browser = findClaudeConnectorBrowserApp() else { return nil }
+    guard let target = findClaudeConnectorKeyboardTarget(expectedState: .addCustomConnectorModal) else {
+      return nil
+    }
     guard let name = values.first(where: { $0.label == "Name" })?.value,
       let serverURL = values.first(where: { $0.label == "Remote MCP server URL" })?.value,
       let clientID = values.first(where: { $0.label == "OAuth Client ID" })?.value,
       let clientSecret = values.first(where: { $0.label == "OAuth Client Secret" })?.value
     else { return nil }
 
-    browser.activate(options: [.activateIgnoringOtherApps])
+    target.app.activate()
     try? await Task.sleep(nanoseconds: 450_000_000)
+    guard let active = NSWorkspace.shared.frontmostApplication,
+      active.processIdentifier == target.app.processIdentifier,
+      let activeTarget = frontmostClaudeConnectorKeyboardTarget(),
+      activeTarget.state == .addCustomConnectorModal
+    else {
+      return
+        "Error: Refusing keyboard fallback because the active window is not Claude's add custom connector modal."
+    }
 
     // Claude's modal currently focuses the close button when opened. Atlas does
     // not expose the page fields through AX, so use the modal's stable tab order.
@@ -221,7 +237,7 @@ enum CloudConnectorFormAutomation {
     var lines = [
       "Native connector form filler result:",
       "Provider: claude",
-      "Browser/app: \(browser.localizedName ?? browser.bundleIdentifier ?? "unknown")",
+      "Browser/app: \(target.app.localizedName ?? target.app.bundleIdentifier ?? "unknown")",
       "Filled: Name, Remote MCP server URL, OAuth Client ID, OAuth Client Secret",
       "Method: keyboard fallback",
     ]
@@ -409,19 +425,12 @@ enum CloudConnectorFormAutomation {
     return available[index]
   }
 
-  private static func findClaudeConnectorBrowserApp() -> NSRunningApplication? {
+  private static func findClaudeConnectorKeyboardTarget(
+    expectedState: ClaudeConnectorPageState
+  ) -> (app: NSRunningApplication, state: ClaudeConnectorPageState)? {
     let ownBundleID = Bundle.main.bundleIdentifier
     let browserApps = NSWorkspace.shared.runningApplications.filter { app in
-      guard app.bundleIdentifier != ownBundleID else { return false }
-      let name = (app.localizedName ?? app.bundleIdentifier ?? "").lowercased()
-      return name.contains("chrome")
-        || name.contains("atlas")
-        || name.contains("brave")
-        || name.contains("edge")
-        || name.contains("arc")
-        || name.contains("opera")
-        || name.contains("vivaldi")
-        || name.contains("chromium")
+      app.bundleIdentifier != ownBundleID && isSupportedBrowserApp(app)
     }
 
     let frontmost = NSWorkspace.shared.frontmostApplication
@@ -430,15 +439,62 @@ enum CloudConnectorFormAutomation {
       let appElement = AXUIElementCreateApplication(app.processIdentifier)
       for root in focusedAndWindowRoots(for: appElement) {
         let nodes = collectNodes(from: root, maxDepth: 10, maxNodes: 500)
-        let text = nodes.map(\.searchableText).joined(separator: " ")
-        if text.contains("claude.ai/customize/connectors")
-          || text.contains("add custom connector")
-        {
-          return app
+        let state = claudeConnectorPageState(nodes: nodes)
+        if state == expectedState {
+          return (app, state)
         }
       }
     }
     return nil
+  }
+
+  private static func frontmostClaudeConnectorKeyboardTarget() -> (
+    app: NSRunningApplication, state: ClaudeConnectorPageState
+  )? {
+    guard let app = NSWorkspace.shared.frontmostApplication,
+      isSupportedBrowserApp(app)
+    else { return nil }
+
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    for root in focusedAndWindowRoots(for: appElement) {
+      let nodes = collectNodes(from: root, maxDepth: 10, maxNodes: 500)
+      let state = claudeConnectorPageState(nodes: nodes)
+      if state != .other {
+        return (app, state)
+      }
+    }
+    return nil
+  }
+
+  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState {
+    let text = nodes.map(\.searchableText).joined(separator: " ")
+    guard text.contains("claude.ai/customize/connectors") else { return .other }
+
+    if text.contains("modal=add-custom-connector")
+      || text.contains("add custom connector")
+    {
+      return .addCustomConnectorModal
+    }
+
+    if text.contains("you are not connected to omi yet")
+      || text.contains("not connected to omi")
+    {
+      return .connectorDetail
+    }
+
+    return .other
+  }
+
+  private static func isSupportedBrowserApp(_ app: NSRunningApplication) -> Bool {
+    let name = (app.localizedName ?? app.bundleIdentifier ?? "").lowercased()
+    return name.contains("chrome")
+      || name.contains("atlas")
+      || name.contains("brave")
+      || name.contains("edge")
+      || name.contains("arc")
+      || name.contains("opera")
+      || name.contains("vivaldi")
+      || name.contains("chromium")
   }
 
   private static func setField(_ element: AXUIElement, to value: String) -> Bool {
