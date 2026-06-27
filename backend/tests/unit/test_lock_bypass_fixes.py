@@ -1326,15 +1326,8 @@ class TestUsersLockEnforcement:
 
     def test_gdpr_export_includes_locked(self):
         """H6: GDPR export must include locked conversations (Art. 15)."""
-        import database.conversations as conversations_db
-        import database.memories as memories_db
-        import database.chat as chat_db
-
         locked_conv = _make_conversation(locked=True)
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
-        conversations_db.iter_all_conversations = MagicMock(return_value=iter([locked_conv, unlocked_conv]))
-        memories_db.get_non_filtered_memories = MagicMock(return_value=[])
-        chat_db.iter_all_messages = MagicMock(return_value=iter([]))
 
         # The export generator lives in services.users.data_export, which binds
         # these helpers at module level. Patch the service-level symbols so the
@@ -1343,22 +1336,34 @@ class TestUsersLockEnforcement:
         with patch('services.users.data_export.get_user_profile', return_value={'name': 'Test'}):
             with patch('services.users.data_export.get_people', return_value=[]):
                 with patch('services.users.data_export.get_standalone_action_items', return_value=[]):
-                    from routers.users import export_all_user_data
+                    with patch(
+                        'services.users.data_export.conversations_db.iter_all_conversations',
+                        return_value=iter([locked_conv, unlocked_conv]),
+                    ):
+                        with patch(
+                            'services.users.data_export.memories_db.get_non_filtered_memories',
+                            return_value=[],
+                        ):
+                            with patch(
+                                'services.users.data_export.chat_db.iter_all_messages',
+                                return_value=iter([]),
+                            ):
+                                from routers.users import export_all_user_data
 
-                    response = export_all_user_data(uid='test-uid')
+                                response = export_all_user_data(uid='test-uid')
 
-                    # Consume body inside patches — the generator is lazy.
-                    # StreamingResponse wraps sync generators as async iterators,
-                    # so iterate the underlying generator directly.
-                    import asyncio
+                                # Consume body inside patches — the generator is lazy.
+                                # StreamingResponse wraps sync generators as async iterators,
+                                # so iterate the underlying generator directly.
+                                import asyncio
 
-                    async def _consume():
-                        parts = []
-                        async for chunk in response.body_iterator:
-                            parts.append(chunk)
-                        return ''.join(parts)
+                                async def _consume():
+                                    parts = []
+                                    async for chunk in response.body_iterator:
+                                        parts.append(chunk)
+                                    return ''.join(parts)
 
-                    body = asyncio.run(_consume())
+                                body = asyncio.run(_consume())
 
         import json
 
