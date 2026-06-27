@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Hardened Notch Mode playback and subagent back-navigation edge cases"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.547",
+      "date": "2026-06-27",
+      "changes": [
+        "Hardened Notch Mode playback and subagent back-navigation edge cases"
+      ]
+    },
     {
       "version": "0.11.546",
       "date": "2026-06-27",
