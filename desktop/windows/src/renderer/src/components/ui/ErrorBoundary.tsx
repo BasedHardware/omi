@@ -24,6 +24,16 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error(`[ErrorBoundary${this.props.label ? `:${this.props.label}` : ''}]`, error, info.componentStack)
   }
 
+  componentDidUpdate(prevProps: Props): void {
+    // Re-attempt the subtree when its content changes after a failure. A transient
+    // WebGL context loss (sleep/wake, driver reset) or a one-time lazy-chunk
+    // rejection would otherwise leave the pane blank forever, even once new data
+    // arrives, until a full app reload.
+    if (this.state.failed && prevProps.children !== this.props.children) {
+      this.setState({ failed: false })
+    }
+  }
+
   render(): ReactNode {
     if (this.state.failed) return this.props.fallback ?? null
     return this.props.children
