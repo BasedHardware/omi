@@ -31,7 +31,12 @@ export function computeLayout(graph: KnowledgeGraph, opts: LayoutOptions = {}): 
   }
 
   const simNodes: SimNode[] = graph.nodes.map((n) => ({ ...n, degree: degree[n.id] ?? 0 }))
-  const simLinks: SimLink[] = graph.edges.map((e) => ({ source: e.sourceId, target: e.targetId }))
+  // Skip edges whose endpoints are not both present. forceLink throws
+  // "missing: <id>" on a dangling reference, and merge/onboarding can emit an
+  // edge before its node exists (degree above already tolerates this).
+  const simLinks: SimLink[] = graph.edges
+    .filter((e) => e.sourceId in degree && e.targetId in degree)
+    .map((e) => ({ source: e.sourceId, target: e.targetId }))
 
   const sim = forceSimulation<SimNode>(simNodes)
     .force('charge', forceManyBody().strength(-180))
