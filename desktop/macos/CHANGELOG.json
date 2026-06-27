@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "AI chat now shows actionable recovery cards for sign-in, timeouts, missing runtimes, interrupted replies, and empty results"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.545",
+      "date": "2026-06-27",
+      "changes": [
+        "AI chat now shows actionable recovery cards for sign-in, timeouts, missing runtimes, interrupted replies, and empty results"
+      ]
+    },
     {
       "version": "0.11.544",
       "date": "2026-06-27",
