@@ -138,9 +138,14 @@ class _OpenAIEmbeddingsProxy:
         try:
             return inst.embed_query(text)
         except Exception as e:
-            if inst is not self._default and self._is_key_failure(e):
-                logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                return self._default.embed_query(text)
+            if inst is not self._default:
+                # Route BYOK failures through the shared handler (which classifies
+                # and notifies the user for actionable key/quota/permission errors)
+                # before transparently falling back to Omi's key or re-raising.
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_query')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return self._default.embed_query(text)
             raise
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -148,9 +153,11 @@ class _OpenAIEmbeddingsProxy:
         try:
             return inst.embed_documents(texts)
         except Exception as e:
-            if inst is not self._default and self._is_key_failure(e):
-                logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                return self._default.embed_documents(texts)
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_documents')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return self._default.embed_documents(texts)
             raise
 
     def __getattr__(self, name: str):

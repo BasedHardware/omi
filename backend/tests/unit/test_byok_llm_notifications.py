@@ -154,6 +154,7 @@ def test_handle_llm_error_does_not_notify_platform_error(
     mock_send_each.assert_not_called()
 
 
+@patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
 @patch('utils.llm.byok_errors.notification_db.remove_bulk_tokens')
 @patch('utils.llm.byok_errors.messaging.send_each')
 @patch('utils.llm.byok_errors.notification_db.get_all_tokens', return_value=['bad-token'])
@@ -167,6 +168,7 @@ def test_handle_llm_error_removes_permanent_bad_tokens(
     mock_get_tokens,
     mock_send_each,
     mock_remove_tokens,
+    mock_release,
 ):
     from utils.llm.byok_errors import handle_llm_error
 
@@ -176,3 +178,82 @@ def test_handle_llm_error_removes_permanent_bad_tokens(
     handle_llm_error(_HTTPError("bad key", 401), 'openai', feature='memories', model='gpt-test')
 
     mock_remove_tokens.assert_called_once_with(['bad-token'])
+    # No device received the notification, so the dedupe lock must be released for retry.
+    mock_release.assert_called_once_with('user-1', 'openai', 'invalid')
+
+
+@patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
+@patch('utils.llm.byok_errors.messaging.send_each', side_effect=RuntimeError('fcm unavailable'))
+@patch('utils.llm.byok_errors.notification_db.get_all_tokens', return_value=['token-1'])
+@patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
+@patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
+@patch('utils.llm.byok_errors.get_byok_key', return_value='sk-user')
+def test_handle_llm_error_releases_lock_when_send_raises(
+    mock_get_key,
+    mock_get_uid,
+    mock_lock,
+    mock_get_tokens,
+    mock_send_each,
+    mock_release,
+):
+    from utils.llm.byok_errors import handle_llm_error
+
+    handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
+
+    mock_lock.assert_called_once_with('user-1', 'openai', 'quota')
+    # send_each raised, so nothing was delivered: the lock must be released for retry.
+    mock_release.assert_called_once_with('user-1', 'openai', 'quota')
+
+
+@patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
+@patch('utils.llm.byok_errors.messaging.send_each')
+@patch('utils.llm.byok_errors.notification_db.get_all_tokens', return_value=['token-1'])
+@patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
+@patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
+@patch('utils.llm.byok_errors.get_byok_key', return_value='sk-user')
+def test_handle_llm_error_releases_lock_when_no_send_succeeds(
+    mock_get_key,
+    mock_get_uid,
+    mock_lock,
+    mock_get_tokens,
+    mock_send_each,
+    mock_release,
+):
+    from utils.llm.byok_errors import handle_llm_error
+
+    transient = SimpleNamespace(code='UNAVAILABLE')
+    mock_send_each.return_value = SimpleNamespace(responses=[SimpleNamespace(success=False, exception=transient)])
+
+    handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
+
+    # Every send failed (transiently): release the lock so the next error retries.
+    mock_release.assert_called_once_with('user-1', 'openai', 'quota')
+
+
+@patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
+@patch('utils.llm.byok_errors.messaging.send_each')
+@patch('utils.llm.byok_errors.notification_db.get_all_tokens', return_value=['token-1', 'token-2'])
+@patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
+@patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
+@patch('utils.llm.byok_errors.get_byok_key', return_value='sk-user')
+def test_handle_llm_error_keeps_lock_when_a_send_succeeds(
+    mock_get_key,
+    mock_get_uid,
+    mock_lock,
+    mock_get_tokens,
+    mock_send_each,
+    mock_release,
+):
+    from utils.llm.byok_errors import handle_llm_error
+
+    mock_send_each.return_value = SimpleNamespace(
+        responses=[
+            SimpleNamespace(success=True, exception=None),
+            SimpleNamespace(success=False, exception=SimpleNamespace(code='UNAVAILABLE')),
+        ]
+    )
+
+    handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
+
+    # At least one device was notified — the dedupe lock must be kept (not released).
+    mock_release.assert_not_called()

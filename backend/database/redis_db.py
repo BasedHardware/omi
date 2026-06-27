@@ -607,6 +607,11 @@ def try_acquire_byok_llm_error_notification_lock(uid: str, provider: str, reason
     return bool(r.set(f'users:{uid}:byok_llm_error:{provider}:{reason}', '1', ex=ttl, nx=True))
 
 
+def release_byok_llm_error_notification_lock(uid: str, provider: str, reason: str) -> None:
+    """Release the dedupe lock so a failed notification can be retried."""
+    r.delete(f'users:{uid}:byok_llm_error:{provider}:{reason}')
+
+
 # ******************************************************
 # ******* IMPORTANT CONVERSATION NOTIFICATIONS *********
 # ******************************************************

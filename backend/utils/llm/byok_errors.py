@@ -13,7 +13,10 @@ except ImportError:
     notification_db = None
 
 try:
-    from database.redis_db import try_acquire_byok_llm_error_notification_lock
+    from database.redis_db import (
+        try_acquire_byok_llm_error_notification_lock,
+        release_byok_llm_error_notification_lock,
+    )
 except ImportError:
 
     def try_acquire_byok_llm_error_notification_lock(
@@ -21,6 +24,11 @@ except ImportError:
     ) -> bool:
         logger.error('BYOK LLM notification lock unavailable uid=%s provider=%s reason=%s', uid, provider, reason)
         return False
+
+    def release_byok_llm_error_notification_lock(uid: str, provider: str, reason: str) -> None:
+        logger.error(
+            'BYOK LLM notification lock release unavailable uid=%s provider=%s reason=%s', uid, provider, reason
+        )
 
 
 from utils.byok import get_byok_key, get_byok_uid
@@ -115,6 +123,16 @@ def _get_status_code(error: Exception) -> Optional[int]:
     return None
 
 
+def _release_byok_llm_error_lock(uid: str, provider: str, reason: str) -> None:
+    """Best-effort release of the dedupe lock; never raise from the error path."""
+    try:
+        release_byok_llm_error_notification_lock(uid, provider, reason)
+    except Exception as e:
+        logger.error(
+            'BYOK LLM notification lock release failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e
+        )
+
+
 def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> None:
     if notification_db is None or messaging is None:
         logger.error(
@@ -160,6 +178,9 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
         response = messaging.send_each(messages)
     except Exception as e:
         logger.error('BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
+        # Delivery never happened — release the dedupe lock so a later error can retry
+        # instead of silently suppressing notifications for the full 24h window.
+        _release_byok_llm_error_lock(uid, provider, reason)
         return
 
     invalid_tokens = []
@@ -179,6 +200,11 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
             notification_db.remove_bulk_tokens(invalid_tokens)
         except Exception as e:
             logger.error('BYOK LLM notification invalid token cleanup failed uid=%s: %s', uid, e)
+
+    if success_count == 0:
+        # No device actually received the notification — release the dedupe lock so
+        # the next occurrence retries rather than being suppressed for 24h.
+        _release_byok_llm_error_lock(uid, provider, reason)
 
     logger.info(
         'BYOK LLM notification sent uid=%s provider=%s reason=%s success=%s total=%s',
