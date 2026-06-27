@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class LiveTranscriptDisplay extends StatelessWidget {
   final List<TranscriptSegment> segments;
@@ -10,10 +11,10 @@ class LiveTranscriptDisplay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (segments.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
-          'Start speaking...',
-          style: TextStyle(color: Color(0xFF666666), fontSize: 16, fontStyle: FontStyle.italic),
+          context.l10n.deviceOnboardingStartSpeaking,
+          style: const TextStyle(color: Color(0xFF666666), fontSize: 16, fontStyle: FontStyle.italic),
         ),
       );
     }
