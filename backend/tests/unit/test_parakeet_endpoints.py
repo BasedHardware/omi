@@ -340,6 +340,23 @@ class TestDurationGuardHTTP413:
         finally:
             mod._max_file_duration_sec = 0.0
 
+    def test_unprobeable_upload_does_not_poison_audio_duration_metric(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            audio_dur_hist = mod.AUDIO_DURATION
+            before_sum = audio_dur_hist._sum.get()
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("bad.bin", b"not audio", "application/octet-stream")})
+            assert resp.status_code == 413
+            after_sum = audio_dur_hist._sum.get()
+            assert after_sum == before_sum, f"AUDIO_DURATION sum changed from {before_sum} to {after_sum}"
+            import math
+
+            assert math.isfinite(after_sum), "AUDIO_DURATION sum is not finite"
+        finally:
+            mod._max_file_duration_sec = 0.0
+
     def test_v1_passes_when_under_limit(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 60.0
