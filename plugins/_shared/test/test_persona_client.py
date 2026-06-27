@@ -85,6 +85,7 @@ class TestChatSuccess:
                 api_key="omi_dev_test",
                 omi_base="https://api.omi.me",
                 text="hi",
+                uid="u-1",
             )
 
         assert reply == "Hello world"
@@ -100,6 +101,7 @@ class TestChatSuccess:
                 api_key="omi_dev_test",
                 omi_base="https://api.omi.me",
                 text="hi",
+                uid="u-1",
             )
 
         client.post.assert_awaited_once()
@@ -117,10 +119,37 @@ class TestChatSuccess:
                 api_key="k",
                 omi_base="https://api.omi.me",
                 text="hi",
+                uid="u-1",
             )
 
         url = client.post.await_args.args[0]
         assert url == "https://api.omi.me/v2/integrations/app-abc/user/persona-chat"
+
+    @pytest.mark.asyncio
+    async def test_sends_uid_as_query_param(self):
+        """Contract: backend extracts `uid` from query string via FastAPI's path
+        declaration. The plugin MUST send it as a query param (not body) so
+        FastAPI can route it.
+
+        This is the contract that broke v0.1 in production — backend expected
+        ?uid=... but client only sent a JSON body, so every request got 422.
+        """
+        resp = _sse_response(["ok"])
+        client = _mock_async_client_post(resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+                uid="u-abc",
+            )
+
+        call_kwargs = client.post.await_args.kwargs
+        assert call_kwargs["params"] == {
+            "uid": "u-abc"
+        }, f"uid must be sent as a query param; got params={call_kwargs.get('params')}"
 
     @pytest.mark.asyncio
     async def test_sends_text_in_json_body(self):
@@ -133,6 +162,7 @@ class TestChatSuccess:
                 api_key="k",
                 omi_base="https://api.omi.me",
                 text="what's the weather?",
+                uid="u-1",
             )
 
         call_kwargs = client.post.await_args.kwargs
@@ -164,6 +194,7 @@ class TestSseParsing:
                 api_key="k",
                 omi_base="https://api.omi.me",
                 text="hi",
+                uid="u-1",
             )
         assert reply == "hello world"
 
@@ -190,6 +221,7 @@ class TestSseParsing:
                 api_key="k",
                 omi_base="https://api.omi.me",
                 text="hi",
+                uid="u-1",
             )
         assert reply == "line one\nline two"
 
@@ -210,6 +242,7 @@ class TestSseParsing:
                 api_key="k",
                 omi_base="https://api.omi.me",
                 text="hi",
+                uid="u-1",
             )
         assert reply == ""
 
@@ -231,6 +264,7 @@ class TestChatErrors:
                     api_key="bad",
                     omi_base="https://api.omi.me",
                     text="hi",
+                    uid="u-1",
                 )
 
     @pytest.mark.asyncio
@@ -246,6 +280,7 @@ class TestChatErrors:
                     api_key="bad",
                     omi_base="https://api.omi.me",
                     text="hi",
+                    uid="u-1",
                 )
 
     @pytest.mark.asyncio
@@ -261,6 +296,7 @@ class TestChatErrors:
                     api_key="k",
                     omi_base="https://api.omi.me",
                     text="hi",
+                    uid="u-1",
                 )
 
     @pytest.mark.asyncio
@@ -277,6 +313,7 @@ class TestChatErrors:
                     api_key="k",
                     omi_base="https://api.omi.me",
                     text="hi",
+                    uid="u-1",
                     timeout_seconds=0.1,
                 )
 
@@ -297,6 +334,7 @@ class TestChatErrors:
                     api_key="k",
                     omi_base="https://api.omi.me",
                     text="hi",
+                    uid="u-1",
                 )
 
         assert reply == ""

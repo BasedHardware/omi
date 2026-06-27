@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 import database.apps as apps_db
 import database.conversations as conversations_db
 import utils.apps as apps_utils
-from utils.apps import verify_api_key, app_can_read_tasks
+from utils.apps import verify_api_key, verify_api_key_for_uid, app_can_read_tasks
 import database.redis_db as redis_db
 import database.memories as memory_db
 from database.redis_db import get_enabled_apps, r as redis_client
@@ -729,8 +729,12 @@ async def persona_chat_via_integration(
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
 
     api_key = authorization.replace('Bearer ', '')
-    if not await run_blocking(critical_executor, verify_api_key, app_id, api_key):
-        raise HTTPException(status_code=403, detail="Invalid integration API key")
+    # Persona chat impersonates the user — verify the API key was issued by
+    # this exact uid, not just by anyone who holds the app-level key.
+    # Otherwise a developer holding a valid app key could impersonate any
+    # enabled user.
+    if not await run_blocking(critical_executor, verify_api_key_for_uid, app_id, uid, api_key):
+        raise HTTPException(status_code=403, detail="Invalid integration API key for this user")
 
     # Rate limit — same per-(app, user) ceiling as conversations endpoint.
     await run_blocking(critical_executor, check_rate_limit_inline, f"{app_id}:{uid}:persona", "integration:persona")
