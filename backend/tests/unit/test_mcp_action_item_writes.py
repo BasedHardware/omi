@@ -267,9 +267,44 @@ class TestMutationGuards:
     @patch('utils.mcp_action_items.action_items_db')
     def test_delete_removes_vector(self, mock_db, mock_vec):
         mock_db.get_action_item.return_value = _action_item('a1')
+        mock_db.delete_action_item.return_value = True
         actions.delete_action_item(UID, 'a1')
         mock_db.delete_action_item.assert_called_once_with(UID, 'a1')
         mock_vec.assert_called_once_with(UID, 'a1')
+
+    @patch('utils.mcp_action_items.delete_action_item_vector')
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_delete_noop_raises_not_found(self, mock_db, mock_vec):
+        # Existed at the guard check, but the delete itself was a no-op (raced).
+        mock_db.get_action_item.return_value = _action_item('a1')
+        mock_db.delete_action_item.return_value = False
+        with pytest.raises(actions.ActionItemNotFound):
+            actions.delete_action_item(UID, 'a1')
+        mock_vec.assert_not_called()
+
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_set_completed_reload_missing_raises(self, mock_db):
+        # Marked complete, then the item vanished before the reload (concurrent delete).
+        mock_db.get_action_item.side_effect = [_action_item('a1'), None]
+        mock_db.mark_action_item_completed.return_value = True
+        with pytest.raises(actions.ActionItemNotFound):
+            actions.set_completed(UID, 'a1')
+
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_update_blank_due_at_does_not_clear(self, mock_db):
+        # A blank due_at must not null the field, and on its own is "nothing to update".
+        mock_db.get_action_item.return_value = _action_item('a1')
+        with pytest.raises(ValueError):
+            actions.update_action_item(UID, 'a1', due_at='')
+
+        # With a real description, a blank due_at is simply dropped from the update.
+        mock_db.get_action_item.side_effect = [_action_item('a1'), _action_item('a1', desc='New')]
+        mock_db.update_action_item.return_value = True
+        actions.update_action_item(UID, 'a1', description='New', due_at='')
+        _, kwargs_or_args = mock_db.update_action_item.call_args
+        update_data = mock_db.update_action_item.call_args[0][2]
+        assert 'due_at' not in update_data
+        assert update_data['description'] == 'New'
 
 
 class TestSearchOrchestration:
@@ -331,7 +366,36 @@ class TestRestTransport:
     @patch('utils.mcp_action_items.action_items_db')
     def test_rest_delete_ok(self, mock_db, _mock_vec):
         mock_db.get_action_item.return_value = _action_item('a1')
+        mock_db.delete_action_item.return_value = True
         assert rest.delete_action_item(action_item_id='a1', uid=UID) == {"status": "ok"}
+
+    @patch('utils.mcp_action_items.upsert_action_item_vector')
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_rest_update(self, mock_db, _mock_vec):
+        mock_db.get_action_item.side_effect = [_action_item('a1'), _action_item('a1', desc='New text')]
+        mock_db.update_action_item.return_value = True
+        out = rest.update_action_item('a1', body=rest.McpUpdateActionItem(description='New text'), uid=UID)
+        assert out['description'] == 'New text'
+
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_rest_update_not_found_is_404(self, mock_db):
+        mock_db.get_action_item.return_value = None
+        with pytest.raises(HTTPException) as ei:
+            rest.update_action_item('missing', body=rest.McpUpdateActionItem(description='x'), uid=UID)
+        assert ei.value.status_code == 404
+
+    @patch('utils.mcp_action_items.search_action_items_by_vector')
+    @patch('utils.mcp_action_items.action_items_db')
+    def test_rest_search(self, mock_db, mock_vec):
+        mock_vec.return_value = ['a1']
+        mock_db.get_action_items_by_ids.return_value = [_action_item('a1')]
+        out = rest.search_action_items(query='bob', uid=UID)
+        assert [i['id'] for i in out] == ['a1']
+
+    def test_rest_search_blank_is_422(self):
+        with pytest.raises(HTTPException) as ei:
+            rest.search_action_items(query='   ', uid=UID)
+        assert ei.value.status_code == 422
 
 
 # ---------------------------------------------------------------------------
