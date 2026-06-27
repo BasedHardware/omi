@@ -28,6 +28,9 @@ struct WhatsAppSettingsSection: View {
     .sheet(isPresented: $showConnectSheet) {
       WhatsAppConnectView(onDismiss: { showConnectSheet = false })
     }
+    .task {
+      await WhatsAppService.shared.resumeIfAuthenticated()
+    }
   }
 
   private var connectionCard: some View {

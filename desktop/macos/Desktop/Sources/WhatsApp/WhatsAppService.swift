@@ -186,7 +186,18 @@ actor WhatsAppService {
     }
 
     do {
-      let process = try makeProcess(binary: binary, arguments: ["sync", "--follow"])
+      await WhatsAppWebhookServer.shared.startIfNeeded()
+      let webhookURL = await WhatsAppWebhookServer.shared.url
+      let process = try makeProcess(
+        binary: binary,
+        arguments: [
+          "--events",
+          "sync",
+          "--follow",
+          "--webhook", webhookURL,
+          "--webhook-allow-private",
+        ]
+      )
       followGeneration &+= 1
       let generation = followGeneration
       followProcess = process
@@ -202,11 +213,24 @@ actor WhatsAppService {
       }
       followRestartAttempts = 0
       await setState(.connected)
-      log("WhatsAppService: started wacli --store <store> --json sync --follow")
+      log("WhatsAppService: started wacli --store <store> --json --events sync --follow --webhook <local>")
     } catch {
       await setState(.degraded(reason: "Failed to start WhatsApp sync"))
       log("WhatsAppService: failed to start sync: \(error)")
     }
+  }
+
+  func resumeIfAuthenticated() async {
+    guard authProcess == nil, followProcess == nil else { return }
+    guard let binary = Self.findWacliBinary() else { return }
+
+    let result = await runOneShot(binary: binary, arguments: ["doctor"])
+    guard result.exitCode == 0, parseDoctorAuthenticated(result.output) else {
+      log("WhatsAppService: resume skipped; doctor did not report authenticated")
+      return
+    }
+
+    await startFollow()
   }
 
   func health() async -> WAHealth {
@@ -554,6 +578,15 @@ actor WhatsAppService {
       return false
     }
     return data["connected"] as? Bool ?? false
+  }
+
+  private func parseDoctorAuthenticated(_ output: String) -> Bool {
+    guard let event = parseEvent(output),
+      let data = event["data"] as? [String: Any]
+    else {
+      return false
+    }
+    return data["authenticated"] as? Bool ?? false
   }
 
   private func normalizedEventName(_ event: [String: Any]) -> String {

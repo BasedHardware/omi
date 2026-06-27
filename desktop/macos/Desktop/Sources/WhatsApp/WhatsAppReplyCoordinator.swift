@@ -51,32 +51,32 @@ struct WAIncomingMessage: Equatable, Sendable {
   init?(event: [String: Any]) {
     let message = WAIncomingMessage.messageObject(from: event)
     let chatJid =
-      WAIncomingMessage.stringValue(message, keys: ["chatJid", "chat_jid", "chat", "to", "from"])
-      ?? WAIncomingMessage.stringValue(event, keys: ["chatJid", "chat_jid", "chat", "to", "from"])
+      WAIncomingMessage.stringValue(message, keys: ["ChatJID", "chatJid", "chat_jid", "chat", "to", "from"])
+      ?? WAIncomingMessage.stringValue(event, keys: ["ChatJID", "chatJid", "chat_jid", "chat", "to", "from"])
     let senderJid =
-      WAIncomingMessage.stringValue(message, keys: ["senderJid", "sender_jid", "sender", "participant", "from"])
-      ?? WAIncomingMessage.stringValue(event, keys: ["senderJid", "sender_jid", "sender", "participant", "from"])
+      WAIncomingMessage.stringValue(message, keys: ["SenderJID", "senderJid", "sender_jid", "sender", "participant", "from"])
+      ?? WAIncomingMessage.stringValue(event, keys: ["SenderJID", "senderJid", "sender_jid", "sender", "participant", "from"])
       ?? chatJid
     let id =
-      WAIncomingMessage.stringValue(message, keys: ["id", "messageId", "message_id", "clientMessageId"])
-      ?? WAIncomingMessage.stringValue(event, keys: ["id", "messageId", "message_id"])
+      WAIncomingMessage.stringValue(message, keys: ["MsgID", "id", "messageId", "message_id", "clientMessageId"])
+      ?? WAIncomingMessage.stringValue(event, keys: ["MsgID", "id", "messageId", "message_id"])
     let senderName =
-      WAIncomingMessage.stringValue(message, keys: ["senderName", "sender_name", "pushName", "name"])
-      ?? WAIncomingMessage.stringValue(event, keys: ["senderName", "sender_name", "pushName", "name"])
+      WAIncomingMessage.stringValue(message, keys: ["SenderName", "senderName", "sender_name", "pushName", "name", "ChatName"])
+      ?? WAIncomingMessage.stringValue(event, keys: ["SenderName", "senderName", "sender_name", "pushName", "name", "ChatName"])
     let text =
-      WAIncomingMessage.stringValue(message, keys: ["text", "body", "message", "caption"])
-      ?? WAIncomingMessage.stringValue(event, keys: ["text", "body", "message", "caption"])
+      WAIncomingMessage.stringValue(message, keys: ["Text", "DisplayText", "text", "body", "message", "caption"])
+      ?? WAIncomingMessage.stringValue(event, keys: ["Text", "DisplayText", "text", "body", "message", "caption"])
     let fromMe =
-      WAIncomingMessage.boolValue(message, keys: ["fromMe", "from_me", "isFromMe"])
-      ?? WAIncomingMessage.boolValue(event, keys: ["fromMe", "from_me", "isFromMe"])
+      WAIncomingMessage.boolValue(message, keys: ["FromMe", "fromMe", "from_me", "isFromMe"])
+      ?? WAIncomingMessage.boolValue(event, keys: ["FromMe", "fromMe", "from_me", "isFromMe"])
       ?? false
     let isGroup =
       WAIncomingMessage.boolValue(message, keys: ["isGroup", "is_group", "group"])
       ?? WAIncomingMessage.boolValue(event, keys: ["isGroup", "is_group", "group"])
       ?? false
     let timestamp =
-      WAIncomingMessage.dateValue(message, keys: ["timestamp", "time", "createdAt"])
-      ?? WAIncomingMessage.dateValue(event, keys: ["timestamp", "time", "createdAt"])
+      WAIncomingMessage.dateValue(message, keys: ["Timestamp", "timestamp", "time", "createdAt"])
+      ?? WAIncomingMessage.dateValue(event, keys: ["Timestamp", "timestamp", "time", "createdAt"])
 
     self.init(
       id: id,
