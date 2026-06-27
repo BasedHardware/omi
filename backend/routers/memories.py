@@ -258,9 +258,6 @@ async def create_memory(
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
 
-    if memory.visibility == 'public':
-        submit_with_context(postprocess_executor, update_personas_async, uid)
-
     return memory_db
 
 
@@ -339,9 +336,6 @@ async def create_memories_batch(
         logger.exception(
             "Batch vector upsert failed uid=%s count=%s (memories saved, vectors missing)", uid, len(memory_dbs)
         )
-
-    if has_public:
-        submit_with_context(postprocess_executor, update_personas_async, uid)
 
     return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 
@@ -546,5 +540,4 @@ def update_memory_visibility(
         postprocess_executor.submit(update_personas_async, uid)
         return {'status': 'ok'}
     memories_db.change_memory_visibility(uid, memory_id, value)
-    postprocess_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}

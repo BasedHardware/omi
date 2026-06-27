@@ -193,7 +193,8 @@ class PhoneCallProvider extends ChangeNotifier {
     _lastError = null;
     _callState = PhoneCallState.connecting;
     _remoteNumber = phoneNumber;
-    _currentCallId = DateTime.now().millisecondsSinceEpoch.toString();
+    final callId = DateTime.now().millisecondsSinceEpoch.toString();
+    _currentCallId = callId;
     _transcriptSegments.clear();
     _isMuted = false;
     _isSpeakerOn = false;
@@ -236,7 +237,7 @@ class PhoneCallProvider extends ChangeNotifier {
     // Make the call via native layer
     var callStarted = await _nativeService.makeCall(
       phoneNumber: phoneNumber,
-      callId: _currentCallId!,
+      callId: callId,
       contactName: _contactName,
     );
 
@@ -437,8 +438,9 @@ class PhoneCallProvider extends ChangeNotifier {
     _transcriptionStatus = TranscriptionStatus.connecting;
     notifyListeners();
 
-    var language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : 'multi';
+    var language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : 'multi';
 
     var wsUrl = api.buildPhoneCallWebSocketUrl(
       callId: _currentCallId!,

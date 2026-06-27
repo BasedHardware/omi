@@ -30,6 +30,10 @@ These rules apply to every AI agent working in this repository. This file is the
 
 ## Coding Guidelines
 
+### UI / Design (all platforms)
+
+- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions.
+
 ### Backend (Python)
 
 - **No in-function imports** — all imports at module top level.
@@ -248,7 +252,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## CI/CD & Logs
 
-- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend).
+- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires manually running `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable.
 - Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Documentation Maintenance

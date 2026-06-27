@@ -518,10 +518,10 @@ def test_conversation_delete_cascade_branches_memory_delete_by_cohort():
 
 
 def test_purge_derived_user_data_wires_canonical_purge_helper():
-    users_source = (BACKEND_DIR / "routers" / "users.py").read_text(encoding="utf-8")
+    users_source = (BACKEND_DIR / "services" / "users" / "account_deletion.py").read_text(encoding="utf-8")
     tree = ast.parse(users_source)
     purge_fn = next(
-        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_purge_derived_user_data"
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "purge_derived_user_data"
     )
     call_names = {
         node.func.id for node in ast.walk(purge_fn) if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)

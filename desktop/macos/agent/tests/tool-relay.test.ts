@@ -10,7 +10,7 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
  * The relay works as follows:
  * 1. pi-mono-extension connects to a Unix socket and sends {"type":"tool_use", callId, name, input}
  * 2. agent receives it, forwards to Swift via stdout, creates a pending promise
- * 3. Swift executes the tool and sends {"type":"tool_result", callId, result} back via stdin
+ * 3. Swift executes the tool and sends {"type":"tool_result", callId, clientId, requestId, result} back via stdin
  * 4. agent's resolveToolCall() resolves the pending promise, writing back to the socket client
  *
  * These tests verify that the relay mechanism correctly routes tool_result
@@ -21,11 +21,18 @@ import { describe, expect, it, beforeEach, afterEach } from "vitest";
 const pendingToolCalls = new Map<string, { resolve: (result: string) => void }>();
 let capturedStdoutMessages: any[] = [];
 
-function resolveToolCall(msg: { callId: string; result: string }): void {
-  const pending = pendingToolCalls.get(msg.callId);
+function toolCallPendingKey(input: { callId: string; clientId?: string; requestId?: string }): string {
+  return input.clientId && input.requestId
+    ? `scoped\0${input.clientId}\0${input.requestId}\0${input.callId}`
+    : `legacy\0${input.callId}`;
+}
+
+function resolveToolCall(msg: { callId: string; result: string; clientId?: string; requestId?: string }): void {
+  const key = toolCallPendingKey(msg);
+  const pending = pendingToolCalls.get(key);
   if (pending) {
     pending.resolve(msg.result);
-    pendingToolCalls.delete(msg.callId);
+    pendingToolCalls.delete(key);
   }
 }
 
@@ -41,14 +48,14 @@ describe("Tool relay: resolveToolCall routing", () => {
 
   it("routes tool_result to pending promise and removes from map", () => {
     let resolved = "";
-    pendingToolCalls.set("call-1", {
+    pendingToolCalls.set(toolCallPendingKey({ callId: "call-1", clientId: "client-1", requestId: "req-1" }), {
       resolve: (r) => { resolved = r; },
     });
 
-    resolveToolCall({ callId: "call-1", result: "success data" });
+    resolveToolCall({ callId: "call-1", clientId: "client-1", requestId: "req-1", result: "success data" });
 
     expect(resolved).toBe("success data");
-    expect(pendingToolCalls.has("call-1")).toBe(false);
+    expect(pendingToolCalls.has(toolCallPendingKey({ callId: "call-1", clientId: "client-1", requestId: "req-1" }))).toBe(false);
   });
 
   it("ignores tool_result for unknown callId (no crash)", () => {
@@ -60,17 +67,32 @@ describe("Tool relay: resolveToolCall routing", () => {
   it("handles multiple concurrent tool calls", () => {
     const results: Record<string, string> = {};
 
-    pendingToolCalls.set("call-A", { resolve: (r) => { results["A"] = r; } });
-    pendingToolCalls.set("call-B", { resolve: (r) => { results["B"] = r; } });
-    pendingToolCalls.set("call-C", { resolve: (r) => { results["C"] = r; } });
+    pendingToolCalls.set(toolCallPendingKey({ callId: "call-A", clientId: "client-1", requestId: "req-A" }), { resolve: (r) => { results["A"] = r; } });
+    pendingToolCalls.set(toolCallPendingKey({ callId: "call-B", clientId: "client-1", requestId: "req-B" }), { resolve: (r) => { results["B"] = r; } });
+    pendingToolCalls.set(toolCallPendingKey({ callId: "call-C", clientId: "client-2", requestId: "req-C" }), { resolve: (r) => { results["C"] = r; } });
 
     // Resolve out of order
-    resolveToolCall({ callId: "call-B", result: "result-B" });
-    resolveToolCall({ callId: "call-A", result: "result-A" });
-    resolveToolCall({ callId: "call-C", result: "result-C" });
+    resolveToolCall({ callId: "call-B", clientId: "client-1", requestId: "req-B", result: "result-B" });
+    resolveToolCall({ callId: "call-A", clientId: "client-1", requestId: "req-A", result: "result-A" });
+    resolveToolCall({ callId: "call-C", clientId: "client-2", requestId: "req-C", result: "result-C" });
 
     expect(results).toEqual({ A: "result-A", B: "result-B", C: "result-C" });
     expect(pendingToolCalls.size).toBe(0);
+  });
+
+  it("keeps reused call ids isolated by client and request", () => {
+    const results: Record<string, string> = {};
+    pendingToolCalls.set(toolCallPendingKey({ callId: "call-1", clientId: "client-A", requestId: "req-A" }), {
+      resolve: (r) => { results["A"] = r; },
+    });
+    pendingToolCalls.set(toolCallPendingKey({ callId: "call-1", clientId: "client-B", requestId: "req-B" }), {
+      resolve: (r) => { results["B"] = r; },
+    });
+
+    resolveToolCall({ callId: "call-1", clientId: "client-B", requestId: "req-B", result: "result-B" });
+
+    expect(results).toEqual({ B: "result-B" });
+    expect(pendingToolCalls.has(toolCallPendingKey({ callId: "call-1", clientId: "client-A", requestId: "req-A" }))).toBe(true);
   });
 });
 
@@ -124,10 +146,12 @@ describe("Tool relay: Unix socket end-to-end", () => {
                 callId: msg.callId,
                 name: msg.name,
                 input: msg.input,
+                clientId: msg.clientId,
+                requestId: msg.requestId,
               });
 
               // Create pending promise
-              pendingToolCalls.set(msg.callId, {
+              pendingToolCalls.set(toolCallPendingKey(msg), {
                 resolve: (result: string) => {
                   client.write(
                     JSON.stringify({
@@ -150,13 +174,14 @@ describe("Tool relay: Unix socket end-to-end", () => {
   function sendToolUse(
     name: string,
     input: Record<string, unknown>,
-    callId?: string
+    callId?: string,
+    scope = { clientId: "client-1", requestId: `req-${name}` }
   ): Promise<{ callId: string; result: string }> {
     const id = callId ?? `call-${name}-${Date.now()}`;
     return new Promise((resolve, reject) => {
       const client = createConnection(sockPath, () => {
         client.write(
-          JSON.stringify({ type: "tool_use", callId: id, name, input }) + "\n"
+          JSON.stringify({ type: "tool_use", callId: id, name, input, ...scope }) + "\n"
         );
       });
 
@@ -181,6 +206,7 @@ describe("Tool relay: Unix socket end-to-end", () => {
         if (pending) {
           resolveToolCall({
             callId: id,
+            ...scope,
             result: `Mock result for ${name}`,
           });
         }

@@ -5,6 +5,7 @@ import { agentControlCapabilityManifest, agentControlInputSchema } from "./contr
 import type { McpServerBuildContext } from "./compatibility-facade.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
+const agentSurfaceKindSchema = z.enum(["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
@@ -13,7 +14,7 @@ const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
 const listAgentSessionsSchema = z.object({
   ownerId: z.string().min(1).optional(),
   status: sessionStatusSchema.optional(),
-  surfaceKind: z.string().min(1).optional(),
+  surfaceKind: agentSurfaceKindSchema.optional(),
   limit: z.coerce.number().int().positive().max(200).default(50),
   beforeUpdatedAtMs: z.coerce.number().int().positive().optional(),
 });
@@ -32,6 +33,7 @@ const cancelAgentRunSchema = z.object({
 
 const inspectAgentArtifactsSchema = z
   .object({
+    artifactId: z.string().min(1).optional(),
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
     attemptId: z.string().min(1).optional(),
@@ -39,8 +41,8 @@ const inspectAgentArtifactsSchema = z
     role: artifactRoleSchema.optional(),
     limit: z.coerce.number().int().positive().max(200).default(50),
   })
-  .refine((value) => value.sessionId || value.runId || value.attemptId, {
-    message: "Provide sessionId, runId, or attemptId",
+  .refine((value) => value.artifactId || value.sessionId || value.runId || value.attemptId, {
+    message: "Provide artifactId, sessionId, runId, or attemptId",
   });
 
 const updateAgentArtifactLifecycleSchema = z.object({
@@ -142,8 +144,13 @@ export interface AgentControlToolContext {
 
 export interface ActiveControlToolOwnerInput {
   requestKey?: string;
+  runId?: string;
+  attemptId?: string;
   ownerIdForRequest?: (requestKey: string) => string | undefined;
+  ownerIdForRun?: (runId: string) => string | undefined;
+  ownerIdForAttempt?: (attemptId: string) => string | undefined;
   fallbackOwnerId?: string;
+  allowFallbackOwner?: boolean;
 }
 
 export interface ControlRequestKeyInput {
@@ -153,7 +160,16 @@ export interface ControlRequestKeyInput {
 
 export interface ControlRequestContextInput extends ControlRequestKeyInput {
   ownerGuard?: string;
-  fallbackOwnerId?: string;
+  activeOwnerId?: string;
+  requireActiveOwner?: boolean;
+  requireOwnerGuard?: boolean;
+}
+
+export interface SignedDirectControlOwnerInput {
+  requestKey?: string;
+  ownerGuard?: string;
+  ownerIdForRequest: (requestKey: string) => string | undefined;
+  registerOwner: (requestKey: string, ownerId: string) => boolean;
 }
 
 export interface ResolvedControlRequestContext {
@@ -163,9 +179,25 @@ export interface ResolvedControlRequestContext {
 }
 
 export const DEFAULT_LEGACY_JSONL_CLIENT_ID = "legacy-jsonl-client";
+export const DEFAULT_LOCAL_OWNER_ID = "desktop-local-user";
 
 export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
+  return input.requestId && input.clientId ? JSON.stringify([input.clientId, input.requestId]) : undefined;
+}
+
+export function legacyControlRequestKey(input: ControlRequestKeyInput): string | undefined {
   return input.requestId ? JSON.stringify([input.clientId ?? DEFAULT_LEGACY_JSONL_CLIENT_ID, input.requestId]) : undefined;
+}
+
+export function registerSignedDirectControlOwner(input: SignedDirectControlOwnerInput): boolean {
+  const ownerGuard = input.ownerGuard?.trim();
+  if (!input.requestKey || !ownerGuard || ownerGuard === DEFAULT_LOCAL_OWNER_ID) {
+    return false;
+  }
+  if (input.ownerIdForRequest(input.requestKey)) {
+    return false;
+  }
+  return input.registerOwner(input.requestKey, ownerGuard);
 }
 
 export function resolveControlRequestContext(input: ControlRequestContextInput): ResolvedControlRequestContext {
@@ -173,10 +205,22 @@ export function resolveControlRequestContext(input: ControlRequestContextInput):
   if (input.ownerGuard !== undefined && !ownerGuard) {
     throw new Error("ownerId cannot be empty");
   }
-  const fallbackOwnerId = input.fallbackOwnerId?.trim();
+  const activeContextOwnerId = input.activeOwnerId?.trim();
+  if (input.requireOwnerGuard && !ownerGuard) {
+    throw new Error("missing owner guard");
+  }
+  if (input.requireActiveOwner && (!activeContextOwnerId || activeContextOwnerId === DEFAULT_LOCAL_OWNER_ID)) {
+    throw new Error("missing active control owner");
+  }
+  const activeOwnerId = activeContextOwnerId && activeContextOwnerId !== DEFAULT_LOCAL_OWNER_ID
+    ? activeContextOwnerId
+    : ownerGuard || activeContextOwnerId || DEFAULT_LOCAL_OWNER_ID;
+  if (ownerGuard && ownerGuard !== activeOwnerId) {
+    throw new Error("ownerId does not match active control owner");
+  }
   return {
     requestKey: controlRequestKey(input),
-    activeOwnerId: ownerGuard || fallbackOwnerId || "desktop-local-user",
+    activeOwnerId,
     ownerGuard,
   };
 }
@@ -383,6 +427,17 @@ export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): st
   const requestOwnerId = input.requestKey ? input.ownerIdForRequest?.(input.requestKey)?.trim() : undefined;
   if (requestOwnerId) {
     return requestOwnerId;
+  }
+  const attemptOwnerId = input.attemptId ? input.ownerIdForAttempt?.(input.attemptId)?.trim() : undefined;
+  if (attemptOwnerId) {
+    return attemptOwnerId;
+  }
+  const runOwnerId = input.runId ? input.ownerIdForRun?.(input.runId)?.trim() : undefined;
+  if (runOwnerId) {
+    return runOwnerId;
+  }
+  if (!input.allowFallbackOwner) {
+    throw new Error("Owner-scoped control tools require active request, run, or attempt context");
   }
   const fallbackOwnerId = input.fallbackOwnerId?.trim();
   return fallbackOwnerId || "desktop-local-user";

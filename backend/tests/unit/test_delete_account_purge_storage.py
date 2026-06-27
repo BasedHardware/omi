@@ -100,7 +100,7 @@ try:
     import firebase_admin.auth as _fa_auth  # stubbed
 
     _fa_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-    from routers import users as users_router  # noqa: E402  (heavy import; deps stubbed above)
+    from services.users import account_deletion as users_service  # noqa: E402  (deps stubbed above)
 finally:
     if _finder in sys.meta_path:
         sys.meta_path.remove(_finder)
@@ -109,7 +109,7 @@ finally:
 
 
 def _purge_patches(**overrides):
-    """Patch every purge collaborator on the users router. overrides set return_value/side_effect."""
+    """Patch every purge collaborator on the users service. overrides set return_value/side_effect."""
     enumerators = {
         'get_conversation_ids': ['c1', 'c2'],
         'get_memory_ids': ['m1'],
@@ -120,17 +120,22 @@ def _purge_patches(**overrides):
     # create=True: some collaborators are pulled into users.py via `from database.users import *`,
     # which doesn't bind names on the stubbed module, so the attribute may not pre-exist here.
     for name, ids in enumerators.items():
-        patchers[name] = patch.object(users_router, name, create=True, **(overrides.get(name) or {'return_value': ids}))
+        patchers[name] = patch.object(
+            users_service, name, create=True, **(overrides.get(name) or {'return_value': ids})
+        )
     for name in (
         'delete_conversation_vectors_batch',
+        'delete_transcript_chunk_vectors_batch',
         'delete_memory_vectors_batch',
         'delete_action_item_vectors_batch',
         'delete_screen_activity_vectors',
         'delete_all_conversation_recordings',
-        'delete_user_data',
         'delete_user_caller_ids',
     ):
-        patchers[name] = patch.object(users_router, name, create=True, **(overrides.get(name) or {}))
+        patchers[name] = patch.object(users_service, name, create=True, **(overrides.get(name) or {}))
+    patchers['delete_user_data'] = patch.object(
+        users_service.users_db, 'delete_user_data', create=True, **(overrides.get('delete_user_data') or {})
+    )
     started = {name: p.start() for name, p in patchers.items()}
     return patchers, started
 
@@ -143,7 +148,7 @@ def _stop(patchers):
 def test_purge_runs_all_backends_before_firestore_wipe():
     patchers, m = _purge_patches()
     try:
-        users_router._background_wipe_user_data('uid1')
+        users_service.background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
 
@@ -165,17 +170,16 @@ def test_id_enumeration_happens_before_firestore_wipe():
         delete_user_data={'side_effect': lambda uid: order.append('wipe')},
     )
     try:
-        users_router._background_wipe_user_data('uid1')
+        users_service.background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
-    assert order[-1] == 'wipe', order
-    assert order[:-1] and all(event == 'enumerate' for event in order[:-1]), order
+    assert order == ['enumerate', 'enumerate', 'wipe'], order
 
 
 def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe():
     patchers, m = _purge_patches(delete_conversation_vectors_batch={'side_effect': Exception('pinecone down')})
     try:
-        users_router._background_wipe_user_data('uid1')
+        users_service.background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
     # one backend failing must not stop the rest or the Firestore wipe
@@ -187,7 +191,7 @@ def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe():
 def test_gcs_failure_does_not_block_firestore_wipe():
     patchers, m = _purge_patches(delete_all_conversation_recordings={'side_effect': Exception('gcs down')})
     try:
-        users_router._background_wipe_user_data('uid1')
+        users_service.background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
     m['delete_all_conversation_recordings'].assert_called_once_with('uid1')  # purge was wired + attempted
@@ -197,7 +201,7 @@ def test_gcs_failure_does_not_block_firestore_wipe():
 def test_enumeration_failure_is_isolated():
     patchers, m = _purge_patches(get_conversation_ids={'side_effect': Exception('firestore read error')})
     try:
-        users_router._background_wipe_user_data('uid1')
+        users_service.background_wipe_user_data('uid1')
     finally:
         _stop(patchers)
     # conversation enumeration blew up, but the other backends + the wipe still run

@@ -478,6 +478,7 @@ class AuthService {
         AnalyticsManager.shared.identify()
         AnalyticsManager.shared.signInCompleted(provider: "apple")
         APIKeyService.shared.startFetchingKeys()
+        Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
         // Start trial polling for the newly signed-in user
         if let state = AppState.current {
@@ -603,6 +604,7 @@ class AuthService {
             AnalyticsManager.shared.identify()
             AnalyticsManager.shared.signInCompleted(provider: provider)
             APIKeyService.shared.startFetchingKeys()
+            Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
             // Start trial polling for the newly signed-in user
             if let state = AppState.current {

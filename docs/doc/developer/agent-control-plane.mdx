@@ -641,6 +641,7 @@ run.orphaned
 attempt.created
 attempt.started
 attempt.failed
+attempt.orphaned
 attempt.cancel_dispatch
 attempt.cancelled
 binding.created
@@ -907,6 +908,9 @@ Rules:
 - No owner-scoped path may fall back to process-global mutable owner state when `clientId`/`requestId` context is expected but absent.
 - Internal maps and queues MUST key request-scoped state by `(clientId, requestId)`, not `requestId` alone.
 - `runId`-only interrupt or control requests MUST still prove owner visibility through the active context or an explicit matching owner guard.
+- Swift app surfaces that manage existing agents outside an active query MUST use the dedicated `direct_control_tool`
+  JSONL envelope. It requires a signed-in `ownerId` guard and is limited to observe/manage tools; request-scoped
+  `control_tool` remains valid only while the daemon has an active `(clientId, requestId)` owner context.
 - Query-scoped tool relay messages MUST carry all available Omi correlation fields: `protocolVersion`, `clientId`, `requestId`, `sessionId`, `runId`, `attemptId`, adapter IDs, and explicitly named adapter-native compatibility fields.
 - Adapter subprocess environments and adapter-to-daemon relay messages are one contract. If the daemon sets `OMI_REQUEST_ID` and `OMI_CLIENT_ID`, the adapter relay MUST serialize them onto any tool-use message that depends on request ownership.
 - Long-lived adapter workers MUST NOT rely on launch-time environment variables as per-attempt context. They MUST refresh active request/run/attempt context through a per-attempt channel before execution, and relay tools MUST read that channel when emitting request-scoped messages.
@@ -1011,6 +1015,7 @@ get_agent_run
 send_agent_message
 cancel_agent_run
 inspect_agent_artifacts
+update_agent_artifact_lifecycle
 ```
 
 ### 16.2 Implementation decision
@@ -1027,10 +1032,16 @@ Required sequence:
 4. Implement `delegate_agent` after child session/run/delegation creation is transactional and the scheduler supports it.
 5. Generate MCP, Swift, documentation, and permission metadata from a capability manifest in the later capability-consolidation phase.
 
-The Phase 1 baseline includes all six hand-written local control tools: `list_agent_sessions`, `get_agent_run`,
-`cancel_agent_run`, `inspect_agent_artifacts`, `send_agent_message`, and `delegate_agent`. `send_agent_message`
-creates a follow-up run in an existing Omi session. `delegate_agent` creates or continues a distinct child Omi
-session linked to a parent run and records the delegation through kernel-owned state.
+The Phase 1 baseline includes seven hand-written local control tools: `list_agent_sessions`, `get_agent_run`,
+`cancel_agent_run`, `inspect_agent_artifacts`, `update_agent_artifact_lifecycle`, `send_agent_message`, and
+`delegate_agent`. `send_agent_message` creates a follow-up run in an existing Omi session. `delegate_agent`
+creates or continues a distinct child Omi session linked to a parent run and records the delegation through
+kernel-owned state.
+
+Observe/manage-by-id tools (`list_agent_sessions`, `get_agent_run`, `cancel_agent_run`,
+`inspect_agent_artifacts`, and `update_agent_artifact_lifecycle`) are cross-surface capabilities for desktop chat
+and PTT/realtime. Creation/continuation tools (`send_agent_message`, `delegate_agent`) remain desktop-chat-only
+until realtime has an equally explicit creation UX, control envelope, and correlation policy.
 
 ### 16.3 Delegation semantics
 

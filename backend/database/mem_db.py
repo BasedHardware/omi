@@ -3,7 +3,7 @@ import time
 proactive_noti_sent_at = {}  # {<uid:app_id>: (ts, ex)}
 
 
-def set_proactive_noti_sent_at(uid: str, app_id: str, ts: int, ttl: int = 30):
+def set_proactive_noti_sent_at(uid: str, *, app_id: str, ts: int, ttl: int = 30):
     k = f'{uid}:{app_id}'
     proactive_noti_sent_at[k] = (ts, ttl + time.time())
 

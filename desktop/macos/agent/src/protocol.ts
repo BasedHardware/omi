@@ -47,10 +47,19 @@ export interface ToolResultMessage {
   type: "tool_result";
   callId: string;
   result: string;
+  requestId?: string;
+  clientId?: string;
+  protocolVersion?: ProtocolVersion;
 }
 
 export interface ControlToolRequestMessage extends ProtocolEnvelope {
   type: "control_tool";
+  name: string;
+  input: Record<string, unknown>;
+}
+
+export interface DirectControlToolRequestMessage extends ProtocolEnvelope {
+  type: "direct_control_tool";
   name: string;
   input: Record<string, unknown>;
 }
@@ -100,6 +109,7 @@ export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
   | ControlToolRequestMessage
+  | DirectControlToolRequestMessage
   | StopMessage
   | InterruptMessage
   | InvalidateSessionMessage
@@ -152,7 +162,7 @@ export interface ResultMessage extends QueryScopedOutbound {
 export interface ToolActivityMessage extends QueryScopedOutbound {
   type: "tool_activity";
   name: string;
-  status: "started" | "completed";
+  status: "started" | "completed" | "failed";
   toolUseId?: string;
   input?: Record<string, unknown>;
 }

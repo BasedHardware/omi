@@ -406,7 +406,7 @@ def save_migrated_retrieval_conversation_id(conversation_id: str):
     r.expire('migrated_retrieval_memory_ids', 60 * 60 * 24 * 7)
 
 
-def set_proactive_noti_sent_at(uid: str, app_id: str, ts: int, ttl: int = 30):
+def set_proactive_noti_sent_at(uid: str, *, app_id: str, ts: int, ttl: int = 30):
     r.set(f'{uid}:{app_id}:proactive_noti_sent_at', ts, ex=ttl)
 
 

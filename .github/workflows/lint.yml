@@ -65,6 +65,9 @@ jobs:
             --head HEAD \
             $SKIP_FLAG
 
+      - name: Check desktop prod promotion policy
+        run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
+
       # -- Dart --
       - name: Setup Flutter
         if: steps.changed.outputs.has_dart == 'true'

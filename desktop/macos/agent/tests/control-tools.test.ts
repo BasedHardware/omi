@@ -9,6 +9,8 @@ import {
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
+  legacyControlRequestKey,
+  registerSignedDirectControlOwner,
   resolveControlRequestContext,
   type AgentControlToolContext,
   withDefaultOwnerGuard,
@@ -62,6 +64,29 @@ describe("agent control tools", () => {
         inputSchema: agentControlInputSchema(tool),
       })),
     );
+  });
+
+  it("constrains canonical list surfaceKind to known surfaces", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const invalid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+        surfaceKind: "surprise_surface",
+      }),
+    );
+    const valid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+        surfaceKind: "realtime",
+      }),
+    );
+
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: { code: "invalid_tool_input" },
+    });
+    expect(valid.ok).toBe(true);
+    store.close();
   });
 
   it("documents delegate_agent as canonical delegation, not floating pill UI", () => {
@@ -139,6 +164,8 @@ describe("agent control tools", () => {
       ["request-owner-a", "owner-a"],
       ["request-owner-b", "owner-b"],
     ]);
+    const ownerByRun = new Map([["run-owner-c", "owner-c"]]);
+    const ownerByAttempt = new Map([["attempt-owner-d", "owner-d"]]);
     let mutableFallbackOwner = "owner-a";
 
     mutableFallbackOwner = "owner-b";
@@ -162,31 +189,109 @@ describe("agent control tools", () => {
         requestKey: "request-missing",
         ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
         fallbackOwnerId: mutableFallbackOwner,
+        allowFallbackOwner: true,
       }),
     ).toBe("owner-b");
+    expect(() =>
+      activeControlToolOwnerId({
+        requestKey: "request-missing",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toThrow("Owner-scoped control tools require active request, run, or attempt context");
+    expect(
+      activeControlToolOwnerId({
+        requestKey: "request-missing",
+        runId: "run-owner-c",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        ownerIdForRun: (runId) => ownerByRun.get(runId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toBe("owner-c");
+    expect(
+      activeControlToolOwnerId({
+        requestKey: "request-missing",
+        runId: "run-owner-c",
+        attemptId: "attempt-owner-d",
+        ownerIdForRequest: (requestId) => ownerByRequest.get(requestId),
+        ownerIdForRun: (runId) => ownerByRun.get(runId),
+        ownerIdForAttempt: (attemptId) => ownerByAttempt.get(attemptId),
+        fallbackOwnerId: mutableFallbackOwner,
+      }),
+    ).toBe("owner-d");
   });
 
-  it("resolves direct control request context from the envelope owner before mutable fallback", () => {
+  it("treats direct control envelope owner as a guard against active owner", () => {
     const resolved = resolveControlRequestContext({
-      ownerGuard: " owner-from-envelope ",
-      fallbackOwnerId: "fallback-owner",
+      ownerGuard: " owner-active ",
+      activeOwnerId: "owner-active",
       requestId: "request-a",
       clientId: "client-a",
     });
 
     expect(resolved).toEqual({
       requestKey: JSON.stringify(["client-a", "request-a"]),
-      activeOwnerId: "owner-from-envelope",
-      ownerGuard: "owner-from-envelope",
+      activeOwnerId: "owner-active",
+      ownerGuard: "owner-active",
     });
+    expect(() =>
+      resolveControlRequestContext({
+        ownerGuard: "owner-from-envelope",
+        activeOwnerId: "fallback-owner",
+        requestId: "request-a",
+        clientId: "client-a",
+      }),
+    ).toThrow("ownerId does not match active control owner");
     expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(JSON.stringify(["client", "request:a"]));
     expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(JSON.stringify(["client:a", "request"]));
-    expect(controlRequestKey({ requestId: "legacy-request" })).toBe(
+    expect(controlRequestKey({ requestId: "legacy-request" })).toBeUndefined();
+    expect(legacyControlRequestKey({ requestId: "legacy-request" })).toBe(
       JSON.stringify(["legacy-jsonl-client", "legacy-request"]),
     );
   });
 
-  it("allows cold direct control calls to use the signed-in envelope owner", async () => {
+  it("rejects direct control envelope owners before active owner context is cached", () => {
+    expect(() =>
+      resolveControlRequestContext({
+        ownerGuard: "signed-in-owner",
+        activeOwnerId: "desktop-local-user",
+        requireActiveOwner: true,
+        requireOwnerGuard: true,
+        requestId: "cold-control-request",
+        clientId: "swift-client",
+      }),
+    ).toThrow("missing active control owner");
+  });
+
+  it("rejects direct control context without active owner authority", () => {
+    expect(() =>
+      resolveControlRequestContext({
+        requireActiveOwner: true,
+        requestId: "cold-control-request",
+        clientId: "swift-client",
+      }),
+    ).toThrow("missing active control owner");
+  });
+
+  it("registers signed direct control envelopes when no request owner is active", () => {
+    const ownersByRequest = new Map<string, string>();
+    const requestKey = controlRequestKey({ requestId: "realtime-request", clientId: "realtime-hub" });
+
+    const inserted = registerSignedDirectControlOwner({
+      requestKey,
+      ownerGuard: " signed-in-owner ",
+      ownerIdForRequest: (key) => ownersByRequest.get(key),
+      registerOwner: (key, ownerId) => {
+        ownersByRequest.set(key, ownerId);
+        return true;
+      },
+    });
+
+    expect(inserted).toBe(true);
+    expect(requestKey ? ownersByRequest.get(requestKey) : undefined).toBe("signed-in-owner");
+  });
+
+  it("rejects cold direct control calls without active request context", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     await kernel.executeRun({ ...baseRunInput, ownerId: "signed-in-owner" });
     await kernel.executeRun({
@@ -196,27 +301,15 @@ describe("agent control tools", () => {
       requestId: "local-run",
     });
 
-    const resolved = resolveControlRequestContext({
-      ownerGuard: "signed-in-owner",
-      fallbackOwnerId: "desktop-local-user",
-      requestId: "cold-direct-request",
-      clientId: "swift-client",
-    });
-    const controlInput = withMergedOwnerGuard({}, resolved.ownerGuard, resolved.activeOwnerId);
-    const listed = parseToolResult(
-      await handleAgentControlToolCall(
-        {
-          kernel,
-          getOwnerId: () => resolved.activeOwnerId,
-        },
-        "list_agent_sessions",
-        controlInput,
-      ),
-    );
-
-    expect(listed.ok).toBe(true);
-    expect(listed.sessions).toHaveLength(1);
-    expect(listed.sessions[0].session.ownerId).toBe("signed-in-owner");
+    expect(() =>
+      resolveControlRequestContext({
+        ownerGuard: "signed-in-owner",
+        requireActiveOwner: true,
+        requireOwnerGuard: true,
+        requestId: "cold-direct-request",
+        clientId: "swift-client",
+      }),
+    ).toThrow("missing active control owner");
     store.close();
   });
 
@@ -224,7 +317,7 @@ describe("agent control tools", () => {
     expect(() =>
       resolveControlRequestContext({
         ownerGuard: "   ",
-        fallbackOwnerId: "fallback-owner",
+        activeOwnerId: "fallback-owner",
         requestId: "request-a",
         clientId: "client-a",
       }),
@@ -277,6 +370,7 @@ describe("agent control tools", () => {
           requestKey: requestId,
           ownerIdForRequest: (id) => ownerByRequest.get(id),
           fallbackOwnerId: mutableFallbackOwner,
+          allowFallbackOwner: true,
         }),
     });
 
@@ -303,6 +397,35 @@ describe("agent control tools", () => {
       error: { code: "control_tool_failed" },
     });
     expect(guarded.error.message).toContain("does not match the active control owner");
+    store.close();
+  });
+
+  it("rejects owner-scoped adapter-originated tools without active request, run, or attempt context", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    await kernel.executeRun({ ...baseRunInput, ownerId: "signed-in-owner" });
+    const result = parseToolResult(
+      await handleAgentControlToolCall(
+        {
+          kernel,
+          getOwnerId: () =>
+            activeControlToolOwnerId({
+              requestKey: controlRequestKey({ requestId: "missing-request" }),
+              ownerIdForRequest: () => undefined,
+              fallbackOwnerId: "signed-in-owner",
+            }),
+        },
+        "list_agent_sessions",
+        {},
+      ),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: {
+        code: "control_tool_failed",
+      },
+    });
+    expect(result.error.message).toContain("Owner-scoped control tools require active request, run, or attempt context");
     store.close();
   });
 
@@ -485,6 +608,18 @@ describe("agent control tools", () => {
       }),
     ]);
 
+    const inspectedByArtifact = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "inspect_agent_artifacts", {
+        artifactId: "art_test",
+        ownerId: "owner",
+      }),
+    );
+    expect(inspectedByArtifact.artifacts).toHaveLength(1);
+    expect(inspectedByArtifact.artifacts[0]).toMatchObject({
+      artifactId: "art_test",
+      omiSessionId: result.session.sessionId,
+    });
+
     const events = kernel.getRun({ runId: result.run.runId, includeEvents: true }).events;
     expect(events.find((event: any) => event.type === "artifact.created")).toMatchObject({
       sessionId: result.session.sessionId,
@@ -524,16 +659,7 @@ describe("agent control tools", () => {
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
       },
-      event: {
-        type: "artifact.dismissed",
-        payload: {
-          artifactId: artifact.artifactId,
-          previousState: "retained",
-          state: "dismissed",
-          reason: "not useful",
-          metadata: { source: "test" },
-        },
-      },
+      event: null,
     });
     expect(dismissed.artifact.lifecycleUpdatedAtMs).toEqual(expect.any(Number));
 
@@ -567,20 +693,13 @@ describe("agent control tools", () => {
         artifactId: artifact.artifactId,
         lifecycleState: "opened",
       },
-      event: {
-        type: "artifact.opened",
-        payload: {
-          previousState: "dismissed",
-          state: "opened",
-        },
-      },
+      event: null,
     });
 
     const events = kernel
       .getRun({ runId: result.run.runId, includeEvents: true, eventLimit: 100 })
       .events.filter((event) => event.type.startsWith("artifact."));
-    expect(events.map((event) => event.type)).toEqual(["artifact.created", "artifact.dismissed", "artifact.opened"]);
-    expect(events[1].eventSeq).toBeLessThan(events[2].eventSeq);
+    expect(events.map((event) => event.type)).toEqual(["artifact.created"]);
     expect(store.getRow("SELECT lifecycle_state FROM artifacts WHERE artifact_id = ?", [artifact.artifactId]).lifecycle_state).toBe("opened");
     store.close();
   });
@@ -643,7 +762,7 @@ describe("agent control tools", () => {
   it("rejects unscoped direct kernel artifact inspection", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     expect(() => kernel.inspectArtifacts({ ownerId: "owner" })).toThrow(
-      "Inspecting artifacts requires sessionId, runId, or attemptId",
+      "Inspecting artifacts requires artifactId, sessionId, runId, or attemptId",
     );
     store.close();
   });
@@ -815,7 +934,6 @@ describe("agent control tools", () => {
 
     adapter.resolveDeferred({
       text: "done",
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
@@ -878,7 +996,6 @@ describe("agent control tools", () => {
 
     adapter.resolveDeferred({
       text: "done",
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
@@ -922,9 +1039,7 @@ describe("agent control tools", () => {
     expect(adapter.executed).toHaveLength(3);
 
     adapter.resolveDeferred({
-      text: "done",
-      sessionId: adapter.executed[1].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      text: "done",      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
     await running;
@@ -1056,7 +1171,12 @@ describe("agent control tools", () => {
       includeSwiftBackedTools: false,
     });
     expect(adapter.opened.at(-1)?.mcpServers).toEqual([
-      { name: "playwright", command: "node", args: ["playwright.js"], env: [] },
+      {
+        name: "playwright",
+        command: "node",
+        args: ["playwright.js"],
+        env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
+      },
     ]);
     expect(adapter.executed.at(-1)?.metadata).toMatchObject({ disableSwiftBackedTools: true });
     store.close();
@@ -1094,9 +1214,7 @@ describe("agent control tools", () => {
     expect(running.childDelegations[0].delegationId).toBe(spawned.delegation.delegationId);
 
     adapter.resolveDeferred({
-      text: "spawn complete",
-      sessionId: adapter.executed[1].binding.adapterNativeSessionId,
-      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
+      text: "spawn complete",      adapterSessionId: adapter.executed[1].binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
     });
     await waitUntil(() => {
@@ -1255,9 +1373,7 @@ describe("agent control tools", () => {
     adapter.resolveDeferred({
       text: "relay cancelled",
       terminalStatus: "cancelled",
-      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
-      sessionId: adapter.executed[0].binding.adapterNativeSessionId,
-    });
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,    });
     await running;
     store.close();
   });

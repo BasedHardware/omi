@@ -956,9 +956,15 @@ class AppState: ObservableObject {
   func checkAllPermissions() {
     checkNotificationPermission()
     checkScreenRecordingPermission()
-    checkAutomationPermission()
     checkMicrophonePermission()
     checkSystemAudioPermission()
+
+    if AppBuild.usesLazyDevPermissions {
+      log("Permissions: lazy dev mode enabled, skipping startup automation/accessibility/FDA probes")
+      return
+    }
+
+    checkAutomationPermission()
     checkAccessibilityPermission()
     checkFullDiskAccess()
     // One-time startup diagnostic for accessibility

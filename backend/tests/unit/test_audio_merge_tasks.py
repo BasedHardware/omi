@@ -95,33 +95,30 @@ class TestPlaybackReadPathsStructure:
         assert 'audio_merge_failed_final' in handler
 
     def test_artifact_urls_path_never_merges(self):
-        src = _read_source(os.path.join('routers', 'sync.py'))
-        fn = src[src.index('def _get_audio_urls_via_artifacts') : src.index('def get_audio_signed_urls_endpoint')]
-        assert '_precache_audio_file' not in fn
+        src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
+        fn = src[src.index('def _get_audio_urls_via_artifacts') : src.index('def _get_audio_urls_inline')]
+        assert 'precache_audio_file' not in fn
         assert 'get_or_create_merged_audio' not in fn
         assert 'download_audio_chunks_and_merge' not in fn
         assert 'enqueue_conversation_audio_merge' in fn
         assert 'poll_after_ms' in fn
 
     def test_urls_endpoint_gated(self):
-        src = _read_source(os.path.join('routers', 'sync.py'))
-        fn = src[src.index('def get_audio_signed_urls_endpoint') :]
+        src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
+        fn = src[src.index('def get_audio_signed_urls') :]
         assert 'is_audio_merge_dispatch_enabled()' in fn[:1500]
 
     def test_download_endpoint_returns_202_on_miss(self):
-        src = _read_source(os.path.join('routers', 'sync.py'))
-        start = (
-            src.index('def download_audio_file_endpoint')
-            if 'def download_audio_file_endpoint' in src
-            else src.index('format == "wav" and is_audio_merge_dispatch_enabled()')
-        )
-        section = src[start : start + 4000]
+        src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
+        start = src.index('def _get_artifact_download_payload')
+        section = src[start : src.index('def _get_inline_download_payload')]
         assert 'download_playback_artifact' in section
-        assert 'status_code=202' in section
+        response_fn = src[src.index('def download_audio_file_response') : src.index('def build_playback_artifact')]
+        assert 'status_code=202' in response_fn
 
     def test_mp3_export_settings(self):
-        src = _read_source(os.path.join('routers', 'sync.py'))
-        fn = src[src.index('def _build_playback_artifact') : src.index('async def run_audio_merge_job')]
+        src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
+        fn = src[src.index('def build_playback_artifact') :]
         assert "format='mp3'" in fn
         assert "bitrate='48k'" in fn
         assert 'fill_gaps=True' in fn
@@ -143,8 +140,8 @@ class TestUnavailableContract:
         assert 'mark_playback_unavailable' in missing
 
     def test_urls_reports_unavailable_without_enqueue(self):
-        src = _read_source(os.path.join('routers', 'sync.py'))
-        fn = src[src.index('def _get_audio_urls_via_artifacts') : src.index('def get_audio_signed_urls_endpoint')]
+        src = _read_source(os.path.join('utils', 'sync', 'playback.py'))
+        fn = src[src.index('def _get_audio_urls_via_artifacts') : src.index('def get_audio_signed_urls')]
         unavailable = fn[fn.index('is_playback_unavailable') : fn.index('else:')]
         assert '"unavailable"' in unavailable
         assert 'to_enqueue.append' not in unavailable

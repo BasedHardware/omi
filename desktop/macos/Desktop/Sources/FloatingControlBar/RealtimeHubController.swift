@@ -59,6 +59,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var sessionProvider: RealtimeHubProvider?
   private var pcmPlayer: StreamingPCMPlayer?
   private let speech = AVSpeechSynthesizer()
+  private let agentControlService = AgentControlService()
 
   // Per-turn state.
   private var turnTranscript = ""
@@ -563,6 +564,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let result = AgentPillsManager.shared.manage(action: action, agentId: agentId)
       log("RealtimeHub[\(providerTag)]: tool manage_agent_pills action=\(action)")
       session?.sendToolResult(callId: callId, name: name, output: result)
+    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle:
+      runToolAndSpeak(
+        callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
+        emptyText: "No canonical agent data came back.",
+        errorText: "Could not reach the agent control plane right now."
+      ) {
+        try await self.agentControlService.executeVoiceTool(name: name, arguments: arguments)
+      }
     case .searchScreenHistory:
       // Fast LOCAL semantic search over screen history (same executor as chat).
       let query = arg("query")
