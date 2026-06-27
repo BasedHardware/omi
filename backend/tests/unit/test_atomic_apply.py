@@ -269,3 +269,28 @@ def test_update_without_target_tier_preserves_existing_short_term_tier():
     assert result.memory_items[0].tier == MemoryTier.short_term
     assert result.memory_items[0].content == "Updated text only."
     assert result.memory_items[0].expires_at is not None
+
+
+def test_update_with_blank_memory_text_preserves_existing_content():
+    control = MemoryControlState(uid="u1", head_commit_id="head0", account_generation=1, source_generation=2)
+    existing = _short_term_existing()
+    operation = _operation(
+        target_memory_id="mem_st",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem_st",
+            "memory_text": "",
+            "result_status": "active",
+        },
+    )
+    patch_payload = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id="mem_st",
+        memory_text="",
+    )
+    patch_payload["existing_item"] = existing.model_dump(mode="python")
+
+    result = apply_long_term_patch_transaction(control_state=control, operation=operation, patch_payload=patch_payload)
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].content == existing.content
