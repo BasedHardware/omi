@@ -8,10 +8,36 @@ from unittest.mock import patch
 
 import pytest
 
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+from tests.unit.memory_import_isolation import (
+    WS_I_HEAVY_STUB_MODULE_NAMES,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
+
+_VECTOR_DB_STUB_MODULE_NAMES = (
+    "pinecone",
+    "utils.llm.clients",
+    "database.projection_repair",
+    "database.vector_db",
+)
+
+_CANONICAL_VECTOR_TEST_STUB_MODULE_NAMES = tuple(
+    dict.fromkeys([*_VECTOR_DB_STUB_MODULE_NAMES, *WS_I_HEAVY_STUB_MODULE_NAMES])
+)
+
+
+@pytest.fixture(autouse=True)
+def _vector_db_stub_isolation():
+    saved = snapshot_sys_modules(_CANONICAL_VECTOR_TEST_STUB_MODULE_NAMES)
+    yield
+    restore_sys_modules(saved)
+
 
 from database.memory_vector_metadata import (
     MEMORY_VECTOR_SCHEMA_VERSION,
@@ -140,7 +166,7 @@ class _FailingIndex:
 def _load_vector_db_with_stubs():
     pinecone_module = types.ModuleType("pinecone")
     setattr(pinecone_module, "Pinecone", lambda api_key: None)
-    sys.modules["pinecone"] = pinecone_module
+    sys.modules.setdefault("pinecone", pinecone_module)
     clients_module = types.ModuleType("utils.llm.clients")
     setattr(clients_module, "embeddings", _FakeEmbeddings())
     sys.modules["utils.llm.clients"] = clients_module
@@ -457,6 +483,7 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
 
     vector_db, fake_index = _install_recording_vector_db(monkeypatch)
     uid = "uid-canonical"
+    set_canonical_cohort(monkeypatch, uid)
     memory_id = "mem_promote"
     short_item = _item(memory_id=memory_id, tier=MemoryTier.short_term).model_copy(update={"uid": uid})
     long_item = short_item.model_copy(update={"tier": MemoryTier.long_term})
