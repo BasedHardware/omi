@@ -127,6 +127,48 @@ def test_extract_kg_uses_subject_predicate_prefix():
         assert kg_content == "[ent_father] has_condition: has diabetes"
 
 
+def test_extract_kg_includes_arguments_and_predicate_only_prefix():
+    item = _long_term_item(
+        predicate="works_at",
+        arguments={"company": "Omi"},
+        content="builds memory products",
+    )
+    with (
+        patch("utils.memory.canonical_kg_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
+            return_value={"nodes": [{}], "edges": []},
+        ) as mock_extract,
+        patch("utils.memory.canonical_kg_promotion.set_canonical_memory_kg_extracted"),
+    ):
+        assert extract_kg_for_promoted_memory("uid-canonical", item) is True
+        kg_content = mock_extract.call_args[0][1]
+        assert kg_content == "works_at (company=Omi): builds memory products"
+
+
+def test_update_canonical_memory_content_refreshes_kg_for_long_term():
+    from utils.memory.canonical_memory_adapter import update_canonical_memory_content
+
+    item = _long_term_item(kg_extracted=True, memory_id="mem_edit")
+    db = MagicMock()
+    db.document.return_value.get.return_value = MagicMock(exists=True, to_dict=lambda: item.model_dump(mode="json"))
+    with (
+        patch("utils.memory.canonical_memory_adapter.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction") as mock_prune,
+        patch(
+            "utils.memory.canonical_memory_adapter.extract_kg_for_promoted_memory", return_value=True
+        ) as mock_extract,
+        patch("utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item"),
+        patch("utils.memory.canonical_memory_adapter.sync_canonical_memory_vector"),
+    ):
+        updated = update_canonical_memory_content("uid-canonical", "mem_edit", "Updated content", db_client=db)
+
+    mock_prune.assert_called_once_with("uid-canonical", ["mem_edit"], db_client=db)
+    mock_extract.assert_called_once()
+    assert updated.content == "Updated content"
+    assert updated.kg_extracted is True
+
+
 def test_invalidate_kg_prunes_citations(monkeypatch):
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.resolve_memory_system",
