@@ -37,6 +37,9 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
         custom_stt_mode=None,
         onboarding_mode=False,
         call_id=None,
+        client_device_id=None,
+        client_platform=None,
+        **_kwargs,
     ):
         captured.update(
             {
@@ -52,6 +55,8 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
                 "custom_stt_mode": getattr(custom_stt_mode, "value", str(custom_stt_mode)),
                 "onboarding_mode": onboarding_mode,
                 "call_id": call_id,
+                "client_device_id": client_device_id,
+                "client_platform": client_platform,
             }
         )
         await websocket.send_json({"type": "fake_stt_ready", "uid": uid, "custom_stt": captured["custom_stt_mode"]})
