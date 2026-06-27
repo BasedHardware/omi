@@ -28,6 +28,19 @@ describe('mapGmailMessage', () => {
     expect(item).toEqual({ id: 'm2', subject: 'Hi', from: '', snippet: '', internalDateMs: 0 })
   })
 
+  it('ignores a header object that has no name', () => {
+    const item = mapGmailMessage({
+      id: 'm3',
+      payload: {
+        headers: [
+          { value: 'orphan' } as unknown as { name: string; value: string },
+          { name: 'Subject', value: 'Hi' }
+        ]
+      }
+    })
+    expect(item).toEqual({ id: 'm3', subject: 'Hi', from: '', snippet: '', internalDateMs: 0 })
+  })
+
   it('returns null without an id', () => {
     expect(mapGmailMessage({ snippet: 'x' })).toBeNull()
   })
