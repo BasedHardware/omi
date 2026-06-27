@@ -211,6 +211,10 @@ pytest tests/unit/test_conversation_events_bounds.py -v
 pytest tests/unit/test_conversation_hybrid_search.py -v
 pytest tests/unit/test_delete_account_stripe_cancel.py -v
 pytest tests/unit/test_delete_account_purge_storage.py -v
+pytest tests/unit/test_claim_deletion_wipe_txn.py -v
+pytest tests/services/users/test_account_deletion.py -v
+pytest tests/services/users/test_data_export.py -v
+pytest tests/routers/test_users.py -v
 pytest tests/unit/test_apps_review_reply_validation.py -v
 pytest tests/unit/test_apps_create_app_json.py -v
 
