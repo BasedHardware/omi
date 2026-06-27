@@ -6,7 +6,6 @@ import copy
 import importlib
 import os
 import sys
-import types
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from unittest.mock import MagicMock, patch
@@ -19,50 +18,56 @@ os.environ.setdefault(
 )
 
 from tests.unit.memory_import_isolation import (
-    AutoMockModule,
-    install_database_client_stub,
-    install_firestore_transactional_stub,
-    install_ws_i_heavy_import_stubs,
+    CONSOLIDATION_APPLY_STUB_MODULE_NAMES,
+    ensure_utils_memory_packages_importable,
+    install_consolidation_apply_stubs,
     restore_sys_modules,
     snapshot_sys_modules,
 )
 
-_saved_modules = snapshot_sys_modules(["database._client"])
-install_database_client_stub()
-install_firestore_transactional_stub()
-_touched = install_ws_i_heavy_import_stubs()
+canonical_consolidation = None
+ConsolidationAgentBatch = None
+ConsolidationAgentDecision = None
+apply_consolidation_decision = None
+list_pending_consolidation_items = None
+run_canonical_consolidation = None
+jobs_mod = None
 
-review_queue_mod = AutoMockModule("database.review_queue")
-review_queue_mod.create_review_conflict = MagicMock()
-review_queue_mod.purge_stale_review_conflicts_for_memories = MagicMock()
-review_queue_mod.should_escalate_conflict = MagicMock(return_value=True)
-sys.modules["database.review_queue"] = review_queue_mod
-_touched.append("database.review_queue")
 
-jobs_mod = AutoMockModule("jobs.short_term_lifecycle_worker")
-jobs_mod.fetch_short_term_memory_items_firestore = MagicMock(return_value=[])
-sys.modules["jobs.short_term_lifecycle_worker"] = jobs_mod
-_touched.append("jobs.short_term_lifecycle_worker")
+@pytest.fixture(scope="module", autouse=True)
+def _consolidation_apply_import_isolation():
+    """Install heavy-import stubs for this module only; restore after to avoid polluting combined runs."""
+    saved = snapshot_sys_modules(CONSOLIDATION_APPLY_STUB_MODULE_NAMES)
+    touched = install_consolidation_apply_stubs()
+    saved.update(snapshot_sys_modules(touched))
+    ensure_utils_memory_packages_importable()
 
-for module_name in (
-    "utils.memory.atom_keyword_index",
-    "utils.memory.canonical_memory_adapter",
-    "utils.memory.canonical_vector_sync",
-):
-    sys.modules[module_name] = AutoMockModule(module_name)
-    _touched.append(module_name)
+    for stale_module in ("database.memory_apply_store", "utils.memory.canonical_consolidation"):
+        sys.modules.pop(stale_module, None)
 
-canonical_consolidation = importlib.import_module("utils.memory.canonical_consolidation")
-ConsolidationAgentBatch = canonical_consolidation.ConsolidationAgentBatch
-ConsolidationAgentDecision = canonical_consolidation.ConsolidationAgentDecision
-apply_consolidation_decision = canonical_consolidation.apply_consolidation_decision
-list_pending_consolidation_items = canonical_consolidation.list_pending_consolidation_items
-run_canonical_consolidation = canonical_consolidation.run_canonical_consolidation
+    cc = importlib.import_module("utils.memory.canonical_consolidation")
+    g = globals()
+    g["canonical_consolidation"] = cc
+    g["ConsolidationAgentBatch"] = cc.ConsolidationAgentBatch
+    g["ConsolidationAgentDecision"] = cc.ConsolidationAgentDecision
+    g["apply_consolidation_decision"] = cc.apply_consolidation_decision
+    g["list_pending_consolidation_items"] = cc.list_pending_consolidation_items
+    g["run_canonical_consolidation"] = cc.run_canonical_consolidation
+    g["jobs_mod"] = importlib.import_module("jobs.short_term_lifecycle_worker")
+    g["apply_long_term_patch_firestore"] = importlib.import_module(
+        "database.memory_apply_store"
+    ).apply_long_term_patch_firestore
 
-from database.memory_apply_store import apply_long_term_patch_firestore
+    yield
+
+    restore_sys_modules(saved)
+
+
+apply_long_term_patch_firestore = None
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
-from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
+from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
 from utils.memory.memory_system import MemorySystem
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
@@ -103,6 +108,8 @@ class _FakeTransaction:
         self.sets = []
         self.fail_after_sets: Optional[int] = None
         self._id = None
+        self._read_only = False
+        self._max_attempts = 5
 
     def set(self, ref, data):
         self.sets.append((ref.path, data))
@@ -186,12 +193,21 @@ def _stored(model) -> dict:
     return model.model_dump(mode="json")
 
 
-def _db_for_apply(*, survivor: MemoryItem, extra_evidence: Optional[list[MemoryEvidence]] = None) -> _FakeDb:
+def _db_for_apply(
+    *,
+    survivor: MemoryItem,
+    extra_items: Optional[list[MemoryItem]] = None,
+    extra_evidence: Optional[list[MemoryEvidence]] = None,
+) -> _FakeDb:
     control = MemoryControlState(uid=UID, head_commit_id="head0", account_generation=1, source_generation=1)
     docs = {
         f"users/{UID}/memory_control/state": _stored(control),
         f"users/{UID}/memory_items/{survivor.memory_id}": _stored(survivor),
     }
+    for item in extra_items or []:
+        docs[f"users/{UID}/memory_items/{item.memory_id}"] = _stored(item)
+        for ev in item.evidence:
+            docs[f"users/{UID}/memory_evidence/{ev.evidence_id}"] = _stored(ev)
     for ev in survivor.evidence:
         docs[f"users/{UID}/memory_evidence/{ev.evidence_id}"] = _stored(ev)
     for ev in extra_evidence or []:
@@ -201,6 +217,18 @@ def _db_for_apply(*, survivor: MemoryItem, extra_evidence: Optional[list[MemoryE
 
 def _stored_item(db: _FakeDb, memory_id: str) -> MemoryItem:
     return MemoryItem(**db.docs[f"users/{UID}/memory_items/{memory_id}"])
+
+
+@pytest.fixture(autouse=True)
+def _canonical_cohort_for_apply(monkeypatch):
+    monkeypatch.setattr(
+        "utils.memory.canonical_consolidation.resolve_memory_system",
+        lambda uid, db_client=None: MemorySystem.CANONICAL,
+    )
+    monkeypatch.setattr("utils.memory.canonical_consolidation.delete_atom_keyword_doc", MagicMock())
+    monkeypatch.setattr("utils.memory.canonical_consolidation.delete_canonical_memory_vector", MagicMock())
+    monkeypatch.setattr("utils.memory.canonical_consolidation.invalidate_kg_for_memory_retraction", MagicMock())
+    monkeypatch.setattr("utils.memory.canonical_consolidation.purge_stale_review_conflicts_for_memories", MagicMock())
 
 
 @pytest.mark.parametrize("agent_decision", ["merge", "add_evidence"])
@@ -323,6 +351,89 @@ def test_consolidation_apply_is_idempotent_on_operation_retry():
     assert after_retry["corroboration_count"] == after_first["corroboration_count"]
 
 
+def test_update_with_supersede_real_apply_excludes_superseded_from_reads():
+    old = _item("mem_old", "Loves ice cream")
+    new = _item("mem_new", "Hates ice cream")
+    db = _db_for_apply(survivor=new, extra_items=[old])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+
+    apply_consolidation_decision(
+        UID,
+        decision=ConsolidationAgentDecision(
+            decision="update",
+            survivor_memory_id="mem_new",
+            supersedes=["mem_old"],
+            memory_text="Hates ice cream",
+            evidence_ids=["ev_mem_new"],
+            rationale="preference flipped",
+        ),
+        pending_by_id={new.memory_id: new, old.memory_id: old},
+        control=control,
+        run_id="run-supersede-real",
+        now=NOW,
+        db_client=db,
+    )
+
+    old_stored = _stored_item(db, "mem_old")
+    new_stored = _stored_item(db, "mem_new")
+    assert old_stored.status == MemoryItemStatus.superseded
+    assert old_stored.superseded_by == "mem_new"
+    assert new_stored.content == "Hates ice cream"
+    assert new_stored.version == new.version + 1
+
+    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
+    visible = filter_canonical_default_visible_items([old_stored, new_stored], policy=policy, now=NOW)
+    assert [item.memory_id for item in visible] == ["mem_new"]
+
+
+def test_partial_supersede_after_survivor_blocks_watermark():
+    uid = UID
+    survivor = _item("mem_new", "Hates ice cream")
+    old = _item("mem_old", "Loves ice cream")
+    control = MemoryControlState(
+        uid=uid,
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=1,
+        last_consolidation_run_at=NOW - timedelta(days=2),
+    )
+    db = _db_for_apply(survivor=survivor, extra_items=[old])
+    db.docs[f"users/{uid}/memory_control/state"] = _stored(control)
+    pending = [old, survivor]
+
+    agent_response = ConsolidationAgentBatch(
+        decisions=[
+            ConsolidationAgentDecision(
+                decision="update",
+                survivor_memory_id="mem_new",
+                supersedes=["mem_old"],
+                memory_text="Hates ice cream",
+                evidence_ids=["ev_mem_new"],
+            )
+        ]
+    )
+
+    with (
+        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
+        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
+        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent", return_value=agent_response),
+        patch(
+            "utils.memory.canonical_consolidation._apply_superseded_item",
+            side_effect=canonical_consolidation.ConsolidationApplySkipped("target memory is not active"),
+        ),
+    ):
+        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
+        report = run_canonical_consolidation(uid, db_client=db, run_id="run-partial", now=NOW, batch_threshold=2)
+
+    assert report.decisions_partial == 1
+    assert report.watermark_blocked is True
+    assert report.last_consolidation_run_at == control.last_consolidation_run_at
+    updated_survivor = _stored_item(db, "mem_new")
+    assert updated_survivor.version == survivor.version + 1
+    assert _stored_item(db, "mem_old").status == MemoryItemStatus.active
+
+
 def test_watermark_not_advanced_on_parse_failure():
     uid = UID
     control = MemoryControlState(
@@ -377,7 +488,7 @@ def test_watermark_advanced_on_clean_empty_run():
     assert stored_control.last_consolidation_run_at == NOW
 
 
-def test_batch_cap_limits_pending_items_sent_to_llm():
+def test_batch_cap_limits_pending_items_per_llm_call_and_loops_all_pending():
     uid = UID
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb({f"users/{uid}/memory_control/state": _stored(control)})
@@ -390,11 +501,15 @@ def test_batch_cap_limits_pending_items_sent_to_llm():
         patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
         patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
     ):
-        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending[:10], candidates_by_anchor={})
-        mock_agent.return_value = ConsolidationAgentBatch(decisions=[])
-        run_canonical_consolidation(uid, db_client=db, run_id="run-cap", now=NOW, batch_threshold=10)
+        mock_gather.side_effect = lambda _uid, batch, **kwargs: MagicMock(
+            uid=uid, pending_items=batch, candidates_by_anchor={}
+        )
+        mock_agent.return_value = ConsolidationAgentBatch(decisions=[], reasoning="no_changes")
+        report = run_canonical_consolidation(uid, db_client=db, run_id="run-cap", now=NOW, batch_threshold=10)
 
-    assert len(mock_gather.call_args[0][1]) == 10
+    assert mock_gather.call_count == 2
+    assert all(len(call.args[1]) <= 10 for call in mock_gather.call_args_list)
+    assert len(report.batched_memory_ids) == 15
 
 
 def test_missing_survivor_skips_decision_without_corruption():
