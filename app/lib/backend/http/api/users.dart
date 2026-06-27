@@ -621,7 +621,8 @@ Future<Map<String, dynamic>?> getUserOnboardingState() async {
   return null;
 }
 
-Future<bool> updateUserOnboardingState({bool? completed, String? acquisitionSource, bool? deviceOnboardingCompleted}) async {
+Future<bool> updateUserOnboardingState(
+    {bool? completed, String? acquisitionSource, bool? deviceOnboardingCompleted}) async {
   Map<String, dynamic> body = {};
   if (completed != null) {
     body['completed'] = completed;
