@@ -29,6 +29,8 @@ class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
 class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOnboardingWrapper> {
   late DeviceOnboardingProvider _onboardingProvider;
   CaptureProvider? _captureProvider;
+  bool _started = false;
+  bool _completed = false;
 
   @override
   void initState() {
@@ -42,12 +44,16 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
       await _captureProvider!.suspendBatchModeForOnboarding();
       if (!mounted) return;
       _onboardingProvider.startOnboarding();
-      AnalyticsManager().deviceOnboardingStarted();
+      _started = true;
+      AnalyticsManager().deviceOnboardingStarted(source: widget.allowExit ? 'settings' : 'auto');
     });
   }
 
   @override
   void dispose() {
+    if (_started && !_completed) {
+      AnalyticsManager().deviceOnboardingAbandoned(_onboardingProvider.currentStep);
+    }
     _captureProvider?.restoreBatchModeAfterOnboarding();
     _captureProvider?.deviceOnboardingProvider = null;
     _onboardingProvider.dispose();
@@ -80,6 +86,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   }
 
   void _completeOnboarding() {
+    _completed = true;
     AnalyticsManager().deviceOnboardingCompleted();
     AnalyticsManager().deviceOnboardingDoubleTapConfigured(_onboardingProvider.selectedDoubleTapAction);
     _onboardingProvider.completeOnboarding();
