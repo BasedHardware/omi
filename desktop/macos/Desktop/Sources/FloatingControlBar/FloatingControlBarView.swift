@@ -1304,10 +1304,8 @@ private struct AgentMainChatView: View {
         return fallback
     }
 
-    private var hasVisibleAssistantOutput: Bool {
-        displayedMessages.contains { message in
-            message.sender == .ai && !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+    private var hasAssistantTurn: Bool {
+        displayedMessages.contains { $0.sender == .ai }
     }
 
     private var activityText: String {
@@ -1447,7 +1445,7 @@ private struct AgentMainChatView: View {
                 agentMessageBubble(message)
             }
 
-            if isRunning && !hasVisibleAssistantOutput {
+            if isRunning && !hasAssistantTurn {
                 runningActivityView
             }
         }
@@ -1498,20 +1496,50 @@ private struct AgentMainChatView: View {
                     }
             }
         } else {
+            agentAssistantContent(message)
+                .padding(.horizontal, 4)
+                .contextMenu {
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(trimmed, forType: .string)
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func agentAssistantContent(_ message: ChatMessage) -> some View {
+        if !message.contentBlocks.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(ContentBlockGroup.group(message.contentBlocks)) { group in
+                    switch group {
+                    case .text(_, let text):
+                        if !text.isEmpty {
+                            SelectableMarkdown(text: text, sender: .ai)
+                                .environment(\.colorScheme, .dark)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    case .toolCalls(_, let calls):
+                        ToolCallsGroup(calls: calls)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    case .thinking(_, let text):
+                        ThinkingBlock(text: text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    case .discoveryCard(_, let title, let summary, let fullText):
+                        DiscoveryCard(title: title, summary: summary, fullText: fullText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+        } else {
+            let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 Markdown(trimmed)
                     .markdownTheme(.aiMessage(scale: 0.88))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 4)
-                    .contextMenu {
-                        Button("Copy") {
-                            NSPasteboard.general.clearContents()
-                            NSPasteboard.general.setString(trimmed, forType: .string)
-                        }
-                    }
-                }
+            }
         }
     }
 
@@ -1780,6 +1808,7 @@ private struct NotchAgentMorphField: View {
                             onSelect(pill)
                         } label: {
                             NotchAgentListRow(
+                                provider: pill.bridgeHarnessOverride,
                                 title: pill.title,
                                 status: pill.status,
                                 activity: pill.latestActivity,
@@ -1794,7 +1823,8 @@ private struct NotchAgentMorphField: View {
                         .position(rowCenter)
                         .help(pill.title)
 
-                        NotchMorphDot(
+                        notchAgentIdentityMark(
+                            provider: pill.bridgeHarnessOverride,
                             color: group.color,
                             isActive: pill.id == activePillID,
                             progress: progress
@@ -1823,6 +1853,28 @@ private struct NotchAgentMorphField: View {
                 .sink { _ in
                     pillStatusChangeToken &+= 1
                 }
+        }
+    }
+
+    @ViewBuilder
+    private func notchAgentIdentityMark(
+        provider: AgentHarnessMode?,
+        color: Color,
+        isActive: Bool,
+        progress: CGFloat
+    ) -> some View {
+        if provider == .hermes || provider == .openclaw {
+            let scale = NotchAgentStackMetrics.logoDotScale + (1 - NotchAgentStackMetrics.logoDotScale) * progress
+            AgentProviderLogoMark(provider: provider, statusColor: color, size: NotchAgentStackMetrics.listOrbSize + 5)
+                .shadow(color: color.opacity(0.55), radius: isActive ? 9 : 5)
+                .scaleEffect(scale)
+                .frame(width: 18, height: 22)
+        } else {
+            NotchMorphDot(
+                color: color,
+                isActive: isActive,
+                progress: progress
+            )
         }
     }
 }
@@ -1863,6 +1915,7 @@ private struct NotchLogoPlaceholderDot: View {
 }
 
 private struct NotchAgentListRow: View {
+    let provider: AgentHarnessMode?
     let title: String
     let status: AgentPill.Status
     let activity: String
@@ -1871,8 +1924,15 @@ private struct NotchAgentListRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Color.clear
-                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 1)
+            Group {
+                if provider == .hermes || provider == .openclaw {
+                    AgentProviderLogoMark(provider: provider, statusColor: statusColor, size: 16)
+                } else {
+                    Color.clear
+                        .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
+                }
+            }
+            .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 18)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)

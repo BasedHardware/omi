@@ -29,8 +29,8 @@ enum AgentPillsLayout {
     static let popoverWidth: CGFloat = 320
 }
 
-/// One agent pill: rounded square + circular Omi logo + status dot. Slowly
-/// rotates the logo while running, settles when done.
+/// One agent pill: rounded square + provider identity + status dot. Omi pills
+/// keep the circular logo; native Hermes/OpenClaw pills use flat tinted logos.
 struct AgentPillView: View {
     @ObservedObject var pill: AgentPill
     @ObservedObject var manager: AgentPillsManager
@@ -41,7 +41,7 @@ struct AgentPillView: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             roundedSquare
-                .overlay(omiBadge)
+                .overlay(identityBadge)
                 .overlay(statusDot, alignment: .topTrailing)
                 .scaleEffect(isHovering ? 1.06 : 1.0)
                 .animation(.spring(response: 0.32, dampingFraction: 0.72), value: isHovering)
@@ -63,6 +63,20 @@ struct AgentPillView: View {
             rotationTask = nil
         }
         .accessibilityLabel("\(pill.title) — \(pill.status.displayLabel)")
+    }
+
+    @ViewBuilder
+    private var identityBadge: some View {
+        if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {
+            AgentProviderLogoMark(
+                provider: pill.bridgeHarnessOverride,
+                statusColor: pill.status.tintColor,
+                size: AgentPillsLayout.pillSize - 13
+            )
+            .shadow(color: pill.status.tintColor.opacity(0.58), radius: 7, x: 0, y: 0)
+        } else {
+            omiBadge
+        }
     }
 
     private var roundedSquare: some View {
@@ -141,6 +155,9 @@ struct AgentPillView: View {
     /// Show the dot only on terminal states. While running we rely on the
     /// rotating logo as the activity signal.
     private var showStatusDot: Bool {
+        if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {
+            return false
+        }
         switch pill.status {
         case .done, .failed: return true
         default: return false
@@ -192,6 +209,46 @@ struct AgentPillView: View {
         }
         return nil
     }()
+}
+
+struct AgentProviderLogoMark: View {
+    let provider: AgentHarnessMode?
+    let statusColor: Color
+    let size: CGFloat
+
+    var body: some View {
+        Group {
+            if let logo = Self.logo(for: provider) {
+                Image(nsImage: logo)
+                    .resizable()
+                    .renderingMode(.template)
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .foregroundStyle(statusColor)
+            } else {
+                Circle().fill(statusColor)
+            }
+        }
+        .frame(width: size, height: size)
+    }
+
+    private static func logo(for provider: AgentHarnessMode?) -> NSImage? {
+        switch provider {
+        case .hermes:
+            return load("hermes_logo_flat")
+        case .openclaw:
+            return load("openclaw_logo_flat")
+        default:
+            return nil
+        }
+    }
+
+    private static func load(_ name: String) -> NSImage? {
+        guard let url = Bundle.resourceBundle.url(forResource: name, withExtension: "png") else {
+            return nil
+        }
+        return NSImage(contentsOf: url)
+    }
 }
 
 /// Popover panel that appears under the hovered pill. Shows what the agent is

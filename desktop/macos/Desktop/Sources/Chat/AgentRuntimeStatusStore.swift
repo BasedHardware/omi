@@ -161,6 +161,13 @@ final class AgentRuntimeStatusStore: ObservableObject {
       let status = message.payload["status"] as? String
       let text = status == "completed" ? nil : name.map { ChatContentBlock.displayName(for: $0) }
       update(surface: surface, status: .running, statusText: text, terminal: false, payload: message.payload)
+    case .toolResultDisplay:
+      let name = message.payload["name"] as? String
+      let output = (message.payload["output"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let displayName = name.map { ChatContentBlock.displayName(for: $0) }
+      let summary = output?.isEmpty == false ? String(output!.prefix(120)) : nil
+      let text = [displayName, summary].compactMap { $0 }.joined(separator: " — ")
+      update(surface: surface, status: .running, statusText: text.isEmpty ? displayName : text, terminal: false, payload: message.payload)
     case .cancelAck:
       let accepted = message.payload["accepted"] as? Bool ?? false
       update(surface: surface, status: accepted ? .cancelling : .running, statusText: nil, terminal: false, payload: message.payload)
@@ -183,7 +190,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .controlToolResult, .unknown:
+    case .initMessage, .toolUse, .authRequired, .authSuccess, .controlToolResult, .unknown:
       break
     }
   }

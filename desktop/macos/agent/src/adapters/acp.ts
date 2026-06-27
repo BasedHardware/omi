@@ -114,9 +114,17 @@ export interface AcpRuntimeAdapterOptions {
   envCommandName?: string;
   sessionMcpServersMode?: "passthrough" | "empty";
   supportsSessionSetModel?: boolean;
+  noProgressTimeoutMs?: number;
 }
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS = 150_000;
+
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
 
 export class AcpRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId: ProductionAdapterId;
@@ -137,6 +145,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private readonly envCommandName?: string;
   private readonly sessionMcpServersMode: "passthrough" | "empty";
   private readonly supportsSessionSetModel: boolean;
+  private readonly noProgressTimeoutMs: number;
 
   constructor(options: AcpRuntimeAdapterOptions = {}) {
     this.adapterId = options.adapterId ?? "acp";
@@ -149,6 +158,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.envCommandName = options.envCommandName;
     this.sessionMcpServersMode = options.sessionMcpServersMode ?? "passthrough";
     this.supportsSessionSetModel = options.supportsSessionSetModel ?? this.capabilities.supportsModelSwitching;
+    this.noProgressTimeoutMs = options.noProgressTimeoutMs
+      ?? parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS)
+      ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
   }
 
   async start(): Promise<void> {
@@ -381,19 +393,29 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     let fullText = "";
     const pendingTools: string[] = [];
     const previousHandler = this.notificationHandler;
+    let lastProgressAt = Date.now();
     this.notificationHandler = (method, params) => {
       previousHandler?.(method, params);
       if (signal.aborted || method !== "session/update") return;
-      this.translateSessionUpdate(params as Record<string, unknown>, pendingTools, sink, (text) => {
+      const didProgress = this.translateSessionUpdate(params as Record<string, unknown>, pendingTools, sink, (text) => {
         fullText += text;
       });
+      if (didProgress) {
+        lastProgressAt = Date.now();
+      }
     };
 
     try {
-      const result = (await this.request("session/prompt", {
+      const promptRequest = this.request("session/prompt", {
         sessionId: adapterSessionId,
         prompt: context.prompt,
-      })) as {
+      });
+      const result = (await this.withNoProgressTimeout(
+        promptRequest,
+        adapterSessionId,
+        () => lastProgressAt,
+        signal
+      )) as {
         usage?: {
           inputTokens?: number;
           outputTokens?: number;
@@ -416,6 +438,51 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     } finally {
       this.notificationHandler = previousHandler;
     }
+  }
+
+  private withNoProgressTimeout<T>(
+    promise: Promise<T>,
+    adapterSessionId: string,
+    getLastProgressAt: () => number,
+    signal: AbortSignal
+  ): Promise<T> {
+    const timeoutMs = this.noProgressTimeoutMs;
+    if (timeoutMs <= 0) {
+      return promise;
+    }
+
+    return new Promise<T>((resolve, reject) => {
+      let settled = false;
+      const finish = (fn: () => void): void => {
+        if (settled) return;
+        settled = true;
+        clearInterval(timer);
+        signal.removeEventListener("abort", onAbort);
+        fn();
+      };
+      const onAbort = (): void => {
+        finish(() => reject(new Error("ACP attempt cancelled")));
+      };
+      const timer = setInterval(() => {
+        if (signal.aborted) {
+          onAbort();
+          return;
+        }
+        const idleMs = Date.now() - getLastProgressAt();
+        if (idleMs < timeoutMs) {
+          return;
+        }
+        this.log(`${this.adapterId} ACP session ${adapterSessionId} produced no recognized progress for ${idleMs}ms; cancelling`);
+        this.notify("session/cancel", { sessionId: adapterSessionId });
+        finish(() => reject(new Error(`${this.adapterId} produced no progress for ${Math.round(timeoutMs / 1000)} seconds`)));
+      }, Math.min(5_000, Math.max(1_000, Math.floor(timeoutMs / 6))));
+
+      signal.addEventListener("abort", onAbort, { once: true });
+      promise.then(
+        (value) => finish(() => resolve(value)),
+        (error) => finish(() => reject(error instanceof Error ? error : new Error(String(error))))
+      );
+    });
   }
 
   async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {
@@ -545,11 +612,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     pendingTools: string[],
     sink: AdapterEventSink,
     onText: (text: string) => void
-  ): void {
+  ): boolean {
     const update = params.update as Record<string, unknown> | undefined;
     if (!update) {
       this.log(`session/update missing 'update' field: ${JSON.stringify(params).slice(0, 200)}`);
-      return;
+      return false;
     }
 
     const sessionUpdate = update.sessionUpdate as string;
@@ -557,13 +624,13 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       case "agent_message_chunk": {
         const content = update.content as { type: string; text?: string } | undefined;
         const text = content?.text ?? "";
-        if (!text) return;
+        if (!text) return false;
         for (const name of pendingTools.splice(0)) {
           sink({ type: "tool_activity", name, status: "completed" });
         }
         onText(text);
         sink({ type: "text_delta", text });
-        break;
+        return true;
       }
 
       case "agent_thought_chunk": {
@@ -571,8 +638,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         const text = content?.text ?? "";
         if (text) {
           sink({ type: "thinking_delta", text });
+          return true;
         }
-        break;
+        return false;
       }
 
       case "tool_call": {
@@ -589,8 +657,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
             toolUseId: toolCallId,
             input: rawInput,
           });
+          return true;
         }
-        break;
+        return false;
       }
 
       case "tool_call_update": {
@@ -598,7 +667,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         const status = (update.status as string) ?? "";
         const title = this.toolTitle(update);
         if (status !== "completed" && status !== "failed" && status !== "cancelled") {
-          return;
+          return false;
         }
         const idx = pendingTools.indexOf(title);
         if (idx >= 0) pendingTools.splice(idx, 1);
@@ -618,22 +687,30 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
             output: output.length > 2000 ? `${output.slice(0, 2000)}\n... (truncated)` : output,
           });
         }
-        break;
+        return true;
       }
 
       case "plan": {
         const entries = update.entries as Array<{ content: string }> | undefined;
-        if (!Array.isArray(entries)) return;
+        if (!Array.isArray(entries)) return false;
+        let emitted = false;
         for (const entry of entries) {
           if (entry.content) {
             sink({ type: "thinking_delta", text: `${entry.content}\n` });
+            emitted = true;
           }
         }
-        break;
+        return emitted;
+      }
+
+      case "available_commands_update":
+      case "usage_update": {
+        return false;
       }
 
       default:
         this.log(`Unknown session update type: ${sessionUpdate}`);
+        return false;
     }
   }
 

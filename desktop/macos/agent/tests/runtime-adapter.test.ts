@@ -204,6 +204,7 @@ describe("AcpRuntimeAdapter process spawning", () => {
 describe("AcpRuntimeAdapter bindings", () => {
   beforeEach(() => {
     vi.mocked(spawn).mockReset();
+    vi.useRealTimers();
   });
 
   it("opens ACP bindings with native resume fidelity", async () => {
@@ -260,6 +261,61 @@ describe("AcpRuntimeAdapter bindings", () => {
       "session/new",
       "session/set_model",
     ]);
+  });
+
+  it("cancels external ACP attempts that produce no recognized progress", async () => {
+    vi.useFakeTimers();
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "hermes",
+      command: "/usr/local/bin/hermes acp",
+      envCommandName: "OMI_HERMES_ADAPTER_COMMAND",
+      noProgressTimeoutMs: 1_000,
+    });
+    const requests: Array<any> = [];
+    proc.stdin.on("data", (chunk) => {
+      for (const line of chunk.toString().trim().split("\n")) {
+        if (!line) continue;
+        const request = JSON.parse(line);
+        requests.push(request);
+        if (request.method === "initialize") {
+          proc.stdout.write(JSON.stringify({
+            jsonrpc: "2.0",
+            id: request.id,
+            result: { protocolVersion: 1 },
+          }) + "\n");
+        }
+      }
+    });
+
+    const execution = adapter.executeAttempt({
+      sessionId: "omi-session",
+      ownerId: "owner-1",
+      requestId: "request-1",
+      clientId: "client-1",
+      runId: "run-1",
+      attemptId: "attempt-1",
+      binding: {
+        sessionId: "omi-session",
+        adapterId: "hermes",
+        adapterNativeSessionId: "native-hermes-session",
+        resumeFidelity: "native",
+        cwd: "/tmp/work",
+      },
+      prompt: [{ type: "text", text: "hello" }],
+      mode: "ask",
+      tools: [],
+    }, () => {}, new AbortController().signal);
+
+    const rejection = expect(execution).rejects.toThrow("hermes produced no progress for 1 seconds");
+    await vi.advanceTimersByTimeAsync(1_200);
+    await rejection;
+    expect(requests.map((request) => request.method)).toContain("session/prompt");
+    expect(requests).toContainEqual(expect.objectContaining({
+      method: "session/cancel",
+      params: { sessionId: "native-hermes-session" },
+    }));
   });
 });
 

@@ -46,6 +46,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains("Markdown(outputText.isEmpty ? \"Working...\" : outputText)"))
     XCTAssertTrue(source.contains("ForEach(displayedMessages) { message in"))
     XCTAssertTrue(source.contains("agentMessageBubble(message)"))
+    XCTAssertTrue(source.contains("agentAssistantContent(message)"))
+    XCTAssertTrue(source.contains("ForEach(ContentBlockGroup.group(message.contentBlocks))"))
+    XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls)"))
+    XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
     XCTAssertTrue(source.contains("Markdown(trimmed)"))
     XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
@@ -159,7 +163,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentMorphField("))
-    XCTAssertTrue(source.contains("NotchAgentListRow(\n                                title: pill.title,\n                                status: pill.status,\n                                activity: pill.latestActivity,\n                                isSelected: pill.id == activePillID,\n                                progress: rowRevealProgress"))
+    XCTAssertTrue(source.contains("NotchAgentListRow(\n                                provider: pill.bridgeHarnessOverride,\n                                title: pill.title,\n                                status: pill.status,\n                                activity: pill.latestActivity,\n                                isSelected: pill.id == activePillID,\n                                progress: rowRevealProgress"))
+    XCTAssertTrue(source.contains("AgentProviderLogoMark(provider: provider, statusColor: statusColor, size: 16)"))
+    XCTAssertTrue(source.contains("notchAgentIdentityMark(\n                            provider: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("let rowWidth = max(0, min(width - NotchAgentStackMetrics.listHorizontalInset * 2, FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))"))
     XCTAssertTrue(source.contains("static let listHorizontalInset: CGFloat = 12"))
@@ -575,11 +581,17 @@ final class AgentPillLifecycleTests: XCTestCase {
 
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
     let source = try agentPillSource()
+    let pillViewSource = try agentPillsViewSource()
 
     XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = bridgeHarnessOverride != nil"))
     XCTAssertTrue(source.contains("if !hasBridgeHarnessOverride {\n                provider.modelOverride = floating.modelOverride\n            }"))
     XCTAssertTrue(source.contains("model: Self.modelForSend(pill: pill, provider: provider)"))
     XCTAssertTrue(source.contains("provider.hasBridgeHarnessOverride ? nil : pill.model"))
+    XCTAssertTrue(pillViewSource.contains("AgentProviderLogoMark("))
+    XCTAssertTrue(pillViewSource.contains("provider: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(pillViewSource.contains("hermes_logo_flat"))
+    XCTAssertTrue(pillViewSource.contains("openclaw_logo_flat"))
+    XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {\n            return false\n        }"))
   }
 
   private func agentPillSource() throws -> String {
