@@ -1,8 +1,18 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { spawn } from 'node:child_process'
+import { dirname, join } from 'node:path'
 import process from 'node:process'
+import { fileURLToPath } from 'node:url'
 
 const env = { ...process.env }
+const args = ['dev', ...process.argv.slice(2)]
+const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+const electronVite = join(
+  root,
+  'node_modules',
+  '.bin',
+  process.platform === 'win32' ? 'electron-vite.cmd' : 'electron-vite'
+)
 
 if (env.ELECTRON_RUN_AS_NODE) {
   console.warn(
@@ -12,7 +22,7 @@ if (env.ELECTRON_RUN_AS_NODE) {
   delete env.ELECTRON_RUN_AS_NODE
 }
 
-const child = spawn('electron-vite', ['dev'], {
+const child = spawn(electronVite, args, {
   env,
   shell: true,
   stdio: 'inherit'
