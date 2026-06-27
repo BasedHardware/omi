@@ -2,6 +2,8 @@ import os
 import sys
 from unittest.mock import MagicMock
 
+import pytest
+
 # Mock heavy dependencies before importing the module under test.
 # These modules pull in Firebase / Google Cloud clients at import time.
 # NOTE: utils.speaker_identification_names is intentionally NOT mocked --
@@ -149,3 +151,146 @@ def test_negative_hello_world():
 
 def test_negative_no_intro_pattern():
     assert detect_speaker_from_text('The weather is nice today') is None
+
+
+# ---------------------------------------------------------------------------
+# Stopword guard -- run-on / garbled transcripts must not leak pronouns or
+# fillers as speaker names (would create phantom contacts "It"/"You"/"Them").
+# Phase 1 returns on first match, so the guard must live there (#5223).
+# ---------------------------------------------------------------------------
+
+STOPWORD_RUNON_CASES = [
+    'And I am It was great',
+    "I'm You know, the guy",
+    "Yeah, I'm Them and the others",
+    'My name is It',
+    'I am Sorry about that',
+    "I'm Just saying",
+    'i am Gonna do it',
+]
+
+
+@pytest.mark.parametrize('text', STOPWORD_RUNON_CASES)
+def test_stopword_not_leaked_as_name(text):
+    assert detect_speaker_from_text(text) is None
+
+
+def test_real_name_still_detected_after_guard():
+    # The guard must reject fillers without suppressing genuine introductions.
+    assert detect_speaker_from_text('I am John') == 'John'
+    assert detect_speaker_from_text('My name is Alice') == 'Alice'
+
+
+# ---------------------------------------------------------------------------
+# Multi-word name normalization -- title-case every word so the result matches
+# how a Person is stored ("John Smith"), not capitalize()'s "John smith".
+# ---------------------------------------------------------------------------
+
+
+def test_multi_word_name_titlecased_this_is():
+    assert detect_speaker_from_text('This is John Smith') == 'John Smith'
+
+
+def test_multi_word_name_titlecased_my_name_is():
+    assert detect_speaker_from_text('My name is Sarah Connor') == 'Sarah Connor'
+
+
+# ---------------------------------------------------------------------------
+# Audit round 2 -- phantom-speaker hardening (regex phase)
+# ---------------------------------------------------------------------------
+
+
+# #15 -- multi-word capture must apply the stopword filter per token
+@pytest.mark.parametrize(
+    'text',
+    ['This is It Works', "I'm Not Sure", "I'm So Sorry", "I'm You Know", 'This is It Is Me'],
+)
+def test_multiword_stopword_bypass_rejected(text):
+    assert detect_speaker_from_text(text) is None
+
+
+# #4 -- Phase 2 gazetteer path must honor the stopword set ('my' is in both)
+@pytest.mark.parametrize('text', ['this is my friend', "it's my turn", 'this is my', "hey it's my dog"])
+def test_phase2_pronoun_my_rejected(text):
+    assert detect_speaker_from_text(text) is None
+
+
+# #5 -- honorifics/titles are stripped, never returned as the name
+def test_honorific_title_stripped():
+    assert detect_speaker_from_text("I'm Dr. Smith") == 'Smith'
+    assert detect_speaker_from_text('This is Mr. Lee') == 'Lee'
+    assert detect_speaker_from_text("I'm Doctor Smith") == 'Smith'
+    assert detect_speaker_from_text('This is Mrs. Johnson') == 'Johnson'
+
+
+# #3 -- suffix cues ('here/speaking/calling') must not fire on questions/negations/idioms
+@pytest.mark.parametrize('text', ['is bob here?', 'no bob here', 'Bob, here you go', 'where is bob calling from'])
+def test_suffix_context_misfire_rejected(text):
+    assert detect_speaker_from_text(text) is None
+
+
+def test_suffix_genuine_intro_still_detected():
+    assert detect_speaker_from_text('bob here') == 'Bob'
+    assert detect_speaker_from_text('sarah speaking, how can i help') == 'Sarah'
+
+
+# #13 -- possessive constructions don't make the possessor the speaker
+@pytest.mark.parametrize('text', ["This is John's car", "I'm Bob's brother", "This is Sarah's mom"])
+def test_possessive_rejected(text):
+    assert detect_speaker_from_text(text) is None
+
+
+# #11 -- a trailing capitalized 'I' must not be absorbed into the name
+def test_trailing_pronoun_i_not_absorbed():
+    assert detect_speaker_from_text("I'm Anna I will call you") == 'Anna'
+    assert detect_speaker_from_text('My name is Sofia I am new') == 'Sofia'
+
+
+# #14 -- normalization preserves intentional interior capitals and short acronyms
+def test_normalize_preserves_interior_caps():
+    assert detect_speaker_from_text("I'm DeShawn") == 'DeShawn'
+    assert detect_speaker_from_text('This is McKenzie') == 'McKenzie'
+    assert detect_speaker_from_text('Call me DJ') == 'DJ'
+
+
+# Recall guard -- real names that are also common words must STILL be detected
+# (we deliberately did not denylist them; this locks in that decision).
+def test_recall_common_word_names_preserved():
+    assert detect_speaker_from_text("I'm June") == 'June'
+    assert detect_speaker_from_text('This is Grace') == 'Grace'
+    assert detect_speaker_from_text("I'm Will") == 'Will'
+    assert detect_speaker_from_text("I'm Mary Jo") == 'Mary Jo'
+
+
+# Verification round -- regressions surfaced by the adversarial check, now locked in.
+
+
+# "<name> calling from/about <x>" is a genuine phone self-intro, not an idiom
+@pytest.mark.parametrize(
+    'text,expected',
+    [
+        ('mike calling from the office', 'Mike'),
+        ('dave calling from acme', 'Dave'),
+        ('jen calling about the meeting', 'Jen'),
+    ],
+)
+def test_suffix_calling_intro_detected(text, expected):
+    assert detect_speaker_from_text(text) == expected
+
+
+# A question/negation clause earlier in run-on ASR must not suppress a later intro
+def test_suffix_question_guard_scoped_to_local_clause():
+    assert detect_speaker_from_text('is this thing on? sarah speaking') == 'Sarah'
+    assert detect_speaker_from_text('are you there? bob here') == 'Bob'
+    # ...while a real question about the name is still suppressed
+    assert detect_speaker_from_text('is bob here?') is None
+    assert detect_speaker_from_text('where is bob calling from') is None
+
+
+# A real surname that coincides with a stopword (Good/Well/Right/Fine) is kept
+def test_multiword_surname_stopword_collision_preserved():
+    assert detect_speaker_from_text("I'm DeShawn Good") == 'DeShawn Good'
+    assert detect_speaker_from_text('My name is DeShawn Good') == 'DeShawn Good'
+    # ...but a leading pronoun/filler is still rejected
+    assert detect_speaker_from_text('This is It Works') is None
+    assert detect_speaker_from_text("I'm Not Sure") is None
