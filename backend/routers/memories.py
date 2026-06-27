@@ -300,6 +300,17 @@ async def create_memories_batch(
     db_client = getattr(db_client_module, 'db', None)
     if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
         memory_service = MemoryService(db_client=db_client)
+        # Pre-validate the entire batch so a whitespace-only (or otherwise
+        # canonical-rejected) item fails fast *before* any per-item write
+        # commits. This preserves the legacy single-batch-write semantics:
+        # either all items persist or none do, so client retries never observe
+        # partial results.
+        for memory_db in memory_dbs:
+            if not (memory_db.content or '').strip():
+                raise HTTPException(
+                    status_code=400,
+                    detail='Memory content cannot be empty or whitespace-only.',
+                )
         committed_ids: List[str] = []
         for memory_db in memory_dbs:
             committed_id = await run_blocking(db_executor, memory_service.write, uid, memory_db.dict())

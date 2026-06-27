@@ -37,7 +37,7 @@ from dependencies import (
     get_mcp_memory_default_memory_read_context,
     get_mcp_memory_default_memory_write_context,
 )
-from utils.other.endpoints import with_rate_limit
+from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
@@ -91,7 +91,9 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
 def create_memory(
     memory: Memory,
-    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_write_context),
+    auth_context: ProductAuthorizationContext = Depends(
+        with_rate_limit_context(get_mcp_memory_default_memory_write_context, "memories:create")
+    ),
 ):
     # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
     # must not mutate canonical memories.

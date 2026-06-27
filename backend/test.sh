@@ -178,6 +178,13 @@ pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_chat_tool_parameters_json.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
+# Canonical memory system tests (added with the new 2-layer runtime).
+pytest tests/unit/test_claim_dedup.py -v
+pytest tests/unit/test_client_device_provenance.py -v
+pytest tests/unit/test_memory_ledger.py -v
+pytest tests/unit/test_memory_rollout.py -v
+pytest tests/unit/test_v3_composed_get_service.py -v
+pytest tests/unit/test_v3_get_runtime_snapshot.py -v
 pytest tests/unit/test_proactive_notification_language.py -v
 pytest tests/unit/test_notification_token_cleanup.py -v
 pytest tests/unit/test_integration_notification_validation.py -v
