@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
+
+import pytest
 
 
 def _is_sys_modules_mutation(node: ast.AST) -> bool:
@@ -80,3 +83,27 @@ def test_no_module_level_sys_modules_stub_in_unit_tests():
         "Move stubs into module-scoped autouse fixtures with teardown restore "
         f"(see tests/unit/memory_import_isolation.py). Offenders:\n  " + "\n  ".join(all_offenders)
     )
+
+
+def test_install_firestore_transactional_stub_does_not_mutate_real_module():
+    try:
+        import google.cloud.firestore_v1 as real_firestore_v1
+    except ImportError:
+        pytest.skip("google.cloud.firestore_v1 not installed")
+
+    if getattr(real_firestore_v1, "__file__", None) is None:
+        pytest.skip("firestore_v1 is already a stub module")
+
+    from tests.unit.memory_import_isolation import install_firestore_transactional_stub
+
+    original_transactional = real_firestore_v1.transactional
+    restore = install_firestore_transactional_stub()
+    try:
+        assert real_firestore_v1.transactional is original_transactional
+        wrapped = sys.modules["google.cloud.firestore_v1"]
+        assert wrapped is not real_firestore_v1
+        assert wrapped.transactional is not original_transactional
+    finally:
+        if restore is not None:
+            restore()
+        assert real_firestore_v1.transactional is original_transactional
