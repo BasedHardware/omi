@@ -129,13 +129,26 @@ export function Home(): React.JSX.Element {
   // edge. A downward wheel at the bottom (no movement) must NOT release, and
   // plain mouse clicks must NOT release (they are not scroll intent). This
   // avoids breaking live-follow on no-op input. Used for onWheel/onTouchMove.
-  const releaseFollowingIfScrolledAway = useCallback((): void => {
-    const el = chatScrollRef.current
-    if (!el) return
-    // If we're still at/near the bottom, this wheel/touch is a no-op; don't release.
-    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) return
-    releaseFollowing()
-  }, [releaseFollowing])
+  const releaseFollowingIfScrolledAway = useCallback(
+    (e?: React.WheelEvent | WheelEvent): void => {
+      const el = chatScrollRef.current
+      if (!el) return
+      // If we're still at/near the bottom, check wheel direction: an upward
+      // wheel (deltaY < 0) is reader intent to leave the live edge and should
+      // release following even though the browser hasn't applied the delta yet.
+      // A downward wheel at the bottom is a no-op; don't release.
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+      if (distFromBottom <= 8) {
+        // At/near bottom — only release on explicit upward wheel intent
+        if (e && 'deltaY' in e && e.deltaY < 0) {
+          releaseFollowing()
+        }
+        return
+      }
+      releaseFollowing()
+    },
+    [releaseFollowing]
+  )
 
   // Windowed history rendering: an infinite thread can hold thousands of
   // messages, so we only render the last `visibleCount` and reveal older ones a
@@ -325,8 +338,8 @@ export function Home(): React.JSX.Element {
         <div
           ref={chatScrollRef}
           onScroll={onThreadScroll}
-          onWheel={releaseFollowingIfScrolledAway}
-          onTouchMove={releaseFollowingIfScrolledAway}
+          onWheel={(e) => releaseFollowingIfScrolledAway(e)}
+          onTouchMove={() => releaseFollowingIfScrolledAway()}
           className="h-full overflow-y-auto"
           style={{ WebkitMaskImage: mask, maskImage: mask }}
         >
