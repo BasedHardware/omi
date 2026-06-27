@@ -376,6 +376,13 @@ def get_memories(
         # the entire list or negative offsets producing inconsistent pages.
         clamped_offset = max(0, offset)
         clamped_limit = max(1, min(limit, 5000))
+        # Preserve the historical first-page load for the mobile MemoriesProvider,
+        # which calls getMemoriesResult() with its default limit and has no
+        # load-more path. Legacy users get this expansion via _legacy_get_memories;
+        # canonical users must get the same first-page behavior so accounts with
+        # more than 100 memories do not silently see only the newest 100.
+        if clamped_offset == 0:
+            clamped_limit = 5000
         return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(
             uid,
             limit=clamped_limit,

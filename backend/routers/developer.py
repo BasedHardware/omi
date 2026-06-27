@@ -704,6 +704,13 @@ def update_memory(
     memory_service = MemoryService(db_client=db)
     memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
+        # Validate existence before mutations so a missing memory returns 404
+        # (matching legacy) rather than letting the update helpers raise
+        # ValueError, which FastAPI surfaces as a 500.
+        if _read_canonical_memory_item(uid, memory_id, db_client=db) is None:
+            raise HTTPException(status_code=404, detail="Memory not found")
+        if request.content is not None and not request.content.strip():
+            raise HTTPException(status_code=422, detail="content must not be empty")
         if request.content is not None:
             memory_service.update_content(uid, memory_id, request.content.strip())
         if request.visibility is not None:
