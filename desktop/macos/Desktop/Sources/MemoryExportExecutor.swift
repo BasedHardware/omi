@@ -153,9 +153,11 @@ enum MemoryExportExecutor {
   }
 
   private static func cloudFormFillSucceeded(_ result: String) -> Bool {
-    result.contains("Submitted with button:")
-      && !result.contains("Missing:")
+    let cleanResult = !result.contains("Missing:")
       && !result.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Error:")
+    return cleanResult
+      && (result.contains("Submitted with button:")
+        || result.contains("Claude connector connected."))
   }
 
   static func cloudFormFillRequiresAccessibilityApproval(_ result: String) -> Bool {

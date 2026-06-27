@@ -176,4 +176,93 @@ final class BrowserAutomationTargetTests: XCTestCase {
       )
     )
   }
+
+  func testClaudeConnectorPageStateClassification() {
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXText claude.ai/customize/connectors?modal=add-custom-connector Add custom connector Remote MCP server URL"
+      ),
+      .addCustomConnectorModal
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXText claude.ai/customize/connectors Omi CUSTOM You are not connected to Omi yet. Connect"
+      ),
+      .connectorDetailNotConnected
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXText claude.ai/customize/connectors Omi CUSTOM You are connected to Omi"
+      ),
+      .connectorDetailConnected
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXText https://example.com/connectors Add custom connector"
+      ),
+      .other
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXText claude.ai/customize/connectors?modal=add-custom-connector"
+      ),
+      .other
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXText claude.ai/customize/connectors Add custom connector"
+      ),
+      .other
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXText claude.ai/customize/connectors Slack You are not connected to Omi yet. Connect"
+      ),
+      .other
+    )
+  }
+
+  func testClaudeConnectorStateMachineRefusesUnexpectedStates() {
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.claudeConnectorAction(
+        for: .addCustomConnectorModal,
+        submit: true
+      ),
+      .fillAddModal
+    )
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.claudeConnectorAction(
+        for: .connectorDetailNotConnected,
+        submit: true
+      ),
+      .pressConnect
+    )
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.claudeConnectorAction(
+        for: .connectorDetailNotConnected,
+        submit: false
+      ),
+      .refuse
+    )
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.claudeConnectorAction(
+        for: .connectorDetailConnected,
+        submit: true
+      ),
+      .alreadyConnected
+    )
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.claudeConnectorAction(
+        for: .other,
+        submit: true
+      ),
+      .refuse
+    )
+  }
 }

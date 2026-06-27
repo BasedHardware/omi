@@ -403,6 +403,7 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
       "Use macOS UI automation first: Accessibility, System Events, AppleScript/osascript, screenshots, keyboard shortcuts, and pasteboard are available. Use browser tools only if they are already available; do not require the user to install a browser extension.",
       "This is an autonomous setup attempt. Do not stop after opening the page; navigate and fill the connector/app form if the user is already signed in.",
       "Use a new browser tab when possible, keep all work in that tab, and do not disturb the user's other tabs.",
+      "Before every click, key press, or paste, verify the frontmost app is \(browserName), the visible URL is the expected \(title) setup page, and the next control/state is clearly identified. Do not use blind coordinate clicks or repeated Tab/Enter loops on an unverified page.",
       "If the user is signed out, developer/custom connector permission is missing, a CAPTCHA/security prompt appears, or the UI no longer has the expected controls, stop and report the exact blocker plus the next click/value needed.",
       "",
       "Start URL: \(openURL.absoluteString)",

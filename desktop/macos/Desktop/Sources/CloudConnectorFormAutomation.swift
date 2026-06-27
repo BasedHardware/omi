@@ -29,10 +29,33 @@ enum CloudConnectorFormAutomation {
     }
   }
 
-  private enum ClaudeConnectorPageState: Equatable {
+  private struct PasteboardSnapshot {
+    let string: String?
+
+    static func capture() -> PasteboardSnapshot {
+      PasteboardSnapshot(string: NSPasteboard.general.string(forType: .string))
+    }
+
+    func restore() {
+      NSPasteboard.general.clearContents()
+      if let string {
+        NSPasteboard.general.setString(string, forType: .string)
+      }
+    }
+  }
+
+  enum ClaudeConnectorPageState: Equatable {
     case addCustomConnectorModal
-    case connectorDetail
+    case connectorDetailNotConnected
+    case connectorDetailConnected
     case other
+  }
+
+  enum ClaudeConnectorAction: Equatable {
+    case fillAddModal
+    case pressConnect
+    case alreadyConnected
+    case refuse
   }
 
   static func fill(_ args: [String: Any]) async -> String {
@@ -114,7 +137,7 @@ enum CloudConnectorFormAutomation {
     }
 
     guard let form = findBestForm(provider: provider, values: values) else {
-      if let result = await fillClaudeConnectorByKeyboard(
+      if let result = await advanceClaudeConnectorStateMachine(
         provider: provider,
         values: values,
         submit: submit)
@@ -160,7 +183,7 @@ enum CloudConnectorFormAutomation {
     }
 
     if !missing.isEmpty,
-      let result = await fillClaudeConnectorByKeyboard(
+      let result = await advanceClaudeConnectorStateMachine(
         provider: provider,
         values: values,
         submit: submit)
@@ -197,20 +220,63 @@ enum CloudConnectorFormAutomation {
     return lines.joined(separator: "\n")
   }
 
-  private static func fillClaudeConnectorByKeyboard(
+  private static func advanceClaudeConnectorStateMachine(
     provider: String,
     values: [FieldValue],
     submit: Bool
   ) async -> String? {
     guard provider == "claude" else { return nil }
-    guard let target = findClaudeConnectorKeyboardTarget(expectedState: .addCustomConnectorModal) else {
+    guard let target = findClaudeConnectorTarget() else {
       return nil
     }
+
+    switch claudeConnectorAction(for: target.state, submit: submit) {
+    case .fillAddModal:
+      return await fillClaudeConnectorAddModalByKeyboard(target: target, values: values, submit: submit)
+    case .pressConnect:
+      return await pressClaudeConnectorConnectButton(target: target)
+    case .alreadyConnected:
+      return [
+        "Native connector form filler result:",
+        "Provider: claude",
+        "Browser/app: \(target.app.localizedName ?? target.app.bundleIdentifier ?? "unknown")",
+        "Claude connector connected.",
+      ].joined(separator: "\n")
+    case .refuse:
+      return nil
+    }
+  }
+
+  nonisolated static func claudeConnectorAction(
+    for state: ClaudeConnectorPageState,
+    submit: Bool
+  ) -> ClaudeConnectorAction {
+    switch state {
+    case .addCustomConnectorModal:
+      return .fillAddModal
+    case .connectorDetailNotConnected:
+      return submit ? .pressConnect : .refuse
+    case .connectorDetailConnected:
+      return .alreadyConnected
+    case .other:
+      return .refuse
+    }
+  }
+
+  private static func fillClaudeConnectorAddModalByKeyboard(
+    target: (app: NSRunningApplication, state: ClaudeConnectorPageState),
+    values: [FieldValue],
+    submit: Bool
+  ) async -> String? {
+    guard target.state == .addCustomConnectorModal else { return nil }
     guard let name = values.first(where: { $0.label == "Name" })?.value,
       let serverURL = values.first(where: { $0.label == "Remote MCP server URL" })?.value,
       let clientID = values.first(where: { $0.label == "OAuth Client ID" })?.value,
       let clientSecret = values.first(where: { $0.label == "OAuth Client Secret" })?.value
     else { return nil }
+
+    let pasteboardSnapshot = PasteboardSnapshot.capture()
+    defer { pasteboardSnapshot.restore() }
 
     target.app.activate()
     try? await Task.sleep(nanoseconds: 450_000_000)
@@ -250,6 +316,53 @@ enum CloudConnectorFormAutomation {
       lines.append("Submit skipped by request.")
     }
 
+    return lines.joined(separator: "\n")
+  }
+
+  private static func pressClaudeConnectorConnectButton(
+    target: (app: NSRunningApplication, state: ClaudeConnectorPageState)
+  ) async -> String? {
+    guard target.state == .connectorDetailNotConnected else { return nil }
+
+    target.app.activate()
+    try? await Task.sleep(nanoseconds: 450_000_000)
+    guard let active = NSWorkspace.shared.frontmostApplication,
+      active.processIdentifier == target.app.processIdentifier,
+      let activeTarget = frontmostClaudeConnectorKeyboardTarget(),
+      activeTarget.state == .connectorDetailNotConnected
+    else {
+      return
+        "Error: Refusing Claude Connect because the active window is not the Omi connector detail page."
+    }
+
+    let appElement = AXUIElementCreateApplication(target.app.processIdentifier)
+    let nodes = focusedAndWindowRoots(for: appElement)
+      .flatMap { collectNodes(from: $0, maxDepth: 10, maxNodes: 500) }
+    guard claudeConnectorPageState(nodes: nodes) == .connectorDetailNotConnected else {
+      return "Error: Refusing Claude Connect because the verified page state changed."
+    }
+    guard let button = findClaudeConnectorDetailConnectButton(in: nodes) else {
+      return
+        "Error: Claude connector is added, but the Connect button is not exposed to Accessibility. Refusing blind coordinate or keyboard clicks."
+    }
+
+    _ = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
+    try? await Task.sleep(nanoseconds: 700_000_000)
+
+    let afterNodes = focusedAndWindowRoots(for: appElement)
+      .flatMap { collectNodes(from: $0, maxDepth: 10, maxNodes: 500) }
+    let afterState = claudeConnectorPageState(nodes: afterNodes)
+    var lines = [
+      "Native connector form filler result:",
+      "Provider: claude",
+      "Browser/app: \(target.app.localizedName ?? target.app.bundleIdentifier ?? "unknown")",
+      "Submitted with button: Connect (Accessibility)",
+    ]
+    if afterState == .connectorDetailConnected {
+      lines.append("Claude connector connected.")
+    } else {
+      lines.append("Connect pressed; waiting for Claude to finish or show OAuth consent.")
+    }
     return lines.joined(separator: "\n")
   }
 
@@ -425,9 +538,9 @@ enum CloudConnectorFormAutomation {
     return available[index]
   }
 
-  private static func findClaudeConnectorKeyboardTarget(
-    expectedState: ClaudeConnectorPageState
-  ) -> (app: NSRunningApplication, state: ClaudeConnectorPageState)? {
+  private static func findClaudeConnectorTarget() -> (
+    app: NSRunningApplication, state: ClaudeConnectorPageState
+  )? {
     let ownBundleID = Bundle.main.bundleIdentifier
     let browserApps = NSWorkspace.shared.runningApplications.filter { app in
       app.bundleIdentifier != ownBundleID && isSupportedBrowserApp(app)
@@ -440,7 +553,7 @@ enum CloudConnectorFormAutomation {
       for root in focusedAndWindowRoots(for: appElement) {
         let nodes = collectNodes(from: root, maxDepth: 10, maxNodes: 500)
         let state = claudeConnectorPageState(nodes: nodes)
-        if state == expectedState {
+        if state != .other {
           return (app, state)
         }
       }
@@ -468,18 +581,36 @@ enum CloudConnectorFormAutomation {
 
   private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState {
     let text = nodes.map(\.searchableText).joined(separator: " ")
+    return classifyClaudeConnectorPageText(text)
+  }
+
+  nonisolated static func classifyClaudeConnectorPageText(_ text: String) -> ClaudeConnectorPageState {
+    let text = text.lowercased()
     guard text.contains("claude.ai/customize/connectors") else { return .other }
 
-    if text.contains("modal=add-custom-connector")
-      || text.contains("add custom connector")
-    {
+    let hasAddModalURL = text.contains("modal=add-custom-connector")
+    let hasAddModalTitle = text.contains("add custom connector")
+    let hasAddModalFields = text.contains("remote mcp server url")
+      && text.contains("oauth client id")
+      && text.contains("oauth client secret")
+    if hasAddModalTitle && (hasAddModalURL || hasAddModalFields) {
       return .addCustomConnectorModal
     }
 
+    let hasOmiConnector = text.contains("omi custom")
+      || (text.contains("omi") && text.contains("https://api.omiapi.com/v1/mcp/sse"))
+    guard hasOmiConnector else { return .other }
+
     if text.contains("you are not connected to omi yet")
-      || text.contains("not connected to omi")
+      || text.contains("not connected to omi yet")
     {
-      return .connectorDetail
+      return .connectorDetailNotConnected
+    }
+
+    if text.contains("you are connected to omi")
+      || text.contains("connected to omi.")
+    {
+      return .connectorDetailConnected
     }
 
     return .other
@@ -535,6 +666,29 @@ enum CloudConnectorFormAutomation {
       node.role.lowercased().contains("button")
         && labels.contains { label in bestLabel(for: node).lowercased().contains(label) }
     }
+  }
+
+  private static func findClaudeConnectorDetailConnectButton(
+    in nodes: [AccessibleNode]
+  ) -> AccessibleNode? {
+    let windowFrames = nodes
+      .filter { $0.role.lowercased().contains("window") && !$0.frame.isNull && !$0.frame.isEmpty }
+      .map(\.frame)
+    guard let windowFrame = windowFrames.max(by: { $0.width * $0.height < $1.width * $1.height }) else {
+      return nil
+    }
+
+    let centerX = windowFrame.midX
+    let candidates = nodes.filter { node in
+      let label = bestLabel(for: node).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      return node.role.lowercased().contains("button")
+        && label == "connect"
+        && !node.frame.isNull
+        && !node.frame.isEmpty
+        && node.frame.midX > centerX
+    }
+    guard candidates.count == 1 else { return nil }
+    return candidates[0]
   }
 
   private static func bestLabel(for node: AccessibleNode) -> String {
