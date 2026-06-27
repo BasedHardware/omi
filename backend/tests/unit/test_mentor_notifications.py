@@ -60,11 +60,14 @@ for submodule in [
     "mem_db",
     "notifications",
     "webhook_health",
+    "dev_api_key",
 ]:
     mod = _stub_module(f"database.{submodule}")
     setattr(database_mod, submodule, mod)
 
 sys.modules["database.llm_usage"].record_llm_usage = MagicMock()
+# Default: not a developer, so the daily-cap tests exercise the cap path.
+sys.modules["database.dev_api_key"].get_dev_keys_for_user = MagicMock(return_value=[])
 sys.modules["database.notifications"].get_mentor_notification_frequency = MagicMock(return_value=3)
 
 # Stub _client.db for auth.py top-level import
@@ -882,10 +885,101 @@ def test_frequency_thresholds():
 
 
 def test_max_daily_notifications():
-    """MAX_DAILY_NOTIFICATIONS should be 12."""
+    """MAX_DAILY_NOTIFICATIONS defaults under 10 (the #4859 target) and is env-tunable."""
     from utils.llm.proactive_notification import MAX_DAILY_NOTIFICATIONS
 
-    assert MAX_DAILY_NOTIFICATIONS == 12
+    assert MAX_DAILY_NOTIFICATIONS == 9
+    assert MAX_DAILY_NOTIFICATIONS < 10
+
+
+def _fresh_app_integrations():
+    _setup_app_integrations_stubs()
+    if "utils.app_integrations" in sys.modules:
+        del sys.modules["utils.app_integrations"]
+    import utils.app_integrations as app_int
+
+    return app_int
+
+
+def test_is_developer_detection():
+    """A user with any developer API key is a developer; a lookup error fails closed."""
+    app_int = _fresh_app_integrations()
+    dev_mod = sys.modules["database.dev_api_key"]
+
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
+    assert app_int._is_developer("u") is False
+
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[MagicMock()])
+    assert app_int._is_developer("u") is True
+
+    dev_mod.get_dev_keys_for_user = MagicMock(side_effect=Exception("firestore down"))
+    assert app_int._is_developer("u") is False  # fail closed: still apply the cap
+
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
+
+
+def test_proactive_daily_cap_helper():
+    """The shared cap triggers at/above MAX_DAILY_NOTIFICATIONS, and developers are exempt (#3346)."""
+    app_int = _fresh_app_integrations()
+    dev_mod = sys.modules["database.dev_api_key"]
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
+
+    redis_mod.get_daily_notification_count.return_value = 0
+    assert app_int._proactive_daily_cap_reached("u") is False
+
+    redis_mod.get_daily_notification_count.return_value = 9  # at the default cap
+    assert app_int._proactive_daily_cap_reached("u") is True
+
+    # Developer: exempt even far over the cap.
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[MagicMock()])
+    redis_mod.get_daily_notification_count.return_value = 100
+    assert app_int._proactive_daily_cap_reached("u") is False
+
+    redis_mod.get_daily_notification_count.return_value = 0
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
+
+
+def test_app_proactive_notification_respects_daily_cap():
+    """Core fix: a third-party app proactive notification is now blocked once the shared daily cap is hit."""
+    app_int = _fresh_app_integrations()
+    mem_mod.get_proactive_noti_sent_at.return_value = None
+    redis_mod.get_proactive_noti_sent_at.return_value = None
+    redis_mod.get_daily_notification_count.return_value = 9  # at the default cap
+    redis_mod.incr_daily_notification_count.reset_mock()
+    sys.modules["database.dev_api_key"].get_dev_keys_for_user = MagicMock(return_value=[])
+
+    app = MagicMock()
+    app.has_capability.return_value = True
+    app.id = "app-1"
+    app.name = "TestApp"
+
+    result = app_int._process_proactive_notification("uid_cap", app, {"prompt": "hello"})
+
+    assert result is None
+    redis_mod.incr_daily_notification_count.assert_not_called()
+    redis_mod.get_daily_notification_count.return_value = 0
+
+
+def test_app_proactive_notification_increments_shared_budget():
+    """A delivered app proactive notification increments the same daily counter mentor notifications use."""
+    app_int = _fresh_app_integrations()
+    mem_mod.get_proactive_noti_sent_at.return_value = None
+    redis_mod.get_proactive_noti_sent_at.return_value = None
+    redis_mod.get_daily_notification_count.return_value = 0  # under cap
+    redis_mod.incr_daily_notification_count.reset_mock()
+    sys.modules["database.dev_api_key"].get_dev_keys_for_user = MagicMock(return_value=[])
+    sys.modules["utils.llm.clients"].get_llm.return_value.invoke.return_value.content = "Here is a useful nudge."
+
+    app = MagicMock()
+    app.has_capability.return_value = True
+    app.id = "app-2"
+    app.name = "TestApp"
+    app.filter_proactive_notification_scopes.return_value = []
+
+    result = app_int._process_proactive_notification("uid_send", app, {"prompt": "hello", "params": []})
+
+    assert result == "Here is a useful nudge."
+    redis_mod.incr_daily_notification_count.assert_called_once_with("uid_send")
 
 
 def test_frequency_guidance_all_levels():
