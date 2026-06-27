@@ -4,15 +4,15 @@ import { relationshipItems, routeIntent, orderFloorSections, type KindedSection 
 describe('relationshipItems', () => {
   test('renders a labeled edge as "Source — label → Target" using node labels', () => {
     const nodes = [
-      { id: 'a', label: 'Omi Windows' },
+      { id: 'a', label: 'Cortex Windows' },
       { id: 'b', label: 'TypeScript' }
     ]
     const edges = [{ sourceId: 'a', targetId: 'b', label: 'written in' }]
-    expect(relationshipItems(nodes, edges)).toEqual(['Omi Windows — written in → TypeScript'])
+    expect(relationshipItems(nodes, edges)).toEqual(['Cortex Windows — written in → TypeScript'])
   })
 
   test('drops edges whose endpoints are not in the node set', () => {
-    const nodes = [{ id: 'a', label: 'Omi Windows' }]
+    const nodes = [{ id: 'a', label: 'Cortex Windows' }]
     const edges = [
       { sourceId: 'a', targetId: 'ghost', label: 'uses' },
       { sourceId: 'missing', targetId: 'a', label: 'depends on' }
@@ -50,7 +50,7 @@ describe('routeIntent', () => {
 describe('orderFloorSections', () => {
   const sections: KindedSection[] = [
     { kind: 'tech', heading: 'Programming languages & technologies', items: ['TypeScript'] },
-    { kind: 'entities', heading: 'Projects, people & interests', items: ['Omi (project)'] },
+    { kind: 'entities', heading: 'Projects, people & interests', items: ['Cortex (project)'] },
     { kind: 'apps', heading: 'Installed apps', items: ['VS Code'] }
   ]
 

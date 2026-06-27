@@ -1,4 +1,4 @@
-// Maps a knowledge-graph node type to a hex color, matching the Omi macOS
+// Maps a knowledge-graph node type to a hex color, matching the Cortex macOS
 // desktop app (KnowledgeGraphNodeType.nsColor). The fixed user/center node is
 // always white, like the macOS `isFixed` glow.
 export function nodeColor(nodeType: string, isFixed: boolean): string {

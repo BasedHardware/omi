@@ -110,7 +110,7 @@ export function QuickGoalsWidget({ onReady }: { onReady?: () => void }): React.J
       const res = await omiApi.get('/v1/goals/suggest')
       const s = res.data as { suggested_title?: string; suggested_target?: number | null }
       if (!s?.suggested_title) {
-        toast('No suggestion right now', { tone: 'info', body: 'Omi needs a few memories first.' })
+        toast('No suggestion right now', { tone: 'info', body: 'Cortex needs a few memories first.' })
         return
       }
       const target =

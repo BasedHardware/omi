@@ -1,5 +1,5 @@
-appId: com.omiwindows.app
-productName: Omi for Windows
+appId: io.apym.cortex
+productName: Cortex
 directories:
   buildResources: build
 files:
@@ -20,7 +20,7 @@ asarUnpack:
   # dir — it must live outside the asar archive or the foreground monitor fails.
   - node_modules/koffi/**
 win:
-  executableName: omi-windows
+  executableName: cortex
   target:
     - target: nsis
       arch: [x64]

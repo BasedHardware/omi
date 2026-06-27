@@ -8,7 +8,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { toast } from '../lib/toast'
 
 // First-class action item, as returned by GET /v1/action-items. This is the
-// same source the Omi webapp reads from — so manually-created tasks and due
+// same source the Cortex webapp reads from — so manually-created tasks and due
 // dates show up here too, unlike the old approach of scraping every
 // conversation's structured.action_items.
 type ActionItem = {

@@ -14,6 +14,7 @@ import {
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
 import { cn } from '../../lib/utils'
+import { CortexWordmark } from '../ui/Brand'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
 
@@ -149,13 +150,11 @@ export function Sidebar(): React.JSX.Element {
         collapsed ? 'w-16' : 'w-60'
       )}
     >
-      {/* Top row: logo (left, fades out) + collapse toggle pinned right. */}
+      {/* Top row: wordmark (left, fades out) + collapse toggle pinned right. */}
       <div className="flex items-center justify-between px-1.5 py-1">
-        <img
-          src="https://personas.omi.me/omilogo.png"
-          alt="omi"
+        <CortexWordmark
           className={cn(
-            'h-4 shrink-0 overflow-hidden transition-opacity duration-200',
+            'shrink-0 overflow-hidden text-base transition-opacity duration-200',
             collapsed ? 'pointer-events-none w-0 opacity-0' : 'w-auto opacity-100'
           )}
         />

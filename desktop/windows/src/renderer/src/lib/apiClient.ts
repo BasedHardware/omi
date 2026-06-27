@@ -11,7 +11,7 @@ const MAX_RETRIES = 5
 type RetryConfig = InternalAxiosRequestConfig & { __retryCount?: number; __noRetry?: boolean }
 
 function makeClient(baseURL: string): AxiosInstance {
-  // 12s is enough for normal Omi responses and short enough that a stuck
+  // 12s is enough for normal Cortex responses and short enough that a stuck
   // request doesn't lock the UI in a perpetual loading state.
   const client = axios.create({ baseURL, timeout: 12_000 })
 

@@ -65,7 +65,7 @@ export function registerAutomationHandlers(): void {
       ].join('\n')
       const opts = {
         type: 'question' as const,
-        title: 'Omi — approve action',
+        title: 'Cortex — approve action',
         message: plan.summary || `Omi wants to do something in “${plan.targetWindow}”`,
         detail,
         buttons: ['Approve & run', 'Cancel'],

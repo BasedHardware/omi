@@ -51,8 +51,8 @@ export function DiskAccessStep({
       totalSteps={totalSteps}
       aside={aside}
       eyebrow="ACCESS"
-      title="Let Omi scan your work"
-      subtitle="File access lets Omi map your projects and files"
+      title="Let Cortex scan your work"
+      subtitle="File access lets Cortex map your projects and files"
       icon={<HardDrive className="h-5 w-5 text-white/60" />}
       cardLabel="File Access"
       statusText={{

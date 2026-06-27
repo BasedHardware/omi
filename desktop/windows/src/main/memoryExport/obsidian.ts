@@ -9,7 +9,7 @@ export async function exportToObsidian(
   vaultPath: string,
   memories: ExportMemory[]
 ): Promise<string> {
-  const dir = join(vaultPath, 'Omi')
+  const dir = join(vaultPath, 'Cortex')
   await fs.mkdir(dir, { recursive: true })
   const file = join(dir, 'Memories.md')
   await fs.writeFile(file, formatMemoriesMarkdown(memories), 'utf8')

@@ -14,7 +14,7 @@ describe('formatMemoriesMarkdown', () => {
       at
     )
     expect(md).toBe(
-      `# Omi Memories
+      `# Cortex Memories
 
 _Exported 2026-06-03 · 3 memories_
 

@@ -8,7 +8,7 @@ import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
 import { Markdown } from '../components/Markdown'
 import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
-import omiMark from '../assets/omi-logo.png'
+import { CortexMark } from '../components/ui/Brand'
 import { maybeStartScreenSynthesis } from '../lib/screenSynthesis'
 import { maybeStartInsightEngine } from '../lib/insightEngine'
 import { maybeStartRetentionSweep } from '../lib/retentionSweep'
@@ -50,7 +50,7 @@ function ChatBar(props: {
         onKeyDown={(e) => {
           if (e.key === 'Enter') props.onSend()
         }}
-        placeholder="Ask Omi…"
+        placeholder="Ask Cortex…"
         className="flex-1 border-0 bg-transparent px-2 py-2 text-sm text-white placeholder:text-white/40 focus:outline-none focus:ring-0"
       />
       <button
@@ -279,10 +279,7 @@ export function Home(): React.JSX.Element {
       if (scrollModeRef.current !== 'followingBottom') {
         setScrollMode('followingBottom')
       }
-    } else if (
-      scrollModeRef.current === 'followingBottom' &&
-      !isProgrammaticScrollRef.current
-    ) {
+    } else if (scrollModeRef.current === 'followingBottom' && !isProgrammaticScrollRef.current) {
       // Release following when the viewport moves away from the live edge via
       // a non-programmatic scroll (scrollbar thumb drag, keyboard arrows, etc).
       // onWheel/onTouchMove already cover wheel/touch; this covers the rest.
@@ -392,7 +389,7 @@ export function Home(): React.JSX.Element {
                         </div>
                       ) : (
                         <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                          <img src={omiMark} alt="Omi" className="h-4 w-4 object-contain" />
+                          <CortexMark className="text-sm" />
                         </div>
                       )}
                       <div

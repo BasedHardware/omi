@@ -153,7 +153,7 @@ describe('shouldFinalize', () => {
 
   it('does NOT commit before the trailing grace, even when silent and settled', () => {
     // A quick release: VAD silence + an old settled segment would otherwise commit
-    // in the gap before Omi's ~1.8s-late trailing segment lands, dropping the tail.
+    // in the gap before Cortex's ~1.8s-late trailing segment lands, dropping the tail.
     expect(
       shouldFinalize(
         {

@@ -7,7 +7,7 @@ const CONNECT_TIMEOUT_MS = 3000
 export type TranscriptionCallbacks = {
   /** Fires every time a new finalized line is ready (a v4/listen segment). */
   onLine: (line: TranscriptLine) => void
-  /** Reserved for in-progress interim text. The Omi v4/listen path emits only
+  /** Reserved for in-progress interim text. The Cortex v4/listen path emits only
    *  finalized segments, so this currently never fires; kept so callers that
    *  render interim text don't need to change. */
   onInterim: (text: string) => void
@@ -37,7 +37,7 @@ function segmentToLine(seg: BackendSegment): TranscriptLine {
 }
 
 /**
- * Omi cloud signals an exhausted free quota two ways: a typed
+ * Cortex cloud signals an exhausted free quota two ways: a typed
  * `freemium_threshold_reached` event sent right after connect, and/or a
  * `1008 trial_expired` WebSocket close. Either way the cloud STT will never emit
  * transcripts, so the session has effectively ended.
@@ -60,10 +60,10 @@ function isQuotaClose(code: number, reason: string): boolean {
   return code === 1008 || /trial_expired|freemium|quota/i.test(reason)
 }
 const QUOTA_MESSAGE =
-  'free Omi transcription quota is used up (1008) — add an Omi subscription or sign in with an entitled account to keep transcribing'
+  'free Cortex transcription quota is used up (1008) — add an Cortex subscription or sign in with an entitled account to keep transcribing'
 
 /**
- * Start an Omi v4/listen session for one source. Resolves the handle once the
+ * Start an Cortex v4/listen session for one source. Resolves the handle once the
  * socket connects, or null on an initial failure (connect timeout, fatal WS
  * error, no signed-in user, or quota exhausted before connect). `onLost` fires
  * when a CONNECTED session can no longer continue (quota exhausted or socket
@@ -117,18 +117,18 @@ async function startWithOmi(
           resolve(null)
         } else if (outcome === 'omi') {
           // Already connected and committed: tell the caller the session is over.
-          onLost('Omi free quota exhausted')
+          onLost('Cortex free quota exhausted')
         }
       },
       onClosed: (code, reason) => {
-        // The Omi socket dropped AFTER connecting (abnormal 1005/1006, clean
-        // 1000, etc.). Omi will emit no more transcripts, so end the session.
+        // The Cortex socket dropped AFTER connecting (abnormal 1005/1006, clean
+        // 1000, etc.). Cortex will emit no more transcripts, so end the session.
         // (Pre-connect closes arrive via onError and drive the initial failure.)
         if (outcome !== 'omi') return
         onLost(
           isQuotaClose(code, reason)
             ? QUOTA_MESSAGE
-            : `Omi /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
+            : `Cortex /v4/listen closed (${code})${reason ? ` ${reason}` : ''}`
         )
       },
       onError: (err, fatal) => {
@@ -144,7 +144,7 @@ async function startWithOmi(
           resolve(null)
           return
         }
-        // Only surface post-connect errors when Omi actually connected.
+        // Only surface post-connect errors when Cortex actually connected.
         if (outcome === 'omi') {
           // Quota backstop: a 1008 'trial_expired' close (in case the typed
           // event didn't arrive first). End the session rather than erroring twice.
@@ -183,7 +183,7 @@ async function startWithOmi(
 }
 
 /**
- * Begin transcribing one audio source via Omi v4/listen. Omi is the only
+ * Begin transcribing one audio source via Cortex v4/listen. Cortex is the only
  * transcription backend: if it can't connect, runs out of free quota, or its
  * socket drops mid-session, the session ends and `onError` fires. (There is no
  * Deepgram fallback.)
@@ -195,7 +195,7 @@ export async function startTranscription(
   let active: OmiListenHandle | null = null
 
   const omi = await startWithOmi(source, cb, (reason) => {
-    cb.onError(new Error(`Omi transcription stopped: ${reason}`))
+    cb.onError(new Error(`Cortex transcription stopped: ${reason}`))
   })
 
   if (omi) {
@@ -204,8 +204,8 @@ export async function startTranscription(
     cb.onError(
       new Error(
         auth.currentUser
-          ? 'Omi transcription unavailable (could not connect)'
-          : 'Omi transcription unavailable (not signed in)'
+          ? 'Cortex transcription unavailable (could not connect)'
+          : 'Cortex transcription unavailable (not signed in)'
       )
     )
   }

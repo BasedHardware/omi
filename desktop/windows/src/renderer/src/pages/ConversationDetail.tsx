@@ -125,7 +125,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
         }
         if (c.kind === 'chat') {
           setDisplay({
-            title: c.title || 'Chat with Omi',
+            title: c.title || 'Chat with Cortex',
             subtitle: `${new Date(c.startedAt).toLocaleString()} · ${c.messages?.length ?? 0} messages`,
             chatMessages: c.messages ?? [],
             transcript: c.transcript,
@@ -165,7 +165,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
-  // Poll while Omi is still processing — title/overview/action_items become
+  // Poll while Cortex is still processing — title/overview/action_items become
   // available once the pipeline finishes summarizing the segments we POSTed.
   useEffect(() => {
     if (!id || !display || display.isLocal) return
@@ -281,7 +281,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     setReprocessing(true)
     try {
       await omiApi.post(`/v1/conversations/${id}/reprocess`)
-      toast('Reprocessing', { tone: 'info', body: 'Omi is regenerating the summary.' })
+      toast('Reprocessing', { tone: 'info', body: 'Cortex is regenerating the summary.' })
       // Trigger polling by marking processing=true locally.
       setDisplay((d) => (d ? { ...d, processing: true, status: 'processing' } : d))
     } catch (e) {
@@ -344,7 +344,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                   onClick={onReprocess}
                   disabled={reprocessing || display.processing}
                   className="btn-ghost px-3 py-2 disabled:opacity-50"
-                  title="Re-run Omi's summarization"
+                  title="Re-run Cortex's summarization"
                 >
                   <Sparkles className={`h-4 w-4 ${reprocessing ? 'animate-pulse' : ''}`} />
                 </button>
@@ -352,7 +352,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                   onClick={onRefresh}
                   disabled={refreshing}
                   className="btn-ghost px-3 py-2 disabled:opacity-50"
-                  title="Refresh from Omi"
+                  title="Refresh from Cortex"
                 >
                   <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
                 </button>
@@ -439,7 +439,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                       }
                     >
                       <div className="mb-1 text-[10px] font-medium uppercase tracking-wide text-white/40">
-                        {m.role === 'user' ? 'You' : 'Omi'}
+                        {m.role === 'user' ? 'You' : 'Cortex'}
                       </div>
                       <div className="whitespace-pre-wrap">{m.content}</div>
                     </li>

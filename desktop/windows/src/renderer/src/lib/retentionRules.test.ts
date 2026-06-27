@@ -24,9 +24,9 @@ it('isEmptyConversation is true under 5 real words', () => {
 })
 
 it('isMetaJunkMemory matches the store phrasing but NOT substantive "memories of/from"', () => {
-  expect(isMetaJunkMemory('The user has 547 memories stored within the Omi application.')).toBe(true)
+  expect(isMetaJunkMemory('The user has 547 memories stored within the Cortex application.')).toBe(true)
   expect(isMetaJunkMemory('The user has 12 memories saved.')).toBe(true)
-  expect(isMetaJunkMemory('The user has 8 memories in Omi.')).toBe(true)
+  expect(isMetaJunkMemory('The user has 8 memories in Cortex.')).toBe(true)
   expect(isMetaJunkMemory('The user has 3 cats.')).toBe(false)
   expect(isMetaJunkMemory('The user uses an experiment branch for tinkering.')).toBe(false)
   // Substantive personal memories — must NOT be flagged as junk.

@@ -17,7 +17,7 @@ function toBlocks(memories: ExportMemory[]): unknown[] {
   }))
 }
 
-// Create an "Omi Memories" page under `parentPageId` and append every memory as
+// Create an "Cortex Memories" page under `parentPageId` and append every memory as
 // a bullet, batching at Notion's 100-block ceiling. Returns the new page URL.
 // Uses the official Notion REST API with the user's internal-integration token.
 export async function exportToNotion(
@@ -36,7 +36,7 @@ export async function exportToNotion(
     headers,
     body: JSON.stringify({
       parent: { page_id: parentPageId },
-      properties: { title: { title: [{ text: { content: 'Omi Memories' } }] } },
+      properties: { title: { title: [{ text: { content: 'Cortex Memories' } }] } },
       children: toBlocks(memories.slice(0, MAX_BLOCKS))
     })
   })

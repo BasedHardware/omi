@@ -35,10 +35,10 @@ export function registerInsightHandlers(): void {
   ipcMain.on('insight:test', () =>
     deliverInsight({
       headline: 'Test notification',
-      advice: 'If you can see this, Omi notifications are working.',
+      advice: 'If you can see this, Cortex notifications are working.',
       reasoning: 'Triggered from Settings.',
       category: 'other',
-      sourceApp: 'Omi',
+      sourceApp: 'Cortex',
       confidence: 1
     })
   )

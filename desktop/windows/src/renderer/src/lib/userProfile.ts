@@ -1,4 +1,4 @@
-// Identity + backend sync for the startup wizard. The Omi backend exposes
+// Identity + backend sync for the startup wizard. The Cortex backend exposes
 // PATCH /v1/users/language and POST /v1/users/store-recording-permission, but
 // has NO endpoint for the user's own name — so the name is set as the Firebase
 // Auth displayName (the closest account-level value). All calls are best-effort;

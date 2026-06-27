@@ -106,7 +106,7 @@ export function GoalStep({
       totalSteps={totalSteps}
       eyebrow="GOAL"
       title="Pick one goal."
-      subtitle="Selecting a correct and detailed goal is very important - Omi will optimize all advice to achieve that goal. Make sure your goal contains a number to measure progress."
+      subtitle="Selecting a correct and detailed goal is very important - Cortex will optimize all advice to achieve that goal. Make sure your goal contains a number to measure progress."
       align="left"
       aside={aside}
       onSkip={onSkip}

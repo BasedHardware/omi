@@ -25,7 +25,7 @@ export function registerMemoryExportHandlers(): void {
     async (_e, memories: ExportMemory[]): Promise<MemoryExportResult> => {
       const r = await dialog.showSaveDialog({
         title: 'Export memories',
-        defaultPath: 'Omi-Memories.md',
+        defaultPath: 'Cortex-Memories.md',
         filters: [{ name: 'Markdown', extensions: ['md'] }]
       })
       if (r.canceled || !r.filePath) return { canceled: true, count: 0 }

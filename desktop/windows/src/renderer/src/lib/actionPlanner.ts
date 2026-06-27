@@ -20,7 +20,7 @@ const ACTION_KEYWORDS = [
   'navigate'
 ]
 
-// Guidance QUESTIONS, not commands: the user is asking Omi where/what/how to act
+// Guidance QUESTIONS, not commands: the user is asking Cortex where/what/how to act
 // ("where should I click?", "what do I type here?", "how do I send this?"), not
 // telling it to do the action. These must fall through to normal chat — where the
 // always-on screen OCR can actually answer them — instead of hitting the planner,
@@ -36,7 +36,7 @@ export function looksLikeAction(text: string): boolean {
 }
 
 // True when a chat reply is actually a raw automation-plan JSON leaking from the
-// conversational backend. The Omi /v2/messages endpoint answers action-intent
+// conversational backend. The Cortex /v2/messages endpoint answers action-intent
 // messages with plan-shaped JSON; when a message reaches chat WITHOUT going
 // through our planner (e.g. a keyword-less follow-up like "again"), that JSON
 // would otherwise render raw in the thread. Callers use this to suppress it.
@@ -177,9 +177,9 @@ export async function planActions(text: string, deps: PlannerDeps): Promise<Plan
   }
   // Guarantee the target window is frontmost before any element step. Element
   // refs resolve against the FOREGROUND window at execute time, and the instant
-  // the user clicks Approve, Omi is foreground — so a plan that lacks a leading
+  // the user clicks Approve, Cortex is foreground — so a plan that lacks a leading
   // focus step (the model includes one only inconsistently) would resolve refs
-  // against Omi and fail "element not found". Focus the EXACT window we
+  // against Cortex and fail "element not found". Focus the EXACT window we
   // snapshotted, by handle (more reliable than the model's title), dropping any
   // model-supplied focus step.
   const focusStep: AutomationStep = { type: 'focus_window', windowRef: snapshot.window.handle }

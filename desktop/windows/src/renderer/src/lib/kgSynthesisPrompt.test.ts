@@ -16,9 +16,9 @@ const digest: FileIndexDigest = {
 
 describe('buildSynthesisPrompt', () => {
   it('includes recently-active folders and memory snippets', () => {
-    const p = buildSynthesisPrompt(digest, ['I am building the Omi Windows port'])
+    const p = buildSynthesisPrompt(digest, ['I am building the Cortex Windows port'])
     expect(p).toContain('omi-windows')
-    expect(p).toContain('Omi Windows port')
+    expect(p).toContain('Cortex Windows port')
   })
   it('states the evidence rule for project nodes', () => {
     const p = buildSynthesisPrompt(digest, [])

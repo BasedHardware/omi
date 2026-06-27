@@ -49,7 +49,7 @@ export function BuildProfileStep({
       align="left"
       eyebrow="DISCOVERY"
       title="Start building your profile"
-      subtitle="Omi scans projects and recent files"
+      subtitle="Cortex scans projects and recent files"
       onContinue={phase === 'done' ? onContinue : undefined}
       onSkip={onSkip}
     >

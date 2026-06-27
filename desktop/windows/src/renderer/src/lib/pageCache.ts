@@ -7,7 +7,7 @@ export type ConversationRow = {
   subtitle: string
   preview: string
   source: 'cloud' | 'local'
-  // For local rows: distinguishes captured recordings from saved Omi chats so
+  // For local rows: distinguishes captured recordings from saved Cortex chats so
   // the list can badge them differently. Undefined for cloud rows.
   localKind?: 'recording' | 'chat'
   // True for optimistic placeholder rows shown immediately on finalize (titled
@@ -23,7 +23,7 @@ export const conversationsCache = {
 }
 
 // Notify a mounted Conversations list that the local store changed so it can
-// refresh in real time (e.g. while an Omi chat is being saved) without waiting
+// refresh in real time (e.g. while an Cortex chat is being saved) without waiting
 // for a remount. Subscribers should re-read local conversations only.
 const subscribers = new Set<() => void>()
 

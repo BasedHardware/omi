@@ -46,7 +46,7 @@ export function HowDidYouHearStep({
       stepIndex={stepIndex}
       totalSteps={totalSteps}
       eyebrow="QUICK QUESTION"
-      title="How did you hear about Omi?"
+      title="How did you hear about Cortex?"
       align="left"
       aside={aside}
     >

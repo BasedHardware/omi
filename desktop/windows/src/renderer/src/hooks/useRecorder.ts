@@ -204,9 +204,9 @@ export function useRecorder(): UseRecorder {
         transcript,
         createdAt: Date.now()
       })
-      // Saved locally only (the dev API key 401s on Omi's read/reprocess
+      // Saved locally only (the dev API key 401s on Cortex's read/reprocess
       // endpoints, so a pushed copy dead-ends). Cloud conversations are still
-      // read from Omi elsewhere.
+      // read from Cortex elsewhere.
       invalidateConversationsCache()
       navigate(`/conversations/${session.conversationId}`, { replace: true })
     } catch (e) {

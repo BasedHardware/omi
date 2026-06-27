@@ -18,7 +18,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Generate text from Gemini via Omi's desktop-backend proxy. Mirrors the macOS
+ * Generate text from Gemini via Cortex's desktop-backend proxy. Mirrors the macOS
  * GeminiClient: Firebase Bearer auth (the backend injects the real Gemini key),
  * multimodal parts, optional structured output, retry on 429/503.
  */

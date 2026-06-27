@@ -7,7 +7,12 @@ import type { ExportMemory } from '../../shared/types'
 export function formatMemoriesMarkdown(memories: ExportMemory[], now = new Date()): string {
   const date = now.toISOString().slice(0, 10)
   const noun = memories.length === 1 ? 'memory' : 'memories'
-  const lines: string[] = ['# Omi Memories', '', `_Exported ${date} · ${memories.length} ${noun}_`, '']
+  const lines: string[] = [
+    '# Cortex Memories',
+    '',
+    `_Exported ${date} · ${memories.length} ${noun}_`,
+    ''
+  ]
 
   const groups = new Map<string, ExportMemory[]>()
   for (const m of memories) {
