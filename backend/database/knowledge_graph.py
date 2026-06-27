@@ -263,8 +263,16 @@ def prune_memory_citations_from_kg(uid: str, memory_ids: List[str]) -> int:
             doc.reference.delete()
         pruned += 1
 
+    surviving_node_ids = {doc.id for doc in nodes_ref.stream()}
+
     for doc in edges_ref.stream():
         data = doc.to_dict() or {}
+        source_id = data.get("source_id")
+        target_id = data.get("target_id")
+        if source_id not in surviving_node_ids or target_id not in surviving_node_ids:
+            doc.reference.delete()
+            pruned += 1
+            continue
         existing_ids = set(data.get("memory_ids") or [])
         if not existing_ids.intersection(retracted):
             continue
