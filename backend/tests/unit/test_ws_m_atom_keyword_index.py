@@ -262,6 +262,33 @@ class TestKeywordSearchAndHybrid:
         assert results[0]["memory_id"] == item.memory_id
         assert NEEDLE in results[0]["content"]
 
+    def test_search_excludes_superseded_long_term_items(self, mock_typesense, monkeypatch):
+        active = _long_term_item(memory_id="mem_active", content=f"Active {NEEDLE}")
+        superseded = _long_term_item(
+            memory_id="mem_superseded",
+            content=f"Superseded {NEEDLE}",
+            status=MemoryItemStatus.superseded,
+        )
+
+        def _empty_vector(*args, **kwargs):
+            return _EmptyVectorResult()
+
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.keyword_search_memory_ids",
+            lambda uid, query, limit=5: ["mem_active", "mem_superseded"],
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
+            lambda uid, db_client=None: [active, superseded],
+        )
+        results = search_canonical_memories(
+            CANONICAL_UID,
+            NEEDLE,
+            limit=5,
+            vector_query=_empty_vector,
+        )
+        assert [row["memory_id"] for row in results] == ["mem_active"]
+
     def test_memory_service_search_hybrid_for_canonical(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
         item = _long_term_item()
