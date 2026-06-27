@@ -38,6 +38,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _captureProvider = context.read<CaptureProvider>();
       _captureProvider!.deviceOnboardingProvider = _onboardingProvider;
+      _captureProvider!.suspendBatchModeForOnboarding();
       _onboardingProvider.startOnboarding();
       AnalyticsManager().deviceOnboardingStarted();
     });
@@ -45,6 +46,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
 
   @override
   void dispose() {
+    _captureProvider?.restoreBatchModeAfterOnboarding();
     _captureProvider?.deviceOnboardingProvider = null;
     _onboardingProvider.dispose();
     super.dispose();
