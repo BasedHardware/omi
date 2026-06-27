@@ -50,6 +50,7 @@ pytest tests/unit/test_llm_gateway_credentials.py -v
 pytest tests/unit/test_llm_gateway_validator.py -v
 pytest tests/unit/test_llm_gateway_resolver.py -v
 pytest tests/unit/test_llm_gateway_executor.py -v
+pytest tests/unit/test_llm_gateway_openai_compatible.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
