@@ -258,11 +258,27 @@ FREQUENCY_GUIDANCE = {
     5: "Very proactive. Share insights when you spot non-obvious connections. Up to 9 per day.",
 }
 
+
+def _resolve_daily_cap(default: int = 9, minimum: int = 1, maximum: int = 1000) -> int:
+    """Read the daily-cap override, clamped to a sane range.
+
+    A non-integer or unset value falls back to the default, and the result is
+    bounded so a typo cannot silently disable proactive notifications (0/negative)
+    or remove throttling entirely (an accidental huge value)."""
+    raw = os.getenv('MAX_DAILY_NOTIFICATIONS')
+    if raw is None:
+        return default
+    try:
+        return max(minimum, min(int(raw), maximum))
+    except (TypeError, ValueError):
+        return default
+
+
 # Hard ceiling on proactive notifications per user per day, across every source
 # (mentor + third-party proactive apps). Defaults to 9 to keep the user under the
 # "less than 10 daily notifs" target in #4859; override with the env var to tune
 # without a code change.
-MAX_DAILY_NOTIFICATIONS = int(os.getenv('MAX_DAILY_NOTIFICATIONS', '9'))
+MAX_DAILY_NOTIFICATIONS = _resolve_daily_cap()
 
 
 # ---------------------------------------------------------------------------
