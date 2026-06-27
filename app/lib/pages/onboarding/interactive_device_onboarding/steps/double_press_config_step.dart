@@ -23,7 +23,6 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
         return OnboardingStepScaffold(
           title: 'Customize Double Tap',
           subtitle: '',
-          currentStep: 3,
           content: Column(
             children: [
               _buildOptionCard(
