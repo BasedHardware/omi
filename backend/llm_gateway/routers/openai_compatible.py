@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
 from llm_gateway.gateway.auth import ServiceAuthDependency
-from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
+from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.credentials import build_omi_managed_credential_context
 from llm_gateway.gateway.errors import (
     GatewayError,
@@ -16,17 +15,9 @@ from llm_gateway.gateway.errors import (
 )
 from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
+from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
 router = APIRouter()
-
-
-@lru_cache(maxsize=1)
-def get_gateway_config() -> GatewayConfig:
-    return load_gateway_config(prod_mode=True)
-
-
-def get_provider_registry() -> ProviderRegistry:
-    return ProviderRegistry()
 
 
 @router.post('/v1/chat/completions')

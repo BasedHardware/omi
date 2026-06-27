@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from llm_gateway.gateway.executor import ProviderRegistry
 from llm_gateway.gateway.providers import FakeChatCompletionProvider
 from llm_gateway.main import app
-from llm_gateway.routers import openai_compatible
+from llm_gateway.routers import dependencies
 
 LANE_ID = 'omi:auto:chat-structured'
 
@@ -22,7 +22,7 @@ def test_chat_completions_requires_service_auth(monkeypatch):
 def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider()
-    app.dependency_overrides[openai_compatible.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
+    app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',

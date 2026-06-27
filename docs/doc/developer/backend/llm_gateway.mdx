@@ -8,7 +8,7 @@ description: "Architecture spec for Omi's internal LLM routing gateway, auto lan
 
 > Status: implemented architecture in progress.
 >
-> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, and the non-streaming provider executor with fake providers for deterministic tests.
+> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor with fake providers for deterministic tests, and local service URL configuration for backend callers.
 
 ## Decision
 
@@ -90,6 +90,7 @@ Do not make the gateway a Swift, Rust, Node, Go, or Kubernetes-controller projec
 Current service layout:
 
 ```text
+backend/scripts/dev-serve-llm-gateway.sh
 backend/llm_gateway/
   main.py
   config/
@@ -99,6 +100,7 @@ backend/llm_gateway/
   routers/
     health.py
     openai_compatible.py
+    dependencies.py
   gateway/
     schemas.py
     config_loader.py
@@ -120,7 +122,7 @@ backend/llm_gateway/gateway/
 
 Keep it a separate service entrypoint. Do not place a parallel `utils/auto_router` package under the main backend and do not wire a public task picker into `backend/main.py`.
 
-Implemented internal service auth uses `Authorization: Bearer <LLM_GATEWAY_SERVICE_TOKEN>` plus `X-Omi-Service-Caller`. The default allowlist is low-cardinality service names `backend` and `pusher`; optional `X-Omi-User-Uid` and `X-Omi-Tenant-Id` populate request context only. `/health` remains unauthenticated. `/v1/chat/completions` depends on these helpers instead of Firebase user auth, and `/ready` should use the same internal boundary when added.
+Implemented internal service auth uses `Authorization: Bearer <LLM_GATEWAY_SERVICE_TOKEN>` plus `X-Omi-Service-Caller`. The default allowlist is low-cardinality service names `backend` and `pusher`; optional `X-Omi-User-Uid` and `X-Omi-Tenant-Id` populate request context only. `/health` remains unauthenticated. `/ready` and `/v1/chat/completions` depend on these helpers instead of Firebase user auth.
 
 Credential context is request-level metadata. It records credential mode, caller, and provider-key presence or approved key references without exposing raw key material in model dumps or repr output. BYOK credential failures such as missing key, invalid auth, quota, rate-limit, and unsupported provider are visible errors and are not fallback-eligible by default.
 
@@ -138,6 +140,14 @@ Preferred rollout:
 6. Promote only after the route artifact has an Omi eval report and rollback has been tested.
 
 Do not start by embedding the gateway router into `backend/main.py`. That would make the gateway look separate in code while still sharing the main backend process, lifecycle, scaling, and blast radius.
+
+Local development runs the gateway as its own process:
+
+```bash
+cd backend && ./scripts/dev-serve-llm-gateway.sh
+```
+
+The script derives a per-worktree port from `scripts/dev-instance.sh` and defaults to `PYTHON_PORT + 1000`. Override with `LLM_GATEWAY_PORT=<port>` when needed. Backend callers use repo-local configuration through `OMI_LLM_GATEWAY_URL`; `utils.llm.gateway_client.get_llm_gateway_base_url()` defaults to `http://127.0.0.1:9080` for the primary checkout and strips trailing slashes from explicit values.
 
 ## Major Library Choices
 
@@ -422,6 +432,8 @@ Runtime fail-open means active route failure may use LKG only for failure classe
 
 ## HTTP Surface
 
+`GET /ready` is implemented as a service-authenticated readiness check. It loads the same repo-local gateway config used by the route dependency, validates active/LKG artifacts through `load_gateway_config(prod_mode=True)`, and returns lane IDs plus route artifact count. Config validation failures return 503 with a generic message.
+
 `POST /v1/chat/completions` is implemented as an OpenAI-compatible non-streaming route for internal services:
 
 - requires service auth;
@@ -488,7 +500,7 @@ Do not log raw prompts, transcripts, screenshots, memory contents, provider resp
 6. Add capability validator tests for `chat-structured`. Done.
 7. Add provider executor with fake providers and fallback/error normalization tests. Done.
 8. Add `/v1/chat/completions` non-streaming support behind service auth. Done.
-9. Add `/ready`, local run command, service URL configuration, and separate-process deployment wiring before shadow traffic.
+9. Add `/ready`, local run command, service URL configuration, and separate-process deployment wiring before shadow traffic. Partially done: `/ready`, local run command, and URL config are implemented; Docker/Helm deployment wiring is still pending.
 10. Add gateway client helper in main backend so selected `model_config.py` features can call the gateway.
 11. Route one low-risk structured feature to `omi:auto:chat-structured` in shadow mode.
 12. Add Omi eval reports and promote only after schema validity, extraction quality, latency, and cost gates pass.
