@@ -59,10 +59,6 @@ export type PiChatRequest = {
   skillIds?: string[]
 }
 
-export type PiChatStreamRequest = PiChatRequest & {
-  sessionId: string
-}
-
 export type PiChatUsage = {
   promptTokens: number
   completionTokens: number
@@ -79,31 +75,6 @@ export type PiChatResponse = {
   usage: PiChatUsage
   toolCalls: PiChatToolCall[]
 }
-
-export type PiChatStartResponse = {
-  sessionId: string
-}
-
-export type PiChatAbortResponse = {
-  aborted: boolean
-}
-
-export type PiChatStreamEvent =
-  | { sessionId: string; type: 'started' }
-  | { sessionId: string; type: 'delta'; text: string }
-  | { sessionId: string; type: 'thinking'; text: string }
-  | { sessionId: string; type: 'tool_start'; toolCall: PiChatToolCall; preview?: string }
-  | { sessionId: string; type: 'tool_delta'; toolCall: PiChatToolCall; preview: string }
-  | {
-      sessionId: string
-      type: 'tool_result'
-      toolCall: PiChatToolCall
-      ok: boolean
-      preview: string
-    }
-  | { sessionId: string; type: 'done'; response: PiChatResponse }
-  | { sessionId: string; type: 'error'; message: string }
-  | { sessionId: string; type: 'aborted' }
 
 export type ClaudeAcpStatus = {
   configured: boolean
@@ -311,9 +282,6 @@ export type OmiBridgeApi = {
   /** Opt-in Pi/Omi chat bridge. Normal chat keeps /v2/messages unless this flag is true. */
   piChatEnabled: boolean
   piChatSend: (request: PiChatRequest) => Promise<PiChatResponse>
-  piChatStart: (request: PiChatStreamRequest) => Promise<PiChatStartResponse>
-  piChatAbort: (sessionId: string) => Promise<PiChatAbortResponse>
-  onPiChatEvent: (cb: (event: PiChatStreamEvent) => void) => () => void
   claudeAcpStatus: () => Promise<ClaudeAcpStatus>
   claudeAcpChatSend: (request: ClaudeAcpChatRequest) => Promise<ClaudeAcpChatResponse>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
