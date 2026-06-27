@@ -354,6 +354,74 @@ async def test_canary_active_route_with_percent_zero_serves_lkg():
     assert result.used_lkg
 
 
+@pytest.mark.asyncio
+async def test_canary_route_enforces_partial_rollout_percentage():
+    """A canary route at <100% should send only a proportional fraction of
+    requests to the active route, with the rest falling back to LKG.
+
+    Deterministic hashing means the distribution is stable per-request, but
+    over many distinct requests the percentage is honored within a tolerance.
+    """
+    from llm_gateway.gateway.executor import _is_route_eligible_to_serve
+
+    canary_route = active_route_with_fallbacks([]).model_copy(
+        update={'rollout': RolloutPolicy(stage=RolloutStage.CANARY, percent=30)}
+    )
+    config = config_with_active_route(canary_route)
+
+    active_count = 0
+    total = 500
+    from llm_gateway.gateway.resolver import resolve_chat_completion_route as _resolve
+
+    for i in range(total):
+        resolved = _resolve(config, valid_request(messages=[{'role': 'user', 'content': f'msg {i}'}]))
+        if _is_route_eligible_to_serve(resolved.active_route, resolved.validated_request):
+            active_count += 1
+
+    # With 30% canary, expect ~150 ± 30 (generous tolerance for deterministic hash)
+    assert 100 <= active_count <= 200, f'canary distribution off: {active_count}/{total}'
+
+
+@pytest.mark.asyncio
+async def test_canary_sampling_is_deterministic_for_same_request():
+    """The same request should consistently get the same canary decision."""
+    from llm_gateway.gateway.executor import _is_route_eligible_to_serve
+
+    canary_route = active_route_with_fallbacks([]).model_copy(
+        update={'rollout': RolloutPolicy(stage=RolloutStage.CANARY, percent=50)}
+    )
+    config = config_with_active_route(canary_route)
+
+    resolved = resolve_chat_completion_route(config, valid_request())
+    decision1 = _is_route_eligible_to_serve(resolved.active_route, resolved.validated_request)
+    decision2 = _is_route_eligible_to_serve(resolved.active_route, resolved.validated_request)
+
+    assert decision1 == decision2
+
+
+@pytest.mark.asyncio
+async def test_canary_route_at_100_percent_serves_active():
+    """A canary route at 100% should serve all traffic from the active route."""
+    canary_route = active_route_with_fallbacks([]).model_copy(
+        update={'rollout': RolloutPolicy(stage=RolloutStage.CANARY, percent=100)}
+    )
+    config = config_with_active_route(canary_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+
+    provider = FakeChatCompletionProvider(
+        [fake_success_response(resolved.active_route.primary, content='{"answer":"active"}')]
+    )
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert result.selected_route_artifact_id == ACTIVE_ROUTE
+    assert not result.used_lkg
+
+
 def valid_request(**overrides):
     request = {
         'model': LANE_ID,

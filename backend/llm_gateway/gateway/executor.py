@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -15,6 +17,7 @@ from llm_gateway.gateway.errors import (
 from llm_gateway.gateway.providers import ChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutStage, RouteArtifact
+from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 
 
 @dataclass(frozen=True)
@@ -103,17 +106,46 @@ def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
 
     When the active route is in shadow or disabled rollout, traffic falls
     back to the last-known-good route until the active route is promoted.
+
+    For canary (partial) rollouts the active route only receives the
+    configured percentage of traffic via deterministic per-request
+    sampling; the remainder is served by the last-known-good route.
     """
-    if _is_route_eligible_to_serve(resolved_route.active_route):
+    if _is_route_eligible_to_serve(resolved_route.active_route, resolved_route.validated_request):
         return resolved_route.active_route
     return resolved_route.last_known_good_route
 
 
-def _is_route_eligible_to_serve(route: RouteArtifact) -> bool:
-    """Whether a route should receive live traffic based on rollout stage."""
+def _is_route_eligible_to_serve(route: RouteArtifact, validated_request: ValidatedChatCompletionRequest) -> bool:
+    """Whether a route should receive live traffic based on rollout stage and percent."""
     if route.rollout.stage in (RolloutStage.SHADOW, RolloutStage.DISABLED):
         return False
+    if route.rollout.stage == RolloutStage.CANARY and route.rollout.percent < 100.0:
+        return _canary_sample(route, validated_request)
     return route.rollout.percent > 0
+
+
+def _canary_sample(route: RouteArtifact, validated_request: ValidatedChatCompletionRequest) -> bool:
+    """Deterministically decide whether a single request is served by a canary route.
+
+    A stable hash of the request messages (plus the route artifact id so
+    different canary routes in the same lane diverge) is mapped into the
+    [0, 100) range and compared against the configured rollout percentage.
+    This keeps the same request consistently on the same lane across
+    retries, while distributing traffic proportionally over many requests.
+    """
+    payload = json.dumps(
+        {
+            'route_artifact_id': route.route_artifact_id,
+            'messages': list(validated_request.messages),
+        },
+        sort_keys=True,
+        separators=(',', ':'),
+        ensure_ascii=True,
+    )
+    digest = hashlib.sha256(payload.encode('utf-8')).hexdigest()
+    bucket = int(digest[:8], 16) % 10000 / 100.0
+    return bucket < route.rollout.percent
 
 
 async def _execute_route(
