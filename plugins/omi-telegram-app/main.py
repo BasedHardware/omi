@@ -102,19 +102,30 @@ async def setup(req: SetupRequest):
     # setWebhook — tells Telegram where to POST updates. The secret_token is
     # what Telegram echoes back in X-Telegram-Bot-Api-Secret-Token; we use it
     # to verify requests actually came from Telegram.
+    #
+    # IMPORTANT: never log str(e) or include it in the HTTP detail. For
+    # httpx.HTTPStatusError, str(e) contains the full request URL — which
+    # includes the bot token. We log only the status code and return a
+    # generic 502 message.
     try:
         await telegram_client.set_webhook(req.bot_token, webhook_url, WEBHOOK_SECRET)
+    except httpx.HTTPStatusError as e:
+        logger.error("set_webhook failed: HTTP %s", e.response.status_code)
+        raise HTTPException(status_code=502, detail="Telegram setWebhook failed")
     except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
-        logger.error("set_webhook failed: %s", e)
-        raise HTTPException(status_code=502, detail=f"Telegram setWebhook failed: {e}")
+        logger.error("set_webhook failed: %s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="Telegram setWebhook failed")
 
     # getMe — fetch the bot's username so we can build the deep link.
     try:
         me = await telegram_client.get_me(req.bot_token)
         bot_username = (me.get("result") or {}).get("username") or "bot"
+    except httpx.HTTPStatusError as e:
+        logger.error("getMe failed: HTTP %s", e.response.status_code)
+        raise HTTPException(status_code=502, detail="Telegram getMe failed")
     except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
-        logger.error("getMe failed: %s", e)
-        raise HTTPException(status_code=502, detail=f"Telegram getMe failed: {e}")
+        logger.error("getMe failed: %s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="Telegram getMe failed")
 
     # Generate a one-shot setup token. The user clicks the deep link, sends
     # /start <token> to the bot, and we know which chat_id maps to which user.
@@ -282,11 +293,18 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
             text=text,
             uid=user["omi_uid"],
         )
+    except httpx.HTTPStatusError as e:
+        # httpx.HTTPStatusError.__str__ includes the request URL (which contains
+        # the API key in the query string). Log only the status code to keep
+        # the key out of logs.
+        logger.error("persona chat HTTP error for chat %s: HTTP %s", chat_id, e.response.status_code)
+        return
     except httpx.HTTPError as e:
-        logger.error("persona chat HTTP error for chat %s: %s", chat_id, e)
+        # Other HTTP errors (connect, timeout). Log exception type name only.
+        logger.error("persona chat HTTP error for chat %s: %s", chat_id, type(e).__name__)
         return
     except asyncio.TimeoutError as e:
-        logger.error("persona chat timeout for chat %s: %s", chat_id, e)
+        logger.error("persona chat timeout for chat %s: %s", chat_id, type(e).__name__)
         return
 
     if not reply:
