@@ -15,9 +15,11 @@ sys.modules.setdefault('database.llm_usage', llm_usage_stub)
 
 
 def _module_available(name: str) -> bool:
+    if name in sys.modules:
+        return True
     try:
         return find_spec(name) is not None
-    except ModuleNotFoundError:
+    except (ModuleNotFoundError, ValueError):
         return False
 
 
@@ -190,5 +192,71 @@ def test_llm_error_callback_uses_provider_context():
 
         mock_handle.assert_called_once()
         assert mock_handle.call_args.args[:2] == (error, 'openai')
+
+    sys.modules.pop('utils.llm.clients', None)
+
+
+def test_openai_embeddings_proxy_tags_sync_byok_failure():
+    """The explicit sync embed_query/embed_documents methods bypass the
+    __getattr__ wrapper, so route their BYOK failures through handle_llm_error
+    (for source tagging) before falling back to Omi's key."""
+
+    class _DummyClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    anthropic_stub = types.ModuleType('anthropic')
+    anthropic_stub.AsyncAnthropic = _DummyClient
+    callbacks_stub = types.ModuleType('langchain_core.callbacks')
+    callbacks_stub.BaseCallbackHandler = object
+    language_models_stub = types.ModuleType('langchain_core.language_models')
+    language_models_stub.BaseChatModel = _DummyClient
+    output_parsers_stub = types.ModuleType('langchain_core.output_parsers')
+    output_parsers_stub.PydanticOutputParser = _DummyClient
+    google_genai_stub = types.ModuleType('langchain_google_genai')
+    google_genai_stub.ChatGoogleGenerativeAI = _DummyClient
+    openai_stub = types.ModuleType('langchain_openai')
+    openai_stub.ChatOpenAI = _DummyClient
+    openai_stub.OpenAIEmbeddings = _DummyClient
+    tiktoken_stub = types.ModuleType('tiktoken')
+    tiktoken_stub.encoding_for_model = MagicMock(return_value=MagicMock())
+    structured_stub = types.ModuleType('models.structured')
+    structured_stub.Structured = MagicMock()
+    usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
+    usage_tracker_stub.get_usage_callback = MagicMock(return_value=object())
+
+    module_stubs = {
+        'anthropic': anthropic_stub,
+        'langchain_core.callbacks': callbacks_stub,
+        'langchain_core.language_models': language_models_stub,
+        'langchain_core.output_parsers': output_parsers_stub,
+        'langchain_google_genai': google_genai_stub,
+        'langchain_openai': openai_stub,
+        'tiktoken': tiktoken_stub,
+        'models.structured': structured_stub,
+        'utils.llm.usage_tracker': usage_tracker_stub,
+    }
+
+    with patch.dict(sys.modules, module_stubs):
+        sys.modules.pop('utils.llm.clients', None)
+        from utils.llm.clients import _OpenAIEmbeddingsProxy
+
+        default = MagicMock()
+        default.embed_query.return_value = [0.1, 0.2]
+        proxy = _OpenAIEmbeddingsProxy('text-embedding-3-small', default, {})
+
+        byok_inst = MagicMock()
+        byok_inst.embed_query.side_effect = _HTTPError('invalid_api_key', 401)
+
+        with patch.object(_OpenAIEmbeddingsProxy, '_resolve', return_value=byok_inst), patch(
+            'utils.llm.clients.handle_llm_error'
+        ) as mock_handle:
+            result = proxy.embed_query('hello world')
+
+        mock_handle.assert_called_once()
+        assert mock_handle.call_args.args[1] == 'openai'
+        assert mock_handle.call_args.kwargs.get('operation') == 'embed_query'
+        default.embed_query.assert_called_once_with('hello world')
+        assert result == [0.1, 0.2]
 
     sys.modules.pop('utils.llm.clients', None)

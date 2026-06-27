@@ -75,7 +75,9 @@ async def handle_llm_error_async(
     try:
         await asyncio.wrap_future(future)
     except Exception as e:
-        logger.error('Async LLM error handler failed provider=%s feature=%s: %s', provider, feature, e)
+        logger.error(
+            'Async LLM error handler failed provider=%s feature=%s: %s', provider, feature, sanitize(str(e))
+        )
 
 
 def _get_status_code(error: Exception) -> Optional[int]:
