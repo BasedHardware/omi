@@ -312,6 +312,7 @@ struct SettingsContentView: View {
     case account = "Account"
     case planUsage = "Plan and Usage"
     case aiChat = "AI Chat"
+    // Hidden from the Settings sidebar; Messages page opens this content from its provider gear.
     case whatsapp = "WhatsApp"
     case floatingBar = "Floating Bar"
     case shortcuts = "Shortcuts"
