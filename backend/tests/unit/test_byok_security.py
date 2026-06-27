@@ -543,10 +543,10 @@ class TestTranscriptionCreditBYOKBypass:
 
 
 class TestBYOKHeadersConstant:
-    def test_headers_has_all_four_providers(self):
+    def test_headers_has_expected_providers(self):
         from utils.byok import BYOK_HEADERS
 
-        assert set(BYOK_HEADERS.keys()) == {'openai', 'anthropic', 'gemini', 'deepgram'}
+        assert set(BYOK_HEADERS.keys()) == {'openai', 'anthropic', 'gemini', 'deepgram', 'custom'}
 
     def test_headers_are_lowercase(self):
         from utils.byok import BYOK_HEADERS
@@ -559,6 +559,186 @@ class TestBYOKHeadersConstant:
 
         for header in BYOK_HEADERS.values():
             assert header.startswith('x-byok-')
+
+
+class TestBYOKCustomProvider:
+    """#6878: custom OpenAI-compatible BYOK provider (key + base URL + model)."""
+
+    _BASE = 'https://openrouter.ai/api/v1'
+
+    # --- base URL validation (best-effort SSRF guard) ---
+    def test_valid_https_public_url(self):
+        from utils.byok import validate_custom_base_url
+
+        assert validate_custom_base_url(self._BASE) == self._BASE
+        assert validate_custom_base_url('  https://api.together.xyz/v1  ') == 'https://api.together.xyz/v1'
+
+    def test_rejects_non_https(self):
+        from utils.byok import validate_custom_base_url
+
+        with pytest.raises(ValueError):
+            validate_custom_base_url('http://openrouter.ai/api/v1')
+
+    def test_rejects_localhost_and_local(self):
+        from utils.byok import validate_custom_base_url
+
+        for url in ('https://localhost/v1', 'https://foo.localhost/v1', 'https://box.local/v1'):
+            with pytest.raises(ValueError):
+                validate_custom_base_url(url)
+
+    def test_rejects_private_and_metadata_ips(self):
+        from utils.byok import validate_custom_base_url
+
+        for url in (
+            'https://127.0.0.1/v1',
+            'https://10.0.0.5/v1',
+            'https://192.168.1.10/v1',
+            'https://172.16.0.1/v1',
+            'https://169.254.169.254/latest/meta-data',  # cloud metadata endpoint
+        ):
+            with pytest.raises(ValueError):
+                validate_custom_base_url(url)
+
+    def test_rejects_empty(self):
+        from utils.byok import validate_custom_base_url
+
+        with pytest.raises(ValueError):
+            validate_custom_base_url('')
+
+    # --- get_byok_custom_provider (per-request config) ---
+    def test_returns_full_config(self):
+        from utils.byok import get_byok_custom_provider, set_byok_keys
+
+        def _run():
+            set_byok_keys({'custom': 'ck', '__custom_base_url': self._BASE, '__custom_model': 'qwen-2.5-72b'})
+            assert get_byok_custom_provider() == {'api_key': 'ck', 'base_url': self._BASE, 'model': 'qwen-2.5-72b'}
+
+        copy_context().run(_run)
+
+    def test_none_when_field_missing(self):
+        from utils.byok import get_byok_custom_provider, set_byok_keys
+
+        def _run():
+            set_byok_keys({'custom': 'ck', '__custom_base_url': self._BASE})  # no model
+            assert get_byok_custom_provider() is None
+            set_byok_keys({'__custom_base_url': self._BASE, '__custom_model': 'm'})  # no key
+            assert get_byok_custom_provider() is None
+
+        copy_context().run(_run)
+
+    def test_none_when_base_url_invalid(self):
+        from utils.byok import get_byok_custom_provider, set_byok_keys
+
+        def _run():
+            set_byok_keys({'custom': 'ck', '__custom_base_url': 'https://10.0.0.1/v1', '__custom_model': 'm'})
+            assert get_byok_custom_provider() is None  # degrades rather than raising
+
+        copy_context().run(_run)
+
+    def test_config_alone_is_not_a_byok_request(self):
+        from utils.byok import has_byok_keys, set_byok_keys
+
+        def _run():
+            set_byok_keys({'__custom_base_url': self._BASE, '__custom_model': 'm'})
+            assert not has_byok_keys()  # config without a key must not flip quota bypass
+
+        copy_context().run(_run)
+
+    # --- header intake ---
+    def test_websocket_extracts_custom_and_config(self):
+        from utils.byok import extract_byok_from_websocket
+
+        ws = MagicMock()
+        ws.headers = {
+            'x-byok-custom': 'ck',
+            'x-byok-custom-base-url': self._BASE,
+            'x-byok-custom-model': 'm',
+        }
+        keys = extract_byok_from_websocket(ws)
+        assert keys == {'custom': 'ck', '__custom_base_url': self._BASE, '__custom_model': 'm'}
+
+    # --- enrollment ---
+    @patch('routers.users.users_db')
+    def test_enrollment_accepts_optional_custom(self, mock_users_db):
+        from routers.users import BYOKActivateRequest, activate_byok_endpoint
+
+        fps = {
+            'openai': hashlib.sha256(b'o').hexdigest(),
+            'anthropic': hashlib.sha256(b'a').hexdigest(),
+            'gemini': hashlib.sha256(b'g').hexdigest(),
+            'deepgram': hashlib.sha256(b'd').hexdigest(),
+            'custom': hashlib.sha256(b'c').hexdigest(),
+        }
+        assert activate_byok_endpoint(BYOKActivateRequest(fingerprints=fps), uid='u') == {"active": True}
+        mock_users_db.set_byok_active.assert_called_once_with('u', fps)
+
+    def test_custom_in_optional_providers(self):
+        from routers.users import _BYOK_OPTIONAL_PROVIDERS
+
+        assert 'custom' in _BYOK_OPTIONAL_PROVIDERS
+
+    # --- enrollment gating in _check_byok_validity ---
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('utils.byok.get_cached_byok_state')
+    def test_unenrolled_custom_is_dropped(self, mock_state):
+        from datetime import datetime
+        from utils.byok import _byok_ctx, _check_byok_validity, get_byok_custom_provider
+
+        mock_state.return_value = {
+            'active': True,
+            'last_seen_at': datetime.now(timezone.utc),
+            'fingerprints': {'openai': hashlib.sha256(b'o').hexdigest()},  # custom NOT enrolled
+        }
+
+        def _run():
+            _byok_ctx.set({'openai': 'o', 'custom': 'ck', '__custom_base_url': self._BASE, '__custom_model': 'm'})
+            assert _check_byok_validity('drop-uid') is None
+            assert get_byok_custom_provider() is None  # unenrolled custom was discarded
+
+        copy_context().run(_run)
+
+    @patch('database.users.BYOK_HEARTBEAT_TTL_SECONDS', 7 * 24 * 3600)
+    @patch('utils.byok.get_cached_byok_state')
+    def test_enrolled_custom_is_honored(self, mock_state):
+        from datetime import datetime
+        from utils.byok import _byok_ctx, _check_byok_validity, get_byok_custom_provider
+
+        mock_state.return_value = {
+            'active': True,
+            'last_seen_at': datetime.now(timezone.utc),
+            'fingerprints': {'custom': hashlib.sha256(b'ck').hexdigest()},
+        }
+
+        def _run():
+            _byok_ctx.set({'custom': 'ck', '__custom_base_url': self._BASE, '__custom_model': 'm'})
+            assert _check_byok_validity('keep-uid') is None
+            cfg = get_byok_custom_provider()
+            assert cfg is not None and cfg['model'] == 'm' and cfg['base_url'] == self._BASE
+
+        copy_context().run(_run)
+
+    # --- client construction + routing ---
+    def test_create_custom_client_caches_by_base_url(self):
+        from utils.llm.clients import _create_custom_byok_client
+
+        c1 = _create_custom_byok_client('m', 'ck', self._BASE)
+        c2 = _create_custom_byok_client('m', 'ck', self._BASE)
+        c3 = _create_custom_byok_client('m', 'ck', 'https://api.together.xyz/v1')
+        assert c1 is c2  # same config served from cache
+        assert c1 is not c3  # different base URL → different client
+
+    @patch('utils.llm.clients._create_custom_byok_client')
+    @patch('utils.llm.clients.get_byok_custom_provider')
+    @patch('utils.llm.clients.is_perplexity_only_feature', return_value=False)
+    @patch('utils.llm.clients.is_anthropic_only_feature', return_value=False)
+    def test_get_llm_routes_to_custom_when_configured(self, _anth, _perp, mock_custom, mock_create):
+        from utils.llm.clients import get_llm
+
+        sentinel = object()
+        mock_custom.return_value = {'api_key': 'ck', 'base_url': self._BASE, 'model': 'm'}
+        mock_create.return_value = sentinel
+        assert get_llm('any_feature') is sentinel
+        mock_create.assert_called_once_with('m', 'ck', self._BASE, False)
 
 
 # ---------------------------------------------------------------------------
