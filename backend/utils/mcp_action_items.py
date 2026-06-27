@@ -112,6 +112,16 @@ def _require_unlocked(uid: str, action_item_id: str) -> dict:
     return item
 
 
+def _reload(uid: str, action_item_id: str) -> dict:
+    """Re-read an item after a write and shape it for the response. Raises
+    ActionItemNotFound if a concurrent delete removed it between the write and
+    this read, rather than dereferencing None."""
+    item = action_items_db.get_action_item(uid, action_item_id)
+    if not item:
+        raise ActionItemNotFound("Action item not found")
+    return clean_action_item(item)
+
+
 def create_action_item(
     uid: str,
     description: str,
@@ -150,7 +160,7 @@ def set_completed(uid: str, action_item_id: str, completed: bool = True) -> dict
     _require_unlocked(uid, action_item_id)
     if not action_items_db.mark_action_item_completed(uid, action_item_id, completed=completed):
         raise ActionItemNotFound("Action item not found")
-    return clean_action_item(action_items_db.get_action_item(uid, action_item_id))
+    return _reload(uid, action_item_id)
 
 
 def update_action_item(
@@ -171,9 +181,14 @@ def update_action_item(
         new_text = _normalize_description(description)
         update_data["description"] = new_text
     if due_at is not None:
-        update_data["due_at"] = parse_due_at(due_at)
+        # Clearing a due date is not supported here, so an empty/blank value
+        # (which parses to None) is treated as "not provided" rather than nulling
+        # the field — matching the documented contract.
+        parsed_due = parse_due_at(due_at)
+        if parsed_due is not None:
+            update_data["due_at"] = parsed_due
     if not update_data:
-        raise ValueError("Provide description and/or due_at to update")
+        raise ValueError("Provide a description, or a due date in ISO 8601 / YYYY-MM-DD form, to update")
 
     if not action_items_db.update_action_item(uid, action_item_id, update_data):
         raise ActionItemNotFound("Action item not found")
@@ -186,13 +201,17 @@ def update_action_item(
             logger.exception(
                 "MCP update_action_item: vector upsert failed uid=%s id=%s (task updated)", uid, action_item_id
             )
-    return clean_action_item(action_items_db.get_action_item(uid, action_item_id))
+    return _reload(uid, action_item_id)
 
 
 def delete_action_item(uid: str, action_item_id: str) -> None:
     """Delete a task and its search vector."""
     _require_unlocked(uid, action_item_id)
-    action_items_db.delete_action_item(uid, action_item_id)
+    # Honor the delete result: a False here means the row was already gone (a
+    # concurrent delete between the existence check above and now), so report
+    # not-found rather than a misleading success.
+    if not action_items_db.delete_action_item(uid, action_item_id):
+        raise ActionItemNotFound("Action item not found")
     try:
         delete_action_item_vector(uid, action_item_id)
     except Exception:
