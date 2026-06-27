@@ -76,6 +76,7 @@ class GPUWorker:
         ctx_raw = os.getenv("PARAKEET_LOCAL_ATTN_CONTEXT", "128,128")
         self._attn_local_context = [int(x.strip()) for x in ctx_raw.split(",")]
         self._attn_is_local = False
+        self._model_dtype = None
         self._max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
 
     @property
@@ -228,6 +229,7 @@ class GPUWorker:
         if use_bf16:
             logger.info(f"Converting {model_name} to BF16 (halves GPU memory)")
             model = model.to(torch.bfloat16)
+            self._model_dtype = torch.bfloat16
         model.eval()
 
         if disable_cuda_graphs:
@@ -327,6 +329,8 @@ class GPUWorker:
         else:
             self._model.change_attention_model("rel_pos")
             self._attn_is_local = False
+        if self._model_dtype is not None:
+            self._model.to(self._model_dtype)
 
     @torch.inference_mode()
     def _batch_transcribe(self, payload: dict) -> list:
