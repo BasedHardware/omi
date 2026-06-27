@@ -116,3 +116,62 @@ def test_auth_dependency_returns_service_caller_model():
     assert caller.name == 'backend'
     assert caller.user_uid == 'user-123'
     assert caller.tenant_id == 'tenant-abc'
+
+
+def test_primary_service_token_env_var_is_accepted(monkeypatch):
+    """Gateway must accept OMI_LLM_GATEWAY_SERVICE_TOKEN (the client's primary var)."""
+    monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'primary-token')
+    monkeypatch.delenv('LLM_GATEWAY_SERVICE_TOKEN', raising=False)
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={'authorization': 'Bearer primary-token', 'x-omi-service-caller': 'backend'},
+    )
+
+    assert response.status_code == 200
+
+
+def test_primary_service_token_takes_precedence_over_legacy(monkeypatch):
+    """When both vars are set, the OMI_ prefixed one must win (matching the client)."""
+    monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'primary-token')
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'legacy-token')
+
+    client = TestClient(_protected_app())
+    primary = client.get(
+        '/protected',
+        headers={'authorization': 'Bearer primary-token', 'x-omi-service-caller': 'backend'},
+    )
+    legacy = client.get(
+        '/protected',
+        headers={'authorization': 'Bearer legacy-token', 'x-omi-service-caller': 'backend'},
+    )
+
+    assert primary.status_code == 200
+    # Legacy token is rejected because the gateway resolves to the primary value.
+    assert legacy.status_code == 401
+
+
+def test_legacy_service_token_still_accepted_when_primary_absent(monkeypatch):
+    """Bare LLM_GATEWAY_SERVICE_TOKEN still works for backward compatibility."""
+    monkeypatch.delenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', raising=False)
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'legacy-token')
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={'authorization': 'Bearer legacy-token', 'x-omi-service-caller': 'backend'},
+    )
+
+    assert response.status_code == 200
+
+
+def test_both_service_token_vars_blank_fails_closed(monkeypatch):
+    """Blank values in both vars must fail closed (503)."""
+    monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', '   ')
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', '')
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={'authorization': 'Bearer anything', 'x-omi-service-caller': 'backend'},
+    )
+
+    assert response.status_code == 503

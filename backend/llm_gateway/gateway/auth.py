@@ -9,7 +9,11 @@ from pydantic import Field, ValidationError, field_validator
 
 from llm_gateway.gateway.schemas import StrictBaseModel
 
-SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
+PRIMARY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
+LEGACY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
+# Kept for backwards compatibility with code/tests that reference the old name.
+SERVICE_TOKEN_ENV_VAR = LEGACY_SERVICE_TOKEN_ENV_VAR
+SERVICE_TOKEN_ENV_VARS = (PRIMARY_SERVICE_TOKEN_ENV_VAR, LEGACY_SERVICE_TOKEN_ENV_VAR)
 ALLOWED_CALLERS_ENV_VAR = 'LLM_GATEWAY_ALLOWED_CALLERS'
 DEFAULT_ALLOWED_CALLERS = frozenset({'backend', 'pusher'})
 
@@ -84,11 +88,16 @@ def allowed_service_callers() -> frozenset[str]:
 
 
 def _configured_service_token() -> str | None:
-    token = os.getenv(SERVICE_TOKEN_ENV_VAR)
-    if token is None:
-        return None
-    stripped = token.strip()
-    return stripped or None
+    # Match the client precedence (utils.llm.gateway_client): the OMI_ prefixed
+    # env var wins; the bare name is kept as a legacy fallback so local dev and
+    # token rotation work even when the two disagree.
+    for env_var in SERVICE_TOKEN_ENV_VARS:
+        token = os.getenv(env_var)
+        if token is not None:
+            stripped = token.strip()
+            if stripped:
+                return stripped
+    return None
 
 
 def _extract_bearer_token(authorization: str | None) -> str | None:
