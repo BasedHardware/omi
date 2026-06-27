@@ -167,6 +167,7 @@ def credential_policy(mode: str = 'omi_paid') -> dict:
             'byok_auth',
             'byok_quota',
             'byok_rate_limit',
+            'byok_unsupported_provider',
             'missing_byok_key',
             'capability_mismatch',
             'invalid_config',

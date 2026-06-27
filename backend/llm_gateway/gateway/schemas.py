@@ -41,6 +41,7 @@ class FailureClass(str, Enum):
     BYOK_AUTH = 'byok_auth'
     BYOK_QUOTA = 'byok_quota'
     BYOK_RATE_LIMIT = 'byok_rate_limit'
+    BYOK_UNSUPPORTED_PROVIDER = 'byok_unsupported_provider'
     MISSING_BYOK_KEY = 'missing_byok_key'
     CAPABILITY_MISMATCH = 'capability_mismatch'
     INVALID_CONFIG = 'invalid_config'

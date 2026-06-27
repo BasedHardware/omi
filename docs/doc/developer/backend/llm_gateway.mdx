@@ -8,7 +8,7 @@ description: "Architecture spec for Omi's internal LLM routing gateway, auto lan
 
 > Status: implemented architecture in progress.
 >
-> Implemented so far: separate FastAPI service skeleton, `/health`, repo-local config schemas/loader, and checked-in `omi:auto:chat-structured` lane artifacts.
+> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, and request-level credential context helpers.
 
 ## Decision
 
@@ -108,8 +108,6 @@ Planned modules:
 
 ```text
 backend/llm_gateway/gateway/
-  auth.py
-  credentials.py
   validator.py
   resolver.py
   executor.py
@@ -119,6 +117,10 @@ backend/llm_gateway/gateway/
 ```
 
 Keep it a separate service entrypoint. Do not place a parallel `utils/auto_router` package under the main backend and do not wire a public task picker into `backend/main.py`.
+
+Implemented internal service auth uses `Authorization: Bearer <LLM_GATEWAY_SERVICE_TOKEN>` plus `X-Omi-Service-Caller`. The default allowlist is low-cardinality service names `backend` and `pusher`; optional `X-Omi-User-Uid` and `X-Omi-Tenant-Id` populate request context only. `/health` remains unauthenticated. Future `/ready` and `/v1/chat/completions` routes should depend on these helpers instead of Firebase user auth.
+
+Credential context is request-level metadata. It records credential mode, caller, and provider-key presence or approved key references without exposing raw key material in model dumps or repr output. BYOK credential failures such as missing key, invalid auth, quota, rate-limit, and unsupported provider are visible errors and are not fallback-eligible by default.
 
 ## Deployment Shape
 
