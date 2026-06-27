@@ -80,6 +80,22 @@ def test_rejects_missing_json_schema_body():
         validate_chat_completion_request(request, lane)
 
 
+def test_rejects_missing_json_schema_name():
+    lane = load_gateway_config(prod_mode=True).lanes[LANE_ID]
+    request = valid_request(
+        response_format={
+            'type': 'json_schema',
+            'json_schema': {
+                'strict': True,
+                'schema': {'type': 'object', 'properties': {'x': {'type': 'string'}}},
+            },
+        }
+    )
+
+    with pytest.raises(GatewayInvalidRequestError, match='response_format.json_schema.name'):
+        validate_chat_completion_request(request, lane)
+
+
 def valid_request(**overrides):
     request = {
         'model': LANE_ID,

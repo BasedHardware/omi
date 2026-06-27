@@ -53,12 +53,31 @@ def _error_response(exc: GatewayError) -> JSONResponse:
         content={
             'error': {
                 'message': exc.message,
-                'type': exc.code.value,
+                'type': _error_type_for_code(exc.code),
                 'param': exc.param,
                 'code': exc.code.value,
             }
         },
     )
+
+
+def _error_type_for_code(code: GatewayErrorCode) -> str:
+    """Map an internal error code to an OpenAI API error category.
+
+    OpenAI distinguishes ``type`` (a broad error category) from ``code`` (the
+    specific identifier). Without this distinction clients that categorize
+    errors by ``type`` cannot classify them correctly.
+    """
+    if code == GatewayErrorCode.CREDENTIAL_FAILURE:
+        return 'authentication_error'
+    if code in {
+        GatewayErrorCode.INVALID_REQUEST,
+        GatewayErrorCode.INVALID_ROUTE_CONFIG,
+        GatewayErrorCode.UNSUPPORTED_MODEL,
+        GatewayErrorCode.CAPABILITY_NOT_SUPPORTED,
+    }:
+        return 'invalid_request_error'
+    return 'api_error'
 
 
 def _status_code_for_error(exc: GatewayError) -> int:

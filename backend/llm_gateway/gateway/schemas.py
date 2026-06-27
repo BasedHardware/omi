@@ -3,13 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 from enum import Enum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 
 class StrictBaseModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
+
+
+# Shared type alias for lane_id so the pattern lives in exactly one place.
+LaneId = Annotated[str, Field(pattern=r'^omi:auto:[a-z0-9][a-z0-9-]*$')]
 
 
 class Surface(str, Enum):
@@ -134,7 +138,7 @@ class FallbackPolicy(StrictBaseModel):
 
 
 class LaneConfig(StrictBaseModel):
-    lane_id: str = Field(pattern=r'^omi:auto:[a-z0-9][a-z0-9-]*$')
+    lane_id: LaneId
     surface: Surface
     capabilities: Capabilities
     objective: Objective
@@ -145,7 +149,7 @@ class LaneConfig(StrictBaseModel):
 
 class RouteArtifact(StrictBaseModel):
     route_artifact_id: str = Field(min_length=1)
-    lane_id: str = Field(pattern=r'^omi:auto:[a-z0-9][a-z0-9-]*$')
+    lane_id: LaneId
     surface: Surface
     primary: ProviderRef
     fallbacks: list[ProviderRef] = Field(default_factory=list)
@@ -173,7 +177,7 @@ class RouteArtifact(StrictBaseModel):
 
 class FeatureBundle(StrictBaseModel):
     feature: str = Field(min_length=1)
-    lane_id: str = Field(pattern=r'^omi:auto:[a-z0-9][a-z0-9-]*$')
+    lane_id: LaneId
     prompt_version: str = Field(min_length=1)
     parser_version: str = Field(min_length=1)
     eval_suite: str = Field(min_length=1)

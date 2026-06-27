@@ -72,7 +72,20 @@ def test_chat_completions_rejects_unsupported_capability(monkeypatch):
 
     assert response.status_code == 400
     assert response.json()['error']['code'] == 'capability_not_supported'
+    assert response.json()['error']['type'] == 'invalid_request_error'
     assert response.json()['error']['param'] == 'stream'
+
+
+def test_chat_completions_error_type_is_openai_category_not_code_duplicate(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    request = valid_request(unexpected_parameter=True)
+
+    response = TestClient(app).post('/v1/chat/completions', json=request, headers=auth_headers())
+
+    assert response.status_code == 400
+    error = response.json()['error']
+    assert error['type'] == 'invalid_request_error'
+    assert error['code'] != error['type']
 
 
 def test_chat_completions_rejects_unknown_request_parameter(monkeypatch):

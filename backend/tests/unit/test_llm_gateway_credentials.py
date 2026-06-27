@@ -49,6 +49,15 @@ def test_key_reference_credential_context_exposes_references_not_raw_keys():
     assert dumped['provider_keys']['openai']['key_ref'] == 'secret-manager://projects/omi/secrets/openai-user-123'
 
 
+def test_key_reference_credential_context_rejects_whitespace_only_ref():
+    context = build_key_reference_credential_context(
+        ServiceCaller(name='pusher'),
+        {'openai': '   '},
+    )
+
+    assert not context.has_provider_key('openai')
+
+
 def test_byok_failure_classes_are_visible_and_not_fallback_eligible_by_default():
     policy = CredentialPolicy(
         mode=CredentialMode.BYOK,

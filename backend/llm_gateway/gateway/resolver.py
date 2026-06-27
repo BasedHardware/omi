@@ -7,6 +7,7 @@ from llm_gateway.gateway.config_loader import GatewayConfig
 from llm_gateway.gateway.credentials import is_byok_failure_class
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
+    GatewayInvalidRequestError,
     GatewayInvalidRouteConfigError,
     GatewayModelNotFoundError,
     GatewayUnsupportedModelError,
@@ -47,7 +48,7 @@ def resolve_chat_completion_route(
 ) -> ResolvedRoute:
     model = request.get('model') if isinstance(request, Mapping) else None
     if not isinstance(model, str) or not model.strip():
-        raise GatewayModelNotFoundError('model is required')
+        raise GatewayInvalidRequestError('model is required', param='model')
 
     lane = resolve_lane(config, model.strip())
     validated_request = validate_chat_completion_request(request, lane)

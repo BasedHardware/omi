@@ -120,6 +120,11 @@ def _validate_response_format(value: Any, lane: LaneConfig) -> Mapping[str, Any]
         raise GatewayInvalidRequestError(
             'response_format.json_schema must be an object', param='response_format.json_schema'
         )
+    name = json_schema.get('name')
+    if not isinstance(name, str) or not name.strip():
+        raise GatewayInvalidRequestError(
+            'response_format.json_schema.name is required', param='response_format.json_schema.name'
+        )
     schema = json_schema.get('schema')
     if not isinstance(schema, Mapping):
         raise GatewayInvalidRequestError(

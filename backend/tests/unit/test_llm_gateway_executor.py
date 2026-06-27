@@ -46,6 +46,39 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
 
 
 @pytest.mark.asyncio
+async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
+    """retry.max_attempts is honored: transient failures are retried before
+    falling through to the next provider."""
+    fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
+    config = config_with_active_route(active_route_with_fallbacks([fallback_ref]))
+    # Override retry to 3 attempts on the active route
+    active_route = config.route_artifacts[ACTIVE_ROUTE].model_copy(
+        update={'retry': type(config.route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=3)}
+    )
+    config = config_with_active_route(active_route.model_copy(update={'fallbacks': [fallback_ref]}))
+    resolved = resolve_chat_completion_route(config, valid_request())
+    # 3 transient failures then fallback succeeds
+    provider = FakeChatCompletionProvider(
+        [
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT),
+            fake_success_response(fallback_ref, content='{"answer":"fallback"}'),
+        ]
+    )
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    # Primary tried 3 times (max_attempts), then fallback once
+    assert [call.model for call in provider.calls] == ['gpt-4.1-mini', 'gpt-4.1-mini', 'gpt-4.1-mini', 'gpt-4o-mini']
+    assert result.response['choices'][0]['message']['content'] == '{"answer":"fallback"}'
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'failure_class',
     [

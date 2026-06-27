@@ -112,15 +112,16 @@ async def _execute_route(
                 param='credentials',
             )
         else:
-            try:
-                provider_response = await provider.create_chat_completion(
-                    _provider_request(resolved_route, provider_ref),
-                    provider_ref=provider_ref,
-                    credentials=credential_context,
-                    timeout_ms=route.timeouts.request_ms,
-                )
+            response, error = await _attempt_provider(
+                resolved_route,
+                route,
+                provider,
+                provider_ref,
+                credential_context,
+            )
+            if error is None:
                 return _executor_result(
-                    provider_response,
+                    response,  # type: ignore[arg-type]
                     resolved_route=resolved_route,
                     route=route,
                     provider_ref=provider_ref,
@@ -128,8 +129,6 @@ async def _execute_route(
                     fallback_reason=current_fallback_reason,
                     used_lkg=is_lkg,
                 )
-            except ProviderFailure as exc:
-                error = _map_provider_failure(exc, credential_context)
 
         last_error = error
         if index == len(refs) - 1 or not _can_try_next_provider(route, error.failure_class):
@@ -139,6 +138,34 @@ async def _execute_route(
     if last_error is not None:
         raise last_error
     raise GatewayInvalidRouteConfigError(f'route {route.route_artifact_id} has no provider refs')
+
+
+async def _attempt_provider(
+    resolved_route: ResolvedRoute,
+    route: RouteArtifact,
+    provider: ChatCompletionProvider,
+    provider_ref: ProviderRef,
+    credential_context: CredentialContext,
+) -> tuple[Mapping[str, Any] | None, GatewayError | None]:
+    """Try a single provider up to ``route.retry.max_attempts`` times.
+
+    Returns ``(response, None)`` on success, or ``(None, error)`` if all
+    attempts fail.
+    """
+    max_attempts = max(route.retry.max_attempts, 1)
+    error: GatewayError | None = None
+    for _attempt in range(max_attempts):
+        try:
+            response = await provider.create_chat_completion(
+                _provider_request(resolved_route, provider_ref),
+                provider_ref=provider_ref,
+                credentials=credential_context,
+                timeout_ms=route.timeouts.request_ms,
+            )
+            return response, None
+        except ProviderFailure as exc:
+            error = _map_provider_failure(exc, credential_context)
+    return None, error
 
 
 def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:

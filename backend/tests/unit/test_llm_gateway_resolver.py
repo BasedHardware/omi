@@ -5,6 +5,7 @@ import pytest
 from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
 from llm_gateway.gateway.errors import (
     GatewayCapabilityMismatchError,
+    GatewayInvalidRequestError,
     GatewayInvalidRouteConfigError,
     GatewayModelNotFoundError,
     GatewayUnsupportedModelError,
@@ -42,6 +43,13 @@ def test_unknown_auto_lane_is_model_not_found():
     request = valid_request(model='omi:auto:unknown')
 
     with pytest.raises(GatewayModelNotFoundError, match='auto lane not found'):
+        resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
+
+
+def test_missing_model_is_invalid_request_not_model_not_found():
+    request = valid_request(model='')
+
+    with pytest.raises(GatewayInvalidRequestError, match='model is required'):
         resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
 
 

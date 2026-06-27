@@ -71,6 +71,22 @@ class FakeGatewayResponse:
         return self.body
 
 
+class FakeGatewayClient:
+    """Fake ``httpx.Client`` for tests. Returns a canned response from post()."""
+
+    def __init__(self, fake_post):
+        self._fake_post = fake_post
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def post(self, url, *, headers=None, json=None, **kwargs):
+        return self._fake_post(url, headers=headers, json=json, **kwargs)
+
+
 @pytest.fixture(autouse=True)
 def clear_byok_context():
     byok.set_byok_keys({})
@@ -95,19 +111,17 @@ class FakeCounter:
         return FakeCounterChild(self, labels)
 
 
-def test_requires_context_non_byok_tries_gateway_by_default(monkeypatch):
-    monkeypatch.setattr(
-        chat,
-        'invoke_chat_structured_gateway',
-        lambda prompt, output_model, *, feature: output_model(value=True),
-    )
-    monkeypatch.setattr(
-        chat,
-        'get_llm',
-        lambda feature: pytest.fail('existing path should not be called after gateway success'),
-    )
+def _mock_gateway_client(monkeypatch, fake_post):
+    """Patch ``httpx.Client`` so the gateway_client uses a fake HTTP client."""
 
-    assert chat.requires_context('hello?') is True
+    def fake_client(*args, **kwargs):
+        return FakeGatewayClient(fake_post)
+
+    monkeypatch.setattr(gateway_client.httpx, 'Client', fake_client)
+
+
+_VALUE_TRUE_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"value": true}'}}]})
+_UNEXPECTED_RESPONSE = FakeGatewayResponse({'choices': [{'message': {'content': '{"unexpected": true}'}}]})
 
 
 def test_requires_context_gateway_success_returns_parsed_result(monkeypatch):
@@ -166,11 +180,7 @@ def test_requires_context_byok_context_skips_gateway(monkeypatch):
 def test_requires_context_invalid_gateway_content_falls_back(monkeypatch):
     existing_calls = []
     monkeypatch.setattr(chat, 'get_llm', lambda feature: FakeLLM(chat.RequiresContext(value=False), existing_calls))
-    monkeypatch.setattr(
-        gateway_client.httpx,
-        'post',
-        lambda *args, **kwargs: FakeGatewayResponse({'choices': [{'message': {'content': '{"unexpected": true}'}}]}),
-    )
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _UNEXPECTED_RESPONSE)
 
     assert chat.requires_context('what did I discuss yesterday?') is False
     assert existing_calls == [chat.RequiresContext]
@@ -181,11 +191,11 @@ def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeyp
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'service-token')
     captured = {}
 
-    def fake_post(url, *, headers, json, timeout):
-        captured.update({'url': url, 'headers': headers, 'json': json, 'timeout': timeout})
-        return FakeGatewayResponse({'choices': [{'message': {'content': '{"value": true}'}}]})
+    def fake_post(url, *, headers=None, json=None, **kwargs):
+        captured.update({'url': url, 'headers': headers, 'json': json})
+        return _VALUE_TRUE_RESPONSE
 
-    monkeypatch.setattr(gateway_client.httpx, 'post', fake_post)
+    _mock_gateway_client(monkeypatch, fake_post)
 
     result = gateway_client.invoke_chat_structured_gateway(
         'classified prompt',
@@ -206,11 +216,7 @@ def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeyp
 def test_chat_structured_gateway_records_success_metric(monkeypatch):
     counter = FakeCounter()
     monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
-    monkeypatch.setattr(
-        gateway_client.httpx,
-        'post',
-        lambda *args, **kwargs: FakeGatewayResponse({'choices': [{'message': {'content': '{"value": true}'}}]}),
-    )
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _VALUE_TRUE_RESPONSE)
 
     result = gateway_client.invoke_chat_structured_gateway(
         'classified prompt',
@@ -234,11 +240,7 @@ def test_chat_structured_gateway_records_success_metric(monkeypatch):
 def test_chat_structured_gateway_records_fallback_reason_metric(monkeypatch):
     counter = FakeCounter()
     monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
-    monkeypatch.setattr(
-        gateway_client.httpx,
-        'post',
-        lambda *args, **kwargs: FakeGatewayResponse({'choices': [{'message': {'content': '{"unexpected": true}'}}]}),
-    )
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _UNEXPECTED_RESPONSE)
 
     result = gateway_client.invoke_chat_structured_gateway(
         'classified prompt',
@@ -263,7 +265,7 @@ def test_chat_structured_gateway_failure_does_not_log_raw_prompt_or_response(mon
     def fake_post(*args, **kwargs):
         raise RuntimeError('raw provider body should not be logged')
 
-    monkeypatch.setattr(gateway_client.httpx, 'post', fake_post)
+    _mock_gateway_client(monkeypatch, fake_post)
 
     with caplog.at_level(logging.DEBUG):
         result = gateway_client.invoke_chat_structured_gateway(

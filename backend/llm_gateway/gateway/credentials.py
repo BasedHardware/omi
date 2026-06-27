@@ -88,10 +88,14 @@ def build_key_reference_credential_context(
     presences: dict[str, ProviderKeyPresence] = {}
     for provider, key_ref in key_refs.items():
         normalized_provider = provider.strip().lower()
+        stripped_key_ref = key_ref.strip() if isinstance(key_ref, str) else key_ref
+        # Whitespace-only refs are treated as absent so they do not pass
+        # BYOK key-availability checks.
+        normalized_key_ref = stripped_key_ref or None
         presences[normalized_provider] = ProviderKeyPresence(
             provider=normalized_provider,
-            present=bool(key_ref),
-            key_ref=key_ref,
+            present=bool(normalized_key_ref),
+            key_ref=normalized_key_ref,
         )
 
     return CredentialContext(

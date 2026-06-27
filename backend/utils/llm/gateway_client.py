@@ -45,15 +45,24 @@ def invoke_chat_structured_gateway(
     *,
     feature: str,
 ) -> StructuredOutput | None:
+    """Call the LLM gateway for chat structured extraction (pilot).
+
+    This is a **synchronous** function intended to be called only from sync
+    ``def`` call sites (e.g. ``requires_context``). When such a sync function
+    is invoked by FastAPI it runs inside a threadpool, so the blocking HTTP
+    call does not stall the event loop. Do **not** call this from ``async def``
+    code without first offloading via ``run_blocking(llm_executor, ...)``.
+    """
     try:
-        response = httpx.post(
-            f'{get_llm_gateway_base_url()}/v1/chat/completions',
-            headers=_gateway_headers(),
-            json=_chat_structured_payload(prompt, output_model, feature=feature),
-            timeout=CHAT_EXTRACTION_TIMEOUT_SECONDS,
-        )
-        response.raise_for_status()
-        content = _extract_choice_content(response.json())
+        with httpx.Client(timeout=CHAT_EXTRACTION_TIMEOUT_SECONDS) as client:
+            response = client.post(
+                f'{get_llm_gateway_base_url()}/v1/chat/completions',
+                headers=_gateway_headers(),
+                json=_chat_structured_payload(prompt, output_model, feature=feature),
+            )
+            response.raise_for_status()
+            response_body = response.json()
+        content = _extract_choice_content(response_body)
         if not isinstance(content, str) or not content.strip():
             record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='empty_content')
             return None
@@ -113,7 +122,7 @@ def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feat
             'json_schema': {
                 'name': output_model.__name__,
                 'strict': True,
-                'schema': _model_json_schema(output_model),
+                'schema': _strict_model_json_schema(output_model),
             },
         },
         'metadata': {
@@ -124,10 +133,42 @@ def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feat
     }
 
 
-def _model_json_schema(output_model: type[BaseModel]) -> dict:
-    if hasattr(output_model, 'model_json_schema'):
-        return output_model.model_json_schema()
-    return output_model.schema()
+def _strict_model_json_schema(output_model: type[BaseModel]) -> dict:
+    """Generate a strict-compatible JSON Schema for OpenAI Structured Outputs.
+
+    OpenAI requires every object schema to include ``additionalProperties: false``
+    when ``strict`` mode is set. Pydantic's ``model_json_schema()`` does not add
+    that by default, so we inject it recursively for all ``type: object`` schemas.
+    """
+    schema = output_model.model_json_schema()
+    _enforce_additional_properties_false(schema)
+    return schema
+
+
+def _enforce_additional_properties_false(schema: dict) -> None:
+    """Recursively add ``additionalProperties: false`` to all object schemas."""
+    if not isinstance(schema, dict):
+        return
+    if schema.get('type') == 'object' and 'additionalProperties' not in schema:
+        schema['additionalProperties'] = False
+    # Recurse into nested schemas under $defs, properties, items, etc.
+    for key in ('$defs', 'definitions'):
+        defs = schema.get(key)
+        if isinstance(defs, dict):
+            for def_schema in defs.values():
+                _enforce_additional_properties_false(def_schema)
+    properties = schema.get('properties')
+    if isinstance(properties, dict):
+        for prop_schema in properties.values():
+            _enforce_additional_properties_false(prop_schema)
+    items = schema.get('items')
+    if isinstance(items, dict):
+        _enforce_additional_properties_false(items)
+    for ref_key in ('anyOf', 'oneOf', 'allOf'):
+        alternatives = schema.get(ref_key)
+        if isinstance(alternatives, list):
+            for alt_schema in alternatives:
+                _enforce_additional_properties_false(alt_schema)
 
 
 def _extract_choice_content(response_body: object) -> object:
@@ -149,6 +190,4 @@ def _validate_output_model(
     output_model: type[StructuredOutput],
     decoded: Mapping[str, object],
 ) -> StructuredOutput:
-    if hasattr(output_model, 'model_validate'):
-        return output_model.model_validate(decoded)
-    return output_model.parse_obj(decoded)
+    return output_model.model_validate(decoded)
