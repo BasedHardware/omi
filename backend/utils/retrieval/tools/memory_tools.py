@@ -160,17 +160,33 @@ def get_memories_tool(
 
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
-        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
+        service = MemoryService(db_client=firestore_db)
         if start_dt or end_dt:
-            filtered = []
-            for memory in memories:
-                created = memory.created_at
-                if start_dt and created and created < start_dt:
-                    continue
-                if end_dt and created and created > end_dt:
-                    continue
-                filtered.append(memory)
-            memories = filtered
+            # Date filters present: scan raw canonical pages and apply the date
+            # bounds before paginating, mirroring the legacy DB path which pushes
+            # start_date/end_date into the query. Reading only the first `limit`
+            # page and then filtering would miss matching memories that live on
+            # later pages.
+            max_scan = 5000
+            scan_offset = 0
+            date_filtered: list = []
+            while scan_offset < max_scan:
+                batch = service.read(uid, limit=500, offset=scan_offset)
+                if not batch:
+                    break
+                for memory in batch:
+                    created = memory.created_at
+                    if start_dt and created and created < start_dt:
+                        continue
+                    if end_dt and created and created > end_dt:
+                        continue
+                    date_filtered.append(memory)
+                scan_offset += len(batch)
+                if len(batch) < 500:
+                    break
+            memories = date_filtered[offset : offset + limit]
+        else:
+            memories = service.read(uid, limit=limit, offset=offset)
         memories_count = len(memories)
         logger.info(f"📊 get_memories_tool - found {memories_count} canonical memories")
         if memories_count >= 500:

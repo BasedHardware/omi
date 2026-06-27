@@ -43,6 +43,7 @@ from utils.memory.default_read_rollout import (
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
+    authorize_memory_external_default_memory_write,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
@@ -611,12 +612,15 @@ def execute_tool(
             # so canonical SSE callers honoring categories/reviewed/sensitive/sort
             # never receive memories they explicitly excluded. The raw
             # MemoryService.read page ignores every parsed argument above.
+            #
+            # Return raw batches to the collector and pass `categories` in
+            # directly: pre-filtering each page inside the lambda can produce an
+            # empty first batch, which the collector treats as end-of-source,
+            # skipping later pages that contain matching memories.
             filtered = collect_filtered_memories(
                 lambda batch_offset, batch_limit: [
                     m.model_dump(mode='json')
                     for m in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
-                    if not valid_categories
-                    or (m.category.value if hasattr(m.category, 'value') else m.category) in set(valid_categories)
                 ],
                 limit=limit,
                 offset=offset,
@@ -626,6 +630,7 @@ def execute_tool(
                 include_sensitive=include_sensitive,
                 updated_after=updated_after,
                 sort=sort,
+                categories=valid_categories or None,
             )
             memories = filtered['memories']
             for memory in memories:
@@ -676,6 +681,15 @@ def execute_tool(
         if not content:
             raise ToolExecutionError("Content is required")
 
+        # Fail closed: a legacy/read-only MCP key (no persisted memories.write
+        # grant) must not create memories through SSE, mirroring the REST MCP
+        # path (routers/mcp.py create_memory).
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+
         if memory_system == MemorySystem.CANONICAL:
             category = identify_category_for_memory(content)
             memory = Memory(content=content, category=category)
@@ -703,6 +717,15 @@ def execute_tool(
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
 
+        # Fail closed: a legacy/read-only MCP key (no persisted memories.write
+        # grant) must not delete memories through SSE, mirroring the REST MCP
+        # path (routers/mcp.py delete_memory).
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
+
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db).delete(user_id, memory_id)
             return {"success": True}
@@ -725,6 +748,15 @@ def execute_tool(
         content = arguments.get("content")
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
+
+        # Fail closed: a legacy/read-only MCP key (no persisted memories.write
+        # grant) must not edit memories through SSE, mirroring the REST MCP
+        # path (routers/mcp.py edit_memory).
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+        if not write_grant.allowed:
+            raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
         if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db).update_content(user_id, memory_id, content)
