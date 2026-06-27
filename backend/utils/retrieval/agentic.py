@@ -597,22 +597,6 @@ def _chunk_text(content: Any) -> str:
     return ''
 
 
-_core_openai_agent = None
-
-
-def _get_core_openai_agent():
-    """Return a cached LangGraph agent for the core tool set.
-
-    The graph is expensive to construct, so reuse it across requests. Requests
-    that add user-specific app tools build a fresh agent (handled by the caller),
-    since those tools vary per user and must not be shared.
-    """
-    global _core_openai_agent
-    if _core_openai_agent is None:
-        _core_openai_agent = create_react_agent(model=get_openai_agent_llm(streaming=True), tools=list(CORE_TOOLS))
-    return _core_openai_agent
-
-
 async def _run_openai_agent_stream(
     agent,
     messages: List,
@@ -782,11 +766,9 @@ async def _execute_agentic_chat_stream_openai(
     callback = AsyncStreamingCallback()
     full_response = []
     tool_usage_count = 0
-    # Reuse the cached core-tools agent unless this request added user-specific app tools.
-    if len(tools) > len(CORE_TOOLS):
-        agent = create_react_agent(model=get_openai_agent_llm(streaming=True), tools=tools)
-    else:
-        agent = _get_core_openai_agent()
+    # Build the agent per request: get_openai_agent_llm() resolves the caller's BYOK
+    # key, so a shared/cached agent would leak the first request's key to others.
+    agent = create_react_agent(model=get_openai_agent_llm(streaming=True), tools=tools)
     task = asyncio.create_task(_run_openai_agent_stream(agent, langchain_messages, config, callback, full_response))
 
     try:
