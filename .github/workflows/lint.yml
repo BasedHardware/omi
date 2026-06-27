@@ -52,6 +52,9 @@ jobs:
             exit 1
           fi
 
+      - name: Check desktop changelog data
+        run: python3 .github/scripts/desktop-changelog.py validate
+
       - name: Check desktop changelog entry
         if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changelog/v')
         run: |
