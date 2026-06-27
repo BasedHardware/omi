@@ -1,17 +1,53 @@
 import {
-  Settings as SettingsIcon,
+  AudioLines,
+  BellRing,
+  BotMessageSquare,
+  CreditCard,
   History,
+  HelpCircle,
+  Info,
+  Keyboard,
+  Layers,
+  Monitor,
   ShieldCheck,
   CircleUserRound,
   SlidersHorizontal,
   Brain,
+  KeyRound,
+  Target,
   type LucideIcon
 } from 'lucide-react'
 
-export type SettingsTabId = 'general' | 'memories' | 'rewind' | 'privacy' | 'account' | 'advanced'
+export type SettingsTabId =
+  | 'ai-chat'
+  | 'byok'
+  | 'shortcuts'
+  | 'transcription'
+  | 'notifications'
+  | 'floating-bar'
+  | 'focus-insights'
+  | 'permissions-help'
+  | 'system'
+  | 'plan-usage'
+  | 'about'
+  | 'memories'
+  | 'rewind'
+  | 'privacy'
+  | 'account'
+  | 'advanced'
 
 export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon }[] = [
-  { id: 'general', label: 'General', Icon: SettingsIcon },
+  { id: 'ai-chat', label: 'AI Chat', Icon: BotMessageSquare },
+  { id: 'byok', label: 'BYOK', Icon: KeyRound },
+  { id: 'shortcuts', label: 'Shortcuts', Icon: Keyboard },
+  { id: 'transcription', label: 'Transcription', Icon: AudioLines },
+  { id: 'notifications', label: 'Notifications', Icon: BellRing },
+  { id: 'floating-bar', label: 'Floating Bar', Icon: Layers },
+  { id: 'focus-insights', label: 'Focus and Insights', Icon: Target },
+  { id: 'permissions-help', label: 'Permissions and Help', Icon: HelpCircle },
+  { id: 'system', label: 'System', Icon: Monitor },
+  { id: 'plan-usage', label: 'Plan and Usage', Icon: CreditCard },
+  { id: 'about', label: 'About', Icon: Info },
   { id: 'memories', label: 'Memories', Icon: Brain },
   { id: 'rewind', label: 'Rewind', Icon: History },
   { id: 'privacy', label: 'Privacy', Icon: ShieldCheck },

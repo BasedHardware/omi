@@ -41,6 +41,11 @@ export type TranscriptLine = {
   speaker?: string
   text: string
   interim?: boolean
+  speakerId?: number
+  isUser?: boolean
+  personId?: string
+  start?: number
+  end?: number
 }
 
 export type ConversationPayload = {
@@ -51,6 +56,188 @@ export type ConversationPayload = {
 }
 
 export type ChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
+
+export type PiChatRequest = {
+  /** Firebase ID token. Main fails closed when this is absent or blank. */
+  token: string
+  messages: ChatMessage[]
+  /** Skill ids selected in the Skills tab; main reads the corresponding SKILL.md files. */
+  skillIds?: string[]
+  /** Optional model selection id, e.g. openrouter:anthropic/claude-3.5-sonnet. */
+  modelId?: string
+}
+
+export type PiChatStreamRequest = PiChatRequest & {
+  sessionId: string
+}
+
+export type PiChatUsage = {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export type PiChatToolCall = {
+  id: string
+  name: string
+}
+
+export type PiChatResponse = {
+  text: string
+  usage: PiChatUsage
+  toolCalls: PiChatToolCall[]
+}
+
+export type PiChatStartResponse = {
+  sessionId: string
+}
+
+export type PiChatAbortResponse = {
+  aborted: boolean
+}
+
+export type PiChatStreamEvent =
+  | { sessionId: string; type: 'started' }
+  | { sessionId: string; type: 'delta'; text: string }
+  | { sessionId: string; type: 'thinking'; text: string }
+  | { sessionId: string; type: 'tool_start'; toolCall: PiChatToolCall; preview?: string }
+  | { sessionId: string; type: 'tool_delta'; toolCall: PiChatToolCall; preview: string }
+  | {
+      sessionId: string
+      type: 'tool_result'
+      toolCall: PiChatToolCall
+      ok: boolean
+      preview: string
+    }
+  | { sessionId: string; type: 'done'; response: PiChatResponse }
+  | { sessionId: string; type: 'error'; message: string }
+  | { sessionId: string; type: 'aborted' }
+
+export type SkillEntry = {
+  id: string
+  name: string
+  description: string
+  sourcePath: string
+  relativePath: string
+}
+
+export type SkillsListResult = {
+  roots: string[]
+  skills: SkillEntry[]
+}
+
+export type ClaudeAcpStatus = {
+  configured: boolean
+  command: string
+  authenticated: boolean | null
+  reason?: string
+}
+
+export type ClaudeAcpChatRequest = {
+  messages: ChatMessage[]
+}
+
+export type ClaudeAcpChatResponse = {
+  text: string
+}
+
+export type ByokProvider =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'deepgram'
+  | 'openrouter'
+  | 'elevenlabs'
+
+export type ByokChatProvider = Exclude<ByokProvider, 'deepgram' | 'elevenlabs'>
+
+export type ModelPurpose = 'chat' | 'agent' | 'memory'
+
+export type ModelProvider = 'omi' | ByokChatProvider
+
+export type AvailableModel = {
+  id: string
+  provider: ModelProvider
+  providerLabel: string
+  model: string
+  label: string
+  configured: boolean
+  source: 'hosted' | 'byok'
+  reason?: string
+}
+
+export type ModelListResult = {
+  models: AvailableModel[]
+  fetchedAt: number
+}
+
+export type ByokProviderStatus = {
+  provider: ByokProvider
+  configured: boolean
+  maskedKey?: string
+  updatedAt?: number
+  lastValidatedAt?: number
+  lastValidationOk?: boolean
+  lastValidationError?: string
+}
+
+export type ByokStatus = {
+  activeChatProvider: ByokChatProvider | null
+  providers: Record<ByokProvider, ByokProviderStatus>
+}
+
+export type ByokSaveRequest = {
+  provider: ByokProvider
+  key: string
+}
+
+export type ByokTestRequest = {
+  provider: ByokProvider
+  /** Optional unsaved key to validate. When omitted, main validates the stored key. */
+  key?: string
+}
+
+export type ByokUseRequest = {
+  provider: ByokChatProvider | null
+}
+
+export type ByokValidationResult = {
+  ok: boolean
+  status?: number
+  error?: string
+}
+
+export type ByokChatRequest = {
+  messages: ChatMessage[]
+  modelId?: string
+}
+
+export type ByokChatResponse = {
+  provider: ByokChatProvider
+  text: string
+  usage: PiChatUsage
+}
+
+export type McpKeyRecord = {
+  id: string
+  name: string
+  key: string
+}
+
+export type LocalAgentChatToolName =
+  | 'get_local_status'
+  | 'search_screen_history'
+  | 'execute_sql'
+  | 'get_screenshot'
+
+export type LocalAgentToolArguments = Record<string, unknown>
+
+export type LocalAgentChatToolResponse = {
+  ok: true
+  name: string
+  content_type: string
+  result: unknown
+}
 
 // Capture modes a recording session can start in. 'mic' = audio only;
 // 'screen' = mic + screen capture + system audio (both audio streams
@@ -74,6 +261,77 @@ export type LocalConversation = {
 }
 
 export type ListenSource = 'mic' | 'system'
+export type TranscriptionBackend = 'omi' | 'local-parakeet' | 'elevenlabs'
+export type SttMode = 'auto' | 'cloud' | 'local-parakeet' | 'elevenlabs'
+export type RealtimeVoiceProvider = 'omi-relay' | 'openai-byok' | 'local-kokoro' | 'elevenlabs'
+
+export type LocalSttStatus = {
+  backend: 'parakeet'
+  /** Internal only. Settings must not expose implementation URLs to end users. */
+  configuredUrl?: string
+  healthUrl?: string
+  healthy: boolean
+  available: boolean
+  nvidiaAvailable: boolean | null
+  managed: boolean
+  runtime: {
+    kind: 'parakeet.cpp'
+    installState:
+      | 'unsupported'
+      | 'not_installed'
+      | 'installing'
+      | 'installed'
+      | 'starting'
+      | 'running'
+      | 'error'
+    variant: 'cuda' | 'cpu' | null
+    model: string
+    canInstall: boolean
+  }
+  reason?: string
+  checkedAt: number
+}
+
+export type LocalTtsStatus = {
+  backend: 'kokoro'
+  healthy: boolean
+  available: boolean
+  managed: boolean
+  runtime: {
+    kind: 'kokoro-js'
+    installState: 'unsupported' | 'not_installed' | 'installing' | 'installed' | 'running' | 'error'
+    model: string
+    voice: string
+    canInstall: boolean
+  }
+  reason?: string
+  checkedAt: number
+}
+
+export type LocalTtsSynthesizeRequest = {
+  text: string
+  voice?: string
+  speed?: number
+}
+
+export type LocalTtsSynthesizeResult = {
+  audioPath: string
+  audioUrl: string
+  mimeType: 'audio/wav'
+}
+
+export type ElevenLabsTtsSynthesizeRequest = {
+  text: string
+  voiceId?: string
+  modelId?: string
+  outputFormat?: string
+}
+
+export type ElevenLabsTtsSynthesizeResult = {
+  audioPath: string
+  audioUrl: string
+  mimeType: 'audio/mpeg'
+}
 
 export type ListenStartArgs = {
   sessionId: string
@@ -82,14 +340,64 @@ export type ListenStartArgs = {
   token: string
   /** BCP-47-ish language code for transcription (e.g. 'en', 'es'). */
   language: string
+  /** 'auto' prefers local Parakeet only when the runtime is healthy and supported. */
+  sttMode?: SttMode
 }
 
 export type ListenMessage =
-  | { sessionId: string; kind: 'connected' }
+  | { sessionId: string; kind: 'connected'; backend: TranscriptionBackend }
   | { sessionId: string; kind: 'segments'; segments: BackendSegment[] }
   | { sessionId: string; kind: 'event'; event: ListenEvent }
   | { sessionId: string; kind: 'error'; message: string; fatal: boolean }
   | { sessionId: string; kind: 'closed'; code: number; reason: string }
+
+export type LocalAgentStatus = {
+  enabled: boolean
+  running: boolean
+  host: string
+  configuredPort: number
+  currentPort: number | null
+  localUrl: string | null
+  toolEndpoint: string | null
+  hasToken: boolean
+}
+
+export type LocalAgentSetupPromptArgs = {
+  hostedServerUrl: string
+  hostedKey: string
+}
+
+export type LocalAgentToolsTestResult = {
+  ok: boolean
+  status?: number
+  toolCount?: number
+  error?: string
+}
+
+export type ObservabilityLevel = 'debug' | 'info' | 'warning' | 'error' | 'fatal'
+
+export type ObservabilitySource = 'main' | 'renderer'
+
+export type ObservabilityBreadcrumb = {
+  name: string
+  category?: string
+  level?: ObservabilityLevel
+  data?: Record<string, unknown>
+  ts?: number
+}
+
+export type ObservabilityEvent = {
+  source?: ObservabilitySource
+  kind: 'breadcrumb' | 'exception' | 'error' | 'crash' | 'unhandled-rejection' | 'warning'
+  name: string
+  category?: string
+  level?: ObservabilityLevel
+  message?: string
+  error?: unknown
+  data?: Record<string, unknown>
+  breadcrumbs?: ObservabilityBreadcrumb[]
+  ts?: number
+}
 
 export type OmiOverlayApi = {
   /** Subscribe to summon events; callback fires each time the overlay is shown. Returns an unsubscribe fn. */
@@ -142,6 +450,66 @@ export type OmiOverlayApi = {
 /** Overlay window state broadcast to all renderers. `active` = visible & focused. */
 export type OverlayVisibility = { open: boolean; active: boolean }
 
+export type FloatingBarSettings = {
+  enabled: boolean
+  summonOnShortcut: boolean
+  summonShortcut: string
+  alwaysOnTop: boolean
+  voiceAnswersEnabled: boolean
+  realtimeVoiceEnabled: boolean
+  realtimeVoiceProvider: RealtimeVoiceProvider
+  summonCount: number
+  askCount: number
+  voiceCaptureCount: number
+  lastSummonedAt: number | null
+  lastOpenedAt: number | null
+  lastAskedAt: number | null
+  lastVoiceCapturedAt: number | null
+}
+
+export type FloatingBarStatus = {
+  settings: FloatingBarSettings
+  effectiveSummonEnabled: boolean
+  windowCreated: boolean
+  open: boolean
+  active: boolean
+  overlayReady: boolean
+  shortcutRegistered: boolean
+  currentShortcut: string
+  alwaysOnTop: boolean
+  alwaysOnTopLevel: 'screen-saver' | 'normal'
+}
+
+export type WindowsPermissionStatus = 'granted' | 'denied' | 'not-determined' | 'unknown'
+
+export type WindowsSystemStatus = {
+  launchAtLogin: boolean
+  microphone: WindowsPermissionStatus
+  screenCapture: WindowsPermissionStatus
+  notificationsSupported: boolean
+  packaged: boolean
+}
+
+export type WindowsUpdateStatus = {
+  enabled: boolean
+  configured: boolean
+  feedUrl: string | null
+  checking: boolean
+  downloaded: boolean
+  lastEvent: string | null
+  lastVersion: string | null
+  lastError: string | null
+}
+
+export type WindowsExternalLinkKind =
+  | 'help'
+  | 'browserExtension'
+  | 'releaseNotes'
+  | 'windowsStartupSettings'
+  | 'windowsMicrophoneSettings'
+  | 'windowsNotificationSettings'
+  | 'windowsPrivacySettings'
+
 export type OmiBridgeApi = {
   getCaptureSources: () => Promise<CaptureSource[]>
   remapConversationId: (fromId: string, toId: string) => Promise<number>
@@ -161,6 +529,23 @@ export type OmiBridgeApi = {
   listenFeed: (sessionId: string, pcm: ArrayBuffer) => void
   /** Subscribe to status/segment/event messages from every listen session. */
   onListenMessage: (cb: (msg: ListenMessage) => void) => () => void
+  /** Probe the local Parakeet STT runtime used for on-device transcription. */
+  localSttStatus: () => Promise<LocalSttStatus>
+  /** Probe the local Kokoro TTS runtime used for on-device assistant speech. */
+  localTtsStatus: () => Promise<LocalTtsStatus>
+  localTtsSynthesize: (request: LocalTtsSynthesizeRequest) => Promise<LocalTtsSynthesizeResult>
+  elevenLabsTtsSynthesize: (
+    request: ElevenLabsTtsSynthesizeRequest
+  ) => Promise<ElevenLabsTtsSynthesizeResult>
+  observabilityCapture: (event: ObservabilityEvent) => void
+  observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) => void
+  localAgentStatus: () => Promise<LocalAgentStatus>
+  localAgentSetEnabled: (enabled: boolean) => Promise<LocalAgentStatus>
+  localAgentSetPort: (port: number) => Promise<LocalAgentStatus>
+  localAgentCopyToken: () => Promise<LocalAgentStatus>
+  localAgentRotateToken: () => Promise<LocalAgentStatus>
+  localAgentTestTools: () => Promise<LocalAgentToolsTestResult>
+  localAgentCopySetupPrompt: (args: LocalAgentSetupPromptArgs) => Promise<LocalAgentStatus>
   indexFilesScan: () => Promise<FileIndexStatus>
   indexFilesStatus: () => Promise<FileIndexStatus>
   /** Indexed installed apps (Start-Menu shortcuts), newest-modified first. */
@@ -181,6 +566,15 @@ export type OmiBridgeApi = {
   /** Read/write the foreground-monitor opt-out flag. */
   usageGetSettings: () => Promise<UsageSettings>
   usageSetSettings: (next: UsageSettings) => Promise<UsageSettings>
+  floatingBarGetSettings: () => Promise<FloatingBarSettings>
+  floatingBarSetSettings: (next: FloatingBarSettings) => Promise<FloatingBarSettings>
+  floatingBarStatus: () => Promise<FloatingBarStatus>
+  onFloatingBarSettings: (cb: (s: FloatingBarSettings) => void) => () => void
+  systemGetStatus: () => Promise<WindowsSystemStatus>
+  systemSetLaunchAtLogin: (enabled: boolean) => Promise<WindowsSystemStatus>
+  systemOpenExternal: (kind: WindowsExternalLinkKind) => Promise<void>
+  updaterGetStatus: () => Promise<WindowsUpdateStatus>
+  updaterCheckNow: () => Promise<WindowsUpdateStatus>
   // Bulk-delete memories from the main process (survives renderer navigation /
   // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
   // and the ids; progress streams via onMemoriesDeleteProgress.
@@ -216,6 +610,27 @@ export type OmiBridgeApi = {
   kgSearchFiles: (q: string, fileType?: string, limit?: number) => Promise<IndexedFileRecord[]>
   /** Run a single read-only SELECT against the local DB (sqlGuard-validated). */
   kgExecuteSql: (sql: string) => Promise<KgSqlResult>
+  /** Chat-only local tool bridge. Main process enforces the read-only allowlist. */
+  localAgentChatTool: (
+    name: LocalAgentChatToolName,
+    args?: LocalAgentToolArguments
+  ) => Promise<LocalAgentChatToolResponse>
+  /** Native Pi/Omi chat availability. Explicit env kill-switches can still disable it. */
+  piChatEnabled: boolean
+  piChatSend: (request: PiChatRequest) => Promise<PiChatResponse>
+  piChatStart: (request: PiChatStreamRequest) => Promise<PiChatStartResponse>
+  piChatAbort: (sessionId: string) => Promise<PiChatAbortResponse>
+  onPiChatEvent: (cb: (event: PiChatStreamEvent) => void) => () => void
+  skillsList: () => Promise<SkillsListResult>
+  claudeAcpStatus: () => Promise<ClaudeAcpStatus>
+  claudeAcpChatSend: (request: ClaudeAcpChatRequest) => Promise<ClaudeAcpChatResponse>
+  byokStatus: () => Promise<ByokStatus>
+  byokSave: (request: ByokSaveRequest) => Promise<ByokStatus>
+  byokDelete: (provider: ByokProvider) => Promise<ByokStatus>
+  byokTest: (request: ByokTestRequest) => Promise<ByokValidationResult>
+  byokUse: (request: ByokUseRequest) => Promise<ByokStatus>
+  byokChatSend: (request: ByokChatRequest) => Promise<ByokChatResponse>
+  byokListModels: () => Promise<ModelListResult>
   // Integrations (3e): read local Windows Sticky Notes for import. The renderer
   // synthesizes the returned note text and writes /v3/memories itself (it holds
   // the auth token).
@@ -229,16 +644,23 @@ export type OmiBridgeApi = {
   googleGmailFetchNew: () => Promise<FetchNewResult<GmailItem>>
   googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
+  mcpKeyCreate: (key: McpKeyRecord) => Promise<void>
+  mcpKeyRead: () => Promise<McpKeyRecord | null>
+  mcpKeyDelete: () => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
   rewindFrameImage: (imagePath: string) => Promise<string>
+  rewindFrameById: (id: number) => Promise<RewindFrameImageResult>
   rewindGetSettings: () => Promise<RewindSettings>
   rewindSetSettings: (next: RewindSettings) => Promise<RewindSettings>
+  rewindStatus: () => Promise<RewindStatus>
   rewindPruneNow: () => Promise<number>
+  rewindDeleteAll: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
   rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
+  onRewindCleared: (cb: () => void) => () => void
   /** Capture the primary screen once and OCR it, returning the recognized text
    *  (or '' on failure/timeout). Used by the chat to read the screen at send time. */
   screenReadText: () => Promise<string>
@@ -257,6 +679,11 @@ export type OmiBridgeApi = {
   insightTest: () => void
   /** Toast renderer subscribes to receive the payload to render. */
   onInsightShow: (cb: (p: InsightPayload) => void) => () => void
+  notificationsGetSettings: () => Promise<WindowsNotificationSettings>
+  notificationsSetSettings: (
+    patch: WindowsNotificationSettingsPatch
+  ) => Promise<WindowsNotificationSettings>
+  notificationsTest: (kind?: WindowsNotificationTestKind) => Promise<WindowsNotificationTestResult>
   perfFirstPaint: () => void
   perfMark: (name: string) => void
   // Animation bench (OMI_ANIM_BENCH): the renderer probe reports a jank summary
@@ -595,6 +1022,25 @@ export type RewindFrame = {
   indexed: number // 0 = not yet OCR'd, 1 = OCR done
 }
 
+export type RewindFrameImageOk = {
+  ok: true
+  id: number
+  ts: number
+  app: string
+  windowTitle: string
+  ocrPreview: string
+  imageMimeType: string
+  imageBase64: string
+}
+
+export type RewindFrameImageNotFound = {
+  ok: false
+  code: 'not_found'
+  message: string
+}
+
+export type RewindFrameImageResult = RewindFrameImageOk | RewindFrameImageNotFound
+
 export type RewindSearchGroup = {
   id: string
   app: string
@@ -613,6 +1059,14 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+}
+
+export type RewindStatus = {
+  latestFrameTs: number | null
+  oldestFrameTs: number | null
+  totalFrameCount: number
+  indexedFrameCount: number
+  ocrBacklogCount: number
 }
 
 // --- Proactive Insights (Rewind OCR → Gemini → acrylic toast) ---
@@ -642,6 +1096,55 @@ export type InsightSettings = {
   denylist: string[]
   lastRunAt: number | null
 }
+
+// --- Windows notification preferences ---
+export type WindowsNotificationChannel =
+  | 'focus'
+  | 'tasks'
+  | 'insights'
+  | 'memories'
+  | 'dailySummary'
+
+export type WindowsNotificationTestKind = WindowsNotificationChannel | 'system'
+
+export type WindowsNotificationCategorySettings = {
+  enabled: boolean
+}
+
+export type WindowsInsightNotificationSettings = WindowsNotificationCategorySettings & {
+  intervalMin: number
+  notificationStyle: InsightNotificationStyle
+  denylist: string[]
+  lastRunAt: number | null
+}
+
+export type WindowsDailySummaryNotificationSettings = WindowsNotificationCategorySettings & {
+  /** Preferred local hour, 0-23. */
+  hour: number
+}
+
+export type WindowsNotificationSettings = {
+  /** Master toggle for native Windows notifications delivered from Electron main. */
+  nativeEnabled: boolean
+  focus: WindowsNotificationCategorySettings
+  tasks: WindowsNotificationCategorySettings
+  insights: WindowsInsightNotificationSettings
+  memories: WindowsNotificationCategorySettings
+  dailySummary: WindowsDailySummaryNotificationSettings
+}
+
+export type WindowsNotificationSettingsPatch = {
+  nativeEnabled?: boolean
+  focus?: Partial<WindowsNotificationCategorySettings>
+  tasks?: Partial<WindowsNotificationCategorySettings>
+  insights?: Partial<WindowsInsightNotificationSettings>
+  memories?: Partial<WindowsNotificationCategorySettings>
+  dailySummary?: Partial<WindowsDailySummaryNotificationSettings>
+}
+
+export type WindowsNotificationTestResult =
+  | { ok: true }
+  | { ok: false; code: 'disabled' | 'unsupported' | 'failed'; reason: string }
 
 // ───────────────────────── Desktop Automation Bridge ─────────────────────────
 // A pruned UI Automation node. `ref` is a stable address resolvable at execute

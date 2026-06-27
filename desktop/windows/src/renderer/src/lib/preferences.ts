@@ -2,6 +2,7 @@
 // setters write back to localStorage and notify subscribers so live components
 // can react.
 import { DEFAULT_LANGUAGE } from './languages'
+import type { ModelPurpose, RealtimeVoiceProvider, SttMode } from '../../../shared/types'
 
 const KEY = 'omi-windows-prefs-v1'
 
@@ -16,6 +17,14 @@ export type Preferences = {
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.
   chatHistoryMode: 'per-launch' | 'infinite'
+  // Runtime backing chat and agent tasks. 'auto' uses native Pi/Omi first, then
+  // BYOK, then Omi hosted if Pi is explicitly disabled.
+  chatRuntimeMode: 'auto' | 'omi-hosted' | 'pi' | 'claude-acp'
+  // Skills selected in Integrations -> Skills. Main reads the corresponding
+  // SKILL.md files and injects them into the native Pi context.
+  enabledSkillIds?: string[]
+  modelPurpose?: ModelPurpose
+  defaultModelByPurpose?: Partial<Record<ModelPurpose, string>>
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.
@@ -34,6 +43,17 @@ export type Preferences = {
   // Set by the onboarding opt-in step; toggled in Settings → Rewind. Undefined =
   // off (opt-in), so existing users are unaffected until they enable it.
   continuousRecording?: boolean
+  // Speech-to-text runtime. 'auto' prefers local Parakeet only when a healthy
+  // supported local runtime is present, otherwise hosted /v4/listen.
+  sttMode?: SttMode
+  // Opt-in realtime voice path. Separate from /v4/listen transcription so
+  // continuous recording remains available even when voice is off/unavailable.
+  realtimeVoiceEnabled?: boolean
+  realtimeVoiceProvider?: RealtimeVoiceProvider
+  focusModeEnabled?: boolean
+  focusModeLabel?: string
+  localTtsVoice?: string
+  elevenLabsVoiceId?: string
   // Auto-cleanup of empty conversations + junk memories. 'dry-run' (default) logs
   // what it WOULD delete without deleting; 'live' deletes (rate-limited); 'off'
   // disables the sweep. Read with `?? 'dry-run'`.
@@ -49,7 +69,9 @@ const defaults: Preferences = {
   // Infinite by default: one ongoing conversation that persists across launches
   // and is accessible from the beginning (the Home thread windows it in as you
   // scroll up). Users can switch back to 'per-launch' in Settings.
-  chatHistoryMode: 'infinite'
+  chatHistoryMode: 'infinite',
+  chatRuntimeMode: 'auto',
+  realtimeVoiceProvider: 'omi-relay'
 }
 
 function load(): Preferences {
@@ -90,7 +112,7 @@ export function isOnboardingComplete(): boolean {
 }
 
 // One-shot, in-memory route the app shell should jump to right after onboarding
-// finishes (e.g. "Take me to my tasks" → '/tasks'). Not persisted — it only
+// finishes (e.g. "Go to chat" -> '/home'). Not persisted — it only
 // bridges the onboarding→shell handoff. Navigating from the onboarding screen
 // directly races the onboarding gate's redirect to /home, so instead we record
 // the destination here and let the shell consume it once it mounts.

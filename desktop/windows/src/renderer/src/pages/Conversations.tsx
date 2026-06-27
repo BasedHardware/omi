@@ -23,6 +23,7 @@ import {
 } from '../lib/pageCache'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
+import { useAppState } from '../state/AppStateProvider'
 import type { LocalConversation } from '../../../shared/types'
 
 type CloudConversation = {
@@ -85,8 +86,9 @@ function ConversationSkeleton(): React.JSX.Element {
 
 type FilterKind = 'all' | 'chat' | 'recording'
 
-export function Conversations(): React.JSX.Element {
+export function Conversations(props: { onClose?: () => void }): React.JSX.Element {
   const navigate = useNavigate()
+  const { chat } = useAppState()
   const [rows, setRows] = useState<ConversationRow[]>(conversationsCache.rows ?? [])
   const [loading, setLoading] = useState(!conversationsCache.loaded)
   const [error, setError] = useState<string | null>(conversationsCache.error)
@@ -95,7 +97,9 @@ export function Conversations(): React.JSX.Element {
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(
+    null
+  )
   const pendingTimeoutRef = useRef<number | null>(null)
 
   const loadAll = useCallback(async (): Promise<void> => {
@@ -114,7 +118,8 @@ export function Conversations(): React.JSX.Element {
           title: c.structured?.title || c.title || 'Untitled conversation',
           emoji: c.structured?.emoji || undefined,
           subtitle: c.created_at ? new Date(c.created_at).toLocaleString() : '',
-          preview: c.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
+          preview:
+            c.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
           source: 'cloud',
           sortAt: created
         })
@@ -142,7 +147,7 @@ export function Conversations(): React.JSX.Element {
 
   useEffect(() => {
     if (conversationsCache.loaded) return
-    void loadAll()
+    queueMicrotask(() => void loadAll())
   }, [loadAll])
 
   // The continuous-recording host (and session-end) request a cloud re-fetch when
@@ -184,7 +189,9 @@ export function Conversations(): React.JSX.Element {
     if (filter === 'recording' && r.localKind !== 'recording') return false
     if (query.trim()) {
       const q = query.trim().toLowerCase()
-      return (r.title?.toLowerCase() ?? '').includes(q) || (r.preview?.toLowerCase() ?? '').includes(q)
+      return (
+        (r.title?.toLowerCase() ?? '').includes(q) || (r.preview?.toLowerCase() ?? '').includes(q)
+      )
     }
     return true
   })
@@ -246,11 +253,25 @@ export function Conversations(): React.JSX.Element {
     }
   }
 
+  const openRow = async (row: ConversationRow): Promise<void> => {
+    if (row.localKind === 'chat') {
+      const loaded = await chat.loadConversation(row.id)
+      if (loaded) {
+        props.onClose?.()
+        navigate('/home')
+        return
+      }
+    }
+    navigate(`/conversations/${row.id}`)
+  }
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Conversations"
-        subtitle={loading ? 'Loading…' : `${rows.length} conversation${rows.length === 1 ? '' : 's'}`}
+        subtitle={
+          loading ? 'Loading…' : `${rows.length} conversation${rows.length === 1 ? '' : 's'}`
+        }
         actions={
           <button
             onClick={() => navigate('/conversations/live')}
@@ -440,9 +461,10 @@ export function Conversations(): React.JSX.Element {
                       ) : null}
                     </button>
                   ) : (
-                    <Link
-                      to={`/conversations/${r.id}`}
-                      className="surface-card-interactive block p-5"
+                    <button
+                      type="button"
+                      onClick={() => void openRow(r)}
+                      className="surface-card-interactive block w-full p-5 text-left"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="font-display text-lg font-semibold leading-tight text-text-primary">
@@ -463,7 +485,7 @@ export function Conversations(): React.JSX.Element {
                       <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-tertiary">
                         {r.preview}
                       </p>
-                    </Link>
+                    </button>
                   )}
                 </li>
               )
@@ -475,7 +497,8 @@ export function Conversations(): React.JSX.Element {
       {pendingDelete && (
         <div className="glass-strong mx-6 mb-4 flex items-center justify-between rounded-2xl px-4 py-3 lg:mx-10">
           <span className="text-sm text-white/80">
-            {pendingDelete.ids.length} conversation{pendingDelete.ids.length !== 1 ? 's' : ''} will be deleted in 5s
+            {pendingDelete.ids.length} conversation{pendingDelete.ids.length !== 1 ? 's' : ''} will
+            be deleted in 5s
           </span>
           <button
             onClick={undoDelete}

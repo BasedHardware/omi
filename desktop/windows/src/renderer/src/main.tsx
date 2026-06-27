@@ -4,6 +4,9 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App'
 import { SandboxBadge } from './components/SandboxBadge'
+import { initRendererObservability } from './lib/observability'
+
+initRendererObservability()
 
 // Startup-phase mark: all module imports above are now evaluated (including the
 // App graph, which dynamically — not statically — pulls in @huggingface/

@@ -24,7 +24,8 @@ function sleep(ms: number): Promise<void> {
  */
 export async function generate(args: GenerateArgs): Promise<string> {
   const model = args.model || DEFAULT_MODEL
-  const base = import.meta.env.VITE_OMI_DESKTOP_API_BASE as string
+  const base =
+    import.meta.env.VITE_OMI_DESKTOP_API_BASE || 'https://desktop-backend-hhibjajaja-uc.a.run.app'
   const url = `${base}/v1/proxy/gemini/models/${model}:generateContent`
 
   const body: Record<string, unknown> = {

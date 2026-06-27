@@ -14,6 +14,7 @@ import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
+import database.vector_db as vector_db
 from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
@@ -239,6 +240,10 @@ class BatchMemoriesResponse(BaseModel):
     created_count: int
 
 
+class MemorySearchResult(CleanerMemory):
+    score: float
+
+
 @router.get("/v1/dev/user/memories", tags=["developer"], response_model=List[CleanerMemory])
 def get_memories(
     uid: str = Depends(get_uid_with_memories_read),
@@ -274,6 +279,55 @@ def get_memories(
             )
             continue
     return valid_memories
+
+
+@router.get("/v1/dev/user/memories/search", tags=["developer"], response_model=List[MemorySearchResult])
+def search_memories(
+    query: str = Query(..., min_length=1, max_length=500),
+    limit: int = Query(10, ge=1, le=25),
+    uid: str = Depends(get_uid_with_memories_read),
+):
+    """
+    Semantically search user memories using the same vector index used by internal retrieval.
+
+    Requires the `memories:read` Developer API scope.
+    """
+    query_text = query.strip()
+    if not query_text:
+        raise HTTPException(status_code=422, detail="query cannot be empty")
+
+    matches = vector_db.find_similar_memories(uid, query_text, threshold=0.0, limit=limit)
+    if not matches:
+        return []
+
+    memory_ids = [match.get('memory_id') for match in matches if match.get('memory_id')]
+    memories = memories_db.get_memories_by_ids(uid, memory_ids)
+    memories_by_id = {memory.get('id'): memory for memory in memories if isinstance(memory, dict)}
+
+    results = []
+    for match in matches:
+        memory_id = match.get('memory_id')
+        memory = memories_by_id.get(memory_id)
+        if not memory or memory.get('is_locked', False):
+            continue
+        try:
+            results.append(
+                MemorySearchResult.model_validate(
+                    {
+                        **memory,
+                        'score': float(match.get('score') or 0.0),
+                    }
+                )
+            )
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid memory search doc {memory.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+
+    return results
 
 
 @router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
@@ -784,6 +838,11 @@ class Conversation(BaseModel):
     folder_name: Optional[str] = None
 
 
+class ConversationSearchResult(BaseModel):
+    conversation: Conversation
+    score: float
+
+
 class CreateConversationRequest(BaseModel):
     text: str = Field(description="The conversation text/transcript", min_length=1, max_length=100000)
     text_source: ExternalIntegrationConversationSource = Field(
@@ -1011,6 +1070,73 @@ def create_conversation(
         status=conversation.status.value if conversation.status else 'completed',
         discarded=conversation.discarded,
     )
+
+
+@router.get("/v1/dev/user/conversations/search", response_model=List[ConversationSearchResult], tags=["developer"])
+def search_conversations(
+    query: str = Query(..., min_length=1, max_length=500),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    limit: int = Query(10, ge=1, le=25),
+    include_transcript: bool = False,
+    uid: str = Depends(get_uid_with_conversations_read),
+):
+    """
+    Semantically search user conversations using the same vector index used by internal retrieval.
+
+    Requires the `conversations:read` Developer API scope.
+    """
+    query_text = query.strip()
+    if not query_text:
+        raise HTTPException(status_code=422, detail="query cannot be empty")
+
+    starts_at = int(start_date.timestamp()) if start_date else None
+    ends_at = int(end_date.timestamp()) if end_date else None
+    matches = vector_db.find_similar_conversations(
+        uid=uid,
+        query=query_text,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        limit=limit,
+    )
+    if not matches:
+        return []
+
+    conversation_ids = [match.get('conversation_id') for match in matches if match.get('conversation_id')]
+    conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
+    conversations = [conversation for conversation in conversations if not conversation.get('is_locked', False)]
+    if not include_transcript:
+        for conversation in conversations:
+            conversation.pop('transcript_segments', None)
+    else:
+        populate_speaker_names(uid, conversations)
+    populate_folder_names(uid, conversations)
+
+    conversations_by_id = {
+        conversation.get('id'): conversation for conversation in conversations if isinstance(conversation, dict)
+    }
+    results = []
+    for match in matches:
+        conversation_id = match.get('conversation_id')
+        conversation = conversations_by_id.get(conversation_id)
+        if not conversation:
+            continue
+        try:
+            results.append(
+                ConversationSearchResult(
+                    conversation=Conversation.model_validate(conversation),
+                    score=float(match.get('score') or 0.0),
+                )
+            )
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid conversation search doc {conversation.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+
+    return results
 
 
 @router.get("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])

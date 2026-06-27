@@ -4,7 +4,8 @@ import {
   House,
   GanttChartSquare,
   ListChecks,
-  LayoutGrid,
+  Brain,
+  Puzzle,
   History,
   Monitor,
   Mic,
@@ -21,8 +22,9 @@ const navItems = [
   { label: 'Home', to: '/home', Icon: House },
   { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
   { label: 'Tasks', to: '/tasks', Icon: ListChecks },
+  { label: 'Memories', to: '/memories', Icon: Brain },
   { label: 'Rewind', to: '/rewind', Icon: History },
-  { label: 'Apps', to: '/apps', Icon: LayoutGrid }
+  { label: 'Integrations', to: '/integrations', Icon: Puzzle }
 ]
 
 const COLLAPSE_KEY = 'omi.sidebar.collapsed'

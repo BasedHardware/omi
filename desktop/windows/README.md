@@ -40,6 +40,12 @@ Everything below is blank in `.env.example` and safe to leave unset:
 
 - `VITE_OMI_API_KEY` — cloud-sync recorded conversations (generate in Omi → Settings →
   Developer). Blank = recordings save locally only.
+- `OMI_CLAUDE_ACP_COMMAND` / `OMI_CLAUDE_ACP_ARGS` — local Claude account runtime for
+  the Claude chat mode. Blank/default expects a signed-in `claude --print` command.
+- `VITE_OMI_REALTIME_VOICE_URL` — optional Omi realtime voice relay URL. Blank keeps
+  realtime voice marked unavailable while `/v4/listen` transcription continues to work.
+- `OMI_WINDOWS_UPDATE_FEED_URL` — generic `electron-updater` feed used by packaged
+  Windows builds. Dev builds only check it when `OMI_UPDATES_ENABLED=1`.
 - `MAIN_VITE_GOOGLE_CLIENT_ID` / `MAIN_VITE_GOOGLE_CLIENT_SECRET` /
   `VITE_ENABLE_GOOGLE_INTEGRATION` — the Google integration above.
 

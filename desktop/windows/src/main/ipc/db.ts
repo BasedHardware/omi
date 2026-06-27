@@ -37,6 +37,11 @@ function timed<T>(name: string, fn: () => T): T {
 
 let db: Database.Database | null = null
 let roDb: Database.Database | null = null
+let rewindFtsAvailable: boolean | null = null
+
+function dbFilePath(): string {
+  return process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
+}
 
 // Add a column only if it doesn't already exist, so existing databases (which
 // predate the `kind`/`messages` columns) migrate forward without data loss.
@@ -54,9 +59,7 @@ function ensureColumn(d: Database.Database, table: string, col: string, decl: st
 // silently broke every INSERT. These tables are a derived cache with no user
 // data worth migrating, so recreating them is safe.
 function dropIfMissingColumn(d: Database.Database, table: string, col: string): void {
-  const exists = d
-    .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
-    .get(table)
+  const exists = d.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)
   if (!exists) return
   const cols = d.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
   if (!cols.some((c) => c.name === col)) d.exec(`DROP TABLE ${table}`)
@@ -66,7 +69,7 @@ function get(): Database.Database {
   if (db) return db
   // OMI_DB_PATH lets the bench harness point at a throwaway DB so benchmarking
   // never reads or writes the user's real omi.db.
-  const file = process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
+  const file = dbFilePath()
   db = new Database(file)
   // For the throwaway bench DB only, relax durability so seeding ~7k rows isn't
   // dominated by a per-insert fsync (otherwise it swamps the startup measurement).
@@ -171,7 +174,6 @@ function get(): Database.Database {
       indexed INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_rewind_frames_ts ON rewind_frames(ts);
-    CREATE INDEX IF NOT EXISTS idx_rewind_frames_indexed ON rewind_frames(indexed);
 
     CREATE TABLE IF NOT EXISTS insights (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -195,6 +197,18 @@ function get(): Database.Database {
   ensureColumn(db, 'local_kg_nodes', 'source_refs', 'TEXT')
   // Resolved .lnk target exe, for joining indexed apps to app_usage (additive).
   ensureColumn(db, 'indexed_files', 'target_path', 'TEXT')
+  // Older Windows Rewind databases predate app/window/OCR/indexed metadata.
+  // Additive defaults keep captured frames searchable without data loss.
+  ensureColumn(db, 'rewind_frames', 'app', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'window_title', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'process_name', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'ocr_text', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'image_path', "TEXT NOT NULL DEFAULT ''")
+  ensureColumn(db, 'rewind_frames', 'width', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'rewind_frames', 'height', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'rewind_frames', 'indexed', 'INTEGER NOT NULL DEFAULT 0')
+  db.exec('CREATE INDEX IF NOT EXISTS idx_rewind_frames_indexed ON rewind_frames(indexed)')
+  ensureRewindSearchIndex(db)
   return db
 }
 
@@ -260,7 +274,9 @@ export function getLocalConversation(id: string): LocalConversation | null {
 export function listLocalConversations(): LocalConversation[] {
   return timed('listLocalConversations', () => {
     const rows = get()
-      .prepare(`SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`)
+      .prepare(
+        `SELECT ${LOCAL_CONVERSATION_COLUMNS} FROM local_conversation ORDER BY created_at DESC`
+      )
       .all() as LocalConversationRow[]
     return rows.map(mapLocalConversation)
   })
@@ -269,7 +285,6 @@ export function listLocalConversations(): LocalConversation[] {
 export function deleteLocalConversation(id: string): void {
   get().prepare('DELETE FROM local_conversation WHERE id = ?').run(id)
 }
-
 
 export function remapConversationId(fromId: string, toId: string): number {
   const r = get()
@@ -455,7 +470,7 @@ export function getLocalKGStatus(): LocalKGStatus {
 function getReadonly(): Database.Database {
   if (roDb) return roDb
   get() // ensure the db file + schema exist before opening read-only
-  roDb = new Database(join(app.getPath('userData'), 'omi.db'), { readonly: true })
+  roDb = new Database(dbFilePath(), { readonly: true })
   return roDb
 }
 
@@ -465,10 +480,248 @@ function getReadonly(): Database.Database {
 export function execSafeSelect(sql: string): KgSqlResult {
   const stmt = getReadonly().prepare(sql)
   const rows = stmt.all() as Record<string, unknown>[]
-  const columns = rows.length
-    ? Object.keys(rows[0])
-    : (stmt.columns().map((c) => c.name) ?? [])
+  const columns = rows.length ? Object.keys(rows[0]) : (stmt.columns().map((c) => c.name) ?? [])
   return { columns, rows }
+}
+
+export type LocalTaskSearchRecord = {
+  source: string
+  id: string
+  backendId: string | null
+  description: string
+  completed: boolean
+  deleted: boolean
+  dueAt: string | number | null
+  createdAt: string | number | null
+  updatedAt: string | number | null
+  priority: string | null
+}
+
+export type LocalTaskSearchResult = {
+  available: boolean
+  reason?: string
+  sources: string[]
+  tasks: LocalTaskSearchRecord[]
+}
+
+type TaskTableSpec = {
+  table: string
+  id: string[]
+  backendId: string[]
+  description: string[]
+  completed: string[]
+  deleted: string[]
+  dueAt: string[]
+  createdAt: string[]
+  updatedAt: string[]
+  priority: string[]
+}
+
+const TASK_TABLE_SPECS: TaskTableSpec[] = [
+  {
+    table: 'action_items',
+    id: ['backendId', 'backend_id', 'id'],
+    backendId: ['backendId', 'backend_id'],
+    description: ['description', 'title', 'text', 'content'],
+    completed: ['completed', 'is_completed'],
+    deleted: ['deleted', 'is_deleted'],
+    dueAt: ['dueAt', 'due_at'],
+    createdAt: ['createdAt', 'created_at'],
+    updatedAt: ['updatedAt', 'updated_at'],
+    priority: ['priority']
+  },
+  {
+    table: 'staged_tasks',
+    id: ['id', 'backendId', 'backend_id'],
+    backendId: ['backendId', 'backend_id'],
+    description: ['description', 'title', 'text', 'content'],
+    completed: ['completed', 'is_completed'],
+    deleted: ['deleted', 'is_deleted'],
+    dueAt: ['dueAt', 'due_at'],
+    createdAt: ['createdAt', 'created_at'],
+    updatedAt: ['updatedAt', 'updated_at'],
+    priority: ['priority']
+  }
+]
+
+type LocalTaskSearchRow = {
+  source: string
+  id: unknown
+  backendId: unknown
+  description: string
+  completed: number
+  deleted: number
+  dueAt: unknown
+  createdAt: unknown
+  updatedAt: unknown
+  priority: unknown
+}
+
+function safeIdent(name: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) throw new Error(`unsafe identifier: ${name}`)
+  return `"${name}"`
+}
+
+function tableExists(d: Database.Database, table: string): boolean {
+  const row = d
+    .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type='table' AND name=?")
+    .get(table) as { ok: number } | undefined
+  return row?.ok === 1
+}
+
+function tableColumns(d: Database.Database, table: string): Map<string, string> {
+  const rows = d.prepare(`PRAGMA table_info(${safeIdent(table)})`).all() as { name: string }[]
+  const out = new Map<string, string>()
+  for (const row of rows) out.set(row.name.toLowerCase(), row.name)
+  return out
+}
+
+function firstColumn(columns: Map<string, string>, candidates: string[]): string | null {
+  for (const candidate of candidates) {
+    const column = columns.get(candidate.toLowerCase())
+    if (column) return column
+  }
+  return null
+}
+
+function coalesceColumnExpr(
+  columns: Map<string, string>,
+  candidates: string[],
+  fallbackSql: string
+): string {
+  const matches = candidates
+    .map((candidate) => firstColumn(columns, [candidate]))
+    .filter((column): column is string => column != null)
+  if (matches.length === 0) return fallbackSql
+  return `COALESCE(${matches.map(safeIdent).join(', ')}, ${fallbackSql})`
+}
+
+function booleanColumnExpr(column: string | null): string {
+  if (!column) return '0'
+  const quoted = safeIdent(column)
+  return `CASE WHEN ${quoted} IN (1, '1', 'true', 'TRUE') THEN 1 ELSE 0 END`
+}
+
+function optionalColumnExpr(column: string | null): string {
+  return column ? safeIdent(column) : 'NULL'
+}
+
+function localTaskValue(value: unknown): string | number | null {
+  if (typeof value === 'string' || typeof value === 'number') return value
+  return null
+}
+
+function localTaskString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null
+}
+
+function localTaskTimestampValue(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const numeric = Number(value)
+    if (Number.isFinite(numeric)) return numeric
+    const parsed = Date.parse(value)
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+  return 0
+}
+
+function mapLocalTaskRow(row: LocalTaskSearchRow): LocalTaskSearchRecord {
+  const fallbackId = `${row.source}:${row.description}:${String(row.createdAt ?? '')}`
+  return {
+    source: row.source,
+    id: String(row.id || row.backendId || fallbackId),
+    backendId: localTaskString(row.backendId),
+    description: row.description,
+    completed: row.completed === 1,
+    deleted: row.deleted === 1,
+    dueAt: localTaskValue(row.dueAt),
+    createdAt: localTaskValue(row.createdAt),
+    updatedAt: localTaskValue(row.updatedAt),
+    priority: localTaskString(row.priority)
+  }
+}
+
+export function searchLocalTasks(
+  query: string,
+  includeCompleted = false,
+  limit = 20
+): LocalTaskSearchResult {
+  const d = getReadonly()
+  const cappedLimit = Math.min(50, Math.max(1, Math.trunc(limit)))
+  const trimmed = query.trim()
+  const tasks: LocalTaskSearchRecord[] = []
+  const sources: string[] = []
+
+  for (const spec of TASK_TABLE_SPECS) {
+    if (!tableExists(d, spec.table)) continue
+    const columns = tableColumns(d, spec.table)
+    const descriptionColumn = firstColumn(columns, spec.description)
+    if (!descriptionColumn) continue
+
+    sources.push(spec.table)
+    const completedColumn = firstColumn(columns, spec.completed)
+    const deletedColumn = firstColumn(columns, spec.deleted)
+    const createdColumn = firstColumn(columns, spec.createdAt)
+    const titleColumn = firstColumn(columns, ['title'])
+    const searchColumns = [...new Set([descriptionColumn, titleColumn].filter(Boolean))] as string[]
+
+    const where: string[] = []
+    const params: unknown[] = []
+    if (deletedColumn) where.push(`${booleanColumnExpr(deletedColumn)} = 0`)
+    if (!includeCompleted && completedColumn)
+      where.push(`${booleanColumnExpr(completedColumn)} = 0`)
+    if (trimmed) {
+      const needles = [
+        trimmed,
+        ...trimmed
+          .split(/\s+/)
+          .map((part) => part.trim())
+          .filter((part) => part.length >= 2 && part !== trimmed)
+      ]
+      const searchParts = needles.map((needle) => {
+        for (let index = 0; index < searchColumns.length; index += 1) params.push(`%${needle}%`)
+        return `(${searchColumns.map((column) => `${safeIdent(column)} LIKE ?`).join(' OR ')})`
+      })
+      where.push(`(${searchParts.join(' OR ')})`)
+    }
+
+    const sql = `
+      SELECT
+        '${spec.table}' AS source,
+        ${coalesceColumnExpr(columns, spec.id, "''")} AS id,
+        ${coalesceColumnExpr(columns, spec.backendId, 'NULL')} AS backendId,
+        ${safeIdent(descriptionColumn)} AS description,
+        ${booleanColumnExpr(completedColumn)} AS completed,
+        ${booleanColumnExpr(deletedColumn)} AS deleted,
+        ${optionalColumnExpr(firstColumn(columns, spec.dueAt))} AS dueAt,
+        ${optionalColumnExpr(createdColumn)} AS createdAt,
+        ${optionalColumnExpr(firstColumn(columns, spec.updatedAt))} AS updatedAt,
+        ${optionalColumnExpr(firstColumn(columns, spec.priority))} AS priority
+      FROM ${safeIdent(spec.table)}
+      ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+      ORDER BY ${createdColumn ? safeIdent(createdColumn) : 'rowid'} DESC
+      LIMIT ?
+    `
+    const rows = d.prepare(sql).all(...params, cappedLimit) as LocalTaskSearchRow[]
+    tasks.push(...rows.map(mapLocalTaskRow))
+  }
+
+  if (sources.length === 0) {
+    return {
+      available: false,
+      reason: 'No supported local task tables were found in the Windows main-process database.',
+      sources: [],
+      tasks: []
+    }
+  }
+
+  tasks.sort((a, b) => localTaskTimestampValue(b.createdAt) - localTaskTimestampValue(a.createdAt))
+  return {
+    available: true,
+    sources,
+    tasks: tasks.slice(0, cappedLimit)
+  }
 }
 
 type LocalKGNodeRow = {
@@ -546,11 +799,7 @@ export function queryKgNodes(q: string, limit = 12): LocalKnowledgeGraph {
 
 // indexed_files whose filename/folder match q. Excludes apps (file_type
 // 'application') unless explicitly requested via fileType.
-export function searchIndexedFiles(
-  q: string,
-  fileType?: string,
-  limit = 20
-): IndexedFileRecord[] {
+export function searchIndexedFiles(q: string, fileType?: string, limit = 20): IndexedFileRecord[] {
   const like = `%${q}%`
   const cols =
     'path, filename, extension, file_type AS fileType, size_bytes AS sizeBytes, folder, depth, created_at AS createdAt, modified_at AS modifiedAt'
@@ -716,42 +965,166 @@ export function clearLocalGraph(): void {
 const REWIND_COLUMNS =
   'id, ts, app, window_title AS windowTitle, process_name AS processName, ocr_text AS ocrText, image_path AS imagePath, width, height, indexed'
 
+const REWIND_FTS_TABLE = 'rewind_frames_fts'
+
+function ensureRewindSearchIndex(d: Database.Database): boolean {
+  if (process.env.OMI_REWIND_DISABLE_FTS === '1') {
+    rewindFtsAvailable = false
+    return false
+  }
+  if (rewindFtsAvailable != null) return rewindFtsAvailable
+  try {
+    d.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS ${REWIND_FTS_TABLE}
+      USING fts5(app, window_title, ocr_text);
+    `)
+    const frameCount = (d.prepare('SELECT COUNT(*) AS n FROM rewind_frames').get() as { n: number })
+      .n
+    const ftsCount = (
+      d.prepare(`SELECT COUNT(*) AS n FROM ${REWIND_FTS_TABLE}`).get() as { n: number }
+    ).n
+    if (frameCount !== ftsCount) rebuildRewindSearchIndex(d)
+    rewindFtsAvailable = true
+  } catch (err) {
+    console.warn('[rewind] FTS search unavailable; falling back to LIKE search', err)
+    rewindFtsAvailable = false
+  }
+  return rewindFtsAvailable
+}
+
+function rebuildRewindSearchIndex(d: Database.Database): void {
+  d.exec(`DELETE FROM ${REWIND_FTS_TABLE}`)
+  d.exec(`
+    INSERT INTO ${REWIND_FTS_TABLE} (rowid, app, window_title, ocr_text)
+    SELECT id, app, window_title, ocr_text FROM rewind_frames
+  `)
+}
+
+function syncRewindSearchRow(d: Database.Database, id: number): void {
+  if (!ensureRewindSearchIndex(d)) return
+  d.prepare(
+    `INSERT OR REPLACE INTO ${REWIND_FTS_TABLE} (rowid, app, window_title, ocr_text)
+     SELECT id, app, window_title, ocr_text FROM rewind_frames WHERE id = ?`
+  ).run(id)
+}
+
+function deleteRewindSearchRows(d: Database.Database, ids: number[]): void {
+  if (ids.length === 0 || !ensureRewindSearchIndex(d)) return
+  const del = d.prepare(`DELETE FROM ${REWIND_FTS_TABLE} WHERE rowid = ?`)
+  for (const id of ids) del.run(id)
+}
+
+function ftsQuery(query: string): string | null {
+  const tokens = query.match(/[\p{L}\p{N}_]+/gu) ?? []
+  const safe = tokens.map((t) => t.replace(/"/g, '""')).filter((t) => t.length > 0)
+  return safe.length > 0 ? safe.map((t) => `"${t}"*`).join(' AND ') : null
+}
+
+function searchRewindFramesLike(d: Database.Database, query: string, limit: number): RewindFrame[] {
+  const like = `%${query}%`
+  return d
+    .prepare(
+      `SELECT ${REWIND_COLUMNS} FROM rewind_frames
+       WHERE ocr_text LIKE ? OR window_title LIKE ? OR app LIKE ?
+       ORDER BY ts DESC LIMIT ?`
+    )
+    .all(like, like, like, limit) as RewindFrame[]
+}
+
 export function insertRewindFrame(f: Omit<RewindFrame, 'id'>): number {
-  const r = get()
+  const d = get()
+  const r = d
     .prepare(
       `INSERT INTO rewind_frames (ts, app, window_title, process_name, ocr_text, image_path, width, height, indexed)
        VALUES (@ts, @app, @windowTitle, @processName, @ocrText, @imagePath, @width, @height, @indexed)`
     )
     .run(f)
-  return r.lastInsertRowid as number
+  const id = r.lastInsertRowid as number
+  syncRewindSearchRow(d, id)
+  return id
 }
 
 export function listRewindFrames(from: number, to: number): RewindFrame[] {
-  return timed('listRewindFrames', () =>
-    get()
-      .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
-      .all(from, to) as RewindFrame[]
+  return timed(
+    'listRewindFrames',
+    () =>
+      get()
+        .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
+        .all(from, to) as RewindFrame[]
   )
 }
 
 export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
-    const like = `%${query}%`
-    return get()
-      .prepare(
-        `SELECT ${REWIND_COLUMNS} FROM rewind_frames
-       WHERE ocr_text LIKE ? OR window_title LIKE ? OR app LIKE ?
-       ORDER BY ts DESC LIMIT ?`
-      )
-      .all(like, like, like, limit) as RewindFrame[]
+    const d = get()
+    const match = ftsQuery(query)
+    if (match && ensureRewindSearchIndex(d)) {
+      try {
+        return d
+          .prepare(
+            `SELECT ${REWIND_COLUMNS}
+               FROM rewind_frames
+              WHERE id IN (
+                SELECT rowid FROM ${REWIND_FTS_TABLE}
+                 WHERE ${REWIND_FTS_TABLE} MATCH ?
+              )
+              ORDER BY ts DESC LIMIT ?`
+          )
+          .all(match, limit) as RewindFrame[]
+      } catch (err) {
+        console.warn('[rewind] FTS query failed; falling back to LIKE search', err)
+      }
+    }
+    return searchRewindFramesLike(d, query, limit)
   })
 }
 
+export function getRewindFrame(id: number): RewindFrame | null {
+  const row = get().prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE id = ?`).get(id) as
+    | RewindFrame
+    | undefined
+  return row ?? null
+}
+
 export function rewindDayBounds(): { min: number; max: number } | null {
-  const row = get()
-    .prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames')
-    .get() as { min: number | null; max: number | null }
+  const row = get().prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames').get() as {
+    min: number | null
+    max: number | null
+  }
   return row.min == null || row.max == null ? null : { min: row.min, max: row.max }
+}
+
+export function rewindStatusStats(): {
+  latestFrameTs: number | null
+  oldestFrameTs: number | null
+  totalFrameCount: number
+  indexedFrameCount: number
+  ocrBacklogCount: number
+} {
+  const row = get()
+    .prepare(
+      `SELECT
+         MIN(ts) AS oldestFrameTs,
+         MAX(ts) AS latestFrameTs,
+         COUNT(*) AS totalFrameCount,
+         SUM(CASE WHEN indexed = 1 THEN 1 ELSE 0 END) AS indexedFrameCount,
+         SUM(CASE WHEN indexed = 0 THEN 1 ELSE 0 END) AS ocrBacklogCount
+       FROM rewind_frames`
+    )
+    .get() as {
+    oldestFrameTs: number | null
+    latestFrameTs: number | null
+    totalFrameCount: number
+    indexedFrameCount: number | null
+    ocrBacklogCount: number | null
+  }
+  return {
+    latestFrameTs: row.latestFrameTs,
+    oldestFrameTs: row.oldestFrameTs,
+    totalFrameCount: row.totalFrameCount,
+    indexedFrameCount: row.indexedFrameCount ?? 0,
+    ocrBacklogCount: row.ocrBacklogCount ?? 0
+  }
 }
 
 /** The single most-recent captured frame (Omi's own windows are never captured),
@@ -770,7 +1143,9 @@ export function unindexedRewindFrames(limit = 20): RewindFrame[] {
 }
 
 export function setRewindFrameOcr(id: number, ocrText: string): void {
-  get().prepare('UPDATE rewind_frames SET ocr_text = ?, indexed = 1 WHERE id = ?').run(ocrText, id)
+  const d = get()
+  d.prepare('UPDATE rewind_frames SET ocr_text = ?, indexed = 1 WHERE id = ?').run(ocrText, id)
+  syncRewindSearchRow(d, id)
 }
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
@@ -779,10 +1154,19 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const del = d.prepare('DELETE FROM rewind_frames WHERE ts < ?')
   const pruneOlderThan = d.transaction((cutoff: number) => {
     const doomed = select.all(cutoff) as RewindFrame[]
+    deleteRewindSearchRows(
+      d,
+      doomed.map((f) => f.id).filter((id): id is number => id != null)
+    )
     del.run(cutoff)
     return doomed // caller deletes the image files
   })
   return pruneOlderThan(cutoffTs)
+}
+
+export function deleteAllRewindFrames(): number {
+  const result = get().prepare('DELETE FROM rewind_frames').run()
+  return result.changes
 }
 
 // --- Proactive Insights ---

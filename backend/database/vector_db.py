@@ -56,13 +56,44 @@ def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[
 
 
 def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
+    matches = find_similar_conversations(uid=uid, query=query, starts_at=starts_at, ends_at=ends_at, limit=k)
+    return [match['conversation_id'] for match in matches if match.get('conversation_id')]
+
+
+def find_similar_conversations(
+    uid: str,
+    query: str,
+    starts_at: int = None,
+    ends_at: int = None,
+    limit: int = 5,
+) -> List[dict]:
+    """
+    Semantic search for conversations.
+    Returns conversation ids with Pinecone relevance scores ordered by relevance.
+    """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping conversation search')
+        return []
+
     filter_data = {'uid': uid}
+    created_at_filter = {}
     if starts_at is not None:
-        filter_data['created_at'] = {'$gte': starts_at, '$lte': ends_at}
+        created_at_filter['$gte'] = starts_at
+    if ends_at is not None:
+        created_at_filter['$lte'] = ends_at
+    if created_at_filter:
+        filter_data['created_at'] = created_at_filter
 
     xq = embeddings.embed_query(query)
-    xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
-    return [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
+    xc = index.query(vector=xq, top_k=limit, include_metadata=True, filter=filter_data, namespace="ns1")
+    return [
+        {
+            'conversation_id': (match.get('metadata') or {}).get('memory_id')
+            or match.get('id', '').replace(f'{uid}-', ''),
+            'score': match.get('score', 0.0),
+        }
+        for match in xc.get('matches', [])
+    ]
 
 
 def query_vectors_by_metadata(

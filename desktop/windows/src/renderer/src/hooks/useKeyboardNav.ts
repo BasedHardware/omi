@@ -12,7 +12,7 @@ const shortcuts: { combo: string; path: string }[] = [
   { combo: '3', path: '/tasks' },
   { combo: '4', path: '/memories' },
   { combo: '5', path: '/rewind' },
-  { combo: '6', path: '/apps' },
+  { combo: '6', path: '/integrations' },
   { combo: ',', path: '/settings' }
 ]
 
@@ -24,10 +24,7 @@ export function useKeyboardNav(): void {
       if (!mod) return
       // Don't hijack typing in inputs.
       const t = e.target as HTMLElement | null
-      if (
-        t &&
-        (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-      ) {
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) {
         return
       }
       const hit = shortcuts.find((s) => s.combo === e.key)

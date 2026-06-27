@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
+import { matchesSettingsQuery } from './settingsSearch'
 
 // Global Settings search. Rows register their searchable text (+ which tab they
 // belong to). With a query present, each row self-hides when it doesn't match,
@@ -43,7 +44,7 @@ export function SettingsSearchProvider(props: { children: React.ReactNode }): Re
     (tab: string): boolean => {
       if (!q) return true
       for (const e of entries.current.values()) {
-        if (e.tab === tab && e.text.includes(q)) return true
+        if (e.tab === tab && matchesSettingsQuery(e.text, q)) return true
       }
       return false
     },
@@ -77,5 +78,5 @@ export function useSearchableRow(text: string): boolean {
     return () => unregister(id)
   }, [id, text, tab, register, unregister])
   const q = query.trim().toLowerCase()
-  return q === '' || text.toLowerCase().includes(q)
+  return matchesSettingsQuery(text, q)
 }

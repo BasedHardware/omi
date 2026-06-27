@@ -10,6 +10,14 @@ function snippet(text: string, query: string): string {
   return (start > 0 ? '…' : '') + text.slice(start, idx + query.length + 30).trim() + '…'
 }
 
+function searchableText(f: RewindFrame): string {
+  return [f.ocrText, f.app, f.windowTitle].filter(Boolean).join(' ')
+}
+
+function matches(f: RewindFrame, query: string): boolean {
+  return searchableText(f).toLowerCase().includes(query.toLowerCase())
+}
+
 /**
  * Cluster a flat frame list into groups: consecutive frames within
  * GROUP_WINDOW_MS of the group's start that share the same app + window title.
@@ -24,7 +32,7 @@ export function groupFrames(frames: RewindFrame[], query: string): RewindSearchG
     if (current.length === 0) return
     const first = current[0]
     const last = current[current.length - 1]
-    const rep = current.find((f) => f.ocrText.toLowerCase().includes(query.toLowerCase())) ?? last
+    const rep = current.find((f) => matches(f, query)) ?? last
     groups.push({
       id: `${first.app}-${first.ts}`,
       app: first.app,
@@ -33,7 +41,7 @@ export function groupFrames(frames: RewindFrame[], query: string): RewindSearchG
       endTs: last.ts,
       frames: [...current],
       representative: rep,
-      matchSnippet: snippet(rep.ocrText, query)
+      matchSnippet: snippet(searchableText(rep), query)
     })
     current = []
   }

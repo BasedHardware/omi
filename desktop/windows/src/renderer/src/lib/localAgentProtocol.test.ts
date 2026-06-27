@@ -8,44 +8,63 @@ import {
 } from './localAgentProtocol'
 
 describe('parseAction', () => {
-  it('parses query_kg with input', () => {
-    expect(parseAction('{"action":"query_kg","input":"projects"}')).toEqual({
-      action: 'query_kg',
-      input: 'projects'
+  it('parses local status without input', () => {
+    expect(parseAction('{"action":"get_local_status","input":{}}')).toEqual({
+      action: 'get_local_status',
+      input: {}
     })
   })
-  it('parses search_files with optional fileType', () => {
-    expect(parseAction('{"action":"search_files","input":"omi","fileType":"code"}')).toEqual({
-      action: 'search_files',
-      input: 'omi',
-      fileType: 'code'
+  it('parses screen history search with object input', () => {
+    expect(
+      parseAction('{"action":"search_screen_history","input":{"query":"roadmap","days":3}}')
+    ).toEqual({
+      action: 'search_screen_history',
+      input: { query: 'roadmap', days: 3 }
     })
   })
-  it('parses search_memories with input', () => {
-    expect(parseAction('{"action":"search_memories","input":"omi windows"}')).toEqual({
-      action: 'search_memories',
-      input: 'omi windows'
+  it('normalizes screen history string input for tolerant model output', () => {
+    expect(parseAction('{"action":"search_screen_history","input":"omi windows"}')).toEqual({
+      action: 'search_screen_history',
+      input: { query: 'omi windows' }
     })
   })
   it('parses execute_sql with input', () => {
-    expect(
-      parseAction('{"action":"execute_sql","input":"SELECT 1 FROM local_kg_nodes"}')
-    ).toEqual({ action: 'execute_sql', input: 'SELECT 1 FROM local_kg_nodes' })
+    expect(parseAction('{"action":"execute_sql","input":"SELECT 1 FROM local_kg_nodes"}')).toEqual({
+      action: 'execute_sql',
+      input: { query: 'SELECT 1 FROM local_kg_nodes' }
+    })
+  })
+  it('parses screenshot ids from object and scalar input', () => {
+    expect(parseAction('{"action":"get_screenshot","input":{"screenshot_id":42}}')).toEqual({
+      action: 'get_screenshot',
+      input: { screenshot_id: 42 }
+    })
+    expect(parseAction('{"action":"get_screenshot","input":"43"}')).toEqual({
+      action: 'get_screenshot',
+      input: { screenshot_id: 43 }
+    })
   })
   it('parses final', () => {
     expect(parseAction('```json\n{"action":"final"}\n```')).toEqual({ action: 'final' })
   })
-  it('returns null for unknown/missing action or blank input', () => {
+  it('returns null for unknown, destructive, missing, or blank actions', () => {
     expect(parseAction('{"action":"delete_all"}')).toBeNull()
-    expect(parseAction('{"action":"query_kg","input":"  "}')).toBeNull()
+    expect(parseAction('{"action":"delete_task","input":{"task_id":"task-1"}}')).toBeNull()
+    expect(parseAction('{"action":"complete_task","input":{"task_id":"task-1"}}')).toBeNull()
+    expect(parseAction('{"action":"execute_sql","input":"  "}')).toBeNull()
+    expect(parseAction('{"action":"search_screen_history","input":{}}')).toBeNull()
+    expect(parseAction('{"action":"get_screenshot","input":{}}')).toBeNull()
     expect(parseAction('not json')).toBeNull()
   })
   // Real-world haiku output: prose + Claude's native <function_calls> tag +
   // a JSON array wrapper, with trailing characters after the object.
   it('parses an action wrapped in prose, <function_calls>, and an array', () => {
     const raw =
-      'I\'ll search your files.\n<function_calls>\n[{"action": "query_kg", "input": "projects work"}]'
-    expect(parseAction(raw)).toEqual({ action: 'query_kg', input: 'projects work' })
+      'I\'ll search your screen.\n<function_calls>\n[{"action":"search_screen_history","input":{"query":"projects work"}}]'
+    expect(parseAction(raw)).toEqual({
+      action: 'search_screen_history',
+      input: { query: 'projects work' }
+    })
   })
   it('parses a bare object preceded by prose and followed by trailing text', () => {
     expect(parseAction('Sure! {"action":"final"} done')).toEqual({ action: 'final' })

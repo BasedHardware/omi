@@ -11,6 +11,12 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { computeOverlayBounds, OVERLAY_WIDTH } from './bounds'
 import { rendererBaseUrl } from '../rendererServer'
+import {
+  getFloatingBarSettings,
+  recordFloatingBarOpened,
+  recordFloatingBarSummon
+} from '../floatingBar/settings'
+import type { FloatingBarSettings } from '../../shared/types'
 
 let overlayWindow: BrowserWindow | null = null
 
@@ -32,6 +38,7 @@ export function getOverlayWindow(): BrowserWindow | null {
  * instant and the auth/session stay warm.
  */
 export function createOverlayWindow(): BrowserWindow {
+  const floatingBarSettings = getFloatingBarSettings()
   const win = new BrowserWindow({
     width: OVERLAY_WIDTH,
     height: 200,
@@ -43,7 +50,7 @@ export function createOverlayWindow(): BrowserWindow {
     titleBarStyle: 'hidden',
     resizable: false,
     skipTaskbar: true,
-    alwaysOnTop: true,
+    alwaysOnTop: floatingBarSettings.alwaysOnTop,
     hasShadow: true,
     focusable: true,
     // Pure-black base so any pre-paint frame and the acrylic's inactive fallback
@@ -58,9 +65,7 @@ export function createOverlayWindow(): BrowserWindow {
     }
   })
 
-  // Float above fullscreen-ish apps. 'screen-saver' is the highest standard
-  // level; if it proves too aggressive over the taskbar/Start, drop to 'pop-up-menu'.
-  win.setAlwaysOnTop(true, 'screen-saver')
+  applyOverlayAlwaysOnTop(win, floatingBarSettings.alwaysOnTop)
 
   // Exclude the overlay from screen capture (Windows WDA_EXCLUDEFROMCAPTURE). The
   // chat's "what's on my screen" feature grabs a screenshot at send time; without
@@ -150,6 +155,27 @@ export function applyOverlayMaterial(win: BrowserWindow): 'acrylic' | 'mica' | '
   return 'none'
 }
 
+/**
+ * Apply the user-facing "stay above everything" setting. When disabled, do not
+ * request a special z-order level at all; the overlay behaves like a normal
+ * focused utility window.
+ */
+export function applyOverlayAlwaysOnTop(win: BrowserWindow, alwaysOnTop: boolean): void {
+  if (alwaysOnTop) {
+    // Float above fullscreen-ish apps. 'screen-saver' preserves the historical
+    // behavior for users who leave the setting on.
+    win.setAlwaysOnTop(true, 'screen-saver')
+    return
+  }
+  win.setAlwaysOnTop(false)
+}
+
+export function setOverlayAlwaysOnTop(alwaysOnTop: boolean): void {
+  const win = overlayWindow
+  if (!win || win.isDestroyed()) return
+  applyOverlayAlwaysOnTop(win, alwaysOnTop)
+}
+
 // --- Summon / dismiss -------------------------------------------------------
 
 const TWEEN_FRAME_MS = 20
@@ -180,15 +206,20 @@ let snapUntil = 0
 // Work area of the display captured at summon, reused by the height tween so a
 // mid-stream cursor move to another monitor can't yank the panel across screens.
 let activeWorkArea: { x: number; y: number; width: number; height: number } | null = null
-// Whether the summon shortcut may open the overlay. Off until onboarding completes
-// (the renderer reports the flag via 'overlay:setEnabled'); the overlay's own
-// shortcut-setup step ships later.
-let overlayEnabled = false
+// Whether the renderer has allowed shortcut summons. Off until onboarding
+// completes (the renderer reports the flag via 'overlay:setEnabled'). User-facing
+// persisted controls are checked separately in canSummonOverlay().
+let overlayAllowed = false
+
+function canSummonOverlay(settings: FloatingBarSettings = getFloatingBarSettings()): boolean {
+  return overlayAllowed && settings.enabled && settings.summonOnShortcut
+}
 
 /** Enable/disable summoning. Disabling also hides the overlay if it's open. */
 export function setOverlayEnabled(enabled: boolean): void {
-  overlayEnabled = enabled
-  if (!enabled) {
+  overlayAllowed = enabled
+  const settings = getFloatingBarSettings()
+  if (!enabled || !settings.enabled || !settings.summonOnShortcut) {
     hideOverlay()
     return
   }
@@ -200,6 +231,16 @@ export function setOverlayEnabled(enabled: boolean): void {
   // mounts, flipping overlayReady, so a summon during warm-up is handled by the
   // existing pendingSummon path.
   ensureOverlayWindow()
+}
+
+export function applyFloatingBarSettings(settings: FloatingBarSettings): void {
+  setOverlayAlwaysOnTop(settings.alwaysOnTop)
+  if (!settings.enabled || !settings.summonOnShortcut) {
+    hideOverlay()
+    return
+  }
+  if (overlayAllowed) ensureOverlayWindow()
+  broadcastOverlayState()
 }
 
 /**
@@ -245,6 +286,7 @@ function presentOverlay(win: BrowserWindow): void {
   snapUntil = Date.now() + SETTLE_MS
   win.show()
   win.focus()
+  recordFloatingBarOpened()
   win.webContents.send('overlay:shown')
   broadcastOverlayState()
 }
@@ -270,6 +312,7 @@ export function hideOverlay(): void {
  * overlay, so a renderer can't observe the press itself.
  */
 function broadcastSummoned(): void {
+  recordFloatingBarSummon()
   for (const w of BrowserWindow.getAllWindows()) {
     if (!w.isDestroyed()) w.webContents.send('overlay:summoned')
   }
@@ -294,7 +337,7 @@ function broadcastOverlayState(): void {
 export function toggleOverlay(): void {
   // Gated until the onboarding shortcut step enables it — the shortcut stays
   // registered (so it's claimed) but does nothing until then.
-  if (!overlayEnabled) return
+  if (!canSummonOverlay()) return
   const now = Date.now()
   if (now - lastToggle < 150) return
   lastToggle = now
@@ -307,6 +350,28 @@ export function toggleOverlay(): void {
     hideOverlay()
   } else {
     showOverlay()
+  }
+}
+
+export function getOverlayRuntimeStatus(settings: FloatingBarSettings = getFloatingBarSettings()): {
+  effectiveSummonEnabled: boolean
+  windowCreated: boolean
+  open: boolean
+  active: boolean
+  overlayReady: boolean
+  alwaysOnTop: boolean
+  alwaysOnTopLevel: 'screen-saver' | 'normal'
+} {
+  const win = overlayWindow
+  const open = !!(win && !win.isDestroyed() && win.isVisible())
+  return {
+    effectiveSummonEnabled: canSummonOverlay(settings),
+    windowCreated: !!(win && !win.isDestroyed()),
+    open,
+    active: open && !!win && win.isFocused(),
+    overlayReady,
+    alwaysOnTop: settings.alwaysOnTop,
+    alwaysOnTopLevel: settings.alwaysOnTop ? 'screen-saver' : 'normal'
   }
 }
 

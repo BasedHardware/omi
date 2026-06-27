@@ -167,6 +167,7 @@ _drop_stale_module("utils.conversations.render", BACKEND_DIR / "utils" / "conver
 from datetime import datetime, timezone  # noqa: E402
 
 import database.memories as memories_db  # noqa: E402  (the stub)
+import database.vector_db as vector_db  # noqa: E402  (the stub)
 from models.memories import MemoryCategory  # noqa: E402  (real model; stubs prevent google init)
 
 from fastapi import FastAPI  # noqa: E402
@@ -259,3 +260,23 @@ def test_all_valid_records_returned():
         resp = client.get('/v1/dev/user/memories')
     assert resp.status_code == 200
     assert len(resp.json()) == 2
+
+
+def test_memory_search_hydrates_scores_and_skips_locked():
+    locked = _valid_memory('locked')
+    locked['is_locked'] = True
+    matches = [
+        {'memory_id': 'b', 'score': 0.92},
+        {'memory_id': 'locked', 'score': 0.88},
+        {'memory_id': 'a', 'score': 0.81},
+    ]
+    with patch.object(vector_db, 'find_similar_memories', return_value=matches) as mock_search, patch.object(
+        memories_db, 'get_memories_by_ids', return_value=[_valid_memory('a'), locked, _valid_memory('b')]
+    ) as mock_get:
+        client = _build()
+        resp = client.get('/v1/dev/user/memories/search?query=project&limit=3')
+
+    assert resp.status_code == 200
+    assert [(m['id'], m['score']) for m in resp.json()] == [('b', 0.92), ('a', 0.81)]
+    mock_search.assert_called_once_with('uid1', 'project', threshold=0.0, limit=3)
+    mock_get.assert_called_once_with('uid1', ['b', 'locked', 'a'])

@@ -74,3 +74,7 @@ export function resumeOverlayShortcut(): boolean {
 export function getOverlayAccelerator(): string {
   return currentAccelerator
 }
+
+export function isOverlayShortcutRegistered(): boolean {
+  return globalShortcut.isRegistered(currentAccelerator)
+}

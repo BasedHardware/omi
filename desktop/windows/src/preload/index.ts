@@ -7,16 +7,37 @@ import type {
   CaptureChoice,
   ListenStartArgs,
   ListenMessage,
+  ElevenLabsTtsSynthesizeRequest,
+  LocalTtsSynthesizeRequest,
   ExportMemory,
   GoogleSource,
   KnowledgeGraph,
   OnboardingGraphNode,
   OnboardingGraphEdge,
   UsageSettings,
+  FloatingBarSettings,
   RewindSettings,
   InsightPayload,
+  WindowsNotificationSettingsPatch,
+  WindowsNotificationTestKind,
   AutomationPlan,
-  StepResult
+  StepResult,
+  McpKeyRecord,
+  LocalAgentChatToolName,
+  LocalAgentSetupPromptArgs,
+  LocalAgentToolArguments,
+  PiChatRequest,
+  PiChatStreamEvent,
+  PiChatStreamRequest,
+  ClaudeAcpChatRequest,
+  ByokProvider,
+  ByokSaveRequest,
+  ByokTestRequest,
+  ByokUseRequest,
+  ByokChatRequest,
+  ObservabilityBreadcrumb,
+  ObservabilityEvent,
+  WindowsExternalLinkKind
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -45,6 +66,22 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('omi-listen:message', listener)
     return () => ipcRenderer.removeListener('omi-listen:message', listener)
   },
+  localSttStatus: () => ipcRenderer.invoke('omi-local-stt:status'),
+  localTtsStatus: () => ipcRenderer.invoke('omi-local-tts:status'),
+  localTtsSynthesize: (request: LocalTtsSynthesizeRequest) =>
+    ipcRenderer.invoke('omi-local-tts:synthesize', request),
+  observabilityCapture: (event: ObservabilityEvent) =>
+    ipcRenderer.send('observability:capture', event),
+  observabilityBreadcrumb: (breadcrumb: ObservabilityBreadcrumb) =>
+    ipcRenderer.send('observability:breadcrumb', breadcrumb),
+  localAgentStatus: () => ipcRenderer.invoke('localAgent:status'),
+  localAgentSetEnabled: (enabled: boolean) => ipcRenderer.invoke('localAgent:setEnabled', enabled),
+  localAgentSetPort: (port: number) => ipcRenderer.invoke('localAgent:setPort', port),
+  localAgentCopyToken: () => ipcRenderer.invoke('localAgent:copyToken'),
+  localAgentRotateToken: () => ipcRenderer.invoke('localAgent:rotateToken'),
+  localAgentTestTools: () => ipcRenderer.invoke('localAgent:testTools'),
+  localAgentCopySetupPrompt: (args: LocalAgentSetupPromptArgs) =>
+    ipcRenderer.invoke('localAgent:copySetupPrompt', args),
   indexFilesScan: () => ipcRenderer.invoke('fileIndex:scan'),
   indexFilesStatus: () => ipcRenderer.invoke('fileIndex:status'),
   indexFilesApps: (limit?: number) => ipcRenderer.invoke('fileIndex:apps', limit),
@@ -56,6 +93,17 @@ const omi: OmiBridgeApi = {
   usageFlush: () => ipcRenderer.invoke('usage:flush'),
   usageGetSettings: () => ipcRenderer.invoke('usage:getSettings'),
   usageSetSettings: (next: UsageSettings) => ipcRenderer.invoke('usage:setSettings', next),
+  floatingBarGetSettings: () => ipcRenderer.invoke('floatingBar:getSettings'),
+  floatingBarSetSettings: (next: FloatingBarSettings) =>
+    ipcRenderer.invoke('floatingBar:setSettings', next),
+  floatingBarStatus: () => ipcRenderer.invoke('floatingBar:status'),
+  systemGetStatus: () => ipcRenderer.invoke('system:getStatus'),
+  systemSetLaunchAtLogin: (enabled: boolean) =>
+    ipcRenderer.invoke('system:setLaunchAtLogin', enabled),
+  systemOpenExternal: (kind: WindowsExternalLinkKind) =>
+    ipcRenderer.invoke('system:openExternal', kind),
+  updaterGetStatus: () => ipcRenderer.invoke('updater:getStatus'),
+  updaterCheckNow: () => ipcRenderer.invoke('updater:checkNow'),
   memoryImportParse: (dump: string) => ipcRenderer.invoke('memoryImport:parse', dump),
   memoryExportObsidian: (memories: ExportMemory[]) =>
     ipcRenderer.invoke('memoryExport:obsidian', memories),
@@ -68,6 +116,30 @@ const omi: OmiBridgeApi = {
   kgQueryNodes: (q, limit?) => ipcRenderer.invoke('kg:queryNodes', q, limit),
   kgSearchFiles: (q, fileType?, limit?) => ipcRenderer.invoke('kg:searchFiles', q, fileType, limit),
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
+  localAgentChatTool: (name: LocalAgentChatToolName, args?: LocalAgentToolArguments) =>
+    ipcRenderer.invoke('localAgent:chatTool', name, args ?? {}),
+  piChatEnabled: process.env.OMI_WINDOWS_PI_CHAT !== '0' && process.env.OMI_PI_CHAT !== '0',
+  piChatSend: (request: PiChatRequest) => ipcRenderer.invoke('piChat:send', request),
+  piChatStart: (request: PiChatStreamRequest) => ipcRenderer.invoke('piChat:start', request),
+  piChatAbort: (sessionId: string) => ipcRenderer.invoke('piChat:abort', sessionId),
+  onPiChatEvent: (cb: (event: PiChatStreamEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: PiChatStreamEvent): void => cb(event)
+    ipcRenderer.on('piChat:event', listener)
+    return () => ipcRenderer.removeListener('piChat:event', listener)
+  },
+  skillsList: () => ipcRenderer.invoke('skills:list'),
+  claudeAcpStatus: () => ipcRenderer.invoke('claudeAcp:status'),
+  claudeAcpChatSend: (request: ClaudeAcpChatRequest) =>
+    ipcRenderer.invoke('claudeAcp:chatSend', request),
+  byokStatus: () => ipcRenderer.invoke('byok:status'),
+  byokSave: (request: ByokSaveRequest) => ipcRenderer.invoke('byok:save', request),
+  byokDelete: (provider: ByokProvider) => ipcRenderer.invoke('byok:delete', provider),
+  byokTest: (request: ByokTestRequest) => ipcRenderer.invoke('byok:test', request),
+  byokUse: (request: ByokUseRequest) => ipcRenderer.invoke('byok:use', request),
+  byokChatSend: (request: ByokChatRequest) => ipcRenderer.invoke('byok:chatSend', request),
+  byokListModels: () => ipcRenderer.invoke('byok:models'),
+  elevenLabsTtsSynthesize: (request: ElevenLabsTtsSynthesizeRequest) =>
+    ipcRenderer.invoke('omi-elevenlabs-tts:synthesize', request),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
   googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
@@ -76,6 +148,9 @@ const omi: OmiBridgeApi = {
   googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
   googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
+  mcpKeyCreate: (key: McpKeyRecord) => ipcRenderer.invoke('mcpKey:create', key),
+  mcpKeyRead: () => ipcRenderer.invoke('mcpKey:read'),
+  mcpKeyDelete: () => ipcRenderer.invoke('mcpKey:delete'),
   memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (
@@ -92,9 +167,12 @@ const omi: OmiBridgeApi = {
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
   rewindFrameImage: (imagePath: string) => ipcRenderer.invoke('rewind:frameImage', imagePath),
+  rewindFrameById: (id: number) => ipcRenderer.invoke('rewind:frameById', id),
   rewindGetSettings: () => ipcRenderer.invoke('rewind:getSettings'),
   rewindSetSettings: (next: RewindSettings) => ipcRenderer.invoke('rewind:setSettings', next),
+  rewindStatus: () => ipcRenderer.invoke('rewind:status'),
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
+  rewindDeleteAll: () => ipcRenderer.invoke('rewind:deleteAll'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
@@ -107,6 +185,16 @@ const omi: OmiBridgeApi = {
     const listener = (_e: unknown, s: RewindSettings): void => cb(s)
     ipcRenderer.on('rewind:settings', listener)
     return () => ipcRenderer.removeListener('rewind:settings', listener)
+  },
+  onRewindCleared: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('rewind:cleared', listener)
+    return () => ipcRenderer.removeListener('rewind:cleared', listener)
+  },
+  onFloatingBarSettings: (cb: (s: FloatingBarSettings) => void) => {
+    const listener = (_e: unknown, s: FloatingBarSettings): void => cb(s)
+    ipcRenderer.on('floatingBar:settings', listener)
+    return () => ipcRenderer.removeListener('floatingBar:settings', listener)
   },
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
@@ -122,6 +210,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('insight:payload', listener)
     return () => ipcRenderer.removeListener('insight:payload', listener)
   },
+  notificationsGetSettings: () => ipcRenderer.invoke('notifications:getSettings'),
+  notificationsSetSettings: (patch: WindowsNotificationSettingsPatch) =>
+    ipcRenderer.invoke('notifications:setSettings', patch),
+  notificationsTest: (kind?: WindowsNotificationTestKind) =>
+    ipcRenderer.invoke('notifications:test', kind),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
   perfAnimResult: (stats: Record<string, number>) => ipcRenderer.send('perf:animResult', stats),

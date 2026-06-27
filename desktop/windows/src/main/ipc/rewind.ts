@@ -1,11 +1,13 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { readFile } from 'fs/promises'
-import { resolve, sep } from 'path'
+import { readFile, rm } from 'fs/promises'
 import { getPrimarySourceId } from '../rewind/sourceId'
 import {
+  deleteAllRewindFrames,
+  getRewindFrame,
   listRewindFrames,
   searchRewindFrames,
-  rewindDayBounds
+  rewindDayBounds,
+  rewindStatusStats
 } from './db'
 import { groupFrames } from '../rewind/rewindGrouping'
 import {
@@ -13,12 +15,16 @@ import {
   updateRewindSettings,
   ingestRewindFrame
 } from '../rewind/captureService'
+import { readRewindFrameImage, resolveFrameImagePath } from '../rewind/frameImage'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
 import { rewindRoot } from '../rewind/paths'
-import type { RewindSettings } from '../../shared/types'
+import type { RewindFrameImageResult, RewindSettings } from '../../shared/types'
+import { clearCurrentScreen } from '../rewind/currentScreen'
 
 export function registerRewindHandlers(): void {
-  ipcMain.handle('rewind:frames', async (_e, from: number, to: number) => listRewindFrames(from, to))
+  ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
+    listRewindFrames(from, to)
+  )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
   ipcMain.handle('rewind:search', async (_e, query: string) => {
     const q = query.trim()
@@ -26,13 +32,16 @@ export function registerRewindHandlers(): void {
     return groupFrames(searchRewindFrames(q), q)
   })
   ipcMain.handle('rewind:frameImage', async (_e, imagePath: string) => {
-    const root = resolve(rewindRoot())
-    const full = resolve(imagePath)
-    if (full !== root && !full.startsWith(root + sep)) {
+    const full = resolveFrameImagePath(rewindRoot(), imagePath)
+    if (!full) {
       throw new Error('invalid frame path')
     }
     const buf = await readFile(full)
     return `data:image/jpeg;base64,${buf.toString('base64')}`
+  })
+  ipcMain.handle('rewind:frameById', async (_e, id: number): Promise<RewindFrameImageResult> => {
+    const frame = Number.isSafeInteger(id) && id > 0 ? getRewindFrame(id) : null
+    return readRewindFrameImage(frame, rewindRoot())
   })
   ipcMain.handle('rewind:getSettings', async () => getRewindSettings())
   ipcMain.handle('rewind:setSettings', async (_e, next: RewindSettings) => {
@@ -45,7 +54,17 @@ export function registerRewindHandlers(): void {
     }
     return current
   })
+  ipcMain.handle('rewind:status', async () => rewindStatusStats())
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
+  ipcMain.handle('rewind:deleteAll', async () => {
+    const deleted = deleteAllRewindFrames()
+    await rm(rewindRoot(), { recursive: true, force: true })
+    clearCurrentScreen()
+    for (const w of BrowserWindow.getAllWindows()) {
+      w.webContents.send('rewind:cleared')
+    }
+    return deleted
+  })
   // Cached primary-screen id. The underlying desktopCapturer.getSources() can
   // take several seconds on some machines, so it's prewarmed at startup; this
   // is an instant cache hit in the normal case.

@@ -1,10 +1,11 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { hideOverlay, setOverlayHeight, setOverlayEnabled } from './window'
+import { setOverlayAccelerator, suspendOverlayShortcut, resumeOverlayShortcut } from './shortcut'
 import {
-  setOverlayAccelerator,
-  suspendOverlayShortcut,
-  resumeOverlayShortcut
-} from './shortcut'
+  recordFloatingBarAsked,
+  recordFloatingBarVoiceCaptured,
+  updateFloatingBarSettings
+} from '../floatingBar/settings'
 
 /**
  * Wire the overlay IPC channels. Renderer → main: hide, setHeight, focusMain,
@@ -27,7 +28,14 @@ export function registerOverlayHandlers(focusMain: () => void): void {
   // was claimed (false → it's taken; main rolled back to the previous binding).
   ipcMain.handle('overlay:setAccelerator', (_e, accelerator: string): boolean => {
     if (typeof accelerator !== 'string' || !accelerator.trim()) return false
-    return setOverlayAccelerator(accelerator)
+    const ok = setOverlayAccelerator(accelerator)
+    if (ok) {
+      const saved = updateFloatingBarSettings({ summonShortcut: accelerator })
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (!w.isDestroyed()) w.webContents.send('floatingBar:settings', saved)
+      }
+    }
+    return ok
   })
   // Release/re-claim the accelerator so the renderer can read raw keys while
   // recording a custom shortcut (otherwise the registered combo is swallowed).
@@ -37,6 +45,7 @@ export function registerOverlayHandlers(focusMain: () => void): void {
   // The overlay reports a captured push-to-talk transcript; relay it to every
   // window so the onboarding voice step knows the user completed a voice ask.
   ipcMain.on('overlay:voiceCaptured', () => {
+    recordFloatingBarVoiceCaptured()
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send('overlay:voiceCaptured')
     }
@@ -45,6 +54,7 @@ export function registerOverlayHandlers(focusMain: () => void): void {
   // The overlay reports any message sent (typed or spoken); relay it so the
   // onboarding demo step knows the user asked something in the bar.
   ipcMain.on('overlay:asked', () => {
+    recordFloatingBarAsked()
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send('overlay:asked')
     }
