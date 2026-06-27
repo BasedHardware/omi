@@ -3067,5 +3067,11 @@
     "captureModeLater": "Neskôr",
     "captureModeLiveDescription": "Prepis v reálnom čase počas rozprávania.",
     "captureModeLaterDescription": "Uložte zvuk teraz a prepíšte ho, kedykoľvek chcete.",
-    "backgroundModeUnavailable": "Režim na pozadí nie je dostupný, pretože nie je pripojené žiadne kompatibilné zariadenie. Ak chcete túto funkciu používať, pripojte zariadenie Omi, OpenGlass alebo Friend Pendant."
+    "backgroundModeUnavailable": "Režim na pozadí nie je dostupný, pretože nie je pripojené žiadne kompatibilné zariadenie. Ak chcete túto funkciu používať, pripojte zariadenie Omi, OpenGlass alebo Friend Pendant.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

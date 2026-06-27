@@ -9368,4 +9368,17 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Em pausa — o áudio não está a ser gravado';
+
+  @override
+  String get memoryThisDevice => 'This device';
+  @override
+  String get memoryThisIphone => 'This iPhone';
+  @override
+  String get memoryThisPhone => 'This phone';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
 }

@@ -1717,12 +1717,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZARIADENIA',
-      one: 'ZARIADENIE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -9355,4 +9350,17 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Pozastavené – zvuk sa nenahráva';
+
+  @override
+  String get memoryThisDevice => 'This device';
+  @override
+  String get memoryThisIphone => 'This iPhone';
+  @override
+  String get memoryThisPhone => 'This phone';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
 }

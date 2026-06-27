@@ -3062,5 +3062,11 @@
     "captureModeLater": "Пізніше",
     "captureModeLiveDescription": "Транскрибуйте в реальному часі, поки говорите.",
     "captureModeLaterDescription": "Збережіть аудіо зараз і транскрибуйте коли завгодно.",
-    "backgroundModeUnavailable": "Фоновий режим недоступний, оскільки не підключено сумісний пристрій. Підключіть пристрій Omi, OpenGlass або Friend Pendant, щоб скористатися цією функцією."
+    "backgroundModeUnavailable": "Фоновий режим недоступний, оскільки не підключено сумісний пристрій. Підключіть пристрій Omi, OpenGlass або Friend Pendant, щоб скористатися цією функцією.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

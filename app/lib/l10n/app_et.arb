@@ -3062,5 +3062,11 @@
     "captureModeLater": "Hiljem",
     "captureModeLiveDescription": "Transkribeeri reaalajas, kui räägid.",
     "captureModeLaterDescription": "Salvesta heli kohe ja transkribeeri, millal soovid.",
-    "backgroundModeUnavailable": "Taustarežiim pole saadaval, sest ühtegi ühilduvat seadet pole ühendatud. Selle funktsiooni kasutamiseks ühenda Omi, OpenGlass või Friend Pendant seade."
+    "backgroundModeUnavailable": "Taustarežiim pole saadaval, sest ühtegi ühilduvat seadet pole ühendatud. Selle funktsiooni kasutamiseks ühenda Omi, OpenGlass või Friend Pendant seade.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

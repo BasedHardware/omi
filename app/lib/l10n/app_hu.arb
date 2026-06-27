@@ -3158,5 +3158,11 @@
     "captureModeLater": "Később",
     "captureModeLiveDescription": "Átírás valós időben, miközben beszélsz.",
     "captureModeLaterDescription": "Mentsd el a hangot most, és írd át, amikor csak akarod.",
-    "backgroundModeUnavailable": "A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt."
+    "backgroundModeUnavailable": "A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

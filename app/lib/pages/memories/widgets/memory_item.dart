@@ -39,6 +39,10 @@ class MemoryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provenanceType = ClientDeviceService.instance.deviceProvenanceType(
+      primaryCaptureDevice: memory.primaryCaptureDevice,
+    );
+    final provenanceLabel = _resolveProvenanceLabel(context, provenanceType);
     final Widget memoryWidget = GestureDetector(
       onTap: () {
         onTap(context, memory, provider);
@@ -61,18 +65,10 @@ class MemoryItem extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(memory.content.decodeString, style: AppStyles.body),
-                      if (ClientDeviceService.instance.deviceProvenanceLabel(
-                            primaryCaptureDevice: memory.primaryCaptureDevice,
-                          ) !=
-                          null)
+                      if (provenanceLabel != null)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            ClientDeviceService.instance.deviceProvenanceLabel(
-                              primaryCaptureDevice: memory.primaryCaptureDevice,
-                            )!,
-                            style: TextStyle(fontSize: 11, color: AppStyles.textTertiary),
-                          ),
+                          child: Text(provenanceLabel, style: TextStyle(fontSize: 11, color: AppStyles.textTertiary)),
                         ),
                     ],
                   ),
@@ -155,6 +151,28 @@ class MemoryItem extends StatelessWidget {
       ),
       child: memoryWidget,
     );
+  }
+
+  /// Resolves a [DeviceProvenanceType] to a localized label, or null if none.
+  String? _resolveProvenanceLabel(BuildContext context, DeviceProvenanceType? type) {
+    switch (type) {
+      case DeviceProvenanceType.thisDevice:
+        return context.l10n.memoryThisDevice;
+      case DeviceProvenanceType.thisIphone:
+        return context.l10n.memoryThisIphone;
+      case DeviceProvenanceType.thisPhone:
+        return context.l10n.memoryThisPhone;
+      case DeviceProvenanceType.mac:
+        return context.l10n.memoryProvenanceMac;
+      case DeviceProvenanceType.iphone:
+        return context.l10n.memoryProvenanceIphone;
+      case DeviceProvenanceType.android:
+        return context.l10n.memoryProvenanceAndroid;
+      case DeviceProvenanceType.other:
+        return null; // Unknown devices show no provenance label.
+      case null:
+        return null;
+    }
   }
 
   Widget _buildConversationLinkButton(BuildContext context) {

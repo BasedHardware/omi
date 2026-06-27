@@ -3063,5 +3063,11 @@
     "captureModeLater": "Después",
     "captureModeLiveDescription": "Transcribe en tiempo real mientras hablas.",
     "captureModeLaterDescription": "Guarda el audio ahora y transcríbelo cuando quieras.",
-    "backgroundModeUnavailable": "El modo en segundo plano no está disponible porque no hay ningún dispositivo compatible conectado. Conecta un dispositivo Omi, OpenGlass o Friend Pendant para usar esta función."
+    "backgroundModeUnavailable": "El modo en segundo plano no está disponible porque no hay ningún dispositivo compatible conectado. Conecta un dispositivo Omi, OpenGlass o Friend Pendant para usar esta función.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

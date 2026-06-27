@@ -6,6 +6,11 @@ import 'package:device_info_plus/device_info_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
 
+/// Stable device-type labels returned by [ClientDeviceService.deviceProvenanceType].
+///
+/// The UI layer resolves these to localized strings via `context.l10n`.
+enum DeviceProvenanceType { thisDevice, thisIphone, thisPhone, mac, iphone, android, other }
+
 /// Shared stable per-installation device identity for provenance (not notifications-only).
 class ClientDeviceService {
   ClientDeviceService._();
@@ -28,27 +33,28 @@ class ClientDeviceService {
     return '${platform}_$hash';
   }
 
-  String? deviceProvenanceLabel({String? primaryCaptureDevice}) {
+  /// Returns a semantic [DeviceProvenanceType] for the capture device, or null if
+  /// [primaryCaptureDevice] is absent. The UI layer resolves the enum to a localized
+  /// label — the service never hardcodes user-facing strings.
+  DeviceProvenanceType? deviceProvenanceType({String? primaryCaptureDevice}) {
     if (primaryCaptureDevice == null || primaryCaptureDevice.isEmpty) {
       return null;
     }
     if (primaryCaptureDevice == clientDeviceId) {
-      return Platform.isIOS
-          ? 'This iPhone'
-          : Platform.isAndroid
-          ? 'This phone'
-          : 'This device';
+      if (Platform.isIOS) return DeviceProvenanceType.thisIphone;
+      if (Platform.isAndroid) return DeviceProvenanceType.thisPhone;
+      return DeviceProvenanceType.thisDevice;
     }
     final platformPrefix = primaryCaptureDevice.split('_').first;
     switch (platformPrefix) {
       case 'macos':
-        return 'Mac';
+        return DeviceProvenanceType.mac;
       case 'ios':
-        return 'iPhone';
+        return DeviceProvenanceType.iphone;
       case 'android':
-        return 'Android';
+        return DeviceProvenanceType.android;
       default:
-        return platformPrefix;
+        return DeviceProvenanceType.other;
     }
   }
 

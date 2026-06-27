@@ -3062,5 +3062,11 @@
     "captureModeLater": "Later",
     "captureModeLiveDescription": "Transcribeer in realtime terwijl je praat.",
     "captureModeLaterDescription": "Sla audio nu op en transcribeer wanneer je wilt.",
-    "backgroundModeUnavailable": "Achtergrondmodus is niet beschikbaar omdat er geen compatibel apparaat is verbonden. Verbind een Omi-, OpenGlass- of Friend Pendant-apparaat om deze functie te gebruiken."
+    "backgroundModeUnavailable": "Achtergrondmodus is niet beschikbaar omdat er geen compatibel apparaat is verbonden. Verbind een Omi-, OpenGlass- of Friend Pendant-apparaat om deze functie te gebruiken.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

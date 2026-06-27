@@ -3067,5 +3067,11 @@
     "captureModeLater": "Sau",
     "captureModeLiveDescription": "Phiên âm theo thời gian thực khi bạn nói.",
     "captureModeLaterDescription": "Lưu âm thanh ngay bây giờ và phiên âm bất cứ khi nào bạn muốn.",
-    "backgroundModeUnavailable": "Chế độ nền không khả dụng vì chưa có thiết bị tương thích nào được kết nối. Kết nối thiết bị Omi, OpenGlass hoặc Friend Pendant để sử dụng tính năng này."
+    "backgroundModeUnavailable": "Chế độ nền không khả dụng vì chưa có thiết bị tương thích nào được kết nối. Kết nối thiết bị Omi, OpenGlass hoặc Friend Pendant để sử dụng tính năng này.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

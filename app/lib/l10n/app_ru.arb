@@ -3097,5 +3097,11 @@
     "captureModeLater": "Позже",
     "captureModeLiveDescription": "Расшифровка в реальном времени, пока вы говорите.",
     "captureModeLaterDescription": "Сохраните аудио сейчас и расшифруйте, когда захотите.",
-    "backgroundModeUnavailable": "Фоновый режим недоступен, потому что не подключено совместимое устройство. Подключите устройство Omi, OpenGlass или Friend Pendant, чтобы использовать эту функцию."
+    "backgroundModeUnavailable": "Фоновый режим недоступен, потому что не подключено совместимое устройство. Подключите устройство Omi, OpenGlass или Friend Pendant, чтобы использовать эту функцию.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

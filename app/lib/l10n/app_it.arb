@@ -3062,5 +3062,11 @@
     "captureModeLater": "Più tardi",
     "captureModeLiveDescription": "Trascrivi in tempo reale mentre parli.",
     "captureModeLaterDescription": "Salva l'audio ora e trascrivilo quando vuoi.",
-    "backgroundModeUnavailable": "La modalità in background non è disponibile perché non è connesso alcun dispositivo compatibile. Collega un dispositivo Omi, OpenGlass o Friend Pendant per usare questa funzione."
+    "backgroundModeUnavailable": "La modalità in background non è disponibile perché non è connesso alcun dispositivo compatibile. Collega un dispositivo Omi, OpenGlass o Friend Pendant per usare questa funzione.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

@@ -10640,5 +10640,11 @@
     "captureModeLater": "Подоцна",
     "captureModeLiveDescription": "Транскрибирајте во реално време додека зборувате.",
     "captureModeLaterDescription": "Зачувајте го звукот сега и транскрибирајте кога сакате.",
-    "backgroundModeUnavailable": "Режимот во заднина не е достапен бидејќи не е поврзан компатибилен уред. Поврзете Omi, OpenGlass или Friend Pendant уред за да ја користите оваа функција."
+    "backgroundModeUnavailable": "Режимот во заднина не е достапен бидејќи не е поврзан компатибилен уред. Поврзете Omi, OpenGlass или Friend Pendant уред за да ја користите оваа функција.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

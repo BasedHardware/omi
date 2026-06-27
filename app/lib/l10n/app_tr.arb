@@ -3097,5 +3097,11 @@
     "captureModeLater": "Sonra",
     "captureModeLiveDescription": "Siz konuşurken gerçek zamanlı olarak yazıya dökün.",
     "captureModeLaterDescription": "Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün.",
-    "backgroundModeUnavailable": "Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın."
+    "backgroundModeUnavailable": "Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

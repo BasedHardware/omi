@@ -3062,5 +3062,11 @@
     "captureModeLater": "Vēlāk",
     "captureModeLiveDescription": "Transkribējiet reāllaikā, kamēr runājat.",
     "captureModeLaterDescription": "Saglabājiet audio tagad un transkribējiet, kad vēlaties.",
-    "backgroundModeUnavailable": "Fona režīms nav pieejams, jo nav pievienota saderīga ierīce. Pievienojiet Omi, OpenGlass vai Friend Pendant ierīci, lai izmantotu šo funkciju."
+    "backgroundModeUnavailable": "Fona režīms nav pieejams, jo nav pievienota saderīga ierīce. Pievienojiet Omi, OpenGlass vai Friend Pendant ierīci, lai izmantotu šo funkciju.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }

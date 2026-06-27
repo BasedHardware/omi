@@ -10640,5 +10640,11 @@
     "captureModeLater": "Kasnije",
     "captureModeLiveDescription": "Transkribirajte u stvarnom vremenu dok govorite.",
     "captureModeLaterDescription": "Spremite zvuk sada i transkribirajte kad god želite.",
-    "backgroundModeUnavailable": "Pozadinski način rada nije dostupan jer nije povezan kompatibilan uređaj. Povežite Omi, OpenGlass ili Friend Pendant uređaj da koristite ovu funkciju."
+    "backgroundModeUnavailable": "Pozadinski način rada nije dostupan jer nije povezan kompatibilan uređaj. Povežite Omi, OpenGlass ili Friend Pendant uređaj da koristite ovu funkciju.",
+    "memoryThisDevice": "This device",
+    "memoryThisIphone": "This iPhone",
+    "memoryThisPhone": "This phone",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android"
 }
