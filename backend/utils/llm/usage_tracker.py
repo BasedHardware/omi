@@ -168,6 +168,7 @@ def get_usage_callback() -> LLMUsageCallback:
 # Feature constants for consistency
 class Features:
     CHAT = "chat"
+    REPLY_DRAFT = "reply_draft"
     CONVERSATION_PROCESSING = "conversation_processing"
     RAG = "rag"
     NOTIFICATIONS = "notifications"

@@ -58,6 +58,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'chat_responses': ('gpt-5.4-mini', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
         'chat_graph': ('gpt-4.1-mini', 'openai'),
+        'reply_draft': ('gpt-5.4-mini', 'openai'),
         'session_titles': ('gemini-2.5-flash-lite', 'gemini'),
         # Features
         'goals': ('gpt-4.1-mini', 'openai'),
@@ -108,6 +109,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'chat_responses': ('gpt-5.4', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
         'chat_graph': ('gpt-4.1', 'openai'),
+        'reply_draft': ('gpt-5.4', 'openai'),
         'session_titles': ('gpt-4.1-mini', 'openai'),
         # Features
         'goals': ('gpt-4.1-mini', 'openai'),
@@ -157,6 +159,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'chat_responses': ('gpt-5.4', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
         'chat_graph': ('gpt-4.1', 'openai'),
+        'reply_draft': ('gpt-5.4', 'openai'),
         'session_titles': ('gpt-4.1-mini', 'openai'),
         # Features
         'goals': ('gpt-4.1-mini', 'openai'),
