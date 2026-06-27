@@ -601,6 +601,28 @@ Parameter guidance:
     },
   },
   {
+    name: "check_calendar_availability",
+    description: `Check whether the user is free for a specific time window using their synced Google Calendar data.
+
+Use when:
+- Someone asks if the user is free or available at a specific date/time
+- Drafting a reply to a scheduling question
+- The user asks what conflicts with a proposed meeting time
+
+Parameter guidance:
+- start_date and end_date must be ISO format with timezone offset.
+- If end_date is omitted, duration_minutes defaults to 60.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        start_date: { type: "string" as const, description: "Start time, ISO with timezone offset" },
+        end_date: { type: "string" as const, description: "End time, ISO with timezone offset" },
+        duration_minutes: { type: "number" as const, description: "Duration when end_date is omitted. Defaults to 60." },
+      },
+      required: ["start_date"],
+    },
+  },
+  {
     name: "load_skill",
     description: `Load the full instructions for a named skill. Call this when you decide to use a skill listed in <available_skills>. Returns the complete SKILL.md content with step-by-step instructions and workflows.`,
     inputSchema: {
@@ -983,7 +1005,8 @@ async function handleJsonRpc(
         toolName === "search_memories" ||
         toolName === "get_action_items" ||
         toolName === "create_action_item" ||
-        toolName === "update_action_item"
+        toolName === "update_action_item" ||
+        toolName === "check_calendar_availability"
       ) {
         // Backend RAG tools — forward to Swift which calls Python backend
         const result = await requestSwiftTool(toolName, args);

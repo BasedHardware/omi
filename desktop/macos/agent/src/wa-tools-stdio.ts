@@ -140,11 +140,11 @@ async function requestSwiftTool(
 const TOOLS = [
   {
     name: "wa_list_chats",
-    description: "List recent WhatsApp chats from the local synced WhatsApp store. Use this to resolve contact or group names to chat JIDs before reading or replying.",
+    description: "List recent WhatsApp chats from the local synced WhatsApp store. Use this to resolve contact or group names to chat JIDs before reading or replying. Results may include contact names, WhatsApp names, phone numbers, and JIDs.",
     inputSchema: {
       type: "object" as const,
       properties: {
-        query: { type: "string" as const, description: "Optional contact, group, or chat-name search query." },
+        query: { type: "string" as const, description: "Optional contact, group, phone, or chat-name search query." },
         limit: { type: "number" as const, description: "Maximum chats to return. Defaults to 50." },
         unread: { type: "boolean" as const, description: "Only include unread chats." },
         archived: { type: "boolean" as const, description: "Only include archived chats." },
@@ -190,7 +190,7 @@ const TOOLS = [
   },
   {
     name: "wa_send_message",
-    description: "Send a WhatsApp text message. Use only after the user explicitly asks to send or reply, and after resolving the intended recipient.",
+    description: "Send a WhatsApp text message. Use only after the user explicitly asks to send or reply. The recipient may be a JID, phone number, or exact contact/chat name; use wa_list_chats first when the name could be ambiguous.",
     inputSchema: {
       type: "object" as const,
       properties: {

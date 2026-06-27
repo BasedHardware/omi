@@ -221,6 +221,7 @@ actor WhatsAppService {
       }
       followRestartAttempts = 0
       await setState(.connected)
+      await handleConnectedSyncSideEffects()
       log("WhatsAppService: started wacli --store <store> --json --events sync --follow --webhook <local>")
     } catch {
       await setState(.degraded(reason: "Failed to start WhatsApp sync"))
@@ -421,6 +422,7 @@ actor WhatsAppService {
       await setState(.needsReauth)
     } else if isConnectedEvent(eventName, event: event) {
       await setState(.connected)
+      await handleConnectedSyncSideEffects()
     }
   }
 
@@ -505,6 +507,14 @@ actor WhatsAppService {
 
   private func setState(_ state: WAConnectionState) async {
     await MainActor.run { WhatsAppState.shared.update(connectionState: state) }
+  }
+
+  private func handleConnectedSyncSideEffects() async {
+    await MainActor.run {
+      WhatsAppContactResolver.shared.scheduleRefresh()
+      WhatsAppToneProfile.shared.scheduleAutomaticRebuild()
+      WhatsAppMemoryImportService.shared.scheduleSyncIfEnabled()
+    }
   }
 
   private func currentState() async -> WAConnectionState {

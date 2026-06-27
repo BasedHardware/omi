@@ -193,6 +193,10 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     - Draft as the user, in first person, with a natural WhatsApp tone.
     - Be brief unless the incoming message clearly needs detail.
     - Ground personal facts in tools and context. Never invent facts.
+    - Use WhatsApp thread/search tools for chat-specific history.
+    - Use Omi memory and conversation tools for personal facts, prior events, relationships, and commitments.
+    - Use check_calendar_availability before answering whether the user is free at a specific time.
+    - Create or update tasks only when the message clearly asks for a follow-up or the user has made a commitment.
     - If you are unsure, draft a reply that says the user will check and get back.
     - Do not send messages yourself unless explicitly asked through wa_send_message.
     - For this autonomous inbound flow, return only the reply text. No explanations.
@@ -235,6 +239,12 @@ final class WhatsAppReplyCoordinator: ObservableObject {
   private func process(_ message: WAIncomingMessage) async {
     guard shouldProcess(message) else { return }
     processedMessageIDs.insert(message.id)
+    WhatsAppContactResolver.shared.remember(
+      jid: message.senderJid,
+      contactName: message.senderName,
+      whatsappName: message.senderName
+    )
+    WhatsAppContactResolver.shared.remember(jid: message.chatJid, whatsappName: message.senderName)
 
     if let preDraftDecision = WhatsAppReplySettings.shared.preDraftDecision(for: message) {
       if case .ignore(let reason) = preDraftDecision {
@@ -249,7 +259,8 @@ final class WhatsAppReplyCoordinator: ObservableObject {
       await routeDraft(draft, for: message)
     } catch {
       let reason = error.localizedDescription
-      lastDraftFailure = "Could not draft a WhatsApp reply for \(message.displaySender): \(reason)"
+      let sender = WhatsAppContactResolver.shared.displayName(for: message.senderJid, fallback: message.senderName)
+      lastDraftFailure = "Could not draft a WhatsApp reply for \(sender): \(reason)"
       appendAuditMessage(for: message, outcome: "draft_failed", reason: reason)
       log("WhatsAppReplyCoordinator: failed to draft reply for \(message.chatJid): \(reason)")
     }
@@ -368,7 +379,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
   }
 
   private func showDraftNotification(_ draft: WhatsAppDraft) {
-    let sender = draft.senderName?.nilIfEmpty ?? draft.senderJid
+    let sender = WhatsAppContactResolver.shared.displayName(for: draft.senderJid, fallback: draft.senderName)
     FloatingControlBarManager.shared.showNotification(
       title: "WhatsApp draft for \(sender)",
       message: draft.text,
@@ -389,6 +400,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
 
   private func draftReply(for message: WAIncomingMessage) async throws -> WhatsAppDraft {
     let prompt = await buildPrompt(for: message)
+    let senderName = WhatsAppContactResolver.shared.displayName(for: message.senderJid, fallback: message.senderName)
     let result = try await bridge.query(
       prompt: prompt,
       systemPrompt: "\(Self.systemPrompt)\n\n\(WhatsAppToneProfile.shared.styleGuide())",
@@ -417,7 +429,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
       messageID: message.id,
       chatJid: message.chatJid,
       senderJid: message.senderJid,
-      senderName: message.senderName,
+      senderName: senderName,
       incomingText: message.text,
       text: result.text.trimmingCharacters(in: .whitespacesAndNewlines),
       createdAt: Date(),
@@ -427,13 +439,16 @@ final class WhatsAppReplyCoordinator: ObservableObject {
 
   private func buildPrompt(for message: WAIncomingMessage) async -> String {
     let recentThreadContext = await recentThreadContext(for: message)
+    let senderDisplayName = WhatsAppContactResolver.shared.displayName(for: message.senderJid, fallback: message.senderName)
+    let chatDisplayName = WhatsAppContactResolver.shared.displayName(for: message.chatJid, fallback: message.senderName)
     return """
     Recent WhatsApp thread context (last 6 synced messages, oldest to newest):
     \(recentThreadContext)
 
     Incoming WhatsApp message:
-    Sender: \(message.displaySender)
+    Sender: \(senderDisplayName)
     Sender JID: \(message.senderJid)
+    Chat: \(chatDisplayName)
     Chat JID: \(message.chatJid)
     Chat type: \(message.isGroup ? "group" : "direct")
     Message ID: \(message.id)
@@ -442,6 +457,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     Use the recent thread context above first.
     Only call wa_read_thread if the reply needs older messages, more context, or exact prior details not visible above.
     Use Omi memory/conversation/task tools if the message asks about personal facts, plans, availability, or commitments.
+    Check calendar availability before answering scheduling questions like whether the user is free at a specific time.
     Draft the best reply as the user. Return only the reply text.
     """
   }

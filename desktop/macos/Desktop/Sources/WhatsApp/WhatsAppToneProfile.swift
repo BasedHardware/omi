@@ -8,6 +8,9 @@ struct WhatsAppToneProfileSnapshot: Codable, Equatable, Sendable {
   let usesQuestions: Bool
   let commonOpeners: [String]
   let commonClosers: [String]
+  let sourceDescription: String?
+  let usesEmoji: Bool?
+  let casualMarkers: [String]?
 
   var styleGuide: String {
     guard sampleCount > 0 else {
@@ -20,6 +23,12 @@ struct WhatsAppToneProfileSnapshot: Codable, Equatable, Sendable {
       usesExclamation ? "Exclamation marks are normal for this user." : "Avoid extra exclamation marks.",
       usesQuestions ? "The user commonly asks short follow-up questions." : "Use questions only when needed.",
     ]
+    if usesEmoji == true {
+      parts.append("Light emoji use is normal when it fits the conversation.")
+    }
+    if let casualMarkers, !casualMarkers.isEmpty {
+      parts.append("Common casual markers: \(casualMarkers.joined(separator: ", ")).")
+    }
     if !commonOpeners.isEmpty {
       parts.append("Common openers: \(commonOpeners.joined(separator: ", ")).")
     }
@@ -35,9 +44,12 @@ final class WhatsAppToneProfile: ObservableObject {
   static let shared = WhatsAppToneProfile()
 
   @Published private(set) var snapshot: WhatsAppToneProfileSnapshot?
+  @Published private(set) var isRebuilding = false
+  @Published private(set) var lastError: String?
 
   private let defaults = UserDefaults.standard
   private let snapshotKey = "whatsapp.toneProfile.snapshot"
+  private var automaticRebuildTask: Task<Void, Never>?
 
   private init() {
     if let data = defaults.data(forKey: snapshotKey),
@@ -56,21 +68,42 @@ final class WhatsAppToneProfile: ObservableObject {
   }
 
   func rebuild(limit: Int = 200) async {
-    let result = await runWacli(["messages", "list", "--from-me", "--limit", String(max(1, min(limit, 500)))])
+    isRebuilding = true
+    lastError = nil
+    defer { isRebuilding = false }
+
+    let boundedLimit = max(1, min(limit, 500))
+    var result = await runWacli(["messages", "export", "--limit", String(boundedLimit)])
+    var sourceDescription = "messages export"
+    if result.exitCode != 0 {
+      result = await runWacli(["messages", "list", "--from-me", "--limit", String(boundedLimit)])
+      sourceDescription = "sent messages list"
+    }
     guard result.exitCode == 0 else {
+      lastError = result.output
       log("WhatsAppToneProfile: failed to rebuild profile: \(result.output.prefix(300))")
       return
     }
 
     let texts = extractSentTexts(from: result.output)
-    let nextSnapshot = buildSnapshot(from: texts)
+    let nextSnapshot = buildSnapshot(from: texts, sourceDescription: sourceDescription)
     snapshot = nextSnapshot
     if let data = try? JSONEncoder().encode(nextSnapshot) {
       defaults.set(data, forKey: snapshotKey)
     }
+    log("WhatsAppToneProfile: rebuilt profile from \(texts.count) samples via \(sourceDescription)")
   }
 
-  private func buildSnapshot(from texts: [String]) -> WhatsAppToneProfileSnapshot {
+  func scheduleAutomaticRebuild(delaySeconds: TimeInterval = 8, limit: Int = 300) {
+    automaticRebuildTask?.cancel()
+    automaticRebuildTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(max(delaySeconds, 0) * 1_000_000_000))
+      guard !Task.isCancelled, let self else { return }
+      await self.rebuild(limit: limit)
+    }
+  }
+
+  private func buildSnapshot(from texts: [String], sourceDescription: String) -> WhatsAppToneProfileSnapshot {
     let cleaned = texts
       .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
       .filter { !$0.isEmpty }
@@ -82,7 +115,10 @@ final class WhatsAppToneProfile: ObservableObject {
       usesExclamation: ratio(in: cleaned, containing: "!") >= 0.2,
       usesQuestions: ratio(in: cleaned, containing: "?") >= 0.2,
       commonOpeners: commonEdgePhrases(in: cleaned, first: true),
-      commonClosers: commonEdgePhrases(in: cleaned, first: false)
+      commonClosers: commonEdgePhrases(in: cleaned, first: false),
+      sourceDescription: sourceDescription,
+      usesEmoji: ratioWithEmoji(in: cleaned) >= 0.15,
+      casualMarkers: commonCasualMarkers(in: cleaned)
     )
   }
 
@@ -114,6 +150,32 @@ final class WhatsAppToneProfile: ObservableObject {
       .map(\.key)
   }
 
+  private func ratioWithEmoji(in texts: [String]) -> Double {
+    guard !texts.isEmpty else { return 0 }
+    let matches = texts.filter { text in
+      text.unicodeScalars.contains { scalar in
+        (0x1F300...0x1FAFF).contains(Int(scalar.value))
+      }
+    }.count
+    return Double(matches) / Double(texts.count)
+  }
+
+  private func commonCasualMarkers(in texts: [String]) -> [String] {
+    let markers = ["haha", "lol", "ya", "yeah", "yep", "no worries", "thanks", "ty", "bro"]
+    var counts: [String: Int] = [:]
+    for text in texts {
+      let lower = text.lowercased()
+      for marker in markers where lower.contains(marker) {
+        counts[marker, default: 0] += 1
+      }
+    }
+    return counts
+      .filter { $0.value >= 2 }
+      .sorted { lhs, rhs in lhs.value == rhs.value ? lhs.key < rhs.key : lhs.value > rhs.value }
+      .prefix(4)
+      .map(\.key)
+  }
+
   private func extractSentTexts(from output: String) -> [String] {
     guard let data = output.data(using: .utf8),
       let json = try? JSONSerialization.jsonObject(with: data)
@@ -131,10 +193,15 @@ final class WhatsAppToneProfile: ObservableObject {
       return []
     }
 
-    let fromMe = (object["fromMe"] as? Bool) ?? (object["from_me"] as? Bool) ?? true
+    let fromMe =
+      (object["fromMe"] as? Bool)
+      ?? (object["from_me"] as? Bool)
+      ?? (object["isFromMe"] as? Bool)
+      ?? (object["FromMe"] as? Bool)
+      ?? true
     var texts: [String] = []
     if fromMe {
-      for key in ["text", "body", "message", "caption"] {
+      for key in ["text", "body", "message", "caption", "Text", "DisplayText", "Caption"] {
         if let text = object[key] as? String, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
           texts.append(text)
         }

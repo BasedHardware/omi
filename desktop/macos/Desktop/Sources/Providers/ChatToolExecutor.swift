@@ -160,6 +160,8 @@ class ChatToolExecutor {
       return await executeBackendTool(toolCall)
     case "update_action_item":
       return await executeBackendTool(toolCall)
+    case "check_calendar_availability":
+      return await executeCheckCalendarAvailability(toolCall.arguments)
 
     // WhatsApp tools — native wacli execution through the bundled binary/store.
     case "wa_list_chats":
@@ -1531,6 +1533,87 @@ class ChatToolExecutor {
     )
   }
 
+  private static func parseFlexibleDate(_ dateStr: String) -> Date? {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: dateStr) {
+      return date
+    }
+    formatter.formatOptions = [.withInternetDateTime]
+    if let date = formatter.date(from: dateStr) {
+      return date
+    }
+    let fallback = DateFormatter()
+    fallback.locale = Locale(identifier: "en_US_POSIX")
+    fallback.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZ"
+    return fallback.date(from: dateStr)
+  }
+
+  private static func executeCheckCalendarAvailability(_ args: [String: Any]) async -> String {
+    guard let startString = nonEmptyString(args["start_date"] ?? args["start"] ?? args["datetime"]) else {
+      return "Error: start_date is required and must be ISO format with timezone offset."
+    }
+    let startValidation = validateISODate(startString, paramName: "start_date")
+    if let error = startValidation.error { return error }
+    guard let startDate = parseFlexibleDate(startValidation.valid ?? startString) else {
+      return "Error: could not parse start_date."
+    }
+
+    let endDate: Date
+    if let endString = nonEmptyString(args["end_date"] ?? args["end"]) {
+      let endValidation = validateISODate(endString, paramName: "end_date")
+      if let error = endValidation.error { return error }
+      guard let parsedEnd = parseFlexibleDate(endValidation.valid ?? endString) else {
+        return "Error: could not parse end_date."
+      }
+      endDate = parsedEnd
+    } else {
+      let durationMinutes = intArg(args["duration_minutes"], defaultValue: 60, maxValue: 24 * 60)
+      endDate = startDate.addingTimeInterval(TimeInterval(durationMinutes * 60))
+    }
+
+    guard endDate > startDate else {
+      return "Error: end_date must be after start_date."
+    }
+
+    let now = Date()
+    let daysBack = max(0, Calendar.current.dateComponents([.day], from: startDate, to: now).day ?? 0) + 1
+    let daysForward = max(1, Calendar.current.dateComponents([.day], from: now, to: endDate).day ?? 0) + 2
+
+    do {
+      let events = try await CalendarReaderService.shared.readEvents(
+        daysBack: daysBack,
+        daysForward: daysForward,
+        maxResults: 300
+      )
+      let conflicts = events.filter { event in
+        guard !event.isAllDay,
+          let eventStart = parseFlexibleDate(event.startTime),
+          let eventEnd = parseFlexibleDate(event.endTime)
+        else {
+          return false
+        }
+        return eventStart < endDate && eventEnd > startDate
+      }
+
+      let displayFormatter = DateFormatter()
+      displayFormatter.dateStyle = .medium
+      displayFormatter.timeStyle = .short
+      let requested = "\(displayFormatter.string(from: startDate)) - \(displayFormatter.string(from: endDate))"
+      guard !conflicts.isEmpty else {
+        return "Available: no calendar conflicts found for \(requested)."
+      }
+
+      let conflictLines = conflicts.prefix(8).map { event -> String in
+        let attendees = event.attendees.isEmpty ? "" : " with \(event.attendees.prefix(3).joined(separator: ", "))"
+        return "- \(event.summary) (\(event.startTime) to \(event.endTime))\(attendees)"
+      }.joined(separator: "\n")
+      return "Busy: found \(conflicts.count) calendar conflict(s) for \(requested):\n\(conflictLines)"
+    } catch {
+      return "Error checking calendar availability: \(error.localizedDescription)"
+    }
+  }
+
   // MARK: - WhatsApp Tools
 
   private static func executeWaListChats(_ args: [String: Any]) async -> String {
@@ -1595,6 +1678,16 @@ class ChatToolExecutor {
         "error": "message is required",
       ])
     }
+    let resolvedRecipient: String
+    do {
+      resolvedRecipient = try await WhatsAppContactResolver.shared.resolveRecipient(recipient)
+    } catch {
+      return waJSON([
+        "status": "error",
+        "sent": false,
+        "error": error.localizedDescription,
+      ])
+    }
 
     let clientMessageID = nonEmptyString(args["client_message_id"] ?? args["dedupe_id"])
     switch WhatsAppReplySettings.shared.canAttemptManualSend(clientMessageID: clientMessageID) {
@@ -1617,12 +1710,12 @@ class ChatToolExecutor {
     if (args["queue_for_approval"] as? Bool) == true {
       return waJSON([
         "status": "queued_for_approval",
-        "to": recipient,
+        "to": resolvedRecipient,
         "sent": false,
       ])
     }
 
-    var command = ["send", "text", "--to", recipient, "--message", message]
+    var command = ["send", "text", "--to", resolvedRecipient, "--message", message]
     appendStringFlag("--reply-to", from: args["reply_to"], to: &command)
     appendStringFlag("--reply-to-sender", from: args["reply_to_sender"], to: &command)
     appendBoolFlag("--no-preview", from: args["no_preview"], to: &command)
@@ -1640,7 +1733,8 @@ class ChatToolExecutor {
     return waJSON([
       "status": "sent",
       "sent": true,
-      "to": recipient,
+      "to": resolvedRecipient,
+      "display_name": WhatsAppContactResolver.shared.displayName(for: resolvedRecipient),
       "output": result.output,
     ])
   }

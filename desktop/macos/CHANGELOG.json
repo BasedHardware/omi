@@ -4,7 +4,8 @@
     "Improved WhatsApp draft failures so account limit errors show in settings and audit history",
     "Fixed WhatsApp linking showing a store-lock error when the account was already connected",
     "Fixed WhatsApp reconnecting events incorrectly showing reconnect required while sync was still running",
-    "Improved WhatsApp reply drafts by including the last few synced thread messages as context"
+    "Improved WhatsApp reply drafts by including the last few synced thread messages as context",
+    "Added opt-in WhatsApp brain sync, automatic tone learning, contact names, and calendar-aware reply drafting"
   ],
   "releases": [
     {
