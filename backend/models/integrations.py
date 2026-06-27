@@ -57,10 +57,6 @@ class PersonaChatRequest(BaseModel):
     """Single-turn persona chat request from a 3rd-party integration (e.g. AI clone plugins)."""
 
     text: str = Field(description="The inbound message from the chat platform (1:1 DM, text only)", min_length=1)
-    context: Optional[Dict[str, Any]] = Field(
-        description="Optional platform context (sender display name, chat title, etc.). Forwarded to the persona prompt but not used for retrieval.",
-        default=None,
-    )
 
 
 class ConversationCreateResponse(BaseModel):

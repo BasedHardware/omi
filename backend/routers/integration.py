@@ -22,6 +22,7 @@ import database.notifications as notification_db
 import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
+from models.chat import Message, MessageSender, MessageType
 from models.conversation import SearchRequest
 from models.app import App
 from utils.app_integrations import send_app_notification, trigger_external_integrations
@@ -769,11 +770,11 @@ async def persona_chat_via_integration(
     # Build a single HumanMessage and stream the persona reply via the
     # existing execute_chat_stream (which dispatches to the persona handler
     # when app.is_a_persona()). The same generator the chat UI uses.
-    from models.chat import Message, MessageSender, MessageType
+    import secrets
 
     messages = [
         Message(
-            id="integration-persona-chat",
+            id=f"integration-persona-chat:{secrets.token_urlsafe(8)}",
             created_at=datetime.now(timezone.utc),
             sender=MessageSender.human,
             text=body.text,
