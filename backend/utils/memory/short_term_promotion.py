@@ -28,7 +28,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Set
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -224,6 +224,8 @@ def promote_short_term_item_via_apply(
         raise ValueError(f"memory item {item.memory_id} is not promotable")
 
     client = db_client if db_client is not None else default_db_client
+    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+        raise ValueError(f"promotion refused for non-canonical cohort uid={uid}")
     current_time = _coerce_aware_utc(now)
     operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=client)
     idempotency_key = deterministic_contract_id(
@@ -343,8 +345,14 @@ def run_canonical_short_term_promotion(
     now: Optional[datetime] = None,
     run_id: str,
     batch_threshold: Optional[int] = None,
+    consolidation_batched_ids: Optional[Set[str]] = None,
 ) -> ShortTermPromotionReport:
-    """Batch-or-daily promotion entry point for one canonical user."""
+    """Batch-or-daily promotion entry point for one canonical user.
+
+    When ``consolidation_batched_ids`` is set (consolidation ran this maintenance pass),
+    only memories included in a consolidation batch this pass are eligible to promote.
+    That enforces consolidate-before-promote when both stages fire in one pass.
+    """
     client = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
@@ -352,6 +360,9 @@ def run_canonical_short_term_promotion(
         return ShortTermPromotionReport(uid=uid, skipped_reason="not_canonical_cohort")
 
     promotable = list_promotable_short_term_items(uid, db_client=client, now=current_time)
+    if consolidation_batched_ids is not None:
+        allowed = set(consolidation_batched_ids)
+        promotable = [item for item in promotable if item.memory_id in allowed]
     fast_track = list_fast_track_promotable_items(uid, db_client=client, now=current_time)
     control = _read_control_state(uid, db_client=client)
     trigger = promotion_trigger_reason(
@@ -471,7 +482,17 @@ def run_canonical_short_term_maintenance(
         run_id=run_id,
         llm_invoke=llm_invoke,
     )
-    promotion = run_canonical_short_term_promotion(uid, db_client=client, now=current_time, run_id=run_id)
+    promotion = run_canonical_short_term_promotion(
+        uid,
+        db_client=client,
+        now=current_time,
+        run_id=run_id,
+        consolidation_batched_ids=(
+            set(consolidation.batched_memory_ids)
+            if consolidation.trigger_reason and not consolidation.watermark_blocked
+            else None
+        ),
+    )
     return CanonicalShortTermMaintenanceReport(
         uid=uid,
         consolidation=consolidation,
