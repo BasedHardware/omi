@@ -12,6 +12,10 @@ from utils.users import get_user_display_name
 
 MAX_CONTEXT_MEMORIES = 24
 MAX_RECENT_CHAT_MESSAGES = 12
+MAX_MEMORY_CHARS = 280
+MAX_RECENT_CHAT_CHARS = 240
+MAX_MEMORY_CONTEXT_CHARS = 2400
+MAX_RECENT_CHAT_CONTEXT_CHARS = 2000
 
 
 SYSTEM_PROMPT = """You are Omi's reply drafting assistant.
@@ -72,10 +76,18 @@ def _load_memory_context(uid: str, include_memories: bool) -> List[str]:
     for memory in rows:
         if memory.get('is_locked'):
             continue
-        content = str(memory.get('content') or '').strip()
-        if content:
-            memories.append(content)
-    return memories[:MAX_CONTEXT_MEMORIES]
+        content = _normalize_context_text(memory.get('content'))
+        if not content:
+            continue
+        if not _append_bounded_context(
+            memories,
+            content,
+            max_items=MAX_CONTEXT_MEMORIES,
+            max_item_chars=MAX_MEMORY_CHARS,
+            max_total_chars=MAX_MEMORY_CONTEXT_CHARS,
+        ):
+            break
+    return memories
 
 
 def _load_recent_user_chat(uid: str, include_recent_chat: bool) -> List[str]:
@@ -91,9 +103,13 @@ def _load_recent_user_chat(uid: str, include_recent_chat: bool) -> List[str]:
             continue
         if message.sender != MessageSender.human:
             continue
-        text = message.text.strip()
-        if text:
-            messages.append(text)
+        _append_bounded_context(
+            messages,
+            _normalize_context_text(message.text),
+            max_items=MAX_RECENT_CHAT_MESSAGES,
+            max_item_chars=MAX_RECENT_CHAT_CHARS,
+            max_total_chars=MAX_RECENT_CHAT_CONTEXT_CHARS,
+        )
     return messages[-MAX_RECENT_CHAT_MESSAGES:]
 
 
@@ -145,3 +161,41 @@ Recent examples of how the user writes to Omi. Use these only for tone and phras
 
 def _numbered_block(items: Sequence[str]) -> str:
     return '\n'.join(f'{index + 1}. {item}' for index, item in enumerate(items) if item.strip())
+
+
+def _normalize_context_text(value) -> str:
+    return ' '.join(str(value or '').split())
+
+
+def _append_bounded_context(
+    items: List[str],
+    text: str,
+    *,
+    max_items: int,
+    max_item_chars: int,
+    max_total_chars: int,
+) -> bool:
+    if not text or len(items) >= max_items:
+        return False
+
+    used_chars = sum(len(item) for item in items)
+    remaining_chars = max_total_chars - used_chars
+    if remaining_chars <= 0:
+        return False
+
+    bounded = _truncate_text(text, min(max_item_chars, remaining_chars))
+    if not bounded:
+        return False
+
+    items.append(bounded)
+    return len(items) < max_items and sum(len(item) for item in items) < max_total_chars
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    if max_chars <= 0:
+        return ''
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= 3:
+        return text[:max_chars]
+    return f'{text[: max_chars - 3].rstrip()}...'

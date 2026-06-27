@@ -4,6 +4,8 @@ from pathlib import Path
 import sys
 import types
 
+import pytest
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
@@ -42,7 +44,7 @@ _install_module(
 )
 _install_module('utils.users', get_user_display_name=lambda _uid, default='Someone': default)
 
-from models.reply_draft import ReplyDraftGeneration, ReplyDraftRequest
+from models.reply_draft import ReplyDraftContextSummary, ReplyDraftGeneration, ReplyDraftRequest, ReplyDraftResponse
 from utils.llm import reply_draft
 
 
@@ -59,7 +61,7 @@ class _FakeLlm:
         self.messages = messages
         return ReplyDraftGeneration(
             draft='Sounds good, I can take a look tonight.',
-            alternatives=['Yep, I can check tonight.', 'I can look later today.', 'extra should be trimmed'],
+            alternatives=['Yep, I can check tonight.', 'I can look later today.'],
             safety_notes=['Review before sending.'],
         )
 
@@ -95,6 +97,41 @@ def test_load_memory_context_excludes_locked_memories(monkeypatch):
         'Uses casual language',
     ]
     assert reply_draft._load_memory_context('uid', include_memories=False) == []
+
+
+def test_loaded_context_is_truncated_before_prompting(monkeypatch):
+    long_memory = 'memory ' + ('x' * 1000)
+    long_message = 'message ' + ('y' * 1000)
+    monkeypatch.setattr(
+        reply_draft,
+        'get_memories',
+        lambda *_args, **_kwargs: [{'content': long_memory} for _ in range(reply_draft.MAX_CONTEXT_MEMORIES)],
+    )
+    monkeypatch.setattr(
+        reply_draft,
+        'get_messages',
+        lambda *_args, **_kwargs: [_chat_row(long_message) for _ in range(reply_draft.MAX_RECENT_CHAT_MESSAGES)],
+    )
+
+    memories = reply_draft._load_memory_context('uid', include_memories=True)
+    recent_messages = reply_draft._load_recent_user_chat('uid', include_recent_chat=True)
+
+    assert memories
+    assert recent_messages
+    assert all(len(item) <= reply_draft.MAX_MEMORY_CHARS for item in memories)
+    assert all(len(item) <= reply_draft.MAX_RECENT_CHAT_CHARS for item in recent_messages)
+    assert sum(len(item) for item in memories) <= reply_draft.MAX_MEMORY_CONTEXT_CHARS
+    assert sum(len(item) for item in recent_messages) <= reply_draft.MAX_RECENT_CHAT_CONTEXT_CHARS
+
+
+def test_reply_draft_response_rejects_empty_draft_after_stripping():
+    with pytest.raises(ValueError):
+        ReplyDraftResponse(
+            draft='   ',
+            alternatives=[],
+            safety_notes=[],
+            used_context=ReplyDraftContextSummary(memories_used=0, recent_chat_messages_used=0),
+        )
 
 
 def test_create_reply_draft_uses_structured_llm_and_context_counts(monkeypatch):

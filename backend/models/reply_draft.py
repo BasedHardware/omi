@@ -4,6 +4,21 @@ from pydantic import BaseModel, Field, field_validator
 
 ReplyDraftTone = Literal['natural', 'warm', 'brief', 'professional', 'playful']
 ReplyDraftLength = Literal['short', 'medium', 'long']
+MAX_REPLY_DRAFT_LENGTH = 3000
+MAX_REPLY_DRAFT_ALTERNATIVES = 2
+MAX_REPLY_DRAFT_SAFETY_NOTES = 5
+
+
+def _strip_required_text(value):
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
+
+def _strip_text_list(value):
+    if isinstance(value, list):
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()]
+    return value
 
 
 class ReplyDraftRequest(BaseModel):
@@ -30,9 +45,19 @@ class ReplyDraftRequest(BaseModel):
 
 
 class ReplyDraftGeneration(BaseModel):
-    draft: str = Field(..., min_length=1, max_length=3000)
-    alternatives: List[str] = Field(default_factory=list, max_length=3)
-    safety_notes: List[str] = Field(default_factory=list, max_length=5)
+    draft: str = Field(..., min_length=1, max_length=MAX_REPLY_DRAFT_LENGTH)
+    alternatives: List[str] = Field(default_factory=list, max_length=MAX_REPLY_DRAFT_ALTERNATIVES)
+    safety_notes: List[str] = Field(default_factory=list, max_length=MAX_REPLY_DRAFT_SAFETY_NOTES)
+
+    @field_validator('draft', mode='before')
+    @classmethod
+    def _strip_draft(cls, value):
+        return _strip_required_text(value)
+
+    @field_validator('alternatives', 'safety_notes', mode='before')
+    @classmethod
+    def _strip_lists(cls, value):
+        return _strip_text_list(value)
 
 
 class ReplyDraftContextSummary(BaseModel):
@@ -41,8 +66,18 @@ class ReplyDraftContextSummary(BaseModel):
 
 
 class ReplyDraftResponse(BaseModel):
-    draft: str
-    alternatives: List[str] = Field(default_factory=list)
+    draft: str = Field(..., min_length=1, max_length=MAX_REPLY_DRAFT_LENGTH)
+    alternatives: List[str] = Field(default_factory=list, max_length=MAX_REPLY_DRAFT_ALTERNATIVES)
     needs_review: bool = True
-    safety_notes: List[str] = Field(default_factory=list)
+    safety_notes: List[str] = Field(default_factory=list, max_length=MAX_REPLY_DRAFT_SAFETY_NOTES)
     used_context: ReplyDraftContextSummary
+
+    @field_validator('draft', mode='before')
+    @classmethod
+    def _strip_draft(cls, value):
+        return _strip_required_text(value)
+
+    @field_validator('alternatives', 'safety_notes', mode='before')
+    @classmethod
+    def _strip_lists(cls, value):
+        return _strip_text_list(value)

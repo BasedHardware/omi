@@ -72,8 +72,13 @@ class ReplyDraftResponse {
   });
 
   factory ReplyDraftResponse.fromJson(Map<String, dynamic> json) {
+    final draft = json['draft'];
+    if (draft is! String || draft.trim().isEmpty) {
+      throw const FormatException('Reply draft response is missing a draft.');
+    }
+
     return ReplyDraftResponse(
-      draft: json['draft'] ?? '',
+      draft: draft.trim(),
       alternatives: ((json['alternatives'] ?? []) as List).map((item) => item.toString()).toList(),
       needsReview: json['needs_review'] ?? true,
       safetyNotes: ((json['safety_notes'] ?? []) as List).map((item) => item.toString()).toList(),
