@@ -109,6 +109,18 @@ enum ChatContentBlock: Identifiable {
         if cleanName.hasPrefix("WebFetch:") {
             return "Fetching page"
         }
+        if cleanName.lowercased().hasPrefix("read:") {
+            return "Reading file"
+        }
+        if cleanName.lowercased().hasPrefix("write:") {
+            return "Writing file"
+        }
+        if cleanName.lowercased().hasPrefix("edit:") {
+            return "Editing file"
+        }
+        if cleanName.lowercased().hasPrefix("bash:") {
+            return "Running command"
+        }
 
         switch cleanName {
         case "execute_sql": return "Querying database"
@@ -425,6 +437,37 @@ struct ChatMessage: Identifiable {
     }
 }
 
+extension ChatMessage {
+    var copyableText: String {
+        let structuredText = contentBlocks
+            .compactMap(\.copyableText)
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !structuredText.isEmpty {
+            return structuredText
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+extension ChatContentBlock {
+    var copyableText: String? {
+        switch self {
+        case .text(_, let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        case .thinking(_, let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : "Thinking:\n\(trimmed)"
+        case .discoveryCard(_, let title, _, let fullText):
+            let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
+        case .toolCall:
+            return nil
+        }
+    }
+}
+
 enum ChatSender {
     case user
     case ai
@@ -603,6 +646,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// When set, the bridge uses this model instead of the default (Opus).
     /// e.g. "claude-sonnet-4-6" for faster floating bar responses.
     var modelOverride: String?
+    /// Optional per-provider bridge override for spawned/background agents.
+    /// This lets a single pill run Hermes/OpenClaw without changing the user's
+    /// global chat provider preference stored in `chatBridgeMode`.
+    private let bridgeHarnessOverride: AgentHarnessMode?
+
+    var hasBridgeHarnessOverride: Bool {
+        bridgeHarnessOverride != nil
+    }
 
     /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
     /// When true, user can create multiple chat sessions
@@ -616,8 +667,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // with the user's Firebase ID token). Claude Code remains as an opt-in harness that
     // uses the user's own Claude OAuth.
     private lazy var agentBridge: AgentBridge = {
-        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
-        let harness = mode == BridgeMode.piMono.rawValue ? "piMono" : "acp"
+        let harness = resolvedHarnessMode()
         activeBridgeHarness = harness
         return AgentBridge(harnessMode: harness)
     }()
@@ -637,11 +687,25 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         case omiAI = "agentSDK"     // Legacy, auto-migrated to piMono
         case userClaude = "claudeCode"
         case piMono = "piMono"
+        case hermes = "hermes"
+        case openClaw = "openclaw"
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
     var isUsingOmiAccountProvider: Bool {
-        bridgeMode != BridgeMode.userClaude.rawValue
+        resolvedHarnessMode() == "piMono"
+    }
+
+    nonisolated static func harnessMode(for mode: BridgeMode) -> String {
+        AgentRuntimeRouting.harnessMode(for: mode).rawValue
+    }
+
+    private func resolvedHarnessMode() -> String {
+        if let override = bridgeHarnessOverride {
+            return override.rawValue
+        }
+        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
+        return Self.harnessMode(for: BridgeMode(rawValue: mode) ?? .piMono)
     }
 
     /// The legacy "$50 lifetime Omi AI spend" upgrade nudge (`showOmiThresholdAlert`)
@@ -744,6 +808,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// after session/new the ACP SDK tracks ongoing history natively.
     private var cachedMainSystemPrompt: String = ""
     private var cachedFloatingSystemPrompt: String = ""
+    private var cachedFloatingPillSystemPrompt: String = ""
 
     // MARK: - CLAUDE.md & Skills (Global)
     @Published var claudeMdContent: String?
@@ -776,7 +841,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // MARK: - System Prompt
     // Prompts are defined in ChatPrompts.swift (converted from Python backend)
 
-    init() {
+    init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
+        self.bridgeHarnessOverride = bridgeHarnessOverride
         log("ChatProvider initialized, will start Claude bridge on first use")
 
         // When the last in-flight save completes, re-run any poll cycle
@@ -1025,14 +1091,25 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let promptContext = formatMemoriesSection()
             let mainSystemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
+            let floatingPillSystemPrompt = buildFloatingBarSystemPrompt(
+                contextString: promptContext,
+                excludingToolNames: ["spawn_agent", "delegate_agent"]
+            )
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
                 ? ModelQoS.Claude.defaultSelection
                 : ShortcutSettings.shared.selectedModel
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
+            cachedFloatingPillSystemPrompt = floatingPillSystemPrompt
+            // Hermes and OpenClaw ignore Omi's Claude model aliases, so leave
+            // the model hint nil to avoid recording a model ID in binding metadata
+            // that could trigger spurious context-changed sessions later.
+            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+            let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
+            let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
             await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
-                .init(key: "main", model: ModelQoS.Claude.chat, systemPrompt: mainSystemPrompt),
-                .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
+                .init(key: "main", model: mainWarmupModel, systemPrompt: mainSystemPrompt),
+                .init(key: "floating", model: floatingWarmupModel, systemPrompt: floatingSystemPrompt)
             ])
             return true
         } catch {
@@ -1067,13 +1144,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         schemaLoaded = false
         cachedMainSystemPrompt = ""
         cachedFloatingSystemPrompt = ""
+        cachedFloatingPillSystemPrompt = ""
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
     func switchBridgeMode(to mode: BridgeMode) async {
         // Normalize legacy omiAI to piMono
         let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
-        let newHarness = resolvedMode == .piMono ? "piMono" : "acp"
+        let newHarness = Self.harnessMode(for: resolvedMode)
         let previousHarness = activeBridgeHarness
         // Compare against the actual running harness, NOT @AppStorage (which may
         // already reflect the new value because another view wrote the same key).
@@ -2045,7 +2123,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
                 // Show upgrade prompt if over threshold but don't block chat. Never for
                 // paid/BYOK users — they aren't subject to the free Omi spend cap.
-                if self.bridgeMode != BridgeMode.userClaude.rawValue && serverCost >= 50.0
+                if self.isUsingOmiAccountProvider && serverCost >= 50.0
                     && !self.isExemptFromOmiUpgradeNudge {
                     log("ChatProvider: Omi AI cost at $\(String(format: "%.2f", serverCost)) on startup — showing upgrade prompt")
                     self.showOmiThresholdAlert = true
@@ -2858,7 +2936,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Show upgrade prompt if over threshold but don't block the message.
         // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
-        if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0
+        if isUsingOmiAccountProvider && omiAICumulativeCostUsd >= 50.0
             && !isExemptFromOmiUpgradeNudge {
             showOmiThresholdAlert = true
         }
@@ -3037,10 +3115,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } else {
                 if systemPromptStyle == .floating {
                     if legacyClientScope == AgentLegacyClientScope.floatingPill {
-                        systemPrompt = buildFloatingBarSystemPrompt(
-                            contextString: formatMemoriesSection(),
-                            excludingToolNames: ["spawn_agent", "delegate_agent"]
-                        )
+                        if cachedFloatingPillSystemPrompt.isEmpty {
+                            cachedFloatingPillSystemPrompt = buildFloatingBarSystemPrompt(
+                                contextString: formatMemoriesSection(),
+                                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                            )
+                        }
+                        systemPrompt = cachedFloatingPillSystemPrompt
                     } else if cachedFloatingSystemPrompt.isEmpty {
                         cachedFloatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: formatMemoriesSection())
                         systemPrompt = cachedFloatingSystemPrompt
@@ -3079,7 +3160,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             }
 
-            // Query the active bridge with streaming
+            // Query the active bridge with streaming. Hermes and OpenClaw do not
+            // accept Omi's Claude model aliases, so leave model choice to the
+            // harness default when either native adapter is active.
+            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+            let effectiveRequestModel = usesNativeModelChoice ? nil : (model ?? modelOverride)
+
             // Callbacks for agent bridge
             //
             // QueryTracer: `isFirstResponse` marks TTFT on the very first output of
@@ -3243,7 +3329,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // message history) and open the request/TTFT spans. The clock starts
             // here so ttft measures input → first streamed output.
             if let tracer {
-                let tracedModel = model ?? modelOverride ?? "unknown"
+                let tracedModel = effectiveRequestModel ?? "unknown"
                 tracer.captureRequest(
                     systemPrompt: systemPrompt,
                     messages: Array(messages.suffix(40)).map {
@@ -3277,7 +3363,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 legacyClientScope: resolvedLegacyClientScope,
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
-                model: model ?? modelOverride,
+                model: effectiveRequestModel,
                 resume: resume,
                 imageData: effectiveImageData,
                 onTextDelta: textDeltaHandler,
@@ -3313,7 +3399,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messages[index].text = messageText
                 messages[index].isStreaming = false
                 messages[index].metadata = MessageMetadata(
-                    model: model ?? modelOverride,
+                    model: effectiveRequestModel,
                     inputTokens: queryResult.inputTokens,
                     outputTokens: queryResult.outputTokens,
                     cacheReadTokens: queryResult.cacheReadTokens,
@@ -3342,7 +3428,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             tracer?.end("llm_request")
             tracer?.finalize(
                 tokenCount: queryResult.outputTokens,
-                model: model ?? modelOverride,
+                model: effectiveRequestModel,
                 inputTokens: queryResult.inputTokens,
                 outputTokens: queryResult.outputTokens,
                 cacheReadTokens: queryResult.cacheReadTokens,
@@ -3426,7 +3512,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     text: aiText,
                     step: "chat",
                     toolCalls: toolNames.isEmpty ? nil : toolNames,
-                    model: model ?? modelOverride
+                    model: effectiveRequestModel
                 )
             }
 
@@ -3446,13 +3532,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messageLength: responseLength
             )
 
-            // Skip client-side usage recording for piMono — the backend already
+            // Skip client-side usage recording for piMono (the backend already
             // logs usage server-side via POST /v2/chat/completions, so recording
-            // here would double-count.
-            let isOmiMode = bridgeMode != BridgeMode.userClaude.rawValue
-            let isPiMono = bridgeMode == BridgeMode.piMono.rawValue
-            if !isPiMono {
-                let accountType = isOmiMode ? "omi" : "personal"
+            // here would double-count) and for local harnesses (Hermes/OpenClaw).
+            // The backend's record_llm_usage_bucket always increments the
+            // grand-total desktop_chat bucket regardless of the account
+            // parameter, and /usage-quota sums that bucket regardless of account,
+            // so any POST — even with account="local" — still depletes the user's
+            // Omi/pi-mono quota. The client-side quota gates already skip local
+            // providers, so skip the POST here too. Use the actual harness, not
+            // @AppStorage bridgeMode, because directed Hermes/OpenClaw pills can
+            // override the harness without changing the user's global preference.
+            let effectiveHarness = activeBridgeHarness
+            let isPiMonoHarness = effectiveHarness == Self.harnessMode(for: .piMono)
+            let isUserClaudeHarness = effectiveHarness == Self.harnessMode(for: .userClaude)
+            if isUserClaudeHarness {
                 let r = queryResult
                 Task.detached(priority: .background) {
                     await APIClient.shared.recordLlmUsage(
@@ -3462,11 +3556,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         cacheWriteTokens: r.cacheWriteTokens,
                         totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
                         costUsd: r.costUsd,
-                        account: accountType
+                        account: "personal"
                     )
                 }
             }
-            if isOmiMode {
+            if isPiMonoHarness {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
                 omiAICumulativeCostUsd += queryResult.costUsd
                 // Show the upgrade flow when the free Omi usage threshold is reached.

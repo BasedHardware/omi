@@ -936,7 +936,7 @@ struct ChatBubble: View {
   private var copyButton: some View {
     Button(action: {
       NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(message.text, forType: .string)
+      NSPasteboard.general.setString(message.copyableText, forType: .string)
       showCopied = true
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
         showCopied = false
@@ -1100,15 +1100,31 @@ enum ContentBlockGroup: Identifiable {
 
 // MARK: - Tool Calls Group
 
-/// Renders a group of consecutive tool calls as a single collapsed summary line
+/// Renders a group of consecutive tool calls as a single summary line with
+/// optional expanded per-step details.
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
+  var compact: Bool = false
+  var expandRunning: Bool = true
   /// `ChatProvider` wires this to `agentBridge.interrupt()` via the
   /// parent message view. If no action is available, the banner is hidden
   /// so the UI never presents a no-op Cancel button.
   var onCancel: (() -> Void)? = nil
 
-  @State private var isExpanded = false
+  @State private var isExpanded: Bool
+
+  init(calls: [ChatContentBlock], compact: Bool = false, expandRunning: Bool = true, onCancel: (() -> Void)? = nil) {
+    self.calls = calls
+    self.compact = compact
+    self.expandRunning = expandRunning
+    self.onCancel = onCancel
+    self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
+  }
+
+  /// Whether any tool in the group is still running.
+  private var hasRunningTool: Bool {
+    Self.hasRunningTool(in: calls)
+  }
 
   /// True iff at least one tool in the group is `.stalled`. Drives the
   /// message-level banner.
@@ -1144,9 +1160,8 @@ struct ToolCallsGroup: View {
     return .completed
   }
 
-  /// Display name of the currently in-flight tool (last in-flight one), or last tool if all done
+  /// Display name of the currently in-flight tool (last in-flight one), or last tool if all done.
   private var currentToolName: String {
-    // Find the last in-flight tool
     if let lastRunning = calls.last(where: { block in
       if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
       return false
@@ -1155,76 +1170,124 @@ struct ToolCallsGroup: View {
         return ChatContentBlock.displayName(for: name)
       }
     }
-    // All done — show last tool name
     if case .toolCall(_, let name, _, _, _, _) = calls.last {
       return ChatContentBlock.displayName(for: name)
     }
     return "Working"
   }
 
+  private var currentToolSummary: String? {
+    if let lastRunning = calls.last(where: { block in
+      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      return false
+    }), case .toolCall(_, let name, _, _, let input, _) = lastRunning {
+      return input?.summary ?? Self.summaryEmbeddedInToolName(name)
+    }
+    if case .toolCall(_, let name, _, _, let input, _) = calls.last {
+      return input?.summary ?? Self.summaryEmbeddedInToolName(name)
+    }
+    return nil
+  }
+
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      // Message-level Cancel banner appears above the summary header
-      // when any tool has been promoted to .stalled and cancellation is wired.
+    VStack(alignment: .leading, spacing: compact ? 0 : 6) {
       if hasStalledTool, let onCancel {
         ToolCallStalledBanner(onCancel: onCancel)
       }
 
-      // Summary header
-      Button(action: {
-        withAnimation(.easeInOut(duration: 0.2)) {
-          isExpanded.toggle()
+      header
+
+      if isExpanded {
+        expandedToolCalls
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: compact ? 14 : 16)
+    .onChange(of: hasRunningTool) { _, isRunning in
+      guard expandRunning, isRunning else { return }
+      withAnimation(.easeInOut(duration: 0.18)) {
+        isExpanded = true
+      }
+    }
+  }
+
+  private var header: some View {
+    Button(action: {
+      withAnimation(.easeInOut(duration: 0.2)) {
+        isExpanded.toggle()
+      }
+    }) {
+      HStack(spacing: compact ? 7 : 6) {
+        statusIcon(for: aggregateStatus, size: 12)
+
+        Text(currentToolName)
+          .scaledFont(size: 12, weight: compact ? .semibold : .regular)
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(1)
+
+        if let summary = currentToolSummary, !summary.isEmpty {
+          Text(summary)
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(1)
+            .truncationMode(.middle)
         }
-      }) {
-        HStack(spacing: 6) {
-          // Status indicator — driven by the aggregate state across
-          // all tools in the group (see `aggregateStatus`).
-          statusIcon(for: aggregateStatus, size: 12)
 
-          // Current/last tool action
-          Text(currentToolName)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textSecondary)
-
-          // Step count (only show when > 1)
-          if calls.count > 1 {
-            Text("·")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+        if calls.count > 1 {
+          Text(compact ? "· \(calls.count) steps" : "·")
+            .scaledFont(size: compact ? 11 : 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(1)
+          if !compact {
             Text("\(calls.count) steps")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
           }
-
-          Spacer(minLength: 4)
-
-          // Expand chevron
-          Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-            .scaledFont(size: 9)
-            .foregroundColor(OmiColors.textTertiary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+
+        Spacer(minLength: compact ? 0 : 4)
+
+        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+          .scaledFont(size: 9)
+          .foregroundColor(OmiColors.textTertiary)
       }
-      .buttonStyle(.plain)
+      .padding(.horizontal, 10)
+      .padding(.vertical, compact ? 0 : 6)
+      .frame(height: compact ? 34 : nil)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .buttonStyle(.plain)
+  }
 
-      // Expanded: show individual tool call cards
-      if isExpanded {
-        Divider()
-          .padding(.horizontal, 8)
+  private var expandedToolCalls: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Divider()
+        .padding(.horizontal, 8)
 
-        VStack(alignment: .leading, spacing: 4) {
-          ForEach(calls) { block in
-            if case .toolCall(_, let name, let status, _, let input, let output) = block {
-              ToolCallCard(name: name, status: status, input: input, output: output)
-            }
+      VStack(alignment: .leading, spacing: 4) {
+        ForEach(calls) { block in
+          if case .toolCall(_, let name, let status, _, let input, let output) = block {
+            ToolCallCard(name: name, status: status, input: input, output: output)
           }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 6)
       }
+      .padding(.horizontal, 6)
+      .padding(.vertical, 6)
     }
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: 16)
+  }
+
+  private static func hasRunningTool(in calls: [ChatContentBlock]) -> Bool {
+    calls.contains { block in
+      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      return false
+    }
+  }
+
+  private static func summaryEmbeddedInToolName(_ name: String) -> String? {
+    guard let separator = name.firstIndex(of: ":") else { return nil }
+    let summary = name[name.index(after: separator)...]
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return summary.isEmpty ? nil : summary
   }
 }
 
@@ -2063,6 +2126,25 @@ extension Theme {
         ForegroundColor(.white.opacity(0.9))
         UnderlineStyle(.single)
       }
+      .table { configuration in
+        ScrollView(.horizontal, showsIndicators: false) {
+          configuration.label
+            .fixedSize(horizontal: true, vertical: true)
+            .markdownTableBorderStyle(.init(color: .white.opacity(0.18)))
+            .markdownTableBackgroundStyle(.alternatingRows(.white.opacity(0.06), .white.opacity(0.03)))
+        }
+        .markdownMargin(top: 0, bottom: 10)
+      }
+      .tableCell { configuration in
+        configuration.label
+          .markdownTextStyle {
+            if configuration.row == 0 {
+              FontWeight(.semibold)
+            }
+          }
+          .padding(.vertical, 5)
+          .padding(.horizontal, 9)
+      }
   }
 
   static func aiMessage(scale: CGFloat = 1.0) -> Theme {
@@ -2095,6 +2177,27 @@ extension Theme {
       }
       .link {
         ForegroundColor(OmiColors.purplePrimary)
+      }
+      .table { configuration in
+        ScrollView(.horizontal, showsIndicators: false) {
+          configuration.label
+            .fixedSize(horizontal: true, vertical: true)
+            .markdownTableBorderStyle(.init(color: Color.white.opacity(0.14)))
+            .markdownTableBackgroundStyle(
+              .alternatingRows(OmiColors.backgroundTertiary.opacity(0.92), Color.white.opacity(0.035))
+            )
+        }
+        .markdownMargin(top: 0, bottom: 10)
+      }
+      .tableCell { configuration in
+        configuration.label
+          .markdownTextStyle {
+            if configuration.row == 0 {
+              FontWeight(.semibold)
+            }
+          }
+          .padding(.vertical, 5)
+          .padding(.horizontal, 9)
       }
   }
 }

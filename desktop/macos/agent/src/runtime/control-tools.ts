@@ -329,6 +329,7 @@ export async function handleAgentControlToolCall(
             ownerId,
             requestId,
             clientId: parsed.clientId,
+            adapterId,
           }),
         });
         return stringifyToolResult({
@@ -351,8 +352,11 @@ export async function handleAgentControlToolCall(
         }
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
         const result = await context.kernel.delegateAgent({
           ...parsed,
+          adapterId,
+          defaultAdapterId: adapterId,
           ownerId,
           requestId,
           metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
@@ -362,6 +366,7 @@ export async function handleAgentControlToolCall(
             ownerId,
             requestId,
             clientId: parsed.clientId,
+            adapterId,
           }),
         });
         return stringifyToolResult({
@@ -399,6 +404,7 @@ function buildControlRunMcpServers(
     ownerId: string;
     requestId: string;
     clientId: string;
+    adapterId: string;
   }
 ): Record<string, unknown>[] | undefined {
   if (!context.buildMcpServers) {
@@ -408,6 +414,7 @@ function buildControlRunMcpServers(
     ownerId: input.ownerId,
     requestId: input.requestId,
     clientId: input.clientId,
+    adapterId: input.adapterId,
     protocolVersion: context.getProtocolVersion?.(),
     includeSwiftBackedTools: false,
   });

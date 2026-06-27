@@ -2498,8 +2498,12 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         presentation: QueryPresentation
     ) async {
+        let directive = AgentPillsManager.providerDirective(
+            from: message,
+            contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)
+        )
         let handoff = AgentPillsManager.floatingAgentHandoff(for: message)
-        if provider.isSending, handoff == nil {
+        if provider.isSending, directive == nil, handoff == nil {
             pendingFollowUpQuery = PendingFollowUpQuery(text: message, presentation: presentation)
             if case .visible(let fromVoice) = presentation {
                 prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
@@ -2516,6 +2520,41 @@ class FloatingControlBarManager {
         }
 
         let routerTracer = QueryTracerContext.current
+        if let directive {
+            if provider.isSending {
+                pendingFollowUpQuery = nil
+                provider.stopAgent()
+            }
+            routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
+            let pill = AgentPillsManager.shared.spawnFromUserQuery(
+                directive.rewrittenQuery,
+                model: selectedFloatingModel,
+                fromVoice: presentation.fromVoice,
+                preFetchedTitle: directive.title,
+                preFetchedAck: directive.ack,
+                bridgeHarnessOverride: directive.provider.harnessMode
+            )
+            let assistantText = "I started \(directive.provider.displayName) in a background agent titled \"\(pill.title)\"."
+            let recordedTurn = provider.recordCompletedTurn(
+                userText: message,
+                assistantText: assistantText,
+                logLabel: "floating-agent-provider"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentHandoff(
+                    .init(originalRequest: message, agentTask: directive.rewrittenQuery),
+                    assistantMessage: recordedTurn.assistant,
+                    assistantText: assistantText,
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+            }
+            return
+        }
+
         if let handoff {
             if provider.isSending {
                 pendingFollowUpQuery = nil
@@ -2598,6 +2637,16 @@ class FloatingControlBarManager {
 
         // Chat route: continue with the requested delivery surface.
         await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+    }
+
+    private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String? {
+        let displayed = barWindow.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !displayed.isEmpty {
+            return displayed
+        }
+        return barWindow.state.chatHistory.reversed().compactMap { exchange in
+            exchange.question?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first { !$0.isEmpty }
     }
 
     private func dispatchChatQuery(

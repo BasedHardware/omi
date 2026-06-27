@@ -50,6 +50,38 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(message?.requestKey)
   }
 
+  func testHarnessModeMapsNamedAdapters() {
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "piMono"), "pi-mono")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "pi-mono"), "pi-mono")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "hermes"), "hermes")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openclaw"), "openclaw")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openClaw"), "openclaw")
+    XCTAssertNil(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"))
+  }
+
+  func testPiMonoAliasUsesCanonicalAdapterForAuthGuards() throws {
+    let processSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(processSource.contains("let preferredAdapterId = AgentRuntimeRouting.adapterId(for: preferredHarness)"))
+    XCTAssertTrue(processSource.contains("preferredAdapterId == .piMono"))
+    XCTAssertFalse(processSource.contains(#"preferredHarnessMode == "piMono""#))
+
+    let bridgeSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentBridge.swift")
+    let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
+    XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness, tokenRefreshTask == nil"))
+    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return }"))
+    XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
+  }
+
   func testNamedBundleStateDirectoriesAreIsolated() {
     let home = URL(fileURLWithPath: "/tmp/test-home")
 
@@ -108,6 +140,27 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertFalse(source.contains("currentHarnessMode"))
     XCTAssertFalse(source.contains("harness changed"))
+    XCTAssertFalse(source.contains(#""adapterId": harnessMode == "piMono" ? "pi-mono" : "acp""#))
+  }
+
+  func testLocalAdapterDiscoveryRunsForSharedRuntimeStartup() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("applyLocalAgentEnvironment(to: &env)"))
+    XCTAssertFalse(source.contains("applyLocalAgentEnvironment(to: &env, adapterId: preferredAdapterId)"))
+    XCTAssertFalse(source.contains("guard adapterId == .hermes || adapterId == .openclaw else"))
+    XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
+    XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
+    XCTAssertTrue(source.contains(#""\(home)/.hermes/hermes-agent/venv/bin""#))
+    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init) + trustedPathDirs + adapterPathDirs"))
+    XCTAssertFalse(source.contains("adapterPathPrefixDirs + existingPath.split"))
+    XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
+    XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
+    XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
   }
 
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {

@@ -45,6 +45,16 @@ describe("omi tool manifest", () => {
     ]);
   });
 
+  it("keeps directed provider routing on the canonical spawn_agent schema", () => {
+    const spawnAgent = toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent");
+
+    expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
+      enum: ["openclaw", "hermes"],
+    });
+    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='openclaw'");
+    expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
+  });
+
   it("projects stdio onboarding-only tools only in onboarding context", () => {
     const regular = new Set(toolNamesForAdapter("omi-tools-stdio"));
     const onboarding = new Set(toolNamesForAdapter("omi-tools-stdio", { onboarding: true }));

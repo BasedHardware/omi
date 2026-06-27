@@ -210,12 +210,19 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     promptGuidelines: [
       "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
       "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
+      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes' instead of treating that name as a session to inspect.",
+      "Return immediately after spawning; the pill keeps working in the background.",
     ],
     latency: "async background",
     inputSchema: schema(
       {
         brief: { type: "string", description: "Clear, self-contained task brief for the background agent." },
         title: { type: "string", description: "Short Title Case label for the agent pill." },
+        provider: {
+          type: "string",
+          enum: ["openclaw", "hermes"],
+          description: "Optional local agent provider to run this pill through.",
+        },
       },
       ["brief"],
     ),

@@ -23,6 +23,10 @@ class TaskChatState: ObservableObject {
     private var agentBridge: AgentBridge?
     private var bridgeStarted = false
 
+    /// Harness mode of the currently active bridge, set when the bridge starts.
+    /// Used to decide whether adapter-native IDs are valid for legacy resume.
+    private var currentHarness: String?
+
     /// Workspace path for file-system tools
     let workspacePath: String
 
@@ -136,11 +140,23 @@ class TaskChatState: ObservableObject {
         guard !bridgeStarted else { return true }
         do {
             let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-            let harness = mode == "piMono" ? "piMono" : "acp"
+            let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
             let bridge = AgentBridge(harnessMode: harness)
             try await bridge.start()
             agentBridge = bridge
             bridgeStarted = true
+            currentHarness = harness
+
+            // Legacy resume IDs are only valid for the ACP/pi-mono adapters that
+            // created them. Hermes and OpenClaw advertise native resume but would
+            // adopt a foreign session ID, causing session/resume on the wrong
+            // backend before falling back or failing. Clear it on adapter switch.
+            let supportsLegacyResume = (harness == "acp" || harness == "piMono")
+            if !supportsLegacyResume, legacyAcpSessionId != nil {
+                log("TaskChatState[\(taskId)]: clearing legacy resume ID for harness \(harness)")
+                legacyAcpSessionId = nil
+            }
+
             log("TaskChatState[\(taskId)]: agent bridge started")
             return true
         } catch {
@@ -272,7 +288,18 @@ class TaskChatState: ObservableObject {
             // acpSessionId column remains a legacy adapter binding only.
             currentOmiSessionId = queryResult.omiSessionId
             if let adapterSessionId = queryResult.adapterSessionId {
-                legacyAcpSessionId = adapterSessionId
+                // Only persist adapter-native IDs for adapters that support the
+                // legacy resume protocol (ACP/pi-mono). Hermes/OpenClaw native IDs
+                // are not interchangeable — storing them would pollute the resume
+                // field and cause a different backend to attempt resuming the
+                // wrong session after an adapter switch.
+                let supportsLegacyResume = (currentHarness == "acp" || currentHarness == "piMono")
+                if supportsLegacyResume {
+                    legacyAcpSessionId = adapterSessionId
+                } else if legacyAcpSessionId != nil {
+                    log("TaskChatState[\(taskId)]: not persisting adapter ID \(adapterSessionId) for non-legacy harness \(currentHarness ?? "?")")
+                    legacyAcpSessionId = nil
+                }
             }
 
             // Flush remaining streaming buffers

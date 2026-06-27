@@ -116,6 +116,37 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertNotNil(projection?.completedAt)
   }
 
+  func testToolResultDisplayDoesNotSurfaceRawOutput() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"tool_result_display","protocolVersion":2,"requestId":"req","name":"Bash","output":"TOKEN=secret-value\n/private/tmp/user-file"}"#
+    )!
+
+    store.ingest(message: message, surface: surface)
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.status, .running)
+    XCTAssertEqual(projection?.statusText, "Running command")
+    XCTAssertFalse(projection?.statusText?.contains("secret-value") ?? true)
+  }
+
+  func testToolResultDisplayDoesNotOverwriteCancellation() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    let cancel = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"cancel_ack","protocolVersion":2,"requestId":"req","accepted":true}"#
+    )!
+    let resultDisplay = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"tool_result_display","protocolVersion":2,"requestId":"req","name":"Bash","output":"done"}"#
+    )!
+
+    store.ingest(message: cancel, surface: surface)
+    store.ingest(message: resultDisplay, surface: surface)
+
+    XCTAssertEqual(store.projection(for: surface)?.status, .cancelling)
+  }
+
   func testTaskRegistryMarkCompletedDoesNotCreateSuccessWithoutRuntimeResult() throws {
     TaskAgentStatusRegistry.shared.registerTask(taskId: "task-no-result", title: "No Result")
     TaskAgentStatusRegistry.shared.markRunning(taskId: "task-no-result")
