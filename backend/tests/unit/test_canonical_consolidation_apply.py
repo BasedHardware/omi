@@ -56,6 +56,7 @@ canonical_consolidation = importlib.import_module("utils.memory.canonical_consol
 ConsolidationAgentBatch = canonical_consolidation.ConsolidationAgentBatch
 ConsolidationAgentDecision = canonical_consolidation.ConsolidationAgentDecision
 apply_consolidation_decision = canonical_consolidation.apply_consolidation_decision
+list_pending_consolidation_items = canonical_consolidation.list_pending_consolidation_items
 run_canonical_consolidation = canonical_consolidation.run_canonical_consolidation
 
 from database.memory_apply_store import apply_long_term_patch_firestore
@@ -348,7 +349,7 @@ def test_watermark_not_advanced_on_parse_failure():
     assert report.last_consolidation_run_at == control.last_consolidation_run_at
 
 
-def test_watermark_not_advanced_when_zero_decisions_applied():
+def test_watermark_advanced_on_clean_empty_run():
     uid = UID
     control = MemoryControlState(
         uid=uid,
@@ -371,7 +372,9 @@ def test_watermark_not_advanced_when_zero_decisions_applied():
         report = run_canonical_consolidation(uid, db_client=db, run_id="run-zero", now=NOW, batch_threshold=2)
 
     assert report.decisions_applied == 0
-    assert report.last_consolidation_run_at == control.last_consolidation_run_at
+    assert report.last_consolidation_run_at == NOW
+    stored_control = MemoryControlState(**db.docs[f"users/{uid}/memory_control/state"])
+    assert stored_control.last_consolidation_run_at == NOW
 
 
 def test_batch_cap_limits_pending_items_sent_to_llm():
@@ -392,3 +395,149 @@ def test_batch_cap_limits_pending_items_sent_to_llm():
         run_canonical_consolidation(uid, db_client=db, run_id="run-cap", now=NOW, batch_threshold=10)
 
     assert len(mock_gather.call_args[0][1]) == 10
+
+
+def test_missing_survivor_skips_decision_without_corruption():
+    survivor = _item("mem_survivor", "Enjoys hiking")
+    db = _db_for_apply(survivor=survivor)
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    initial_item = copy.deepcopy(db.docs[f"users/{UID}/memory_items/mem_survivor"])
+
+    decision = ConsolidationAgentDecision(
+        decision="merge",
+        survivor_memory_id="mem_hallucinated",
+        memory_text="Enjoys hiking",
+        evidence_ids=["ev_mem_survivor"],
+        corroboration_increment=True,
+    )
+
+    with pytest.raises(canonical_consolidation.ConsolidationApplySkipped):
+        apply_consolidation_decision(
+            UID,
+            decision=decision,
+            pending_by_id={},
+            control=control,
+            run_id="run-missing-survivor",
+            now=NOW,
+            db_client=db,
+        )
+
+    assert db.docs[f"users/{UID}/memory_items/mem_survivor"] == initial_item
+    assert "mem_hallucinated" not in db.docs
+
+
+def test_superseded_survivor_skips_decision():
+    survivor = _item("mem_survivor", "Old fact")
+    survivor.status = MemoryItemStatus.superseded
+    db = _db_for_apply(survivor=survivor)
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    initial_item = copy.deepcopy(db.docs[f"users/{UID}/memory_items/mem_survivor"])
+
+    decision = ConsolidationAgentDecision(
+        decision="update",
+        survivor_memory_id="mem_survivor",
+        memory_text="Updated fact",
+        evidence_ids=["ev_mem_survivor"],
+    )
+
+    with pytest.raises(canonical_consolidation.ConsolidationApplySkipped):
+        apply_consolidation_decision(
+            UID,
+            decision=decision,
+            pending_by_id={},
+            control=control,
+            run_id="run-superseded-survivor",
+            now=NOW,
+            db_client=db,
+        )
+
+    assert db.docs[f"users/{UID}/memory_items/mem_survivor"] == initial_item
+
+
+def test_merged_survivor_stays_short_term_and_reappears_in_pending():
+    survivor = _item("mem_survivor", "Enjoys hiking in Seattle", tier=MemoryTier.short_term)
+    duplicate_ev = _evidence("ev_pending", source_id="conv-2")
+    db = _db_for_apply(survivor=survivor, extra_evidence=[duplicate_ev])
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    pending = _item("mem_pending", "Enjoys hiking in Seattle", evidence_ids=["ev_pending"])
+
+    apply_consolidation_decision(
+        UID,
+        decision=ConsolidationAgentDecision(
+            decision="merge",
+            survivor_memory_id="mem_survivor",
+            memory_text="Enjoys hiking in Seattle",
+            evidence_ids=["ev_pending"],
+            corroboration_increment=True,
+        ),
+        pending_by_id={survivor.memory_id: survivor, pending.memory_id: pending},
+        control=control,
+        run_id="run-merge-tier",
+        now=NOW,
+        db_client=db,
+    )
+
+    updated = _stored_item(db, "mem_survivor")
+    assert updated.tier == MemoryTier.short_term
+
+    jobs_mod.fetch_short_term_memory_items_firestore.return_value = [updated]
+    pending_items = list_pending_consolidation_items(UID, db_client=db, now=NOW)
+    assert [item.memory_id for item in pending_items] == ["mem_survivor"]
+
+
+def test_batch_skips_hallucinated_evidence_and_applies_valid_decision():
+    uid = UID
+    survivor = _item("mem_valid", "Likes coffee")
+    control = MemoryControlState(
+        uid=uid,
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=1,
+        last_consolidation_run_at=NOW - timedelta(days=2),
+    )
+    db = _FakeDb(
+        {
+            f"users/{uid}/memory_control/state": _stored(control),
+            f"users/{uid}/memory_items/mem_valid": _stored(survivor),
+            f"users/{uid}/memory_evidence/ev_mem_valid": _stored(survivor.evidence[0]),
+        }
+    )
+    pending = [survivor, _item("mem_pending", "Duplicate coffee", evidence_ids=["ev_pending"])]
+
+    agent_response = ConsolidationAgentBatch(
+        decisions=[
+            ConsolidationAgentDecision(
+                decision="merge",
+                survivor_memory_id="mem_valid",
+                memory_text="Likes coffee",
+                evidence_ids=["ev_hallucinated"],
+                corroboration_increment=True,
+            ),
+            ConsolidationAgentDecision(
+                decision="skip_duplicate",
+                survivor_memory_id="mem_valid",
+                corroboration_increment=True,
+            ),
+        ]
+    )
+
+    with (
+        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
+        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
+        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent", return_value=agent_response),
+    ):
+        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
+        report = run_canonical_consolidation(
+            uid,
+            db_client=db,
+            run_id="run-mixed-batch",
+            now=NOW,
+            batch_threshold=2,
+        )
+
+    assert report.decisions_applied == 1
+    assert report.decisions_skipped == 1
+    assert report.last_consolidation_run_at == NOW
+    updated = _stored_item(db, "mem_valid")
+    assert updated.corroboration_count == 1
