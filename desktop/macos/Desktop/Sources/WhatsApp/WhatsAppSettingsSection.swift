@@ -24,6 +24,10 @@ struct WhatsAppSettingsSection: View {
   @State private var allowlistError: String?
   @State private var draftEdits: [String: String] = [:]
 
+  private var showsDeveloperDiagnostics: Bool {
+    AppBuild.isNonProduction
+  }
+
   var body: some View {
     VStack(spacing: 20) {
       connectionCard
@@ -34,8 +38,10 @@ struct WhatsAppSettingsSection: View {
       allowlistCard
       guardrailsCard
       brainSyncCard
-      auditCard
-      detailsCard
+      if showsDeveloperDiagnostics {
+        auditCard
+        detailsCard
+      }
     }
     .sheet(isPresented: $showConnectSheet) {
       WhatsAppConnectView(onDismiss: { showConnectSheet = false })

@@ -20,6 +20,7 @@ struct MessagesPage: View {
   @State private var hasCheckedProviderConnection = false
   @State private var isCheckingProviderConnection = false
   @State private var isWhatsAppAuthenticated = false
+  @State private var unreadClearBaselines: [String: Int] = [:]
 
   private var provider: (any MessagingProvider)? {
     registry.selectedProvider
@@ -36,7 +37,7 @@ struct MessagesPage: View {
         subtitle: thread.subtitle,
         lastMessagePreview: thread.lastMessagePreview,
         lastActivity: thread.lastActivity,
-        unreadCount: thread.unreadCount,
+        unreadCount: displayedUnreadCount(for: thread),
         isGroup: thread.isGroup,
         hasPendingDraft: draftThreadIds.contains(thread.id)
       )
@@ -105,6 +106,7 @@ struct MessagesPage: View {
     .onChange(of: registry.selectedProviderId) { _, _ in
       selectedThreadId = nil
       messages = []
+      unreadClearBaselines = [:]
       hasCheckedProviderConnection = false
       isWhatsAppAuthenticated = false
       Task {
@@ -524,6 +526,8 @@ struct MessagesPage: View {
     }
     let loaded = await provider.loadThreads()
     threads = loaded.sorted { ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast) }
+    reconcileUnreadBaselines()
+    clearSelectedThreadUnreadBadge()
     if showLoading {
       isLoadingThreads = false
     }
@@ -533,6 +537,7 @@ struct MessagesPage: View {
     }
     if selectedThreadId == nil {
       selectedThreadId = displayedThreads.first { $0.hasPendingDraft }?.id ?? displayedThreads.first?.id
+      clearSelectedThreadUnreadBadge()
       await reloadSelectedMessages()
     }
   }
@@ -540,6 +545,7 @@ struct MessagesPage: View {
   private func selectThread(_ threadId: String) {
     selectedThreadId = threadId
     sendError = nil
+    clearUnreadBadge(for: threadId)
     Task { await reloadSelectedMessages() }
   }
 
@@ -609,6 +615,31 @@ struct MessagesPage: View {
     var existing = optimisticMessagesByThread[threadId] ?? []
     existing.append(message)
     optimisticMessagesByThread[threadId] = existing
+  }
+
+  private func displayedUnreadCount(for thread: MessageThread) -> Int {
+    max(0, thread.unreadCount - (unreadClearBaselines[thread.id] ?? 0))
+  }
+
+  private func reconcileUnreadBaselines() {
+    let unreadCountsByThread = Dictionary(uniqueKeysWithValues: threads.map { ($0.id, $0.unreadCount) })
+    var updatedBaselines: [String: Int] = [:]
+    for (threadId, baseline) in unreadClearBaselines {
+      if let unreadCount = unreadCountsByThread[threadId] {
+        updatedBaselines[threadId] = min(baseline, unreadCount)
+      }
+    }
+    unreadClearBaselines = updatedBaselines
+  }
+
+  private func clearSelectedThreadUnreadBadge() {
+    guard let selectedThreadId else { return }
+    clearUnreadBadge(for: selectedThreadId)
+  }
+
+  private func clearUnreadBadge(for threadId: String) {
+    guard let unreadCount = threads.first(where: { $0.id == threadId })?.unreadCount else { return }
+    unreadClearBaselines[threadId] = max(unreadClearBaselines[threadId] ?? 0, unreadCount)
   }
 
   private func removeOptimisticMessage(_ messageId: String, threadId: String) {
