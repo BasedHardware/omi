@@ -428,14 +428,16 @@ def get_user_timezone(uid: str) -> str:
         return "UTC"
 
 
-def get_current_datetime_block(uid: str) -> str:
+def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
     """Build the current-datetime block injected into the user turn.
 
     Kept out of the cached system prefix so the cached bytes stay stable across requests
     while the model still receives the live time. Mirrors the timezone resolution used by
-    _get_agentic_qa_prompt.
+    _get_agentic_qa_prompt. Pass a pre-resolved ``tz`` to avoid a duplicate timezone lookup
+    when the caller already resolved it for the system prompt.
     """
-    tz = get_user_timezone(uid)
+    if tz is None:
+        tz = get_user_timezone(uid)
     try:
         current_datetime_user = datetime.now(ZoneInfo(tz))
     except Exception:
@@ -452,7 +454,11 @@ def get_current_datetime_block(uid: str) -> str:
 
 
 def _get_agentic_qa_prompt(
-    uid: str, app: Optional[App] = None, messages: List[Message] = None, context: Optional[PageContext] = None
+    uid: str,
+    app: Optional[App] = None,
+    messages: List[Message] = None,
+    context: Optional[PageContext] = None,
+    tz: Optional[str] = None,
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
@@ -476,8 +482,10 @@ def _get_agentic_qa_prompt(
     user_name = get_user_name(uid)
 
     # Resolve timezone only — the live datetime is injected into the user turn, not here,
-    # so the cached system prefix stays byte-identical across requests.
-    tz = get_user_timezone(uid)
+    # so the cached system prefix stays byte-identical across requests. A caller that already
+    # resolved the timezone (for the datetime block) can pass it in to skip a duplicate lookup.
+    if tz is None:
+        tz = get_user_timezone(uid)
     current_datetime_str = CURRENT_DATETIME_PLACEHOLDER
     current_datetime_iso = CURRENT_DATETIME_PLACEHOLDER
     logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}")

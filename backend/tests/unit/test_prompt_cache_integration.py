@@ -995,6 +995,55 @@ def test_datetime_injected_into_user_turn_not_system():
     assert result[0]["content"] == "what did I do yesterday?", "Earlier user turns must be untouched"
 
 
+def test_datetime_injected_into_list_content_user_turn():
+    """
+    When the latest user turn carries list (multimodal) content, the datetime block must be
+    prepended as a leading text block on that same turn — not appended as a separate message
+    and not attached to an earlier string turn.
+    """
+    agentic_mod = _get_agentic_module()
+
+    messages = [
+        {"role": "user", "content": "earlier text turn"},
+        {"role": "assistant", "content": "ok"},
+        {"role": "user", "content": [{"type": "image", "source": {"type": "base64", "data": "..."}}]},
+    ]
+    block = "<current_datetime>\nCurrent date time in UTC: 2024-01-19 14:23:45\n</current_datetime>"
+    result = agentic_mod._inject_current_datetime(list(messages), block)
+
+    # No extra trailing message was appended; the last turn is still the image turn.
+    assert len(result) == len(messages), "Should not append a separate datetime message for list content"
+    last = result[-1]
+    assert last["role"] == "user" and isinstance(last["content"], list)
+    # Datetime is the leading text block, original blocks preserved after it.
+    assert last["content"][0] == {"type": "text", "text": block}, "Datetime should be the leading text block"
+    assert last["content"][1]["type"] == "image", "Original content blocks must be preserved"
+    # The earlier string user turn must be left untouched.
+    assert result[0]["content"] == "earlier text turn"
+
+
+def test_passed_timezone_skips_duplicate_db_lookup():
+    """A pre-resolved tz passed to get_current_datetime_block must avoid re-querying the tz DB.
+
+    The agentic flow resolves the timezone once and shares it between the system prompt and
+    the datetime block, so the second consumer must not trigger another lookup.
+    """
+    chat_mod = _get_chat_module()
+    _set_user(chat_mod, "Alice", "America/New_York")
+    chat_mod.notification_db.get_user_time_zone.reset_mock()
+
+    block = chat_mod.get_current_datetime_block("uid_alice", tz="America/New_York")
+    assert "America/New_York" in block
+    assert (
+        chat_mod.notification_db.get_user_time_zone.call_count == 0
+    ), "Passing a resolved tz must not trigger another get_user_time_zone lookup"
+
+    # Without a passed tz it still resolves on its own (one lookup).
+    block2 = chat_mod.get_current_datetime_block("uid_alice")
+    assert "America/New_York" in block2
+    assert chat_mod.notification_db.get_user_time_zone.call_count == 1
+
+
 # ---------------------------------------------------------------------------
 # Utility
 # ---------------------------------------------------------------------------
