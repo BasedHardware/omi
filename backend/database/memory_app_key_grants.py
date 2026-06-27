@@ -178,8 +178,17 @@ def remove_developer_api_key_memory_grant(
     from google.cloud import firestore
 
     document_path = app_key_memory_grants_document_path(uid)
+    doc_ref = db_client.document(document_path)
+
+    # Guard against legacy keys that were created without memory scopes or
+    # predate grant seeding: Firestore ``update()`` raises ``NotFound`` on a
+    # missing document, which would turn a successful key deletion into a 500.
+    # If the grant document does not exist, there is nothing to remove.
+    if not doc_ref.get().exists:
+        return
+
     field_path = f'grants.{DEVELOPER_API_CONSUMER}.apps.{DEVELOPER_API_DEFAULT_APP_ID}.keys.{key_id}'
-    db_client.document(document_path).update({field_path: firestore.DELETE_FIELD})
+    doc_ref.update({field_path: firestore.DELETE_FIELD})
 
 
 __all__ = [

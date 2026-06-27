@@ -198,6 +198,12 @@ class MemoriesViewModel: ObservableObject {
 
   // Pagination state
   private var currentOffset = 0
+  // Tracks the raw backend fetch cursor independently from the visible/SQLite
+  // cursor (currentOffset). The API returns unscoped/default-scope pages that
+  // may contain items excluded by the current layer filter. Advancing the
+  // backend offset by only the visible count would re-request part of the same
+  // raw page on the next loadMore(), causing overlapping pages and duplicates.
+  private var rawBackendOffset = 0
   private let pageSize = 100  // Reduced from 500 for better performance
 
   // Bulk operations state
@@ -420,6 +426,7 @@ class MemoriesViewModel: ObservableObject {
     hasLoadedInitially = false
     isActive = false
     currentOffset = 0
+    rawBackendOffset = 0
     showingDeleteAllConfirmation = false
     isBulkOperationInProgress = false
     linkedConversation = nil
@@ -469,6 +476,7 @@ class MemoriesViewModel: ObservableObject {
       )
       memories = mergedMemories
       currentOffset = mergedMemories.count
+      rawBackendOffset = apiMemories.count
       hasMoreMemories = mergedMemories.count >= reloadLimit
       AuthBackoffTracker.shared.reportSuccess()
     } catch {
@@ -690,6 +698,7 @@ class MemoriesViewModel: ObservableObject {
     isLoading = true
     errorMessage = nil
     currentOffset = 0
+    rawBackendOffset = 0
     let token = currentScopeToken
     let tokenTiers = layers(for: token)
 
@@ -761,6 +770,8 @@ class MemoriesViewModel: ObservableObject {
         }
         memories = mergedMemories
         currentOffset = mergedMemories.count
+        // Track the raw backend cursor for subsequent loadMore() fetches.
+        rawBackendOffset = fetchedMemories.count
         // Use the raw backend page count for pagination, not the tier-filtered
         // count. The API fetch is an unscoped/default-scope page, so a full raw
         // page may contain fewer tier-matching items than pageSize while later
@@ -776,6 +787,7 @@ class MemoriesViewModel: ObservableObject {
         let allowedTiers = Set(layers(for: token))
         memories = fetchedMemories.filter { allowedTiers.contains($0.tier) }
         currentOffset = memories.count
+        rawBackendOffset = fetchedMemories.count
         hasMoreMemories = fetchedMemories.count >= pageSize
       }
     } catch {
@@ -939,6 +951,7 @@ class MemoriesViewModel: ObservableObject {
     defer { isLoadingMore = false }
     let token = currentScopeToken
     let requestedOffset = currentOffset
+    let requestedRawOffset = rawBackendOffset
 
     // Step 1: Try to load more from local cache first
     do {
@@ -965,10 +978,12 @@ class MemoriesViewModel: ObservableObject {
     // Step 2: If local cache is exhausted, fetch from API
     // Pass deviceScope so the server filters for device-scoped views, keeping
     // pagination server-side rather than limited to the first in-memory page.
+    // Use the raw backend offset (not the visible/SQLite offset) so that layer
+    // filtering does not cause overlapping pages or duplicate appends.
     do {
       let newMemories = try await fetchMemoriesDeviceScopeAware(
         limit: pageSize,
-        offset: requestedOffset
+        offset: requestedRawOffset
       )
       guard isCurrentScope(token), currentOffset == requestedOffset else { return }
 
@@ -981,6 +996,9 @@ class MemoriesViewModel: ObservableObject {
       // Then append to display
       memories.append(contentsOf: visibleNewMemories)
       currentOffset += visibleNewMemories.count
+      // Advance the raw backend cursor by the raw page size so the next fetch
+      // starts after all items in this page, not just the visible subset.
+      rawBackendOffset += newMemories.count
       hasMoreMemories = newMemories.count >= pageSize
       log("MemoriesViewModel: Loaded \(visibleNewMemories.count) more visible memories from API (raw: \(newMemories.count), total: \(memories.count))")
     } catch {
