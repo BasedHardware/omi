@@ -619,6 +619,25 @@ export type RewindFrame = {
   indexed: number // 0 = not yet OCR'd, 1 = OCR done
 }
 
+export type RewindFrameImageOk = {
+  ok: true
+  id: number
+  ts: number
+  app: string
+  windowTitle: string
+  ocrPreview: string
+  imageMimeType: string
+  imageBase64: string
+}
+
+export type RewindFrameImageNotFound = {
+  ok: false
+  code: 'not_found'
+  message: string
+}
+
+export type RewindFrameImageResult = RewindFrameImageOk | RewindFrameImageNotFound
+
 export type RewindSearchGroup = {
   id: string
   app: string

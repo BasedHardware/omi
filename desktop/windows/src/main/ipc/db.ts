@@ -991,11 +991,51 @@ export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   })
 }
 
+export function getRewindFrame(id: number): RewindFrame | null {
+  const row = get().prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE id = ?`).get(id) as
+    | RewindFrame
+    | undefined
+  return row ?? null
+}
+
 export function rewindDayBounds(): { min: number; max: number } | null {
   const row = get()
     .prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames')
     .get() as { min: number | null; max: number | null }
   return row.min == null || row.max == null ? null : { min: row.min, max: row.max }
+}
+
+export function rewindStatusStats(): {
+  latestFrameTs: number | null
+  oldestFrameTs: number | null
+  totalFrameCount: number
+  indexedFrameCount: number
+  ocrBacklogCount: number
+} {
+  const row = get()
+    .prepare(
+      `SELECT
+         MIN(ts) AS oldestFrameTs,
+         MAX(ts) AS latestFrameTs,
+         COUNT(*) AS totalFrameCount,
+         SUM(CASE WHEN indexed = 1 THEN 1 ELSE 0 END) AS indexedFrameCount,
+         SUM(CASE WHEN indexed = 0 THEN 1 ELSE 0 END) AS ocrBacklogCount
+       FROM rewind_frames`
+    )
+    .get() as {
+    oldestFrameTs: number | null
+    latestFrameTs: number | null
+    totalFrameCount: number
+    indexedFrameCount: number | null
+    ocrBacklogCount: number | null
+  }
+  return {
+    latestFrameTs: row.latestFrameTs,
+    oldestFrameTs: row.oldestFrameTs,
+    totalFrameCount: row.totalFrameCount,
+    indexedFrameCount: row.indexedFrameCount ?? 0,
+    ocrBacklogCount: row.ocrBacklogCount ?? 0
+  }
 }
 
 /** The single most-recent captured frame (Omi's own windows are never captured),
