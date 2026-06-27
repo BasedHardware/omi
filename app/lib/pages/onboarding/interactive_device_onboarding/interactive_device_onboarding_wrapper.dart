@@ -36,6 +36,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     _onboardingProvider = DeviceOnboardingProvider();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       _captureProvider = context.read<CaptureProvider>();
       _captureProvider!.deviceOnboardingProvider = _onboardingProvider;
       _captureProvider!.suspendBatchModeForOnboarding();
