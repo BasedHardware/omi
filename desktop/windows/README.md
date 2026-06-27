@@ -53,6 +53,11 @@ the window still comes up blank rather than missing, also add
 for the full dev-only environment variable reference and parallel-worktree
 port/profile isolation.
 
+`pnpm run dev` automatically unsets `ELECTRON_RUN_AS_NODE` for the spawned Electron
+app. Some shell/tooling sessions leave that variable set after using Electron as a
+Node runtime; if it leaks into app startup, Electron does not expose `electron.app`
+and the dev app crashes before opening.
+
 ## Authentication
 
 - **App sign-in:** each user signs in with **their own** Google or Apple/Omi account
