@@ -609,7 +609,7 @@ def _normalize_provider_hint(value: Any) -> Optional[str]:
     for provider, aliases in PROVIDER_ALIASES.items():
         if normalized == provider or normalized in aliases:
             return provider
-    return normalized
+    return None
 
 
 def _contains_alias(name: str, alias: str) -> bool:

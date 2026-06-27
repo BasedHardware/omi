@@ -110,6 +110,25 @@ def test_parser_does_not_treat_model_family_inside_slug_as_provider():
     assert "gemini:gemini-2.5-flash-lite" not in metrics
 
 
+def test_parser_falls_back_to_slug_provider_when_explicit_provider_is_unknown():
+    payload = {
+        "data": [
+            {
+                "slug": "google-gemini-2.5-flash-lite",
+                "provider": "Google AI Studio",
+                "name": "Gemini 2.5 Flash Lite",
+                "evaluations": {"artificial_analysis_intelligence_index": 74},
+                "median_output_tokens_per_second": 240,
+                "pricing": {"input": 0.10, "output": 0.40},
+            }
+        ]
+    }
+
+    metrics = parse_artificial_analysis_models(payload)
+
+    assert "gemini:gemini-2.5-flash-lite" in metrics
+
+
 def test_build_route_table_picks_better_value_for_regular_features():
     route_table = build_auto_route_table(
         profile_name="premium",
