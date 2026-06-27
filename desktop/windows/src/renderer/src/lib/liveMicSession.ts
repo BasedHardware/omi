@@ -9,11 +9,11 @@ import { buildLocalGraph } from './kgSynthesis'
 // throttled to once per 30 min (the rebuild is two LLM calls). Delayed so the
 // backend has extracted memories from the just-saved conversation first.
 let lastKgRebuildAt = 0
-function requestKgRebuild(): void {
+function requestKgRebuild(): ReturnType<typeof setTimeout> | null {
   const now = Date.now()
-  if (now - lastKgRebuildAt < 30 * 60 * 1000) return
+  if (now - lastKgRebuildAt < 30 * 60 * 1000) return null
   lastKgRebuildAt = now
-  setTimeout(() => void buildLocalGraph(), 120000)
+  return setTimeout(() => void buildLocalGraph(), 120000)
 }
 
 // After this much silence (no new finalized speech) the current conversation is
@@ -84,8 +84,10 @@ export function startLiveMicSession(): LiveMicController {
     liveConversation.markSaved()
     pollForNewConversation()
     // New conversation-derived memories should reach the brain map without waiting
-    // for the next launch; force a throttled KG rebuild (helper above).
-    requestKgRebuild()
+    // for the next launch; force a throttled KG rebuild (helper above). Track its
+    // timer so stop() can cancel it — otherwise it fires for a torn-down session.
+    const kgTimer = requestKgRebuild()
+    if (kgTimer) timers.push(kgTimer)
   }
 
   // Finalize on the silence timeout or "Save now": end the session (the backend
@@ -119,7 +121,12 @@ export function startLiveMicSession(): LiveMicController {
       },
       onInterim: () => {},
       onBackend: () => {
-        if (!cancelled) liveConversation.setStatus('live')
+        if (cancelled) return
+        // A successful connect resets the retry budget so it counts CONSECUTIVE
+        // connect failures, not lifetime drops (an always-on session that flaps a
+        // few times over hours should not permanently error out).
+        attempt = 0
+        liveConversation.setStatus('live')
       },
       onEvent: (ev) => {
         if (cancelled) return
@@ -133,6 +140,11 @@ export function startLiveMicSession(): LiveMicController {
       },
       onError: (e) => {
         if (cancelled) return
+        // Stop the dropped session's own audio before reconnecting, otherwise the
+        // old mic stream / AudioContext keeps running and a second pipeline starts
+        // on top of it (only the latest handle is torn down by stop()).
+        try { handle?.stop() } catch { /* ignore */ }
+        handle = null
         if (attempt < MAX_ATTEMPTS) {
           attempt++
           liveConversation.setStatus('connecting')
