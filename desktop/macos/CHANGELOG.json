@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed Windows database connection errors, stabilized transcription session continuity on network drops, and optimized background history indexing to pause when running on battery and avoid UI stuttering"
+  ],
   "releases": [
     {
       "version": "0.11.543",
@@ -61,9 +63,7 @@
     {
       "version": "0.11.537",
       "date": "2026-06-26",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.536",
@@ -90,79 +90,57 @@
     {
       "version": "0.11.533",
       "date": "2026-06-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.531",
       "date": "2026-06-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.530",
       "date": "2026-06-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.529",
       "date": "2026-06-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.527",
       "date": "2026-06-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.525",
       "date": "2026-06-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.524",
       "date": "2026-06-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.523",
       "date": "2026-06-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.522",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.521",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.520",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.518",
@@ -174,37 +152,27 @@
     {
       "version": "0.11.517",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.516",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.514",
       "date": "2026-06-24",
-      "changes": [
-        "Changed the default Ask Omi keyboard shortcut to Command-O"
-      ]
+      "changes": ["Changed the default Ask Omi keyboard shortcut to Command-O"]
     },
     {
       "version": "0.11.513",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.512",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.510",
@@ -216,30 +184,22 @@
     {
       "version": "0.11.508",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.507",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.506",
       "date": "2026-06-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.504",
       "date": "2026-06-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.503",
@@ -253,9 +213,7 @@
     {
       "version": "0.11.501",
       "date": "2026-06-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.500",
@@ -274,30 +232,22 @@
     {
       "version": "0.11.498",
       "date": "2026-06-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.497",
       "date": "2026-06-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.495",
       "date": "2026-06-22",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.494",
       "date": "2026-06-22",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.493",
@@ -309,58 +259,42 @@
     {
       "version": "0.11.492",
       "date": "2026-06-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.491",
       "date": "2026-06-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.490",
       "date": "2026-06-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.489",
       "date": "2026-06-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.488",
       "date": "2026-06-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.487",
       "date": "2026-06-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.486",
       "date": "2026-06-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.485",
       "date": "2026-06-20",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.484",
@@ -374,9 +308,7 @@
     {
       "version": "0.11.482",
       "date": "2026-06-20",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.481",
@@ -403,9 +335,7 @@
     {
       "version": "0.11.476",
       "date": "2026-06-20",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.474",
@@ -417,37 +347,27 @@
     {
       "version": "0.11.473",
       "date": "2026-06-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.472",
       "date": "2026-06-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.471",
       "date": "2026-06-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.470",
       "date": "2026-06-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.469",
       "date": "2026-06-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.468",
@@ -470,9 +390,7 @@
     {
       "version": "0.11.465",
       "date": "2026-06-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.464",
@@ -484,16 +402,12 @@
     {
       "version": "0.11.463",
       "date": "2026-06-11",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.462",
       "date": "2026-06-11",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.461",
@@ -505,9 +419,7 @@
     {
       "version": "0.11.460",
       "date": "2026-06-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.459",
@@ -544,9 +456,7 @@
     {
       "version": "0.11.453",
       "date": "2026-06-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.452",
@@ -558,16 +468,12 @@
     {
       "version": "0.11.451",
       "date": "2026-06-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.450",
       "date": "2026-06-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.449",
@@ -583,51 +489,37 @@
     {
       "version": "0.11.446",
       "date": "2026-06-03",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.445",
       "date": "2026-06-03",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.444",
       "date": "2026-06-03",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.443",
       "date": "2026-06-03",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.442",
       "date": "2026-06-02",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.441",
       "date": "2026-06-02",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.439",
       "date": "2026-06-02",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.438",
@@ -640,9 +532,7 @@
     {
       "version": "0.11.437",
       "date": "2026-06-01",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.436",
@@ -655,44 +545,32 @@
     {
       "version": "0.11.435",
       "date": "2026-05-31",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.434",
       "date": "2026-05-31",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.433",
       "date": "2026-05-31",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.432",
       "date": "2026-05-29",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.431",
       "date": "2026-05-29",
-      "changes": [
-        "Fixed editing a conversation title not saving"
-      ]
+      "changes": ["Fixed editing a conversation title not saving"]
     },
     {
       "version": "0.11.429",
       "date": "2026-05-28",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.428",
@@ -712,16 +590,12 @@
     {
       "version": "0.11.426",
       "date": "2026-05-26",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.425",
       "date": "2026-05-26",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.424",
@@ -734,23 +608,17 @@
     {
       "version": "0.11.423",
       "date": "2026-05-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.422",
       "date": "2026-05-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.421",
       "date": "2026-05-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.420",
@@ -769,9 +637,7 @@
     {
       "version": "0.11.417",
       "date": "2026-05-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.416",
@@ -785,9 +651,7 @@
     {
       "version": "0.11.415",
       "date": "2026-05-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.414",
@@ -800,9 +664,7 @@
     {
       "version": "0.11.412",
       "date": "2026-05-20",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.411",
@@ -821,9 +683,7 @@
     {
       "version": "0.11.408",
       "date": "2026-05-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.407",
@@ -835,9 +695,7 @@
     {
       "version": "0.11.406",
       "date": "2026-05-15",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.405",
@@ -870,9 +728,7 @@
     {
       "version": "0.11.401",
       "date": "2026-05-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.400",
@@ -891,16 +747,12 @@
     {
       "version": "0.11.397",
       "date": "2026-05-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.395",
       "date": "2026-05-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.393",
@@ -912,9 +764,7 @@
     {
       "version": "0.11.392",
       "date": "2026-05-12",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.391",
@@ -926,16 +776,12 @@
     {
       "version": "0.11.389",
       "date": "2026-05-12",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.388",
       "date": "2026-05-12",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.387",
@@ -954,30 +800,22 @@
     {
       "version": "0.11.385",
       "date": "2026-05-12",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.384",
       "date": "2026-05-12",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.383",
       "date": "2026-05-11",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.382",
       "date": "2026-05-11",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.380",
@@ -989,65 +827,47 @@
     {
       "version": "0.11.379",
       "date": "2026-05-07",
-      "changes": [
-        "Reduced AI processing costs with thinking budget controls"
-      ]
+      "changes": ["Reduced AI processing costs with thinking budget controls"]
     },
     {
       "version": "0.11.378",
       "date": "2026-05-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.377",
       "date": "2026-05-05",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.376",
       "date": "2026-05-05",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.375",
       "date": "2026-05-04",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.374",
       "date": "2026-05-03",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.373",
       "date": "2026-04-29",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.372",
       "date": "2026-04-29",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.371",
       "date": "2026-04-29",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.370",
@@ -1059,16 +879,12 @@
     {
       "version": "0.11.369",
       "date": "2026-04-28",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.368",
       "date": "2026-04-27",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.367",
@@ -1087,9 +903,7 @@
     {
       "version": "0.11.365",
       "date": "2026-04-26",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.364",
@@ -1102,16 +916,12 @@
     {
       "version": "0.11.363",
       "date": "2026-04-26",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.362",
       "date": "2026-04-26",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.361",
@@ -1131,23 +941,17 @@
     {
       "version": "0.11.357",
       "date": "2026-04-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.356",
       "date": "2026-04-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.355",
       "date": "2026-04-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.354",
@@ -1159,16 +963,12 @@
     {
       "version": "0.11.353",
       "date": "2026-04-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.352",
       "date": "2026-04-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.351",
@@ -1187,9 +987,7 @@
     {
       "version": "0.11.349",
       "date": "2026-04-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.348",
@@ -1202,9 +1000,7 @@
     {
       "version": "0.11.343",
       "date": "2026-04-20",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.341",
@@ -1239,16 +1035,12 @@
     {
       "version": "0.11.336",
       "date": "2026-04-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.335",
       "date": "2026-04-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.334",
@@ -1260,30 +1052,22 @@
     {
       "version": "0.11.332",
       "date": "2026-04-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.330",
       "date": "2026-04-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.329",
       "date": "2026-04-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.328",
       "date": "2026-04-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.326",
@@ -1296,16 +1080,12 @@
     {
       "version": "0.11.324",
       "date": "2026-04-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.323",
       "date": "2026-04-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.322",
@@ -1317,9 +1097,7 @@
     {
       "version": "0.11.321",
       "date": "2026-04-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.320",
@@ -1331,16 +1109,12 @@
     {
       "version": "0.11.319",
       "date": "2026-04-16",
-      "changes": [
-        "Added a voice picker in the floating bar settings"
-      ]
+      "changes": ["Added a voice picker in the floating bar settings"]
     },
     {
       "version": "0.11.318",
       "date": "2026-04-15",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.316",
@@ -1352,9 +1126,7 @@
     {
       "version": "0.11.314",
       "date": "2026-04-15",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.313",
@@ -1395,30 +1167,22 @@
     {
       "version": "0.11.308",
       "date": "2026-04-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.307",
       "date": "2026-04-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.305",
       "date": "2026-04-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.304",
       "date": "2026-04-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.303",
@@ -1430,16 +1194,12 @@
     {
       "version": "0.11.302",
       "date": "2026-04-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.301",
       "date": "2026-04-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.300",
@@ -1451,9 +1211,7 @@
     {
       "version": "0.11.299",
       "date": "2026-04-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.298",
@@ -1467,30 +1225,22 @@
     {
       "version": "0.11.296",
       "date": "2026-04-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.295",
       "date": "2026-04-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.294",
       "date": "2026-04-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.293",
       "date": "2026-04-12",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.291",
@@ -1502,65 +1252,47 @@
     {
       "version": "0.11.289",
       "date": "2026-04-11",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.287",
       "date": "2026-04-11",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.286",
       "date": "2026-04-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.285",
       "date": "2026-04-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.284",
       "date": "2026-04-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.282",
       "date": "2026-04-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.281",
       "date": "2026-04-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.279",
       "date": "2026-04-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.277",
       "date": "2026-04-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.276",
@@ -1579,93 +1311,67 @@
     {
       "version": "0.11.273",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.272",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.271",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.270",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.269",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.268",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.267",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.266",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.265",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.264",
       "date": "2026-04-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.262",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.261",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.260",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.259",
@@ -1677,100 +1383,72 @@
     {
       "version": "0.11.258",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.257",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.256",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.255",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.254",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.253",
       "date": "2026-04-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.251",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.249",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.247",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.245",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.243",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.242",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.241",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.240",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.239",
@@ -1782,107 +1460,77 @@
     {
       "version": "0.11.238",
       "date": "2026-04-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.237",
       "date": "2026-04-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.236",
       "date": "2026-04-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.235",
       "date": "2026-04-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.234",
       "date": "2026-04-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.233",
       "date": "2026-04-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.232",
       "date": "2026-04-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.231",
       "date": "2026-04-06",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.230",
       "date": "2026-04-05",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.229",
       "date": "2026-04-05",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.228",
       "date": "2026-04-05",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.227",
       "date": "2026-04-05",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.226",
       "date": "2026-04-04",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.225",
       "date": "2026-04-04",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.224",
       "date": "2026-04-04",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.223",
@@ -1908,9 +1556,7 @@
     {
       "version": "0.11.220",
       "date": "2026-04-02",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.219",
@@ -1922,23 +1568,17 @@
     {
       "version": "0.11.218",
       "date": "2026-04-02",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.217",
       "date": "2026-04-01",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.215",
       "date": "2026-04-01",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.214",
@@ -1950,23 +1590,17 @@
     {
       "version": "0.11.213",
       "date": "2026-04-01",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.212",
       "date": "2026-04-01",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.210",
       "date": "2026-04-01",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.209",
@@ -1978,9 +1612,7 @@
     {
       "version": "0.11.208",
       "date": "2026-04-01",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.207",
@@ -1999,16 +1631,12 @@
     {
       "version": "0.11.205",
       "date": "2026-03-31",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.204",
       "date": "2026-03-31",
-      "changes": [
-        "Fixed transcription not auto-starting after proxy migration"
-      ]
+      "changes": ["Fixed transcription not auto-starting after proxy migration"]
     },
     {
       "version": "0.11.203",
@@ -2028,191 +1656,137 @@
     {
       "version": "0.11.200",
       "date": "2026-03-31",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.199",
       "date": "2026-03-30",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.198",
       "date": "2026-03-30",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.197",
       "date": "2026-03-30",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.196",
       "date": "2026-03-30",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.195",
       "date": "2026-03-29",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.194",
       "date": "2026-03-28",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.193",
       "date": "2026-03-28",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.192",
       "date": "2026-03-28",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.191",
       "date": "2026-03-28",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.190",
       "date": "2026-03-28",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.189",
       "date": "2026-03-27",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.188",
       "date": "2026-03-27",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.186",
       "date": "2026-03-27",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.184",
       "date": "2026-03-27",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.183",
       "date": "2026-03-26",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.182",
       "date": "2026-03-26",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.181",
       "date": "2026-03-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.179",
       "date": "2026-03-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.178",
       "date": "2026-03-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.177",
       "date": "2026-03-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.176",
       "date": "2026-03-25",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.175",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.173",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.172",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.171",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.170",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.169",
@@ -2226,156 +1800,112 @@
     {
       "version": "0.11.168",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.166",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.165",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.164",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.163",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.161",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.159",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.158",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.156",
       "date": "2026-03-24",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.155",
       "date": "2026-03-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.154",
       "date": "2026-03-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.152",
       "date": "2026-03-23",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.151",
       "date": "2026-03-22",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.150",
       "date": "2026-03-22",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.149",
       "date": "2026-03-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.148",
       "date": "2026-03-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.147",
       "date": "2026-03-21",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.146",
       "date": "2026-03-20",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.145",
       "date": "2026-03-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.144",
       "date": "2026-03-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.143",
       "date": "2026-03-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.142",
       "date": "2026-03-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.141",
@@ -2390,30 +1920,22 @@
     {
       "version": "0.11.139",
       "date": "2026-03-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.138",
       "date": "2026-03-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.136",
       "date": "2026-03-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.135",
       "date": "2026-03-19",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.134",
@@ -2426,149 +1948,107 @@
     {
       "version": "0.11.133",
       "date": "2026-03-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.132",
       "date": "2026-03-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.131",
       "date": "2026-03-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.130",
       "date": "2026-03-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.129",
       "date": "2026-03-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.128",
       "date": "2026-03-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.127",
       "date": "2026-03-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.126",
       "date": "2026-03-18",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.125",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.124",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.123",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.122",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.121",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.119",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.118",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.116",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.115",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.114",
       "date": "2026-03-17",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.113",
       "date": "2026-03-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.112",
       "date": "2026-03-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.111",
       "date": "2026-03-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.110",
@@ -2580,205 +2060,147 @@
     {
       "version": "0.11.109",
       "date": "2026-03-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.108",
       "date": "2026-03-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.107",
       "date": "2026-03-16",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.106",
       "date": "2026-03-15",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.105",
       "date": "2026-03-15",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.104",
       "date": "2026-03-15",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.103",
       "date": "2026-03-15",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.102",
       "date": "2026-03-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.101",
       "date": "2026-03-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.100",
       "date": "2026-03-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.99",
       "date": "2026-03-14",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.98",
       "date": "2026-03-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.97",
       "date": "2026-03-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.96",
       "date": "2026-03-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.95",
       "date": "2026-03-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.94",
       "date": "2026-03-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.93",
       "date": "2026-03-13",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.92",
       "date": "2026-03-12",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.91",
       "date": "2026-03-10",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.90",
       "date": "2026-03-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.89",
       "date": "2026-03-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.88",
       "date": "2026-03-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.87",
       "date": "2026-03-09",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.86",
       "date": "2026-03-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.85",
       "date": "2026-03-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.84",
       "date": "2026-03-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.83",
       "date": "2026-03-08",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.82",
       "date": "2026-03-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.81",
       "date": "2026-03-07",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.80",
@@ -2806,9 +2228,7 @@
     {
       "version": "0.11.38",
       "date": "2026-03-01",
-      "changes": [
-        "Bug fixes and improvements"
-      ]
+      "changes": ["Bug fixes and improvements"]
     },
     {
       "version": "0.11.36",
@@ -2831,9 +2251,7 @@
     {
       "version": "0.11.9",
       "date": "2026-02-26",
-      "changes": [
-        "Fixed AI chat not working (missing module after update)"
-      ]
+      "changes": ["Fixed AI chat not working (missing module after update)"]
     },
     {
       "version": "11.5",
@@ -3075,9 +2493,7 @@
     {
       "version": "0.9.7",
       "date": "2026-02-19",
-      "changes": [
-        "Rolled back due to agent crash"
-      ]
+      "changes": ["Rolled back due to agent crash"]
     },
     {
       "version": "0.9.6",
@@ -3606,9 +3022,7 @@
     {
       "version": "0.3.1",
       "date": "2026-02-04",
-      "changes": [
-        "Fixed notifications not appearing when app is in foreground"
-      ]
+      "changes": ["Fixed notifications not appearing when app is in foreground"]
     },
     {
       "version": "0.3.0",
@@ -3696,9 +3110,7 @@
     {
       "version": "0.1.9",
       "date": "2026-02-02",
-      "changes": [
-        "Lowered macOS requirement from 15.0 to 14.0 (Sonoma)"
-      ]
+      "changes": ["Lowered macOS requirement from 15.0 to 14.0 (Sonoma)"]
     },
     {
       "version": "0.1.8",
@@ -3731,16 +3143,12 @@
     {
       "version": "0.1.5",
       "date": "2026-02-01",
-      "changes": [
-        "Bug fixes and stability improvements"
-      ]
+      "changes": ["Bug fixes and stability improvements"]
     },
     {
       "version": "0.1.4",
       "date": "2026-02-01",
-      "changes": [
-        "Bug fixes and stability improvements"
-      ]
+      "changes": ["Bug fixes and stability improvements"]
     },
     {
       "version": "0.1.3",
@@ -3839,9 +3247,7 @@
     {
       "version": "0.0.8",
       "date": "2026-01-30",
-      "changes": [
-        "Bug fixes and stability improvements"
-      ]
+      "changes": ["Bug fixes and stability improvements"]
     },
     {
       "version": "0.0.7",
@@ -3855,9 +3261,7 @@
     {
       "version": "0.0.6",
       "date": "2026-01-30",
-      "changes": [
-        "Bug fixes and stability improvements"
-      ]
+      "changes": ["Bug fixes and stability improvements"]
     },
     {
       "version": "0.0.5",
@@ -3873,23 +3277,17 @@
     {
       "version": "0.0.4",
       "date": "2026-01-30",
-      "changes": [
-        "Bug fixes and stability improvements"
-      ]
+      "changes": ["Bug fixes and stability improvements"]
     },
     {
       "version": "0.0.3",
       "date": "2026-01-30",
-      "changes": [
-        "Bug fixes and stability improvements"
-      ]
+      "changes": ["Bug fixes and stability improvements"]
     },
     {
       "version": "0.0.2",
       "date": "2026-01-30",
-      "changes": [
-        "Bug fixes and stability improvements"
-      ]
+      "changes": ["Bug fixes and stability improvements"]
     },
     {
       "version": "0.0.1",
