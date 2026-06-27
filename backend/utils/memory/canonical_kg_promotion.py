@@ -15,6 +15,22 @@ from utils.memory.memory_system import MemorySystem, resolve_memory_system
 logger = logging.getLogger(__name__)
 
 
+def _content_for_kg_extraction(item: MemoryItem) -> str:
+    content = (item.content or "").strip()
+    predicate = getattr(item, "predicate", None)
+    subject_entity_id = getattr(item, "subject_entity_id", None)
+    arguments = getattr(item, "arguments", None) or {}
+    args_suffix = ""
+    if arguments:
+        args_suffix = f" ({' '.join(f'{key}={value}' for key, value in arguments.items())})"
+
+    if predicate and subject_entity_id:
+        return f"[{subject_entity_id}] {predicate}{args_suffix}: {content}"
+    if predicate:
+        return f"{predicate}{args_suffix}: {content}"
+    return content
+
+
 def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client=None) -> None:
     client = db_client if db_client is not None else default_db_client
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
@@ -41,12 +57,7 @@ def extract_kg_for_promoted_memory(
     if not content:
         return False
 
-    predicate = getattr(item, "predicate", None)
-    subject_entity_id = getattr(item, "subject_entity_id", None)
-    if predicate and subject_entity_id:
-        content_for_kg = f"[{subject_entity_id}] {predicate}: {content}"
-    else:
-        content_for_kg = content
+    content_for_kg = _content_for_kg_extraction(item)
 
     try:
         result = extract_knowledge_from_memory(uid, content_for_kg, item.memory_id, user_name=user_name)
