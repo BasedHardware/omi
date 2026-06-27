@@ -185,14 +185,14 @@ async def transcribe(file: UploadFile = File(...)):
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
-        if audio_dur > 0:
-            AUDIO_DURATION.observe(audio_dur)
         if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
             status = "rejected"
             return JSONResponse(
                 status_code=413,
                 content={"detail": _duration_limit_detail(audio_dur)},
             )
+        if audio_dur > 0 and math.isfinite(audio_dur):
+            AUDIO_DURATION.observe(audio_dur)
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
@@ -241,14 +241,14 @@ async def transcribe_v2(
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
-        if audio_dur > 0:
-            AUDIO_DURATION.observe(audio_dur)
         if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
             status = "rejected"
             return JSONResponse(
                 status_code=413,
                 content={"detail": _duration_limit_detail(audio_dur)},
             )
+        if audio_dur > 0 and math.isfinite(audio_dur):
+            AUDIO_DURATION.observe(audio_dur)
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
