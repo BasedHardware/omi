@@ -60,4 +60,23 @@ describe('export file I/O (real disk)', () => {
     expect(String(lastCall![0])).not.toBe(target)
     renameSpy.mockRestore()
   })
+
+  it('exportToObsidian removes the temp file when the rename fails', async () => {
+    const vault = join(work, 'vault-cleanup')
+    const renameSpy = vi.spyOn(fs, 'rename').mockRejectedValueOnce(new Error('rename boom'))
+    await expect(exportToObsidian(vault, memories)).rejects.toThrow('rename boom')
+    renameSpy.mockRestore()
+    const entries = await fs.readdir(join(vault, 'Omi'))
+    expect(entries.some((e) => e.endsWith('.tmp'))).toBe(false)
+  })
+
+  it('exportToFile removes the temp file when the rename fails', async () => {
+    const target = join(work, 'memories-cleanup.md')
+    await fs.mkdir(work, { recursive: true })
+    const renameSpy = vi.spyOn(fs, 'rename').mockRejectedValueOnce(new Error('rename boom'))
+    await expect(exportToFile(target, memories)).rejects.toThrow('rename boom')
+    renameSpy.mockRestore()
+    const entries = await fs.readdir(work)
+    expect(entries.some((e) => e.startsWith('memories-cleanup.md.') && e.endsWith('.tmp'))).toBe(false)
+  })
 })
