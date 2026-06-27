@@ -66,6 +66,8 @@ from models.memories import MemoryCategory
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus
 from utils.memory.canonical_memory_adapter import (
+    delete_all_canonical_memories,
+    delete_canonical_memory,
     extraction_memory_id,
     neutral_vector_id_for_memory,
     purge_canonical_derived_user_data,
@@ -297,6 +299,11 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
         _fake_delete_by_id,
         raising=False,
     )
+    delete_graph = MagicMock()
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.kg_db.delete_knowledge_graph",
+        delete_graph,
+    )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
     memory_id = payload["id"]
@@ -309,6 +316,7 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
     expected_vector_id = neutral_vector_id_for_memory(memory_id)
     assert expected_vector_id in result["vector_ids"]
     assert expected_vector_id in deleted_vector_ids
+    delete_graph.assert_called_once_with(uid)
 
     outbox_paths = [path for path in canonical_db.docs if f"users/{uid}/memory_outbox/" in path]
     assert outbox_paths, "account delete should enqueue durable vector purge outbox records"
@@ -425,7 +433,7 @@ def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     kg_calls = []
     monkeypatch.setattr(
         "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
-        lambda u, ids: kg_calls.append((u, list(ids))),
+        lambda u, ids, **kwargs: kg_calls.append((u, list(ids))),
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
@@ -435,11 +443,78 @@ def test_retract_calls_kg_invalidation_hook(monkeypatch, canonical_db):
     assert payload["id"] in kg_calls[0][1]
 
 
+def test_delete_canonical_memory_calls_kg_invalidation_hook(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-delete-kg"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content="Delete KG hook")
+    memory_id = payload["id"]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    kg_calls = []
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
+        lambda u, ids, **kwargs: kg_calls.append((u, list(ids))),
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+    delete_canonical_memory(uid, memory_id, db_client=canonical_db)
+
+    assert kg_calls == [(uid, [memory_id])]
+    tombstoned = canonical_db.docs[f"users/{uid}/memory_items/{memory_id}"]
+    assert tombstoned["status"] == MemoryItemStatus.tombstoned.value
+
+
+def test_delete_all_canonical_memories_batches_kg_invalidation(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    payloads = [
+        _sample_memory_payload(uid=uid, conversation_id="conv-del-all-1", content="First fact"),
+        _sample_memory_payload(uid=uid, conversation_id="conv-del-all-2", content="Second fact"),
+    ]
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    kg_calls = []
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction",
+        lambda u, ids, **kwargs: kg_calls.append((u, list(ids))),
+    )
+
+    memory_ids = []
+    for payload in payloads:
+        write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+        memory_ids.append(payload["id"])
+
+    delete_all_canonical_memories(uid, db_client=canonical_db)
+
+    assert len(kg_calls) == 1
+    assert kg_calls[0][0] == uid
+    assert set(kg_calls[0][1]) == set(memory_ids)
+
+
 def test_conversation_delete_cascade_default_is_false():
     """Q8 gated: production default must stay cascade=false until owner sign-off."""
     source = CONVERSATIONS_ROUTER_PATH.read_text(encoding="utf-8")
     assert re.search(r"cascade:\s*bool\s*=\s*Query\(False\)", source)
     assert "Q8-gated" in source
+
+
+def test_conversation_delete_cascade_branches_memory_delete_by_cohort():
+    """Cascade delete must branch legacy delete vs canonical retract."""
+    source = CONVERSATIONS_ROUTER_PATH.read_text(encoding="utf-8")
+    cascade_start = source.index("if cascade:")
+    cascade_block = source[cascade_start : source.index("return {\"status\": \"Ok\"}", cascade_start)]
+    assert "memory_system = pin_memory_system(uid)" in cascade_block
+    assert "if memory_system == MemorySystem.CANONICAL:" in cascade_block
+    assert "MemoryService().retract_conversation_memories(uid, conversation_id)" in cascade_block
+    assert "memories_db.delete_memories_for_conversation(uid, conversation_id)" in cascade_block
+    canonical_branch_start = cascade_block.index("if memory_system == MemorySystem.CANONICAL:")
+    legacy_delete_idx = cascade_block.index("memories_db.delete_memories_for_conversation")
+    assert legacy_delete_idx > canonical_branch_start
 
 
 def test_purge_derived_user_data_wires_canonical_purge_helper():
