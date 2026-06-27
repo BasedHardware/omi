@@ -19,6 +19,7 @@ class PowerCycleStep extends StatefulWidget {
 class _PowerCycleStepState extends State<PowerCycleStep> {
   bool _showHint = false;
   bool _showContinue = false;
+  bool _continueScheduled = false;
 
   @override
   void initState() {
@@ -33,7 +34,8 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(
       builder: (context, provider, _) {
-        if (provider.powerCycleState == PowerCycleSubState.reconnected && !_showContinue) {
+        if (provider.powerCycleState == PowerCycleSubState.reconnected && !_continueScheduled) {
+          _continueScheduled = true;
           Future.delayed(const Duration(seconds: 1), () {
             if (mounted) setState(() => _showContinue = true);
           });
