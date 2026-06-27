@@ -129,7 +129,7 @@ def test_kg_promotion_uses_stored_subject_entity_id(monkeypatch_trusted_account)
         assert extract_kg_for_promoted_memory("uid-kg", item) is True
         mock_extract.assert_called_once()
         kg_content = mock_extract.call_args[0][1]
-        assert kg_content.startswith(f"[{USER_ENTITY_ID}] resides_in:")
+        assert kg_content == f"[{USER_ENTITY_ID}] resides_in (location=San Francisco): lives in San Francisco"
 
 
 def test_write_canonical_extraction_memory_threads_explicit_triple_fields(monkeypatch_trusted_account):
