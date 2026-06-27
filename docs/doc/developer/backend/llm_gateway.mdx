@@ -1,12 +1,12 @@
 ---
 title: "LLM Gateway"
 icon: "route"
-description: "Architecture spec for Omi's internal LLM routing gateway, auto lanes, route artifacts, and first chat-structured pilot."
+description: "Architecture for Omi's internal LLM routing gateway, auto lanes, route artifacts, and first chat-structured pilot."
 ---
 
 # LLM Gateway Architecture
 
-> Status: implemented architecture in progress.
+> Status: v1 foundation implemented; not yet receiving production traffic.
 >
 > Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor, fake providers for deterministic tests, a live OpenAI-compatible provider adapter, and local service URL configuration for backend callers.
 
@@ -500,9 +500,9 @@ cohort
 
 Do not log raw prompts, transcripts, screenshots, memory contents, provider response bodies, or BYOK keys. Use existing sanitizer patterns for error bodies and user text.
 
-## Implementation Sequence
+## Build Status
 
-1. Add this doc and an implementation checklist. Done.
+1. Add this architecture doc and temporary implementation tickets. Done.
 2. Add `llm_gateway` service skeleton with health endpoint. Done.
 3. Add Pydantic schemas for lane config, route artifacts, feature bundles, capability declarations, retries, timeouts, rollout, evidence, credential policy, fallback policy, and LKG. Done.
 4. Add service-auth and credential-policy contracts. Done.
@@ -511,7 +511,7 @@ Do not log raw prompts, transcripts, screenshots, memory contents, provider resp
 7. Add provider executor with fake providers and fallback/error normalization tests. Done.
 8. Add `/v1/chat/completions` non-streaming support behind service auth. Done.
 9. Add `/ready`, local run command, service URL configuration, and separate-process deployment wiring before shadow traffic. Partially done: `/ready`, local run command, and URL config are implemented; Docker/Helm deployment wiring is still pending.
-10. Add gateway client helper in main backend so selected `model_config.py` features can call the gateway.
+10. Add route refs and gateway URL helpers in main backend so selected `model_config.py` features can call the gateway later. Done.
 11. Route one low-risk structured feature to `omi:auto:chat-structured` in shadow mode.
 12. Add Omi eval reports and promote only after schema validity, extraction quality, latency, and cost gates pass.
 
