@@ -327,7 +327,13 @@ final class AgentPillsManager: ObservableObject {
             "how do i", "how do you", "how to", "what is", "what are", "what does",
             "what can", "whats", "can you explain", "could you explain",
             "explain how", "tell me about", "tell me how", "why", "is it",
-            "are agents", "do agents", "does the agent"
+            "are agents", "do agents", "does the agent",
+            // Modal question starters — queries like "can I run agents in the
+            // background?", "will agents run while I work?", or "should I start
+            // an agent?" contain an agent noun + an action verb but are questions,
+            // not imperatives, so they should answer inline, not spawn a pill.
+            "can i", "could i", "should i", "would i", "will agents",
+            "will the agent", "may i", "do i need", "do i have",
         ]
         let trimmedLower = lower.trimmingCharacters(in: .whitespacesAndNewlines)
         if questionStarters.contains(where: { trimmedLower.hasPrefix($0) }) {
@@ -469,7 +475,13 @@ final class AgentPillsManager: ObservableObject {
 
         trimForNewPillIfNeeded()
         if pills.count >= maxPills {
-            cleanup(pillID: pills[0].id)
+            // Last-resort trim: drop the oldest non-active pill. Never clean up
+            // the pill the user is actively viewing in the agent chat surface —
+            // doing so would drop the window state to stale/blank content.
+            let activeChatPillID = FloatingControlBarManager.shared.activeAgentChatPillID
+            if let victimID = pills.first(where: { $0.id != activeChatPillID })?.id {
+                cleanup(pillID: victimID)
+            }
         }
 
         pills.append(pill)
@@ -674,8 +686,10 @@ final class AgentPillsManager: ObservableObject {
         expireViewedFinishedPills()
         guard pills.count >= maxPills else { return }
 
+        let activeChatPillID = FloatingControlBarManager.shared.activeAgentChatPillID
+
         if let oldestDoneID = pills
-            .filter({ $0.status == .done })
+            .filter({ $0.status == .done && $0.id != activeChatPillID })
             .sorted(by: { ($0.completedAt ?? $0.createdAt) < ($1.completedAt ?? $1.createdAt) })
             .first?.id {
             cleanup(pillID: oldestDoneID)
@@ -683,7 +697,7 @@ final class AgentPillsManager: ObservableObject {
         }
 
         if let oldestFinishedID = pills
-            .filter({ $0.status.isFinished })
+            .filter({ $0.status.isFinished && $0.id != activeChatPillID })
             .sorted(by: { ($0.completedAt ?? $0.createdAt) < ($1.completedAt ?? $1.createdAt) })
             .first?.id {
             cleanup(pillID: oldestFinishedID)

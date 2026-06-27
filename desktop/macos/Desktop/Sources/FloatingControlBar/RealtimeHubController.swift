@@ -117,6 +117,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
   private var audioReceivedThisTurn = false
+  /// Tracks whether local AVSpeechSynthesizer speech is queued or active this
+  /// turn. Set synchronously in speak() to avoid the race where exitVoiceUI
+  /// checks speech.isSpeaking before the synthesizer has started the queued
+  /// utterance (which can clear the response glow mid-utterance). Cleared in
+  /// both didFinish and didCancel delegate callbacks so cancellation paths
+  /// (system interruption, stopSpeaking) always release the glow.
+  private var localSpeechActive = false
   /// `spawn_agent` is a handoff, not a read tool. After the tool result returns,
   /// the realtime model sometimes continues with meta/control text; never speak it.
   private var suppressAssistantOutputForCurrentTurn = false
@@ -373,6 +380,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     speculativeWarmDone = false
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
+    localSpeechActive = false
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     lastTurnAt = Date()
@@ -814,10 +822,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     barState.voiceTranscript = ""
     // When the turn fell back to local AVSpeechSynthesizer speech (no realtime audio)
     // or the spawn_agent path spoke a local ack, audioReceivedThisTurn is false but
-    // the synthesizer is still speaking. Keep the glow active until the delegate
+    // the synthesizer has been asked to speak. Keep the glow active until the delegate
     // (didFinish/didCancel) clears it, so the spoken-response indicator doesn't
-    // disappear mid-utterance.
-    if clearResponseGlow || (!audioReceivedThisTurn && !speech.isSpeaking) {
+    // disappear mid-utterance. Using localSpeechActive (set synchronously in speak)
+    // instead of speech.isSpeaking avoids the race where isSpeaking is still false
+    // because the synthesizer hasn't started the queued utterance yet.
+    if clearResponseGlow || (!audioReceivedThisTurn && !localSpeechActive) {
       responseGlowGate.clearImmediately()
     }
     barState.isVoiceListening = false
@@ -900,12 +910,28 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     utterance.voice =
       AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
       ?? AVSpeechSynthesisVoice(language: "en-US")
+    // Set synchronously so exitVoiceUI sees it even before the synthesizer
+    // starts playback (isSpeaking is false until the queued utterance begins).
+    localSpeechActive = true
     speech.speak(utterance)
   }
 
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
     Task { @MainActor [weak self] in
-      self?.responseGlowGate.clearImmediately()
+      guard let self else { return }
+      self.localSpeechActive = false
+      self.responseGlowGate.clearImmediately()
+    }
+  }
+
+  /// Handles non-explicit cancellation paths (system interruption, future code,
+  /// or unexpected state) so the response glow doesn't stay stuck when speech
+  /// is cancelled without didFinish firing.
+  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      self.localSpeechActive = false
+      self.responseGlowGate.clearImmediately()
     }
   }
 

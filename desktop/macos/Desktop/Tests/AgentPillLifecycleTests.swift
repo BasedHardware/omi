@@ -228,7 +228,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentSource.contains("func markViewed(pillID: UUID)"))
     XCTAssertTrue(agentSource.contains("scheduleViewedExpiration(for: pill)"))
     XCTAssertTrue(agentSource.contains("private func trimForNewPillIfNeeded()"))
-    XCTAssertTrue(agentSource.contains(".filter({ $0.status == .done })"))
+    XCTAssertTrue(agentSource.contains(".filter({ $0.status == .done && $0.id != activeChatPillID })"))
     XCTAssertTrue(viewSource.contains("manager.markViewed(pillID: pill.id)"))
     XCTAssertTrue(viewSource.contains("if pill.status == .done"))
     XCTAssertTrue(viewSource.contains("manager.dismiss(pillID: pill.id)"))
@@ -244,6 +244,38 @@ final class AgentPillLifecycleTests: XCTestCase {
     // disabled for a viewed finished pill after the user navigates away.
     XCTAssertTrue(source.contains("if FloatingControlBarManager.shared.activeAgentChatPillID == pillID {"))
     XCTAssertTrue(source.contains("self.scheduleViewedExpiration(for: pill)"))
+  }
+
+  func testTrimForNewPillSkipsActiveChatPill() throws {
+    let source = try agentPillSource()
+
+    // Both the done/finished trim filters and the last-resort fallback must
+    // skip the pill the user is actively viewing, so the active chat doesn't
+    // disappear/revert to stale/blank content when a new pill is spawned.
+    XCTAssertTrue(source.contains("$0.status == .done && $0.id != activeChatPillID"))
+    XCTAssertTrue(source.contains("$0.status.isFinished && $0.id != activeChatPillID"))
+    XCTAssertTrue(source.contains("if let victimID = pills.first(where: { $0.id != activeChatPillID })?.id {"))
+  }
+
+  func testLocalSpeechGlowUsesLocalSpeechActiveNotIsSpeaking() throws {
+    let source = try realtimeHubControllerSource()
+
+    // The glow-clear deferral must track localSpeechActive (set synchronously
+    // in speak) rather than speech.isSpeaking, which is racy — isSpeaking is
+    // false until the synthesizer starts the queued utterance.
+    XCTAssertTrue(source.contains("private var localSpeechActive = false"))
+    XCTAssertTrue(source.contains("if clearResponseGlow || (!audioReceivedThisTurn && !localSpeechActive)"))
+    XCTAssertTrue(source.contains("localSpeechActive = true"))
+  }
+
+  func testSpeechSynthesizerDidCancelClearsGlow() throws {
+    let source = try realtimeHubControllerSource()
+
+    // The AVSpeechSynthesizerDelegate must implement didCancel so non-explicit
+    // cancellation paths (system interruption, stopSpeaking) always release the
+    // response glow instead of leaving it stuck.
+    XCTAssertTrue(source.contains("func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance)"))
+    XCTAssertTrue(source.contains("self.localSpeechActive = false"))
   }
 
   func testVoiceResponseGlowTriggersCompactResizeOnLegacyDisplays() throws {
@@ -295,6 +327,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       "Are agents able to start tasks?",
       "Do agents create pills automatically?",
       "Tell me about starting a subagent",
+      // Modal question starters — contain agent noun + action verb but are
+      // questions, not imperative spawn commands.
+      "Can I run agents in the background?",
+      "Will agents run while I work?",
+      "Should I start an agent?",
+      "Would I need to spawn a subagent?",
+      "May I launch a floating agent?",
+      "Do I need to create a background agent?",
     ]
     for question in questionsThatContainAgentAndActionWords {
       XCTAssertNil(
@@ -411,6 +451,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeStatusStore.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeHubControllerSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
