@@ -36,6 +36,12 @@ class ProviderRegistry:
     def provider_for(self, provider: str) -> ChatCompletionProvider | None:
         return self._providers.get(provider.strip().lower())
 
+    async def aclose(self) -> None:
+        for provider in self._providers.values():
+            close = getattr(provider, 'aclose', None)
+            if close is not None:
+                await close()
+
 
 async def execute_chat_completion(
     resolved_route: ResolvedRoute,
@@ -136,12 +142,14 @@ async def _execute_route(
 
 
 def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
-    return {
+    provider_request = {
         'model': provider_ref.model,
         'messages': list(resolved_route.validated_request.messages),
         'response_format': dict(resolved_route.validated_request.response_format),
         'stream': False,
     }
+    provider_request.update(dict(resolved_route.validated_request.forwarded_params))
+    return provider_request
 
 
 def _executor_result(

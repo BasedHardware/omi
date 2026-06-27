@@ -5,7 +5,7 @@ import os
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request, status
-from pydantic import Field, field_validator
+from pydantic import Field, ValidationError, field_validator
 
 from llm_gateway.gateway.schemas import StrictBaseModel
 
@@ -58,11 +58,14 @@ def require_service_auth(request: Request) -> ServiceCaller:
     if caller_name is None or not caller_name.strip():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='missing service caller')
 
-    caller = ServiceCaller(
-        name=caller_name,
-        user_uid=request.headers.get(USER_UID_HEADER),
-        tenant_id=request.headers.get(TENANT_ID_HEADER),
-    )
+    try:
+        caller = ServiceCaller(
+            name=caller_name,
+            user_uid=request.headers.get(USER_UID_HEADER),
+            tenant_id=request.headers.get(TENANT_ID_HEADER),
+        )
+    except ValidationError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='invalid service caller') from exc
     if caller.name not in allowed_service_callers():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='service caller is not allowed')
 

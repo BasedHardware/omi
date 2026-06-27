@@ -26,7 +26,7 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
-            json=valid_request(),
+            json=valid_request(temperature=0, max_completion_tokens=64),
             headers=auth_headers(),
         )
     finally:
@@ -40,6 +40,8 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'selected_route_artifact_id' not in body
     assert provider.calls[0].model == 'gpt-4.1-mini'
     assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
+    assert provider.calls[0].request['temperature'] == 0
+    assert provider.calls[0].request['max_completion_tokens'] == 64
 
 
 def test_chat_completions_rejects_unknown_auto_lane(monkeypatch):
@@ -71,6 +73,17 @@ def test_chat_completions_rejects_unsupported_capability(monkeypatch):
     assert response.status_code == 400
     assert response.json()['error']['code'] == 'capability_not_supported'
     assert response.json()['error']['param'] == 'stream'
+
+
+def test_chat_completions_rejects_unknown_request_parameter(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    request = valid_request(unexpected_parameter=True)
+
+    response = TestClient(app).post('/v1/chat/completions', json=request, headers=auth_headers())
+
+    assert response.status_code == 400
+    assert response.json()['error']['code'] == 'invalid_request'
+    assert response.json()['error']['param'] == 'unexpected_parameter'
 
 
 def test_chat_completions_fails_closed_when_openai_key_is_not_configured(monkeypatch):

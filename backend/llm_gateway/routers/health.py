@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status
+from pydantic import ValidationError
 
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import ConfigValidationError
@@ -16,7 +17,7 @@ def get_health():
 def get_ready(caller: ServiceAuthDependency):
     try:
         config = get_gateway_config()
-    except ConfigValidationError as exc:
+    except (ConfigValidationError, ValidationError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail='llm gateway config is invalid',

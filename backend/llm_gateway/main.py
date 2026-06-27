@@ -1,7 +1,19 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
+from llm_gateway.routers.dependencies import close_provider_registry
 from llm_gateway.routers import health, openai_compatible
 
-app = FastAPI(title='Omi LLM Gateway')
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        yield
+    finally:
+        await close_provider_registry()
+
+
+app = FastAPI(title='Omi LLM Gateway', lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(openai_compatible.router)

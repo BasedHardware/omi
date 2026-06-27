@@ -446,10 +446,11 @@ Runtime fail-open means active route failure may use LKG only for failure classe
 - builds an Omi-managed request credential context for the current v1 lane;
 - resolves `model: "omi:auto:chat-structured"` to the checked-in active route;
 - calls the executor and returns the provider response payload with `model` rewritten to the requested lane ID;
+- forwards supported OpenAI chat-completions controls such as `temperature`, `max_tokens`, `max_completion_tokens`, `seed`, `top_p`, penalties, `stop`, and `user`;
 - maps typed gateway exceptions to OpenAI-style error envelopes with `error.message`, `error.type`, `error.param`, and `error.code`;
-- rejects unknown auto lanes, bare provider model names, streaming, tools, and unsupported capabilities before provider execution.
+- rejects unknown auto lanes, bare provider model names, streaming, tools, unsupported capabilities, and unknown top-level request parameters before provider execution.
 
-The default provider registry includes the OpenAI-compatible adapter for the checked-in `openai` provider route. It uses `OPENAI_API_KEY` and optional `OPENAI_BASE_URL`, posts to `/chat/completions` with `httpx.AsyncClient`, and fails closed with `invalid_route_config` when the managed key is absent or rejected. Tests can still override the registry with fake providers.
+The default provider registry includes the OpenAI-compatible adapter for the checked-in `openai` provider route. It is cached per process, closed during FastAPI lifespan shutdown, uses `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and optional `OPENAI_MAX_RESPONSE_BYTES`, posts to `/chat/completions` with `httpx.AsyncClient`, and fails closed with `invalid_route_config` when the managed key is absent or rejected. Tests can still override the registry with fake providers.
 
 ## Provider Execution
 
@@ -474,7 +475,7 @@ The current provider abstraction is an async protocol plus:
 - `OpenAICompatibleChatCompletionProvider` for live non-streaming OpenAI-compatible calls;
 - in-memory fake providers for unit tests.
 
-The live adapter does not log raw provider response bodies, prompts, transcripts, screenshots, memory contents, or BYOK keys. It maps missing Omi-managed keys and provider 401/403 responses to config failure, provider 429 to Omi-paid rate-limit failure, provider 5xx/network failures to Omi-paid provider failure, and provider 4xx request failures to capability mismatch.
+The live adapter does not log raw provider response bodies, prompts, transcripts, screenshots, memory contents, or BYOK keys. It bounds successful response bodies, validates that success responses look like OpenAI chat completions, maps missing Omi-managed keys and provider 401/403 responses to config failure, provider 429 to Omi-paid rate-limit failure, provider 5xx/network failures to Omi-paid provider failure, and provider 4xx request failures to capability mismatch.
 
 ## Observability
 

@@ -12,6 +12,28 @@ class ValidatedChatCompletionRequest:
     model: str
     messages: tuple[Mapping[str, Any], ...]
     response_format: Mapping[str, Any]
+    forwarded_params: Mapping[str, Any]
+
+
+CONTROL_PARAMS = frozenset({'model', 'messages', 'response_format', 'stream', 'tools', 'tool_choice'})
+FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
+    {
+        'frequency_penalty',
+        'logit_bias',
+        'logprobs',
+        'max_completion_tokens',
+        'max_tokens',
+        'metadata',
+        'n',
+        'presence_penalty',
+        'seed',
+        'stop',
+        'temperature',
+        'top_logprobs',
+        'top_p',
+        'user',
+    }
+)
 
 
 def validate_chat_completion_request(
@@ -34,11 +56,13 @@ def validate_chat_completion_request(
 
     messages = _validate_messages(request.get('messages'))
     response_format = _validate_response_format(request.get('response_format'), lane)
+    forwarded_params = _validate_forwarded_params(request)
 
     return ValidatedChatCompletionRequest(
         model=model.strip(),
         messages=tuple(messages),
         response_format=response_format,
+        forwarded_params=forwarded_params,
     )
 
 
@@ -104,3 +128,13 @@ def _validate_response_format(value: Any, lane: LaneConfig) -> Mapping[str, Any]
         )
 
     return value
+
+
+def _validate_forwarded_params(request: Mapping[str, Any]) -> Mapping[str, Any]:
+    unsupported = sorted(set(request.keys()) - CONTROL_PARAMS - FORWARDED_CHAT_COMPLETION_PARAMS)
+    if unsupported:
+        raise GatewayInvalidRequestError(
+            f'unsupported chat completion parameter: {unsupported[0]}',
+            param=unsupported[0],
+        )
+    return {key: request[key] for key in FORWARDED_CHAT_COMPLETION_PARAMS if key in request}

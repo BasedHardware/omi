@@ -71,6 +71,21 @@ def test_unknown_caller_is_rejected(monkeypatch):
     assert response.status_code == 403
 
 
+def test_malformed_caller_is_rejected_without_500(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+
+    response = TestClient(_protected_app()).get(
+        '/protected',
+        headers={
+            'authorization': 'Bearer shared-secret',
+            'x-omi-service-caller': 'not valid',
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()['detail'] == 'invalid service caller'
+
+
 def test_backend_and_pusher_callers_succeed_by_default(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     client = TestClient(_protected_app())
