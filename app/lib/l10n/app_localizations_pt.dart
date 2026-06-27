@@ -9370,7 +9370,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get transcribeLaterPaused => 'Em pausa — o áudio não está a ser gravado';
 
   @override
-  String get deviceTutorial => 'Tutorial do dispositivo';
+  String get deviceTutorial => 'Como usar o Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Fale com o seu Omi';

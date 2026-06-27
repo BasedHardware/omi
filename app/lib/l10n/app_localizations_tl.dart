@@ -9450,7 +9450,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
 
   @override
-  String get deviceTutorial => 'Gabay sa Device';
+  String get deviceTutorial => 'Paano Gamitin ang Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Magsalita sa Iyong Omi';

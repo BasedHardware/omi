@@ -9396,7 +9396,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get transcribeLaterPaused => 'ಸ್ಥಗಿತ — ಆಡಿಯೋ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿಲ್ಲ';
 
   @override
-  String get deviceTutorial => 'ಸಾಧನ ಟ್ಯುಟೋರಿಯಲ್';
+  String get deviceTutorial => 'Omi ಅನ್ನು ಹೇಗೆ ಬಳಸುವುದು';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'ನಿಮ್ಮ Omi ಜೊತೆ ಮಾತನಾಡಿ';

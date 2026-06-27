@@ -9414,7 +9414,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get transcribeLaterPaused => 'Паузирано — аудиото не се снима';
 
   @override
-  String get deviceTutorial => 'Упатство за уредот';
+  String get deviceTutorial => 'Како да го користите Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Зборувајте во вашиот Omi';

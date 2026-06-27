@@ -9350,7 +9350,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transcribeLaterPaused => 'Sat på pause — lyden optages ikke';
 
   @override
-  String get deviceTutorial => 'Enhedsguide';
+  String get deviceTutorial => 'Sådan bruger du Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Tal til din Omi';

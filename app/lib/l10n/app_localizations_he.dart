@@ -9294,7 +9294,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcribeLaterPaused => 'מושהה — האודיו אינו מוקלט';
 
   @override
-  String get deviceTutorial => 'מדריך למכשיר';
+  String get deviceTutorial => 'איך להשתמש ב-Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'דברו אל ה-Omi שלכם';

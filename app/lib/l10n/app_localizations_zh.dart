@@ -9195,7 +9195,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterPaused => '已暂停 — 当前未在录音';
 
   @override
-  String get deviceTutorial => '设备教程';
+  String get deviceTutorial => '如何使用 Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => '对着 Omi 说话';

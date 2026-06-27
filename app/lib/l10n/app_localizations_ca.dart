@@ -9419,7 +9419,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcribeLaterPaused => 'En pausa — no s\'està gravant àudio';
 
   @override
-  String get deviceTutorial => 'Tutorial del dispositiu';
+  String get deviceTutorial => 'Com utilitzar l\'Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Parla a l\'Omi';

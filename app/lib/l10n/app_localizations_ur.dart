@@ -9379,7 +9379,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcribeLaterPaused => 'روکا گیا — آڈیو ریکارڈ نہیں ہو رہی';
 
   @override
-  String get deviceTutorial => 'ڈیوائس ٹیوٹوریل';
+  String get deviceTutorial => 'Omi کیسے استعمال کریں';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'اپنے Omi سے بولیں';

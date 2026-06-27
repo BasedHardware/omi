@@ -9414,7 +9414,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get transcribeLaterPaused => 'పాజ్ చేయబడింది — ఆడియో రికార్డ్ కావడం లేదు';
 
   @override
-  String get deviceTutorial => 'పరికర ట్యుటోరియల్';
+  String get deviceTutorial => 'Omi ని ఎలా ఉపయోగించాలి';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'మీ Omiతో మాట్లాడండి';

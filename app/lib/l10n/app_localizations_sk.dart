@@ -9357,7 +9357,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transcribeLaterPaused => 'Pozastavené – zvuk sa nenahráva';
 
   @override
-  String get deviceTutorial => 'Návod k zariadeniu';
+  String get deviceTutorial => 'Ako používať Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Hovorte do svojho Omi';

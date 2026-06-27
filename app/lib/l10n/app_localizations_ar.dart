@@ -9309,7 +9309,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transcribeLaterPaused => 'متوقف مؤقتًا — لا يتم تسجيل الصوت';
 
   @override
-  String get deviceTutorial => 'دليل الجهاز';
+  String get deviceTutorial => 'كيفية استخدام Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'تحدّث إلى Omi';

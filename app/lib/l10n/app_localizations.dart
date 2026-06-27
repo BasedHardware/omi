@@ -17451,10 +17451,10 @@ abstract class AppLocalizations {
   /// **'Paused — audio isn\'t being recorded'**
   String get transcribeLaterPaused;
 
-  /// Settings row that launches the interactive device tutorial (shown only when a device is connected)
+  /// Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)
   ///
   /// In en, this message translates to:
-  /// **'Device Tutorial'**
+  /// **'How to Use Your Omi'**
   String get deviceTutorial;
 
   /// Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo

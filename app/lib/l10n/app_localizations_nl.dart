@@ -9391,7 +9391,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get transcribeLaterPaused => 'Gepauzeerd — audio wordt niet opgenomen';
 
   @override
-  String get deviceTutorial => 'Uitleg apparaat';
+  String get deviceTutorial => 'Hoe je Omi gebruikt';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Spreek in je Omi';

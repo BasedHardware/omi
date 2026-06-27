@@ -9442,7 +9442,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get transcribeLaterPaused => 'Pausiert – Audio wird nicht aufgenommen';
 
   @override
-  String get deviceTutorial => 'Geräte-Tutorial';
+  String get deviceTutorial => 'So verwendest du Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Sprich in dein Omi';

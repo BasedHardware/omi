@@ -9449,7 +9449,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get transcribeLaterPaused => 'En pause — aucun audio n\'est enregistré';
 
   @override
-  String get deviceTutorial => 'Tutoriel de l\'appareil';
+  String get deviceTutorial => 'Comment utiliser Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Parlez à votre Omi';

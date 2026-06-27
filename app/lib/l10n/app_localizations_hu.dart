@@ -9405,7 +9405,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
 
   @override
-  String get deviceTutorial => 'Eszközoktató';
+  String get deviceTutorial => 'Az Omi használata';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Beszélj az Omihoz';

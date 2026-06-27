@@ -9365,7 +9365,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
 
   @override
-  String get deviceTutorial => 'Laitteen opastus';
+  String get deviceTutorial => 'Näin käytät Omia';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Puhu Omi-laitteeseesi';

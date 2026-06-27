@@ -9420,7 +9420,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get transcribeLaterPaused => 'In pausa — l\'audio non viene registrato';
 
   @override
-  String get deviceTutorial => 'Tutorial del dispositivo';
+  String get deviceTutorial => 'Come usare Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Parla al tuo Omi';

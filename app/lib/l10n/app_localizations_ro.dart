@@ -9410,7 +9410,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
 
   @override
-  String get deviceTutorial => 'Tutorial dispozitiv';
+  String get deviceTutorial => 'Cum să folosești Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Vorbește în Omi';

@@ -9379,7 +9379,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get transcribeLaterPaused => 'Pristabdyta — garsas neįrašomas';
 
   @override
-  String get deviceTutorial => 'Įrenginio mokymo programa';
+  String get deviceTutorial => 'Kaip naudoti Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Kalbėkite į Omi';

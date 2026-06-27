@@ -9387,7 +9387,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transcribeLaterPaused => 'Apturēts — audio netiek ierakstīts';
 
   @override
-  String get deviceTutorial => 'Ierīces pamācība';
+  String get deviceTutorial => 'Kā lietot Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Runā savā Omi';

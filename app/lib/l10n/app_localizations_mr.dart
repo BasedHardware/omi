@@ -9375,7 +9375,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get transcribeLaterPaused => 'थांबवले — ऑडिओ रेकॉर्ड होत नाही';
 
   @override
-  String get deviceTutorial => 'डिव्हाइस ट्युटोरियल';
+  String get deviceTutorial => 'Omi कसे वापरावे';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'तुमच्या Omi शी बोला';

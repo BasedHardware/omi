@@ -9363,7 +9363,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get transcribeLaterPaused => 'Đã tạm dừng — không ghi lại âm thanh';
 
   @override
-  String get deviceTutorial => 'Hướng dẫn thiết bị';
+  String get deviceTutorial => 'Cách sử dụng Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Nói vào Omi của bạn';

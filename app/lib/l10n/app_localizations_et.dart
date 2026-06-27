@@ -9362,7 +9362,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
 
   @override
-  String get deviceTutorial => 'Seadme õpetus';
+  String get deviceTutorial => 'Kuidas Omi\'t kasutada';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Räägi oma Omisse';

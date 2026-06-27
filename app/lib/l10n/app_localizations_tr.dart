@@ -9375,7 +9375,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcribeLaterPaused => 'Duraklatıldı — ses kaydedilmiyor';
 
   @override
-  String get deviceTutorial => 'Cihaz Eğitimi';
+  String get deviceTutorial => 'Omi Nasıl Kullanılır';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Omi\'nize Konuşun';

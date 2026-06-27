@@ -9373,7 +9373,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get transcribeLaterPaused => 'Dijeda — audio tidak sedang direkam';
 
   @override
-  String get deviceTutorial => 'Tutorial Perangkat';
+  String get deviceTutorial => 'Cara Menggunakan Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Bicara ke Omi Anda';

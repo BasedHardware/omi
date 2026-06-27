@@ -9360,7 +9360,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeLaterPaused => 'Paused — audio isn\'t being recorded';
 
   @override
-  String get deviceTutorial => 'Device Tutorial';
+  String get deviceTutorial => 'How to Use Your Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Speak Into Your Omi';

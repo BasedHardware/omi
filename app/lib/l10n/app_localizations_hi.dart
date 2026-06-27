@@ -9342,7 +9342,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String get transcribeLaterPaused => 'रोका गया — ऑडियो रिकॉर्ड नहीं हो रहा है';
 
   @override
-  String get deviceTutorial => 'डिवाइस ट्यूटोरियल';
+  String get deviceTutorial => 'Omi का उपयोग कैसे करें';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'अपने Omi से बात करें';

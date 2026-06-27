@@ -9400,7 +9400,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcribeLaterPaused => 'На пауза — звукът не се записва';
 
   @override
-  String get deviceTutorial => 'Урок за устройството';
+  String get deviceTutorial => 'Как да използвате Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Говорете към вашето Omi';

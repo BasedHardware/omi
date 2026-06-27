@@ -9397,7 +9397,7 @@ class AppLocalizationsHr extends AppLocalizations {
   String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
 
   @override
-  String get deviceTutorial => 'Vodič za uređaj';
+  String get deviceTutorial => 'Kako koristiti Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Govorite u svoj Omi';

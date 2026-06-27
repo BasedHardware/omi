@@ -9372,7 +9372,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
 
   @override
-  String get deviceTutorial => 'ডিভাইস টিউটোরিয়াল';
+  String get deviceTutorial => 'Omi কীভাবে ব্যবহার করবেন';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'আপনার Omi-তে কথা বলুন';

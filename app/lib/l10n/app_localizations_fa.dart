@@ -9367,7 +9367,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get transcribeLaterPaused => 'متوقف شد — صدا ضبط نمی‌شود';
 
   @override
-  String get deviceTutorial => 'آموزش دستگاه';
+  String get deviceTutorial => 'نحوه استفاده از Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'با Omi خود صحبت کنید';

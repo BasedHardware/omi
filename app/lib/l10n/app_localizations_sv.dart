@@ -9370,7 +9370,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcribeLaterPaused => 'Pausad – inget ljud spelas in';
 
   @override
-  String get deviceTutorial => 'Enhetsguide';
+  String get deviceTutorial => 'Så använder du Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Prata in i din Omi';

@@ -9362,7 +9362,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get transcribeLaterPaused => 'På pause – lyd tas ikke opp';
 
   @override
-  String get deviceTutorial => 'Enhetsveiledning';
+  String get deviceTutorial => 'Slik bruker du Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Snakk til Omi';
