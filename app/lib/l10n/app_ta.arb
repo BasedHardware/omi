@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "அனைத்தையும் பார்",
+    "expand": "விரிவாக்கு",
     "@viewAll": {
         "description": "Button text to view all items"
     },

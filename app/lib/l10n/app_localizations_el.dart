@@ -7819,6 +7819,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get viewAll => 'Προβολή όλων';
 
   @override
+  String get expand => 'Ανάπτυξη';
+
+  @override
   String get addTask => 'Προσθήκη εργασίας';
 
   @override

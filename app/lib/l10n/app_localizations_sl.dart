@@ -7787,6 +7787,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get viewAll => 'Prikaži vse';
 
   @override
+  String get expand => 'Razširi';
+
+  @override
   String get addTask => 'Dodaj opravilo';
 
   @override

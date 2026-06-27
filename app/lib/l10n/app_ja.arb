@@ -2541,6 +2541,7 @@
     "addTask": "タスクを追加",
     "newTask": "新しいタスク",
     "viewAll": "すべて表示",
+    "expand": "展開",
     "whatsNewInVersion": "{version} の新機能",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

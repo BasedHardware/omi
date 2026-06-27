@@ -7835,6 +7835,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get viewAll => 'Tingnan Lahat';
 
   @override
+  String get expand => 'Palawakin';
+
+  @override
   String get addTask => 'Magdagdag ng Task';
 
   @override

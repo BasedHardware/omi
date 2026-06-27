@@ -7772,6 +7772,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get viewAll => 'Peržiūrėti viską';
 
   @override
+  String get expand => 'Išskleisti';
+
+  @override
   String get addTask => 'Pridėti užduotį';
 
   @override

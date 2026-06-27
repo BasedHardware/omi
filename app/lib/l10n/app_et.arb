@@ -2540,6 +2540,7 @@
     "addTask": "Lisa ülesanne",
     "newTask": "Uus ülesanne",
     "viewAll": "Vaata kõiki",
+    "expand": "Laienda",
     "whatsNewInVersion": "Mis on uut versioonis {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

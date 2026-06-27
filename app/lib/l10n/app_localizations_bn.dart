@@ -7774,6 +7774,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get viewAll => 'সব দেখুন';
 
   @override
+  String get expand => 'প্রসারিত করুন';
+
+  @override
   String get addTask => 'কাজ যোগ করুন';
 
   @override

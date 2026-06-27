@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Tingnan Lahat",
+    "expand": "Palawakin",
     "@viewAll": {
         "description": "Button text to view all items"
     },

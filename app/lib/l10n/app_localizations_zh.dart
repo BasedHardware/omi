@@ -7628,6 +7628,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewAll => '查看全部';
 
   @override
+  String get expand => '展开';
+
+  @override
   String get addTask => '添加任务';
 
   @override

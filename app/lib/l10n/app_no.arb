@@ -2540,6 +2540,7 @@
     "addTask": "Legg til oppgave",
     "newTask": "Ny oppgave",
     "viewAll": "Vis alle",
+    "expand": "Utvid",
     "whatsNewInVersion": "Nyheter i {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

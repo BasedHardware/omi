@@ -2636,6 +2636,7 @@
     "addTask": "Feladat hozzáadása",
     "newTask": "Új feladat",
     "viewAll": "Összes megtekintése",
+    "expand": "Kibontás",
     "whatsNewInVersion": "Újdonságok a {version} verzióban",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

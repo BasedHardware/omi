@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Prikaži vse",
+    "expand": "Razširi",
     "@viewAll": {
         "description": "Button text to view all items"
     },

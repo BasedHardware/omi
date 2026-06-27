@@ -7777,6 +7777,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get viewAll => 'Погледај све';
 
   @override
+  String get expand => 'Прошири';
+
+  @override
   String get addTask => 'Додај задатак';
 
   @override

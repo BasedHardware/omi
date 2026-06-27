@@ -138,6 +138,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                       context,
                       MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
                     ),
+                    buttonLabel: context.l10n.expand,
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildMindMapPreview(context)),
@@ -280,15 +281,18 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     );
   }
 
-  Widget _buildSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll}) {
+  Widget _buildSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll, String? buttonLabel}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          GestureDetector(
+            onTap: onViewAll,
+            child: Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
           ),
           if (onViewAll != null)
             GestureDetector(
@@ -300,7 +304,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Text(
-                  context.l10n.viewAll,
+                  buttonLabel ?? context.l10n.viewAll,
                   style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),

@@ -7777,6 +7777,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get viewAll => 'سب دیکھیں';
 
   @override
+  String get expand => 'پھیلائیں';
+
+  @override
   String get addTask => 'کام شامل کریں';
 
   @override

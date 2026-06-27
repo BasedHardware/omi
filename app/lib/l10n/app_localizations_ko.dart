@@ -7639,6 +7639,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get viewAll => '모두 보기';
 
   @override
+  String get expand => '펼치기';
+
+  @override
   String get addTask => '작업 추가';
 
   @override

@@ -7637,6 +7637,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get viewAll => 'すべて表示';
 
   @override
+  String get expand => '展開';
+
+  @override
   String get addTask => 'タスクを追加';
 
   @override

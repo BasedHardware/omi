@@ -7711,6 +7711,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get viewAll => 'عرض الكل';
 
   @override
+  String get expand => 'توسيع';
+
+  @override
   String get addTask => 'إضافة مهمة';
 
   @override

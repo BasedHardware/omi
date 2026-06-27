@@ -7793,6 +7793,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get viewAll => 'ಎಲ್ಲವನ್ನೂ ವೀಕ್ಷಿಸಿ';
 
   @override
+  String get expand => 'ವಿಸ್ತರಿಸಿ';
+
+  @override
   String get addTask => 'ಕಾರ್ಯ ಸೇರಿಸಿ';
 
   @override

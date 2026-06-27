@@ -7764,6 +7764,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get viewAll => 'Vaata kõiki';
 
   @override
+  String get expand => 'Laienda';
+
+  @override
   String get addTask => 'Lisa ülesanne';
 
   @override

@@ -7769,6 +7769,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get viewAll => 'مشاهده همه';
 
   @override
+  String get expand => 'گسترش';
+
+  @override
   String get addTask => 'افزودن کار';
 
   @override

@@ -2540,6 +2540,7 @@
     "addTask": "Lisää tehtävä",
     "newTask": "Uusi tehtävä",
     "viewAll": "Näytä kaikki",
+    "expand": "Laajenna",
     "whatsNewInVersion": "Uutta versiossa {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

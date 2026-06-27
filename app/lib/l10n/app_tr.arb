@@ -2575,6 +2575,7 @@
     "addTask": "Görev ekle",
     "newTask": "Yeni görev",
     "viewAll": "Tümünü gör",
+    "expand": "Genişlet",
     "whatsNewInVersion": "{version} sürümündeki yenilikler",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

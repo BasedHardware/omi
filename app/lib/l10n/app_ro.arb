@@ -2540,6 +2540,7 @@
     "addTask": "Adaugă sarcină",
     "newTask": "Sarcină nouă",
     "viewAll": "Vezi tot",
+    "expand": "Extinde",
     "whatsNewInVersion": "Ce este nou în {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

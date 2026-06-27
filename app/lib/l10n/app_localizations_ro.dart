@@ -7802,6 +7802,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get viewAll => 'Vezi tot';
 
   @override
+  String get expand => 'Extinde';
+
+  @override
   String get addTask => 'Adaugă sarcină';
 
   @override

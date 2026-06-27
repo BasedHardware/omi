@@ -2582,6 +2582,7 @@
     "addTask": "Tambah tugas",
     "newTask": "Tugas baru",
     "viewAll": "Lihat semua",
+    "expand": "Perluas",
     "whatsNewInVersion": "Yang Baru di {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

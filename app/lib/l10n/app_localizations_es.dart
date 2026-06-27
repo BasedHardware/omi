@@ -7778,6 +7778,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get viewAll => 'Ver todo';
 
   @override
+  String get expand => 'Expandir';
+
+  @override
   String get addTask => 'Añadir tarea';
 
   @override

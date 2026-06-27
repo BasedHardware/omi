@@ -2562,6 +2562,7 @@
     "addTask": "添加任务",
     "newTask": "新任务",
     "viewAll": "查看全部",
+    "expand": "展开",
     "whatsNewInVersion": "{version} 的新功能",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

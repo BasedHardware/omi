@@ -7836,6 +7836,9 @@ class AppLocalizationsFr extends AppLocalizations {
   String get viewAll => 'Tout afficher';
 
   @override
+  String get expand => 'Développer';
+
+  @override
   String get addTask => 'Ajouter une tâche';
 
   @override

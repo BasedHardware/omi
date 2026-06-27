@@ -7788,6 +7788,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get viewAll => 'Паглядзець ўсё';
 
   @override
+  String get expand => 'Разгарнуць';
+
+  @override
   String get addTask => 'Дадаць задачу';
 
   @override

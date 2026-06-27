@@ -2540,6 +2540,7 @@
     "addTask": "Προσθήκη εργασίας",
     "newTask": "Νέα εργασία",
     "viewAll": "Προβολή όλων",
+    "expand": "Ανάπτυξη",
     "whatsNewInVersion": "Τι νέο υπάρχει στο {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

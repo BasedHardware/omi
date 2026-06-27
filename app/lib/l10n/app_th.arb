@@ -2540,6 +2540,7 @@
     "addTask": "เพิ่มงาน",
     "newTask": "งานใหม่",
     "viewAll": "ดูทั้งหมด",
+    "expand": "ขยาย",
     "whatsNewInVersion": "มีอะไรใหม่ใน {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

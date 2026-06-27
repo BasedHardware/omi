@@ -7778,6 +7778,9 @@ class AppLocalizationsMr extends AppLocalizations {
   String get viewAll => 'सर्व पाहा';
 
   @override
+  String get expand => 'विस्तारित करा';
+
+  @override
   String get addTask => 'कार्य जोडा';
 
   @override

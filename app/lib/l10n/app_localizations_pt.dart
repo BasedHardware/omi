@@ -7764,6 +7764,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get viewAll => 'Ver tudo';
 
   @override
+  String get expand => 'Expandir';
+
+  @override
   String get addTask => 'Adicionar tarefa';
 
   @override

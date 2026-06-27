@@ -2545,6 +2545,7 @@
     "addTask": "Thêm nhiệm vụ",
     "newTask": "Nhiệm vụ mới",
     "viewAll": "Xem tất cả",
+    "expand": "Mở rộng",
     "whatsNewInVersion": "Có gì mới trong {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

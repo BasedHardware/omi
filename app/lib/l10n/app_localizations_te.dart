@@ -7810,6 +7810,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get viewAll => 'అన్నీ చూడండి';
 
   @override
+  String get expand => 'విస్తరించు';
+
+  @override
   String get addTask => 'కార్యం జోడించండి';
 
   @override

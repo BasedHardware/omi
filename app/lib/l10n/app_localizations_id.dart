@@ -7775,6 +7775,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get viewAll => 'Lihat semua';
 
   @override
+  String get expand => 'Perluas';
+
+  @override
   String get addTask => 'Tambah tugas';
 
   @override

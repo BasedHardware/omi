@@ -7777,6 +7777,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get viewAll => 'Переглянути все';
 
   @override
+  String get expand => 'Розгорнути';
+
+  @override
   String get addTask => 'Додати завдання';
 
   @override

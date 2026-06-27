@@ -2509,6 +2509,7 @@
     "addTask": "Добавяне на задача",
     "newTask": "Нова задача",
     "viewAll": "Виж всички",
+    "expand": "Разгъни",
     "whatsNewInVersion": "Какво ново във {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

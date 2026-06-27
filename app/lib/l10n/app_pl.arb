@@ -2575,6 +2575,7 @@
     "addTask": "Dodaj zadanie",
     "newTask": "Nowe zadanie",
     "viewAll": "Pokaż wszystko",
+    "expand": "Rozwiń",
     "whatsNewInVersion": "Co nowego w {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

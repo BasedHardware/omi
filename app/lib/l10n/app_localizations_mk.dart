@@ -7808,6 +7808,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get viewAll => 'Преглед на сите';
 
   @override
+  String get expand => 'Прошири';
+
+  @override
   String get addTask => 'Додај задача';
 
   @override

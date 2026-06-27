@@ -2549,6 +2549,7 @@
     "addTask": "Tilføj opgave",
     "newTask": "Ny opgave",
     "viewAll": "Vis alle",
+    "expand": "Udvid",
     "whatsNewInVersion": "Nyheder i {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

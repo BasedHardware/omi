@@ -2540,6 +2540,7 @@
     "addTask": "Aggiungi attività",
     "newTask": "Nuova attività",
     "viewAll": "Vedi tutto",
+    "expand": "Espandi",
     "whatsNewInVersion": "Novità nella {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

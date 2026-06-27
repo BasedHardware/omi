@@ -2540,6 +2540,7 @@
     "addTask": "Pievienot uzdevumu",
     "newTask": "Jauns uzdevums",
     "viewAll": "Skatīt visu",
+    "expand": "Izvērst",
     "whatsNewInVersion": "Kas jauns {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",
