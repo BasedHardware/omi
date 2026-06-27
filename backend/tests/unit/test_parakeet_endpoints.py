@@ -6,7 +6,9 @@ import sys
 import wave
 from unittest.mock import MagicMock, AsyncMock, patch
 
+import numpy as np
 import pytest
+import soundfile as sf
 
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
@@ -240,6 +242,14 @@ class TestAudioDurationFromBytes:
 
         assert _get_audio_duration_from_bytes(b"") == 0.0
 
+    def test_flac_returns_positive_duration(self):
+        from main import _get_audio_duration_from_bytes
+
+        buf = io.BytesIO()
+        sf.write(buf, np.zeros(16000 * 3, dtype='float32'), 16000, format='FLAC')
+        dur = _get_audio_duration_from_bytes(buf.getvalue())
+        assert abs(dur - 3.0) < 0.01
+
     def test_v1_with_real_wav_observes_audio_duration(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
@@ -276,6 +286,18 @@ class TestDurationGuardHTTP413:
         resp = client.post(
             "/v2/transcribe", files={"file": ("long.wav", wav_data, "audio/wav")}, data={"diarize": "true"}
         )
+        assert resp.status_code == 413
+        assert "exceeds limit" in resp.json()["detail"].lower()
+        mod._max_file_duration_sec = 0.0
+
+    def test_v1_returns_413_for_oversized_flac(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        buf = io.BytesIO()
+        sf.write(buf, np.zeros(16000 * 10, dtype='float32'), 16000, format='FLAC')
+        flac_data = buf.getvalue()
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("long.flac", flac_data, "audio/flac")})
         assert resp.status_code == 413
         assert "exceeds limit" in resp.json()["detail"].lower()
         mod._max_file_duration_sec = 0.0
