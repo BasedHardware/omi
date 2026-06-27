@@ -1,0 +1,69 @@
+{
+  "_comment": "Example benchmark data for auto-router v1. NOT real benchmarks — these are EDUCATED ESTIMATES for development and demo purposes. Production deployment should use real measurements (e.g., from Artificial Analysis for LLM providers, in-house measurements for STT/embedding providers). To use real data, copy this file to 'benchmarks.json' (which is gitignored) and edit. Format: tasks array with name/quality_weight/latency_weight/cost_weight/description; models dict mapping task_name → list of {id, provider, quality_score, latency_score, cost_score}. All scores are on the [0.0, 1.0] scale: 1.0 = best in class for that dimension, 0.0 = worst. See backend/utils/auto_router/README.md for the scoring formula and how to add tasks/models.",
+  "tasks": [
+    {
+      "name": "ptt_response",
+      "quality_weight": 0.4,
+      "latency_weight": 0.5,
+      "cost_weight": 0.1,
+      "description": "Real-time voice responses via the realtime hub. Latency-critical."
+    },
+    {
+      "name": "screenshot_understanding",
+      "quality_weight": 0.6,
+      "latency_weight": 0.2,
+      "cost_weight": 0.2,
+      "description": "Vision-language analysis of screen captures. Quality-critical."
+    },
+    {
+      "name": "screenshot_embedding",
+      "quality_weight": 0.2,
+      "latency_weight": 0.3,
+      "cost_weight": 0.5,
+      "description": "Embedding pipeline for screen captures and retrieval. Cost-critical."
+    },
+    {
+      "name": "general_assistant",
+      "quality_weight": 0.5,
+      "latency_weight": 0.3,
+      "cost_weight": 0.2,
+      "description": "General chat assistant replies. Balanced quality/latency/cost."
+    },
+    {
+      "name": "transcription",
+      "quality_weight": 0.3,
+      "latency_weight": 0.6,
+      "cost_weight": 0.1,
+      "description": "Speech-to-text transcription (STT). Latency-critical."
+    }
+  ],
+  "models": {
+    "ptt_response": [
+      {"id": "gemini-1-5-flash-8b-exp", "provider": "google", "quality_score": 0.75, "latency_score": 0.95, "cost_score": 0.90},
+      {"id": "gpt-realtime-2", "provider": "openai", "quality_score": 0.85, "latency_score": 0.80, "cost_score": 0.60},
+      {"id": "claude-sonnet-4-6", "provider": "anthropic", "quality_score": 0.92, "latency_score": 0.50, "cost_score": 0.30},
+      {"id": "haiku-4-5", "provider": "anthropic", "quality_score": 0.70, "latency_score": 0.85, "cost_score": 0.85}
+    ],
+    "screenshot_understanding": [
+      {"id": "claude-sonnet-4-6", "provider": "anthropic", "quality_score": 0.95, "latency_score": 0.65, "cost_score": 0.35},
+      {"id": "gpt-4o", "provider": "openai", "quality_score": 0.90, "latency_score": 0.70, "cost_score": 0.40},
+      {"id": "gemini-1-5-pro", "provider": "google", "quality_score": 0.88, "latency_score": 0.75, "cost_score": 0.55}
+    ],
+    "screenshot_embedding": [
+      {"id": "text-embedding-3-small", "provider": "openai", "quality_score": 0.75, "latency_score": 0.85, "cost_score": 0.95},
+      {"id": "voyage-large-2", "provider": "voyage", "quality_score": 0.90, "latency_score": 0.60, "cost_score": 0.70},
+      {"id": "cohere-embed-english-v3", "provider": "cohere", "quality_score": 0.85, "latency_score": 0.75, "cost_score": 0.85}
+    ],
+    "general_assistant": [
+      {"id": "claude-sonnet-4-6", "provider": "anthropic", "quality_score": 0.95, "latency_score": 0.55, "cost_score": 0.30},
+      {"id": "haiku-4-5", "provider": "anthropic", "quality_score": 0.75, "latency_score": 0.85, "cost_score": 0.85},
+      {"id": "gpt-4o", "provider": "openai", "quality_score": 0.92, "latency_score": 0.65, "cost_score": 0.40},
+      {"id": "gemini-1-5-pro", "provider": "google", "quality_score": 0.88, "latency_score": 0.75, "cost_score": 0.55}
+    ],
+    "transcription": [
+      {"id": "parakeet-stt-v2", "provider": "nvidia", "quality_score": 0.85, "latency_score": 0.95, "cost_score": 0.95},
+      {"id": "deepgram-nova-2", "provider": "deepgram", "quality_score": 0.90, "latency_score": 0.85, "cost_score": 0.75},
+      {"id": "whisper-large-v3", "provider": "openai", "quality_score": 0.88, "latency_score": 0.65, "cost_score": 0.70}
+    ]
+  }
+}

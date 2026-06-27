@@ -1,0 +1,51 @@
+{
+  "_comment": "Snapshot of Artificial Analysis API response (https://artificialanalysis.ai/api/v2/data/llms/models) used for testing the BenchmarksFetcher. NOT live data — captured 2025-06-25 for snapshot test stability. AA's actual schema may evolve; if the snapshot test fails after an AA update, regenerate this fixture from a fresh AA response and update the parser.",
+  "_date_captured": "2025-06-25",
+  "data": [
+    {
+      "id": "claude-sonnet-4-6",
+      "name": "Claude Sonnet 4.6",
+      "model_creator": {"name": "Anthropic"},
+      "evaluations": [
+        {"name": "MMLU", "value": 0.88},
+        {"name": "GPQA", "value": 0.74},
+        {"name": "MATH", "value": 0.78}
+      ],
+      "pricing": {"price_1m_input_tokens_usd": 3.0, "price_1m_output_tokens_usd": 15.0},
+      "median_latency_seconds": 1.2
+    },
+    {
+      "id": "gpt-4o",
+      "name": "GPT-4o",
+      "model_creator": {"name": "OpenAI"},
+      "evaluations": [
+        {"name": "MMLU", "value": 0.86},
+        {"name": "GPQA", "value": 0.71},
+        {"name": "MATH", "value": 0.76}
+      ],
+      "pricing": {"price_1m_input_tokens_usd": 2.5, "price_1m_output_tokens_usd": 10.0},
+      "median_latency_seconds": 0.9
+    },
+    {
+      "id": "gemini-1-5-pro",
+      "name": "Gemini 1.5 Pro",
+      "model_creator": {"name": "Google"},
+      "evaluations": [
+        {"name": "MMLU", "value": 0.85},
+        {"name": "GPQA", "value": 0.70}
+      ],
+      "pricing": {"price_1m_input_tokens_usd": 1.25, "price_1m_output_tokens_usd": 5.0},
+      "median_latency_seconds": 1.5
+    },
+    {
+      "id": "haiku-4-5",
+      "name": "Claude Haiku 4.5",
+      "model_creator": {"name": "Anthropic"},
+      "evaluations": [
+        {"name": "MMLU", "value": 0.78}
+      ],
+      "pricing": {"price_1m_input_tokens_usd": 0.8, "price_1m_output_tokens_usd": 4.0},
+      "median_latency_seconds": 0.7
+    }
+  ]
+}
