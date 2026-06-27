@@ -7,6 +7,16 @@ import type {
   ListenStartArgs
 } from '../../shared/types'
 
+/**
+ * True only when the error fired before the socket ever reached OPEN.
+ * Pre-connect failures are fatal — the renderer must abort immediately.
+ * Post-connect errors are non-fatal — the 'close' event fires next and
+ * drives normal teardown via onLost in the renderer.
+ */
+export function classifyWsFatal(connected: boolean): boolean {
+  return !connected
+}
+
 function buildEndpoint(language: string): string {
   return (
     'wss://api.omi.me/v4/listen' +
@@ -112,7 +122,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
       sessionId: args.sessionId,
       kind: 'error',
       message: err.message,
-      fatal: !session.connected // fatal if error fires before connection completes
+      fatal: classifyWsFatal(session.connected)
     })
   })
 
