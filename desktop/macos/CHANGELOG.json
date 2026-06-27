@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Hardened Notch Mode playback and subagent back-navigation edge cases"
+  ],
   "releases": [
     {
       "version": "0.11.546",
