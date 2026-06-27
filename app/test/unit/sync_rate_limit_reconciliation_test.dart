@@ -30,8 +30,10 @@ void main() {
 
   test('clears persisted rate limit but preserves backendBusy cooldown', () {
     // Set both a persisted rate-limit and an in-memory backendBusy cooldown.
-    SyncRateLimiter.instance.markLimited(retryAfterSeconds: 3600, reason: RateLimitReason.rateLimit);
-    SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backendBusy);
+    // Use a longer backendBusy cooldown so `reason` reports it as the
+    // dominant deadline (matching `until`'s max-based pick).
+    SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.rateLimit);
+    SyncRateLimiter.instance.markLimited(retryAfterSeconds: 3600, reason: RateLimitReason.backendBusy);
     expect(SyncRateLimiter.instance.isLimited, isTrue);
     expect(SyncRateLimiter.instance.reason, RateLimitReason.backendBusy);
 
@@ -53,8 +55,8 @@ void main() {
 
   group('clearRateLimit', () {
     test('only clears persisted rate-limit state, preserves backendBusy', () {
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: 3600, reason: RateLimitReason.rateLimit);
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.backendBusy);
+      SyncRateLimiter.instance.markLimited(retryAfterSeconds: 600, reason: RateLimitReason.rateLimit);
+      SyncRateLimiter.instance.markLimited(retryAfterSeconds: 3600, reason: RateLimitReason.backendBusy);
 
       SyncRateLimiter.instance.clearRateLimit();
 
