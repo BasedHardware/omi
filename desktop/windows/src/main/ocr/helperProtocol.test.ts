@@ -46,4 +46,11 @@ describe('FrameDecoder', () => {
     dec.push(Buffer.concat([mk({ a: 1 }), mk({ b: 2 })]))
     expect(seen).toEqual(['{"a":1}', '{"b":2}'])
   })
+
+  it('rejects an absurd frame length instead of buffering without bound', () => {
+    const dec = new FrameDecoder(() => {})
+    const header = Buffer.alloc(4)
+    header.writeUInt32LE(0xffffffff, 0)
+    expect(() => dec.push(header)).toThrow(/frame too large/)
+  })
 })
