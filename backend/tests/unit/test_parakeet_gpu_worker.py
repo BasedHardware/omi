@@ -649,6 +649,39 @@ class TestSwitchAttention:
 
             worker._model.change_attention_model.assert_not_called()
 
+    def test_recast_bf16_after_switch_to_local(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
+            worker = GPUWorker()
+            worker._model = MagicMock()
+            worker._model_dtype = _torch.bfloat16
+            worker._attn_is_local = False
+
+            worker._switch_attention(to_local=True)
+
+            worker._model.to.assert_called_once_with(_torch.bfloat16)
+
+    def test_recast_bf16_after_switch_to_full(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
+            worker = GPUWorker()
+            worker._model = MagicMock()
+            worker._model_dtype = _torch.bfloat16
+            worker._attn_is_local = True
+
+            worker._switch_attention(to_local=False)
+
+            worker._model.to.assert_called_once_with(_torch.bfloat16)
+
+    def test_no_recast_when_dtype_is_none(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
+            worker = GPUWorker()
+            worker._model = MagicMock()
+            worker._model_dtype = None
+            worker._attn_is_local = False
+
+            worker._switch_attention(to_local=True)
+
+            worker._model.to.assert_not_called()
+
 
 class TestDurationGuard:
 
