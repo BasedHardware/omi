@@ -756,20 +756,33 @@ class MemoriesViewModel: ObservableObject {
         try await MemoryStorage.shared.syncServerMemories(fetchedMemories)
         log("MemoriesViewModel: Synced \(fetchedMemories.count) memories to local cache")
 
-        // Reload from local cache to get merged data
-        let mergedMemories = try await MemoryStorage.shared.getLocalMemories(
-          limit: pageSize,
-          offset: 0,
-          tiers: layers(for: token)
-        )
+        // For device-scoped loads the server already filtered to this device.
+        // Reloading from the unscoped SQLite cache can surface other devices'
+        // newer memories that recomputeFilteredMemories() then strips, leaving
+        // an empty/short initial page that cannot paginate. Display the fetched
+        // page directly instead. (If device_scope 400'd, deviceScopeSupported is
+        // now false so we take the merged-cache path with client-side filtering.)
+        let wasDeviceScoped = filterThisDeviceOnly && deviceScopeSupported
+        let displayMemories: [ServerMemory]
+        if wasDeviceScoped {
+          let allowedTiers = Set(layers(for: token))
+          displayMemories = fetchedMemories.filter { allowedTiers.contains($0.tier) }
+        } else {
+          // Reload from local cache to get merged data
+          displayMemories = try await MemoryStorage.shared.getLocalMemories(
+            limit: pageSize,
+            offset: 0,
+            tiers: layers(for: token)
+          )
+        }
         guard isCurrentScope(token) else {
           // Scope changed mid-merge; reset loading state so the replacement
           // load is not permanently blocked.
           isLoading = false
           return
         }
-        memories = mergedMemories
-        currentOffset = mergedMemories.count
+        memories = displayMemories
+        currentOffset = displayMemories.count
         // Track the raw backend cursor for subsequent loadMore() fetches.
         rawBackendOffset = fetchedMemories.count
         // Use the raw backend page count for pagination, not the tier-filtered
@@ -780,7 +793,7 @@ class MemoriesViewModel: ObservableObject {
         // permanently hide those memories. This matches the error-fallback path
         // below and the loadMore() API path.
         hasMoreMemories = fetchedMemories.count >= pageSize
-        log("MemoriesViewModel: Showing \(mergedMemories.count) memories from merged local cache")
+        log("MemoriesViewModel: Showing \(displayMemories.count) memories from \(wasDeviceScoped ? "device-scoped API" : "merged local cache")")
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
         // Fall back to API data if sync fails, preserving the desktop default-access guardrail.

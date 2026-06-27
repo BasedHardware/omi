@@ -1420,15 +1420,12 @@ struct ServerMemory: Decodable, Identifiable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let idValue = try container.decodeIfPresent(String.self, forKey: .id)
     let memoryIdValue = try container.decodeIfPresent(String.self, forKey: .memoryId)
-    switch (idValue, memoryIdValue) {
-    case let (.some(id), .some(memoryId)) where id != memoryId:
-      throw ServerMemoryAliasDecodeError.conflict(
-        "id", id, "memory_id", memoryId, codingPath: container.codingPath)
-    case let (.some(id), _):
-      self.id = id
-    case let (_, .some(memoryId)):
-      self.id = memoryId
-    case (.none, .none):
+    // Prefer `id` when present; fall back to `memory_id` only when `id` is absent.
+    // Legacy persisted rows carry `memory_id = conversation_id` (the pre-PR backend
+    // behaviour), so an id/memory_id mismatch must not fail decoding — a single such
+    // row would otherwise abort the entire memories array decode and break the
+    // desktop memories load for legacy users.
+    guard let resolvedId = idValue ?? memoryIdValue else {
       throw DecodingError.keyNotFound(
         CodingKeys.id,
         DecodingError.Context(
@@ -1437,6 +1434,7 @@ struct ServerMemory: Decodable, Identifiable {
         )
       )
     }
+    self.id = resolvedId
 
     content = try container.decode(String.self, forKey: .content)
     category = try container.decodeIfPresent(MemoryCategory.self, forKey: .category) ?? .system

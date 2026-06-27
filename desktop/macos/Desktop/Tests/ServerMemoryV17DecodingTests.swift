@@ -133,12 +133,16 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         XCTAssertEqual(memory.tier, .archive)
     }
 
-    func testConflictingIdAliasesFailClosed() {
+    func testConflictingIdAliasesPreferIdNotFail() throws {
+        // Legacy persisted rows carry memory_id = conversation_id (the pre-V17
+        // backend behaviour), which differs from id. Such rows must NOT fail
+        // decoding — a single throw would abort the entire memories array and
+        // break the desktop memories load. Prefer id when present.
         let json = """
         {
           "id": "mem-a",
-          "memory_id": "mem-b",
-          "content": "Conflicting ids",
+          "memory_id": "conv-legacy-1",
+          "content": "Legacy memory_id alias",
           "category": "system",
           "tier": "long_term",
           "created_at": "2026-06-21T10:00:00Z",
@@ -146,7 +150,8 @@ final class ServerMemoryV17DecodingTests: XCTestCase {
         }
         """.data(using: .utf8)!
 
-        XCTAssertThrowsError(try decoder.decode(ServerMemory.self, from: json))
+        let memory = try decoder.decode(ServerMemory.self, from: json)
+        XCTAssertEqual(memory.id, "mem-a")
     }
 
     func testMatchingIdAliasesDecode() throws {
