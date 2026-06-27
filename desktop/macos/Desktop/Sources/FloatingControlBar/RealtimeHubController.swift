@@ -480,12 +480,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
     guard !suppressAssistantOutputForCurrentTurn else { return }
-    audioReceivedThisTurn = true
     // If PTT muted music/system output while listening, make sure the model's
     // reply is audible even if capture teardown restore is delayed by hardware.
     SystemAudioMuteController.shared.restore()
+    guard pcmPlayer?.enqueue(pcm24k) == true else {
+      log("RealtimeHub[\(providerTag)]: native audio chunk could not be scheduled; keeping text fallback armed")
+      return
+    }
+    audioReceivedThisTurn = true
     responseGlowGate.markPlaybackActive()
-    pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
   }
 
   func hubDidEmitText(_ text: String, isFinal: Bool) {

@@ -48,7 +48,7 @@ struct FloatingControlBarView: View {
         notchHiddenCenterWidth + notchSideWidth * 2
     }
     private var notchChromeLayoutWidth: CGFloat {
-        state.showingAIConversation || shouldShowAgentSwitcher
+        state.showingAIConversation || shouldShowNotchHoverMenu
             ? max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
             : notchChromeWidth
     }
@@ -58,8 +58,17 @@ struct FloatingControlBarView: View {
     private var notchSurfaceBottomInset: CGFloat {
         state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetBottom : 0
     }
-    private var notchAgentListHeight: CGFloat {
-        FloatingControlBarWindow.notchAgentListHeight(agentCount: agentPills.pills.count)
+    private var notchHoverMenuHeight: CGFloat {
+        FloatingControlBarWindow.notchHoverMenuHeight(agentCount: agentPills.pills.count)
+    }
+    private var notchHoverRowWidth: CGFloat {
+        max(
+            0,
+            min(
+                notchChromeLayoutWidth - NotchAgentStackMetrics.listHorizontalInset * 2,
+                FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2
+            )
+        )
     }
     var body: some View {
         Group {
@@ -95,8 +104,11 @@ struct FloatingControlBarView: View {
         // switcher expands only for explicit pinned/hover interaction AND only
         // when chat is not open. (Cubic P2 + Codex P2.)
         !agentPills.pills.isEmpty
-            && !state.showingAIConversation
-            && (state.agentSwitcherPinned || state.agentSwitcherHovering)
+            && shouldShowNotchHoverMenu
+    }
+
+    private var shouldShowNotchHoverMenu: Bool {
+        state.isNotchHoverMenuVisible
     }
 
     private var showingNotchWaveform: Bool {
@@ -107,11 +119,20 @@ struct FloatingControlBarView: View {
         VStack(spacing: 0) {
             notchChrome
 
-            if shouldShowAgentSwitcher {
-                // Reserves the list's height; the subagent dots/text are drawn by
-                // the morph overlay so the same dots can travel up into the logo.
-                Color.clear
-                    .frame(width: notchChromeLayoutWidth, height: notchAgentListHeight)
+            if shouldShowNotchHoverMenu {
+                VStack(spacing: 0) {
+                    notchOmiChatRow
+                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+                        .opacity(notchSwitcherProgress)
+                        .allowsHitTesting(notchSwitcherProgress > 0.6)
+
+                    Color.clear
+                        .frame(
+                            width: notchChromeLayoutWidth,
+                            height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight
+                        )
+                }
+                    .frame(width: notchChromeLayoutWidth, height: notchHoverMenuHeight, alignment: .top)
                     .onHover { setAgentSwitcherHovering($0) }
                     .transition(.identity)
             }
@@ -120,7 +141,7 @@ struct FloatingControlBarView: View {
                 conversationView
                     .padding(.horizontal, 12)
                     .padding(.top, 0)
-                    .padding(.bottom, 9)
+                    .padding(.bottom, FloatingControlBarWindow.notchConversationBottomPadding)
                     .transition(.opacity)
             }
 
@@ -132,29 +153,35 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if !agentPills.pills.isEmpty && !showingNotchWaveform && !state.showingAIConversation {
-                NotchAgentMorphField(
-                    manager: agentPills,
-                    activePillID: state.activeAgentChatPillID,
-                    progress: notchSwitcherProgress,
-                    notchHiddenCenterWidth: notchHiddenCenterWidth,
-                    notchSideWidth: notchSideWidth,
-                    onSelect: openAgentInChat
-                )
-                .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchAgentListHeight)
-                .onHover { setAgentSwitcherHovering($0) }
-                .allowsHitTesting(notchSwitcherProgress > 0.6)
+            if shouldShowNotchHoverMenu && !showingNotchWaveform {
+                ZStack(alignment: .top) {
+                    if !agentPills.pills.isEmpty {
+                        NotchAgentMorphField(
+                            manager: agentPills,
+                            activePillID: state.activeAgentChatPillID,
+                            progress: notchSwitcherProgress,
+                            notchHiddenCenterWidth: notchHiddenCenterWidth,
+                            notchSideWidth: notchSideWidth,
+                            rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight,
+                            onSelect: openAgentInChat
+                        )
+                        .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                        .allowsHitTesting(notchSwitcherProgress > 0.6)
 
-                notchAgentLogoHitTarget
-                    .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchAgentListHeight)
+                        notchAgentLogoHitTarget
+                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                    }
+                }
+                .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                .onHover { setAgentSwitcherHovering($0) }
             }
         }
-        .onAppear { notchSwitcherProgress = shouldShowAgentSwitcher ? 1 : 0 }
+        .onAppear { notchSwitcherProgress = shouldShowNotchHoverMenu ? 1 : 0 }
         .padding(.horizontal, notchSurfaceHorizontalInset)
         .padding(.bottom, notchSurfaceBottomInset)
         .background(alignment: .top) {
             GeometryReader { geometry in
-                let hasExpandedSurface = state.showingAIConversation || state.currentNotification != nil || shouldShowAgentSwitcher
+                let hasExpandedSurface = state.showingAIConversation || state.currentNotification != nil || shouldShowNotchHoverMenu
                 let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
                 let surfaceWidth = hasExpandedSurface
                     ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
@@ -196,10 +223,12 @@ struct FloatingControlBarView: View {
             anchor: .top
         )
         .opacity(min(1, max(0, state.notchRevealProgress * 1.4)))
+        .contentShape(Rectangle())
         .contextMenu { barContextMenu }
+        .onHover(perform: handleBarHover)
         .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
-        .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowAgentSwitcher)
-        .onChange(of: shouldShowAgentSwitcher) { _, visible in
+        .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)
+        .onChange(of: shouldShowNotchHoverMenu) { _, visible in
             (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
             // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
             // dots are back in the notch before the surface shrinks (no stranded dots).
@@ -211,9 +240,9 @@ struct FloatingControlBarView: View {
             }
         }
         .onChange(of: state.showingAIConversation) { _, isShowing in
-            guard !isShowing, shouldShowAgentSwitcher else { return }
+            guard !isShowing, shouldShowNotchHoverMenu else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                guard shouldShowAgentSwitcher else { return }
+                guard shouldShowNotchHoverMenu else { return }
                 (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: true)
             }
         }
@@ -224,6 +253,7 @@ struct FloatingControlBarView: View {
                 notchLogoHovering = false
             }
         }
+        .onDisappear { state.setNotchHoverMenuOpen(false) }
     }
 
     private var notchChrome: some View {
@@ -257,7 +287,7 @@ struct FloatingControlBarView: View {
                     NotchAgentPillsRowView(manager: agentPills, barWindow: window)
                         // Compact mode lets the morph field own the ring while agents unfurl.
                         // Chat mode hides that field, so the lobe owns the logo/settings slot.
-                        .opacity((agentPills.pills.isEmpty || state.showingAIConversation) && !notchLogoHovering ? 1 : 0)
+                        .opacity((agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu) && !notchLogoHovering ? 1 : 0)
                         .scaleEffect(notchLogoHovering ? 0.72 : 1.0)
                         .rotationEffect(.degrees(notchLogoHovering ? -28 : 0))
 
@@ -304,8 +334,83 @@ struct FloatingControlBarView: View {
 
     private var notchControlLobe: some View {
         Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onAskAI()
+            }
+            .accessibilityLabel("Ask Omi")
+            .accessibilityHint("Open Ask Omi")
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.leading, 2)
+        .padding(.leading, 5)
+    }
+
+    private var notchOmiChatRow: some View {
+        Button {
+            onAskAI()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "message.fill")
+                    .scaledFont(size: 11, weight: .semibold)
+                    .foregroundStyle(.white.opacity(0.86))
+                    .frame(
+                        width: NotchAgentStackMetrics.listOrbSize,
+                        height: NotchAgentStackMetrics.listOrbSize
+                    )
+                    .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, alignment: .leading)
+
+                Text("Omi Chat")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundStyle(.white.opacity(0.94))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                notchShortcutHint("Ask", keys: shortcutSettings.askOmiShortcut.displayTokens)
+                notchShortcutHint(systemImage: "mic.fill", keys: shortcutSettings.pttShortcut.displayTokens)
+            }
+            .padding(.leading, NotchAgentStackMetrics.listRowLeadingPadding)
+            .padding(.trailing, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color.white.opacity(0.11))
+                    .frame(height: 0.6)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func notchShortcutHint(_ title: String, keys: [String]) -> some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .scaledFont(size: 8, weight: .semibold)
+                .foregroundStyle(.white.opacity(0.54))
+            notchShortcutKeys(keys)
+        }
+    }
+
+    private func notchShortcutHint(systemImage: String, keys: [String]) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .scaledFont(size: 8, weight: .semibold)
+                .foregroundStyle(.white.opacity(0.58))
+                .frame(width: 8, height: 10)
+            notchShortcutKeys(keys)
+        }
+    }
+
+    private func notchShortcutKeys(_ keys: [String]) -> some View {
+        ForEach(keys.prefix(2), id: \.self) { key in
+            Text(key)
+                .scaledFont(size: 8, weight: .medium)
+                .foregroundStyle(.white.opacity(0.75))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, key.count > 1 ? 3 : 0)
+                .frame(minWidth: 12, minHeight: 12)
+                .background(Color.white.opacity(0.12))
+                .cornerRadius(3)
+        }
     }
 
     private var notchChromeHeight: CGFloat {
@@ -417,7 +522,7 @@ struct FloatingControlBarView: View {
                 )
                 .id(activeAgentChatPill.id)
                 .zIndex(1)
-            } else if state.conversationSurface == .mainResponse || state.showingAIResponse {
+            } else if state.conversationSurface == .mainResponse {
                 mainConversationContainer {
                     aiResponseView
                         .id("response")
@@ -494,20 +599,18 @@ struct FloatingControlBarView: View {
         agentSwitcherCollapseWorkItem = nil
 
         if hovering {
-            state.agentSwitcherHovering = true
-            return
-        }
-
-        guard !state.agentSwitcherPinned, !state.showingAIConversation else {
-            state.agentSwitcherHovering = false
+            (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
             return
         }
 
         let workItem = DispatchWorkItem {
-            state.agentSwitcherHovering = false
+            (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
+            if !shouldShowNotchHoverMenu {
+                notchLogoHovering = false
+            }
         }
         agentSwitcherCollapseWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
     }
 
     private func toggleAgentSwitcherPinned() {
@@ -549,8 +652,7 @@ struct FloatingControlBarView: View {
         agentPills.markViewed(pillID: pill.id)
         let barWindow = window as? FloatingControlBarWindow
         let wasShowingConversation = state.showingAIConversation
-        state.agentSwitcherPinned = false
-        state.agentSwitcherHovering = false
+        state.setNotchHoverMenuOpen(false)
         notchLogoHovering = false
         barWindow?.makeKeyAndOrderFront(nil)
         withAnimation(agentChatSwitchTransition) {
@@ -568,20 +670,29 @@ struct FloatingControlBarView: View {
         }
         withAnimation(agentChatSwitchTransition) {
             state.hideConversationSurface()
-            state.agentSwitcherPinned = true
-            state.agentSwitcherHovering = true
         }
         DispatchQueue.main.async {
-            (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: true)
+            (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
         }
     }
 
     private func handleBarHover(_ hovering: Bool) {
+        if state.usesNotchIsland {
+            (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovering = state.isNotchHoverMenuVisible
+            }
+            if !state.isNotchHoverMenuVisible {
+                notchLogoHovering = false
+            }
+            return
+        }
+
         if !hovering {
             state.requiresHoverReset = false
         }
 
-        let effectiveHover = hovering && !state.requiresHoverReset
+        let effectiveHover = hovering && !state.requiresHoverReset && isWithinActivationZoneForCurrentMode()
         state.isHoveringBar = effectiveHover
         // Resize window BEFORE updating SwiftUI state on expand so the expanded
         // content never renders in a too-small window (which causes overflow).
@@ -594,6 +705,20 @@ struct FloatingControlBarView: View {
         if !effectiveHover {
             (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
         }
+    }
+
+    private func isWithinActivationZoneForCurrentMode() -> Bool {
+        guard state.usesNotchIsland else { return true }
+        guard let window else { return false }
+        let hitHeight = state.isAgentSwitcherExpanded
+            ? max(FloatingControlBarWindow.notchChromeHeight, window.frame.height - notchSurfaceBottomInset)
+            : FloatingControlBarWindow.notchActivationHeight
+        return FloatingControlBarGeometry.notchChromeActivationContains(
+            mouseLocation: NSEvent.mouseLocation,
+            windowFrame: window.frame,
+            chromeHeight: hitHeight,
+            horizontalOutset: FloatingControlBarWindow.notchGlowOutsetX
+        )
     }
 
     private func notificationView(_ notification: FloatingBarNotification) -> some View {
@@ -902,13 +1027,8 @@ struct FloatingControlBarView: View {
             ),
             canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
             onSend: { message in
-                state.displayedQuery = message
-                state.markConversationActivity()
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
-                    state.showingAIResponse = true
-                    state.isAILoading = true
-                    state.currentAIMessage = nil
-                }
+                (window as? FloatingControlBarWindow)?
+                    .beginVisibleMainQuery(message, fromVoice: false, animated: true)
                 onSendQuery(message)
             },
             onClearVisibleConversation: onClearVisibleConversation,
@@ -973,6 +1093,8 @@ struct FloatingControlBarView: View {
             onSendFollowUp: { message in
                 archiveCurrentExchange()
 
+                (window as? FloatingControlBarWindow)?
+                    .beginVisibleMainQuery(message, fromVoice: false, animated: true)
                 state.displayedQuery = message
                 state.currentQuestionMessageId = nil
                 state.markConversationActivity()
@@ -1570,6 +1692,7 @@ private struct NotchAgentMorphField: View {
     let progress: CGFloat
     let notchHiddenCenterWidth: CGFloat
     let notchSideWidth: CGFloat
+    let rowTopOffset: CGFloat
     let onSelect: (AgentPill) -> Void
     @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
     @State private var pillStatusChangeToken = 0
@@ -1605,7 +1728,7 @@ private struct NotchAgentMorphField: View {
                 ForEach(0..<NotchAgentStackMetrics.maxAgents, id: \.self) { index in
                     let ringOffset = NotchAgentStackMetrics.logoDotSourceOffset(for: index)
                     let ringPoint = CGPoint(x: logoCenter.x + ringOffset.width, y: logoCenter.y + ringOffset.height)
-                    let rowMinY = chromeHeight + verticalPadding + CGFloat(index) * (rowHeight + rowSpacing)
+                    let rowMinY = chromeHeight + rowTopOffset + verticalPadding + CGFloat(index) * (rowHeight + rowSpacing)
                     let rowCenter = CGPoint(x: width / 2, y: rowMinY + rowHeight / 2)
                     let orbCenter = CGPoint(
                         x: rowMinX + NotchAgentStackMetrics.listRowLeadingPadding + NotchAgentStackMetrics.listOrbSize / 2,
@@ -1613,7 +1736,7 @@ private struct NotchAgentMorphField: View {
                     )
                     let controlPoint = CGPoint(
                         x: logoCenter.x + (orbCenter.x - logoCenter.x) * 0.58,
-                        y: chromeHeight + verticalPadding + CGFloat(index) * 2
+                        y: chromeHeight + rowTopOffset * 0.45 + verticalPadding + CGFloat(index) * 2
                     )
                     let dotPoint = NotchAgentStackMetrics.quadraticBezier(
                         from: ringPoint,

@@ -121,6 +121,26 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var agentSwitcherPinned: Bool = false
     @Published var agentSwitcherHovering: Bool = false
     var isAgentSwitcherExpanded: Bool { agentSwitcherPinned || agentSwitcherHovering }
+    @Published private(set) var notchHoverMenuOpen: Bool = false
+    var canShowNotchHoverMenu: Bool {
+        usesNotchIsland
+            && !showingAIConversation
+            && !isVoiceListening
+            && !isShowingNotification
+            && currentNotification == nil
+    }
+    var isNotchHoverMenuVisible: Bool {
+        canShowNotchHoverMenu && notchHoverMenuOpen
+    }
+
+    func setNotchHoverMenuOpen(_ open: Bool) {
+        notchHoverMenuOpen = open
+        isHoveringBar = open
+        agentSwitcherHovering = open
+        if !open {
+            agentSwitcherPinned = false
+        }
+    }
 
     /// Convenience accessor for plain-text response (used by window geometry and error handling).
     var aiResponseText: String {
@@ -236,6 +256,13 @@ class FloatingControlBarState: NSObject, ObservableObject {
 
     func measuredContentHeight(for surface: FloatingConversationSurface) -> CGFloat? {
         responseContentHeights[surface.measurementKey]
+    }
+
+    func resetMeasuredContentHeight(for surface: FloatingConversationSurface) {
+        responseContentHeights.removeValue(forKey: surface.measurementKey)
+        if surface == .mainResponse {
+            responseContentHeight = 0
+        }
     }
 
     func clearVisibleConversation() {

@@ -4,6 +4,27 @@ import XCTest
 
 @MainActor
 final class FloatingControlBarStateTests: XCTestCase {
+    func testNotchHoverMenuVisibilityIsSingleGatedState() {
+        let state = FloatingControlBarState()
+        state.usesNotchIsland = true
+
+        state.setNotchHoverMenuOpen(true)
+        XCTAssertTrue(state.isNotchHoverMenuVisible)
+        XCTAssertTrue(state.isHoveringBar)
+
+        state.showingAIConversation = true
+        XCTAssertFalse(state.isNotchHoverMenuVisible)
+
+        state.showingAIConversation = false
+        state.isVoiceListening = true
+        XCTAssertFalse(state.isNotchHoverMenuVisible)
+
+        state.isVoiceListening = false
+        state.setNotchHoverMenuOpen(false)
+        XCTAssertFalse(state.isNotchHoverMenuVisible)
+        XCTAssertFalse(state.isHoveringBar)
+    }
+
     func testAgentSurfaceDoesNotDependOnMainChatContentOrHeight() {
         let state = FloatingControlBarState()
         let agentID = UUID()

@@ -81,6 +81,23 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(lobeSource.contains("Image(systemName: \"mic.fill\")"))
   }
 
+  func testNotchHoverMenuKeepsAskOmiReachable() throws {
+    let source = try floatingControlBarViewSource()
+
+    guard let rowRange = source.range(of: "private var notchOmiChatRow: some View"),
+      let heightRange = source.range(of: "private var notchChromeHeight: CGFloat")
+    else {
+      return XCTFail("Expected notch Omi Chat hover row section")
+    }
+    let rowSource = String(source[rowRange.lowerBound..<heightRange.lowerBound])
+
+    XCTAssertTrue(rowSource.contains("Text(\"Omi Chat\")"))
+    XCTAssertTrue(rowSource.contains("onAskAI()"))
+    XCTAssertTrue(rowSource.contains("notchShortcutHint(\"Ask\""))
+    XCTAssertTrue(rowSource.contains("notchShortcutHint(systemImage: \"mic.fill\""))
+    XCTAssertFalse(rowSource.contains("notchShortcutHint(\"PTT\""))
+  }
+
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
     let source = try floatingControlBarWindowSource()
 
@@ -109,11 +126,12 @@ final class AgentPillLifecycleTests: XCTestCase {
     let windowSource = try floatingControlBarWindowSource()
     let responseSource = try aiResponseViewSource()
 
-    // The old literal expression "state.showingAIConversation || state.agentSwitcherPinned
-    // || state.agentSwitcherHovering" was replaced by the shouldShowAgentSwitcher computed
-    // property; the notchChromeLayoutWidth assertion below covers the derived usage.
-
-    XCTAssertTrue(source.contains("state.showingAIConversation || shouldShowAgentSwitcher"))
+    XCTAssertTrue(source.contains("state.isNotchHoverMenuVisible"))
+    XCTAssertTrue(windowSource.contains("func updateNotchPointerFromGlobalMouse()"))
+    XCTAssertTrue(windowSource.contains("func openNotchHoverMenuUntilExit()"))
+    XCTAssertTrue(windowSource.contains("private enum NotchPointerMode"))
+    XCTAssertTrue(windowSource.contains("state.isNotchHoverMenuVisible ? .openMenuRetention : .activationOnly"))
+    XCTAssertTrue(source.contains("state.showingAIConversation || shouldShowNotchHoverMenu"))
     XCTAssertTrue(source.contains("static let maxAgents = FloatingControlBarWindow.notchAgentListMaxVisibleAgents"))
     XCTAssertTrue(source.contains("static let dotDiameterRatio: CGFloat = 0.18"))
     XCTAssertTrue(source.contains("static let ringRadiusRatio: CGFloat = 0.33"))
@@ -136,14 +154,15 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("? .spring(response: 0.34, dampingFraction: 0.86)"))
     XCTAssertTrue(source.contains(": .spring(response: 0.18, dampingFraction: 0.92)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
-    XCTAssertTrue(source.contains("Color.clear\n                    .frame(width: notchChromeLayoutWidth, height: notchAgentListHeight)"))
+    XCTAssertTrue(source.contains("notchOmiChatRow\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
+    XCTAssertTrue(source.contains("height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("state.present(.agent(pill.id))"))
     XCTAssertTrue(source.contains("private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)"))
     XCTAssertTrue(source.contains("if state.conversationSurface == .agent(pill.id)"))
     XCTAssertTrue(source.contains("@State private var notchLogoHovering = false"))
     XCTAssertTrue(source.contains("private func setNotchLogoHovering(_ hovering: Bool)"))
     XCTAssertTrue(source.contains("private var notchAgentLogoHitTarget: some View"))
-    XCTAssertTrue(source.contains("(agentPills.pills.isEmpty || state.showingAIConversation) && !notchLogoHovering ? 1 : 0"))
+    XCTAssertTrue(source.contains("(agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu) && !notchLogoHovering ? 1 : 0"))
     XCTAssertTrue(source.contains("ZStack(alignment: .trailing)"))
     XCTAssertTrue(source.contains(".frame(width: NotchAgentStackMetrics.logoFrameSize, height: NotchAgentStackMetrics.logoFrameSize)"))
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
@@ -158,7 +177,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
     XCTAssertTrue(source.contains("Color.white.opacity(0.96 * Double(1 - progress))"))
-    XCTAssertTrue(source.contains("if !agentPills.pills.isEmpty && !showingNotchWaveform && !state.showingAIConversation"))
+    XCTAssertTrue(source.contains("if shouldShowNotchHoverMenu && !showingNotchWaveform"))
+    XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
     XCTAssertTrue(source.contains("if state.hasVisibleConversation {\n                        escToClearHint\n                    }"))
@@ -224,9 +244,36 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("let startHeight = max(responseHeight.initialHeight, currentResponseSurfaceHeight())"))
     XCTAssertTrue(source.contains("private func defaultAutoResponseMaxHeight() -> CGFloat"))
     XCTAssertTrue(source.contains("floor(screenHeight / 3)"))
+    XCTAssertTrue(source.contains("private func storedResponseSurfaceSize() -> NSSize?"))
+    XCTAssertTrue(source.contains("UserDefaults.standard.removeObject(forKey: Self.sizeKey)"))
+    XCTAssertTrue(source.contains("size.height > Self.minResponseHeight + 2"))
+    XCTAssertTrue(source.contains("state.conversationSurface.isResponseLike"))
     XCTAssertTrue(source.contains("func finishUserResponseResize()"))
     XCTAssertTrue(source.contains("persistCurrentResponseSurfaceSize()"))
+    XCTAssertTrue(source.contains("Persisting ordinary resize notifications here records"))
     XCTAssertFalse(source.contains("let initialSize = NSSize(width: expandedContentWidth, height: startHeight)"))
+  }
+
+  func testTypedSendDelegatesResponseSizingToWindow() throws {
+    let viewSource = try floatingControlBarViewSource()
+    let windowSource = try floatingControlBarWindowSource()
+
+    guard let inputRange = viewSource.range(of: "private var aiInputView: some View"),
+      let inputEnd = viewSource.range(of: "private func recomputeNotchInputHeight")
+    else {
+      return XCTFail("Expected AI input view section")
+    }
+    let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
+
+    XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
+    XCTAssertTrue(viewSource.contains("onSendFollowUp: { message in\n                archiveCurrentExchange()\n\n                (window as? FloatingControlBarWindow)?\n                    .beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
+    XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
+    XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
+    XCTAssertTrue(windowSource.contains("func beginVisibleMainQuery(_ message: String, fromVoice: Bool, animated: Bool = true)"))
+    XCTAssertTrue(windowSource.contains("state.resetMeasuredContentHeight(for: .mainResponse)"))
+    XCTAssertTrue(windowSource.contains("state.present(.mainResponse)"))
+    XCTAssertTrue(windowSource.contains("beginMainResponseHeight(animated: animated)"))
+    XCTAssertFalse(windowSource.contains("state.showingAIResponse = true"))
   }
 
   func testActiveSubagentChatRefreshesWhenAgentOutputChanges() throws {
@@ -299,6 +346,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("private var localSpeechActive = false"))
     XCTAssertTrue(source.contains("if clearResponseGlow || (!audioReceivedThisTurn && !localSpeechActive)"))
     XCTAssertTrue(source.contains("localSpeechActive = true"))
+  }
+
+  func testRealtimeHubKeepsSpeechFallbackArmedWhenNativeAudioDoesNotSchedule() throws {
+    let hubSource = try realtimeHubControllerSource()
+    let playerSource = try streamingPCMPlayerSource()
+
+    XCTAssertTrue(playerSource.contains("private func ensureRunning() -> Bool"))
+    XCTAssertTrue(playerSource.contains("@discardableResult\n  func enqueue(_ data: Data) -> Bool"))
+    XCTAssertTrue(hubSource.contains("guard pcmPlayer?.enqueue(pcm24k) == true else"))
+    XCTAssertTrue(hubSource.contains("keeping text fallback armed"))
+    XCTAssertTrue(hubSource.contains("audioReceivedThisTurn = true\n    responseGlowGate.markPlaybackActive()"))
+    XCTAssertFalse(hubSource.contains("audioReceivedThisTurn = true\n    // If PTT muted music/system output"))
   }
 
   func testBeginTurnStopsQueuedLocalSpeechOnBargeIn() throws {
@@ -504,6 +563,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func streamingPCMPlayerSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/StreamingPCMPlayer.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }
