@@ -131,6 +131,12 @@ final class AgentPillsManager: ObservableObject {
     This is already the spawned background agent. Do not call spawn_agent or delegate_agent just to hand off this same task.
     """
 
+    /// Shared agent-noun pattern used by negation guard, intent detection, and
+    /// task extraction. Kept word-boundary-free so callers can embed it inside
+    /// larger patterns and add `\b` anchors themselves. (Cubic P2 — single
+    /// source of truth for agent-noun regex.)
+    private nonisolated static let agentNounPattern = #"(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)"#
+
     /// Which pill (if any) is currently capturing a voice follow-up — drives the
     /// pill popover's mic button state.
     @Published var recordingPillID: UUID?
@@ -346,7 +352,7 @@ final class AgentPillsManager: ObservableObject {
         // negation words (e.g. "don't make me laugh, spawn an agent") do not
         // false-suppress legitimate spawns. (Cubic P1 — tightens prior scoped
         // guard.)
-        let agentNoun = #"(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)"#
+        let agentNoun = Self.agentNounPattern
         let article = #"(?:a|an|any)\s+"#
         let negationOptOuts = [
             // "don't spawn an agent", "do not create a pill", "don't run agents"
@@ -362,7 +368,7 @@ final class AgentPillsManager: ObservableObject {
         if negationOptOuts.contains(where: { lower.range(of: $0, options: .regularExpression) != nil }) {
             return nil
         }
-        let agentPattern = #"\b(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#
+        let agentPattern = #"\b"# + Self.agentNounPattern + #"\b"#
         let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run)\b"#
         guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
         guard lower.range(of: actionPattern, options: .regularExpression) != nil else { return nil }
@@ -378,7 +384,7 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private nonisolated static func extractFloatingAgentTask(from text: String) -> String? {
-        let nounPattern = #"\b(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#
+        let nounPattern = #"\b"# + Self.agentNounPattern + #"\b"#
         guard let regex = try? NSRegularExpression(pattern: nounPattern, options: [.caseInsensitive]) else {
             return nil
         }
@@ -640,12 +646,16 @@ final class AgentPillsManager: ObservableObject {
             if provider.isSending {
                 provider.stopAgent()
                 // stopAgent() has a 3s watchdog that force-releases isSending;
-                // poll until the guard clears (bounded to ~4s total).
+                // poll until the guard clears (bounded to ~4s total). Check
+                // Task.isCancelled on every iteration so a cancelled follow-up
+                // does not proceed to sendMessage. (Cubic P1.)
                 for _ in 0..<80 {
+                    if Task.isCancelled { return }
                     if !provider.isSending { break }
                     try? await Task.sleep(nanoseconds: 50_000_000)
                 }
             }
+            guard !Task.isCancelled else { return }
             let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
             let finalText = await provider.sendMessage(
                 text, model: pill.model,
