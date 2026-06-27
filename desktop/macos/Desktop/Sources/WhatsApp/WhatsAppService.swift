@@ -512,29 +512,31 @@ actor WhatsAppService {
   private func stopAuthProcess() async {
     authReadTask?.cancel()
     authReadTask = nil
-    terminate(authProcess)
+    await terminate(authProcess)
     authProcess = nil
   }
 
   private func stopFollowProcess() async {
     followReadTask?.cancel()
     followReadTask = nil
-    terminate(followProcess)
+    await terminate(followProcess)
     followProcess = nil
   }
 
-  private func terminate(_ process: Process?) {
+  private func terminate(_ process: Process?) async {
     guard let process else { return }
-    if process.isRunning {
-      process.terminate()
-      let start = Date()
-      while process.isRunning && Date().timeIntervalSince(start) < 2 {
-        Thread.sleep(forTimeInterval: 0.05)
-      }
+    await Task.detached(priority: .utility) {
       if process.isRunning {
-        kill(process.processIdentifier, SIGKILL)
+        process.terminate()
+        let start = Date()
+        while process.isRunning && Date().timeIntervalSince(start) < 2 {
+          try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        if process.isRunning {
+          kill(process.processIdentifier, SIGKILL)
+        }
       }
-    }
+    }.value
   }
 
   private func runOneShot(binary: String, arguments: [String]) async -> (output: String, exitCode: Int32) {
@@ -542,8 +544,8 @@ actor WhatsAppService {
       let process = try makeProcess(binary: binary, arguments: arguments)
       let output = process.standardOutput as? Pipe
       try process.run()
-      process.waitUntilExit()
       let data = output?.fileHandleForReading.readDataToEndOfFile() ?? Data()
+      process.waitUntilExit()
       let text = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       return (text, process.terminationStatus)
     } catch {
@@ -658,11 +660,11 @@ actor WhatsAppService {
   }
 
   private func parseAuthenticated(_ event: [String: Any]) -> Bool {
-    if let authenticated = event["authenticated"] as? Bool {
+    if let authenticated = boolValue(event["authenticated"]) {
       return authenticated
     }
     if let data = event["data"] as? [String: Any],
-      let authenticated = data["authenticated"] as? Bool
+      let authenticated = boolValue(data["authenticated"])
     {
       return authenticated
     }
@@ -675,7 +677,7 @@ actor WhatsAppService {
     else {
       return false
     }
-    return data["connected"] as? Bool ?? false
+    return boolValue(data["connected"]) ?? false
   }
 
   private func parseDoctorAuthenticated(_ output: String) -> Bool {
@@ -684,7 +686,7 @@ actor WhatsAppService {
     else {
       return false
     }
-    return data["authenticated"] as? Bool ?? false
+    return boolValue(data["authenticated"]) ?? boolValue(event["authenticated"]) ?? false
   }
 
   private func normalizedEventName(_ event: [String: Any]) -> String {
@@ -726,11 +728,15 @@ actor WhatsAppService {
   }
 
   private func isConnectedEvent(_ eventName: String, event: [String: Any]) -> Bool {
+    if parseAuthenticated(event) {
+      return true
+    }
+    if let data = event["data"] as? [String: Any], boolValue(data["connected"]) == true {
+      return true
+    }
     let haystack = "\(eventName) \(event)".lowercased()
     return eventName == "connected"
-      || eventName == "success"
       || haystack.contains("login.success")
-      || haystack.contains("authenticated")
       || haystack.contains("logged_in")
   }
 
@@ -745,6 +751,26 @@ actor WhatsAppService {
 
   private func isTransientSyncEvent(_ eventName: String) -> Bool {
     eventName == "disconnected" || eventName == "reconnecting"
+  }
+
+  private func boolValue(_ value: Any?) -> Bool? {
+    if let value = value as? Bool {
+      return value
+    }
+    if let value = value as? NSNumber {
+      return value.boolValue
+    }
+    if let value = value as? String {
+      switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+      case "true", "1", "yes", "authenticated", "connected":
+        return true
+      case "false", "0", "no", "unauthenticated", "not authenticated", "disconnected":
+        return false
+      default:
+        return nil
+      }
+    }
+    return nil
   }
 
   private func summarizeMessageEvent(_ event: [String: Any]) -> String {

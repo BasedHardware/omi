@@ -179,6 +179,7 @@ stage_universal_node() {
 
 stage_wacli() {
   local wacli_bin="${OMI_WACLI_BIN:-}"
+  local expected_wacli_sha="${OMI_WACLI_SHA256:-}"
   local dev_wacli="$DESKTOP_DIR/local/whatsapp/bin/openclaw-v0.11.1/wacli"
   if [ -n "$wacli_bin" ] && [ ! -x "$wacli_bin" ]; then
     echo "ERROR: OMI_WACLI_BIN is not executable: $wacli_bin" >&2
@@ -213,10 +214,16 @@ stage_wacli() {
       exit 1
     fi
     log "wacli at $wacli_bin is too old; skipping staged wacli resource for local dev"
-    if [ ! -x "$WACLI_RESOURCE" ]; then
-      rm -f "$WACLI_RESOURCE"
-    fi
+    rm -f "$WACLI_RESOURCE"
     return
+  fi
+
+  if [ "$MODE" = "universal" ] && [ -z "$expected_wacli_sha" ]; then
+    echo "ERROR: OMI_WACLI_SHA256 is required when staging wacli for release packaging." >&2
+    exit 1
+  fi
+  if [ -n "$expected_wacli_sha" ]; then
+    verify_sha256 "$wacli_bin" "$expected_wacli_sha"
   fi
 
   mkdir -p "$(dirname "$WACLI_RESOURCE")"

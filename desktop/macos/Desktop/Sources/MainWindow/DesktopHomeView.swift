@@ -515,13 +515,12 @@ struct DesktopHomeView: View {
     guard !nonMainPages.contains(selectedIndex) else { return }
 
     var visibleRawValues: Set<Int> = [
-      SidebarNavItem.dashboard.rawValue, SidebarNavItem.rewind.rawValue,
+      SidebarNavItem.dashboard.rawValue, SidebarNavItem.rewind.rawValue, SidebarNavItem.messages.rawValue,
     ]
     if currentTierLevel >= 2 { visibleRawValues.insert(SidebarNavItem.memories.rawValue) }
     if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }
     // Conversations replaced Chat in the sidebar; tier 1 unlocks it.
     if currentTierLevel >= 1 { visibleRawValues.insert(SidebarNavItem.conversations.rawValue) }
-
     if !visibleRawValues.contains(selectedIndex) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
     }

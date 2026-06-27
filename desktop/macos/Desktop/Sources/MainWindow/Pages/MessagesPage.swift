@@ -69,7 +69,7 @@ struct MessagesPage: View {
 
   private var shouldShowConnectionLoading: Bool {
     guard provider?.id == "whatsapp" else { return false }
-    if isCheckingProviderConnection || !hasCheckedProviderConnection || isWhatsAppAuthenticated {
+    if isCheckingProviderConnection || !hasCheckedProviderConnection {
       return true
     }
     if case .connecting = waState.connectionState {
@@ -545,11 +545,18 @@ struct MessagesPage: View {
 
   private func reloadSelectedMessages(showLoading: Bool = true) async {
     guard let provider, let selectedThreadId else { return }
+    let loadingThreadId = selectedThreadId
     if showLoading {
       isLoadingMessages = true
     }
-    let loaded = await provider.loadMessages(threadId: selectedThreadId)
-    pruneOptimisticMessages(for: selectedThreadId, against: loaded)
+    let loaded = await provider.loadMessages(threadId: loadingThreadId)
+    guard self.selectedThreadId == loadingThreadId else {
+      if showLoading {
+        isLoadingMessages = false
+      }
+      return
+    }
+    pruneOptimisticMessages(for: loadingThreadId, against: loaded)
     messages = loaded
     if showLoading {
       isLoadingMessages = false

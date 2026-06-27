@@ -21,7 +21,7 @@ final class WhatsAppMessagingProvider: MessagingProvider {
   func loadThreads() async -> [MessageThread] {
     let threads = await WhatsAppReader.listChats()
     let pendingDrafts = WhatsAppReplyCoordinator.shared.pendingDrafts
-    draftThreadAliases = await draftAliases(for: pendingDrafts, in: threads)
+    draftThreadAliases = draftAliases(for: pendingDrafts, in: threads)
     let draftThreadIds = Set(pendingDrafts.map { canonicalThreadId(for: $0) })
     let mappedThreads = threads.map { thread in
       MessageThread(
@@ -135,7 +135,7 @@ final class WhatsAppMessagingProvider: MessagingProvider {
     draftThreadAliases[draft.chatJid] ?? draft.chatJid
   }
 
-  private func draftAliases(for drafts: [WhatsAppDraft], in threads: [MessageThread]) async -> [String: String] {
+  private func draftAliases(for drafts: [WhatsAppDraft], in threads: [MessageThread]) -> [String: String] {
     var aliases: [String: String] = [:]
     let visibleThreadIds = Set(threads.map(\.id))
 
@@ -145,7 +145,7 @@ final class WhatsAppMessagingProvider: MessagingProvider {
         rememberAliasContact(for: draft, canonicalThreadId: match, threads: threads)
         continue
       }
-      if let match = await messageMatchedThreadId(for: draft, in: threads) {
+      if let match = previewMatchedThreadId(for: draft, in: threads) {
         aliases[draft.chatJid] = match
         rememberAliasContact(for: draft, canonicalThreadId: match, threads: threads)
       }
@@ -164,30 +164,19 @@ final class WhatsAppMessagingProvider: MessagingProvider {
       guard !thread.isGroup else { return false }
       let threadTitle = normalizedName(thread.title)
       return threadTitle == draftName
-        || threadTitle.hasPrefix("\(draftName) ")
-        || draftName.hasPrefix("\(threadTitle) ")
     }
     return matches.count == 1 ? matches[0].id : nil
   }
 
-  private func messageMatchedThreadId(for draft: WhatsAppDraft, in threads: [MessageThread]) async -> String? {
+  private func previewMatchedThreadId(for draft: WhatsAppDraft, in threads: [MessageThread]) -> String? {
     let draftText = normalizedMessageText(draft.incomingText)
     guard !draftText.isEmpty else { return nil }
 
-    var matches: [String] = []
-    for thread in threads where !thread.isGroup {
-      if normalizedMessageText(thread.lastMessagePreview ?? "") == draftText {
-        matches.append(thread.id)
-        continue
-      }
-
-      let recentMessages = await WhatsAppReader.listMessages(chatJid: thread.id, limit: 12)
-      if recentMessages.contains(where: { !$0.isFromMe && normalizedMessageText($0.text) == draftText }) {
-        matches.append(thread.id)
-      }
+    let matches = threads.filter { thread in
+      guard !thread.isGroup else { return false }
+      return normalizedMessageText(thread.lastMessagePreview ?? "") == draftText
     }
-
-    return Set(matches).count == 1 ? matches[0] : nil
+    return matches.count == 1 ? matches[0].id : nil
   }
 
   private func normalizedName(_ value: String) -> String {

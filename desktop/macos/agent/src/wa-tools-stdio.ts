@@ -11,7 +11,7 @@ const bridgePipePath = process.env.OMI_BRIDGE_PIPE;
 
 const pendingToolCalls = new Map<
   string,
-  { resolve: (result: string) => void }
+  { resolve: (result: string) => void; reject: (error: Error) => void; timeout: NodeJS.Timeout }
 >();
 
 let callIdCounter = 0;
@@ -50,17 +50,13 @@ function activeOmiContext(): Record<string, unknown> {
   }
   return {
     ...envBase,
-    ...(envProtocolVersion() === 2
-      ? {}
-      : {
-          requestId: process.env.OMI_REQUEST_ID,
-          clientId: process.env.OMI_CLIENT_ID,
-          sessionId: process.env.OMI_SESSION_ID,
-          runId: process.env.OMI_RUN_ID,
-          attemptId: process.env.OMI_ATTEMPT_ID,
-          adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
-          legacyAdapterSessionId: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
-        }),
+    requestId: process.env.OMI_REQUEST_ID,
+    clientId: process.env.OMI_CLIENT_ID,
+    sessionId: process.env.OMI_SESSION_ID,
+    runId: process.env.OMI_RUN_ID,
+    attemptId: process.env.OMI_ATTEMPT_ID,
+    adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
+    legacyAdapterSessionId: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
   };
 }
 
@@ -93,6 +89,7 @@ function connectToPipe(): Promise<void> {
           if (msg.type === "tool_result" && msg.callId) {
             const pending = pendingToolCalls.get(msg.callId);
             if (pending) {
+              clearTimeout(pending.timeout);
               pending.resolve(msg.result);
               pendingToolCalls.delete(msg.callId);
             }
@@ -105,7 +102,12 @@ function connectToPipe(): Promise<void> {
 
     pipeConnection.on("error", (err) => {
       logErr(`Pipe error: ${err.message}`);
+      rejectPendingToolCalls(err);
       reject(err);
+    });
+    pipeConnection.on("close", () => {
+      rejectPendingToolCalls(new Error("bridge pipe closed"));
+      pipeConnection = null;
     });
   });
 }
@@ -125,8 +127,12 @@ async function requestSwiftTool(
     return `Error: missing active Omi request context for v2 tool relay${context.contextError ? `: ${context.contextError}` : ""}`;
   }
 
-  return new Promise<string>((resolve) => {
-    pendingToolCalls.set(callId, { resolve });
+  return new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      pendingToolCalls.delete(callId);
+      reject(new Error(`Timed out waiting for Swift tool result for ${name}`));
+    }, 30_000);
+    pendingToolCalls.set(callId, { resolve, reject, timeout });
     pipeConnection!.write(JSON.stringify({
       type: "tool_use",
       callId,
@@ -135,6 +141,14 @@ async function requestSwiftTool(
       ...context,
     }) + "\n");
   });
+}
+
+function rejectPendingToolCalls(error: Error): void {
+  for (const [callId, pending] of pendingToolCalls) {
+    clearTimeout(pending.timeout);
+    pending.reject(error);
+    pendingToolCalls.delete(callId);
+  }
 }
 
 const TOOLS = [
@@ -251,9 +265,16 @@ async function handleJsonRpc(body: Record<string, unknown>): Promise<void> {
         }
         return;
       }
-      const result = await requestSwiftTool(toolName, args);
-      if (!isNotification) {
-        send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: result }] } });
+      try {
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: result }] } });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!isNotification) {
+          send({ jsonrpc: "2.0", id, error: { code: -32000, message } });
+        }
       }
       break;
     }

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 struct WhatsAppSyncedMessage: Identifiable, Equatable, Sendable {
@@ -302,32 +303,6 @@ final class WhatsAppMemoryImportService: ObservableObject {
     return saved
   }
 
-  private nonisolated static func saveMemory(for message: WhatsAppSyncedMessage) async -> Bool {
-    let dateStr = message.timestamp?.formatted(date: .abbreviated, time: .shortened) ?? "unknown date"
-    let sender = await MainActor.run { message.displaySender }
-    let chat = await MainActor.run {
-      WhatsAppContactResolver.shared.displayName(for: message.chatJid, fallback: message.senderName)
-    }
-    let direction = message.fromMe ? "sent by the user" : "from \(sender)"
-    let content = "WhatsApp message in \(chat) on \(dateStr) \(direction): \(message.text)"
-
-    do {
-      _ = try await APIClient.shared.createMemory(
-        content: content,
-        visibility: "private",
-        category: .system,
-        tags: ["whatsapp", "message"],
-        source: "whatsapp",
-        windowTitle: "WhatsApp - \(chat)",
-        headline: "WhatsApp with \(chat)"
-      )
-      return true
-    } catch {
-      log("WhatsAppMemoryImportService: failed to save message memory \(message.id): \(error)")
-      return false
-    }
-  }
-
   private func memoryContent(for message: WhatsAppSyncedMessage) -> String {
     let dateStr = message.timestamp?.formatted(date: .abbreviated, time: .shortened) ?? "unknown date"
     let direction = message.fromMe ? "sent by the user" : "from \(message.displaySender)"
@@ -359,7 +334,7 @@ final class WhatsAppMemoryImportService: ObservableObject {
     let text = stringValue(object, keys: ["text", "body", "message", "caption", "Text", "DisplayText"])
     if let chatJid, let senderJid, let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       let id = stringValue(object, keys: ["id", "ID", "messageId", "message_id", "MsgID"])
-        ?? "\(chatJid):\(senderJid):\(text.hashValue)"
+        ?? stableFallbackMessageID(chatJid: chatJid, senderJid: senderJid, text: text)
       messages.append(WhatsAppSyncedMessage(
         id: id,
         chatJid: chatJid,
@@ -397,6 +372,12 @@ final class WhatsAppMemoryImportService: ObservableObject {
 
   private nonisolated func dedupeKey(for message: WhatsAppSyncedMessage) -> String {
     "\(message.chatJid)|\(message.senderJid)|\(message.id)|\(Int(message.timestamp?.timeIntervalSince1970 ?? 0))"
+  }
+
+  private nonisolated func stableFallbackMessageID(chatJid: String, senderJid: String, text: String) -> String {
+    let source = "\(chatJid):\(senderJid):\(text)"
+    let digest = SHA256.hash(data: Data(source.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
   }
 
   private func stringValue(_ object: [String: Any], keys: [String]) -> String? {

@@ -1584,7 +1584,7 @@ class ChatToolExecutor {
       let events = try await CalendarReaderService.shared.readEvents(
         daysBack: daysBack,
         daysForward: daysForward,
-        maxResults: 300
+        maxResults: 10_000
       )
       let conflicts = events.filter { event in
         guard !event.isAllDay,
@@ -1764,37 +1764,7 @@ class ChatToolExecutor {
     }
 
     let storeDir = WhatsAppService.defaultStoreDirectory()
-    return await Task.detached(priority: .userInitiated) {
-      do {
-        try FileManager.default.createDirectory(atPath: storeDir, withIntermediateDirectories: true)
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: binary)
-        process.arguments = ["--store", storeDir, "--json"] + (readOnly ? ["--read-only"] : []) + arguments
-
-        var env = ProcessInfo.processInfo.environment
-        let binaryDir = (binary as NSString).deletingLastPathComponent
-        let existingPath = env["PATH"] ?? "/usr/bin:/bin"
-        if !existingPath.components(separatedBy: ":").contains(binaryDir) {
-          env["PATH"] = "\(binaryDir):\(existingPath)"
-        }
-        if readOnly {
-          env["WACLI_READONLY"] = "1"
-        }
-        process.environment = env
-
-        let outputPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = outputPipe
-        try process.run()
-        let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return (output, process.terminationStatus)
-      } catch {
-        return ("\(error)", 1)
-      }
-    }.value
+    return await WhatsAppCLIRunner.shared.run(binary: binary, storeDir: storeDir, arguments: arguments, readOnly: readOnly)
   }
 
   private static func appendStringFlag(_ flag: String, from value: Any?, to command: inout [String]) {
@@ -1965,5 +1935,80 @@ class ChatToolExecutor {
       log("Backend tool error (\(toolCall.name)): \(error)")
       return "Error calling backend: \(error.localizedDescription)"
     }
+  }
+}
+
+private actor WhatsAppCLIRunner {
+  static let shared = WhatsAppCLIRunner()
+
+  private let timeoutNanoseconds: UInt64 = 30 * 1_000_000_000
+  private let maxAttempts = 3
+
+  func run(binary: String, storeDir: String, arguments: [String], readOnly: Bool) async -> (output: String, exitCode: Int32) {
+    for attempt in 1...maxAttempts {
+      let result = await runOnce(binary: binary, storeDir: storeDir, arguments: arguments, readOnly: readOnly)
+      if isStoreLockError(result.output), attempt < maxAttempts {
+        try? await Task.sleep(nanoseconds: UInt64(attempt) * 300_000_000)
+        continue
+      }
+      return result
+    }
+    return ("wacli store is locked", 75)
+  }
+
+  private func runOnce(binary: String, storeDir: String, arguments: [String], readOnly: Bool) async -> (output: String, exitCode: Int32) {
+    do {
+      try FileManager.default.createDirectory(atPath: storeDir, withIntermediateDirectories: true)
+
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: binary)
+      process.arguments = ["--store", storeDir, "--json"] + (readOnly ? ["--read-only"] : []) + arguments
+
+      var env = ProcessInfo.processInfo.environment
+      let binaryDir = (binary as NSString).deletingLastPathComponent
+      let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+      if !existingPath.components(separatedBy: ":").contains(binaryDir) {
+        env["PATH"] = "\(binaryDir):\(existingPath)"
+      }
+      if readOnly {
+        env["WACLI_READONLY"] = "1"
+      }
+      process.environment = env
+
+      let outputPipe = Pipe()
+      process.standardOutput = outputPipe
+      process.standardError = outputPipe
+      try process.run()
+
+      return await withTaskGroup(of: (output: String, exitCode: Int32).self) { group in
+        group.addTask {
+          let data = outputPipe.fileHandleForReading.readDataToEndOfFile()
+          process.waitUntilExit()
+          let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+          return (output, process.terminationStatus)
+        }
+        group.addTask {
+          try? await Task.sleep(nanoseconds: self.timeoutNanoseconds)
+          if process.isRunning {
+            process.terminate()
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            if process.isRunning {
+              kill(process.processIdentifier, SIGKILL)
+            }
+          }
+          return ("wacli timed out", 124)
+        }
+        let result = await group.next() ?? ("wacli did not return a result", 1)
+        group.cancelAll()
+        return result
+      }
+    } catch {
+      return ("\(error)", 1)
+    }
+  }
+
+  private func isStoreLockError(_ output: String) -> Bool {
+    let normalized = output.lowercased()
+    return normalized.contains("store is locked") || normalized.contains("store locked")
   }
 }

@@ -1,7 +1,10 @@
+import CryptoKit
 import Foundation
 
 @MainActor
 enum WhatsAppReader {
+  private static let iso8601Formatter = ISO8601DateFormatter()
+
   static func listChats(limit: Int = 50) async -> [MessageThread] {
     let boundedLimit = max(1, min(limit, 200))
     let raw = await runWacliJSON(["chats", "list", "--limit", String(boundedLimit)])
@@ -31,9 +34,11 @@ enum WhatsAppReader {
   private static func runWacliJSON(_ arguments: [String]) async -> Any? {
     let result = await runWacli(arguments, readOnly: true)
     guard result.exitCode == 0, let data = result.output.data(using: .utf8) else {
+      log("WhatsAppReader: wacli failed exit=\(result.exitCode) output=\(result.output.prefix(300))")
       return nil
     }
     guard let json = try? JSONSerialization.jsonObject(with: data) else {
+      log("WhatsAppReader: failed to parse wacli JSON for \(arguments.joined(separator: " ")): \(result.output.prefix(300))")
       return nil
     }
     if let envelope = json as? [String: Any], envelope.keys.contains("data") {
@@ -98,9 +103,10 @@ enum WhatsAppReader {
     }
     guard let object = value as? [String: Any] else { return [] }
 
-    var threads = object.values.flatMap { collectChats(from: $0) }
+    var threads = nestedCollectionValues(object, keys: ["data", "chats", "items", "results", "conversations"])
+      .flatMap { collectChats(from: $0) }
     guard let jid = stringValue(object, keys: ["jid", "JID", "chatJid", "ChatJID", "chat_jid", "id", "ID", "chat"]),
-      jid.contains("@")
+      isWhatsAppJid(jid)
     else {
       return threads
     }
@@ -160,7 +166,8 @@ enum WhatsAppReader {
     }
     guard let object = value as? [String: Any] else { return [] }
 
-    var messages = object.values.flatMap { collectMessages(from: $0) }
+    var messages = nestedCollectionValues(object, keys: ["data", "messages", "items", "results"])
+      .flatMap { collectMessages(from: $0) }
     guard let text = stringValue(object, keys: ["text", "body", "message", "caption", "Text", "DisplayText"]),
       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else {
@@ -171,8 +178,11 @@ enum WhatsAppReader {
     let timestamp = dateValue(object, keys: [
       "timestamp", "Timestamp", "time", "createdAt", "CreatedAt", "messageTimestamp", "message_timestamp",
     ])
+    guard senderJid != nil || timestamp != nil || stringValue(object, keys: ["id", "ID", "messageId", "message_id", "MsgID"]) != nil else {
+      return messages
+    }
     let id = stringValue(object, keys: ["id", "ID", "messageId", "message_id", "MsgID"])
-      ?? "\(senderJid ?? "unknown"):\(Int(timestamp?.timeIntervalSince1970 ?? 0)):\(text.hashValue)"
+      ?? stableFallbackMessageID(senderJid: senderJid, timestamp: timestamp, text: text)
     let senderName = stringValue(object, keys: ["senderName", "SenderName", "pushName", "PushName", "name", "Name"])
       ?? senderJid.map { WhatsAppContactResolver.shared.displayName(for: $0) }
 
@@ -204,6 +214,10 @@ enum WhatsAppReader {
     return nil
   }
 
+  private static func nestedCollectionValues(_ object: [String: Any], keys: [String]) -> [Any] {
+    keys.compactMap { object[$0] }
+  }
+
   private static func displayTitle(for jid: String, rawTitle: String?, isGroup: Bool) -> String {
     let cleanedTitle = rawTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
     let fallback = isGroup ? "WhatsApp Group" : nil
@@ -224,7 +238,15 @@ enum WhatsAppReader {
 
   private static func isJidLike(_ value: String) -> Bool {
     let lowercased = value.lowercased()
-    return lowercased.contains("@s.whatsapp.net") || lowercased.contains("@g.us")
+    return isWhatsAppJid(lowercased)
+  }
+
+  private static func isWhatsAppJid(_ value: String) -> Bool {
+    let lowercased = value.lowercased()
+    return lowercased.hasSuffix("@s.whatsapp.net")
+      || lowercased.hasSuffix("@g.us")
+      || lowercased.hasSuffix("@lid")
+      || lowercased.hasSuffix("@broadcast")
   }
 
   private static func phoneNumber(from jid: String) -> String? {
@@ -293,7 +315,7 @@ enum WhatsAppReader {
         return Date(timeIntervalSince1970: seconds > 10_000_000_000 ? seconds / 1000 : seconds)
       }
       if let string = object[key] as? String {
-        if let date = ISO8601DateFormatter().date(from: string) {
+        if let date = iso8601Formatter.date(from: string) {
           return date
         }
         if let seconds = TimeInterval(string) {
@@ -302,5 +324,11 @@ enum WhatsAppReader {
       }
     }
     return nil
+  }
+
+  private static func stableFallbackMessageID(senderJid: String?, timestamp: Date?, text: String) -> String {
+    let source = "\(senderJid ?? "unknown"):\(Int(timestamp?.timeIntervalSince1970 ?? 0)):\(text)"
+    let digest = SHA256.hash(data: Data(source.utf8))
+    return digest.map { String(format: "%02x", $0) }.joined()
   }
 }

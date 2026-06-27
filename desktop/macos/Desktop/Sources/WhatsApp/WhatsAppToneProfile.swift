@@ -68,6 +68,10 @@ final class WhatsAppToneProfile: ObservableObject {
   }
 
   func rebuild(limit: Int = 200) async {
+    guard !isRebuilding else {
+      log("WhatsAppToneProfile: rebuild skipped because another rebuild is already running")
+      return
+    }
     isRebuilding = true
     lastError = nil
     defer { isRebuilding = false }
@@ -85,7 +89,11 @@ final class WhatsAppToneProfile: ObservableObject {
       return
     }
 
-    let texts = extractSentTexts(from: result.output)
+    guard let texts = extractSentTexts(from: result.output) else {
+      lastError = "Could not parse WhatsApp tone samples."
+      log("WhatsAppToneProfile: failed to parse tone profile JSON: \(result.output.prefix(300))")
+      return
+    }
     let nextSnapshot = buildSnapshot(from: texts, sourceDescription: sourceDescription)
     snapshot = nextSnapshot
     if let data = try? JSONEncoder().encode(nextSnapshot) {
@@ -176,13 +184,26 @@ final class WhatsAppToneProfile: ObservableObject {
       .map(\.key)
   }
 
-  private func extractSentTexts(from output: String) -> [String] {
-    guard let data = output.data(using: .utf8),
+  private func extractSentTexts(from output: String) -> [String]? {
+    guard let data = jsonSlice(from: output).data(using: .utf8),
       let json = try? JSONSerialization.jsonObject(with: data)
     else {
-      return []
+      return nil
     }
     return collectTexts(from: json)
+  }
+
+  private func jsonSlice(from output: String) -> String {
+    let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let firstObject = trimmed.firstIndex(where: { $0 == "{" || $0 == "[" }) else {
+      return trimmed
+    }
+    let opener = trimmed[firstObject]
+    let closer: Character = opener == "{" ? "}" : "]"
+    guard let lastObject = trimmed.lastIndex(of: closer), lastObject >= firstObject else {
+      return trimmed
+    }
+    return String(trimmed[firstObject...lastObject])
   }
 
   private func collectTexts(from value: Any) -> [String] {

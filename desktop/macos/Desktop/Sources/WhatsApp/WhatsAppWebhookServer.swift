@@ -8,12 +8,13 @@ actor WhatsAppWebhookServer {
   private static let maxRequestBytes = 1024 * 1024
 
   private let queue = DispatchQueue(label: "com.omi.desktop.whatsapp-webhook")
+  private let token = UUID().uuidString
   private var listener: NWListener?
   private var listeningPort: UInt16 = WhatsAppWebhookServer.configuredPort()
 
   var url: String {
     get async {
-      "http://127.0.0.1:\(listeningPort)/v1/whatsapp/webhook"
+      "http://127.0.0.1:\(listeningPort)/v1/whatsapp/webhook?token=\(token)"
     }
   }
 
@@ -70,12 +71,18 @@ actor WhatsAppWebhookServer {
         return
       }
 
-      if let request = Self.parseRequest(from: accumulated) {
+      switch Self.parseRequest(from: accumulated) {
+      case .complete(let request):
         Task {
-          await self.route(request)
-          Self.send(status: 200, body: "{\"ok\":true}", on: connection)
+          let response = await self.route(request)
+          Self.send(status: response.status, body: response.body, on: connection)
         }
         return
+      case .badRequest(let message):
+        Self.send(status: 400, body: Self.jsonBody(ok: false, error: message), on: connection)
+        return
+      case .incomplete:
+        break
       }
 
       if isComplete {
@@ -87,19 +94,30 @@ actor WhatsAppWebhookServer {
     }
   }
 
-  private func route(_ request: WhatsAppWebhookRequest) async {
+  private func route(_ request: WhatsAppWebhookRequest) async -> WhatsAppWebhookResponse {
     guard request.method == "POST", request.path == "/v1/whatsapp/webhook" else {
       log("WhatsAppWebhookServer: unsupported route \(request.method) \(request.path)")
-      return
+      return WhatsAppWebhookResponse(status: 404, body: Self.jsonBody(ok: false, error: "not_found"))
+    }
+
+    guard isAuthenticated(request) else {
+      log("WhatsAppWebhookServer: rejected unauthenticated webhook request")
+      return WhatsAppWebhookResponse(status: 401, body: Self.jsonBody(ok: false, error: "unauthorized"))
     }
 
     guard let json = try? JSONSerialization.jsonObject(with: request.body) else {
       log("WhatsAppWebhookServer: invalid webhook JSON")
-      return
+      return WhatsAppWebhookResponse(status: 400, body: Self.jsonBody(ok: false, error: "invalid_json"))
     }
 
     let handled = await handleWebhookJSON(json)
     log("WhatsAppWebhookServer: handled webhook messages=\(handled)")
+    return WhatsAppWebhookResponse(status: 200, body: "{\"ok\":true,\"messages\":\(handled)}")
+  }
+
+  private func isAuthenticated(_ request: WhatsAppWebhookRequest) -> Bool {
+    request.queryItems["token"] == token
+      || request.headers["x-omi-webhook-token"] == token
   }
 
   private func handleWebhookJSON(_ json: Any) async -> Int {
@@ -116,8 +134,10 @@ actor WhatsAppWebhookServer {
     }
 
     var count = 0
+    var seenMessageIds = Set<String>()
     for candidate in webhookMessageCandidates(from: object) {
       if let message = WAIncomingMessage(event: candidate) {
+        guard seenMessageIds.insert(message.id).inserted else { continue }
         await WhatsAppReplyCoordinator.shared.handle(message)
         count += 1
       } else {
@@ -128,10 +148,12 @@ actor WhatsAppWebhookServer {
   }
 
   private func webhookMessageCandidates(from object: [String: Any]) -> [[String: Any]] {
-    var candidates = [object]
+    var candidates: [[String: Any]] = []
+    var emittedNestedCandidate = false
     for key in ["message", "data", "payload", "event"] {
       if let nested = object[key] as? [String: Any] {
         candidates.append(nested)
+        emittedNestedCandidate = true
       }
       if let nestedString = object[key] as? String,
         key == "message",
@@ -140,48 +162,66 @@ actor WhatsAppWebhookServer {
         var copy = object
         copy["Text"] = nestedString
         candidates.append(copy)
+        emittedNestedCandidate = true
       }
       if let array = object[key] as? [[String: Any]] {
         candidates.append(contentsOf: array)
+        emittedNestedCandidate = true
       }
     }
     if let messages = object["messages"] as? [[String: Any]] {
       candidates.append(contentsOf: messages)
+      emittedNestedCandidate = true
+    }
+    if !emittedNestedCandidate {
+      candidates.insert(object, at: 0)
     }
     return candidates
   }
 
-  private nonisolated static func parseRequest(from data: Data) -> WhatsAppWebhookRequest? {
+  private nonisolated static func parseRequest(from data: Data) -> WhatsAppWebhookParseResult {
     guard let headerRange = data.range(of: Data("\r\n\r\n".utf8)),
       let headerString = String(data: data[..<headerRange.lowerBound], encoding: .utf8)
     else {
-      return nil
+      return .incomplete
     }
 
     let lines = headerString.components(separatedBy: "\r\n")
-    guard let requestLine = lines.first else { return nil }
+    guard let requestLine = lines.first else { return .badRequest("missing_request_line") }
     let requestParts = requestLine.split(separator: " ")
-    guard requestParts.count >= 2 else { return nil }
+    guard requestParts.count >= 2 else { return .badRequest("invalid_request_line") }
 
     var contentLength = 0
+    var headers: [String: String] = [:]
     for line in lines.dropFirst() {
       let pieces = line.split(separator: ":", maxSplits: 1)
       guard pieces.count == 2 else { continue }
-      if pieces[0].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
-        contentLength = Int(pieces[1].trimmingCharacters(in: .whitespaces)) ?? 0
+      let name = pieces[0].trimmingCharacters(in: .whitespaces).lowercased()
+      let value = pieces[1].trimmingCharacters(in: .whitespaces)
+      headers[name] = String(value)
+      if name == "content-length" {
+        guard let parsedLength = Int(value), parsedLength >= 0 else {
+          return .badRequest("invalid_content_length")
+        }
+        contentLength = parsedLength
       }
     }
 
     let bodyStart = headerRange.upperBound
     let expectedLength = data.distance(from: data.startIndex, to: bodyStart) + contentLength
-    guard data.count >= expectedLength else { return nil }
+    guard expectedLength <= maxRequestBytes else { return .badRequest("request_too_large") }
+    guard data.count >= expectedLength else { return .incomplete }
     let body = Data(data[bodyStart..<data.index(bodyStart, offsetBy: contentLength)])
+    let target = String(requestParts[1])
+    let pathAndQuery = splitPathAndQuery(target)
 
-    return WhatsAppWebhookRequest(
+    return .complete(WhatsAppWebhookRequest(
       method: String(requestParts[0]),
-      path: String(requestParts[1]),
+      path: pathAndQuery.path,
+      queryItems: pathAndQuery.queryItems,
+      headers: headers,
       body: body
-    )
+    ))
   }
 
   private nonisolated static func send(status: Int, body: String, on connection: NWConnection) {
@@ -201,6 +241,22 @@ actor WhatsAppWebhookServer {
     })
   }
 
+  private nonisolated static func jsonBody(ok: Bool, error: String) -> String {
+    #"{"ok":\#(ok ? "true" : "false"),"error":"\#(error)"}"#
+  }
+
+  private nonisolated static func splitPathAndQuery(_ target: String) -> (path: String, queryItems: [String: String]) {
+    guard var components = URLComponents(string: target) else {
+      return (target, [:])
+    }
+    let path = components.path.isEmpty ? target.components(separatedBy: "?").first ?? target : components.path
+    let items = components.queryItems?.reduce(into: [String: String]()) { partial, item in
+      partial[item.name] = item.value ?? ""
+    } ?? [:]
+    components.queryItems = nil
+    return (path, items)
+  }
+
   private static func configuredPort() -> UInt16 {
     if let value = ProcessInfo.processInfo.environment["OMI_WHATSAPP_WEBHOOK_PORT"],
       let port = UInt16(value)
@@ -214,5 +270,18 @@ actor WhatsAppWebhookServer {
 private struct WhatsAppWebhookRequest {
   let method: String
   let path: String
+  let queryItems: [String: String]
+  let headers: [String: String]
   let body: Data
+}
+
+private struct WhatsAppWebhookResponse {
+  let status: Int
+  let body: String
+}
+
+private enum WhatsAppWebhookParseResult {
+  case complete(WhatsAppWebhookRequest)
+  case incomplete
+  case badRequest(String)
 }

@@ -62,6 +62,8 @@ final class WhatsAppReplySettings: ObservableObject {
   private let defaults: UserDefaults
   private var autoSendHistory: [String: [Date]] = [:]
   private var sentClientMessageIDs = Set<String>()
+  private var sentClientMessageIDOrder: [String] = []
+  private let maxSentClientMessageIDs = 1_000
 
   private enum Keys {
     static let mode = "whatsapp.reply.mode"
@@ -108,6 +110,8 @@ final class WhatsAppReplySettings: ObservableObject {
         return .duplicate
       }
       sentClientMessageIDs.insert(clientMessageID)
+      sentClientMessageIDOrder.append(clientMessageID)
+      pruneSentClientMessageIDs()
     }
     return .allowed
   }
@@ -168,13 +172,16 @@ final class WhatsAppReplySettings: ObservableObject {
   }
 
   func recentAuditEntries(limit: Int = 20) -> [WhatsAppAuditEntry] {
+    let boundedLimit = max(1, min(limit, 200))
     let url = auditLogURL()
-    guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+    guard let text = tailText(from: url, maxBytes: max(64 * 1024, boundedLimit * 4096)) else {
       return []
     }
-    return text.split(separator: "\n").suffix(limit).compactMap { line in
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    return text.split(separator: "\n").suffix(boundedLimit).compactMap { line in
       guard let data = String(line).data(using: .utf8) else { return nil }
-      return try? JSONDecoder().decode(WhatsAppAuditEntry.self, from: data)
+      return try? decoder.decode(WhatsAppAuditEntry.self, from: data)
     }
     .reversed()
   }
@@ -204,6 +211,29 @@ final class WhatsAppReplySettings: ObservableObject {
     let history = autoSendHistory[normalized, default: []].filter { $0 >= cutoff }
     autoSendHistory[normalized] = history
     return history.count < max(rateLimitPerHour, 1)
+  }
+
+  private func pruneSentClientMessageIDs() {
+    guard sentClientMessageIDOrder.count > maxSentClientMessageIDs else { return }
+    let overflow = sentClientMessageIDOrder.count - maxSentClientMessageIDs
+    let expired = sentClientMessageIDOrder.prefix(overflow)
+    for id in expired {
+      sentClientMessageIDs.remove(id)
+    }
+    sentClientMessageIDOrder.removeFirst(overflow)
+  }
+
+  private func tailText(from url: URL, maxBytes: Int) -> String? {
+    guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+    defer { try? handle.close() }
+    let size = (try? handle.seekToEnd()) ?? 0
+    let offset = size > UInt64(maxBytes) ? size - UInt64(maxBytes) : 0
+    try? handle.seek(toOffset: offset)
+    var data = handle.readDataToEndOfFile()
+    if offset > 0, let newline = data.firstIndex(of: UInt8(ascii: "\n")) {
+      data = data[data.index(after: newline)...]
+    }
+    return String(data: data, encoding: .utf8)
   }
 
   private func isQuietHoursActive(date: Date = Date()) -> Bool {

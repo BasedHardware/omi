@@ -8,7 +8,7 @@ struct WhatsAppConnectView: View {
 
   let onDismiss: () -> Void
 
-  private let qrContext = CIContext()
+  private static let qrContext = CIContext()
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -179,7 +179,7 @@ struct WhatsAppConnectView: View {
     let filter = CIFilter.qrCodeGenerator()
     filter.message = Data(string.utf8)
     guard let output = filter.outputImage?.transformed(by: CGAffineTransform(scaleX: 10, y: 10)),
-      let cgImage = qrContext.createCGImage(output, from: output.extent)
+      let cgImage = Self.qrContext.createCGImage(output, from: output.extent)
     else {
       return nil
     }

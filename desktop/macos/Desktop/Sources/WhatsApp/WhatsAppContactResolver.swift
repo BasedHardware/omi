@@ -97,22 +97,30 @@ final class WhatsAppContactResolver: ObservableObject {
     lastRefreshError = nil
 
     if importSystemContacts {
-      _ = await runWacli(["contacts", "import-system"], readOnly: false)
+      let importResult = await runWacli(["contacts", "import-system"], readOnly: false)
+      if importResult.exitCode != 0 {
+        lastRefreshError = importResult.output
+        log("WhatsAppContactResolver: contacts import-system failed: \(importResult.output.prefix(300))")
+      }
     }
-    _ = await runWacli(["contacts", "refresh"], readOnly: false)
+    let refreshResult = await runWacli(["contacts", "refresh"], readOnly: false)
+    if refreshResult.exitCode != 0 {
+      lastRefreshError = [lastRefreshError, refreshResult.output].compactMap(\.self).joined(separator: "\n")
+      log("WhatsAppContactResolver: contacts refresh failed: \(refreshResult.output.prefix(300))")
+    }
 
     let chats = await runWacli(["chats", "list", "--limit", "200"], readOnly: true)
     if chats.exitCode == 0 {
       mergeContacts(from: chats.output)
     } else {
-      lastRefreshError = chats.output
+      lastRefreshError = [lastRefreshError, chats.output].compactMap(\.self).joined(separator: "\n")
     }
   }
 
   func resolveRecipient(_ input: String) async throws -> String {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { throw WhatsAppContactResolutionError.emptyInput }
-    if trimmed.contains("@") {
+    if trimmed.contains("@"), isWhatsAppJid(trimmed) {
       return normalizeJid(trimmed)
     }
     if let jid = jidFromPhone(trimmed) {
@@ -191,9 +199,9 @@ final class WhatsAppContactResolver: ObservableObject {
     guard let object = value as? [String: Any] else { return [] }
 
     var contacts = object.values.flatMap { collectContacts(from: $0) }
-    if let jid = stringValue(object, keys: ["jid", "JID", "chatJid", "ChatJID", "id", "ID", "chat", "raw"]) {
+    if let jid = jidValue(object, keys: ["jid", "JID", "chatJid", "ChatJID", "id", "ID", "chat", "raw"]) {
       let normalized = normalizeJid(jid)
-      if normalized.contains("@") {
+      if isWhatsAppJid(normalized) {
         contacts.append(WhatsAppContact(
           jid: normalized,
           contactName: stringValue(object, keys: ["contactName", "contact_name", "fullName", "full_name", "name", "Name"]),
@@ -206,6 +214,15 @@ final class WhatsAppContactResolver: ObservableObject {
   }
 
   private func stringValue(_ object: [String: Any], keys: [String]) -> String? {
+    for key in keys {
+      if let value = object[key] as? String, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        return value
+      }
+    }
+    return nil
+  }
+
+  private func jidValue(_ object: [String: Any], keys: [String]) -> String? {
     for key in keys {
       if let value = object[key] as? String, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
         return value
@@ -251,6 +268,14 @@ final class WhatsAppContactResolver: ObservableObject {
 
   private func normalizeJid(_ jid: String) -> String {
     jid.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  }
+
+  private func isWhatsAppJid(_ value: String) -> Bool {
+    let normalized = normalizeJid(value)
+    return normalized.hasSuffix("@s.whatsapp.net")
+      || normalized.hasSuffix("@g.us")
+      || normalized.hasSuffix("@lid")
+      || normalized.hasSuffix("@broadcast")
   }
 
   private func jidFromPhone(_ value: String) -> String? {

@@ -8,7 +8,8 @@
     "Added opt-in WhatsApp brain sync, automatic tone learning, contact names, and calendar-aware reply drafting",
     "Added a Messages page with a WhatsApp-style chat and draft inbox, opened from the new Messages tile on the dashboard; moved WhatsApp settings into the Messages page",
     "Fixed the Messages page to sort WhatsApp threads by recent activity, show cleaner contact names, keep drafts attached to the right chats, refresh live chats, and display sent messages immediately",
-    "Fixed WhatsApp reply drafts so reasoning text is hidden and never sent as part of the message"
+    "Fixed WhatsApp reply drafts so reasoning text is hidden and never sent as part of the message",
+    "Improved WhatsApp reliability by hardening local webhooks, message syncing, draft handling, and agent tool timeouts"
   ],
   "releases": [
     {

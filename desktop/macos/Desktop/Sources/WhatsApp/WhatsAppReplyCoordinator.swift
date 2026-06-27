@@ -206,10 +206,14 @@ final class WhatsAppReplyCoordinator: ObservableObject {
   @Published private(set) var pendingDrafts: [WhatsAppDraft] = []
   @Published private(set) var lastDraftFailure: String?
   private var processedMessageIDs = Set<String>()
+  private var processedMessageIDOrder: [String] = []
   private var queuedMessageIDs = Set<String>()
   private var processingChatJids = Set<String>()
   private var queuedMessagesByChatJid: [String: [WAIncomingMessage]] = [:]
   private var latestDrafts: [String: WhatsAppDraft] = [:]
+  private var latestDraftMessageIDOrder: [String] = []
+  private let maxProcessedMessageIDs = 1_000
+  private let maxLatestDrafts = 500
 
   private init() {}
 
@@ -261,7 +265,6 @@ final class WhatsAppReplyCoordinator: ObservableObject {
 
   private func process(_ message: WAIncomingMessage) async {
     guard shouldProcess(message) else { return }
-    processedMessageIDs.insert(message.id)
     WhatsAppContactResolver.shared.remember(
       jid: message.senderJid,
       contactName: message.senderName,
@@ -272,6 +275,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     if let preDraftDecision = WhatsAppReplySettings.shared.preDraftDecision(for: message) {
       if case .ignore(let reason) = preDraftDecision {
         appendAuditMessage(for: message, outcome: "ignored", reason: reason)
+        markProcessed(message.id)
         log("WhatsAppReplyCoordinator: ignored message \(message.id) before drafting, reason=\(reason)")
         return
       }
@@ -280,6 +284,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     do {
       let draft = try await draftReply(for: message)
       await routeDraft(draft, for: message)
+      markProcessed(message.id)
     } catch {
       let reason = error.localizedDescription
       let sender = WhatsAppContactResolver.shared.displayName(for: message.senderJid, fallback: message.senderName)
@@ -394,7 +399,11 @@ final class WhatsAppReplyCoordinator: ObservableObject {
 
   private func enqueueDraft(_ draft: WhatsAppDraft) {
     lastDraftFailure = nil
+    if latestDrafts[draft.messageID] == nil {
+      latestDraftMessageIDOrder.append(draft.messageID)
+    }
     latestDrafts[draft.messageID] = draft
+    pruneLatestDrafts()
     pendingDrafts.removeAll { $0.messageID == draft.messageID }
     pendingDrafts.insert(draft, at: 0)
     showDraftNotification(draft)
@@ -402,6 +411,26 @@ final class WhatsAppReplyCoordinator: ObservableObject {
 
   private func removePendingDraft(id: String) {
     pendingDrafts.removeAll { $0.id == id }
+  }
+
+  private func markProcessed(_ messageID: String) {
+    guard processedMessageIDs.insert(messageID).inserted else { return }
+    processedMessageIDOrder.append(messageID)
+    guard processedMessageIDOrder.count > maxProcessedMessageIDs else { return }
+    let overflow = processedMessageIDOrder.count - maxProcessedMessageIDs
+    for expired in processedMessageIDOrder.prefix(overflow) {
+      processedMessageIDs.remove(expired)
+    }
+    processedMessageIDOrder.removeFirst(overflow)
+  }
+
+  private func pruneLatestDrafts() {
+    guard latestDraftMessageIDOrder.count > maxLatestDrafts else { return }
+    let overflow = latestDraftMessageIDOrder.count - maxLatestDrafts
+    for expired in latestDraftMessageIDOrder.prefix(overflow) {
+      latestDrafts.removeValue(forKey: expired)
+    }
+    latestDraftMessageIDOrder.removeFirst(overflow)
   }
 
   private func showDraftNotification(_ draft: WhatsAppDraft) {

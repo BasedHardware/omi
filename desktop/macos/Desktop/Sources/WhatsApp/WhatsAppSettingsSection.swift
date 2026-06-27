@@ -44,6 +44,10 @@ struct WhatsAppSettingsSection: View {
       await WhatsAppService.shared.resumeIfAuthenticated()
       WhatsAppContactResolver.shared.scheduleRefresh()
     }
+    .onChange(of: replyCoordinator.pendingDrafts) { _, drafts in
+      let activeDraftIds = Set(drafts.map(\.id))
+      draftEdits = draftEdits.filter { activeDraftIds.contains($0.key) }
+    }
   }
 
   private var connectionCard: some View {
@@ -482,17 +486,24 @@ struct WhatsAppSettingsSection: View {
       .textFieldStyle(.roundedBorder)
       HStack {
         Button("Send") {
-          Task { _ = await replyCoordinator.approveDraft(id: draft.id, editedText: draftEdits[draft.id]) }
+          Task {
+            _ = await replyCoordinator.approveDraft(id: draft.id, editedText: draftEdits[draft.id])
+            draftEdits[draft.id] = nil
+          }
         }
         .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
 
         Button("Always Auto + Send") {
-          Task { _ = await replyCoordinator.alwaysAutoReplyAndApproveDraft(id: draft.id) }
+          Task {
+            _ = await replyCoordinator.alwaysAutoReplyAndApproveDraft(id: draft.id)
+            draftEdits[draft.id] = nil
+          }
         }
         .buttonStyle(OnboardingCardButtonStyle(isPrimary: false))
 
         Button("Dismiss") {
           replyCoordinator.dismissDraft(id: draft.id)
+          draftEdits[draft.id] = nil
         }
         .buttonStyle(.plain)
         .foregroundColor(OmiColors.warning)
