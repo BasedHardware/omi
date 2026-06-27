@@ -3095,5 +3095,7 @@
     "deviceOnboardingFinish": "Selesai",
     "deviceOnboardingIntroTitle": "Kenali Omi Anda",
     "deviceOnboardingIntroSubtitle": "Lawatan ringkas dan praktikal tentang semua yang Omi anda boleh lakukan.",
-    "deviceOnboardingIntroDuration": "Kira-kira 1 minit"
+    "deviceOnboardingIntroDuration": "Kira-kira 1 minit",
+    "jumpToLatestMessage": "Jump to latest message",
+    "latest": "Latest"
 }

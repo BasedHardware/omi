@@ -10673,5 +10673,7 @@
     "deviceOnboardingFinish": "Završi",
     "deviceOnboardingIntroTitle": "Upoznajte svoj Omi",
     "deviceOnboardingIntroSubtitle": "Brz i praktičan obilazak svega što vaš Omi može.",
-    "deviceOnboardingIntroDuration": "Otprilike 1 minuta"
+    "deviceOnboardingIntroDuration": "Otprilike 1 minuta",
+    "jumpToLatestMessage": "Jump to latest message",
+    "latest": "Latest"
 }

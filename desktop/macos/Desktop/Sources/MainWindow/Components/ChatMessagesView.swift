@@ -41,7 +41,7 @@ private struct UserScrollDetector: NSViewRepresentable {
             }
             let targetScrollView = scrollView
 
-            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged]) { [weak self] event in
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDragged]) { [weak self] event in
                 guard let self = self, let targetScrollView = targetScrollView else { return event }
                 // Only respond to events in our scroll view's window
                 guard event.window == targetScrollView.window else { return event }
@@ -49,12 +49,17 @@ private struct UserScrollDetector: NSViewRepresentable {
                 let locationInWindow = event.locationInWindow
                 let locationInScrollView = targetScrollView.convert(locationInWindow, from: nil)
                 guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
-                // Any physical wheel/trackpad scroll or mouse drag/click inside the transcript is reader intent.
                 if event.type == .scrollWheel {
-                    if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
+                    // deltaY > 0 means scrolling up (towards earlier content, away from
+                    // the live edge). Only that direction is reader intent to leave the
+                    // bottom; a downward nudge at the live edge is a no-op and must not
+                    // release following. Plain clicks (.leftMouseDown) are excluded
+                    // entirely so idle clicks don't kill following.
+                    if event.scrollingDeltaY > 0 {
                         self.onUserScroll()
                     }
                 } else {
+                    // Mouse drag inside the transcript is reader intent.
                     self.onUserScroll()
                 }
                 return event
@@ -161,6 +166,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         .onChange(of: messages.count) { oldCount, newCount in
             if newCount > oldCount || oldCount == 0 {
                 if scrollMode == .followingBottom || oldCount == 0 {
+                    // oldCount == 0 means the first real messages just arrived
+                    // (history load). A stray wheel/click may have flipped
+                    // scrollMode to .freeScrolling before this fired; force the
+                    // viewport back to the live edge so the initial load lands
+                    // at the latest message, not at the top.
+                    if oldCount == 0 && scrollMode != .followingBottom {
+                        scrollMode = .followingBottom
+                    }
                     scrollToBottom(proxy: proxy)
                     if oldCount == 0 {
                         scheduleInitialScroll(proxy: proxy, delay: 0.3)
@@ -326,11 +339,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         ZStack {
             ScrollPositionDetector { atBottom in
                 isUserAtBottom = atBottom
-                // atBottom == false alone must NOT switch to freeScrolling.
-                // Geometry/layout changes (content growth, markdown layout,
-                // LazyVStack realization, citations, window resize) can make
-                // the viewport not-at-bottom without user intent.
-                // Only atBottom == true updates isUserAtBottom tracking.
+                // Resume live following when the reader scrolls back to the
+                // live edge. atBottom == true is unambiguous intent to follow
+                // again; only atBottom == false is ambiguous (it can be a
+                // geometry/layout change, not user intent) and must NOT switch
+                // to .freeScrolling on its own.
+                if atBottom && scrollMode == .freeScrolling {
+                    cancelAllPendingScrolls()
+                    userIsScrolling = false
+                    scrollMode = .followingBottom
+                }
             }
             UserScrollDetector {
                 scrollMode = .freeScrolling

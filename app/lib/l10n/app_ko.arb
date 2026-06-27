@@ -3095,5 +3095,7 @@
     "deviceOnboardingFinish": "완료",
     "deviceOnboardingIntroTitle": "Omi 알아보기",
     "deviceOnboardingIntroSubtitle": "Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.",
-    "deviceOnboardingIntroDuration": "약 1분"
+    "deviceOnboardingIntroDuration": "약 1분",
+    "jumpToLatestMessage": "Jump to latest message",
+    "latest": "Latest"
 }

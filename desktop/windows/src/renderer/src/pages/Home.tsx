@@ -125,6 +125,18 @@ export function Home(): React.JSX.Element {
     setScrollMode('freeScrolling')
   }, [cancelPendingScroll, setScrollMode])
 
+  // Release following only when the reader actually scrolls AWAY from the live
+  // edge. A downward wheel at the bottom (no movement) must NOT release, and
+  // plain mouse clicks must NOT release (they are not scroll intent). This
+  // avoids breaking live-follow on no-op input. Used for onWheel/onTouchMove.
+  const releaseFollowingIfScrolledAway = useCallback((): void => {
+    const el = chatScrollRef.current
+    if (!el) return
+    // If we're still at/near the bottom, this wheel/touch is a no-op; don't release.
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) return
+    releaseFollowing()
+  }, [releaseFollowing])
+
   // Windowed history rendering: an infinite thread can hold thousands of
   // messages, so we only render the last `visibleCount` and reveal older ones a
   // page at a time as the user scrolls to the top. This keeps the DOM small
@@ -246,6 +258,12 @@ export function Home(): React.JSX.Element {
     const el = chatScrollRef.current
     if (!el) return
     setOverflowing(el.scrollHeight > el.clientHeight + 4)
+    // Resume live following when the reader scrolls back to the live edge.
+    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) {
+      if (scrollModeRef.current !== 'followingBottom') {
+        setScrollMode('followingBottom')
+      }
+    }
     if (el.scrollTop < 80 && visibleCount < chat.history.length) {
       restoreFromBottom.current = el.scrollHeight - el.scrollTop
       setVisibleCount((n) => Math.min(n + PAGE_SIZE, chat.history.length))
@@ -299,79 +317,83 @@ export function Home(): React.JSX.Element {
         </div>
       </div>
 
-      {/* Middle: the thread (active) or the greeting (idle). */}
-      <div
-        ref={chatScrollRef}
-        onScroll={onThreadScroll}
-        onWheel={releaseFollowing}
-        onTouchMove={releaseFollowing}
-        onMouseDown={releaseFollowing}
-        className="relative min-h-0 overflow-y-auto"
-        style={{ WebkitMaskImage: mask, maskImage: mask }}
-      >
-        <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
-          <div className="mt-auto space-y-2 pb-2">
-            {started && showThread ? (
-              windowed.map((m, i) => {
-                const isUser = m.role === 'user'
-                const isLast = i === windowed.length - 1
-                return (
-                  <div
-                    key={m.id ?? `${windowStart}-${i}`}
-                    className={cn('flex items-end gap-2.5', isUser && 'flex-row-reverse')}
-                  >
-                    {isUser ? (
-                      <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/10">
-                        <img
-                          src={photoURL ?? ''}
-                          alt=""
-                          className={cn(
-                            'h-full w-full object-cover',
-                            photoURL ? 'block' : 'hidden'
-                          )}
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            const el = e.currentTarget
-                            el.classList.add('hidden')
-                            el.nextElementSibling?.classList.remove('hidden')
-                          }}
-                        />
-                        <div
-                          className={cn(
-                            'flex h-full w-full items-center justify-center bg-white/10 text-[11px] font-semibold text-white',
-                            photoURL ? 'hidden' : ''
-                          )}
-                        >
-                          {initial}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
-                        <img src={omiMark} alt="Omi" className="h-4 w-4 object-contain" />
-                      </div>
-                    )}
+      {/* Middle: the thread (active) or the greeting (idle). The scroller is
+          wrapped in a relative container so the Latest overlay is a sibling of
+          the scroller — an absolute child of a scrolled element moves with the
+          scrollable content and can scroll out of the visible viewport. */}
+      <div className="relative min-h-0">
+        <div
+          ref={chatScrollRef}
+          onScroll={onThreadScroll}
+          onWheel={releaseFollowingIfScrolledAway}
+          onTouchMove={releaseFollowingIfScrolledAway}
+          className="h-full overflow-y-auto"
+          style={{ WebkitMaskImage: mask, maskImage: mask }}
+        >
+          <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
+            <div className="mt-auto space-y-2 pb-2">
+              {started && showThread ? (
+                windowed.map((m, i) => {
+                  const isUser = m.role === 'user'
+                  const isLast = i === windowed.length - 1
+                  return (
                     <div
-                      className={cn(
-                        'bubble-in w-fit max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-snug',
-                        isUser
-                          ? 'rounded-br-md bg-[color:var(--accent)] text-right text-white'
-                          : 'rounded-bl-md bg-white/[0.06] text-left text-white/80'
-                      )}
+                      key={m.id ?? `${windowStart}-${i}`}
+                      className={cn('flex items-end gap-2.5', isUser && 'flex-row-reverse')}
                     >
                       {isUser ? (
-                        <div className="whitespace-pre-wrap">{m.content}</div>
+                        <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/10">
+                          <img
+                            src={photoURL ?? ''}
+                            alt=""
+                            className={cn(
+                              'h-full w-full object-cover',
+                              photoURL ? 'block' : 'hidden'
+                            )}
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              const el = e.currentTarget
+                              el.classList.add('hidden')
+                              el.nextElementSibling?.classList.remove('hidden')
+                            }}
+                          />
+                          <div
+                            className={cn(
+                              'flex h-full w-full items-center justify-center bg-white/10 text-[11px] font-semibold text-white',
+                              photoURL ? 'hidden' : ''
+                            )}
+                          >
+                            {initial}
+                          </div>
+                        </div>
                       ) : (
-                        <Markdown text={m.content || (chat.sending && isLast ? '…' : '')} />
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white">
+                          <img src={omiMark} alt="Omi" className="h-4 w-4 object-contain" />
+                        </div>
                       )}
+                      <div
+                        className={cn(
+                          'bubble-in w-fit max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-snug',
+                          isUser
+                            ? 'rounded-br-md bg-[color:var(--accent)] text-right text-white'
+                            : 'rounded-bl-md bg-white/[0.06] text-left text-white/80'
+                        )}
+                      >
+                        {isUser ? (
+                          <div className="whitespace-pre-wrap">{m.content}</div>
+                        ) : (
+                          <Markdown text={m.content || (chat.sending && isLast ? '…' : '')} />
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )
-              })
-            ) : !started ? (
-              <h1 className="fade-in-slow pb-2 text-center font-display text-4xl font-semibold tracking-tight text-white">
-                Hi, {firstName(user)}
-              </h1>
-            ) : null}
+                  )
+                })
+              ) : !started ? (
+                <h1 className="fade-in-slow pb-2 text-center font-display text-4xl font-semibold tracking-tight text-white">
+                  Hi, {firstName(user)}
+                </h1>
+              ) : null}
+            </div>
           </div>
         </div>
         {scrollMode === 'freeScrolling' && started ? (

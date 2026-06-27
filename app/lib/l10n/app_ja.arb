@@ -3096,5 +3096,7 @@
     "deviceOnboardingFinish": "完了",
     "deviceOnboardingIntroTitle": "Omi を知ろう",
     "deviceOnboardingIntroSubtitle": "Omi にできることを、すべて手軽に体験できるクイックツアー。",
-    "deviceOnboardingIntroDuration": "約1分"
+    "deviceOnboardingIntroDuration": "約1分",
+    "jumpToLatestMessage": "Jump to latest message",
+    "latest": "Latest"
 }

@@ -3130,5 +3130,7 @@
     "deviceOnboardingFinish": "Bitir",
     "deviceOnboardingIntroTitle": "Omi'nizi Tanıyın",
     "deviceOnboardingIntroSubtitle": "Omi'nizin yapabileceği her şeyin hızlı ve uygulamalı bir turu.",
-    "deviceOnboardingIntroDuration": "Yaklaşık 1 dakika"
+    "deviceOnboardingIntroDuration": "Yaklaşık 1 dakika",
+    "jumpToLatestMessage": "Jump to latest message",
+    "latest": "Latest"
 }

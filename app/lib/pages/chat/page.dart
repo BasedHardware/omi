@@ -975,18 +975,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     final lastMessage = messages.isNotEmpty ? messages.last : null;
     final lastId = lastMessage?.id;
     final textLength = lastMessage?.text.length ?? 0;
-    final contentBlockCount = lastMessage?.contentBlocks.length ?? 0;
+    final thinkingCount = lastMessage?.thinkings.length ?? 0;
 
     final addedMessages = count > _lastObservedMessageCount;
     final lastMessageChanged = lastId != _lastObservedMessageId;
     final streamedTextChanged = lastId == _lastObservedMessageId && textLength != _lastObservedTextLength;
     final streamedBlocksChanged =
-        lastId == _lastObservedMessageId && contentBlockCount != _lastObservedContentBlockCount;
+        lastId == _lastObservedMessageId && thinkingCount != _lastObservedContentBlockCount;
 
     _lastObservedMessageCount = count;
     _lastObservedMessageId = lastId;
     _lastObservedTextLength = textLength;
-    _lastObservedContentBlockCount = contentBlockCount;
+    _lastObservedContentBlockCount = thinkingCount;
 
     if (count == 0) return;
 
@@ -1010,6 +1010,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     if (_isProgrammaticScroll && !isUserScroll && !isDragScroll) return false;
 
+    // Resume live following when the reader scrolls back to the live edge.
+    // maxScrollExtent - pixels <= threshold means we're at/near the bottom.
+    if (notification.metrics.maxScrollExtent - notification.metrics.pixels <= 24 &&
+        notification.metrics.maxScrollExtent > 0) {
+      if (_chatScrollMode == _ChatScrollMode.freeScrolling) {
+        _chatScrollMode = _ChatScrollMode.followingBottom;
+        _cancelPendingScrolls();
+        if (mounted) setState(() {});
+      }
+      return false;
+    }
+
     if (isUserScroll || isDragScroll) {
       _chatScrollMode = _ChatScrollMode.freeScrolling;
       _cancelPendingScrolls();
@@ -1026,10 +1038,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
       bottom: 16,
       child: Center(
         child: Semantics(
-          label: 'Jump to latest message',
+          label: context.l10n.jumpToLatestMessage,
           button: true,
           child: Tooltip(
-            message: 'Jump to latest message',
+            message: context.l10n.jumpToLatestMessage,
             child: Material(
               color: Colors.transparent,
               child: InkWell(
@@ -1045,14 +1057,14 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                       BoxShadow(color: Colors.black.withOpacity(0.28), blurRadius: 12, offset: const Offset(0, 4)),
                     ],
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 22),
-                      SizedBox(width: 6),
+                      const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 22),
+                      const SizedBox(width: 6),
                       Text(
-                        'Latest',
-                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                        context.l10n.latest,
+                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),

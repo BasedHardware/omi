@@ -3096,5 +3096,7 @@
     "deviceOnboardingFinish": "Finalizar",
     "deviceOnboardingIntroTitle": "Conoce tu Omi",
     "deviceOnboardingIntroSubtitle": "Un recorrido rápido y práctico por todo lo que tu Omi puede hacer.",
-    "deviceOnboardingIntroDuration": "Aproximadamente 1 minuto"
+    "deviceOnboardingIntroDuration": "Aproximadamente 1 minuto",
+    "jumpToLatestMessage": "Jump to latest message",
+    "latest": "Latest"
 }
