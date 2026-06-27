@@ -584,7 +584,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           title: 'Device Tutorial',
                           icon: const FaIcon(FontAwesomeIcons.graduationCap, color: Color(0xFF8E8E93), size: 20),
                           onTap: () {
-                            routeToPage(context, const InteractiveDeviceOnboardingWrapper());
+                            routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true));
                           },
                         ),
                       ],
