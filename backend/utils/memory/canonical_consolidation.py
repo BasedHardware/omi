@@ -18,7 +18,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
 
 from database._client import db as default_db_client
-from database.memory_apply_store import apply_long_term_patch_firestore
+from database.memory_apply_store import MissingMemoryDocument, apply_long_term_patch_firestore
 from database.memory_collections import MemoryCollections
 from database.review_queue import (
     create_review_conflict,
@@ -383,16 +383,29 @@ def _consolidation_apply_decision(decision: ConsolidationAgentDecision) -> str:
     return decision.decision
 
 
+class ConsolidationApplySkipped(Exception):
+    """Agent decision referenced a missing or inactive memory/evidence doc."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
 def _should_advance_consolidation_watermark(
     agent_batch: ConsolidationAgentBatch,
     *,
     decisions_applied: int,
 ) -> bool:
+    """Advance on any clean agent completion; fail-closed only on parse/invoke failures.
+
+    Clean runs include zero-action batches (``no_changes``) and passes that skipped
+    hallucinated references — advancing prevents hourly re-fire on the daily-elapsed path.
+    ``parse_failed:*`` means unusable agent output and must retry without advancing.
+    """
+    del decisions_applied  # retained for call-site clarity; semantics are batch-level
     if agent_batch.reasoning.startswith("parse_failed:"):
         return False
-    if decisions_applied > 0:
-        return True
-    return bool(agent_batch.decisions)
+    return True
 
 
 def _dedupe_evidence_ids(*ids: str) -> List[str]:
@@ -494,6 +507,8 @@ def _apply_superseded_item(
         patch_payload=patch_payload,
         db_client=db_client,
     )
+    if result.status == ApplyStatus.target_not_active:
+        raise ConsolidationApplySkipped(f"supersede target not active for {memory_id}: {result.reason}")
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(f"supersede apply failed for {memory_id}: {result.status} ({result.reason})")
 
@@ -616,6 +631,15 @@ def _load_survivor_item(
     return MemoryItem(**(snapshot.to_dict() or {}))
 
 
+def _validate_consolidation_survivor(survivor: Optional[MemoryItem], *, memory_id: str) -> None:
+    if survivor is None:
+        raise ConsolidationApplySkipped(f"missing survivor memory item: {memory_id}")
+    if survivor.status != MemoryItemStatus.active:
+        raise ConsolidationApplySkipped(f"survivor memory is not active: {memory_id}")
+    if survivor.processing_state != ProcessingState.processed:
+        raise ConsolidationApplySkipped(f"survivor memory is not processed: {memory_id}")
+
+
 def apply_consolidation_decision(
     uid: str,
     *,
@@ -644,6 +668,7 @@ def apply_consolidation_decision(
         pending_by_id=pending_by_id,
         db_client=db_client,
     )
+    _validate_consolidation_survivor(survivor, memory_id=decision.survivor_memory_id)
     evidence_ids = _dedupe_evidence_ids(
         *(decision.evidence_ids or []),
         *([ev.evidence_id for ev in survivor.evidence] if survivor else []),
@@ -704,6 +729,10 @@ def apply_consolidation_decision(
         patch_payload=patch_payload,
         db_client=db_client,
     )
+    if result.status == ApplyStatus.target_not_active:
+        raise ConsolidationApplySkipped(
+            f"survivor apply target not active for {decision.survivor_memory_id}: {result.reason}"
+        )
     if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
         raise RuntimeError(
             f"consolidation apply failed for {decision.survivor_memory_id}: {result.status} ({result.reason})"
@@ -734,6 +763,7 @@ class ConsolidationReport:
     trigger_reason: Optional[str] = None
     pending_count: int = 0
     decisions_applied: int = 0
+    decisions_skipped: int = 0
     superseded_memory_ids: List[str] = field(default_factory=list)
     review_escalations: int = 0
     last_consolidation_run_at: Optional[datetime] = None
@@ -797,21 +827,33 @@ def run_canonical_consolidation(
                 report.review_escalations += 1
             continue
         control = _read_control_state(uid, db_client=client)
-        applied_ids = apply_consolidation_decision(
-            uid,
-            decision=decision,
-            pending_by_id=pending_by_id,
-            control=control,
-            run_id=run_id,
-            now=current_time,
-            db_client=client,
-        )
+        try:
+            applied_ids = apply_consolidation_decision(
+                uid,
+                decision=decision,
+                pending_by_id=pending_by_id,
+                control=control,
+                run_id=run_id,
+                now=current_time,
+                db_client=client,
+            )
+        except (ConsolidationApplySkipped, MissingMemoryDocument) as exc:
+            report.decisions_skipped += 1
+            logger.warning(
+                "consolidation_decision_skipped uid=%s survivor=%s reason=%s",
+                uid,
+                sanitize_pii(decision.survivor_memory_id),
+                sanitize_pii(str(exc)),
+            )
+            continue
         if applied_ids:
             report.decisions_applied += 1
             for memory_id in applied_ids:
                 if memory_id in decision.supersedes:
                     report.superseded_memory_ids.append(memory_id)
 
+    # Skipped hallucinated refs still advance: agent output was usable; retrying the same
+    # batch would reproduce the same bad decision. Only parse_failed blocks advancement.
     if _should_advance_consolidation_watermark(agent_batch, decisions_applied=report.decisions_applied):
         updated_control = _read_control_state(uid, db_client=client).model_copy(
             update={"last_consolidation_run_at": current_time, "updated_at": current_time}
