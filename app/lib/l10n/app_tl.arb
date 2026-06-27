@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "Isang tap lang iyon — subukang mag-tap nang dalawang beses nang mabilis!",
     "deviceOnboardingTryDoubleTap": "Subukan mo ngayon! I-double tap ang iyong Omi",
     "deviceOnboardingContinue": "Magpatuloy",
-    "deviceOnboardingFinish": "Tapusin"
+    "deviceOnboardingFinish": "Tapusin",
+    "deviceOnboardingIntroTitle": "Kilalanin ang Iyong Omi",
+    "deviceOnboardingIntroSubtitle": "Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.",
+    "deviceOnboardingIntroDuration": "Mga 1 minuto"
 }

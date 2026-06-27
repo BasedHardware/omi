@@ -3092,5 +3092,8 @@
     "deviceOnboardingSingleTapHint": "今のはシングルタップです — 素早く2回タップしてみてください！",
     "deviceOnboardingTryDoubleTap": "今すぐ試そう！Omiをダブルタップしてください",
     "deviceOnboardingContinue": "続ける",
-    "deviceOnboardingFinish": "完了"
+    "deviceOnboardingFinish": "完了",
+    "deviceOnboardingIntroTitle": "Omi を知ろう",
+    "deviceOnboardingIntroSubtitle": "Omi にできることを、すべて手軽に体験できるクイックツアー。",
+    "deviceOnboardingIntroDuration": "約1分"
 }

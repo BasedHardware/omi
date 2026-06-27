@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "방금 한 번 탭했어요 — 빠르게 두 번 탭해보세요!",
     "deviceOnboardingTryDoubleTap": "지금 해보세요! Omi를 더블 탭하세요",
     "deviceOnboardingContinue": "계속",
-    "deviceOnboardingFinish": "완료"
+    "deviceOnboardingFinish": "완료",
+    "deviceOnboardingIntroTitle": "Omi 알아보기",
+    "deviceOnboardingIntroSubtitle": "Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.",
+    "deviceOnboardingIntroDuration": "약 1분"
 }

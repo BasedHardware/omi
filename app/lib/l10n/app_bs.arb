@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "To je bio jedan dodir — pokušaj brzo dodirnuti dvaput!",
     "deviceOnboardingTryDoubleTap": "Probaj odmah! Dvaput dodirni svoj Omi",
     "deviceOnboardingContinue": "Nastavi",
-    "deviceOnboardingFinish": "Završi"
+    "deviceOnboardingFinish": "Završi",
+    "deviceOnboardingIntroTitle": "Upoznajte svoj Omi",
+    "deviceOnboardingIntroSubtitle": "Brz, praktičan obilazak svega što vaš Omi može.",
+    "deviceOnboardingIntroDuration": "Oko 1 minute"
 }

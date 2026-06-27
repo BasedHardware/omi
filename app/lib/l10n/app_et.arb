@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "See oli üks koputus — proovi koputada kaks korda kiiresti!",
     "deviceOnboardingTryDoubleTap": "Proovi kohe! Koputa oma Omile kaks korda",
     "deviceOnboardingContinue": "Jätka",
-    "deviceOnboardingFinish": "Lõpeta"
+    "deviceOnboardingFinish": "Lõpeta",
+    "deviceOnboardingIntroTitle": "Tutvu oma Omiga",
+    "deviceOnboardingIntroSubtitle": "Kiire ja praktiline ülevaade kõigest, mida sinu Omi suudab.",
+    "deviceOnboardingIntroDuration": "Umbes 1 minut"
 }

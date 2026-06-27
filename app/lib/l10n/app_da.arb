@@ -3100,5 +3100,8 @@
     "deviceOnboardingSingleTapHint": "Det var ét enkelt tryk – prøv at trykke to gange hurtigt!",
     "deviceOnboardingTryDoubleTap": "Prøv det nu! Dobbelttryk på din Omi",
     "deviceOnboardingContinue": "Fortsæt",
-    "deviceOnboardingFinish": "Afslut"
+    "deviceOnboardingFinish": "Afslut",
+    "deviceOnboardingIntroTitle": "Lær din Omi at kende",
+    "deviceOnboardingIntroSubtitle": "En hurtig, praktisk rundvisning i alt, hvad din Omi kan.",
+    "deviceOnboardingIntroDuration": "Cirka 1 minut"
 }

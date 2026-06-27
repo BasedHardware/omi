@@ -3096,5 +3096,8 @@
     "deviceOnboardingSingleTapHint": "To bolo jedno ťuknutie – skúste ťuknúť dvakrát rýchlo za sebou!",
     "deviceOnboardingTryDoubleTap": "Skúste to hneď! Dvakrát ťuknite na svoje Omi",
     "deviceOnboardingContinue": "Pokračovať",
-    "deviceOnboardingFinish": "Dokončiť"
+    "deviceOnboardingFinish": "Dokončiť",
+    "deviceOnboardingIntroTitle": "Spoznajte svoj Omi",
+    "deviceOnboardingIntroSubtitle": "Rýchla praktická prehliadka všetkého, čo váš Omi dokáže.",
+    "deviceOnboardingIntroDuration": "Približne 1 minúta"
 }

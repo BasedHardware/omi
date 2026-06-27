@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "Це було одне натискання — спробуйте швидко натиснути двічі!",
     "deviceOnboardingTryDoubleTap": "Спробуйте зараз! Двічі натисніть на свій Omi",
     "deviceOnboardingContinue": "Продовжити",
-    "deviceOnboardingFinish": "Завершити"
+    "deviceOnboardingFinish": "Завершити",
+    "deviceOnboardingIntroTitle": "Знайомство з Omi",
+    "deviceOnboardingIntroSubtitle": "Швидкий практичний огляд усього, що вміє ваш Omi.",
+    "deviceOnboardingIntroDuration": "Близько 1 хвилини"
 }

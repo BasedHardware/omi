@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "A fost un singur tap — încearcă să atingi de două ori rapid!",
     "deviceOnboardingTryDoubleTap": "Încearcă acum! Atinge Omi de două ori",
     "deviceOnboardingContinue": "Continuă",
-    "deviceOnboardingFinish": "Termină"
+    "deviceOnboardingFinish": "Termină",
+    "deviceOnboardingIntroTitle": "Cunoaște-ți Omi-ul",
+    "deviceOnboardingIntroSubtitle": "Un tur rapid și practic prin tot ce poate face Omi-ul tău.",
+    "deviceOnboardingIntroDuration": "Aproximativ 1 minut"
 }

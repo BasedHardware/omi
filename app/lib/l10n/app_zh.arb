@@ -3113,5 +3113,8 @@
     "deviceOnboardingSingleTapHint": "那是单击——试着快速点击两次！",
     "deviceOnboardingTryDoubleTap": "现在就试试！双击你的 Omi",
     "deviceOnboardingContinue": "继续",
-    "deviceOnboardingFinish": "完成"
+    "deviceOnboardingFinish": "完成",
+    "deviceOnboardingIntroTitle": "了解你的 Omi",
+    "deviceOnboardingIntroSubtitle": "快速、上手地体验 Omi 的全部功能。",
+    "deviceOnboardingIntroDuration": "大约 1 分钟"
 }

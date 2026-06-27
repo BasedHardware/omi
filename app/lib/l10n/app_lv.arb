@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "Tas bija viens pieskāriens — pamēģini ātri pieskarties divreiz!",
     "deviceOnboardingTryDoubleTap": "Pamēģini tagad! Dubultpieskaries savai Omi",
     "deviceOnboardingContinue": "Turpināt",
-    "deviceOnboardingFinish": "Pabeigt"
+    "deviceOnboardingFinish": "Pabeigt",
+    "deviceOnboardingIntroTitle": "Iepazīsti savu Omi",
+    "deviceOnboardingIntroSubtitle": "Ātrs, praktisks ieskats visā, ko spēj tavs Omi.",
+    "deviceOnboardingIntroDuration": "Apmēram 1 minūte"
 }

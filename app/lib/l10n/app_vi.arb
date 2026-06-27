@@ -3096,5 +3096,8 @@
     "deviceOnboardingSingleTapHint": "Đó là nhấn một lần — hãy thử nhấn hai lần thật nhanh!",
     "deviceOnboardingTryDoubleTap": "Thử ngay! Nhấn đúp lên Omi của bạn",
     "deviceOnboardingContinue": "Tiếp tục",
-    "deviceOnboardingFinish": "Hoàn tất"
+    "deviceOnboardingFinish": "Hoàn tất",
+    "deviceOnboardingIntroTitle": "Tìm hiểu về Omi của bạn",
+    "deviceOnboardingIntroSubtitle": "Một chuyến tham quan nhanh, thực tế về mọi điều Omi của bạn có thể làm.",
+    "deviceOnboardingIntroDuration": "Khoảng 1 phút"
 }

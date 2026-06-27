@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "یہ سنگل ٹیپ تھا — جلدی سے دو بار ٹیپ کرنے کی کوشش کریں!",
     "deviceOnboardingTryDoubleTap": "ابھی آزمائیں! اپنے Omi کو ڈبل ٹیپ کریں",
     "deviceOnboardingContinue": "جاری رکھیں",
-    "deviceOnboardingFinish": "مکمل کریں"
+    "deviceOnboardingFinish": "مکمل کریں",
+    "deviceOnboardingIntroTitle": "اپنے Omi کو جانیں",
+    "deviceOnboardingIntroSubtitle": "آپ کا Omi جو کچھ کر سکتا ہے اس کا ایک تیز اور عملی جائزہ۔",
+    "deviceOnboardingIntroDuration": "تقریباً 1 منٹ"
 }

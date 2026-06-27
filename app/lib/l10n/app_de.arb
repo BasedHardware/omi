@@ -3059,5 +3059,8 @@
     "deviceOnboardingSingleTapHint": "Das war ein einzelnes Tippen – versuche, zweimal schnell zu tippen!",
     "deviceOnboardingTryDoubleTap": "Probier es jetzt aus! Tippe zweimal auf dein Omi",
     "deviceOnboardingContinue": "Weiter",
-    "deviceOnboardingFinish": "Fertig"
+    "deviceOnboardingFinish": "Fertig",
+    "deviceOnboardingIntroTitle": "Lerne deinen Omi kennen",
+    "deviceOnboardingIntroSubtitle": "Ein kurzer, praktischer Rundgang durch alles, was dein Omi kann.",
+    "deviceOnboardingIntroDuration": "Etwa 1 Minute"
 }

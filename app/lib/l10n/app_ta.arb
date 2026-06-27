@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "அது ஒற்றைத் தட்டல் — விரைவாக இருமுறை தட்டிப் பாருங்கள்!",
     "deviceOnboardingTryDoubleTap": "இப்போதே முயற்சியுங்கள்! உங்கள் Omi-யை இரட்டை தட்டுங்கள்",
     "deviceOnboardingContinue": "தொடரவும்",
-    "deviceOnboardingFinish": "முடிக்கவும்"
+    "deviceOnboardingFinish": "முடிக்கவும்",
+    "deviceOnboardingIntroTitle": "உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்",
+    "deviceOnboardingIntroSubtitle": "உங்கள் Omi செய்யக்கூடிய அனைத்தையும் விரைவாக நேரடியாகப் பார்க்கும் சுற்றுலா.",
+    "deviceOnboardingIntroDuration": "சுமார் 1 நிமிடம்"
 }

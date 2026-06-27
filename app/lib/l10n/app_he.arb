@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "זו הייתה הקשה אחת — נסו להקיש פעמיים במהירות!",
     "deviceOnboardingTryDoubleTap": "נסו עכשיו! הקישו פעמיים על ה-Omi שלכם",
     "deviceOnboardingContinue": "המשך",
-    "deviceOnboardingFinish": "סיום"
+    "deviceOnboardingFinish": "סיום",
+    "deviceOnboardingIntroTitle": "הכירו את ה-Omi שלכם",
+    "deviceOnboardingIntroSubtitle": "סיור מהיר ומעשי בכל מה שה-Omi שלכם יכול לעשות.",
+    "deviceOnboardingIntroDuration": "כדקה אחת"
 }

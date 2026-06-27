@@ -3058,5 +3058,8 @@
     "deviceOnboardingSingleTapHint": "كانت تلك نقرة واحدة — جرّب النقر مرتين بسرعة!",
     "deviceOnboardingTryDoubleTap": "جرّبه الآن! انقر على Omi نقراً مزدوجاً",
     "deviceOnboardingContinue": "متابعة",
-    "deviceOnboardingFinish": "إنهاء"
+    "deviceOnboardingFinish": "إنهاء",
+    "deviceOnboardingIntroTitle": "تعرّف على Omi",
+    "deviceOnboardingIntroSubtitle": "جولة سريعة وعملية على كل ما يمكن أن يفعله جهاز Omi.",
+    "deviceOnboardingIntroDuration": "حوالي دقيقة واحدة"
 }

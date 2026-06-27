@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "นั่นคือการแตะครั้งเดียว — ลองแตะสองครั้งเร็วๆ ดูสิ!",
     "deviceOnboardingTryDoubleTap": "ลองเลย! แตะ Omi ของคุณสองครั้ง",
     "deviceOnboardingContinue": "ดำเนินการต่อ",
-    "deviceOnboardingFinish": "เสร็จสิ้น"
+    "deviceOnboardingFinish": "เสร็จสิ้น",
+    "deviceOnboardingIntroTitle": "ทำความรู้จักกับ Omi ของคุณ",
+    "deviceOnboardingIntroSubtitle": "ทัวร์สั้น ๆ แบบลงมือทำจริงเกี่ยวกับทุกสิ่งที่ Omi ของคุณทำได้",
+    "deviceOnboardingIntroDuration": "ประมาณ 1 นาที"
 }

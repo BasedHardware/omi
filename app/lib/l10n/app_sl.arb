@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "To je bil enojni tap – poskusite hitro tapniti dvakrat!",
     "deviceOnboardingTryDoubleTap": "Poskusite zdaj! Dvakrat tapnite Omi",
     "deviceOnboardingContinue": "Naprej",
-    "deviceOnboardingFinish": "Končaj"
+    "deviceOnboardingFinish": "Končaj",
+    "deviceOnboardingIntroTitle": "Spoznajte svoj Omi",
+    "deviceOnboardingIntroSubtitle": "Hiter, praktičen ogled vsega, kar zmore vaš Omi.",
+    "deviceOnboardingIntroDuration": "Približno 1 minuta"
 }

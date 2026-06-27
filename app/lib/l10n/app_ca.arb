@@ -3060,5 +3060,8 @@
     "deviceOnboardingSingleTapHint": "Això ha estat un sol toc: prova de tocar dues vegades ràpidament!",
     "deviceOnboardingTryDoubleTap": "Prova-ho ara! Fes un doble toc a l'Omi",
     "deviceOnboardingContinue": "Continua",
-    "deviceOnboardingFinish": "Finalitza"
+    "deviceOnboardingFinish": "Finalitza",
+    "deviceOnboardingIntroTitle": "Coneix el teu Omi",
+    "deviceOnboardingIntroSubtitle": "Un recorregut ràpid i pràctic per tot el que pot fer el teu Omi.",
+    "deviceOnboardingIntroDuration": "Aproximadament 1 minut"
 }

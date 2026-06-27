@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "ಅದು ಒಂದೇ ಟ್ಯಾಪ್ ಆಗಿತ್ತು — ವೇಗವಾಗಿ ಎರಡು ಬಾರಿ ಟ್ಯಾಪ್ ಮಾಡಿ ನೋಡಿ!",
     "deviceOnboardingTryDoubleTap": "ಈಗಲೇ ಪ್ರಯತ್ನಿಸಿ! ನಿಮ್ಮ Omi ಅನ್ನು ಡಬಲ್ ಟ್ಯಾಪ್ ಮಾಡಿ",
     "deviceOnboardingContinue": "ಮುಂದುವರಿಸಿ",
-    "deviceOnboardingFinish": "ಮುಗಿಸಿ"
+    "deviceOnboardingFinish": "ಮುಗಿಸಿ",
+    "deviceOnboardingIntroTitle": "ನಿಮ್ಮ Omi ಅನ್ನು ತಿಳಿಯಿರಿ",
+    "deviceOnboardingIntroSubtitle": "ನಿಮ್ಮ Omi ಮಾಡಬಲ್ಲ ಎಲ್ಲದರ ತ್ವರಿತ, ಪ್ರಾಯೋಗಿಕ ಪರಿಚಯ.",
+    "deviceOnboardingIntroDuration": "ಸುಮಾರು 1 ನಿಮಿಷ"
 }

@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "तो एकच टॅप होता — पटकन दोनदा टॅप करून पाहा!",
     "deviceOnboardingTryDoubleTap": "आता करून पाहा! तुमच्या Omi वर डबल टॅप करा",
     "deviceOnboardingContinue": "पुढे जा",
-    "deviceOnboardingFinish": "पूर्ण करा"
+    "deviceOnboardingFinish": "पूर्ण करा",
+    "deviceOnboardingIntroTitle": "तुमच्या Omi ला जाणून घ्या",
+    "deviceOnboardingIntroSubtitle": "तुमचा Omi जे काही करू शकतो त्याची झटपट, प्रत्यक्ष ओळख.",
+    "deviceOnboardingIntroDuration": "सुमारे 1 मिनिट"
 }

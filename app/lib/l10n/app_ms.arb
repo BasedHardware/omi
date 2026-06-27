@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "Itu satu ketukan sahaja — cuba ketuk dua kali dengan pantas!",
     "deviceOnboardingTryDoubleTap": "Cuba sekarang! Ketuk Omi anda dua kali",
     "deviceOnboardingContinue": "Teruskan",
-    "deviceOnboardingFinish": "Selesai"
+    "deviceOnboardingFinish": "Selesai",
+    "deviceOnboardingIntroTitle": "Kenali Omi Anda",
+    "deviceOnboardingIntroSubtitle": "Lawatan ringkas dan praktikal tentang semua yang Omi anda boleh lakukan.",
+    "deviceOnboardingIntroDuration": "Kira-kira 1 minit"
 }

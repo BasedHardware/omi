@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "এটি একবার ট্যাপ ছিল — দ্রুত দুবার ট্যাপ করে দেখুন!",
     "deviceOnboardingTryDoubleTap": "এখনই করে দেখুন! আপনার Omi-তে ডাবল ট্যাপ করুন",
     "deviceOnboardingContinue": "চালিয়ে যান",
-    "deviceOnboardingFinish": "সম্পন্ন করুন"
+    "deviceOnboardingFinish": "সম্পন্ন করুন",
+    "deviceOnboardingIntroTitle": "আপনার Omi-কে জানুন",
+    "deviceOnboardingIntroSubtitle": "আপনার Omi যা যা করতে পারে তার একটি দ্রুত, হাতে-কলমে ভ্রমণ।",
+    "deviceOnboardingIntroDuration": "প্রায় ১ মিনিট"
 }

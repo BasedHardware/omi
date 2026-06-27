@@ -3126,5 +3126,8 @@
     "deviceOnboardingSingleTapHint": "C'était un seul appui — essayez d'appuyer deux fois rapidement !",
     "deviceOnboardingTryDoubleTap": "Essayez maintenant ! Faites un double appui sur votre Omi",
     "deviceOnboardingContinue": "Continuer",
-    "deviceOnboardingFinish": "Terminer"
+    "deviceOnboardingFinish": "Terminer",
+    "deviceOnboardingIntroTitle": "Faites connaissance avec votre Omi",
+    "deviceOnboardingIntroSubtitle": "Un tour rapide et pratique de tout ce que votre Omi peut faire.",
+    "deviceOnboardingIntroDuration": "Environ 1 minute"
 }

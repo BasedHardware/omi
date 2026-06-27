@@ -3126,5 +3126,8 @@
     "deviceOnboardingSingleTapHint": "Bu tek dokunuştu — hızlıca iki kez dokunmayı deneyin!",
     "deviceOnboardingTryDoubleTap": "Şimdi deneyin! Omi'nize çift dokunun",
     "deviceOnboardingContinue": "Devam Et",
-    "deviceOnboardingFinish": "Bitir"
+    "deviceOnboardingFinish": "Bitir",
+    "deviceOnboardingIntroTitle": "Omi'nizi Tanıyın",
+    "deviceOnboardingIntroSubtitle": "Omi'nizin yapabileceği her şeyin hızlı ve uygulamalı bir turu.",
+    "deviceOnboardingIntroDuration": "Yaklaşık 1 dakika"
 }

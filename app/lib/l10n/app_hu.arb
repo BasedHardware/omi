@@ -3187,5 +3187,8 @@
     "deviceOnboardingSingleTapHint": "Ez egyszeri koppintás volt – próbálj meg gyorsan kétszer koppintani!",
     "deviceOnboardingTryDoubleTap": "Próbáld ki most! Koppints duplán az Omira",
     "deviceOnboardingContinue": "Folytatás",
-    "deviceOnboardingFinish": "Befejezés"
+    "deviceOnboardingFinish": "Befejezés",
+    "deviceOnboardingIntroTitle": "Ismerd meg az Omidat",
+    "deviceOnboardingIntroSubtitle": "Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.",
+    "deviceOnboardingIntroDuration": "Körülbelül 1 perc"
 }

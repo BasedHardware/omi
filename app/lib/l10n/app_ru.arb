@@ -3126,5 +3126,8 @@
     "deviceOnboardingSingleTapHint": "Это было одиночное касание — попробуйте коснуться дважды подряд!",
     "deviceOnboardingTryDoubleTap": "Попробуйте! Дважды коснитесь Omi",
     "deviceOnboardingContinue": "Продолжить",
-    "deviceOnboardingFinish": "Готово"
+    "deviceOnboardingFinish": "Готово",
+    "deviceOnboardingIntroTitle": "Знакомство с Omi",
+    "deviceOnboardingIntroSubtitle": "Быстрый практический обзор всего, что умеет ваш Omi.",
+    "deviceOnboardingIntroDuration": "Около 1 минуты"
 }
