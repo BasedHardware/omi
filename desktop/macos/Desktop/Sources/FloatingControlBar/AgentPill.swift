@@ -339,14 +339,22 @@ final class AgentPillsManager: ObservableObject {
         if questionStarters.contains(where: { trimmedLower.hasPrefix($0) }) {
             return nil
         }
-        // Negation guard: explicit opt-outs like "don't run an agent",
-        // "without spawning a subagent", "no agent, just answer here", or
-        // "do not create a pill" should answer inline, not spawn a pill.
-        // Only check after question-starter exclusion so queries like "can I
-        // run agents without a pill?" (which start with a modal question word)
-        // already returned nil. (Codex P2 — honor explicit no-agent requests.)
-        let negationPattern = #"\b(?:don'?t|do not|without|no|not)\b"#
-        if lower.range(of: negationPattern, options: .regularExpression) != nil {
+        // Negation guard (scoped): only treat as an explicit opt-out when the
+        // negation word directly governs an agent noun or spawn action — e.g.
+        // "don't run an agent", "no agent, just answer here", "without spawning
+        // a subagent". This avoids false suppression when "no"/"not"/"without"
+        // appear for unrelated reasons (e.g. "spawn an agent to run without
+        // errors"). (Cubic P1; supersedes the earlier unscoped Codex P2 guard.)
+        let negationOptOuts = [
+            // "don't spawn …", "do not create a pill", "don't run agents"
+            #"\b(?:don'?t|do not)\s+(?:spawn|start|launch|kick\s+off|create|make|run)\b"#,
+            // "no agent", "not an agent", "no pills", "not a subagent"
+            #"\b(?:no|not)\s+(?:an?\s+)?(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#,
+            // "without spawning an agent", "without a pill",
+            // "without creating subagents"
+            #"\bwithout\s+(?:(?:spawning|creating|making|starting|launching|running)\s+(?:an?\s+)?|an?\s+)?(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#,
+        ]
+        if negationOptOuts.contains(where: { lower.range(of: $0, options: .regularExpression) != nil }) {
             return nil
         }
         let agentPattern = #"\b(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#

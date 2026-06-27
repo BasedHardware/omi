@@ -79,6 +79,43 @@ final class FloatingBarHeuristicsTests: XCTestCase {
         }
     }
 
+    // MARK: - scoped negation guard (Cubic P1)
+
+    func testNegationGuardDoesNotSuppressLegitimateSpawnRequests() {
+        // These contain "no"/"not"/"without" for unrelated reasons but are
+        // legitimate spawn requests — must NOT be suppressed by the negation guard.
+        let legitimateSpawns = [
+            "spawn an agent to run without errors",
+            "start a background agent that never logs secrets",
+            "launch a subagent to fix the not-found bug",
+            "create a pill to clean up notes with no duplicates",
+            "run an agent to remove items that are not pinned",
+        ]
+        for q in legitimateSpawns {
+            XCTAssertTrue(
+                AgentPillsManager.explicitlyRequestsFloatingAgent(q),
+                "Expected floating-agent request, but negation guard wrongly suppressed: \"\(q)\"")
+        }
+    }
+
+    func testNegationGuardSuppressesExplicitOptOuts() {
+        // These are explicit opt-outs that should answer inline, not spawn a pill.
+        let optOuts = [
+            "don't spawn an agent",
+            "do not create a pill",
+            "no agent, just answer here",
+            "not an agent, just tell me",
+            "without spawning a subagent",
+            "without a pill",
+            "don't run any agents",
+        ]
+        for q in optOuts {
+            XCTAssertFalse(
+                AgentPillsManager.explicitlyRequestsFloatingAgent(q),
+                "Expected inline answer, but negation guard did NOT suppress explicit opt-out: \"\(q)\"")
+        }
+    }
+
     // MARK: - queryNeedsScreenshot (#2: only capture when screen-related)
 
     func testScreenshotCapturedForVisualQueries() {

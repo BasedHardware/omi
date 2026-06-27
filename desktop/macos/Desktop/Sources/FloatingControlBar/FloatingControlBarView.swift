@@ -317,8 +317,13 @@ struct FloatingControlBarView: View {
         .onTapGesture {
             onAskAI()
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel("Ask Omi")
         .accessibilityHint("Open the conversation")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
+            onAskAI()
+        }
     }
 
     private var notchChromeHeight: CGFloat {
