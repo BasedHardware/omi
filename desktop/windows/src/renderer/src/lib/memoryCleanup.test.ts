@@ -35,6 +35,11 @@ describe('isAppIndexMemory', () => {
     expect(isAppIndexMemory(mem('1', 'Uses Excel daily for budgeting and taxes.'))).toBe(false)
     expect(isAppIndexMemory(mem('2', 'Used to work at Google before joining Omi'))).toBe(false)
   })
+  it('does NOT delete a short "Uses X for/with Y" memory, but still matches a bare app name', () => {
+    expect(isAppIndexMemory(mem('1', 'Uses Figma for design work'))).toBe(false)
+    expect(isAppIndexMemory(mem('2', 'Uses Notion for tasks'))).toBe(false)
+    expect(isAppIndexMemory(mem('3', 'Uses Slack'))).toBe(true)
+  })
   it('matches file/project-index synthesis sentences (stem + a path)', () => {
     expect(
       isAppIndexMemory(
