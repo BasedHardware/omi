@@ -56,12 +56,16 @@ route_artifacts:
         - invalid_config
 
   - route_artifact_id: route.chat_structured.2026_06_20.001
-    artifact_digest: sha256:95f52d92ff3f104784ad84573ce278ce282a46f32c8abc31a5a051fcb89c6cbe
+    artifact_digest: sha256:8fc0aab6f81dacfcaf227010f57d8d67303caf8b5836d6ee078aee5e6c6e01e5
     lane_id: omi:auto:chat-structured
     surface: openai.chat_completions
+    # LKG primary must match the legacy `chat_extraction` model (gpt-4.1-mini) so
+    # that while the pilot's active route is shadow-only, serving this route is a
+    # no-user-visible behavior match instead of silently swapping gpt-4.1-mini
+    # for gpt-4o-mini and changing classifier behavior for 100% of pilot calls.
     primary:
       provider: openai
-      model: gpt-4o-mini
+      model: gpt-4.1-mini
     fallbacks: []
     timeouts:
       request_ms: 9000

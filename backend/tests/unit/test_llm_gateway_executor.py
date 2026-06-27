@@ -160,11 +160,11 @@ async def test_executor_uses_lkg_only_when_active_route_policy_allows():
 
     assert result.response['model'] == LANE_ID
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-4o-mini'
+    assert result.selected_model == 'gpt-4.1-mini'
     assert result.fallback_used
     assert result.fallback_reason == FailureClass.TIMEOUT_BEFORE_OUTPUT
     assert result.used_lkg
-    assert [call.model for call in provider.calls] == ['gpt-4.1-mini', 'gpt-4o-mini']
+    assert [call.model for call in provider.calls] == ['gpt-4.1-mini', 'gpt-4.1-mini']
 
 
 @pytest.mark.asyncio
@@ -288,8 +288,9 @@ async def test_shadow_active_route_serves_lkg_not_active():
     config = config_with_active_route(shadow_route)
     resolved = resolve_chat_completion_route(config, valid_request())
 
-    # Provider should be called with the LKG model (gpt-4o-mini), not the
-    # active route's primary (gpt-4.1-mini).
+    # Provider should be called with the LKG model (gpt-4.1-mini, which now
+    # matches the legacy chat_extraction model). The LKG is aligned with the
+    # legacy route by design so the shadow pilot is a no-user-visible match.
     provider = FakeChatCompletionProvider(
         [fake_success_response(resolved.last_known_good_route.primary, content='{"answer":"lkg"}')]
     )
@@ -301,9 +302,9 @@ async def test_shadow_active_route_serves_lkg_not_active():
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-4o-mini'
+    assert result.selected_model == 'gpt-4.1-mini'
     assert result.used_lkg
-    assert provider.calls[0].request['model'] == 'gpt-4o-mini'
+    assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
 
 
 @pytest.mark.asyncio
@@ -327,7 +328,7 @@ async def test_disabled_active_route_serves_lkg_not_active():
     )
 
     assert result.selected_route_artifact_id == LKG_ROUTE
-    assert result.selected_model == 'gpt-4o-mini'
+    assert result.selected_model == 'gpt-4.1-mini'
     assert result.used_lkg
 
 
