@@ -71,7 +71,6 @@ import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'widgets/battery_info_widget.dart';
 import 'widgets/capture_mode_chip.dart';
 
@@ -489,7 +488,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       return;
     }
 
-    if (!mounted) return;
+    if (!mounted || _deviceOnboardingShown) return;
     _deviceOnboardingShown = true;
     routeToPage(context, const InteractiveDeviceOnboardingWrapper());
   }
