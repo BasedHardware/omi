@@ -557,10 +557,11 @@ class MemoriesViewModel: ObservableObject {
   /// Recompute filtered memories when search/tags/layer change
   private func recomputeFilteredMemories() {
     // Must match the isInFilteredMode property so pagination routing is
-    // consistent. Layer-only views are excluded from "filtered mode" because
-    // they paginate via loadMore() (SQLite/API batches), not loadMoreFiltered()
-    // (in-memory expansion of a single-page allFilteredResults array).
-    let isInFilteredMode = !searchText.isEmpty || !selectedTags.isEmpty || filterThisDeviceOnly
+    // consistent. Layer-only views and device-scoped views are excluded from
+    // "filtered mode" because they paginate via loadMore()
+    // (SQLite/API batches), not loadMoreFiltered() (in-memory expansion of a
+    // single-page allFilteredResults array).
+    let isInFilteredMode = !searchText.isEmpty || !selectedTags.isEmpty
 
     // Determine source based on current state
     var result: [ServerMemory]
@@ -863,14 +864,15 @@ class MemoriesViewModel: ObservableObject {
 
   /// Whether we're currently in a filtered/search mode.
   ///
-  /// Layer-only views (Short-term/Long-term/Archive) are intentionally NOT
-  /// included here: they load paginated batches from SQLite via the same
-  /// loadMore() path as the default view, just with a tier filter applied.
-  /// Treating them as "filtered" would route pagination through
-  /// loadMoreFiltered(), which only expands the in-memory allFilteredResults
-  /// array (capped at one page), preventing further SQLite/API pagination.
+  /// Layer-only views (Short-term/Long-term/Archive) and device-scoped views
+  /// are intentionally NOT included here: they load paginated batches from
+  /// SQLite via the same loadMore() path as the default view, just with a
+  /// tier/device filter applied. Treating them as "filtered" would route
+  /// pagination through loadMoreFiltered(), which only expands the in-memory
+  /// allFilteredResults array (capped at one page), preventing further
+  /// SQLite/API pagination.
   var isInFilteredMode: Bool {
-    !searchText.isEmpty || !selectedTags.isEmpty || filterThisDeviceOnly
+    !searchText.isEmpty || !selectedTags.isEmpty
   }
 
   /// Load more memories (pagination) - triggered by scrolling near end
@@ -902,6 +904,9 @@ class MemoriesViewModel: ObservableObject {
     guard hasMoreMemories, !isLoading, !isLoadingMore else { return }
 
     isLoadingMore = true
+    // Clear the flag on every exit path, including stale-scope guard returns,
+    // so pagination is not permanently blocked by `guard !isLoadingMore`.
+    defer { isLoadingMore = false }
     let token = currentScopeToken
     let requestedOffset = currentOffset
 
@@ -921,7 +926,6 @@ class MemoriesViewModel: ObservableObject {
         log(
           "MemoriesViewModel: Loaded \(moreFromCache.count) more from local cache (total: \(memories.count))"
         )
-        isLoadingMore = false
         return
       }
     } catch {
@@ -929,9 +933,14 @@ class MemoriesViewModel: ObservableObject {
     }
 
     // Step 2: If local cache is exhausted, fetch from API
+    // Pass deviceScope so the server filters for device-scoped views, keeping
+    // pagination server-side rather than limited to the first in-memory page.
     do {
       let newMemories = try await APIClient.shared.getMemories(
-        limit: pageSize, offset: requestedOffset)
+        limit: pageSize,
+        offset: requestedOffset,
+        deviceScope: filterThisDeviceOnly ? "current" : nil
+      )
       guard isCurrentScope(token), currentOffset == requestedOffset else { return }
 
       // Sync to local cache first
@@ -948,8 +957,6 @@ class MemoriesViewModel: ObservableObject {
     } catch {
       logError("Failed to load more memories", error: error)
     }
-
-    isLoadingMore = false
   }
 
   func createMemory() async {

@@ -370,10 +370,16 @@ def get_memories(
     if is_canonical:
         _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
         _set_device_scope_capability_header(response, supported=True)
+        # Clamp pagination parameters so the canonical branch (which bypasses
+        # _legacy_get_memories clamping) never receives values that would
+        # slice the visible list incorrectly — e.g. limit=-1 returning nearly
+        # the entire list or negative offsets producing inconsistent pages.
+        clamped_offset = max(0, offset)
+        clamped_limit = max(1, min(limit, 5000))
         return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(
             uid,
-            limit=limit,
-            offset=offset,
+            limit=clamped_limit,
+            offset=clamped_offset,
             device_scope_request=scope_request,
         )
 
