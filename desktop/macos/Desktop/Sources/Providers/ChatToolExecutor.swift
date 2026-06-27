@@ -1739,6 +1739,17 @@ class ChatToolExecutor {
     ])
   }
 
+  static func sendWhatsAppMessage(to recipient: String, text message: String, clientMessageID: String? = nil) async -> String {
+    var arguments: [String: Any] = [
+      "to": recipient,
+      "message": message,
+    ]
+    if let clientMessageID, !clientMessageID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      arguments["client_message_id"] = clientMessageID
+    }
+    return await executeWaSendMessage(arguments)
+  }
+
   private static func waToolResult(_ arguments: [String], readOnly: Bool) async -> String {
     let result = await runWacli(arguments, readOnly: readOnly)
     guard result.exitCode == 0 else {
