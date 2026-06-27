@@ -768,6 +768,84 @@ class TestMemoryToolFiltering:
         # All memories locked, so result should indicate nothing found
         assert 'no' in result.lower() or 'mem-1' not in result
 
+    def test_get_memories_tool_routes_canonical_user_to_memory_service(self):
+        """Canonical cohort must read via MemoryService, not legacy get_memories."""
+        from datetime import datetime, timezone
+
+        from models.memories import MemoryDB, MemoryCategory
+        from utils.memory.memory_system import MemorySystem
+        from utils.retrieval.tools import memory_tools
+
+        canonical_memory = MemoryDB(
+            id='mem-canonical',
+            uid='uid-canonical',
+            content='CANONICAL_FACT',
+            category=MemoryCategory.interesting,
+            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+        service = MagicMock()
+        service.read.return_value = [canonical_memory]
+        config = {'configurable': {'user_id': 'uid-canonical'}}
+
+        with patch.object(memory_tools, 'pin_memory_system', return_value=MemorySystem.CANONICAL):
+            with patch.object(memory_tools, 'MemoryService', return_value=service):
+                with patch.object(memory_tools.memory_db, 'get_memories') as legacy_get:
+                    result = memory_tools.get_memories_tool.invoke({'limit': 10, 'offset': 0}, config=config)
+
+        service.read.assert_called_once_with('uid-canonical', limit=10, offset=0)
+        legacy_get.assert_not_called()
+        assert 'CANONICAL_FACT' in result
+
+    def test_get_memories_tool_routes_legacy_user_to_legacy_db(self):
+        """Non-canonical cohort must keep legacy get_memories path."""
+        from utils.memory.memory_system import MemorySystem
+        from utils.retrieval.tools import memory_tools
+
+        unlocked_mem = _make_memory(locked=False, memory_id='mem-legacy')
+        unlocked_mem['content'] = 'LEGACY_FACT'
+        service = MagicMock()
+        config = {'configurable': {'user_id': 'uid-legacy'}}
+
+        with patch.object(memory_tools, 'pin_memory_system', return_value=MemorySystem.LEGACY):
+            with patch.object(memory_tools, 'MemoryService', return_value=service):
+                with patch.object(memory_tools.memory_db, 'get_memories', return_value=[unlocked_mem]) as legacy_get:
+                    result = memory_tools.get_memories_tool.invoke({'limit': 10, 'offset': 0}, config=config)
+
+        legacy_get.assert_called_once()
+        service.read.assert_not_called()
+        assert 'LEGACY_FACT' in result
+
+    def test_search_memories_tool_routes_canonical_user_to_memory_service(self):
+        """Canonical cohort must search via MemoryService, not legacy vector_db."""
+        from datetime import datetime, timezone
+        from types import SimpleNamespace
+
+        from models.memories import MemoryDB, MemoryCategory
+        from utils.memory.memory_system import MemorySystem
+        from utils.retrieval.tools import memory_tools
+
+        canonical_memory = MemoryDB(
+            id='mem-canonical',
+            uid='uid-canonical',
+            content='CANONICAL_SEARCH_HIT',
+            category=MemoryCategory.interesting,
+            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+        service = MagicMock()
+        service.search.return_value = [SimpleNamespace(memory=canonical_memory, score=0.91)]
+        config = {'configurable': {'user_id': 'uid-canonical'}}
+
+        with patch.object(memory_tools, 'pin_memory_system', return_value=MemorySystem.CANONICAL):
+            with patch.object(memory_tools, 'MemoryService', return_value=service):
+                with patch.object(memory_tools.vector_db, 'find_similar_memories') as legacy_search:
+                    result = memory_tools.search_memories_tool.invoke({'query': 'coffee'}, config=config)
+
+        service.search.assert_called_once_with('uid-canonical', 'coffee', limit=5)
+        legacy_search.assert_not_called()
+        assert 'CANONICAL_SEARCH_HIT' in result
+
 
 # =============================================================================
 # Test webhooks — call the real functions
@@ -1421,6 +1499,62 @@ class TestPromptDataLockFilter:
         all_mems = user_made + generated
         assert len(all_mems) == 1
         assert all_mems[0].content == 'VISIBLE_CONTENT'
+
+    def test_get_prompt_data_routes_canonical_user_to_memory_service(self):
+        """Canonical cohort must load prompt facts via MemoryService.read."""
+        from datetime import datetime, timezone
+
+        from models.memories import MemoryDB, MemoryCategory
+        from utils.memory.memory_system import MemorySystem
+        import utils.llms.memory as memory_mod
+
+        canonical_memory = MemoryDB(
+            id='mem-canonical',
+            uid='uid-canonical',
+            content='CANONICAL_PROMPT_FACT',
+            category=MemoryCategory.interesting,
+            manually_added=False,
+            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+        service = MagicMock()
+        service.read.return_value = [canonical_memory]
+
+        with patch.object(memory_mod, 'resolve_memory_system', return_value=MemorySystem.CANONICAL):
+            with patch.object(memory_mod, 'MemoryService', return_value=service):
+                with patch.object(memory_mod.memories_db, 'get_memories') as legacy_get:
+                    with patch.object(memory_mod, 'get_user_name', return_value='Test'):
+                        _, user_made, generated = memory_mod.get_prompt_data('uid-canonical')
+
+        service.read.assert_called_once_with('uid-canonical', limit=1000)
+        legacy_get.assert_not_called()
+        assert len(user_made) + len(generated) == 1
+        assert (user_made + generated)[0].content == 'CANONICAL_PROMPT_FACT'
+
+    def test_get_prompt_data_routes_legacy_user_to_legacy_db(self):
+        """Non-canonical cohort must keep legacy get_memories for prompt facts."""
+        import utils.llms.memory as memory_mod
+        from utils.memory.memory_system import MemorySystem
+
+        unlocked_mem = {
+            'id': 'mem-legacy',
+            'content': 'LEGACY_PROMPT_FACT',
+            'is_locked': False,
+            'manually_added': False,
+            'category': 'interesting',
+        }
+        service = MagicMock()
+
+        with patch.object(memory_mod, 'resolve_memory_system', return_value=MemorySystem.LEGACY):
+            with patch.object(memory_mod, 'MemoryService', return_value=service):
+                with patch.object(memory_mod.memories_db, 'get_memories', return_value=[unlocked_mem]) as legacy_get:
+                    with patch.object(memory_mod, 'get_user_name', return_value='Test'):
+                        _, user_made, generated = memory_mod.get_prompt_data('uid-legacy')
+
+        legacy_get.assert_called_once_with('uid-legacy', limit=1000)
+        service.read.assert_not_called()
+        assert len(user_made) + len(generated) == 1
+        assert (user_made + generated)[0].content == 'LEGACY_PROMPT_FACT'
 
 
 # =============================================================================
