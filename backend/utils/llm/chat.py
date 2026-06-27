@@ -1,7 +1,6 @@
-from .clients import get_llm
 import json
-import re
 import os
+import re
 from datetime import datetime, timezone
 from typing import List, Optional
 from zoneinfo import ZoneInfo
@@ -21,8 +20,12 @@ from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
+from utils.byok import has_byok_keys
+from utils.llm.gateway_client import invoke_chat_structured_gateway, is_llm_gateway_chat_extraction_enabled
 from utils.llms.memory import get_prompt_memories
 from utils.llm.usage_tracker import track_usage, Features
+
+from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
@@ -107,6 +110,13 @@ def requires_context(question: str) -> bool:
     User's Question:
     {question}
     '''
+    if is_llm_gateway_chat_extraction_enabled() and not has_byok_keys():
+        gateway_response = invoke_chat_structured_gateway(
+            prompt, RequiresContext, feature='chat_extraction.requires_context'
+        )
+        if gateway_response is not None:
+            return gateway_response.value
+
     with_parser = get_llm('chat_extraction').with_structured_output(RequiresContext)
     response: RequiresContext = with_parser.invoke(prompt)
     try:
