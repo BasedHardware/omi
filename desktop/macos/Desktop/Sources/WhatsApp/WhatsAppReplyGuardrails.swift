@@ -112,9 +112,22 @@ final class WhatsAppReplySettings: ObservableObject {
     return .allowed
   }
 
+  func preDraftDecision(for message: WAIncomingMessage) -> WhatsAppAutoDecision? {
+    guard !killSwitchEnabled else {
+      return .ignore(reason: "kill_switch")
+    }
+    guard mode != .off else {
+      return .ignore(reason: "mode_off")
+    }
+    guard !message.fromMe, !message.isStatusOrBroadcast else {
+      return .ignore(reason: "loop_prevention")
+    }
+    return nil
+  }
+
   func autoDecision(for message: WAIncomingMessage, draftText: String) -> WhatsAppAutoDecision {
     guard !killSwitchEnabled else {
-      return .draft(reason: "kill_switch")
+      return .ignore(reason: "kill_switch")
     }
     guard mode != .off else {
       return .ignore(reason: "mode_off")

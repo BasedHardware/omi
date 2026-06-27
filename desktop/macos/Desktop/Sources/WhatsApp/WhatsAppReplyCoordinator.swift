@@ -236,11 +236,12 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     guard shouldProcess(message) else { return }
     processedMessageIDs.insert(message.id)
 
-    if let quotaFailure = await quotaFailureReason() {
-      lastDraftFailure = "Could not draft a WhatsApp reply for \(message.displaySender): \(quotaFailure)"
-      appendAuditFailure(for: message, reason: quotaFailure)
-      log("WhatsAppReplyCoordinator: blocked draft for \(message.chatJid) by backend quota: \(quotaFailure)")
-      return
+    if let preDraftDecision = WhatsAppReplySettings.shared.preDraftDecision(for: message) {
+      if case .ignore(let reason) = preDraftDecision {
+        appendAuditMessage(for: message, outcome: "ignored", reason: reason)
+        log("WhatsAppReplyCoordinator: ignored message \(message.id) before drafting, reason=\(reason)")
+        return
+      }
     }
 
     do {
@@ -249,35 +250,9 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     } catch {
       let reason = error.localizedDescription
       lastDraftFailure = "Could not draft a WhatsApp reply for \(message.displaySender): \(reason)"
-      appendAuditFailure(for: message, reason: reason)
+      appendAuditMessage(for: message, outcome: "draft_failed", reason: reason)
       log("WhatsAppReplyCoordinator: failed to draft reply for \(message.chatJid): \(reason)")
     }
-  }
-
-  private func quotaFailureReason() async -> String? {
-    guard let quota = await APIClient.shared.fetchChatUsageQuota() else {
-      log("WhatsAppReplyCoordinator: quota check unavailable; drafting optimistically")
-      return nil
-    }
-
-    log(
-      "WhatsAppReplyCoordinator: backend quota response allowed=\(quota.allowed) plan=\(quota.plan) unit=\(quota.unit) used=\(quota.used) limit=\(quota.limit ?? -1)"
-    )
-    guard !quota.allowed else { return nil }
-    return quotaLimitMessage(quota)
-  }
-
-  private func quotaLimitMessage(_ quota: APIClient.ChatUsageQuota) -> String {
-    let limitStr: String = {
-      guard let limit = quota.limit else { return "your monthly limit" }
-      return quota.unit == "cost_usd"
-        ? String(format: "$%.0f of monthly chat usage", limit)
-        : "\(Int(limit)) chat questions per month"
-    }()
-    let usedStr = quota.unit == "cost_usd"
-      ? String(format: "$%.2f used", quota.used)
-      : "\(Int(quota.used)) used"
-    return "Backend quota response allowed=false: you've hit your \(quota.plan) plan limit (\(limitStr); \(usedStr)). Upgrade in Settings -> Plan and Usage, or wait until the next reset."
   }
 
   func latestDraft(for messageID: String) -> WhatsAppDraft? {
@@ -367,7 +342,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     ))
   }
 
-  private func appendAuditFailure(for message: WAIncomingMessage, reason: String) {
+  private func appendAuditMessage(for message: WAIncomingMessage, outcome: String, reason: String?) {
     WhatsAppReplySettings.shared.appendAuditEntry(WhatsAppAuditEntry(
       id: UUID().uuidString,
       createdAt: Date(),
@@ -375,7 +350,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
       senderJid: message.senderJid,
       messageID: message.id,
       text: message.text,
-      outcome: "draft_failed",
+      outcome: outcome,
       reason: reason
     ))
   }
@@ -413,7 +388,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
   }
 
   private func draftReply(for message: WAIncomingMessage) async throws -> WhatsAppDraft {
-    let prompt = buildPrompt(for: message)
+    let prompt = await buildPrompt(for: message)
     let result = try await bridge.query(
       prompt: prompt,
       systemPrompt: "\(Self.systemPrompt)\n\n\(WhatsAppToneProfile.shared.styleGuide())",
@@ -450,8 +425,12 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     )
   }
 
-  private func buildPrompt(for message: WAIncomingMessage) -> String {
-    """
+  private func buildPrompt(for message: WAIncomingMessage) async -> String {
+    let recentThreadContext = await recentThreadContext(for: message)
+    return """
+    Recent WhatsApp thread context (last 6 synced messages, oldest to newest):
+    \(recentThreadContext)
+
     Incoming WhatsApp message:
     Sender: \(message.displaySender)
     Sender JID: \(message.senderJid)
@@ -460,10 +439,29 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     Message ID: \(message.id)
     Text: \(message.text)
 
-    First read recent thread context with wa_read_thread for this chat when useful.
+    Use the recent thread context above first.
+    Only call wa_read_thread if the reply needs older messages, more context, or exact prior details not visible above.
     Use Omi memory/conversation/task tools if the message asks about personal facts, plans, availability, or commitments.
     Draft the best reply as the user. Return only the reply text.
     """
+  }
+
+  private func recentThreadContext(for message: WAIncomingMessage) async -> String {
+    let result = await ChatToolExecutor.execute(ToolCall(
+      name: "wa_read_thread",
+      arguments: [
+        "chat_jid": message.chatJid,
+        "limit": 6,
+        "ascending": true,
+      ],
+      thoughtSignature: nil
+    ))
+
+    if result.hasPrefix("Error:") {
+      log("WhatsAppReplyCoordinator: failed to read recent thread context: \(result.prefix(200))")
+      return "Unavailable: \(result)"
+    }
+    return result.isEmpty ? "[]" : result
   }
 }
 
