@@ -130,6 +130,21 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
     )
 
 
+def _has_current_paid_subscription_for_different_stripe_sub(
+    current_subscription: Subscription | None, event_subscription_id: str | None, now: int | None = None
+) -> bool:
+    """True when a stale inactive event should not overwrite stored paid access."""
+    if not current_subscription or not event_subscription_id:
+        return False
+    if current_subscription.stripe_subscription_id == event_subscription_id:
+        return False
+    if current_subscription.status != SubscriptionStatus.active or not is_paid_plan(current_subscription.plan):
+        return False
+    if current_subscription.current_period_end and current_subscription.current_period_end < (now or int(time.time())):
+        return False
+    return True
+
+
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session):
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
@@ -834,6 +849,13 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 adopted_active_paid = False
                 if not is_paid_plan(new_subscription.plan):
                     event_sub_id = subscription_obj.get('id')
+                    current_subscription = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+                    if _has_current_paid_subscription_for_different_stripe_sub(current_subscription, event_sub_id):
+                        logger.info(
+                            f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
+                            f"stored paid sub {current_subscription.stripe_subscription_id} is still valid."
+                        )
+                        return {"status": "success"}
                     active_paid = await run_blocking(stripe_executor, find_active_paid_subscription_for_user, uid)
                     if active_paid and active_paid.stripe_subscription_id != event_sub_id:
                         logger.info(
@@ -1141,7 +1163,8 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
 @router.get("/v1/payments/success", response_class=HTMLResponse)
 def stripe_success(session_id: str = Query(...)):
     # The subscription is updated via webhook. This page is just for user feedback.
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Success</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1149,12 +1172,14 @@ def stripe_success(session_id: str = Query(...)):
                 <p>Your subscription is now active. You can close this window and return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.get("/v1/payments/cancel", response_class=HTMLResponse)
 def stripe_cancel():
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Cancelled</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1162,7 +1187,8 @@ def stripe_cancel():
                 <p>Your payment process was cancelled. You can return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/payments/customer-portal')
@@ -1195,7 +1221,8 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
 @router.get("/v1/payments/portal-return", response_class=HTMLResponse)
 def portal_return():
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Portal Complete</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1203,7 +1230,8 @@ def portal_return():
                 <p>Your payment settings have been updated. You can close this window and return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.get("/v1/payment-methods/status")
