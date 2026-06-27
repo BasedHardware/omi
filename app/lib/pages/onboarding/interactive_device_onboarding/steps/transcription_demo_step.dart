@@ -19,6 +19,7 @@ class TranscriptionDemoStep extends StatefulWidget {
 class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
   bool _showContinue = false;
+  bool _continueScheduled = false;
 
   @override
   void initState() {
@@ -36,7 +37,8 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
   Widget build(BuildContext context) {
     return Consumer<DeviceOnboardingProvider>(
       builder: (context, provider, _) {
-        if (provider.transcriptionComplete && !_showContinue) {
+        if (provider.transcriptionComplete && !_continueScheduled) {
+          _continueScheduled = true;
           Future.delayed(const Duration(seconds: 1), () {
             if (mounted) setState(() => _showContinue = true);
           });
