@@ -109,6 +109,9 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   const [refreshing, setRefreshing] = useState(false)
   const [reprocessing, setReprocessing] = useState(false)
   const pollHandle = useRef<ReturnType<typeof setInterval> | null>(null)
+  // The id of the most recent load request, so a slow response for a previously
+  // viewed conversation can't overwrite the one now on screen.
+  const latestLoadId = useRef<string>('')
 
   const fetchServer = async (idStr: string): Promise<Display | null> => {
     const r = await omiApi.get<ServerConversation>(`/v1/conversations/${idStr}`)
@@ -116,9 +119,11 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   }
 
   const load = async (idStr: string, isLocal: boolean): Promise<void> => {
+    const stale = (): boolean => latestLoadId.current !== idStr
     try {
       if (isLocal) {
         const c = await window.omi.getLocalConversation(idStr)
+        if (stale()) return
         if (!c) {
           setError('Local conversation not found')
           return
@@ -149,8 +154,10 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
         return
       }
       const d = await fetchServer(idStr)
+      if (stale()) return
       if (d) setDisplay(d)
     } catch (e) {
+      if (stale()) return
       console.error('ConversationDetail load failed:', e)
       setError((e as Error).message)
     }
@@ -159,6 +166,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   useEffect(() => {
     if (!id) return
     const isLocal = id.startsWith('local-') || id.startsWith('chat-')
+    latestLoadId.current = id
     setError(null)
     setDisplay(null)
     load(id, isLocal)
@@ -167,9 +175,9 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
 
   // Poll while Omi is still processing — title/overview/action_items become
   // available once the pipeline finishes summarizing the segments we POSTed.
+  const isProcessing = !!display && !display.isLocal && !!display.processing
   useEffect(() => {
-    if (!id || !display || display.isLocal) return
-    if (!display.processing) {
+    if (!id || !isProcessing) {
       if (pollHandle.current) {
         clearInterval(pollHandle.current)
         pollHandle.current = null
@@ -200,7 +208,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
       if (pollHandle.current) clearInterval(pollHandle.current)
       pollHandle.current = null
     }
-  }, [id, display])
+  }, [id, isProcessing])
 
   const onRefresh = async (): Promise<void> => {
     if (!id || refreshing) return
