@@ -382,7 +382,10 @@ def run_canonical_short_term_promotion(
     )
     if trigger is None and fast_track:
         trigger = "user_asserted_fast_track"
-        promotable = fast_track
+        if consolidation_batched_ids is not None:
+            promotable = [item for item in fast_track if item.memory_id in allowed]
+        else:
+            promotable = fast_track
     elif trigger is None:
         return ShortTermPromotionReport(
             uid=uid,
