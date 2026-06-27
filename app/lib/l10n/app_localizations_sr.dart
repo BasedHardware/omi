@@ -9464,4 +9464,13 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Заврши';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Упознајте свој Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Брз, практичан обилазак свега што ваш Omi може.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Око 1 минута';
 }

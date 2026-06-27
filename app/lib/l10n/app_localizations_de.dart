@@ -9529,4 +9529,13 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Fertig';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Lerne deinen Omi kennen';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Ein kurzer, praktischer Rundgang durch alles, was dein Omi kann.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Etwa 1 Minute';
 }

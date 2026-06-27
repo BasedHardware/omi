@@ -9280,4 +9280,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '完成';
+
+  @override
+  String get deviceOnboardingIntroTitle => '了解你的 Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => '快速、上手地体验 Omi 的全部功能。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '大约 1 分钟';
 }

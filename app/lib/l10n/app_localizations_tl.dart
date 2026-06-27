@@ -9538,4 +9538,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Tapusin';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kilalanin ang Iyong Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Mga 1 minuto';
 }

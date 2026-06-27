@@ -9499,4 +9499,13 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'ముగించు';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'మీ Omiని తెలుసుకోండి';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'మీ Omi చేయగలిగే ప్రతిదాని గురించి త్వరిత, ప్రత్యక్ష పరిచయం.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'సుమారు 1 నిమిషం';
 }

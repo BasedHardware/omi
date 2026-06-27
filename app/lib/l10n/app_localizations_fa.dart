@@ -9453,4 +9453,13 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'پایان';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'با Omi خود آشنا شوید';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'یک گشت سریع و کاربردی در همه‌ی کارهایی که Omi شما می‌تواند انجام دهد.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'حدود ۱ دقیقه';
 }

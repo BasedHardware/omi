@@ -9478,4 +9478,13 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Končaj';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Spoznajte svoj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Hiter, praktičen ogled vsega, kar zmore vaš Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Približno 1 minuta';
 }

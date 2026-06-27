@@ -9457,4 +9457,13 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'সম্পন্ন করুন';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'আপনার Omi-কে জানুন';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'আপনার Omi যা যা করতে পারে তার একটি দ্রুত, হাতে-কলমে ভ্রমণ।';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'প্রায় ১ মিনিট';
 }

@@ -9480,4 +9480,13 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Гатова';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Пазнаёмцеся з Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Хуткі практычны агляд усяго, што ўмее ваш Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Каля 1 хвіліны';
 }

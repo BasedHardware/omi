@@ -9451,4 +9451,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Valmis';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutustu Omiisi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Nopea ja käytännönläheinen kierros kaikkeen, mitä Omisi osaa.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Noin 1 minuutti';
 }

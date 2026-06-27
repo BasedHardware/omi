@@ -9518,4 +9518,14 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'உங்கள் Omi செய்யக்கூடிய அனைத்தையும் விரைவாக நேரடியாகப் பார்க்கும் சுற்றுலா.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'சுமார் 1 நிமிடம்';
 }

@@ -9505,4 +9505,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Finalitza';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Coneix el teu Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un recorregut ràpid i pràctic per tot el que pot fer el teu Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximadament 1 minut';
 }

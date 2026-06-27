@@ -9451,4 +9451,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Dokončit';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Poznejte svůj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Rychlá praktická prohlídka všeho, co váš Omi umí.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Přibližně 1 minuta';
 }

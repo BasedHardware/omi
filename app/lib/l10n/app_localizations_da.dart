@@ -9436,4 +9436,13 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Afslut';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Lær din Omi at kende';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'En hurtig, praktisk rundvisning i alt, hvad din Omi kan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
 }

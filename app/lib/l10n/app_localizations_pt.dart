@@ -9456,4 +9456,13 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Concluir';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Conheça o seu Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Um tour rápido e prático por tudo o que o seu Omi pode fazer.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cerca de 1 minuto';
 }

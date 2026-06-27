@@ -9296,4 +9296,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '完了';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi を知ろう';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi にできることを、すべて手軽に体験できるクイックツアー。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '約1分';
 }

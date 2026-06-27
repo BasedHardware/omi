@@ -9470,4 +9470,13 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Завершити';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Знайомство з Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Швидкий практичний огляд усього, що вміє ваш Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Близько 1 хвилини';
 }

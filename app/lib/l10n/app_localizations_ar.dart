@@ -9394,4 +9394,13 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'إنهاء';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'تعرّف على Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'جولة سريعة وعملية على كل ما يمكن أن يفعله جهاز Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'حوالي دقيقة واحدة';
 }

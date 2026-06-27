@@ -9297,4 +9297,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '완료';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi 알아보기';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.';
+
+  @override
+  String get deviceOnboardingIntroDuration => '약 1분';
 }

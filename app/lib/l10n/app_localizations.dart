@@ -17624,6 +17624,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Finish'**
   String get deviceOnboardingFinish;
+
+  /// Onboarding intro screen title shown before the device tutorial steps
+  ///
+  /// In en, this message translates to:
+  /// **'Get to Know Your Omi'**
+  String get deviceOnboardingIntroTitle;
+
+  /// Onboarding intro screen subtitle explaining the tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'A quick, hands-on tour of everything your Omi can do.'**
+  String get deviceOnboardingIntroSubtitle;
+
+  /// Onboarding intro screen estimated duration hint
+  ///
+  /// In en, this message translates to:
+  /// **'About 1 minute'**
+  String get deviceOnboardingIntroDuration;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -9442,4 +9442,13 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Dokončiť';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Spoznajte svoj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Rýchla praktická prehliadka všetkého, čo váš Omi dokáže.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Približne 1 minúta';
 }

@@ -9448,4 +9448,13 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Hoàn tất';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tìm hiểu về Omi của bạn';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Một chuyến tham quan nhanh, thực tế về mọi điều Omi của bạn có thể làm.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
 }

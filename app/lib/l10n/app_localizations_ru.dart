@@ -9485,4 +9485,13 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Готово';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Знакомство с Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Быстрый практический обзор всего, что умеет ваш Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Около 1 минуты';
 }

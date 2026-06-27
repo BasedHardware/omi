@@ -9456,4 +9456,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Slutför';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Lär känna din Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'En snabb, praktisk rundtur i allt din Omi kan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
 }

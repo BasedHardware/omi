@@ -9481,4 +9481,13 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'ಮುಗಿಸಿ';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'ನಿಮ್ಮ Omi ಅನ್ನು ತಿಳಿಯಿರಿ';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'ನಿಮ್ಮ Omi ಮಾಡಬಲ್ಲ ಎಲ್ಲದರ ತ್ವರಿತ, ಪ್ರಾಯೋಗಿಕ ಪರಿಚಯ.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'ಸುಮಾರು 1 ನಿಮಿಷ';
 }

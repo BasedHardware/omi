@@ -9496,4 +9496,13 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Termină';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Cunoaște-ți Omi-ul';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un tur rapid și practic prin tot ce poate face Omi-ul tău.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximativ 1 minut';
 }

@@ -9491,4 +9491,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Befejezés';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Ismerd meg az Omidat';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
 }

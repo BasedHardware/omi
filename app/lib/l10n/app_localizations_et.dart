@@ -9448,4 +9448,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Lõpeta';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutvu oma Omiga';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Kiire ja praktiline ülevaade kõigest, mida sinu Omi suudab.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Umbes 1 minut';
 }

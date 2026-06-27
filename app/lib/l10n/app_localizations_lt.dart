@@ -9467,4 +9467,13 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Baigti';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Susipažinkite su savo Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Greita praktinė apžvalga visko, ką gali jūsų Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Maždaug 1 minutė';
 }

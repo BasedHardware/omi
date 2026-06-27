@@ -9461,4 +9461,13 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Bitir';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi\'nizi Tanıyın';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi\'nizin yapabileceği her şeyin hızlı ve uygulamalı bir turu.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Yaklaşık 1 dakika';
 }
