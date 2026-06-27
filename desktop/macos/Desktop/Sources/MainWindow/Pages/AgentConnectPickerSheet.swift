@@ -104,7 +104,12 @@ private struct ConnectOptionCard: View {
   }
 
   private var primaryLabel: String {
-    destination.mcpExecuteKind == .autonomous ? "Do it for me" : "Open & copy key"
+    switch destination.mcpExecuteKind {
+    case .localAutonomous, .browserAutonomous:
+      return "Do it for me"
+    case .assisted:
+      return "Open & copy key"
+    }
   }
 
   var body: some View {

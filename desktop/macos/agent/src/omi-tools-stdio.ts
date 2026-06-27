@@ -246,6 +246,59 @@ Parameter guidance:
     },
   },
   {
+    name: "fill_cloud_connector_form",
+    description: `Fill the currently visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.
+
+Use this first for one-click cloud connector setup after opening the signed-in browser to the connector page. It scans visible browser windows, fills matching connector fields, and can press the final Add/Connect button when requested. Do not install a browser extension before trying this tool.`,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        provider: {
+          type: "string" as const,
+          enum: ["claude", "chatgpt"],
+          description: "Cloud platform whose connector form is visible",
+        },
+        name: {
+          type: "string" as const,
+          description: "Connector name, usually 'Omi Memory'",
+        },
+        server_url: {
+          type: "string" as const,
+          description: "Remote MCP server URL to paste into the connector form",
+        },
+        oauth_client_id: {
+          type: "string" as const,
+          description: "OAuth Client ID, usually 'omi'",
+        },
+        oauth_client_secret: {
+          type: "string" as const,
+          description: "OAuth Client Secret / Omi MCP key",
+        },
+        authentication: {
+          type: "string" as const,
+          description: "Authentication mode, usually 'OAuth' for ChatGPT",
+        },
+        token_auth_method: {
+          type: "string" as const,
+          description: "OAuth token auth method, usually 'client_secret_post'",
+        },
+        auth_url: {
+          type: "string" as const,
+          description: "OAuth authorization URL when the form asks for it",
+        },
+        token_url: {
+          type: "string" as const,
+          description: "OAuth token URL when the form asks for it",
+        },
+        submit: {
+          type: "boolean" as const,
+          description: "Whether to press the visible Add/Connect/Create button after filling required fields",
+        },
+      },
+      required: ["provider", "server_url"],
+    },
+  },
+  {
     name: "get_daily_recap",
     description: `Get a pre-formatted daily activity recap combining app usage, conversations, tasks, focus sessions, memories, and observations.
 
@@ -965,9 +1018,10 @@ async function handleJsonRpc(
         toolName === "set_user_preferences" ||
         toolName === "ask_followup" ||
         toolName === "complete_onboarding" ||
-        toolName === "save_knowledge_graph"
+        toolName === "save_knowledge_graph" ||
+        toolName === "fill_cloud_connector_form"
       ) {
-        // Onboarding tools — forward directly to Swift
+        // Native Swift tools — forward directly to the app.
         const result = await requestSwiftTool(toolName, args);
         if (!isNotification) {
           send({

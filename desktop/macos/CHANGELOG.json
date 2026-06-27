@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Connect your AI: ChatGPT and Claude cloud setup now uses your selected/default browser instead of hard-coded Chrome, with guided macOS UI automation for one-click setup and broader Chromium browser recognition."
+  ],
   "releases": [
     {
       "version": "0.11.538",

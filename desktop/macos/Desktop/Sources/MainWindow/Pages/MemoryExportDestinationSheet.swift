@@ -612,14 +612,22 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var executeButtonTitle: String {
-    destination.mcpExecuteKind == .autonomous ? "Do it for me" : "Open & copy key"
+    switch destination.mcpExecuteKind {
+    case .localAutonomous, .browserAutonomous:
+      return "Do it for me"
+    case .assisted:
+      return "Open & copy key"
+    }
   }
 
   private var executeBlockSubtitle: String {
     switch destination.mcpExecuteKind {
-    case .autonomous:
+    case .localAutonomous:
       return
         "Omi sets up \(destination.title) for you — it runs as an Omi task you can watch in the floating bar. If it gets stuck, use the manual steps below."
+    case .browserAutonomous:
+      return
+        "Omi uses your signed-in browser to set up \(destination.title). If sign-in or permissions block it, Omi will tell you exactly where it stopped."
     case .assisted:
       return
         "Omi opens \(destination.title) and copies your key, then you confirm the quick steps below."
