@@ -228,7 +228,8 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                       ),
                     ),
                     const SizedBox(width: 14),
-                    const Text('Listening...', style: TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500)),
+                    const Text('Listening...',
+                        style: TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500)),
                   ],
                 ),
               );
