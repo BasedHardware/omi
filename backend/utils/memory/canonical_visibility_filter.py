@@ -47,4 +47,10 @@ def filter_canonical_default_visible_items(
         ):
             visible_by_id[item.memory_id] = item
 
+    # §user-review: exclude memories explicitly rejected by the user.
+    for item in items:
+        promotion = item.promotion or {}
+        if promotion.get("user_review") is False and item.memory_id in visible_by_id:
+            del visible_by_id[item.memory_id]
+
     return sorted(visible_by_id.values(), key=lambda item: (-item.updated_at.timestamp(), item.memory_id))

@@ -233,7 +233,11 @@ def search_canonical_memories(
     if not merged_ids:
         return []
 
-    items_by_id = {item.memory_id: item for item in fetch_authoritative_product_memory_items(uid=uid, db_client=client)}
+    now = datetime.now(timezone.utc)
+    policy = MemoryAccessPolicy.for_omi_chat(archive_capability=False)
+    all_items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+    visible_items = filter_canonical_default_visible_items(all_items, policy=policy, now=now)
+    items_by_id = {item.memory_id: item for item in visible_items}
     vector_scores = {hit.memory_id: float(hit.score or 0.0) for hit in vector_result.hits}
 
     candidates = []
@@ -241,7 +245,7 @@ def search_canonical_memories(
         item = items_by_id.get(memory_id)
         if item is None:
             continue
-        if item.tier != MemoryLayer.long_term or item.status != MemoryItemStatus.active:
+        if item.tier != MemoryLayer.long_term:
             continue
         scoped = filter_items_by_device_scope(
             [item],
@@ -781,16 +785,19 @@ def delete_all_canonical_memories(uid: str, *, db_client=None) -> None:
 
 
 def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, Any]:
-    """Best-effort purge of canonical Pinecone vectors before Firestore account wipe.
+    """Best-effort purge of canonical Pinecone vectors, keyword index, and KG data.
 
-    Inert for legacy cohort users (immediate return). Canonical cohort is empty in production
-    until ``CANONICAL_MEMORY_USERS`` is populated.
+    Purges based on existing canonical artifacts (memory_items docs) rather than
+    current cohort membership, so a canonical user removed from
+    ``CANONICAL_MEMORY_USERS`` for rollback/kill-switch before account deletion
+    still has their derived data cleaned up. Legacy users have no canonical
+    memory_items docs, so the purge is inert for them.
     """
-    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
-        return {"purged": False, "reason": "not_canonical_cohort", "vector_ids": [], "memory_ids": []}
-
     client = db_client if db_client is not None else default_db_client
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+    if not items:
+        return {"purged": False, "reason": "not_canonical_cohort", "vector_ids": [], "memory_ids": []}
+
     memory_ids = [item.memory_id for item in items]
     vector_ids = [neutral_vector_id_for_memory(memory_id) for memory_id in memory_ids]
 
@@ -821,7 +828,7 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
 
     return {
         "purged": True,
-        "reason": "canonical_cohort",
+        "reason": "canonical_artifacts_found",
         "vector_ids": vector_ids,
         "memory_ids": memory_ids,
         "keyword_docs_deleted": keyword_deleted,
