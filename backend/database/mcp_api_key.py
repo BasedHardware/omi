@@ -11,21 +11,29 @@ from utils.mcp_api_keys import generate_api_key, hash_api_key
 
 MCP_DEFAULT_APP_ID = "mcp-api"
 
+# Server-owned default scopes seeded onto every newly minted MCP key so memory
+# MCP routes (which require persisted memories.read/memories.write) authorize
+# out of the box. Aligned with ALLOWED_SERVER_ASSIGNED_SCOPES and
+# REQUIRED_DEFAULT_READ_SCOPE in scripts/mcp_api_key_scope_readiness.py.
+# Legacy keys (persisted with scopes=None before this default) still fail closed
+# until a readiness migration patches them.
+MCP_DEFAULT_KEY_SCOPES: List[str] = ["memories.read", "memories.write"]
+
 
 def create_mcp_key(
     user_id: str,
     name: str,
-    scopes: Optional[List[str]] = None,
+    scopes: Optional[List[str]] = MCP_DEFAULT_KEY_SCOPES,
     app_id: Optional[str] = MCP_DEFAULT_APP_ID,
 ) -> Tuple[str, McpApiKey]:
     """
     Creates a new MCP API key for a user.
     Returns the raw key and the key's metadata.
 
-    New keys carry stable server-owned app/key identity for future memory
-    authorization. Scopes default to None/no verified scopes so existing keys do
-    not implicitly gain memory access; a server-side grant/migration must set
-    scopes before memory MCP route enforcement can authorize.
+    New keys carry stable server-owned app/key identity and are seeded with the
+    default memory scopes (memories.read + memories.write) so the hosted MCP
+    memory toolset works immediately. Pass scopes=None explicitly to mint a
+    read-only/legacy key with no persisted scopes (memory routes fail closed).
     """
     raw_key, hashed_key, key_prefix = generate_api_key()
     key_id = str(uuid.uuid4())

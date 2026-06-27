@@ -222,3 +222,60 @@ def test_mcp_memory_dependency_fails_closed_without_persisted_memories_read_scop
 
     assert exc.value.status_code == 403
     assert 'memories.read' in exc.value.detail
+
+
+class _CreateDB:
+    """Minimal Firestore stub for create_mcp_key: records the persisted doc."""
+
+    def __init__(self):
+        self.set_calls = []
+
+    def collection(self, name):
+        assert name == 'mcp_api_keys'
+        return _CreateCollection(self)
+
+
+class _CreateCollection:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def document(self, _doc_id):
+        return _CreateDoc(self.parent)
+
+
+class _CreateDoc:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def set(self, doc):
+        self.parent.set_calls.append(doc)
+
+
+def test_create_mcp_key_seeds_default_memory_scopes(monkeypatch):
+    """Newly minted MCP keys must be seeded with memories.read + memories.write
+    so the hosted MCP memory toolset works immediately. Codex review P2."""
+    monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
+    fake_db = _CreateDB()
+    monkeypatch.setattr(mcp_api_key_db, 'db', fake_db)
+
+    raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'desktop-key')
+
+    assert raw_key == 'raw'
+    assert api_key_data.scopes == ['memories.read', 'memories.write']
+    assert api_key_data.app_id == 'mcp-api'
+    persisted = fake_db.set_calls[0]
+    assert persisted['scopes'] == ['memories.read', 'memories.write']
+    assert persisted['app_id'] == 'mcp-api'
+
+
+def test_create_mcp_key_explicit_none_scopes_mints_legacy_key(monkeypatch):
+    """Explicit scopes=None still mints a key with no persisted scopes (fail-closed
+    legacy behavior), preserving backward compatibility for callers that opt out."""
+    monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
+    fake_db = _CreateDB()
+    monkeypatch.setattr(mcp_api_key_db, 'db', fake_db)
+
+    _raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'legacy-key', scopes=None)
+
+    assert api_key_data.scopes is None
+    assert fake_db.set_calls[0]['scopes'] is None
