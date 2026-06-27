@@ -64,7 +64,7 @@ def test_maintenance_runs_consolidation_before_promotion():
     assert mock_promotion.call_args.kwargs["consolidation_batched_ids"] == {"mem_a"}
 
 
-def test_maintenance_skips_promotion_gate_when_consolidation_watermark_blocked():
+def test_maintenance_defers_promotion_when_consolidation_watermark_blocked():
     uid = "uid-maint-blocked"
 
     with (
@@ -89,7 +89,105 @@ def test_maintenance_skips_promotion_gate_when_consolidation_watermark_blocked()
     ):
         run_canonical_short_term_maintenance(uid, db_client=MagicMock(), run_id="run-blocked")
 
+    assert mock_promotion.call_args.kwargs["consolidation_batched_ids"] == set()
+
+
+def test_maintenance_no_promotion_gate_when_consolidation_not_due():
+    uid = "uid-maint-not-due"
+
+    with (
+        patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
+            return_value=CanonicalShortTermLifecycleReport(uid=uid),
+        ),
+        patch(
+            "utils.memory.short_term_promotion.run_canonical_consolidation",
+            return_value=ConsolidationReport(uid=uid, skipped_reason="consolidation_not_due"),
+        ),
+        patch(
+            "utils.memory.short_term_promotion.run_canonical_short_term_promotion",
+            return_value=ShortTermPromotionReport(uid=uid),
+        ) as mock_promotion,
+    ):
+        run_canonical_short_term_maintenance(uid, db_client=MagicMock(), run_id="run-not-due")
+
     assert mock_promotion.call_args.kwargs["consolidation_batched_ids"] is None
+
+
+def _promotable_item(memory_id: str) -> MemoryItem:
+    return MemoryItem(
+        memory_id=memory_id,
+        uid="uid-partial-promo",
+        version=1,
+        tier=MemoryTier.short_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content=f"fact {memory_id}",
+        evidence=[
+            MemoryEvidence(
+                evidence_id=f"ev_{memory_id}",
+                source_id="conv-1",
+                source_type="conversation",
+                source_version="v1",
+                artifact_preservation=ArtifactPreservationState.preserved,
+            )
+        ],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=NOW,
+        updated_at=NOW,
+        expires_at=NOW + timedelta(days=30),
+        ledger_commit_id="c1",
+        ledger_sequence=1,
+        item_revision=1,
+        source_commit_id="c1",
+        source_commit_sequence=1,
+        content_hash="h",
+        account_generation=1,
+    )
+
+
+def test_partial_apply_pass_does_not_promote_stale_or_survivor():
+    """After partial consolidate (survivor updated, supersede failed), promotion is deferred."""
+    uid = "uid-partial-promo"
+    stale = _promotable_item("mem_old")
+    survivor = _promotable_item("mem_new")
+
+    with (
+        patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch(
+            "utils.memory.short_term_promotion.run_canonical_short_term_ttl_lifecycle",
+            return_value=CanonicalShortTermLifecycleReport(uid=uid),
+        ),
+        patch(
+            "utils.memory.short_term_promotion.run_canonical_consolidation",
+            return_value=ConsolidationReport(
+                uid=uid,
+                trigger_reason="batch_threshold",
+                batched_memory_ids=["mem_old", "mem_new"],
+                watermark_blocked=True,
+                decisions_partial=1,
+            ),
+        ),
+        patch(
+            "utils.memory.short_term_promotion.list_promotable_short_term_items",
+            return_value=[stale, survivor],
+        ),
+        patch("utils.memory.short_term_promotion.list_fast_track_promotable_items", return_value=[]),
+        patch("utils.memory.short_term_promotion._read_control_state") as mock_control,
+        patch(
+            "utils.memory.short_term_promotion.promote_short_term_item_via_apply",
+        ) as mock_promote,
+        patch("utils.memory.short_term_promotion._persist_control_state"),
+    ):
+        mock_control.return_value = MagicMock(last_promotion_run_at=None)
+        report = run_canonical_short_term_maintenance(uid, db_client=MagicMock(), run_id="run-partial-promo")
+
+    assert report.promotion.skipped_reason == "consolidation_watermark_blocked"
+    mock_promote.assert_not_called()
 
 
 def test_promotion_defers_items_not_in_consolidation_batch():
