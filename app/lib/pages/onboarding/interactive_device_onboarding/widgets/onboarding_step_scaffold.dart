@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/providers/device_onboarding_provider.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 // Persistent, self-animating progress indicator. Rendered once in the wrapper
 // (above the transitioning content) and driven live by provider.currentStep, so
@@ -86,12 +87,12 @@ class OnboardingStepScaffold extends StatelessWidget {
 
 class OnboardingContinueButton extends StatelessWidget {
   final VoidCallback onPressed;
-  final String label;
+  final String? label;
 
   const OnboardingContinueButton({
     super.key,
     required this.onPressed,
-    this.label = 'Continue',
+    this.label,
   });
 
   @override
@@ -107,7 +108,8 @@ class OnboardingContinueButton extends StatelessWidget {
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
           elevation: 0,
         ),
-        child: Text(label, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+        child: Text(label ?? context.l10n.deviceOnboardingContinue,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
       ),
     );
   }
