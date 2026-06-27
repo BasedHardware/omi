@@ -44,7 +44,9 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("import MarkdownUI"))
     XCTAssertFalse(source.contains("Markdown(outputText.isEmpty ? \"Working...\" : outputText)"))
-    XCTAssertTrue(source.contains("Markdown(outputText)"))
+    XCTAssertTrue(source.contains("ForEach(displayedMessages) { message in"))
+    XCTAssertTrue(source.contains("agentMessageBubble(message)"))
+    XCTAssertTrue(source.contains("Markdown(trimmed)"))
     XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
@@ -299,11 +301,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     let agentSource = try agentPillSource()
     let viewSource = try floatingControlBarViewSource()
 
+    XCTAssertTrue(agentSource.contains("@Published var conversationMessages: [ChatMessage] = []"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages = displayMessages"))
+    XCTAssertTrue(agentSource.contains("message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty"))
+    XCTAssertTrue(viewSource.contains("private var displayedMessages: [ChatMessage]"))
+    XCTAssertTrue(viewSource.contains("ChatMessage(text: pill.query, sender: .user)"))
+    XCTAssertTrue(viewSource.contains("Text(trimmed)"))
     XCTAssertTrue(agentSource.contains("@Published var contentRevision: Int = 0"))
     XCTAssertTrue(agentSource.contains("func markContentChanged()"))
     XCTAssertTrue(agentSource.contains("pill.markContentChanged()"))
     XCTAssertTrue(viewSource.contains(".id(pill.contentRevision)"))
     XCTAssertTrue(viewSource.contains(".onChange(of: pill.contentRevision)"))
+    XCTAssertTrue(viewSource.contains(".onChange(of: pill.conversationMessages.map(\\.text).joined(separator: \"\\n\"))"))
     XCTAssertTrue(viewSource.contains("state.reportContentHeight(height, for: .agent(pill.id))"))
   }
 

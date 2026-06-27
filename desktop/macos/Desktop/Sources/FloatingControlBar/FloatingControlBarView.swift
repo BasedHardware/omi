@@ -1290,14 +1290,24 @@ private struct AgentMainChatView: View {
         }
     }
 
-    private var outputText: String {
+    private var displayedMessages: [ChatMessage] {
+        if !pill.conversationMessages.isEmpty {
+            return pill.conversationMessages
+        }
+        var fallback = [ChatMessage(text: pill.query, sender: .user)]
         if let message = pill.aiMessage {
             let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
-                return text
+                fallback.append(message)
             }
         }
-        return ""
+        return fallback
+    }
+
+    private var hasVisibleAssistantOutput: Bool {
+        displayedMessages.contains { message in
+            message.sender == .ai && !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
     }
 
     private var activityText: String {
@@ -1311,9 +1321,7 @@ private struct AgentMainChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        questionBubble
-
-                        responseContent
+                        conversationContent
                             .id(pill.contentRevision)
 
                         if isRecording {
@@ -1337,7 +1345,7 @@ private struct AgentMainChatView: View {
                 .onChange(of: pill.latestActivity) {
                     scrollToBottom(proxy)
                 }
-                .onChange(of: pill.aiMessage?.text) {
+                .onChange(of: pill.conversationMessages.map(\.text).joined(separator: "\n")) {
                     scrollToBottom(proxy)
                 }
                 .onChange(of: pill.contentRevision) {
@@ -1432,28 +1440,53 @@ private struct AgentMainChatView: View {
         }
     }
 
-    private var questionBubble: some View {
-        Text(pill.query)
-            .scaledFont(size: 13, weight: .semibold)
-            .foregroundColor(.white)
-            .textSelection(.enabled)
-            .lineLimit(4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color.white.opacity(0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .contextMenu {
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(pill.query, forType: .string)
-                }
+    @ViewBuilder
+    private var conversationContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(displayedMessages) { message in
+                agentMessageBubble(message)
             }
+
+            if isRunning && !hasVisibleAssistantOutput {
+                runningActivityView
+            }
+        }
+    }
+
+    private var runningActivityView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TypingIndicator()
+                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+            if !activityText.isEmpty {
+                Text(activityText)
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white.opacity(0.62))
+                    .textSelection(.enabled)
+            }
+        }
     }
 
     @ViewBuilder
-    private var responseContent: some View {
-        if isRunning && outputText.isEmpty {
+    private func agentMessageBubble(_ message: ChatMessage) -> some View {
+        let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if message.sender == .user {
+            Text(trimmed)
+                .scaledFont(size: 13, weight: .semibold)
+                .foregroundColor(.white)
+                .textSelection(.enabled)
+                .lineLimit(nil)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(Color.white.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .contextMenu {
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(trimmed, forType: .string)
+                    }
+                }
+        } else if trimmed.isEmpty && message.isStreaming {
             VStack(alignment: .leading, spacing: 8) {
                 TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
@@ -1462,27 +1495,23 @@ private struct AgentMainChatView: View {
                         .scaledFont(size: 12, weight: .semibold)
                         .foregroundColor(.white.opacity(0.62))
                         .textSelection(.enabled)
-                }
+                    }
             }
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                if outputText.isEmpty {
-                    EmptyView()
-                } else {
-                    Markdown(outputText)
-                        .markdownTheme(.aiMessage(scale: 0.88))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+            if !trimmed.isEmpty {
+                Markdown(trimmed)
+                    .markdownTheme(.aiMessage(scale: 0.88))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+                    .contextMenu {
+                        Button("Copy") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(trimmed, forType: .string)
+                        }
+                    }
                 }
-            }
-            .padding(.horizontal, 4)
-            .contextMenu {
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(outputText, forType: .string)
-                }
-            }
         }
     }
 

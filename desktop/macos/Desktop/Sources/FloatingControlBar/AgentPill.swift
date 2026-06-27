@@ -62,6 +62,7 @@ final class AgentPill: ObservableObject, Identifiable {
     @Published var latestActivity: String = "Queued…"
     @Published var transcript: [String] = []
     @Published var aiMessage: ChatMessage?
+    @Published var conversationMessages: [ChatMessage] = []
     @Published var completedAt: Date?
     @Published var viewedAt: Date?
     @Published var suggestedFollowUps: [String] = []
@@ -866,9 +867,14 @@ final class AgentPillsManager: ObservableObject {
             let pill = AgentPill(query: "Automation subagent \(index + 1)", model: ModelQoS.Claude.defaultSelection)
             pill.title = index == 0 ? "SLEEP FOR 5" : "Sleep Subagent"
             if index == 0 {
+                let aiMessage = ChatMessage(text: "Automation output for subagent \(index + 1).", sender: .ai)
                 pill.status = .done
                 pill.latestActivity = "Done — automation output."
-                pill.aiMessage = ChatMessage(text: "Automation output for subagent \(index + 1).", sender: .ai)
+                pill.aiMessage = aiMessage
+                pill.conversationMessages = [
+                    ChatMessage(text: pill.query, sender: .user),
+                    aiMessage,
+                ]
                 pill.completedAt = Date()
             } else {
                 pill.status = .running
@@ -992,6 +998,14 @@ final class AgentPillsManager: ObservableObject {
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
         guard messages.count > since else { return }
         let recent = Array(messages.suffix(from: since))
+        let displayMessages = recent.filter { message in
+            let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty
+        }
+        if !displayMessages.isEmpty {
+            pill.conversationMessages = displayMessages
+            pill.markContentChanged()
+        }
         guard let aiMessage = recent.last(where: { $0.sender == .ai }) else { return }
         pill.aiMessage = aiMessage
         pill.markContentChanged()
@@ -1046,7 +1060,20 @@ final class AgentPillsManager: ObservableObject {
         let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
             if pill.aiMessage?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                pill.aiMessage = ChatMessage(text: trimmedFinalText, sender: .ai)
+                var finalMessage = pill.aiMessage ?? ChatMessage(text: trimmedFinalText, sender: .ai)
+                finalMessage.text = trimmedFinalText
+                finalMessage.isStreaming = false
+                pill.aiMessage = finalMessage
+                if pill.conversationMessages.isEmpty {
+                    pill.conversationMessages = [
+                        ChatMessage(text: pill.query, sender: .user),
+                        finalMessage,
+                    ]
+                } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == finalMessage.id }) {
+                    pill.conversationMessages[index] = finalMessage
+                } else {
+                    pill.conversationMessages.append(finalMessage)
+                }
             }
             pill.latestActivity = String(trimmedFinalText.prefix(140))
             pill.markContentChanged()
