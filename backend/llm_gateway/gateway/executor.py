@@ -148,6 +148,15 @@ def _canary_sample(route: RouteArtifact, validated_request: ValidatedChatComplet
     return bucket < route.rollout.percent
 
 
+RETRYABLE_PROVIDER_FAILURE_CLASSES = frozenset(
+    {
+        FailureClass.TIMEOUT_BEFORE_OUTPUT,
+        FailureClass.PROVIDER_429_OMI_PAID,
+        FailureClass.PROVIDER_5XX_OMI_PAID,
+    }
+)
+
+
 async def _execute_route(
     resolved_route: ResolvedRoute,
     route: RouteArtifact,
@@ -227,6 +236,8 @@ async def _attempt_provider(
             return response, None
         except ProviderFailure as exc:
             error = _map_provider_failure(exc, credential_context)
+            if error.failure_class not in RETRYABLE_PROVIDER_FAILURE_CLASSES:
+                return None, error
     return None, error
 
 

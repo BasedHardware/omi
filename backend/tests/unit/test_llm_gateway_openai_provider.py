@@ -124,6 +124,7 @@ async def test_openai_compatible_provider_maps_transport_error(monkeypatch):
         (400, FailureClass.CAPABILITY_MISMATCH),
         (401, FailureClass.INVALID_CONFIG),
         (403, FailureClass.INVALID_CONFIG),
+        (408, FailureClass.TIMEOUT_BEFORE_OUTPUT),
         (429, FailureClass.PROVIDER_429_OMI_PAID),
         (500, FailureClass.PROVIDER_5XX_OMI_PAID),
     ],

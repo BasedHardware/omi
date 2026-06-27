@@ -158,6 +158,8 @@ def _default_fake_response(provider_ref: ProviderRef) -> dict[str, Any]:
 def _raise_for_status(status_code: int) -> None:
     if status_code in {401, 403}:
         raise ProviderFailure(FailureClass.INVALID_CONFIG)
+    if status_code == 408:
+        raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
     if status_code == 429:
         raise ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID)
     if status_code >= 500:

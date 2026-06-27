@@ -225,15 +225,15 @@ Or an Omi lane:
   "response_format": {
     "type": "json_schema",
     "json_schema": {
-      "name": "memory_extraction",
+      "name": "RequiresContext",
       "strict": true,
       "schema": {}
     }
   },
   "metadata": {
-    "omi_feature": "memories",
-    "prompt_version": "memory_extraction.v17",
-    "parser_version": "memory_schema.v9"
+    "omi_feature": "chat_extraction.requires_context",
+    "prompt_version": "chat_extraction.requires_context.v1",
+    "parser_version": "RequiresContext.v1"
   }
 }
 ```
@@ -299,7 +299,7 @@ primary:
   model: gpt-4.1-mini
 fallbacks:
   - provider: openai
-    model: gpt-5.4-mini
+    model: gpt-4.1-mini
 timeouts:
   request_ms: 8000
 retry:
@@ -308,10 +308,11 @@ capabilities:
   structured_output: json_schema
   streaming: false
 evidence:
-  benchmark_snapshot: bench.aa.2026_06_27
-  eval_report: eval.memory_extraction.2026_06_27
+  benchmark_snapshot: bench.omi.chat_structured.2026_06_27
+  eval_report: eval.chat_extraction_requires_context.2026_06_27
 rollout:
   stage: shadow
+  percent: 0
 credential_policy:
   mode: omi_paid
   allow_byok_to_omi_paid_fallback: false
@@ -333,15 +334,15 @@ artifact_digest: sha256:<computed-by-validation>
 Feature bundle:
 
 ```yaml
-feature: memories
+feature: chat_extraction.requires_context
 lane_id: omi:auto:chat-structured
-prompt_version: memory_extraction.v17
-parser_version: memory_schema.v9
-eval_suite: memory_precision_recall.v5
+prompt_version: chat_extraction.requires_context.v1
+parser_version: RequiresContext.v1
+eval_suite: chat_extraction_requires_context.v1
 promotion_gates:
   schema_valid_rate: ">= 99.5%"
-  precision_regression: "none"
-  recall_delta: ">= 0"
+  classification_agreement_delta: ">= 0"
+  false_negative_regression: "none"
   p95_latency_ms: "<= LKG + 10%"
   cost_per_success: "<= LKG + 15%"
 ```

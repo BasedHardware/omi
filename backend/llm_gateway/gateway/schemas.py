@@ -95,6 +95,14 @@ class RolloutPolicy(StrictBaseModel):
     stage: RolloutStage
     percent: float = Field(default=0.0, ge=0.0, le=100.0)
 
+    @model_validator(mode='after')
+    def validate_stage_percent(self):
+        if self.stage == RolloutStage.ACTIVE and self.percent != 100.0:
+            raise ValueError('active rollout stage must use percent 100')
+        if self.stage in (RolloutStage.SHADOW, RolloutStage.DISABLED) and self.percent != 0.0:
+            raise ValueError(f'{self.stage.value} rollout stage must use percent 0')
+        return self
+
 
 class Evidence(StrictBaseModel):
     benchmark_snapshot: str = Field(min_length=1)

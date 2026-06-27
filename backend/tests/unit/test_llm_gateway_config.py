@@ -20,7 +20,7 @@ def test_loads_default_gateway_config():
     assert lane.active_route == ACTIVE_ROUTE
     assert lane.last_known_good == LKG_ROUTE
     assert config.route_artifacts[ACTIVE_ROUTE].content_digest.startswith('sha256:')
-    assert config.feature_bundles['memories'].lane_id == LANE_ID
+    assert config.feature_bundles['chat_extraction.requires_context'].lane_id == LANE_ID
 
 
 def test_missing_active_route_fails(tmp_path):
@@ -101,6 +101,21 @@ def test_mock_benchmark_evidence_rejected_in_prod_mode(tmp_path):
         load_gateway_config(tmp_path, prod_mode=True)
 
 
+@pytest.mark.parametrize(
+    'rollout',
+    [
+        {'stage': 'active', 'percent': 99},
+        {'stage': 'shadow', 'percent': 1},
+        {'stage': 'disabled', 'percent': 1},
+    ],
+)
+def test_invalid_rollout_stage_percent_combination_fails(tmp_path, rollout):
+    write_config(tmp_path, active_overrides={'rollout': rollout})
+
+    with pytest.raises(ValueError, match='rollout stage must use percent'):
+        load_gateway_config(tmp_path, prod_mode=False)
+
+
 def write_config(
     config_dir: Path,
     *,
@@ -132,11 +147,11 @@ def write_config(
         route_artifacts = [active, lkg]
 
     feature_bundle = {
-        'feature': 'memories',
+        'feature': 'chat_extraction.requires_context',
         'lane_id': LANE_ID,
-        'prompt_version': 'memory_extraction.v17',
-        'parser_version': 'memory_schema.v9',
-        'eval_suite': 'memory_precision_recall.v5',
+        'prompt_version': 'chat_extraction.requires_context.v1',
+        'parser_version': 'RequiresContext.v1',
+        'eval_suite': 'chat_extraction_requires_context.v1',
         'promotion_gates': {'schema_valid_rate': '>= 99.5%'},
     }
 

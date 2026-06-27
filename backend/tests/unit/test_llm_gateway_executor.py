@@ -78,6 +78,36 @@ async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    'failure_class,error_type',
+    [
+        (FailureClass.INVALID_CONFIG, GatewayInvalidRouteConfigError),
+        (FailureClass.CAPABILITY_MISMATCH, GatewayCapabilityMismatchError),
+        (FailureClass.BYOK_AUTH, GatewayCredentialFailureError),
+        (FailureClass.BYOK_QUOTA, GatewayCredentialFailureError),
+        (FailureClass.BYOK_RATE_LIMIT, GatewayCredentialFailureError),
+    ],
+)
+async def test_executor_does_not_retry_terminal_provider_failures(failure_class, error_type):
+    config = config_with_active_route(
+        active_route_with_fallbacks([]).model_copy(
+            update={'retry': type(load_gateway_config().route_artifacts[ACTIVE_ROUTE].retry)(max_attempts=3)}
+        )
+    )
+    resolved = resolve_chat_completion_route(config, valid_request())
+    provider = FakeChatCompletionProvider([ProviderFailure(failure_class)])
+
+    with pytest.raises(error_type):
+        await execute_chat_completion(
+            resolved,
+            omi_credentials(),
+            ProviderRegistry({'openai': provider}),
+        )
+
+    assert len(provider.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     'failure_class',
     [
         FailureClass.TIMEOUT_BEFORE_OUTPUT,
