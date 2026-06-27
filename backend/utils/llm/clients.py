@@ -141,7 +141,11 @@ class _OpenAIEmbeddingsProxy:
             if inst is not self._default:
                 # Explicit methods bypass the __getattr__ wrapper, so tag the BYOK
                 # source here too before falling back to Omi's key or re-raising.
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_query')
+                # Guard the tagging call so it can never break the fallback below.
+                try:
+                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_query')
+                except Exception:
+                    logger.exception("handle_llm_error failed during embeddings error handling")
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return self._default.embed_query(text)
@@ -153,7 +157,10 @@ class _OpenAIEmbeddingsProxy:
             return inst.embed_documents(texts)
         except Exception as e:
             if inst is not self._default:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_documents')
+                try:
+                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_documents')
+                except Exception:
+                    logger.exception("handle_llm_error failed during embeddings error handling")
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return self._default.embed_documents(texts)
@@ -169,7 +176,10 @@ class _OpenAIEmbeddingsProxy:
                 try:
                     return await attr(*args, **kwargs)
                 except Exception as e:
-                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                    try:
+                        handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                    except Exception:
+                        logger.exception("handle_llm_error failed during embeddings error handling")
                     raise
 
             return _wrapped_async
@@ -178,7 +188,10 @@ class _OpenAIEmbeddingsProxy:
             try:
                 return attr(*args, **kwargs)
             except Exception as e:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                try:
+                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                except Exception:
+                    logger.exception("handle_llm_error failed during embeddings error handling")
                 raise
 
         return _wrapped
