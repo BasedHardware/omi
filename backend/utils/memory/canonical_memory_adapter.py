@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
+from database.review_queue import purge_stale_review_conflicts_for_memories
 from utils.memory.atom_keyword_index import (
     delete_atom_keyword_doc,
     keyword_search_memory_ids,
@@ -712,6 +713,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str
         db_client.document(record["outbox_path"]).set(record)
 
     delete_atom_keyword_doc(uid, item.memory_id)
+    purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason)
 
 
 def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client=None) -> Dict[str, Any]:

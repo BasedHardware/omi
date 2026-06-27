@@ -20,7 +20,11 @@ from pydantic import BaseModel, Field
 from database._client import db as default_db_client
 from database.memory_apply_store import apply_long_term_patch_firestore
 from database.memory_collections import MemoryCollections
-from database.review_queue import create_review_conflict, should_escalate_conflict
+from database.review_queue import (
+    create_review_conflict,
+    purge_stale_review_conflicts_for_memories,
+    should_escalate_conflict,
+)
 from database.vector_db import query_memory_vector_candidates
 from jobs.short_term_lifecycle_worker import fetch_short_term_memory_items_firestore
 from models.memory_evidence import SourceState
@@ -464,6 +468,7 @@ def _apply_superseded_item(
         delete_atom_keyword_doc(uid, item.memory_id)
     delete_canonical_memory_vector(uid, memory_id)
     invalidate_kg_for_memory_retraction(uid, [memory_id])
+    purge_stale_review_conflicts_for_memories(uid, [memory_id], reason="memory_superseded")
 
 
 def _apply_corroboration_bump(
