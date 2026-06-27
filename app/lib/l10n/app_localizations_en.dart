@@ -9358,4 +9358,92 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Paused — audio isn\'t being recorded';
+
+  @override
+  String get deviceTutorial => 'Device Tutorial';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Speak Into Your Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Say a few words and watch them appear in real-time';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Good job!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Start speaking...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Ask Omi a Question';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Press the button once, speak your question, then press again when done';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Processing your question...';
+
+  @override
+  String get deviceOnboardingListening => 'Listening...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Turn Off';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Turn On';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Hold the button for 3 seconds';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Press the button to turn it back on';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Hold the button firmly until the light turns off';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Connected';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Connected!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Disconnected';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Turning off...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Customize Double Tap';
+
+  @override
+  String get deviceOnboardingEndConversation => 'End Conversation';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Save and end current conversation';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Mute / Unmute';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Toggle microphone on or off';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Star Ongoing Conversation';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Mark conversation as important';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'That was a single tap — try tapping twice quickly!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Try it now! Double tap your Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continue';
+
+  @override
+  String get deviceOnboardingFinish => 'Finish';
 }

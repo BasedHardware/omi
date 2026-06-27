@@ -29,6 +29,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'device_settings.dart';
 import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
@@ -576,6 +577,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           icon: const FaIcon(FontAwesomeIcons.bluetooth, color: Color(0xFF8E8E93), size: 20),
                           onTap: () {
                             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DeviceSettings()));
+                          },
+                        ),
+                        const Divider(height: 1, color: Color(0xFF3C3C43)),
+                        _buildSettingsItem(
+                          title: context.l10n.deviceTutorial,
+                          icon: const FaIcon(FontAwesomeIcons.graduationCap, color: Color(0xFF8E8E93), size: 20),
+                          onTap: () {
+                            routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true));
                           },
                         ),
                       ],

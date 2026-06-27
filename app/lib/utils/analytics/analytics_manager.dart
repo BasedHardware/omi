@@ -243,6 +243,20 @@ class AnalyticsManager {
   void onboardingUserAcquisitionSource(String source) =>
       track('User Acquisition Source', properties: {'source': source});
 
+  // Interactive device onboarding
+  void deviceOnboardingStarted({String source = 'auto'}) =>
+      track('Device Onboarding Started', properties: {'source': source});
+
+  void deviceOnboardingStepCompleted(String step) =>
+      track('Device Onboarding Step Completed', properties: {'step': step});
+
+  void deviceOnboardingCompleted() => track('Device Onboarding Completed');
+
+  void deviceOnboardingAbandoned(int step) => track('Device Onboarding Abandoned', properties: {'step': step});
+
+  void deviceOnboardingDoubleTapConfigured(int action) =>
+      track('Device Onboarding Double Tap Configured', properties: {'action': action});
+
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
         'Developer Settings Saved',
         properties: {

@@ -9373,4 +9373,91 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'थांबवले — ऑडिओ रेकॉर्ड होत नाही';
+
+  @override
+  String get deviceTutorial => 'डिव्हाइस ट्युटोरियल';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'तुमच्या Omi शी बोला';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'काही शब्द बोला आणि ते रिअल-टाइममध्ये दिसताना पाहा';
+
+  @override
+  String get deviceOnboardingGoodJob => 'छान!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'बोलायला सुरुवात करा...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi ला प्रश्न विचारा';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'बटण एकदा दाबा, तुमचा प्रश्न बोला, आणि झाल्यावर पुन्हा दाबा';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'तुमचा प्रश्न प्रोसेस होत आहे...';
+
+  @override
+  String get deviceOnboardingListening => 'ऐकत आहे...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'बंद करा';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'चालू करा';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'बटण ३ सेकंद दाबून ठेवा';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'पुन्हा चालू करण्यासाठी बटण दाबा';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'दिवा बंद होईपर्यंत बटण घट्ट दाबून ठेवा';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'कनेक्ट झाले';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'कनेक्ट झाले!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'डिस्कनेक्ट झाले';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'बंद होत आहे...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'डबल टॅप सानुकूल करा';
+
+  @override
+  String get deviceOnboardingEndConversation => 'संभाषण संपवा';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'सध्याचे संभाषण जतन करून संपवा';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'म्यूट / अनम्यूट';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'मायक्रोफोन चालू किंवा बंद करा';
+
+  @override
+  String get deviceOnboardingStarConversation => 'सुरू असलेले संभाषण स्टार करा';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'संभाषण महत्त्वाचे म्हणून चिन्हांकित करा';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'तो एकच टॅप होता — पटकन दोनदा टॅप करून पाहा!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'आता करून पाहा! तुमच्या Omi वर डबल टॅप करा';
+
+  @override
+  String get deviceOnboardingContinue => 'पुढे जा';
+
+  @override
+  String get deviceOnboardingFinish => 'पूर्ण करा';
 }

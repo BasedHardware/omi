@@ -9365,4 +9365,92 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'متوقف شد — صدا ضبط نمی‌شود';
+
+  @override
+  String get deviceTutorial => 'آموزش دستگاه';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'با Omi خود صحبت کنید';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'چند کلمه بگویید و ظاهر شدن آن‌ها را به‌صورت لحظه‌ای ببینید';
+
+  @override
+  String get deviceOnboardingGoodJob => 'آفرین!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'شروع به صحبت کنید...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'از Omi سؤالی بپرسید';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'یک‌بار دکمه را فشار دهید، سؤالتان را بگویید و پس از پایان دوباره فشار دهید';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'در حال پردازش سؤال شما...';
+
+  @override
+  String get deviceOnboardingListening => 'در حال شنیدن...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'خاموش کردن';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'روشن کردن';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'دکمه را ۳ ثانیه نگه دارید';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'برای روشن کردن دوباره، دکمه را فشار دهید';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'دکمه را محکم نگه دارید تا چراغ خاموش شود';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'متصل';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'متصل شد!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'قطع شد';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'در حال خاموش شدن...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'سفارشی‌سازی دو ضربه';
+
+  @override
+  String get deviceOnboardingEndConversation => 'پایان گفتگو';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'ذخیره و پایان گفتگوی فعلی';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'بی‌صدا / باصدا';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'روشن یا خاموش کردن میکروفون';
+
+  @override
+  String get deviceOnboardingStarConversation => 'ستاره‌دار کردن گفتگوی جاری';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'علامت‌گذاری گفتگو به‌عنوان مهم';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'آن یک ضربه بود — دو بار سریع ضربه بزنید!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'همین حالا امتحان کنید! روی Omi خود دو ضربه بزنید';
+
+  @override
+  String get deviceOnboardingContinue => 'ادامه';
+
+  @override
+  String get deviceOnboardingFinish => 'پایان';
 }
