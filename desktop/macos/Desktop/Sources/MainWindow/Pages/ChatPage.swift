@@ -480,6 +480,7 @@ struct ChatPage: View {
       },
       sessionsLoadError: chatProvider.sessionsLoadError,
       onRetry: { Task { await chatProvider.retryLoad() } },
+      localSendToken: chatProvider.localSendToken,
       welcomeContent: { welcomeMessage }
     )
   }

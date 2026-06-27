@@ -15,6 +15,9 @@ class TaskChatState: ObservableObject {
     @Published var draftText = ""
     @Published var errorMessage: String?
     @Published var chatMode: ChatMode = .act
+    /// Monotonic token that increments each time the local user sends a message
+    /// in this task chat. ChatMessagesView observes this for turn anchoring.
+    @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
 
     /// Own bridge process — completely independent from sidebar chat
     private var agentBridge: AgentBridge?
@@ -170,6 +173,8 @@ class TaskChatState: ObservableObject {
         isSending = true
         errorMessage = nil
         TaskAgentStatusRegistry.shared.markRunning(taskId: taskId)
+        // Signal local send for turn anchoring.
+        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         // Add user message to local messages and persist
         // Skip for follow-ups — sendFollowUp() already added and persisted it
