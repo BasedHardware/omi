@@ -32,6 +32,9 @@ export class FrameDecoder {
       if (this.buf.length < 4) return
       const len = this.buf.readUInt32LE(0)
       if (len > MAX_FRAME_BYTES) {
+        // Drop the poisoned buffer before throwing so a later chunk (e.g. buffered
+        // stdout from a dying child) cannot re-concatenate onto it and re-throw.
+        this.buf = Buffer.alloc(0)
         throw new Error(`frame too large: ${len} bytes (max ${MAX_FRAME_BYTES})`)
       }
       if (this.buf.length < 4 + len) return

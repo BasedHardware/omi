@@ -53,4 +53,17 @@ describe('FrameDecoder', () => {
     header.writeUInt32LE(0xffffffff, 0)
     expect(() => dec.push(header)).toThrow(/frame too large/)
   })
+
+  it('drops the poisoned buffer so a later valid frame still decodes', () => {
+    const seen: string[] = []
+    const dec = new FrameDecoder((s) => seen.push(s))
+    const bad = Buffer.alloc(4)
+    bad.writeUInt32LE(0xffffffff, 0)
+    expect(() => dec.push(bad)).toThrow(/frame too large/)
+    const body = Buffer.from('{"ok":true}', 'utf8')
+    const header = Buffer.alloc(4)
+    header.writeUInt32LE(body.length, 0)
+    dec.push(Buffer.concat([header, body]))
+    expect(seen).toEqual(['{"ok":true}'])
+  })
 })
