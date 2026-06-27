@@ -149,6 +149,19 @@ final class StallDetectorTests: XCTestCase {
     )
   }
 
+  func testDuplicateToolStartPreservesOriginalStartTime() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: 0)
+    _ = await detector.step(kind: .toolStarted(id: "t1"), atMs: thresholds.slowGapMs - 1)
+
+    let transitions = await detector.tick(atMs: thresholds.slowGapMs)
+
+    XCTAssertTrue(
+      transitions.contains(.tool(id: "t1", from: .running, to: .slow)),
+      "duplicate starts should not reset the original per-tool timer"
+    )
+  }
+
   // MARK: - Threshold guard
 
   func testThresholdsPreconditionRejectsInvalidValues() {

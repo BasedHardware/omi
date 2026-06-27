@@ -142,14 +142,10 @@ actor StallDetector {
       break
 
     case .toolStarted(let id):
-      toolStartedAtMs[id] = atMs
-      if let old = toolStates[id], old != .running {
-        // Re-starting a tool that had been promoted (unusual but
-        // possible if the bridge re-emits) — emit a back-to-running
-        // transition for the UI.
-        transitions.append(.tool(id: id, from: old, to: .running))
+      if toolStartedAtMs[id] == nil {
+        toolStartedAtMs[id] = atMs
+        toolStates[id] = .running
       }
-      toolStates[id] = .running
 
     case .toolCompleted(let id):
       toolStartedAtMs.removeValue(forKey: id)

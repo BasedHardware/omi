@@ -48,4 +48,17 @@ final class ToolCallStatusTests: XCTestCase {
       "untracked-execute_sql"
     )
   }
+
+  // MARK: - Bridge status mapping
+
+  func testBridgeTerminalFailureStatusesMapToFailed() {
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("failed"), .failed)
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("cancelled"), .failed)
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("interrupted"), .failed)
+  }
+
+  func testBridgeStartedAndCompletedStatusesMapToExpectedStates() {
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("started"), .running)
+    XCTAssertEqual(ChatProvider.mapBridgeToolStatus("completed"), .completed)
+  }
 }

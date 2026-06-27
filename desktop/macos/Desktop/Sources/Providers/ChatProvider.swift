@@ -3748,6 +3748,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
 
+        // Detector-promoted .slow / .stalled arrive through the stall
+        // status-update path, not here.
         if status == .running {
             // If we have a toolUseId and input, try to update an existing running block (input arrived after start)
             if let toolUseId = toolUseId, toolInput != nil {
@@ -3768,13 +3770,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                           toolUseId: toolUseId, input: toolInput)
             )
         } else {
-            // Mark as completed — find by toolUseId first, fall back to name
+            // Mark as terminal — find by toolUseId first, fall back to name.
+            // Match any in-flight state so detector-promoted .slow / .stalled
+            // also resolve cleanly when the tool actually finishes.
             for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, .running, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i] {
+                if case .toolCall(let id, let name, let existingStatus, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
+                   existingStatus.isInFlight {
                     let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
                     if matches {
                         messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: .completed,
+                            id: id, name: name, status: status,
                             toolUseId: toolUseId ?? existingTuid,
                             input: toolInput ?? existingInput,
                             output: output
@@ -3819,8 +3824,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Mark any remaining in-flight tool call blocks as terminal in a message.
     /// Called when a query finishes (success or interrupt) so spinners don't spin forever.
-    /// Matches `.running`, `.slow`, and `.stalled` so detector-promoted blocks
-    /// resolve when the turn ends.
+    /// Matches `.running`, `.slow`, and `.stalled` (any state where `isInFlight` is true)
+    /// so detector-promoted blocks resolve when the turn ends.
     private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
         for i in messages[index].contentBlocks.indices {

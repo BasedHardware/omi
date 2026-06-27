@@ -2038,25 +2038,25 @@ struct OnboardingToolIndicator: View {
   private var displayText: String {
     switch cleanToolName {
     case "scan_files", "start_file_scan":
-      return status == .running ? "Scanning your files..." : "Files scanned"
+      return status.isInFlight ? "Scanning your files..." : "Files scanned"
     case "check_permission_status":
-      return status == .running ? "Checking permissions..." : "Permissions checked"
+      return status.isInFlight ? "Checking permissions..." : "Permissions checked"
     case "request_permission":
-      return status == .running ? "Requesting permission..." : "Permission requested"
+      return status.isInFlight ? "Requesting permission..." : "Permission requested"
     case "set_user_preferences":
-      return status == .running ? "Saving preferences..." : "Preferences saved"
+      return status.isInFlight ? "Saving preferences..." : "Preferences saved"
     case "complete_onboarding":
-      return status == .running ? "Finishing setup..." : "Setup complete"
+      return status.isInFlight ? "Finishing setup..." : "Setup complete"
     case "save_knowledge_graph":
-      return status == .running ? "Updating your profile..." : "Profile updated"
+      return status.isInFlight ? "Updating your profile..." : "Profile updated"
     default:
       if toolName == "WebSearch" || toolName.contains("search") || toolName.contains("web") {
-        return status == .running ? "Learning more about you..." : "Learned more about you"
+        return status.isInFlight ? "Learning more about you..." : "Learned more about you"
       }
       if toolName.hasPrefix("WebFetch:") || toolName == "WebFetch" {
-        return status == .running ? "Reading context..." : "Context updated"
+        return status.isInFlight ? "Reading context..." : "Context updated"
       }
-      return status == .running ? "Working..." : "Done"
+      return status.isInFlight ? "Working..." : "Done"
     }
   }
 }
