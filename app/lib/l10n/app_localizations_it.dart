@@ -7807,6 +7807,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get viewAll => 'Vedi tutto';
 
   @override
+  String get expand => 'Espandi';
+
+  @override
   String get addTask => 'Aggiungi attività';
 
   @override
@@ -9426,4 +9429,99 @@ class AppLocalizationsIt extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'Come usare Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Parla al tuo Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Pronuncia qualche parola e guardale comparire in tempo reale';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Ottimo lavoro!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Inizia a parlare...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Fai una domanda a Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Premi il pulsante una volta, fai la tua domanda, poi premi di nuovo quando hai finito';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Elaborazione della tua domanda...';
+
+  @override
+  String get deviceOnboardingListening => 'In ascolto...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Spegni';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Accendi';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tieni premuto il pulsante per 3 secondi';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Premi il pulsante per riaccenderlo';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tieni premuto saldamente il pulsante finché la luce non si spegne';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Connesso';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Connesso!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Disconnesso';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Spegnimento in corso...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalizza il doppio tocco';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Termina conversazione';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Salva e termina la conversazione corrente';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Disattiva / Attiva';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Attiva o disattiva il microfono';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Metti tra i preferiti la conversazione in corso';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Segna la conversazione come importante';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Era un tocco singolo: prova a toccare due volte rapidamente!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Provalo ora! Tocca due volte il tuo Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continua';
+
+  @override
+  String get deviceOnboardingFinish => 'Fine';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Scopri il tuo Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un tour rapido e pratico di tutto ciò che il tuo Omi può fare.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Circa 1 minuto';
 }

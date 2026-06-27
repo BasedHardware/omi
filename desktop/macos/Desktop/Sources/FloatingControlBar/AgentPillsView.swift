@@ -130,7 +130,7 @@ struct AgentPillView: View {
                     .fill(Color(nsColor: NSColor(white: 0.05, alpha: 1.0)))
                     .frame(width: 10, height: 10)
                 Circle()
-                    .fill(statusColor)
+                    .fill(pill.status.tintColor)
                     .frame(width: 8, height: 8)
             }
             .offset(x: 3, y: -3)
@@ -144,15 +144,6 @@ struct AgentPillView: View {
         switch pill.status {
         case .done, .failed: return true
         default: return false
-        }
-    }
-
-    private var statusColor: Color {
-        switch pill.status {
-        case .queued: return Color(red: 0.85, green: 0.78, blue: 0.30)
-        case .starting, .running: return Color(red: 0.27, green: 0.92, blue: 0.46)
-        case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)  // green
-        case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
         }
     }
 
@@ -251,13 +242,17 @@ struct AgentPillPopover: View {
 
             Spacer(minLength: 6)
 
-            Text(pill.status.displayLabel)
-                .scaledFont(size: 10, weight: .semibold)
-                .foregroundColor(statusBadgeForeground)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(statusBadgeBackground)
-                .clipShape(Capsule())
+            Group {
+                if pill.status == .done {
+                    Button(action: onDismiss) {
+                        statusBadge
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss completed agent")
+                } else {
+                    statusBadge
+                }
+            }
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
@@ -270,6 +265,16 @@ struct AgentPillPopover: View {
             .buttonStyle(.plain)
             .accessibilityLabel("Dismiss agent")
         }
+    }
+
+    private var statusBadge: some View {
+        Text(pill.status.displayLabel)
+            .scaledFont(size: 10, weight: .semibold)
+            .foregroundColor(statusBadgeForeground)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(statusBadgeBackground)
+            .clipShape(Capsule())
     }
 
     private var statusBadgeForeground: Color {

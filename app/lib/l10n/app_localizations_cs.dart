@@ -7755,6 +7755,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get viewAll => 'Zobrazit vše';
 
   @override
+  String get expand => 'Rozbalit';
+
+  @override
   String get addTask => 'Přidat úkol';
 
   @override
@@ -9371,4 +9374,99 @@ class AppLocalizationsCs extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'Jak používat Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Mluvte do svého Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Řekněte pár slov a sledujte, jak se zobrazují v reálném čase';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Skvělá práce!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Začněte mluvit...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Zeptejte se Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Jednou stiskněte tlačítko, položte otázku a po dokončení stiskněte znovu';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Zpracovávám vaši otázku...';
+
+  @override
+  String get deviceOnboardingListening => 'Poslouchám...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Vypnutí';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Zapnutí';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Podržte tlačítko po dobu 3 sekund';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Stisknutím tlačítka zařízení znovu zapnete';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Pevně držte tlačítko, dokud kontrolka nezhasne';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Připojeno';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Připojeno!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Odpojeno';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Vypínám...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Nastavení dvojitého klepnutí';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Ukončit konverzaci';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Uložit a ukončit aktuální konverzaci';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Ztlumit / Zrušit ztlumení';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Zapnout nebo vypnout mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Označit probíhající konverzaci hvězdičkou';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Označit konverzaci jako důležitou';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'To bylo jen jedno klepnutí – zkuste klepnout dvakrát rychle za sebou!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Vyzkoušejte to! Dvakrát klepněte na své Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Pokračovat';
+
+  @override
+  String get deviceOnboardingFinish => 'Dokončit';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Poznejte svůj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Rychlá praktická prohlídka všeho, co váš Omi umí.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Přibližně 1 minuta';
 }

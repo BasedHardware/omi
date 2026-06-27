@@ -7637,6 +7637,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get viewAll => 'すべて表示';
 
   @override
+  String get expand => '展開';
+
+  @override
   String get addTask => 'タスクを追加';
 
   @override
@@ -9209,4 +9212,98 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'Omi の使い方';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Omiに話しかけてみよう';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => '何か話して、リアルタイムで文字になる様子を見てみましょう';
+
+  @override
+  String get deviceOnboardingGoodJob => 'いいですね！';
+
+  @override
+  String get deviceOnboardingStartSpeaking => '話してみてください...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omiに質問してみよう';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'ボタンを1回押して質問を話し、終わったらもう一度押します';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => '質問を処理しています...';
+
+  @override
+  String get deviceOnboardingListening => '聞いています...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => '電源を切る';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => '電源を入れる';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'ボタンを3秒間長押しします';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'ボタンを押すと再び電源が入ります';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'ライトが消えるまでボタンをしっかり長押ししてください';
+
+  @override
+  String get deviceOnboardingStatusConnected => '接続済み';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => '接続しました！';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => '未接続';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => '電源を切っています...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'ダブルタップをカスタマイズ';
+
+  @override
+  String get deviceOnboardingEndConversation => '会話を終了';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => '現在の会話を保存して終了します';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'ミュート / 解除';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'マイクのオン・オフを切り替えます';
+
+  @override
+  String get deviceOnboardingStarConversation => '進行中の会話にスターを付ける';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => '会話を重要としてマークします';
+
+  @override
+  String get deviceOnboardingSingleTapHint => '今のはシングルタップです — 素早く2回タップしてみてください！';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => '今すぐ試そう！Omiをダブルタップしてください';
+
+  @override
+  String get deviceOnboardingContinue => '続ける';
+
+  @override
+  String get deviceOnboardingFinish => '完了';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi を知ろう';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi にできることを、すべて手軽に体験できるクイックツアー。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '約1分';
 }

@@ -7773,6 +7773,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get viewAll => 'Tümünü gör';
 
   @override
+  String get expand => 'Genişlet';
+
+  @override
   String get addTask => 'Görev ekle';
 
   @override
@@ -9381,4 +9384,99 @@ class AppLocalizationsTr extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'Omi Nasıl Kullanılır';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Omi\'nize Konuşun';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Birkaç kelime söyleyin ve gerçek zamanlı olarak göründüklerini izleyin';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Aferin!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Konuşmaya başlayın...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi\'ye Bir Soru Sorun';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'Düğmeye bir kez basın, sorunuzu söyleyin, bitince tekrar basın';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Sorunuz işleniyor...';
+
+  @override
+  String get deviceOnboardingListening => 'Dinliyor...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Kapat';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Aç';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Düğmeyi 3 saniye basılı tutun';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tekrar açmak için düğmeye basın';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Işık sönene kadar düğmeyi sıkıca basılı tutun';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Bağlandı';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Bağlandı!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Bağlantı kesildi';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Kapatılıyor...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Çift Dokunmayı Özelleştir';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Konuşmayı Bitir';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Mevcut konuşmayı kaydet ve bitir';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Sustur / Sesi Aç';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Mikrofonu aç veya kapat';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Devam Eden Konuşmayı Yıldızla';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Konuşmayı önemli olarak işaretle';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Bu tek dokunuştu — hızlıca iki kez dokunmayı deneyin!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Şimdi deneyin! Omi\'nize çift dokunun';
+
+  @override
+  String get deviceOnboardingContinue => 'Devam Et';
+
+  @override
+  String get deviceOnboardingFinish => 'Bitir';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi\'nizi Tanıyın';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi\'nizin yapabileceği her şeyin hızlı ve uygulamalı bir turu.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Yaklaşık 1 dakika';
 }

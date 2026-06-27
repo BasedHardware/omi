@@ -7765,6 +7765,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get viewAll => 'Visa alla';
 
   @override
+  String get expand => 'Expandera';
+
+  @override
   String get addTask => 'Lägg till uppgift';
 
   @override
@@ -9376,4 +9379,99 @@ class AppLocalizationsSv extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'Så använder du Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Prata in i din Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Säg några ord och se dem visas i realtid';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Bra jobbat!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Börja prata...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Ställ en fråga till Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Tryck en gång på knappen, ställ din fråga och tryck igen när du är klar';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Bearbetar din fråga...';
+
+  @override
+  String get deviceOnboardingListening => 'Lyssnar...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Stäng av';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Slå på';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Håll in knappen i 3 sekunder';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tryck på knappen för att slå på den igen';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Håll in knappen ordentligt tills lampan slocknar';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Ansluten';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Ansluten!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Frånkopplad';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Stänger av...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Anpassa dubbeltryck';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Avsluta konversation';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Spara och avsluta pågående konversation';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Tysta / Slå på ljud';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Slå på eller av mikrofonen';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Stjärnmärk pågående konversation';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Markera konversationen som viktig';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Det var ett enkeltryck – prova att trycka två gånger snabbt!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Prova nu! Dubbeltryck på din Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Fortsätt';
+
+  @override
+  String get deviceOnboardingFinish => 'Slutför';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Lär känna din Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'En snabb, praktisk rundtur i allt din Omi kan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
 }

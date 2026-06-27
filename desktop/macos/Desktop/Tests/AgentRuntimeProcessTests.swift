@@ -110,6 +110,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains("harness changed"))
   }
 
+  func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("handle.readabilityHandler = { [weak self] handle in"))
+    // The implementation now uses a generation-guarded signature; match the current
+    // function name without coupling the test to the exact parameter list.
+    XCTAssertTrue(source.contains("func processStdoutData("))
+    XCTAssertFalse(source.contains("Task.detached { [weak self] in"))
+    XCTAssertFalse(source.contains("while !Task.isCancelled"))
+  }
+
   func testFailedRuntimeStartCleansUpLatchedRunningState() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

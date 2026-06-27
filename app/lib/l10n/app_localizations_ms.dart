@@ -7782,6 +7782,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get viewAll => 'Lihat semua';
 
   @override
+  String get expand => 'Kembangkan';
+
+  @override
   String get addTask => 'Tambah tugas';
 
   @override
@@ -9386,4 +9389,101 @@ class AppLocalizationsMs extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'Cara Menggunakan Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Bercakap dengan Omi Anda';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Sebut beberapa patah perkataan dan lihat ia muncul secara langsung';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Syabas!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Mula bercakap...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Tanya Omi Satu Soalan';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Tekan butang sekali, sebut soalan anda, kemudian tekan sekali lagi apabila selesai';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Memproses soalan anda...';
+
+  @override
+  String get deviceOnboardingListening => 'Mendengar...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Matikan';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Hidupkan';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tekan dan tahan butang selama 3 saat';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tekan butang untuk menghidupkannya semula';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tekan dan tahan butang dengan kemas sehingga lampu padam';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Bersambung';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Bersambung!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Terputus';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Sedang dimatikan...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Sesuaikan Ketuk Dua Kali';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Tamatkan Perbualan';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Simpan dan tamatkan perbualan semasa';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Senyap / Nyahsenyap';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Hidupkan atau matikan mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Bintangkan Perbualan Semasa';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Tandakan perbualan sebagai penting';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Itu satu ketukan sahaja — cuba ketuk dua kali dengan pantas!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Cuba sekarang! Ketuk Omi anda dua kali';
+
+  @override
+  String get deviceOnboardingContinue => 'Teruskan';
+
+  @override
+  String get deviceOnboardingFinish => 'Selesai';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kenali Omi Anda';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'Lawatan ringkas dan praktikal tentang semua yang Omi anda boleh lakukan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Kira-kira 1 minit';
 }

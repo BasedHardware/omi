@@ -7706,6 +7706,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get viewAll => 'عرض الكل';
 
   @override
+  String get expand => 'توسيع';
+
+  @override
   String get addTask => 'إضافة مهمة';
 
   @override
@@ -9315,4 +9318,98 @@ class AppLocalizationsAr extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'كيفية استخدام Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'تحدّث إلى Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'قل بضع كلمات وشاهدها تظهر في الوقت الفعلي';
+
+  @override
+  String get deviceOnboardingGoodJob => 'أحسنت!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'ابدأ بالتحدّث...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'اسأل Omi سؤالاً';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'اضغط الزر مرة واحدة، اطرح سؤالك، ثم اضغط مجدداً عند الانتهاء';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'جارٍ معالجة سؤالك...';
+
+  @override
+  String get deviceOnboardingListening => 'يستمع...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'إيقاف التشغيل';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'تشغيل';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'اضغط مع الاستمرار على الزر لمدة 3 ثوانٍ';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'اضغط الزر لإعادة تشغيله';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'اضغط مع الاستمرار على الزر بإحكام حتى ينطفئ الضوء';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'متصل';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'تم الاتصال!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'غير متصل';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'جارٍ الإيقاف...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'تخصيص النقر المزدوج';
+
+  @override
+  String get deviceOnboardingEndConversation => 'إنهاء المحادثة';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'حفظ المحادثة الحالية وإنهاؤها';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'كتم / إلغاء الكتم';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'تشغيل الميكروفون أو إيقافه';
+
+  @override
+  String get deviceOnboardingStarConversation => 'تمييز المحادثة الجارية بنجمة';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'تحديد المحادثة كمهمة';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'كانت تلك نقرة واحدة — جرّب النقر مرتين بسرعة!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'جرّبه الآن! انقر على Omi نقراً مزدوجاً';
+
+  @override
+  String get deviceOnboardingContinue => 'متابعة';
+
+  @override
+  String get deviceOnboardingFinish => 'إنهاء';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'تعرّف على Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'جولة سريعة وعملية على كل ما يمكن أن يفعله جهاز Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'حوالي دقيقة واحدة';
 }

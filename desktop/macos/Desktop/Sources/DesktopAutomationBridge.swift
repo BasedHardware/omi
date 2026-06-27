@@ -81,6 +81,9 @@ struct DesktopAutomationSnapshot: Codable {
   var askOmiOpen: Bool
   var askOmiFocused: Bool
   var floatingBarFrame: String?
+  var floatingBarVoiceListening: Bool
+  var floatingBarVoiceResponseActive: Bool
+  var floatingBarUsesNotchIsland: Bool
   var updatedAt: String
 }
 
@@ -191,6 +194,9 @@ final class DesktopAutomationStateStore {
     askOmiOpen: false,
     askOmiFocused: false,
     floatingBarFrame: nil,
+    floatingBarVoiceListening: false,
+    floatingBarVoiceResponseActive: false,
+    floatingBarUsesNotchIsland: false,
     updatedAt: ISO8601DateFormatter().string(from: Date())
   )
 
@@ -222,6 +228,9 @@ private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
       isAskOmiOpen: floating.isAskOmiOpen,
       isAskOmiFocused: floating.isAskOmiFocused,
       frame: floating.frame,
+      isVoiceListening: floating.isVoiceListening,
+      isVoiceResponseActive: floating.isVoiceResponseActive,
+      usesNotchIsland: floating.usesNotchIsland,
       isAppActive: NSApp.isActive
     )
   }
@@ -230,6 +239,9 @@ private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
     snapshot.askOmiOpen = floating.isAskOmiOpen
     snapshot.askOmiFocused = floating.isAskOmiFocused
     snapshot.floatingBarFrame = floating.frame
+    snapshot.floatingBarVoiceListening = floating.isVoiceListening
+    snapshot.floatingBarVoiceResponseActive = floating.isVoiceResponseActive
+    snapshot.floatingBarUsesNotchIsland = floating.usesNotchIsland
     snapshot.isAppActive = floating.isAppActive
     snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
   }
@@ -490,6 +502,34 @@ final class DesktopAutomationActionRegistry {
           return ["error": error.localizedDescription]
         }
       }
+    }
+
+    register(
+      name: "seed_subagents",
+      summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
+      params: ["count"]
+    ) { params in
+      let count = intParam(params["count"], default: 3)
+      return await FloatingControlBarManager.shared.seedSubagentsForAutomation(count: count)
+    }
+
+    register(
+      name: "open_seeded_subagent",
+      summary: "Open a seeded subagent in the floating-bar chat",
+      params: ["index", "wait"]
+    ) { params in
+      let index = intParam(params["index"], default: 0)
+      let wait = boolParam(params["wait"], default: true)
+      return await FloatingControlBarManager.shared.openSeededSubagentForAutomation(index: index, wait: wait)
+    }
+
+    register(
+      name: "back_from_subagent",
+      summary: "Return from the selected subagent to the main Ask Omi chat",
+      params: ["wait"]
+    ) { params in
+      let wait = boolParam(params["wait"], default: true)
+      return await FloatingControlBarManager.shared.backFromSubagentForAutomation(wait: wait)
     }
   }
 }

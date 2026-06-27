@@ -131,7 +131,9 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateSpecificGroupedConvo(ServerConversation convo, DateTime date, int idx) {
-    groupedConversations[date]![idx] = convo;
+    final group = groupedConversations[date];
+    if (group == null || idx < 0 || idx >= group.length) return;
+    group[idx] = convo;
     notifyListeners();
   }
 

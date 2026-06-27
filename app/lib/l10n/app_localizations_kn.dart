@@ -7788,6 +7788,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get viewAll => 'ಎಲ್ಲವನ್ನೂ ವೀಕ್ಷಿಸಿ';
 
   @override
+  String get expand => 'ವಿಸ್ತರಿಸಿ';
+
+  @override
   String get addTask => 'ಕಾರ್ಯ ಸೇರಿಸಿ';
 
   @override
@@ -9397,4 +9400,98 @@ class AppLocalizationsKn extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'Omi ಅನ್ನು ಹೇಗೆ ಬಳಸುವುದು';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'ನಿಮ್ಮ Omi ಜೊತೆ ಮಾತನಾಡಿ';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'ಕೆಲವು ಪದಗಳನ್ನು ಹೇಳಿ, ಅವು ತಕ್ಷಣವೇ ಕಾಣಿಸುವುದನ್ನು ನೋಡಿ';
+
+  @override
+  String get deviceOnboardingGoodJob => 'ಭೇಷ್‌!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'ಮಾತನಾಡಲು ಆರಂಭಿಸಿ...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi ಗೆ ಪ್ರಶ್ನೆ ಕೇಳಿ';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'ಬಟನ್ ಒಮ್ಮೆ ಒತ್ತಿ, ನಿಮ್ಮ ಪ್ರಶ್ನೆ ಕೇಳಿ, ಮುಗಿದ ಮೇಲೆ ಮತ್ತೆ ಒತ್ತಿ';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ...';
+
+  @override
+  String get deviceOnboardingListening => 'ಆಲಿಸುತ್ತಿದೆ...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'ಆಫ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'ಆನ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'ಬಟನ್ ಅನ್ನು 3 ಸೆಕೆಂಡ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'ಮತ್ತೆ ಆನ್ ಮಾಡಲು ಬಟನ್ ಒತ್ತಿ';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'ಬೆಳಕು ಆರಿ ಹೋಗುವವರೆಗೆ ಬಟನ್ ಅನ್ನು ಗಟ್ಟಿಯಾಗಿ ಒತ್ತಿ ಹಿಡಿಯಿರಿ';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'ಸಂಪರ್ಕಗೊಂಡಿದೆ';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'ಸಂಪರ್ಕಗೊಂಡಿದೆ!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'ಆಫ್ ಆಗುತ್ತಿದೆ...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'ಡಬಲ್ ಟ್ಯಾಪ್ ಕಸ್ಟಮೈಸ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingEndConversation => 'ಸಂಭಾಷಣೆ ಮುಗಿಸಿ';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'ಪ್ರಸ್ತುತ ಸಂಭಾಷಣೆಯನ್ನು ಉಳಿಸಿ ಮುಗಿಸಿ';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'ಮ್ಯೂಟ್ / ಅನ್‌ಮ್ಯೂಟ್';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'ಮೈಕ್ರೊಫೋನ್ ಅನ್ನು ಆನ್ ಅಥವಾ ಆಫ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingStarConversation => 'ನಡೆಯುತ್ತಿರುವ ಸಂಭಾಷಣೆಗೆ ಸ್ಟಾರ್ ಹಾಕಿ';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'ಸಂಭಾಷಣೆಯನ್ನು ಮುಖ್ಯ ಎಂದು ಗುರುತಿಸಿ';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'ಅದು ಒಂದೇ ಟ್ಯಾಪ್ ಆಗಿತ್ತು — ವೇಗವಾಗಿ ಎರಡು ಬಾರಿ ಟ್ಯಾಪ್ ಮಾಡಿ ನೋಡಿ!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'ಈಗಲೇ ಪ್ರಯತ್ನಿಸಿ! ನಿಮ್ಮ Omi ಅನ್ನು ಡಬಲ್ ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get deviceOnboardingContinue => 'ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get deviceOnboardingFinish => 'ಮುಗಿಸಿ';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'ನಿಮ್ಮ Omi ಅನ್ನು ತಿಳಿಯಿರಿ';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'ನಿಮ್ಮ Omi ಮಾಡಬಲ್ಲ ಎಲ್ಲದರ ತ್ವರಿತ, ಪ್ರಾಯೋಗಿಕ ಪರಿಚಯ.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'ಸುಮಾರು 1 ನಿಮಿಷ';
 }

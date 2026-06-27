@@ -7795,6 +7795,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get viewAll => 'Összes megtekintése';
 
   @override
+  String get expand => 'Kibontás';
+
+  @override
   String get addTask => 'Feladat hozzáadása';
 
   @override
@@ -9411,4 +9414,99 @@ class AppLocalizationsHu extends AppLocalizations {
   String get memoryProvenanceIphone => 'iPhone';
   @override
   String get memoryProvenanceAndroid => 'Android';
+  String get deviceTutorial => 'Az Omi használata';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Beszélj az Omihoz';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Mondj néhány szót, és nézd, ahogy valós időben megjelennek';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Szép munka!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Kezdj el beszélni...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Tegyél fel kérdést az Ominak';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Nyomd meg egyszer a gombot, mondd el a kérdésed, majd nyomd meg újra, ha végeztél';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Kérdés feldolgozása...';
+
+  @override
+  String get deviceOnboardingListening => 'Hallgatom...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Kikapcsolás';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Bekapcsolás';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tartsd nyomva a gombot 3 másodpercig';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Nyomd meg a gombot a visszakapcsoláshoz';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tartsd határozottan nyomva a gombot, amíg a fény ki nem alszik';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Csatlakoztatva';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Csatlakoztatva!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Leválasztva';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Kikapcsolás...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Dupla koppintás testreszabása';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Beszélgetés befejezése';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Aktuális beszélgetés mentése és lezárása';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Némítás / Feloldás';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Mikrofon be- vagy kikapcsolása';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Folyamatban lévő beszélgetés csillagozása';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Beszélgetés megjelölése fontosként';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Ez egyszeri koppintás volt – próbálj meg gyorsan kétszer koppintani!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Próbáld ki most! Koppints duplán az Omira';
+
+  @override
+  String get deviceOnboardingContinue => 'Folytatás';
+
+  @override
+  String get deviceOnboardingFinish => 'Befejezés';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Ismerd meg az Omidat';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
 }
