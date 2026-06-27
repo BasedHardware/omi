@@ -40,7 +40,13 @@ def _full_stub(name, *attrs):
         return MagicMock()
 
     mod.__getattr__ = _getattr  # type: ignore[attr-defined]
-    sys.modules[name] = mod
+    # Use setdefault so we don't clobber a real module already imported by
+    # another test in the same pytest session. This matters when running
+    # `pytest backend/tests/unit/` — the persona_chat test would otherwise
+    # overwrite database.* stubs into sys.modules and break test collection
+    # of unrelated tests (test_prompt_caching, test_users_webhook_url_validation,
+    # etc. all fail with module-already-stubbed errors).
+    sys.modules.setdefault(name, mod)
     return mod
 
 
