@@ -176,6 +176,7 @@ def test_prodlike_future_plans_route_to_review(monkeypatch):
 class _FakeLLM:
     def invoke(self, _prompt_value):
         from langchain_core.messages import AIMessage
+
         return AIMessage(content='{"facts":[{"content":"User uses Warp terminal","category":"system"}]}')
 
 
@@ -184,7 +185,11 @@ def test_prodlike_trace_captures_raw_response_before_parse(monkeypatch):
     monkeypatch.setattr(production_like_model, "_memory_llm", lambda: _FakeLLM())
 
     memories = production_like_model._extract_memories_with_production_prompt(
-        segments=[production_like_model.TranscriptSegment(text="I use Warp terminal every day for coding work.", is_user=True, start=0.0, end=3.0)],
+        segments=[
+            production_like_model.TranscriptSegment(
+                text="I use Warp terminal every day for coding work.", is_user=True, start=0.0, end=3.0
+            )
+        ],
         user_name="User",
         memories_str="you do not yet know durable facts about User.\n",
         language=None,
@@ -206,12 +211,14 @@ def test_prodlike_trace_captures_raw_response_before_parse(monkeypatch):
 
 def test_prodlike_client_trace_sink_records_candidate_and_frame(monkeypatch):
     def fake_extract_memories_with_production_prompt(**kwargs):
-        kwargs["trace_sink"]({
-            "stage": "model_call",
-            "status": "ok",
-            "parsed_facts_before_filter": [{"content": "User uses Warp terminal"}],
-            **kwargs.get("trace_context", {}),
-        })
+        kwargs["trace_sink"](
+            {
+                "stage": "model_call",
+                "status": "ok",
+                "parsed_facts_before_filter": [{"content": "User uses Warp terminal"}],
+                **kwargs.get("trace_context", {}),
+            }
+        )
         return [ProductionLikeMemory(content="User uses Warp terminal", category="system")]
 
     monkeypatch.setattr(
@@ -232,7 +239,6 @@ def test_prodlike_client_trace_sink_records_candidate_and_frame(monkeypatch):
     assert route_event["metadata"]["route_family"] == "current"
     assert "model_call" in stages
     assert "frame_created" in stages
-
 
 
 def test_prodlike_source_route_config_records_chat_v7a(monkeypatch):
@@ -270,7 +276,10 @@ class _FlakyLLMThenSuccess:
         if self.calls == 1:
             raise TimeoutError("Request timed out.")
         from langchain_core.messages import AIMessage
-        return AIMessage(content='{"facts":[{"content":"User is going to San Francisco to find a cofounder","category":"system"}]}')
+
+        return AIMessage(
+            content='{"facts":[{"content":"User is going to San Francisco to find a cofounder","category":"system"}]}'
+        )
 
 
 def test_prodlike_voice_recall_route_retries_model_call(monkeypatch):
@@ -287,8 +296,12 @@ def test_prodlike_voice_recall_route_retries_model_call(monkeypatch):
     assert output.event_frames[0].canonical_text == "User is going to San Francisco to find a cofounder"
     stages = [event["stage"] for event in client.trace_events]
     assert "model_call_retry" in stages
-    error_event = next(event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "error")
-    ok_event = next(event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "ok")
+    error_event = next(
+        event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "error"
+    )
+    ok_event = next(
+        event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "ok"
+    )
     assert error_event["will_retry"] is True
     assert error_event["attempt"] == 1
     assert ok_event["attempt"] == 2
@@ -309,7 +322,9 @@ def test_prodlike_current_voice_route_does_not_retry(monkeypatch):
 
     assert llm.calls == 1
     assert output.event_frames == []
-    error_event = next(event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "error")
+    error_event = next(
+        event for event in client.trace_events if event["stage"] == "model_call" and event["status"] == "error"
+    )
     assert error_event["will_retry"] is False
     assert error_event["max_attempts"] == 1
 
@@ -382,6 +397,7 @@ def test_candidate_schema_serializes_chat_and_ocr_candidates(monkeypatch):
         ),
     ]
     for idx, (source_type, text, memory, attribution, mention, event_type) in enumerate(cases):
+
         def fake_extract_memories_with_production_prompt(**_kwargs):
             return [memory]
 
@@ -397,7 +413,6 @@ def test_candidate_schema_serializes_chat_and_ocr_candidates(monkeypatch):
         assert dumped["candidates"][0]["source_type"] == source_type
         assert dumped["candidates"][0]["speaker_or_actor_attribution"] == attribution
         assert any(m["surface"] == mention for m in dumped["candidates"][0]["entity_mentions"])
-
 
 
 def test_prodlike_voice_recall_route_preserves_non_user_subject(monkeypatch):

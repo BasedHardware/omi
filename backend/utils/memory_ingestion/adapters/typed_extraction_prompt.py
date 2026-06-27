@@ -7,10 +7,10 @@ same single call to also emit a typed proposition: a predicate from a fixed
 vocabulary plus named argument slots. It does not add model calls.
 
 v2 (2026-06-12): Simplified from v1's ~245-line prompt to ~160 lines.
-Removed redundant exclusion sections (anti-hallucination + strict exclusions + 
-double-check were 77+11 lines repeating the same rules). Consolidated three 
-contradictory conservative-bias phrases into one clear principle. Resolved 
-date/time vs plan predicate contradiction. Removed quality-over-quantity section 
+Removed redundant exclusion sections (anti-hallucination + strict exclusions +
+double-check were 77+11 lines repeating the same rules). Consolidated three
+contradictory conservative-bias phrases into one clear principle. Resolved
+date/time vs plan predicate contradiction. Removed quality-over-quantity section
 that fought against lean-toward-extraction guidance.
 
 v3 (2026-06-13): Diagnostic-driven overhaul. Root causes of H=75%/F1=0.162:
@@ -31,14 +31,14 @@ TYPED_PREDICATES = [
     "plans_travel_to",
     "prefers",
     "dislikes",
-    "works_on",            # absorbs belongs_to_project
-    "considering_using",   # absorbs decided_to_use for weak/evaluative cases
-    "committed_to_do",     # absorbs decided_to_use for strong decisions
+    "works_on",  # absorbs belongs_to_project
+    "considering_using",  # absorbs decided_to_use for weak/evaluative cases
+    "committed_to_do",  # absorbs decided_to_use for strong decisions
     "knows_person",
     "has_birthday",
     "has_address",
-    "uses_tool",           # absorbs owns_device
-    "is_currently_true",   # PRIMARY predicate for voice/transcript sources (~30% of extractions); use for biographical identity, ongoing states, location/residence, visa/status, family relationships, health, travel history when no more specific predicate fits
+    "uses_tool",  # absorbs owns_device
+    "is_currently_true",  # PRIMARY predicate for voice/transcript sources (~30% of extractions); use for biographical identity, ongoing states, location/residence, visa/status, family relationships, health, travel history when no more specific predicate fits
     "is_no_longer_true",
     "credential_detected",  # credentials, passwords, PII, auth material (OCR/security sources)
     "sensitive_info_visible",  # sensitive but non-credential info (emails, personal identifiers)
@@ -109,9 +109,7 @@ def render_source_guidance(source_type: str) -> str:
     return "\n".join(parts)
 
 
-typed_extract_memories_prompt = ChatPromptTemplate.from_messages(
-    [
-        '''
+typed_extract_memories_prompt = ChatPromptTemplate.from_messages(['''
 You are an expert memory curator extracting durable, memory-worthy facts about {user_name} from a conversation, as TYPED propositions.
 
 CRITICAL CONTEXT:
@@ -638,8 +636,4 @@ LANGUAGE INSTRUCTION:
 {conversation}
 ```
 {format_instructions}
-'''.replace(
-            ' ', ''
-        ).strip()
-    ]
-)
+'''.replace(' ', '').strip()])

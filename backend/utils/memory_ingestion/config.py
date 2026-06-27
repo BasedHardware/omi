@@ -7,5 +7,4 @@ from utils.memory_ingestion.models import (
     ThresholdConfig,
 )
 
-
 DEFAULT_MEMORY_PIPELINE_CONFIG = MemoryPipelineConfig()

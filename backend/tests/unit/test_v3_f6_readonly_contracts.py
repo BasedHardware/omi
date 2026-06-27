@@ -17,7 +17,6 @@ from testing.memory.v3_f6.readonly_contracts import (
     verify_identity_iam,
 )
 
-
 READ_PERMISSIONS = frozenset(
     {
         "datastore.databases.get",

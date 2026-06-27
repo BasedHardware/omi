@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-
 WriteMode = Literal["legacy_only", "dual_write", "graph_only"]
 ReadMode = Literal["legacy", "graph_head"]
 GateStatus = Literal["unknown", "running", "failed", "passed"]

@@ -23,7 +23,6 @@ from utils.memory.short_term_promotion import (
     run_canonical_short_term_maintenance,
 )
 
-
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 
 

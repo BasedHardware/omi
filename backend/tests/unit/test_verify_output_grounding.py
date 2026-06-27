@@ -30,10 +30,10 @@ from utils.memory_ingestion.stages.verify_output import (
     verify_output,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_source_ref() -> SourceRef:
     return SourceRef(conversation_id="conv_1")
@@ -151,7 +151,15 @@ def _make_output(
         ],
         entity_ops=[],
         relationship_ops=[],
-        mutation_plan=MemoryMutationPlan(plan_id="plan_1", creates=creates, updates=[], invalidations=[], evidence_links=[], review_upserts=[], task_routes=[]),
+        mutation_plan=MemoryMutationPlan(
+            plan_id="plan_1",
+            creates=creates,
+            updates=[],
+            invalidations=[],
+            evidence_links=[],
+            review_upserts=[],
+            task_routes=[],
+        ),
         vector_plan=VectorMutationPlan(upserts=[], deletes=[]),
         review_items=[],
         rejected_items=[],
@@ -171,6 +179,7 @@ def _make_output(
 # ---------------------------------------------------------------------------
 # _edit_distance
 # ---------------------------------------------------------------------------
+
 
 class TestEditDistance:
     def test_identical_strings(self):
@@ -194,43 +203,54 @@ class TestEditDistance:
 # _check_confidence_contradiction
 # ---------------------------------------------------------------------------
 
+
 class TestConfidenceContradiction:
     def test_high_confidence_with_inferred_not_stated_on_frame(self):
-        output = _make_output(frames=[
-            _make_frame(confidence="high", uncertainty_reasons=["inferred_not_stated"]),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(confidence="high", uncertainty_reasons=["inferred_not_stated"]),
+            ]
+        )
         lints = _check_confidence_contradiction(output)
         assert len(lints) == 1
         assert lints[0].code == "confidence_contradiction"
         assert lints[0].severity == "error"
 
     def test_high_confidence_with_inferred_not_stated_on_create(self):
-        output = _make_output(creates=[
-            _make_create(mutation_id="mut_x", confidence="high", uncertainty_reasons=["inferred_not_stated"]),
-        ])
+        output = _make_output(
+            creates=[
+                _make_create(mutation_id="mut_x", confidence="high", uncertainty_reasons=["inferred_not_stated"]),
+            ]
+        )
         lints = _check_confidence_contradiction(output)
         assert len(lints) == 1
         assert lints[0].code == "confidence_contradiction"
         assert lints[0].mutation_id == "mut_x"
 
     def test_medium_confidence_with_inferred_not_stated_is_ok(self):
-        output = _make_output(frames=[
-            _make_frame(confidence="medium", uncertainty_reasons=["inferred_not_stated"]),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(confidence="medium", uncertainty_reasons=["inferred_not_stated"]),
+            ]
+        )
         lints = _check_confidence_contradiction(output)
         assert len(lints) == 0
 
     def test_high_confidence_without_inferred_not_stated_is_ok(self):
-        output = _make_output(frames=[
-            _make_frame(confidence="high", uncertainty_reasons=["weak_evidence"]),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(confidence="high", uncertainty_reasons=["weak_evidence"]),
+            ]
+        )
         lints = _check_confidence_contradiction(output)
         assert len(lints) == 0
 
     def test_no_uncertainty_reasons_is_ok(self):
-        output = _make_output(frames=[
-            _make_frame(confidence="high"),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(confidence="high"),
+            ]
+        )
         lints = _check_confidence_contradiction(output)
         assert len(lints) == 0
 
@@ -239,56 +259,71 @@ class TestConfidenceContradiction:
 # _check_grounding
 # ---------------------------------------------------------------------------
 
+
 class TestGrounding:
     def test_canonical_text_found_in_quote_no_warning(self):
-        output = _make_output(frames=[
-            _make_frame(canonical_text="Alice likes pizza", evidence_quotes=["She said Alice likes pizza"]),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(canonical_text="Alice likes pizza", evidence_quotes=["She said Alice likes pizza"]),
+            ]
+        )
         lints = _check_grounding(output)
         assert len(lints) == 0
 
     def test_canonical_text_not_in_quote_warns(self):
-        output = _make_output(frames=[
-            _make_frame(canonical_text="Alice hates pizza", evidence_quotes=["Bob ordered a burger"]),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(canonical_text="Alice hates pizza", evidence_quotes=["Bob ordered a burger"]),
+            ]
+        )
         lints = _check_grounding(output)
         assert len(lints) == 1
         assert lints[0].code == "ungrounded_content"
         assert lints[0].severity == "warning"
 
     def test_case_insensitive_match(self):
-        output = _make_output(frames=[
-            _make_frame(canonical_text="ALICE LIKES PIZZA", evidence_quotes=["alice likes pizza"]),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(canonical_text="ALICE LIKES PIZZA", evidence_quotes=["alice likes pizza"]),
+            ]
+        )
         lints = _check_grounding(output)
         assert len(lints) == 0
 
     def test_no_evidence_skips_check(self):
         """Frames without evidence quotes should not trigger ungrounded warning."""
-        output = _make_output(frames=[
-            _make_frame(canonical_text="Alice likes pizza", evidence_quotes=[]),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(canonical_text="Alice likes pizza", evidence_quotes=[]),
+            ]
+        )
         lints = _check_grounding(output)
         assert len(lints) == 0
 
     def test_empty_canonical_text_skips_check(self):
-        output = _make_output(frames=[
-            _make_frame(canonical_text="   ", evidence_quotes=["something"]),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(canonical_text="   ", evidence_quotes=["something"]),
+            ]
+        )
         lints = _check_grounding(output)
         assert len(lints) == 0
 
     def test_create_mutation_text_found_in_quote(self):
-        output = _make_output(creates=[
-            _make_create(text="Alice likes coffee", evidence_quotes=["She said Alice likes coffee today"]),
-        ])
+        output = _make_output(
+            creates=[
+                _make_create(text="Alice likes coffee", evidence_quotes=["She said Alice likes coffee today"]),
+            ]
+        )
         lints = _check_grounding(output)
         assert len(lints) == 0
 
     def test_create_mutation_text_not_in_quote_warns(self):
-        output = _make_output(creates=[
-            _make_create(text="Alice likes tea", evidence_quotes=["Bob ordered coffee"]),
-        ])
+        output = _make_output(
+            creates=[
+                _make_create(text="Alice likes tea", evidence_quotes=["Bob ordered coffee"]),
+            ]
+        )
         lints = _check_grounding(output)
         assert len(lints) == 1
         assert lints[0].code == "ungrounded_content"
@@ -298,65 +333,80 @@ class TestGrounding:
 # _check_near_duplicates
 # ---------------------------------------------------------------------------
 
+
 class TestNearDuplicates:
     def test_identical_texts_flagged(self):
-        output = _make_output(frames=[
-            _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
-            _make_frame(frame_id="f2", canonical_text="Alice likes pizza"),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
+                _make_frame(frame_id="f2", canonical_text="Alice likes pizza"),
+            ]
+        )
         lints = _check_near_duplicates(output)
         assert len(lints) == 1
         assert lints[0].code == "near_duplicate_canonical_text"
         assert lints[0].severity == "warning"
 
     def test_edit_distance_one_flagged(self):
-        output = _make_output(frames=[
-            _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
-            _make_frame(frame_id="f2", canonical_text="Alice like pizza"),  # missing 's'
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
+                _make_frame(frame_id="f2", canonical_text="Alice like pizza"),  # missing 's'
+            ]
+        )
         lints = _check_near_duplicates(output)
         assert len(lints) == 1
         assert "edit distance=1" in lints[0].message
 
     def test_edit_distance_two_flagged(self):
-        output = _make_output(frames=[
-            _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
-            _make_frame(frame_id="f2", canonical_text="Alic like pizza"),  # missing 'e' and 's'
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
+                _make_frame(frame_id="f2", canonical_text="Alic like pizza"),  # missing 'e' and 's'
+            ]
+        )
         lints = _check_near_duplicates(output)
         assert len(lints) == 1
         assert "edit distance=2" in lints[0].message
 
     def test_edit_distance_three_not_flagged(self):
-        output = _make_output(frames=[
-            _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
-            _make_frame(frame_id="f2", canonical_text="Ali like pizza"),  # dist >= 3
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
+                _make_frame(frame_id="f2", canonical_text="Ali like pizza"),  # dist >= 3
+            ]
+        )
         lints = _check_near_duplicates(output)
         assert len(lints) == 0
 
     def test_single_frame_no_lint(self):
-        output = _make_output(frames=[
-            _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(frame_id="f1", canonical_text="Alice likes pizza"),
+            ]
+        )
         lints = _check_near_duplicates(output)
         assert len(lints) == 0
 
     def test_empty_canonical_text_ignored(self):
-        output = _make_output(frames=[
-            _make_frame(frame_id="f1", canonical_text=""),
-            _make_frame(frame_id="f2", canonical_text="  "),
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(frame_id="f1", canonical_text=""),
+                _make_frame(frame_id="f2", canonical_text="  "),
+            ]
+        )
         lints = _check_near_duplicates(output)
         assert len(lints) == 0
 
     def test_multiple_pairs_all_flagged(self):
-        output = _make_output(frames=[
-            _make_frame(frame_id="f1", canonical_text="same text here"),
-            _make_frame(frame_id="f2", canonical_text="same text here"),
-            _make_frame(frame_id="f3", canonical_text="different thing"),
-            _make_frame(frame_id="f4", canonical_text="differen thing"),  # dist=1 from f3
-        ])
+        output = _make_output(
+            frames=[
+                _make_frame(frame_id="f1", canonical_text="same text here"),
+                _make_frame(frame_id="f2", canonical_text="same text here"),
+                _make_frame(frame_id="f3", canonical_text="different thing"),
+                _make_frame(frame_id="f4", canonical_text="differen thing"),  # dist=1 from f3
+            ]
+        )
         lints = _check_near_duplicates(output)
         assert len(lints) == 2  # (f1,f2) and (f3,f4)
 
@@ -364,6 +414,7 @@ class TestNearDuplicates:
 # ---------------------------------------------------------------------------
 # Integration: all three checks wired into verify_output()
 # ---------------------------------------------------------------------------
+
 
 class TestVerifyOutputIntegration:
     def test_all_checks_fire_together(self):

@@ -26,7 +26,6 @@ from tests.unit.v3_router_probes.real_router_dependency_map import (
 )
 from tests.unit.v3_router_probes.stubs import legacy_memory_doc_factory_source, legacy_pin_stub_source
 
-
 MEMORY_ADAPTER_MODULES = [
     "utils.memory.v3_request_adapter",
     "testing.memory.v3_route_planner",
@@ -62,8 +61,7 @@ def _repo_backend_root() -> Path:
 def _probe_code() -> str:
     legacy_item_block = legacy_memory_doc_factory_source(stubbed_uid="stubbed-test-uid")
     pin_stub_block = legacy_pin_stub_source()
-    template = textwrap.dedent(
-        r'''
+    template = textwrap.dedent(r'''
         import hashlib
         import importlib
         import json
@@ -303,8 +301,7 @@ __PIN_STUB_BLOCK__        surface_routing.pin_memory_system = pin_memory_system
             "memory_adapter_modules_loaded": loaded_adapters,
             "runtime_cutover_claimed": False,
         }, sort_keys=True))
-        '''
-    )
+        ''')
     return template.replace("__LEGACY_ITEM_BLOCK__", legacy_item_block).replace("__PIN_STUB_BLOCK__", pin_stub_block)
 
 

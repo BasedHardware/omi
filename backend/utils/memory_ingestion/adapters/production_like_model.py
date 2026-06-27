@@ -215,25 +215,31 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
         for conversation_id, grouped_events in _events_by_conversation(events).items():
             for chunk_index, event_chunk in enumerate(_chunks(grouped_events, self.max_events_per_call)):
                 if _is_passive_media_monologue(event_chunk):
-                    self._emit_trace({
-                        "stage": "model_client_chunk_skip",
-                        "reason": "passive_media_monologue",
-                        "conversation_id": conversation_id,
-                        "chunk_index": chunk_index,
-                        "source_event_ids": [event.event_id for event in event_chunk],
-                    })
+                    self._emit_trace(
+                        {
+                            "stage": "model_client_chunk_skip",
+                            "reason": "passive_media_monologue",
+                            "conversation_id": conversation_id,
+                            "chunk_index": chunk_index,
+                            "source_event_ids": [event.event_id for event in event_chunk],
+                        }
+                    )
                     continue
                 route_family = self.source_route_config.get(pipeline_input.source.source_type, "current")
                 route = route_source(pipeline_input.source, route_family=route_family)
-                self._emit_trace({
-                    "stage": "source_route",
-                    "conversation_id": conversation_id,
-                    "chunk_index": chunk_index,
-                    "source_event_ids": [event.event_id for event in event_chunk],
-                    **route.model_dump(),
-                })
+                self._emit_trace(
+                    {
+                        "stage": "source_route",
+                        "conversation_id": conversation_id,
+                        "chunk_index": chunk_index,
+                        "source_event_ids": [event.event_id for event in event_chunk],
+                        **route.model_dump(),
+                    }
+                )
                 segments = [_to_transcript_segment(event, index) for index, event in enumerate(event_chunk)]
-                is_voice_recall_route = pipeline_input.source.source_type == "voice_transcript" and route_family == "voice_recall_v1"
+                is_voice_recall_route = (
+                    pipeline_input.source.source_type == "voice_transcript" and route_family == "voice_recall_v1"
+                )
                 retry_attempts = 1 if is_voice_recall_route else 0
                 memories = _extract_memories_with_production_prompt(
                     segments=segments,
@@ -255,14 +261,16 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                 )
                 for memory_index, memory in enumerate(memories):
                     if not _has_sufficient_evidence(memory.content, event_chunk, quote_anchor=memory.quote_anchor):
-                        self._emit_trace({
-                            "stage": "candidate_rejected",
-                            "reason": "insufficient_evidence",
-                            "conversation_id": conversation_id,
-                            "chunk_index": chunk_index,
-                            "memory_index": memory_index,
-                            "memory": _model_dump(memory),
-                        })
+                        self._emit_trace(
+                            {
+                                "stage": "candidate_rejected",
+                                "reason": "insufficient_evidence",
+                                "conversation_id": conversation_id,
+                                "chunk_index": chunk_index,
+                                "memory_index": memory_index,
+                                "memory": _model_dump(memory),
+                            }
+                        )
                         continue
                     source_events = [event.event_id for event in event_chunk]
                     calibration = _calibration(memory, event_chunk)
@@ -323,13 +331,15 @@ class ProductionLikeMemoryModelClient(MemoryModelClient):
                             notes=self._extraction_notes(),
                         ),
                     )
-                    self._emit_trace({
-                        "stage": "frame_created",
-                        "conversation_id": conversation_id,
-                        "chunk_index": chunk_index,
-                        "memory_index": memory_index,
-                        "frame": _model_dump(frame),
-                    })
+                    self._emit_trace(
+                        {
+                            "stage": "frame_created",
+                            "conversation_id": conversation_id,
+                            "chunk_index": chunk_index,
+                            "memory_index": memory_index,
+                            "frame": _model_dump(frame),
+                        }
+                    )
                     frames.append(frame)
         for frame in frames:
             frame.frame_id = id_factory.new_id(
@@ -397,18 +407,23 @@ def _extract_memories_with_production_prompt(
     trace_context = trace_context or {}
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=[])
     if not content or len(content) < 25:
-        _emit_optional_trace(trace_sink, {
-            "stage": "model_call_skipped",
-            "reason": "selected_content_too_short",
-            "source_type": source_type,
-            "selected_text_chars": len(content or ""),
-            **trace_context,
-        })
+        _emit_optional_trace(
+            trace_sink,
+            {
+                "stage": "model_call_skipped",
+                "reason": "selected_content_too_short",
+                "source_type": source_type,
+                "selected_text_chars": len(content or ""),
+                **trace_context,
+            },
+        )
         return []
     is_voice_recall_route = source_type == "voice_transcript" and route_family == "voice_recall_v1"
     if typed:
         parser = PydanticOutputParser(
-            pydantic_object=VoiceRecallTypedProductionLikeMemories if is_voice_recall_route else TypedProductionLikeMemories
+            pydantic_object=(
+                VoiceRecallTypedProductionLikeMemories if is_voice_recall_route else TypedProductionLikeMemories
+            )
         )
         prompt = typed_extract_memories_prompt
     else:
@@ -440,46 +455,55 @@ def _extract_memories_with_production_prompt(
             break
         except Exception as exc:
             final_attempt = attempt >= max_attempts
-            _emit_optional_trace(trace_sink, {
-                "stage": "model_call",
-                "status": "error",
-                "source_type": source_type,
-                "typed": typed,
-                "high_recall": high_recall,
-                "selected_text": content,
-                "raw_model_response": _model_dump(raw_response),
-                "parser_error": str(exc),
-                "attempt": attempt,
-                "max_attempts": max_attempts,
-                "will_retry": not final_attempt,
-                **trace_context,
-            })
-            if not final_attempt:
-                _emit_optional_trace(trace_sink, {
-                    "stage": "model_call_retry",
+            _emit_optional_trace(
+                trace_sink,
+                {
+                    "stage": "model_call",
+                    "status": "error",
                     "source_type": source_type,
-                    "attempt": attempt + 1,
+                    "typed": typed,
+                    "high_recall": high_recall,
+                    "selected_text": content,
+                    "raw_model_response": _model_dump(raw_response),
+                    "parser_error": str(exc),
+                    "attempt": attempt,
                     "max_attempts": max_attempts,
-                    "previous_error": str(exc),
+                    "will_retry": not final_attempt,
                     **trace_context,
-                })
+                },
+            )
+            if not final_attempt:
+                _emit_optional_trace(
+                    trace_sink,
+                    {
+                        "stage": "model_call_retry",
+                        "source_type": source_type,
+                        "attempt": attempt + 1,
+                        "max_attempts": max_attempts,
+                        "previous_error": str(exc),
+                        **trace_context,
+                    },
+                )
                 continue
             raise
     assert parsed_response is not None
-    _emit_optional_trace(trace_sink, {
-        "stage": "model_call",
-        "status": "ok",
-        "source_type": source_type,
-        "typed": typed,
-        "high_recall": high_recall,
-        "selected_text": content,
-        "raw_model_response": _model_dump(raw_response),
-        "parsed_facts_before_filter": _model_dump(parsed_response.facts),
-        "parser_error": None,
-        "attempt": attempt,
-        "max_attempts": max_attempts,
-        **trace_context,
-    })
+    _emit_optional_trace(
+        trace_sink,
+        {
+            "stage": "model_call",
+            "status": "ok",
+            "source_type": source_type,
+            "typed": typed,
+            "high_recall": high_recall,
+            "selected_text": content,
+            "raw_model_response": _model_dump(raw_response),
+            "parsed_facts_before_filter": _model_dump(parsed_response.facts),
+            "parser_error": None,
+            "attempt": attempt,
+            "max_attempts": max_attempts,
+            **trace_context,
+        },
+    )
     return parsed_response.facts
 
 
@@ -590,9 +614,29 @@ _CONTENT_PREDICATE_RULES: list[tuple[str, list[str]]] = [
     ("dislikes", ["dislike", "hate", "can't stand", "annoy"]),
     ("works_on", ["works on", "working on", "building", "developing", "leading", "managing project"]),
     ("decided_to_use", ["decided to use", "decided on", "chose to use", "switched to", "adopted", "settled on"]),
-    ("considering_using", ["considering using", "thinking about using", "looking into", "evaluating", "exploring", "might use"]),
+    (
+        "considering_using",
+        ["considering using", "thinking about using", "looking into", "evaluating", "exploring", "might use"],
+    ),
     ("committed_to_do", ["committed to", "promised to", "plan to", "going to", "will definitely", "pledged"]),
-    ("knows_person", ["knows", "met", "friend", "colleague", "coworker", "partner", "boss", "manager", "report", "sibling", "parent", "spouse", "relative"]),
+    (
+        "knows_person",
+        [
+            "knows",
+            "met",
+            "friend",
+            "colleague",
+            "coworker",
+            "partner",
+            "boss",
+            "manager",
+            "report",
+            "sibling",
+            "parent",
+            "spouse",
+            "relative",
+        ],
+    ),
     ("has_birthday", ["birthday", "born on", "turns age", "age is"]),
     ("has_address", ["address", "lives at", "home is", "located at", "residence"]),
     ("uses_tool", ["uses ", "relies on", "leverages", "runs on", "built with"]),
@@ -764,7 +808,11 @@ def _calibration(memory: ProductionLikeMemory, events: list[RawContextEvent]) ->
     )
     # Relaxed: direct self-reports only need 2+ overlap words (was 3) since
     # first-person language already provides strong attribution signal.
-    if best_overlap < (2 if direct_self_report else 3) and len(_meaningful_words(memory.content)) >= 3 and not direct_self_report:
+    if (
+        best_overlap < (2 if direct_self_report else 3)
+        and len(_meaningful_words(memory.content)) >= 3
+        and not direct_self_report
+    ):
         uncertainty_reasons.append("weak_evidence")
         review_required = True
 
@@ -909,9 +957,7 @@ def _has_direct_self_report_evidence(
         candidates.append((quote_anchor, _quote_anchor_is_supported(quote_anchor, events)))
     candidates.extend((event.text or "", True) for event in events)
     return any(
-        supported
-        and _has_first_person_language(text)
-        and _evidence_overlap_count(memory_content, text) >= 1
+        supported and _has_first_person_language(text) and _evidence_overlap_count(memory_content, text) >= 1
         for text, supported in candidates
     )
 
@@ -1084,11 +1130,12 @@ def _has_health_signal(text: str) -> bool:
 
 def _has_named_entities(text: str) -> bool:
     """Check if text contains likely named entities (proper nouns, places, organizations).
-    
+
     Uses simple heuristics: capitalized words that aren't sentence-starters,
     plus known patterns like multi-word capitalized sequences.
     """
     import re
+
     # Look for capitalized words not at start of sentence
     # Patterns like "John", "Paris", "Google", "Monday", etc.
     mid_sentence_capitalized = re.findall(r'(?:^|\.\s+|\!\s+|\?\s+)\s*([A-Z][a-z]+)\b', text)  # sentence starts
@@ -1192,9 +1239,7 @@ def _supporting_events(
         return None
     if quote_anchor:
         anchor = " ".join(quote_anchor.split()).casefold()
-        supporting = [
-            e for e in events if anchor and anchor in " ".join((e.text or "").split()).casefold()
-        ]
+        supporting = [e for e in events if anchor and anchor in " ".join((e.text or "").split()).casefold()]
         return supporting if supporting else None
     supporting = [e for e in events if _evidence_overlap_count(memory_content, e.text or "") > 0]
     return supporting if supporting else None

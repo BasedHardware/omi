@@ -136,7 +136,12 @@ def test_hard_secret_event_is_dropped_before_model_extraction_but_emits_rejectio
 
 
 def test_email_pii_is_not_whole_dropped_by_secret_gate():
-    output = _run(_input(text="Please reach me at user@example.com regarding the Atlas project invoice.", payload={"memory_frames": [_frame_payload()]}))
+    output = _run(
+        _input(
+            text="Please reach me at user@example.com regarding the Atlas project invoice.",
+            payload={"memory_frames": [_frame_payload()]},
+        )
+    )
 
     assert output.stats.redaction_count == 0
     assert output.stats.dropped_artifact_count == 0
@@ -287,6 +292,7 @@ def test_cli_reads_json_and_writes_pipeline_output(tmp_path):
 # Signal density filter tests (T-H10 / committee-D2)
 # ---------------------------------------------------------------------------
 
+
 def test_signal_density_rejects_pure_chitchat():
     """Gold=0 noise examples like 'Thanks, sounds good.' must be rejected early."""
     output = _run(_input(text="Thanks, sounds good."))
@@ -345,16 +351,22 @@ def test_signal_density_multi_event_average():
         ),
         raw_events=[
             RawContextEvent(
-                event_id="e1", event_type="manual_text",
-                text="Uh huh.", source_ref=SourceRef(fixture_id="f1"),
+                event_id="e1",
+                event_type="manual_text",
+                text="Uh huh.",
+                source_ref=SourceRef(fixture_id="f1"),
             ),
             RawContextEvent(
-                event_id="e2", event_type="manual_text",
-                text="Yeah, ok.", source_ref=SourceRef(fixture_id="f1"),
+                event_id="e2",
+                event_type="manual_text",
+                text="Yeah, ok.",
+                source_ref=SourceRef(fixture_id="f1"),
             ),
             RawContextEvent(
-                event_id="e3", event_type="manual_text",
-                text="Sure thing.", source_ref=SourceRef(fixture_id="f1"),
+                event_id="e3",
+                event_type="manual_text",
+                text="Sure thing.",
+                source_ref=SourceRef(fixture_id="f1"),
             ),
         ],
         config=MemoryPipelineConfig(),

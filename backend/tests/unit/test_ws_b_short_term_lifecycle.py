@@ -52,7 +52,6 @@ from tests.unit.test_ws_i_write_convergence import (
     _trusted_account_generation,
 )
 
-
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
 
 

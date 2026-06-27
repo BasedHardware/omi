@@ -110,9 +110,34 @@ def _check_near_duplicates(output: MemoryPipelineOutput) -> list[LintResult]:
 
 _BLOCKING_CREATE_UNCERTAINTIES = {"weak_evidence", "inferred_not_stated", "unsupported_by_existing_state"}
 _GROUNDING_STOPWORDS = {
-    "a", "about", "an", "and", "are", "at", "for", "from", "has", "have", "her", "his",
-    "i", "in", "is", "it", "me", "my", "of", "on", "our", "the", "their", "to", "user",
-    "was", "we", "with",
+    "a",
+    "about",
+    "an",
+    "and",
+    "are",
+    "at",
+    "for",
+    "from",
+    "has",
+    "have",
+    "her",
+    "his",
+    "i",
+    "in",
+    "is",
+    "it",
+    "me",
+    "my",
+    "of",
+    "on",
+    "our",
+    "the",
+    "their",
+    "to",
+    "user",
+    "was",
+    "we",
+    "with",
 }
 _FIRST_PERSON_RE = re.compile(
     r"\b(i|i['’]m|i['’]ve|i['’]d|i['’]ll|me|my|mine|we|we['’]re|we['’]ve|we['’]d|we['’]ll|our|ours)\b"

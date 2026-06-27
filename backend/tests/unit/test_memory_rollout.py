@@ -13,7 +13,6 @@ from utils.memory_ingestion.rollout import (
     legacy_memory_to_migrated_fact,
 )
 
-
 MIGRATION_TIME = datetime(2026, 6, 10, tzinfo=timezone.utc)
 
 
