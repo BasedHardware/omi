@@ -980,8 +980,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     final addedMessages = count > _lastObservedMessageCount;
     final lastMessageChanged = lastId != _lastObservedMessageId;
     final streamedTextChanged = lastId == _lastObservedMessageId && textLength != _lastObservedTextLength;
-    final streamedBlocksChanged =
-        lastId == _lastObservedMessageId && thinkingCount != _lastObservedContentBlockCount;
+    final streamedBlocksChanged = lastId == _lastObservedMessageId && thinkingCount != _lastObservedContentBlockCount;
 
     _lastObservedMessageCount = count;
     _lastObservedMessageId = lastId;
