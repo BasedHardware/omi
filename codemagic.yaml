@@ -2650,16 +2650,7 @@ workflows:
 
       - name: Create GitHub release
         script: |
-          CHANGELOG_MD=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            changes = data.get('releases', [{}])[0].get('changes', [])
-            print('\n'.join('- ' + c for c in changes))
-          except:
-            print('- Bug fixes and improvements')
-          ")
+          CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
           CHANGELOG_PIPE=$(echo "$CHANGELOG_MD" | sed 's/^- //' | tr '\n' '|' | sed 's/|$//')
@@ -2762,15 +2753,7 @@ workflows:
           # verified. Remove this step once the Rust backend is decommissioned.
           export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
 
-          export CHANGELOG_JSON=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            print(json.dumps(data.get('releases', [{}])[0].get('changes', [])))
-          except:
-            print('[]')
-          ")
+          export CHANGELOG_JSON=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format json || echo "[]")
 
           RELEASE_JSON=$(python3 -c "
           import json, os
