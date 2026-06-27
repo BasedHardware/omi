@@ -314,6 +314,7 @@ struct SettingsContentView: View {
     case aiChat = "AI Chat"
     case floatingBar = "Floating Bar"
     case shortcuts = "Shortcuts"
+    case autoRouter = "Auto-router"
     case advanced = "Advanced"
     case about = "About"
   }
@@ -471,6 +472,8 @@ struct SettingsContentView: View {
           floatingBarSection
         case .shortcuts:
           shortcutsSection
+        case .autoRouter:
+          autoRouterSection
         case .advanced:
           advancedSection
         case .about:
@@ -2570,6 +2573,12 @@ struct SettingsContentView: View {
 
   private var shortcutsSection: some View {
     ShortcutsSettingsSection(highlightedSettingId: $highlightedSettingId)
+  }
+
+  private var autoRouterSection: some View {
+    // v5: Per-user weight overrides for the auto-router framework.
+    // Renders the 5 task cards + reset-all + save status.
+    AutoRouterSettingsView()
   }
 
   private var aiChatSection: some View {

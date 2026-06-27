@@ -17,6 +17,7 @@ yarn.lock
 
 # Coordination (AI agent collab manifests)
 .coordination/
+.aidlc/
 
 # General
 .idea/
@@ -156,6 +157,10 @@ backend/scripts/rag/visualizations/
 backend/google-credentials.json
 backend/google-credentials-dev.json
 
+# Auto-router v1 deployment data (real benchmarks). The committed
+# benchmarks.example.json template is the source of truth for schema/format.
+backend/utils/auto_router/benchmarks.json
+
 startup-script.sh
 /app/lib/firebase_options_dev.dart
 /app/lib/firebase_options_prod.dart
@@ -224,3 +229,9 @@ builds-snapshot.md
 
 # Per-worktree dev isolation (pidfiles, scratch) — scripts/dev-instance.sh
 .dev/
+
+# AIDLC process artifacts (development noise, not product docs)
+# These belong in PR comments / .aidlc/ (gitignored) / .github/ if needed.
+review-report.md
+UAT-REPORT.md
+uat-findings.json

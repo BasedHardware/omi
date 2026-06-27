@@ -285,6 +285,16 @@ struct SettingsSearchItem: Identifiable {
       subtitle: "Play audio feedback when starting and ending voice input",
       keywords: ["sounds", "audio feedback", "ptt sounds"], section: .shortcuts, icon: "keyboard",
       settingId: "floatingbar.pttsounds"),
+
+    // Auto-router (v5)
+    SettingsSearchItem(
+      name: "Auto-router", subtitle: "Tune how omi picks the best model for each task",
+      keywords: ["model", "router", "auto", "weights", "quality", "latency", "cost", "preferences"],
+      section: .autoRouter, icon: "wand.and.stars", settingId: "autorouter.main"),
+    SettingsSearchItem(
+      name: "Per-task weights", subtitle: "Quality, latency, and cost sliders for each task",
+      keywords: ["weights", "quality", "latency", "cost", "sliders", "task"],
+      section: .autoRouter, icon: "slider.horizontal.3", settingId: "autorouter.weights"),
     SettingsSearchItem(
       name: "Multiple Chat Sessions", subtitle: "Create separate chat threads",
       keywords: ["multi chat", "threads"], section: .advanced, icon: "slider.horizontal.3",
@@ -327,6 +337,7 @@ struct SettingsSidebar: View {
     .planUsage,
     .floatingBar,
     .shortcuts,
+    .autoRouter,
     .advanced,
     .about,
   ]
@@ -512,6 +523,7 @@ struct SettingsSidebarItem: View {
     case .aiChat: return "cpu"
     case .floatingBar: return "sparkles"
     case .shortcuts: return "keyboard"
+    case .autoRouter: return "wand.and.stars"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
     }

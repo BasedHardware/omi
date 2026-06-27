@@ -88,11 +88,43 @@ final class RealtimeOmniSettings {
         }
     }
 
-    /// The concrete provider to actually use right now. Resolves `.auto` via the
-    /// cached daily benchmark pick (falling back to Gemini when no pick exists).
+    /// The concrete provider to actually use right now. Resolves `.auto`:
+    ///   1. v3: Try AutoRouter.shared.currentPick(for: .pttResponse) — the
+    ///      v1+v2 framework's per-task pick. Map to a realtime-capable
+    ///      provider (gemini or gpt-realtime). If the router picks a non-
+    ///      realtime model (e.g., claude-sonnet-4-6), fall through.
+    ///   2. Fall back to AutoModelSelector.shared.currentPick — the upstream
+    ///      AA integration (RealtimeOmniProvider already validated).
+    ///   3. Last resort: .geminiFlashLive.
     var effectiveProvider: RealtimeOmniProvider {
         guard selectedProvider == .auto else { return selectedProvider }
+        if let routerPick = AutoRouter.shared.currentPick(for: .pttResponse),
+           let provider = Self.realtimeProvider(for: routerPick) {
+            return provider
+        }
         return AutoModelSelector.shared.currentPick ?? .geminiFlashLive
+    }
+
+    /// Map a router model ID to a realtime-capable RealtimeOmniProvider.
+    /// Returns nil if the model ID doesn't map to a realtime-capable provider
+    /// (e.g., claude-sonnet-4-6 — not a realtime voice model).
+    static func realtimeProvider(for modelId: String) -> RealtimeOmniProvider? {
+        let id = modelId.lowercased()
+        // Cubic review: broadened to handle common OpenAI realtime variants
+        // (gpt-4o-realtime-preview, gpt-4o-mini-realtime, gpt-realtime-2,
+        // gpt_realtime_2 with underscores, etc.). We match the gpt- prefix
+        // OR the gpt_ prefix, and require "realtime" or "audio" in the name.
+        // OpenAI's realtime models all match this pattern; other gpt-* models
+        // (gpt-4o, gpt-4-turbo, etc.) don't have "realtime"/"audio" and are
+        // correctly NOT matched here.
+        let is_gpt = id.contains("gpt-") || id.contains("gpt_")
+        if is_gpt && (id.contains("realtime") || id.contains("audio")) {
+            return .gptRealtime2
+        }
+        if id.contains("gemini") {
+            return .geminiFlashLive
+        }
+        return nil
     }
 }
 
