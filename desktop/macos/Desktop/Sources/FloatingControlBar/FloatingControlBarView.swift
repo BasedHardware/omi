@@ -303,9 +303,22 @@ struct FloatingControlBarView: View {
     }
 
     private var notchControlLobe: some View {
+        // Right-side lobe of the notch chrome. In notch mode the legacy
+        // controlBarView is never rendered, so this lobe is the only hit
+        // target on the right side of the notch. Wire it to open Ask Omi on
+        // tap and accept hover so users on notched displays can still reach
+        // the conversation/PTT entry point by clicking the notch. (Codex P1.)
+        // It is intentionally subtle (transparent) to preserve the minimal
+        // notch aesthetic.
         Color.clear
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .padding(.leading, 2)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            onAskAI()
+        }
+        .accessibilityLabel("Ask Omi")
+        .accessibilityHint("Open the conversation")
     }
 
     private var notchChromeHeight: CGFloat {
@@ -941,7 +954,14 @@ struct FloatingControlBarView: View {
     /// pill-list change so the header height budget never goes stale.
     private func recomputeNotchInputHeight() {
         guard state.usesNotchIsland else { return }
-        let height = lastInputEditorHeight
+        // Guard against stale zero editor height: the editor has not reported
+        // its size yet (or was just re-created after a surface switch), so
+        // recomputing now would shrink the window and clip input/send
+        // controls. Fall back to the minimum content height so the panel
+        // keeps a usable size until a real height arrives. (Cubic P2.)
+        let height = lastInputEditorHeight > 0
+            ? lastInputEditorHeight
+            : FloatingControlBarWindow.notchInputPanelMinimumContentHeight
         let baseHeight = notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
         let headerBudget = !agentPills.pills.isEmpty
             ? FloatingControlBarWindow.notchChatHeaderVerticalBudget

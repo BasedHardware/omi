@@ -1563,6 +1563,20 @@ class FloatingControlBarManager {
     /// floating bar, so viewed-pill expiration can skip the one the user is
     /// actively reading.
     var activeAgentChatPillID: UUID? { window?.state.activeAgentChatPillID }
+
+    /// Called when a pill is dismissed while it is the one shown in the Ask Omi
+    /// surface. Leaves the agent surface so conversationSurface resets instead
+    /// of dangling as .agent(id) for a removed pill. (Codex P2 — clear active
+    /// chat when dismissing a pill.)
+    func leaveActiveAgentSurfaceFromPillDismiss() {
+        guard let window else { return }
+        window.state.leaveAgentSurface()
+        if window.state.conversationSurface == .mainInput {
+            window.resizeForMainInputAfterAgentExit()
+        } else {
+            window.resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+        }
+    }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
     private var notificationWasTemporarilyShown = false
@@ -2203,8 +2217,12 @@ class FloatingControlBarManager {
 
         // Reset visible state directly (no animation) to avoid contract-then-expand flicker.
         // Provider session context remains intact; only the floating-bar UI is reset.
+        // Pass cancelInFlightWork: false because we already cancelled our own
+        // subscriptions above (chatCancellable/input height observer) and are about
+        // to route a new typed query through the same provider — killing its session
+        // here would break the incoming query. (Cubic P2 — semantic mismatch.)
         window.state.showingAIConversation = false
-        window.state.clearVisibleConversation()
+        window.state.clearVisibleConversation(cancelInFlightWork: false)
         window.state.currentQueryFromVoice = fromVoice
         pendingNotificationContext = nil
         floatingSessionKey = "floating"

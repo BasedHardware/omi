@@ -339,6 +339,16 @@ final class AgentPillsManager: ObservableObject {
         if questionStarters.contains(where: { trimmedLower.hasPrefix($0) }) {
             return nil
         }
+        // Negation guard: explicit opt-outs like "don't run an agent",
+        // "without spawning a subagent", "no agent, just answer here", or
+        // "do not create a pill" should answer inline, not spawn a pill.
+        // Only check after question-starter exclusion so queries like "can I
+        // run agents without a pill?" (which start with a modal question word)
+        // already returned nil. (Codex P2 — honor explicit no-agent requests.)
+        let negationPattern = #"\b(?:don'?t|do not|without|no|not)\b"#
+        if lower.range(of: negationPattern, options: .regularExpression) != nil {
+            return nil
+        }
         let agentPattern = #"\b(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#
         let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run)\b"#
         guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
@@ -626,6 +636,13 @@ final class AgentPillsManager: ObservableObject {
 
     /// Force-dismiss a pill.
     func dismiss(pillID: UUID) {
+        // If the pill being dismissed is the one currently shown in the Ask Omi
+        // surface, leave the agent surface first so conversationSurface does
+        // not stay as .agent(id) pointing to a removed pill — which would leave
+        // the view falling through to blank/stale Omi content. (Codex P2.)
+        if FloatingControlBarManager.shared.activeAgentChatPillID == pillID {
+            FloatingControlBarManager.shared.leaveActiveAgentSurfaceFromPillDismiss()
+        }
         cleanup(pillID: pillID)
         if hoveredPillID == pillID { hoveredPillID = nil }
         if pinnedPillID == pillID { pinnedPillID = nil }
