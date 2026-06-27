@@ -736,18 +736,31 @@ async def persona_chat_via_integration(
     await run_blocking(critical_executor, check_rate_limit_inline, f"{app_id}:{uid}:persona", "integration:persona")
 
     # App lookup + enabled-for-user check.
-    app = await run_blocking(db_executor, apps_db.get_app_by_id_db, app_id)
-    if not app:
+    # get_app_by_id_db returns a Firestore dict; we coerce to the App Pydantic
+    # model so execute_chat_stream can call app.is_a_persona() (which lives on
+    # the model class, not the dict).
+    app_dict = await run_blocking(db_executor, apps_db.get_app_by_id_db, app_id)
+    if not app_dict:
         raise HTTPException(status_code=404, detail="App not found")
+
+    # Capability gate uses the dict (it only reads external_integration.actions).
+    if not apps_utils.app_can_persona_chat(app_dict):
+        raise HTTPException(status_code=403, detail="App does not have persona_chat capability")
 
     enabled_plugins = await run_blocking(db_executor, redis_db.get_enabled_apps, uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
-    # Capability gate — only apps that opt in (external_integration.actions
-    # contains {"action": "persona_chat"}) can drive the user's persona.
-    if not apps_utils.app_can_persona_chat(app):
-        raise HTTPException(status_code=403, detail="App does not have persona_chat capability")
+    # Convert to Pydantic App for the chat stream path. Wrap in try/except so a
+    # malformed Firestore doc returns 502 rather than crashing with a stack trace.
+    if isinstance(app_dict, App):
+        app = app_dict
+    else:
+        try:
+            app = App(**app_dict)
+        except Exception as e:
+            logger.error(f"Failed to parse app {app_id} into App model: {e}")
+            raise HTTPException(status_code=502, detail=f"App data is malformed: {e}")
 
     # Build a single HumanMessage and stream the persona reply via the
     # existing execute_chat_stream (which dispatches to the persona handler

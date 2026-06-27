@@ -55,7 +55,11 @@ else:
 OMI_BASE_URL = os.getenv("OMI_BASE_URL", "https://api.omi.me")
 
 # How often we re-nudge a user who has auto-reply disabled. Default 4 hours.
-_NUDGE_COOLDOWN_SECONDS = float(os.getenv("NUDGE_COOLDOWN_SECONDS", "14400"))
+try:
+    _NUDGE_COOLDOWN_SECONDS = float(os.getenv("NUDGE_COOLDOWN_SECONDS", "14400"))
+except ValueError:
+    logger.warning("NUDGE_COOLDOWN_SECONDS is not a float; defaulting to 14400")
+    _NUDGE_COOLDOWN_SECONDS = 14400.0
 
 
 app = FastAPI(

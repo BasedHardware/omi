@@ -51,7 +51,9 @@ def telegram_api():
 
     client.post = AsyncMock(side_effect=_post)
 
-    with patch("telegram_client.httpx.AsyncClient", return_value=client):
+    with patch("telegram_client.httpx.AsyncClient", return_value=client), patch(
+        "telegram_client._get_client", return_value=client
+    ):
         yield {"client": client, "calls": calls}
 
 

@@ -48,7 +48,12 @@ class EmptyResponse(BaseModel):
 class PersonaChatRequest(BaseModel):
     """Single-turn persona chat request from a 3rd-party integration (e.g. AI clone plugins)."""
 
-    text: str = Field(description="The inbound message from the chat platform (1:1 DM, text only)", min_length=1)
+    # Telegram caps messages at 4096 chars; WhatsApp at ~65536; iMessage at
+    # ~20000. We pick a conservative 8192 so the cap covers the largest
+    # platform and the LLM has plenty of room to think.
+    text: str = Field(
+        description="The inbound message from the chat platform (1:1 DM, text only)", min_length=1, max_length=8192
+    )
 
 
 class ConversationCreateResponse(BaseModel):

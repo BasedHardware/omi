@@ -10,28 +10,28 @@ Self-hosted FastAPI service. Receives Telegram webhook updates, calls the Omi pe
 2. Deploy this service to a public URL (e.g. via the desktop app launcher, or a public tunnel).
 3. From the Omi desktop, click **AI Clone → Telegram → Connect**. Paste the bot token + your Omi UID + persona ID + `omi_dev_...` API key. The service registers the webhook with Telegram and returns a deep link.
 4. Click the deep link on the device where Telegram is signed in. Send `/start` to the bot. The plugin binds your `chat_id` to your Omi user.
-5. Toggle **Auto-reply** in the Omi desktop. Subsequent Telegram messages will be answered by your persona.
+5. Toggle **Auto-reply** in the Omi desktop (or call `POST /toggle` directly). Subsequent Telegram messages will be answered by your persona.
 
 ## Environment
 
+- `TELEGRAM_WEBHOOK_SECRET` (**required in production**) — shared secret for `X-Telegram-Bot-Api-Secret-Token`. **Must be set in production** — if unset, a random value is generated at startup. Restarting the service then changes the secret, which invalidates the webhook with Telegram (subsequent updates fail signature verification until you re-run setup).
 - `OMI_BASE_URL` (default: `https://api.omi.me`) — backend to call for persona chats.
-- `TELEGRAM_WEBHOOK_SECRET` (optional) — shared secret for `X-Telegram-Bot-Api-Secret-Token`. If unset, a random value is generated at startup (survives restarts via env var).
+- `NUDGE_COOLDOWN_SECONDS` (default: `14400` = 4h) — how often to re-send the "auto-reply disabled" message to a user who has the toggle off.
 - `STORAGE_DIR` (default: `/app/data`) — where JSON files persist. Falls back to the plugin dir in dev.
 
 ## Endpoints
 
 - `GET /health` — liveness.
 - `POST /setup` — register a bot token, returns `{deep_link, bot_username, setup_token}`.
-- `POST /webhook` — receives Telegram updates. Verifies `X-Telegram-Bot-Api-Secret-Token`.
+- `POST /webhook` — receives Telegram updates. Verifies `X-Telegram-Bot-Api-Secret-Token`, dispatches to the persona when auto-reply is on.
+- `POST /toggle` — flips `auto_reply_enabled` for a given `chat_id`. Called by Chat Tools.
 
 ## Architecture
 
 - `main.py` — FastAPI app, routes.
 - `telegram_client.py` — async wrapper around `api.telegram.org`.
-- `simple_storage.py` — JSON-file persistence (users + pending_setups).
+- `simple_storage.py` — JSON-file persistence (users + pending_setups + nudge state).
 - `persona_client.py` — re-export of `plugins/_shared/persona_client.py`.
-
-Auto-reply (persona dispatch) is wired in T-004. This skeleton handles setup only.
 
 ## Tests
 
