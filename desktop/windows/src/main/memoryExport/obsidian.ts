@@ -12,6 +12,10 @@ export async function exportToObsidian(
   const dir = join(vaultPath, 'Omi')
   await fs.mkdir(dir, { recursive: true })
   const file = join(dir, 'Memories.md')
-  await fs.writeFile(file, formatMemoriesMarkdown(memories), 'utf8')
+  // Write to a temp file then rename onto the target so a failed or partial write
+  // (disk full, crash) never truncates the user's previous export.
+  const tmp = join(dir, `Memories.md.${process.pid}.tmp`)
+  await fs.writeFile(tmp, formatMemoriesMarkdown(memories), 'utf8')
+  await fs.rename(tmp, file)
   return file
 }
