@@ -51,7 +51,7 @@ if "main" in sys.modules:
     if not hasattr(_existing_main, "__file__") or _existing_main.__file__ is None:
         del sys.modules["main"]
 
-from gpu_worker import GPUWorker
+from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
 
 from fastapi.testclient import TestClient
@@ -254,6 +254,76 @@ class TestAudioDurationFromBytes:
         assert resp.status_code == 200
         after = mod.AUDIO_DURATION._sum.get()
         assert after - before >= 1.4
+
+
+class TestDurationGuardHTTP413:
+
+    def test_v1_returns_413_for_oversized_wav(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        wav_data = _make_wav_bytes(duration_s=10.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("long.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 413
+        assert "exceeds limit" in resp.json()["detail"].lower()
+        mod._max_file_duration_sec = 0.0
+
+    def test_v2_returns_413_for_oversized_wav(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        wav_data = _make_wav_bytes(duration_s=10.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe", files={"file": ("long.wav", wav_data, "audio/wav")}, data={"diarize": "true"}
+        )
+        assert resp.status_code == 413
+        assert "exceeds limit" in resp.json()["detail"].lower()
+        mod._max_file_duration_sec = 0.0
+
+    def test_v1_passes_when_under_limit(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 60.0
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        wav_data = _make_wav_bytes(duration_s=5.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("short.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 200
+        mod._max_file_duration_sec = 0.0
+
+    def test_v1_returns_413_on_AudioDurationExceededError(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(side_effect=AudioDurationExceededError("too long"))
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")})
+        assert resp.status_code == 413
+        assert "too long" in resp.json()["detail"]
+
+    def test_v2_returns_413_on_AudioDurationExceededError(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(side_effect=AudioDurationExceededError("too long"))
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")}, data={"diarize": "true"}
+        )
+        assert resp.status_code == 413
+        assert "too long" in resp.json()["detail"]
+
+    def test_v1_guard_disabled_when_zero(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 0.0
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        wav_data = _make_wav_bytes(duration_s=3600.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("huge.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 200
 
 
 class TestMetricsEndpoint:
