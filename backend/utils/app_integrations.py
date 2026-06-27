@@ -5,7 +5,6 @@ import os
 import time
 
 import httpx
-from cachetools import TTLCache
 
 from utils.http_client import (
     get_webhook_client,
@@ -16,6 +15,7 @@ from utils.http_client import (
 )
 from utils.executors import db_executor, run_blocking
 from utils.async_tasks import gather_safe
+import utils.dev_cache as dev_cache
 
 import database.notifications as notification_db
 import database.dev_api_key as dev_api_key_db
@@ -317,21 +317,14 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
-# Developer status rarely changes, but the cap is checked on every proactive
-# notification attempt, so cache it briefly to avoid a Firestore read per attempt.
-_DEV_STATUS_CACHE: TTLCache = TTLCache(maxsize=4096, ttl=300)
-_dev_status_lock = threading.Lock()
-
-
 def _is_developer(uid: str) -> bool:
     """A user with at least one developer API key is treated as a developer and
     is exempt from the daily proactive-notification cap (#3346), so building and
-    testing an app is not throttled. Result is cached for a few minutes to keep
-    the cap check off the Firestore hot path. Fails closed (treats the user as a
-    non-developer, and does not cache the failure) so a lookup error never
-    silently lifts the cap for everyone."""
-    with _dev_status_lock:
-        cached = _DEV_STATUS_CACHE.get(uid)
+    testing an app is not throttled. Result is cached (in ``utils.dev_cache``, and
+    invalidated on dev-key changes) to keep the cap check off the Firestore hot
+    path. Fails closed (treats the user as a non-developer, and does not cache the
+    failure) so a lookup error never silently lifts the cap for everyone."""
+    cached = dev_cache.get_cached_developer(uid)
     if cached is not None:
         return cached
     try:
@@ -339,8 +332,7 @@ def _is_developer(uid: str) -> bool:
     except Exception as e:
         logger.warning(f"proactive daily cap: developer check failed uid={uid}, applying cap: {e}")
         return False
-    with _dev_status_lock:
-        _DEV_STATUS_CACHE[uid] = result
+    dev_cache.set_cached_developer(uid, result)
     return result
 
 
