@@ -4,6 +4,10 @@
 > canonical memory vocabulary, Memories record schema, and legal state-combination matrix.
 > It supersedes scattered legacy codename-era docs for domain terminology. Implementation types live
 > in `backend/models/memory_domain.py`.
+>
+> **Runtime architecture (capture → consolidate → promote → read):**
+> [docs/doc/developer/backend/canonical_memory_architecture.md](../doc/developer/backend/canonical_memory_architecture.md)
+> (visual: [HTML companion](../doc/developer/backend/canonical_memory_architecture.html)).
 
 ## Glossary
 
