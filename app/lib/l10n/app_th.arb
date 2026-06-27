@@ -2540,6 +2540,7 @@
     "addTask": "เพิ่มงาน",
     "newTask": "งานใหม่",
     "viewAll": "ดูทั้งหมด",
+    "expand": "ขยาย",
     "whatsNewInVersion": "มีอะไรใหม่ใน {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",
@@ -3063,7 +3064,7 @@
     "captureModeLiveDescription": "ถอดเสียงแบบเรียลไทม์ขณะที่คุณพูด",
     "captureModeLaterDescription": "บันทึกเสียงตอนนี้แล้วถอดเสียงเมื่อใดก็ได้ที่ต้องการ",
     "backgroundModeUnavailable": "โหมดพื้นหลังไม่พร้อมใช้งานเนื่องจากไม่มีอุปกรณ์ที่รองรับเชื่อมต่ออยู่ เชื่อมต่ออุปกรณ์ Omi, OpenGlass หรือ Friend Pendant เพื่อใช้ฟีเจอร์นี้",
-    "deviceTutorial": "บทแนะนำการใช้อุปกรณ์",
+    "deviceTutorial": "วิธีใช้ Omi",
     "deviceOnboardingTranscriptionTitle": "พูดใส่ Omi ของคุณ",
     "deviceOnboardingTranscriptionSubtitle": "พูดสักสองสามคำแล้วดูข้อความปรากฏแบบเรียลไทม์",
     "deviceOnboardingGoodJob": "เยี่ยมมาก!",
@@ -3091,5 +3092,10 @@
     "deviceOnboardingSingleTapHint": "นั่นคือการแตะครั้งเดียว — ลองแตะสองครั้งเร็วๆ ดูสิ!",
     "deviceOnboardingTryDoubleTap": "ลองเลย! แตะ Omi ของคุณสองครั้ง",
     "deviceOnboardingContinue": "ดำเนินการต่อ",
-    "deviceOnboardingFinish": "เสร็จสิ้น"
+    "deviceOnboardingFinish": "เสร็จสิ้น",
+    "deviceOnboardingIntroTitle": "ทำความรู้จักกับ Omi ของคุณ",
+    "deviceOnboardingIntroSubtitle": "ทัวร์สั้น ๆ แบบลงมือทำจริงเกี่ยวกับทุกสิ่งที่ Omi ของคุณทำได้",
+    "deviceOnboardingIntroDuration": "ประมาณ 1 นาที",
+    "jumpToLatestMessage": "ไปยังข้อความล่าสุด",
+    "latest": "ล่าสุด"
 }

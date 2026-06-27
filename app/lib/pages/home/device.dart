@@ -21,6 +21,7 @@ import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'firmware_update.dart';
 import 'omiglass_ota_update.dart';
 
@@ -211,6 +212,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
+          // How to Use Your Omi (interactive tutorial) — Omi devices only, while connected
+          if (provider.connectedDevice?.type == DeviceType.omi) ...[
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.graduationCap,
+              title: context.l10n.deviceTutorial,
+              onTap: () {
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)));
+              },
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
           // Firmware Update
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.download,
@@ -218,13 +232,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             chipValue: provider.connectedDevice == null
                 ? context.l10n.offline
                 : provider.havingNewFirmware
-                    ? context.l10n.available
-                    : null,
+                ? context.l10n.available
+                : null,
             onTap: provider.connectedDevice != null
                 ? () {
                     // Route to OmiGlass OTA page for openglass devices
                     final deviceName = provider.connectedDevice?.name?.toLowerCase() ?? '';
-                    final isOpenGlass = provider.connectedDevice?.type == DeviceType.openglass ||
+                    final isOpenGlass =
+                        provider.connectedDevice?.type == DeviceType.openglass ||
                         deviceName.contains('openglass') ||
                         deviceName.contains('omiglass') ||
                         deviceName.contains('glass');
@@ -292,8 +307,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
-                final page =
-                    context.read<DeviceProvider>().supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                final page = context.read<DeviceProvider>().supportsMultiFileSync
+                    ? const AutoSyncPage()
+                    : const SyncPage();
                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
               },
             ),

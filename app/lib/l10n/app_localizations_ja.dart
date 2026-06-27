@@ -7637,6 +7637,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get viewAll => 'すべて表示';
 
   @override
+  String get expand => '展開';
+
+  @override
   String get addTask => 'タスクを追加';
 
   @override
@@ -8315,12 +8318,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count件の会話を作成',
-      one: '1件の会話を作成',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
     return '$_temp0';
   }
 
@@ -9044,11 +9042,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 件の録音を同期できます',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 件の録音を同期できます');
     return '$_temp0';
   }
 
@@ -9060,11 +9054,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '確認が必要な録音が$count件',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '確認が必要な録音が$count件');
     return '$_temp0';
   }
 
@@ -9211,7 +9201,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcribeLaterPaused => '一時停止中 — 音声は録音されていません';
 
   @override
-  String get deviceTutorial => 'デバイスチュートリアル';
+  String get deviceTutorial => 'Omi の使い方';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Omiに話しかけてみよう';
@@ -9296,4 +9286,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '完了';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi を知ろう';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi にできることを、すべて手軽に体験できるクイックツアー。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '約1分';
+  @override
+  String get jumpToLatestMessage => '最新のメッセージにジャンプ';
+
+  @override
+  String get latest => '最新';
 }

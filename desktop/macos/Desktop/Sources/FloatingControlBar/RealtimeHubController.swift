@@ -156,6 +156,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// Provider turn completion means the server finished sending; the Mac may still be
   /// playing the queued tail, and a new PTT during that tail is still a barge-in.
   private var realtimePlaybackActive = false
+  /// Monotonic owner for realtime playback-idle callbacks. The PCM player can
+  /// complete older buffers after a stop, rebuild, or newer audio chunk; only the
+  /// latest scheduled playback epoch may clear `realtimePlaybackActive`.
+  private var realtimePlaybackEpoch = 0
 
   /// Log tag for the currently-connected provider.
   private var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
@@ -362,10 +366,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   private func makePCMPlayer() -> StreamingPCMPlayer {
     let player = StreamingPCMPlayer(sampleRate: 24000)
-    player.onPlaybackIdle = { [weak self] in
+    player.onPlaybackScheduled = { [weak self] playbackEpoch in
       Task { @MainActor in
-        self?.realtimePlaybackActive = false
-        self?.clearResponseGlowIfRealtimeAudioIdle()
+        guard let self else { return }
+        self.realtimePlaybackActive = true
+        self.realtimePlaybackEpoch = playbackEpoch
+      }
+    }
+    player.onPlaybackIdle = { [weak self] playbackEpoch in
+      Task { @MainActor in
+        guard let self, self.realtimePlaybackEpoch == playbackEpoch else { return }
+        self.realtimePlaybackActive = false
+        self.clearResponseGlowIfRealtimeAudioIdle()
       }
     }
     return player
@@ -381,6 +393,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     let bargeIn = responding || realtimePlaybackActive || localSpeechActive || speech.isSpeaking
     responding = false
     realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
     turnTranscript = ""
     assistantText = ""
     speculativeWarmDone = false
@@ -450,6 +463,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   func cancelTurn() {
     responding = false
     realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
     turnTranscript = ""
     assistantText = ""
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
@@ -492,12 +506,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // If PTT muted music/system output while listening, make sure the model's
     // reply is audible even if capture teardown restore is delayed by hardware.
     SystemAudioMuteController.shared.restore()
-    guard pcmPlayer?.enqueue(pcm24k) == true else {
+    guard let pcmPlayer, pcmPlayer.enqueue(pcm24k) else {
       log("RealtimeHub[\(providerTag)]: native audio chunk could not be scheduled; keeping text fallback armed")
       return
     }
     audioReceivedThisTurn = true
     realtimePlaybackActive = true
+    realtimePlaybackEpoch = pcmPlayer.playbackEpoch
     responseGlowGate.markPlaybackActive()
   }
 
@@ -824,6 +839,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
     realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
     if localSpeechActive || speech.isSpeaking {
       speech.stopSpeaking(at: .immediate)
       localSpeechActive = false

@@ -246,17 +246,7 @@ describe("env-command local subprocess adapters", () => {
       cacheWriteTokens: 4,
     });
     expect("sessionId" in result).toBe(false);
-    expect(result.artifacts).toEqual([
-      expect.objectContaining({
-        role: "result",
-        uri: "adapter://hermes/artifact-1",
-        metadata: { nativeArtifactId: "artifact-1" },
-      }),
-      expect.objectContaining({
-        role: "checkpoint",
-        uri: "adapter://hermes/checkpoint-1",
-      }),
-    ]);
+    expect(result.artifacts).toBeUndefined();
     expect(events.map((event) => event.type)).toEqual([
       "text_delta",
       "thinking_delta",
@@ -365,18 +355,7 @@ describe("env-command local subprocess adapters", () => {
       text: "done",
       adapterSessionId: "openclaw-native-1",
     });
-    expect(result.artifacts).toEqual([
-      expect.objectContaining({
-        kind: "markdown",
-        role: "result",
-        uri: "adapter://openclaw/artifact-unsupported",
-      }),
-      expect.objectContaining({
-        kind: "json",
-        role: "result",
-        uri: "adapter://openclaw/result-artifact-unsupported",
-      }),
-    ]);
+    expect(result.artifacts).toBeUndefined();
 
     await expect(adapter.cancelAttempt({ sessionId: "omi-session" })).resolves.toMatchObject({
       accepted: true,

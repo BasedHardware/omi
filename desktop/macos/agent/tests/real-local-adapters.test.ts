@@ -107,13 +107,10 @@ describe("real local Hermes/OpenClaw adapter wrappers", () => {
       method: "session/request_permission",
       params: { options: [{ kind: "allow_always", optionId: "allow" }] },
     })}\n`);
-    await vi.waitUntil(() => requests.some((request) => request.id === 99 && "result" in request));
+    await vi.waitUntil(() => requests.some((request) => request.id === 99 && "error" in request));
     expect(requests.find((request) => request.id === 99)).toMatchObject({
-      result: {
-        outcome: {
-          outcome: "selected",
-          optionId: "allow",
-        },
+      error: {
+        code: -32001,
       },
     });
     expect(spawn).toHaveBeenCalledWith(

@@ -163,11 +163,13 @@ final class AgentRuntimeStatusStore: ObservableObject {
       update(surface: surface, status: .running, statusText: text, terminal: false, payload: message.payload)
     case .toolResultDisplay:
       let name = message.payload["name"] as? String
-      let output = (message.payload["output"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
       let displayName = name.map { ChatContentBlock.displayName(for: $0) }
-      let summary = output?.isEmpty == false ? String(output!.prefix(120)) : nil
-      let text = [displayName, summary].compactMap { $0 }.joined(separator: " — ")
-      update(surface: surface, status: .running, statusText: text.isEmpty ? displayName : text, terminal: false, payload: message.payload)
+      if projectionsBySurface[surface.key]?.status == .cancelling {
+        return
+      }
+      // Ambient status surfaces are visible outside the chat transcript; never
+      // echo raw tool output here because it may contain secrets or local paths.
+      update(surface: surface, status: .running, statusText: displayName, terminal: false, payload: message.payload)
     case .cancelAck:
       let accepted = message.payload["accepted"] as? Bool ?? false
       update(surface: surface, status: accepted ? .cancelling : .running, statusText: nil, terminal: false, payload: message.payload)

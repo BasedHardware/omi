@@ -15,7 +15,6 @@ import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/models/subscription.dart';
@@ -30,7 +29,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:omi/backend/http/api/announcements.dart';
 import 'package:omi/pages/announcements/changelog_sheet.dart';
-import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'device_settings.dart';
 import '../conversations/auto_sync_page.dart';
 import '../conversations/sync_page.dart';
@@ -474,8 +472,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     }
 
     return Column(
-      children:
-          filtered.map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap)).toList(),
+      children: filtered
+          .map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap))
+          .toList(),
     );
   }
 
@@ -560,8 +559,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    final page =
-                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                    final page = SharedPreferencesUtil().deviceSupportsMultiFileSync
+                        ? const AutoSyncPage()
+                        : const SyncPage();
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),
@@ -580,16 +580,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DeviceSettings()));
                           },
                         ),
-                        if (deviceProvider.connectedDevice?.type == DeviceType.omi) ...[
-                          const Divider(height: 1, color: Color(0xFF3C3C43)),
-                          _buildSettingsItem(
-                            title: context.l10n.deviceTutorial,
-                            icon: const FaIcon(FontAwesomeIcons.graduationCap, color: Color(0xFF8E8E93), size: 20),
-                            onTap: () {
-                              routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true));
-                            },
-                          ),
-                        ],
                       ],
                     );
                   },

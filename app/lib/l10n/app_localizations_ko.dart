@@ -7639,6 +7639,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get viewAll => '모두 보기';
 
   @override
+  String get expand => '펼치기';
+
+  @override
   String get addTask => '작업 추가';
 
   @override
@@ -8317,12 +8320,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '대화 $count개 생성됨',
-      one: '대화 1개 생성됨',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '대화 $count개 생성됨', one: '대화 1개 생성됨');
     return '$_temp0';
   }
 
@@ -9046,11 +9044,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '녹음 $count건 동기화 준비됨',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '녹음 $count건 동기화 준비됨');
     return '$_temp0';
   }
 
@@ -9062,11 +9056,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '확인이 필요한 녹음 $count개',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '확인이 필요한 녹음 $count개');
     return '$_temp0';
   }
 
@@ -9212,7 +9202,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcribeLaterPaused => '일시중지됨 — 오디오가 녹음되지 않고 있습니다';
 
   @override
-  String get deviceTutorial => '기기 튜토리얼';
+  String get deviceTutorial => 'Omi 사용법';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Omi에 대고 말해보세요';
@@ -9297,4 +9287,18 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '완료';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi 알아보기';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.';
+
+  @override
+  String get deviceOnboardingIntroDuration => '약 1분';
+  @override
+  String get jumpToLatestMessage => '최신 메시지로 이동';
+
+  @override
+  String get latest => '최신';
 }

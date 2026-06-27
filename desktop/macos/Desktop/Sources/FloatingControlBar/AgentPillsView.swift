@@ -251,13 +251,16 @@ struct AgentProviderLogoMark: View {
     private static func logo(for provider: AgentHarnessMode?) -> NSImage? {
         switch provider {
         case .hermes:
-            return load("hermes_logo_flat")
+            return hermesLogo
         case .openclaw:
-            return load("openclaw_logo_flat")
+            return openClawLogo
         default:
             return nil
         }
     }
+
+    private static let hermesLogo = load("hermes_logo_flat")
+    private static let openClawLogo = load("openclaw_logo_flat")
 
     private static func load(_ name: String) -> NSImage? {
         guard let url = Bundle.resourceBundle.url(forResource: name, withExtension: "png") else {

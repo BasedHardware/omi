@@ -1712,12 +1712,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ĮRENGINIAI',
-      one: 'ĮRENGINYS',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -7772,6 +7767,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get viewAll => 'Peržiūrėti viską';
 
   @override
+  String get expand => 'Išskleisti';
+
+  @override
   String get addTask => 'Pridėti užduotį';
 
   @override
@@ -9379,7 +9377,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get transcribeLaterPaused => 'Pristabdyta — garsas neįrašomas';
 
   @override
-  String get deviceTutorial => 'Įrenginio mokymo programa';
+  String get deviceTutorial => 'Kaip naudoti Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Kalbėkite į Omi';
@@ -9467,4 +9465,18 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Baigti';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Susipažinkite su savo Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Greita praktinė apžvalga visko, ką gali jūsų Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Maždaug 1 minutė';
+  @override
+  String get jumpToLatestMessage => 'Peršokti į naujausią pranešimą';
+
+  @override
+  String get latest => 'Naujausias';
 }

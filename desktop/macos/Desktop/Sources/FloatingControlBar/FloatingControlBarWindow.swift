@@ -1015,11 +1015,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     }
 
-    func showAgentRowsFromConversation() {
-        guard !AgentPillsManager.shared.pills.isEmpty else {
-            closeAIConversation()
-            return
+    func leaveAgentConversation() {
+        if state.usesNotchIsland, !AgentPillsManager.shared.pills.isEmpty {
+            showAgentRowsFromConversation()
+        } else {
+            showMainConversationFromAgent()
         }
+    }
+
+    private func showAgentRowsFromConversation() {
+        guard !AgentPillsManager.shared.pills.isEmpty else { return showMainConversationFromAgent() }
 
         responseHeightCancellable?.cancel()
         responseHeightCancellable = nil
@@ -1029,6 +1034,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             state.hideConversationSurface()
         }
         openNotchHoverMenuUntilExit()
+    }
+
+    private func showMainConversationFromAgent() {
+        guard state.activeAgentChatPillID != nil else {
+            closeAIConversation()
+            return
+        }
+
+        state.leaveAgentSurface()
+        if state.conversationSurface == .mainInput {
+            resizeForMainInputAfterAgentExit()
+        } else {
+            resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+        }
+        focusInputField()
     }
 
     private func animateNotchReveal(from sourceSize: NSSize, to targetSize: NSSize, duration: TimeInterval) {
@@ -1056,7 +1076,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard state.showingAIConversation else { return }
 
         if state.activeAgentChatPillID != nil {
-            showAgentRowsFromConversation()
+            leaveAgentConversation()
             return
         }
 
@@ -1733,7 +1753,7 @@ class FloatingControlBarManager {
     /// chat when dismissing a pill.)
     func leaveActiveAgentSurfaceFromPillDismiss() {
         guard let window else { return }
-        window.showAgentRowsFromConversation()
+        window.leaveAgentConversation()
     }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
@@ -2138,22 +2158,26 @@ class FloatingControlBarManager {
             return ["error": "floating_bar_window_unavailable"]
         }
         let start = ContinuousClock.now
-        window.showAgentRowsFromConversation()
+        let expectsRows = window.state.usesNotchIsland && !AgentPillsManager.shared.pills.isEmpty
+        window.leaveAgentConversation()
         guard wait else {
             return [
                 "triggered": "true",
                 "active": window.state.activeAgentChatPillID?.uuidString ?? "",
+                "mode": expectsRows ? "rows" : "main",
                 "rowsOpen": window.state.isNotchHoverMenuVisible ? "true" : "false",
             ]
         }
         let backMs = await waitForAutomationCondition {
             window.state.activeAgentChatPillID == nil
-                && !window.state.showingAIConversation
-                && window.state.isNotchHoverMenuVisible
+                && (expectsRows
+                    ? (!window.state.showingAIConversation && window.state.isNotchHoverMenuVisible)
+                    : window.state.showingAIConversation)
         }
         return [
             "backMs": backMs ?? "timeout",
             "elapsedMs": start.duration(to: .now).millisecondsString,
+            "mode": expectsRows ? "rows" : "main",
             "rowsOpen": window.state.isNotchHoverMenuVisible ? "true" : "false",
             "frame": NSStringFromRect(window.frame),
         ]
@@ -3405,6 +3429,20 @@ extension FloatingControlBarWindow {
         state.resetMeasuredContentHeight(for: .mainResponse)
         beginMainResponseHeight(animated: animated)
         orderFrontRegardless()
+    }
+
+    /// Resize the window to the normal Ask Omi input height after exiting an
+    /// agent surface to `.mainInput`. Cancels the response-height observer and
+    /// installs the input-height observer so non-Notch displays preserve the
+    /// legacy "back to Omi chat" behavior instead of using Notch row navigation.
+    func resizeForMainInputAfterAgentExit() {
+        responseHeightCancellable?.cancel()
+        responseHeightCancellable = nil
+        state.responseContentHeight = 0
+        state.inputViewHeight = inputPanelHeight
+        let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
+        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+        setupInputHeightObserver()
     }
 
     /// Save the current center point so closeAIConversation can restore position.

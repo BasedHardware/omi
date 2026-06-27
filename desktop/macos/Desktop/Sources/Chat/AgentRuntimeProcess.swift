@@ -552,12 +552,12 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
-    let adapterPathPrefixDirs = [
+    let adapterPathDirs = [
       "\(home)/.hermes/hermes-agent/venv/bin",
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
     ]
-    let adapterSearchDirs = adapterPathPrefixDirs + [
+    let adapterSearchDirs = adapterPathDirs + [
       "\(home)/.local/bin",
       "/opt/homebrew/bin",
       "/usr/local/bin",
@@ -568,7 +568,7 @@ actor AgentRuntimeProcess {
     ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     var pathElements: [String] = []
-    for path in adapterPathPrefixDirs + existingPath.split(separator: ":").map(String.init) + trustedPathDirs {
+    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterPathDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }

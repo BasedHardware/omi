@@ -219,8 +219,11 @@ struct SelectableMarkdown: View {
         for index in 0..<(lines.count - 1) {
             let header = lines[index].trimmingCharacters(in: .whitespaces)
             let separator = lines[index + 1].trimmingCharacters(in: .whitespaces)
-            guard header.filter({ $0 == "|" }).count >= 2,
-                  separator.filter({ $0 == "|" }).count >= 2 else {
+            let headerCells = markdownTableCells(header)
+            let separatorCells = markdownTableCells(separator)
+            guard headerCells.count >= 2,
+                  separatorCells.count >= 2,
+                  headerCells.count == separatorCells.count else {
                 continue
             }
             if isMarkdownTableSeparator(separator) {
@@ -231,11 +234,15 @@ struct SelectableMarkdown: View {
         return false
     }
 
-    private static func isMarkdownTableSeparator(_ line: String) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        let cells = trimmed
+    private static func markdownTableCells(_ line: String) -> [Substring] {
+        line
             .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
             .split(separator: "|", omittingEmptySubsequences: false)
+    }
+
+    private static func isMarkdownTableSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let cells = markdownTableCells(trimmed)
         guard !cells.isEmpty else { return false }
 
         return cells.allSatisfy { cell in

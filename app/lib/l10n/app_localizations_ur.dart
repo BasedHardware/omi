@@ -1712,12 +1712,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -7777,6 +7772,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get viewAll => 'سب دیکھیں';
 
   @override
+  String get expand => 'پھیلائیں';
+
+  @override
   String get addTask => 'کام شامل کریں';
 
   @override
@@ -8465,12 +8463,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9379,7 +9372,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcribeLaterPaused => 'روکا گیا — آڈیو ریکارڈ نہیں ہو رہی';
 
   @override
-  String get deviceTutorial => 'ڈیوائس ٹیوٹوریل';
+  String get deviceTutorial => 'Omi کیسے استعمال کریں';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'اپنے Omi سے بولیں';
@@ -9465,4 +9458,18 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'مکمل کریں';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'اپنے Omi کو جانیں';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'آپ کا Omi جو کچھ کر سکتا ہے اس کا ایک تیز اور عملی جائزہ۔';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'تقریباً 1 منٹ';
+  @override
+  String get jumpToLatestMessage => 'تازہ ترین پیغام پر جائیں';
+
+  @override
+  String get latest => 'تازہ ترین';
 }

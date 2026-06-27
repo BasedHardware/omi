@@ -560,18 +560,21 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const method = msg.method as string;
 
     if (method === "session/request_permission") {
-      // Forward permission requests to the shared legacy policy for all ACP
-      // adapters, including external ones (hermes, openclaw). Hermes ACP routes
-      // dangerous commands back through this approval path; hard-denying them
-      // caused provider runs to fail on the first command that needs approval.
       const params = msg.params as Record<string, unknown> | undefined;
       const options =
         (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
-      const decision = legacyPermissionPolicy.resolveAcpPermission({
-        requestId: id,
-        options,
-      });
+      const decision = this.adapterId === "acp"
+        ? legacyPermissionPolicy.resolveAcpPermission({ requestId: id, options })
+        : legacyPermissionPolicy.resolveExternalAcpPermission({ adapterId: this.adapterId, requestId: id, options });
       this.log(`ACP permission resolved: ${JSON.stringify(decision.auditEvent)}`);
+      if ("acpError" in decision) {
+        this.stdinWriter?.(JSON.stringify({
+          jsonrpc: "2.0",
+          id,
+          error: decision.acpError,
+        }));
+        return;
+      }
       this.stdinWriter?.(JSON.stringify({
         jsonrpc: "2.0",
         id,

@@ -1721,12 +1721,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 NAHANAP SA MALAPIT';
   }
 
@@ -7835,6 +7830,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get viewAll => 'Tingnan Lahat';
 
   @override
+  String get expand => 'Palawakin';
+
+  @override
   String get addTask => 'Magdagdag ng Task';
 
   @override
@@ -8530,12 +8528,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 na ginawa';
   }
 
@@ -9450,7 +9443,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
 
   @override
-  String get deviceTutorial => 'Gabay sa Device';
+  String get deviceTutorial => 'Paano Gamitin ang Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Magsalita sa Iyong Omi';
@@ -9538,4 +9531,19 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Tapusin';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kilalanin ang Iyong Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Mga 1 minuto';
+  @override
+  String get jumpToLatestMessage => 'Tumalon sa pinakabagong mensahe';
+
+  @override
+  String get latest => 'Pinakabago';
 }

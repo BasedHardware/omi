@@ -2549,6 +2549,7 @@
     "addTask": "Tilføj opgave",
     "newTask": "Ny opgave",
     "viewAll": "Vis alle",
+    "expand": "Udvid",
     "whatsNewInVersion": "Nyheder i {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",
@@ -3072,7 +3073,7 @@
     "captureModeLiveDescription": "Transskriber i realtid, mens du taler.",
     "captureModeLaterDescription": "Gem lyden nu, og transskriber den, når du vil.",
     "backgroundModeUnavailable": "Baggrundstilstand er ikke tilgængelig, fordi der ikke er tilsluttet en kompatibel enhed. Tilslut en Omi-, OpenGlass- eller Friend Pendant-enhed for at bruge denne funktion.",
-    "deviceTutorial": "Enhedsguide",
+    "deviceTutorial": "Sådan bruger du Omi",
     "deviceOnboardingTranscriptionTitle": "Tal til din Omi",
     "deviceOnboardingTranscriptionSubtitle": "Sig et par ord, og se dem dukke op i realtid",
     "deviceOnboardingGoodJob": "Godt klaret!",
@@ -3100,5 +3101,10 @@
     "deviceOnboardingSingleTapHint": "Det var ét enkelt tryk – prøv at trykke to gange hurtigt!",
     "deviceOnboardingTryDoubleTap": "Prøv det nu! Dobbelttryk på din Omi",
     "deviceOnboardingContinue": "Fortsæt",
-    "deviceOnboardingFinish": "Afslut"
+    "deviceOnboardingFinish": "Afslut",
+    "deviceOnboardingIntroTitle": "Lær din Omi at kende",
+    "deviceOnboardingIntroSubtitle": "En hurtig, praktisk rundvisning i alt, hvad din Omi kan.",
+    "deviceOnboardingIntroDuration": "Cirka 1 minut",
+    "jumpToLatestMessage": "Gå til nyeste besked",
+    "latest": "Nyeste"
 }

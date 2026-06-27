@@ -661,7 +661,7 @@ struct FloatingControlBarView: View {
     }
 
     private func showAgentListFromConversation() {
-        (window as? FloatingControlBarWindow)?.showAgentRowsFromConversation() ?? onCloseAI()
+        (window as? FloatingControlBarWindow)?.leaveAgentConversation() ?? onCloseAI()
     }
 
     private func handleBarHover(_ hovering: Bool) {
@@ -1294,10 +1294,10 @@ private struct AgentMainChatView: View {
         if !pill.conversationMessages.isEmpty {
             return pill.conversationMessages
         }
-        var fallback = [ChatMessage(text: pill.query, sender: .user)]
+        var fallback = [ChatMessage(id: "\(pill.id.uuidString)-query", text: pill.query, sender: .user)]
         if let message = pill.aiMessage {
             let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty {
+            if !text.isEmpty || !message.contentBlocks.isEmpty {
                 fallback.append(message)
             }
         }
@@ -1481,7 +1481,7 @@ private struct AgentMainChatView: View {
                 .contextMenu {
                     Button("Copy") {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(trimmed, forType: .string)
+                        NSPasteboard.general.setString(message.copyableText, forType: .string)
                     }
                 }
         } else if trimmed.isEmpty && message.isStreaming {
@@ -1501,7 +1501,7 @@ private struct AgentMainChatView: View {
                 .contextMenu {
                     Button("Copy") {
                         NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(trimmed, forType: .string)
+                        NSPasteboard.general.setString(message.copyableText, forType: .string)
                     }
                 }
         }

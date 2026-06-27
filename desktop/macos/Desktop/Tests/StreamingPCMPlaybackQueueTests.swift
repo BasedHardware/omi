@@ -4,6 +4,20 @@ import XCTest
 final class StreamingPCMPlaybackQueueTests: XCTestCase {
   private final class BufferBox {}
 
+  func testStreamingPlayerPublishesEpochForEveryScheduledBuffer() throws {
+    let source = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources/FloatingControlBar/StreamingPCMPlayer.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(source.contains("var onPlaybackScheduled: ((Int) -> Void)?"))
+    XCTAssertTrue(source.contains("let scheduledPlaybackEpoch = playbackEpoch\n    onPlaybackScheduled?(scheduledPlaybackEpoch)"))
+    XCTAssertTrue(source.contains("for buffer in buffersToReplay {\n        self.schedule(buffer)\n      }"))
+  }
+
   func testConfigurationChangeReturnsScheduledTailForReplay() {
     let queue = StreamingPCMPlaybackQueue<BufferBox>()
     let first = BufferBox()
@@ -27,13 +41,13 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
     _ = queue.buffersToReplayAfterConfigurationChange()
     let newGeneration = queue.appendScheduled(buffer)
 
-    queue.markPlayed(buffer, generation: oldGeneration)
+    XCTAssertFalse(queue.markPlayed(buffer, generation: oldGeneration))
     XCTAssertFalse(
       queue.isEmpty,
       "A completion from the pre-rebuild player must not remove the replayed buffer"
     )
 
-    queue.markPlayed(buffer, generation: newGeneration)
+    XCTAssertTrue(queue.markPlayed(buffer, generation: newGeneration))
     XCTAssertTrue(queue.isEmpty)
   }
 
@@ -47,7 +61,7 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
     XCTAssertTrue(queue.isEmpty)
 
     queue.appendScheduled(buffer)
-    queue.markPlayed(buffer, generation: oldGeneration)
+    XCTAssertFalse(queue.markPlayed(buffer, generation: oldGeneration))
 
     XCTAssertFalse(
       queue.isEmpty,
@@ -63,7 +77,7 @@ final class StreamingPCMPlaybackQueueTests: XCTestCase {
     let generation = queue.appendScheduled(first)
     queue.appendScheduled(second)
 
-    queue.markPlayed(first, generation: generation)
+    XCTAssertTrue(queue.markPlayed(first, generation: generation))
 
     XCTAssertEqual(queue.scheduledBuffers.count, 1)
     XCTAssertTrue(queue.scheduledBuffers[0] === second)
