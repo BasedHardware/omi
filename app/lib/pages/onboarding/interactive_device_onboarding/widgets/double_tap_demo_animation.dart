@@ -200,19 +200,22 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                   Container(
                     height: 3,
                     width: leftWidth * 0.9,
-                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(2)),
                   ),
                   const SizedBox(height: 4),
                   Container(
                     height: 3,
                     width: leftWidth * 0.6,
-                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(2)),
                   ),
                   const SizedBox(height: 4),
                   Container(
                     height: 3,
                     width: leftWidth * 0.75,
-                    decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(2)),
+                    decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(2)),
                   ),
                 ],
               ),
@@ -223,7 +226,8 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
                 child: Container(
                   width: 2,
                   height: 20,
-                  decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(1)),
+                  decoration:
+                      BoxDecoration(color: Colors.black.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(1)),
                 ),
               ),
             ),
