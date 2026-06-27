@@ -9,8 +9,8 @@ use axum::{
     Json,
 };
 use jsonwebtoken::{decode, decode_header, DecodingKey, Validation};
-use serde::de::DeserializeOwned;
 use reqwest::Client;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -133,7 +133,10 @@ impl FirebaseAuth {
     }
 
     /// Verify a Firebase ID token and extract the user ID and name
-    pub async fn verify_token(&self, token: &str) -> Result<(String, Option<String>, Option<String>), AuthError> {
+    pub async fn verify_token(
+        &self,
+        token: &str,
+    ) -> Result<(String, Option<String>, Option<String>), AuthError> {
         if Self::auth_emulator_active() {
             return self.verify_emulator_token(token);
         }
@@ -165,18 +168,24 @@ impl FirebaseAuth {
         )]);
 
         // Decode and validate token
-        let token_data = decode::<FirebaseClaims>(token, key, &validation).map_err(|e| {
-            AuthError {
+        let token_data =
+            decode::<FirebaseClaims>(token, key, &validation).map_err(|e| AuthError {
                 error: "invalid_token".to_string(),
                 message: format!("Token validation failed: {}", e),
-            }
-        })?;
+            })?;
 
-        Ok((token_data.claims.sub, token_data.claims.name, token_data.claims.email))
+        Ok((
+            token_data.claims.sub,
+            token_data.claims.name,
+            token_data.claims.email,
+        ))
     }
 
     /// Verify unsigned JWTs issued by the Firebase Auth emulator (alg "none").
-    fn verify_emulator_token(&self, token: &str) -> Result<(String, Option<String>, Option<String>), AuthError> {
+    fn verify_emulator_token(
+        &self,
+        token: &str,
+    ) -> Result<(String, Option<String>, Option<String>), AuthError> {
         let alg = Self::jwt_header_alg(token).ok_or_else(|| AuthError {
             error: "invalid_token".to_string(),
             message: "Failed to decode emulator token header".to_string(),
@@ -188,10 +197,11 @@ impl FirebaseAuth {
             });
         }
 
-        let claims = Self::decode_jwt_payload::<FirebaseClaims>(token).map_err(|message| AuthError {
-            error: "invalid_token".to_string(),
-            message,
-        })?;
+        let claims =
+            Self::decode_jwt_payload::<FirebaseClaims>(token).map_err(|message| AuthError {
+                error: "invalid_token".to_string(),
+                message,
+            })?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_secs())
@@ -237,9 +247,12 @@ impl FirebaseAuth {
 
     fn jwt_header_alg(token: &str) -> Option<String> {
         let encoded = token.split('.').next()?;
-        Self::decode_jwt_part_json(encoded)
-            .ok()
-            .and_then(|value| value.get("alg").and_then(|item| item.as_str()).map(str::to_string))
+        Self::decode_jwt_part_json(encoded).ok().and_then(|value| {
+            value
+                .get("alg")
+                .and_then(|item| item.as_str())
+                .map(str::to_string)
+        })
     }
 
     fn decode_jwt_payload<T: DeserializeOwned>(token: &str) -> Result<T, String> {
@@ -248,7 +261,8 @@ impl FirebaseAuth {
             .nth(1)
             .ok_or_else(|| "Emulator token missing payload".to_string())?;
         let value = Self::decode_jwt_part_json(encoded)?;
-        serde_json::from_value(value).map_err(|error| format!("Emulator token payload invalid: {error}"))
+        serde_json::from_value(value)
+            .map_err(|error| format!("Emulator token payload invalid: {error}"))
     }
 
     fn decode_jwt_part_json(encoded: &str) -> Result<serde_json::Value, String> {
@@ -263,7 +277,8 @@ impl FirebaseAuth {
                 base64::engine::general_purpose::STANDARD.decode(padded)
             })
             .map_err(|error| format!("Emulator token base64 decode failed: {error}"))?;
-        serde_json::from_slice(&bytes).map_err(|error| format!("Emulator token JSON decode failed: {error}"))
+        serde_json::from_slice(&bytes)
+            .map_err(|error| format!("Emulator token JSON decode failed: {error}"))
     }
 }
 
@@ -402,10 +417,7 @@ where
         if let Some(byok_ext) = parts.extensions.get::<crate::byok::ByokCacheExt>() {
             // Get the Firestore service from the paywall checker (shares the same Arc)
             if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-                let byok_state = byok_ext
-                    .0
-                    .get_or_fetch(&uid, &checker.0.firestore)
-                    .await;
+                let byok_state = byok_ext.0.get_or_fetch(&uid, &checker.0.firestore).await;
 
                 match crate::byok::validate_byok_request(&uid, &parts.headers, &byok_state) {
                     Ok(crate::byok::ByokValidation::Active) => {
@@ -415,11 +427,7 @@ where
                         byok_stripped = clear_headers;
                     }
                     Err(error_msg) => {
-                        tracing::warn!(
-                            "BYOK validation failed for uid={}: {}",
-                            uid,
-                            error_msg
-                        );
+                        tracing::warn!("BYOK validation failed for uid={}: {}", uid, error_msg);
                         return Err(AuthError {
                             error: "byok_validation_failed".to_string(),
                             message: error_msg,
@@ -432,7 +440,11 @@ where
         // Paywall check — fail open if Firestore is unreachable so a backend
         // outage never makes paying users look paywalled.
         if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-            if checker.0.is_paywalled(&uid, &parts.headers, byok_stripped).await {
+            if checker
+                .0
+                .is_paywalled(&uid, &parts.headers, byok_stripped)
+                .await
+            {
                 return Err(AuthError {
                     error: "trial_expired".to_string(),
                     message: "Desktop trial expired. Upgrade or bring your own keys.".to_string(),

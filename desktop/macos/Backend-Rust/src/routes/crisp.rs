@@ -129,14 +129,20 @@ async fn find_session_by_email(
         if !conv_response.status().is_success() {
             let status = conv_response.status();
             let body = conv_response.text().await.unwrap_or_default();
-            tracing::warn!("Crisp API conversations page {} returned {}: {}", page, status, body);
+            tracing::warn!(
+                "Crisp API conversations page {} returned {}: {}",
+                page,
+                status,
+                body
+            );
             break;
         }
 
-        let conversations: CrispConversationsResponse = conv_response.json().await.map_err(|e| {
-            tracing::warn!("Failed to parse Crisp conversations: {}", e);
-            StatusCode::BAD_GATEWAY
-        })?;
+        let conversations: CrispConversationsResponse =
+            conv_response.json().await.map_err(|e| {
+                tracing::warn!("Failed to parse Crisp conversations: {}", e);
+                StatusCode::BAD_GATEWAY
+            })?;
 
         let convs = conversations.data.unwrap_or_default();
         if convs.is_empty() {
@@ -175,7 +181,10 @@ async fn get_unread_messages(
         (Some(id), Some(k), Some(wid)) => (id, k, wid),
         _ => {
             // Crisp not configured — return empty (feature disabled, not an error)
-            return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
+            return Ok(Json(UnreadResponse {
+                unread_count: 0,
+                messages: vec![],
+            }));
         }
     };
 
@@ -186,7 +195,10 @@ async fn get_unread_messages(
         }
         None => {
             tracing::info!("Crisp: no email in auth token for user {}", user.uid);
-            return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
+            return Ok(Json(UnreadResponse {
+                unread_count: 0,
+                messages: vec![],
+            }));
         }
     };
 
@@ -195,22 +207,26 @@ async fn get_unread_messages(
     let email_lower = email.to_lowercase();
 
     // Try cache first, then fall back to conversation list search
-    let session_id = if let Some(cached) = get_cached_session(&state.crisp_session_cache, &email_lower).await {
-        tracing::info!("Crisp: cache hit for {} -> {}", email, cached);
-        cached
-    } else {
-        match find_session_by_email(&client, &auth, website_id, &email).await? {
-            Some(id) => {
-                tracing::info!("Crisp: found session {} for {} (caching)", id, email);
-                set_cached_session(&state.crisp_session_cache, email_lower, id.clone()).await;
-                id
+    let session_id =
+        if let Some(cached) = get_cached_session(&state.crisp_session_cache, &email_lower).await {
+            tracing::info!("Crisp: cache hit for {} -> {}", email, cached);
+            cached
+        } else {
+            match find_session_by_email(&client, &auth, website_id, &email).await? {
+                Some(id) => {
+                    tracing::info!("Crisp: found session {} for {} (caching)", id, email);
+                    set_cached_session(&state.crisp_session_cache, email_lower, id.clone()).await;
+                    id
+                }
+                None => {
+                    tracing::info!("Crisp: no conversation found for email {}", email);
+                    return Ok(Json(UnreadResponse {
+                        unread_count: 0,
+                        messages: vec![],
+                    }));
+                }
             }
-            None => {
-                tracing::info!("Crisp: no conversation found for email {}", email);
-                return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
-            }
-        }
-    };
+        };
 
     // Fetch messages for this conversation (1 API call)
     let messages_url = format!(
@@ -233,7 +249,10 @@ async fn get_unread_messages(
         let status = msg_response.status();
         let body = msg_response.text().await.unwrap_or_default();
         tracing::warn!("Crisp API messages returned {}: {}", status, body);
-        return Ok(Json(UnreadResponse { unread_count: 0, messages: vec![] }));
+        return Ok(Json(UnreadResponse {
+            unread_count: 0,
+            messages: vec![],
+        }));
     }
 
     let messages: CrispMessagesResponse = msg_response.json().await.map_err(|e| {

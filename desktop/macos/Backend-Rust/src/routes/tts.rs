@@ -184,7 +184,8 @@ async fn tts_synthesize(
             }
         }
     }
-    let upstream = upstream.ok_or_else(|| TtsProxyError::BadGateway("tts: no upstream response".to_string()))?;
+    let upstream = upstream
+        .ok_or_else(|| TtsProxyError::BadGateway("tts: no upstream response".to_string()))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
