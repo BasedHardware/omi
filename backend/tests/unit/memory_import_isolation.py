@@ -510,6 +510,36 @@ WS_C_STUB_MODULE_NAMES = (
 )
 
 
+def install_consolidation_apply_stubs() -> list[str]:
+    """Stubs for WS-O consolidation apply tests (real apply path, mocked side effects)."""
+    touched: list[str] = []
+    install_database_client_stub()
+    install_firestore_transactional_stub()
+    touched.extend(install_ws_i_heavy_import_stubs())
+
+    review_queue_mod = AutoMockModule("database.review_queue")
+    review_queue_mod.create_review_conflict = MagicMock()
+    review_queue_mod.purge_stale_review_conflicts_for_memories = MagicMock()
+    review_queue_mod.should_escalate_conflict = MagicMock(return_value=True)
+    sys.modules["database.review_queue"] = review_queue_mod
+    touched.append("database.review_queue")
+
+    jobs_mod = AutoMockModule("jobs.short_term_lifecycle_worker")
+    jobs_mod.fetch_short_term_memory_items_firestore = MagicMock(return_value=[])
+    sys.modules["jobs.short_term_lifecycle_worker"] = jobs_mod
+    touched.append("jobs.short_term_lifecycle_worker")
+
+    return list(dict.fromkeys(touched))
+
+
+CONSOLIDATION_APPLY_STUB_MODULE_NAMES = (
+    "database._client",
+    "database.review_queue",
+    "jobs.short_term_lifecycle_worker",
+    "utils.memory.canonical_consolidation",
+)
+
+
 def module_import_isolation(
     install_fn: Callable[[], Sequence[str]],
     extra_names: Sequence[str] = (),
