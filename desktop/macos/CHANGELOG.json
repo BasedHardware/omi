@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed agent chat and task execution failing with a \"cannot start a transaction within a transaction\" database error"
+  ],
   "releases": [
     {
       "version": "0.11.543",
