@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -114,9 +115,9 @@ class EndConversationDemo extends StatefulWidget {
 
 class _EndConversationDemoState extends State<EndConversationDemo> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  double _cutPhase = 0;
   double _splitPosition = 0.5;
   bool _isSplit = false;
+  Timer? _splitTimer;
 
   @override
   void initState() {
@@ -128,10 +129,10 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
   void didUpdateWidget(EndConversationDemo oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.doublePressCount > oldWidget.doublePressCount) {
-      _cutPhase = _controller.value * 2 * pi * 3;
       _splitPosition = 0.35 + (_controller.value * 0.3);
       setState(() => _isSplit = true);
-      Future.delayed(const Duration(seconds: 2), () {
+      _splitTimer?.cancel();
+      _splitTimer = Timer(const Duration(seconds: 2), () {
         if (mounted) setState(() => _isSplit = false);
       });
     }
@@ -139,6 +140,7 @@ class _EndConversationDemoState extends State<EndConversationDemo> with SingleTi
 
   @override
   void dispose() {
+    _splitTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
