@@ -48,6 +48,7 @@ import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
+import { startWindowsUpdater } from './updater'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 
 // Default the perf log to the user data dir so marks double as lightweight prod
@@ -391,6 +392,7 @@ app.whenReady().then(async () => {
     setTimeout(() => prewarmPrimarySourceId(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    startWindowsUpdater()
   })
 
   // Overlay: wire IPC + global shortcut. The overlay window is created lazily on
