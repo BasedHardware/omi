@@ -51,18 +51,18 @@ struct WAIncomingMessage: Equatable, Sendable {
   init?(event: [String: Any]) {
     let message = WAIncomingMessage.messageObject(from: event)
     let chatJid =
-      WAIncomingMessage.stringValue(message, keys: ["ChatJID", "chatJid", "chat_jid", "chat", "to", "from"])
-      ?? WAIncomingMessage.stringValue(event, keys: ["ChatJID", "chatJid", "chat_jid", "chat", "to", "from"])
+      WAIncomingMessage.stringValue(message, keys: ["ChatJID", "Chat", "chatJid", "chat_jid", "chat", "to", "from"])
+      ?? WAIncomingMessage.stringValue(event, keys: ["ChatJID", "Chat", "chatJid", "chat_jid", "chat", "to", "from"])
     let senderJid =
       WAIncomingMessage.stringValue(message, keys: ["SenderJID", "senderJid", "sender_jid", "sender", "participant", "from"])
       ?? WAIncomingMessage.stringValue(event, keys: ["SenderJID", "senderJid", "sender_jid", "sender", "participant", "from"])
       ?? chatJid
     let id =
-      WAIncomingMessage.stringValue(message, keys: ["MsgID", "id", "messageId", "message_id", "clientMessageId"])
-      ?? WAIncomingMessage.stringValue(event, keys: ["MsgID", "id", "messageId", "message_id"])
+      WAIncomingMessage.stringValue(message, keys: ["MsgID", "ID", "id", "messageId", "message_id", "clientMessageId"])
+      ?? WAIncomingMessage.stringValue(event, keys: ["MsgID", "ID", "id", "messageId", "message_id"])
     let senderName =
-      WAIncomingMessage.stringValue(message, keys: ["SenderName", "senderName", "sender_name", "pushName", "name", "ChatName"])
-      ?? WAIncomingMessage.stringValue(event, keys: ["SenderName", "senderName", "sender_name", "pushName", "name", "ChatName"])
+      WAIncomingMessage.stringValue(message, keys: ["SenderName", "PushName", "senderName", "sender_name", "pushName", "name", "ChatName"])
+      ?? WAIncomingMessage.stringValue(event, keys: ["SenderName", "PushName", "senderName", "sender_name", "pushName", "name", "ChatName"])
     let text =
       WAIncomingMessage.stringValue(message, keys: ["Text", "DisplayText", "text", "body", "message", "caption"])
       ?? WAIncomingMessage.stringValue(event, keys: ["Text", "DisplayText", "text", "body", "message", "caption"])
@@ -108,12 +108,39 @@ struct WAIncomingMessage: Equatable, Sendable {
       if let value = object[key] as? String, !value.isEmpty {
         return value
       }
+      if let nested = object[key] as? [String: Any],
+        let value = jidString(from: nested) ?? stringValue(nested, keys: ["JID", "jid", "ID", "id", "Raw", "raw"]),
+        !value.isEmpty
+      {
+        return value
+      }
       if let value = object[key] {
+        if let number = value as? NSNumber {
+          return number.stringValue
+        }
+        if String(describing: type(of: value)).contains("Dictionary") {
+          continue
+        }
         let string = "\(value)"
         if !string.isEmpty {
           return string
         }
       }
+    }
+    return nil
+  }
+
+  private static func jidString(from object: [String: Any]) -> String? {
+    if let jid = object["JID"] as? String, !jid.isEmpty {
+      return jid
+    }
+    if let jid = object["jid"] as? String, !jid.isEmpty {
+      return jid
+    }
+    let user = (object["User"] as? String) ?? (object["user"] as? String)
+    let server = (object["Server"] as? String) ?? (object["server"] as? String)
+    if let user, !user.isEmpty, let server, !server.isEmpty {
+      return "\(user)@\(server)"
     }
     return nil
   }
