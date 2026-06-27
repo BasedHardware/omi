@@ -1,6 +1,6 @@
-import json
+from __future__ import annotations
+
 import re
-import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
 import hashlib
@@ -21,6 +21,8 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from services.users.data_export import iter_user_data_export
+from services.users.account_deletion import start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
 from database.conversations import get_in_progress_conversation, get_conversation
@@ -91,7 +93,6 @@ from utils.subscription import (
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
-from utils.twilio_service import delete_user_caller_ids
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
@@ -103,19 +104,7 @@ from utils.other.storage import (
     delete_user_person_speech_samples,
     delete_user_person_speech_sample,
 )
-from database.conversations import get_conversation_ids
-from database.memories import get_memory_ids
-from database.action_items import get_action_item_ids
-from database.screen_activity import get_screen_activity_ids
-from database.vector_db import (
-    delete_conversation_vectors_batch,
-    delete_transcript_chunk_vectors_batch,
-    delete_memory_vectors_batch,
-    delete_action_item_vectors_batch,
-    delete_screen_activity_vectors,
-)
 from utils.webhooks import webhook_first_time_setup
-from database.action_items import get_action_items as get_standalone_action_items
 from utils.byok import has_byok_keys, invalidate_byok_state_cache
 import logging
 
@@ -152,121 +141,13 @@ class DeleteAccountRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-def _purge_derived_user_data(uid: str):
-    """Best-effort purge of a user's data that lives OUTSIDE Firestore — Pinecone vectors and GCS
-    recordings — run before the Firestore wipe removes the IDs we need to enumerate (#5088).
-
-    Each backend is isolated in its own try/except so one failure (or a slow external call) never
-    blocks the others or the subsequent Firestore deletion. IDs are read via lightweight IDs-only
-    queries (no decryption).
-
-    Scope: conversation (ns1), memory (ns2), action-item (ns4), screen-activity (ns3) and
-    transcript-chunk (ns_tchunks) vectors,
-    plus conversation recordings. Known follow-ups NOT covered here: X-post vectors (no delete helper
-    yet), speech-profile / person-sample / private-cloud-sync / chat-upload GCS blobs, and the
-    externally-indexed Typesense collection.
-    """
-    try:
-        conversation_ids = get_conversation_ids(uid)
-        if conversation_ids:
-            delete_conversation_vectors_batch(uid, conversation_ids)
-    except Exception as e:
-        logger.error(f'delete_account purge conversation vectors failed for {uid}: {sanitize(str(e))}')
-
-    try:
-        conversation_ids = get_conversation_ids(uid)
-        if conversation_ids:
-            delete_transcript_chunk_vectors_batch(uid, conversation_ids)
-    except Exception as e:
-        logger.error(f'delete_account purge transcript chunk vectors failed for {uid}: {sanitize(str(e))}')
-
-    try:
-        memory_ids = get_memory_ids(uid)
-        if memory_ids:
-            delete_memory_vectors_batch(uid, memory_ids)
-    except Exception as e:
-        logger.error(f'delete_account purge memory vectors failed for {uid}: {sanitize(str(e))}')
-
-    try:
-        action_item_ids = get_action_item_ids(uid)
-        if action_item_ids:
-            delete_action_item_vectors_batch(uid, action_item_ids)
-    except Exception as e:
-        logger.error(f'delete_account purge action item vectors failed for {uid}: {sanitize(str(e))}')
-
-    try:
-        screen_activity_ids = get_screen_activity_ids(uid)
-        if screen_activity_ids:
-            delete_screen_activity_vectors(uid, screen_activity_ids)
-    except Exception as e:
-        logger.error(f'delete_account purge screen activity vectors failed for {uid}: {sanitize(str(e))}')
-
-    try:
-        delete_all_conversation_recordings(uid)
-    except Exception as e:
-        logger.error(f'delete_account purge recordings failed for {uid}: {sanitize(str(e))}')
-
-
-def _background_wipe_user_data(uid: str):
-    try:
-        # Twilio caller IDs first, while the phone_numbers subcollection still
-        # carries the twilio_sid metadata. delete_user_caller_ids is best-effort
-        # — Twilio errors are logged inside and never propagate, so a momentary
-        # Twilio outage cannot leave the user half-deleted in Firestore.
-        delete_user_caller_ids(uid)
-        # Purge external stores (Pinecone vectors, GCS recordings) BEFORE the Firestore wipe, which
-        # removes the IDs we enumerate. Best-effort + isolated so it never blocks the Firestore wipe.
-        _purge_derived_user_data(uid)
-        delete_user_data(uid)
-        logger.info(f'delete_account background wipe complete for {uid}')
-    except Exception as e:
-        logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
-
-
 @router.delete('/v1/users/delete-account', tags=['v1'])
 def delete_account(
     request: DeleteAccountRequest = DeleteAccountRequest(),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     try:
-        # 1. Persist deletion feedback first (top-level collection survives wipe).
-        if request.reason or request.reason_details:
-            try:
-                users_db.set_user_deletion_feedback(uid, request.reason, request.reason_details)
-            except Exception as e:
-                logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
-
-        # 1.5 Cancel any active paid Stripe subscription before wiping the account, so the user
-        #     isn't billed after deletion (they lose all access and can't self-serve a cancel).
-        #     Read the subscription while the user doc still exists. Best-effort: a Stripe hiccup
-        #     must never block account deletion, but log loudly so support can clean up manually.
-        try:
-            sub = users_db.get_user_subscription(uid)
-            if sub and sub.stripe_subscription_id:
-                canceled = stripe_utils.cancel_subscription(sub.stripe_subscription_id)
-                if not canceled:
-                    logger.error(f'delete_account stripe cancel returned None for {uid}')
-        except Exception as e:
-            # cancel_subscription swallows its own Stripe errors (returns None), so this only
-            # fires on the subscription lookup (e.g. a Firestore read error).
-            logger.error(f'delete_account subscription lookup failed for {uid}: {sanitize(str(e))}')
-
-        # 2. Revoke Firebase auth immediately so tokens are useless and the
-        #    account cannot be logged back into while the data wipe runs.
-        try:
-            auth.delete_account(uid)
-        except Exception as e:
-            err = str(e).upper()
-            if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
-                logger.info(f'delete_account firebase user already gone for {uid}')
-            else:
-                raise
-
-        # 3. Wipe Firestore subcollections in the background — can take minutes
-        #    for heavy users and would otherwise time out at the load balancer.
-        threading.Thread(target=_background_wipe_user_data, args=(uid,), daemon=True).start()
-
-        return {'status': 'ok', 'message': 'Account deletion started'}
+        return start_account_deletion(uid, reason=request.reason, reason_details=request.reason_details)
     except Exception as e:
         logger.info(f'delete_account {sanitize(str(e))}')
         raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
@@ -1646,55 +1527,11 @@ def get_llm_top_features(
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
 
 
-def _json_default(obj):
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    raise TypeError(f"Type {type(obj)} not serializable")
-
-
 @router.get('/v1/users/export', tags=['v1'])
 def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
-
-    def generate():
-        profile = get_user_profile(uid)
-        memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
-        people = get_people(uid)
-        action_items = get_standalone_action_items(uid, limit=10000, offset=0)
-
-        # Stream pretty-printed JSON, yielding conversations and messages one at a time
-        yield '{\n'
-        yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
-
-        # Stream conversations via generator (batched internally, never all in memory)
-        # Note: locked conversations are intentionally included in GDPR/CCPA exports per Art. 15
-        yield '  "conversations": [\n'
-        first = True
-        for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
-            if not first:
-                yield ',\n'
-            first = False
-            yield '    ' + json.dumps(conv, default=_json_default, indent=4)
-        yield '\n  ],\n'
-
-        yield '  "memories": ' + json.dumps(memories_list, default=_json_default, indent=2) + ',\n'
-        yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ',\n'
-        yield '  "action_items": ' + json.dumps(action_items, default=_json_default, indent=2) + ',\n'
-
-        # Stream chat messages via generator (batched internally, never all in memory)
-        yield '  "chat_messages": [\n'
-        first = True
-        for msg in chat_db.iter_all_messages(uid):
-            if not first:
-                yield ',\n'
-            first = False
-            yield '    ' + json.dumps(msg, default=_json_default, indent=4)
-        yield '\n  ]\n'
-
-        yield '}\n'
-
     return StreamingResponse(
-        generate(),
+        iter_user_data_export(uid),
         media_type='application/json',
         headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
     )
