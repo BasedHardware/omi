@@ -3064,5 +3064,7 @@
     "deviceOnboardingFinish": "Готово",
     "deviceOnboardingIntroTitle": "Опознайте своя Omi",
     "deviceOnboardingIntroSubtitle": "Бърза практическа обиколка на всичко, което вашият Omi може да прави.",
-    "deviceOnboardingIntroDuration": "Около 1 минута"
+    "deviceOnboardingIntroDuration": "Около 1 минута",
+    "jumpToLatestMessage": "Отиди до последното съобщение",
+    "latest": "Последно"
 }

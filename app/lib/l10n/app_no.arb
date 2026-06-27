@@ -3095,5 +3095,7 @@
     "deviceOnboardingFinish": "Fullfør",
     "deviceOnboardingIntroTitle": "Bli kjent med din Omi",
     "deviceOnboardingIntroSubtitle": "En rask, praktisk omvisning i alt din Omi kan.",
-    "deviceOnboardingIntroDuration": "Cirka 1 minutt"
+    "deviceOnboardingIntroDuration": "Cirka 1 minutt",
+    "jumpToLatestMessage": "Gå til nyeste melding",
+    "latest": "Nyeste"
 }

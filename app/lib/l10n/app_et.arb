@@ -3095,5 +3095,7 @@
     "deviceOnboardingFinish": "Lõpeta",
     "deviceOnboardingIntroTitle": "Tutvu oma Omiga",
     "deviceOnboardingIntroSubtitle": "Kiire ja praktiline ülevaade kõigest, mida sinu Omi suudab.",
-    "deviceOnboardingIntroDuration": "Umbes 1 minut"
+    "deviceOnboardingIntroDuration": "Umbes 1 minut",
+    "jumpToLatestMessage": "Hüppa uusima sõnumi juurde",
+    "latest": "Uusim"
 }

@@ -10673,5 +10673,7 @@
     "deviceOnboardingFinish": "ముగించు",
     "deviceOnboardingIntroTitle": "మీ Omiని తెలుసుకోండి",
     "deviceOnboardingIntroSubtitle": "మీ Omi చేయగలిగే ప్రతిదాని గురించి త్వరిత, ప్రత్యక్ష పరిచయం.",
-    "deviceOnboardingIntroDuration": "సుమారు 1 నిమిషం"
+    "deviceOnboardingIntroDuration": "సుమారు 1 నిమిషం",
+    "jumpToLatestMessage": "తాజా సందేశానికి వెళ్ళు",
+    "latest": "తాజా"
 }

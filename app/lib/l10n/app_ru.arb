@@ -3130,5 +3130,7 @@
     "deviceOnboardingFinish": "Готово",
     "deviceOnboardingIntroTitle": "Знакомство с Omi",
     "deviceOnboardingIntroSubtitle": "Быстрый практический обзор всего, что умеет ваш Omi.",
-    "deviceOnboardingIntroDuration": "Около 1 минуты"
+    "deviceOnboardingIntroDuration": "Около 1 минуты",
+    "jumpToLatestMessage": "Перейти к последнему сообщению",
+    "latest": "Последнее"
 }

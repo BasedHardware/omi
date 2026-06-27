@@ -9513,4 +9513,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Околу 1 минута';
+  @override
+  String get jumpToLatestMessage => 'Оди до последната порака';
+
+  @override
+  String get latest => 'Најново';
 }

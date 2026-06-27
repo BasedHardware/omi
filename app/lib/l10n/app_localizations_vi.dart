@@ -9460,4 +9460,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
+  @override
+  String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
+
+  @override
+  String get latest => 'Mới nhất';
 }

@@ -3095,5 +3095,7 @@
     "deviceOnboardingFinish": "Pabeigt",
     "deviceOnboardingIntroTitle": "Iepazīsti savu Omi",
     "deviceOnboardingIntroSubtitle": "Ātrs, praktisks ieskats visā, ko spēj tavs Omi.",
-    "deviceOnboardingIntroDuration": "Apmēram 1 minūte"
+    "deviceOnboardingIntroDuration": "Apmēram 1 minūte",
+    "jumpToLatestMessage": "Pārlēkt uz jaunāko ziņojumu",
+    "latest": "Jaunākais"
 }

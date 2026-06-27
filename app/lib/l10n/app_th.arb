@@ -3095,5 +3095,7 @@
     "deviceOnboardingFinish": "เสร็จสิ้น",
     "deviceOnboardingIntroTitle": "ทำความรู้จักกับ Omi ของคุณ",
     "deviceOnboardingIntroSubtitle": "ทัวร์สั้น ๆ แบบลงมือทำจริงเกี่ยวกับทุกสิ่งที่ Omi ของคุณทำได้",
-    "deviceOnboardingIntroDuration": "ประมาณ 1 นาที"
+    "deviceOnboardingIntroDuration": "ประมาณ 1 นาที",
+    "jumpToLatestMessage": "ไปยังข้อความล่าสุด",
+    "latest": "ล่าสุด"
 }

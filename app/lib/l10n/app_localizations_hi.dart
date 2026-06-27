@@ -9439,4 +9439,9 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'लगभग 1 मिनट';
+  @override
+  String get jumpToLatestMessage => 'नवीनतम संदेश पर जाएं';
+
+  @override
+  String get latest => 'नवीनतम';
 }

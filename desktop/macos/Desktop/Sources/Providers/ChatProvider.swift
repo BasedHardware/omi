@@ -521,6 +521,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var isStopping = false
     @Published var isClearing = false
     @Published var errorMessage: String?
+    /// Monotonic token that increments each time the local user sends a message.
+    /// ChatMessagesView observes this to anchor the viewport on send, rather than
+    /// inferring solely from messages.count changes (which can also come from
+    /// polling/sync).
+    @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
 
     // MARK: - ChatErrorState (structured replacement for the inline error banner)
     //
@@ -2490,6 +2495,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             sender: .user
         )
         messages.append(userMessage)
+        // Signal local send for turn anchoring.
+        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         // Persist to backend and sync server ID back to prevent poll duplicates.
         //
@@ -2950,6 +2957,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 attachments: attachmentsForMessage
             )
             messages.append(userMessage)
+            // Signal to ChatMessagesView after the local user row exists so
+            // it anchors the new turn, not the previous one.
+            localSendToken = LocalSendToken(generation: sendGeneration)
 
             // Track onboarding user messages with full content
             if isOnboarding {
