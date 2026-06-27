@@ -9398,4 +9398,92 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'На пауза — звукът не се записва';
+
+  @override
+  String get deviceTutorial => 'Урок за устройството';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Говорете към вашето Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Кажете няколко думи и ги вижте как се появяват в реално време';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Браво!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Започнете да говорите...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Задайте въпрос на Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Натиснете бутона веднъж, задайте въпроса си, а след това натиснете отново, когато сте готови';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Обработка на въпроса ви...';
+
+  @override
+  String get deviceOnboardingListening => 'Слушане...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Изключване';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Включване';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Задръжте бутона за 3 секунди';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Натиснете бутона, за да го включите отново';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Задръжте бутона здраво, докато светлината угасне';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Свързано';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Свързано!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Прекъсната връзка';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Изключване...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Персонализиране на двойното докосване';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Край на разговора';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Запазете и приключете текущия разговор';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Заглушаване / Включване';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Включете или изключете микрофона';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Маркиране на текущия разговор';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Отбележете разговора като важен';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Това беше единично докосване — опитайте да докоснете два пъти бързо!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Опитайте сега! Докоснете два пъти вашето Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Продължи';
+
+  @override
+  String get deviceOnboardingFinish => 'Готово';
 }

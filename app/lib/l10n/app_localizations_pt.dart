@@ -9368,4 +9368,92 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Em pausa — o áudio não está a ser gravado';
+
+  @override
+  String get deviceTutorial => 'Tutorial do dispositivo';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Fale com o seu Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Diga algumas palavras e veja-as aparecer em tempo real';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Muito bem!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Comece a falar...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Faça uma pergunta ao Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Pressione o botão uma vez, faça a sua pergunta e pressione novamente ao terminar';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'A processar a sua pergunta...';
+
+  @override
+  String get deviceOnboardingListening => 'A ouvir...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Desligar';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Ligar';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Mantenha o botão pressionado durante 3 segundos';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Pressione o botão para ligar novamente';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Mantenha o botão pressionado com firmeza até a luz apagar';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Ligado';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Ligado!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Desligado';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'A desligar...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalizar toque duplo';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Terminar conversa';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Guardar e terminar a conversa atual';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Silenciar / Ativar som';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Ligar ou desligar o microfone';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Destacar conversa em curso';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Marcar a conversa como importante';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Isso foi um toque único — tente tocar duas vezes rapidamente!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Experimente agora! Toque duas vezes no seu Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continuar';
+
+  @override
+  String get deviceOnboardingFinish => 'Concluir';
 }

@@ -17450,6 +17450,180 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Paused — audio isn\'t being recorded'**
   String get transcribeLaterPaused;
+
+  /// Interactive device onboarding tutorial: deviceTutorial
+  ///
+  /// In en, this message translates to:
+  /// **'Device Tutorial'**
+  String get deviceTutorial;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingTranscriptionTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Speak Into Your Omi'**
+  String get deviceOnboardingTranscriptionTitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingTranscriptionSubtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Say a few words and watch them appear in real-time'**
+  String get deviceOnboardingTranscriptionSubtitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingGoodJob
+  ///
+  /// In en, this message translates to:
+  /// **'Good job!'**
+  String get deviceOnboardingGoodJob;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingStartSpeaking
+  ///
+  /// In en, this message translates to:
+  /// **'Start speaking...'**
+  String get deviceOnboardingStartSpeaking;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingAskQuestionTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi a Question'**
+  String get deviceOnboardingAskQuestionTitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingAskQuestionSubtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button once, speak your question, then press again when done'**
+  String get deviceOnboardingAskQuestionSubtitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingProcessingQuestion
+  ///
+  /// In en, this message translates to:
+  /// **'Processing your question...'**
+  String get deviceOnboardingProcessingQuestion;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingListening
+  ///
+  /// In en, this message translates to:
+  /// **'Listening...'**
+  String get deviceOnboardingListening;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingTurnOffTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Turn Off'**
+  String get deviceOnboardingTurnOffTitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingTurnOnTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On'**
+  String get deviceOnboardingTurnOnTitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingTurnOffSubtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the button for 3 seconds'**
+  String get deviceOnboardingTurnOffSubtitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingTurnOnSubtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button to turn it back on'**
+  String get deviceOnboardingTurnOnSubtitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingHoldButtonHint
+  ///
+  /// In en, this message translates to:
+  /// **'Hold the button firmly until the light turns off'**
+  String get deviceOnboardingHoldButtonHint;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingStatusConnected
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get deviceOnboardingStatusConnected;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingStatusConnectedDone
+  ///
+  /// In en, this message translates to:
+  /// **'Connected!'**
+  String get deviceOnboardingStatusConnectedDone;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingStatusDisconnected
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnected'**
+  String get deviceOnboardingStatusDisconnected;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingStatusTurningOff
+  ///
+  /// In en, this message translates to:
+  /// **'Turning off...'**
+  String get deviceOnboardingStatusTurningOff;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingDoubleTapTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Customize Double Tap'**
+  String get deviceOnboardingDoubleTapTitle;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingEndConversation
+  ///
+  /// In en, this message translates to:
+  /// **'End Conversation'**
+  String get deviceOnboardingEndConversation;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingEndConversationDesc
+  ///
+  /// In en, this message translates to:
+  /// **'Save and end current conversation'**
+  String get deviceOnboardingEndConversationDesc;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingMuteUnmute
+  ///
+  /// In en, this message translates to:
+  /// **'Mute / Unmute'**
+  String get deviceOnboardingMuteUnmute;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingMuteUnmuteDesc
+  ///
+  /// In en, this message translates to:
+  /// **'Toggle microphone on or off'**
+  String get deviceOnboardingMuteUnmuteDesc;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingStarConversation
+  ///
+  /// In en, this message translates to:
+  /// **'Star Ongoing Conversation'**
+  String get deviceOnboardingStarConversation;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingStarConversationDesc
+  ///
+  /// In en, this message translates to:
+  /// **'Mark conversation as important'**
+  String get deviceOnboardingStarConversationDesc;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingSingleTapHint
+  ///
+  /// In en, this message translates to:
+  /// **'That was a single tap — try tapping twice quickly!'**
+  String get deviceOnboardingSingleTapHint;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingTryDoubleTap
+  ///
+  /// In en, this message translates to:
+  /// **'Try it now! Double tap your Omi'**
+  String get deviceOnboardingTryDoubleTap;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingContinue
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get deviceOnboardingContinue;
+
+  /// Interactive device onboarding tutorial: deviceOnboardingFinish
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get deviceOnboardingFinish;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

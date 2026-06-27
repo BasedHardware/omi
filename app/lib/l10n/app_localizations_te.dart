@@ -9412,4 +9412,91 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'పాజ్ చేయబడింది — ఆడియో రికార్డ్ కావడం లేదు';
+
+  @override
+  String get deviceTutorial => 'పరికర ట్యుటోరియల్';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'మీ Omiతో మాట్లాడండి';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'కొన్ని మాటలు చెప్పి, అవి తక్షణమే కనిపించడం చూడండి';
+
+  @override
+  String get deviceOnboardingGoodJob => 'శభాష్!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'మాట్లాడటం ప్రారంభించండి...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omiని ఒక ప్రశ్న అడగండి';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'బటన్‌ను ఒకసారి నొక్కి, మీ ప్రశ్న అడిగి, పూర్తయ్యాక మళ్లీ నొక్కండి';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'మీ ప్రశ్నను ప్రాసెస్ చేస్తోంది...';
+
+  @override
+  String get deviceOnboardingListening => 'వింటోంది...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'ఆఫ్ చేయండి';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'ఆన్ చేయండి';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'బటన్‌ను 3 సెకన్ల పాటు నొక్కి ఉంచండి';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'మళ్లీ ఆన్ చేయడానికి బటన్‌ను నొక్కండి';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'లైట్ ఆరిపోయే వరకు బటన్‌ను గట్టిగా నొక్కి ఉంచండి';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'కనెక్ట్ అయింది';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'కనెక్ట్ అయింది!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'డిస్‌కనెక్ట్ అయింది';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'ఆఫ్ అవుతోంది...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'డబుల్ ట్యాప్‌ను అనుకూలీకరించండి';
+
+  @override
+  String get deviceOnboardingEndConversation => 'సంభాషణ ముగించు';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'ప్రస్తుత సంభాషణను సేవ్ చేసి ముగించండి';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'మ్యూట్ / అన్‌మ్యూట్';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'మైక్రోఫోన్‌ను ఆన్ లేదా ఆఫ్ చేయండి';
+
+  @override
+  String get deviceOnboardingStarConversation => 'జరుగుతున్న సంభాషణకు స్టార్ ఇవ్వండి';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'సంభాషణను ముఖ్యమైనదిగా గుర్తించండి';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'అది ఒకే ట్యాప్ — రెండుసార్లు వేగంగా ట్యాప్ చేయడానికి ప్రయత్నించండి!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'ఇప్పుడే ప్రయత్నించండి! మీ Omiని డబుల్ ట్యాప్ చేయండి';
+
+  @override
+  String get deviceOnboardingContinue => 'కొనసాగించండి';
+
+  @override
+  String get deviceOnboardingFinish => 'ముగించు';
 }
