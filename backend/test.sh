@@ -42,6 +42,9 @@ pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
 pytest tests/unit/test_memory_domain.py -v
+pytest tests/unit/test_memory_system_cohort.py -v
+pytest tests/unit/test_canonical_memory_vectors.py -v
+pytest tests/unit/test_no_module_level_sys_modules_stub.py -v
 pytest tests/unit/test_ws_k_layer_field.py -v
 pytest tests/unit/test_memory_service_parity.py -v
 pytest tests/unit/test_ws_i_write_convergence.py -v
@@ -237,6 +240,7 @@ pytest tests/unit/test_goals_id_fallback.py -v
 pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
+pytest tests/unit/test_kg_prune_memory_citations.py -v
 pytest tests/unit/test_goal_extraction_batch.py -v
 pytest tests/unit/test_listen_pipeline.py -v
 pytest tests/unit/test_resample_pcm_divzero.py -v
