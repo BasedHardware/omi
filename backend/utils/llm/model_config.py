@@ -228,13 +228,28 @@ _STRUCTURED_OUTPUT_FEATURES = {
 
 _DEFAULT_CONFIG: Tuple[str, str] = ('gpt-4.1-mini', 'openai')
 _SUPPORTED_PROVIDERS = {'openai', 'gemini', 'openrouter', 'anthropic', 'perplexity'}
-_DYNAMIC_ROUTE_REFRESH_SECONDS = int(os.environ.get('MODEL_AUTO_ROUTER_ROUTE_CACHE_SECONDS', '60'))
 
 
 def _env_flag(name: str, default: str) -> bool:
     return os.environ.get(name, default).strip().lower() not in {'0', 'false', 'no', 'off'}
 
 
+def _env_int(name: str, default: int, minimum: Optional[int] = None) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        logger.warning('%s=%r is not an integer, falling back to %s', name, raw, default)
+        return default
+    if minimum is not None and value < minimum:
+        logger.warning('%s=%s is below minimum %s, falling back to %s', name, value, minimum, default)
+        return default
+    return value
+
+
+_DYNAMIC_ROUTE_REFRESH_SECONDS = _env_int('MODEL_AUTO_ROUTER_ROUTE_CACHE_SECONDS', 60, minimum=1)
 _auto_router_enabled = _env_flag('MODEL_AUTO_ROUTER_ENABLED', 'true')
 _dynamic_routes: Dict[str, Dict[str, Any]] = {}
 _dynamic_routes_loaded_at = 0.0
@@ -321,6 +336,7 @@ def _normalize_dynamic_routes(route_payload: Optional[Mapping[str, Any]]) -> Dic
     if _is_route_payload_expired(route_payload):
         return {}
 
+    payload_expires_at = route_payload.get('expires_at') if isinstance(route_payload, Mapping) else None
     routes_obj = route_payload.get('routes') if isinstance(route_payload, Mapping) else None
     routes = routes_obj if isinstance(routes_obj, Mapping) else route_payload
     normalized: Dict[str, Dict[str, Any]] = {}
@@ -328,6 +344,8 @@ def _normalize_dynamic_routes(route_payload: Optional[Mapping[str, Any]]) -> Dic
         route_data = _route_to_dict(route)
         if not route_data:
             continue
+        if payload_expires_at and 'expires_at' not in route_data:
+            route_data['expires_at'] = payload_expires_at
         model = route_data.get('model')
         provider = route_data.get('provider')
         if _is_dynamic_route_allowed(feature, model, provider):

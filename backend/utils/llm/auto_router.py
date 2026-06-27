@@ -21,6 +21,13 @@ AUTO_ROUTER_MIN_SCORE_MARGIN = 0.015
 
 SUPPORTED_PROVIDERS = frozenset({"openai", "gemini", "openrouter", "anthropic", "perplexity"})
 OPENAI_COMPATIBLE_PROVIDERS = frozenset({"openai", "gemini"})
+PROVIDER_ALIASES = {
+    "openai": frozenset({"openai"}),
+    "gemini": frozenset({"gemini", "google", "google-ai", "google-deepmind"}),
+    "openrouter": frozenset({"openrouter"}),
+    "anthropic": frozenset({"anthropic", "claude"}),
+    "perplexity": frozenset({"perplexity"}),
+}
 
 
 @dataclass(frozen=True)
@@ -312,7 +319,6 @@ def build_auto_route_table(
     pinned = pinned_features or {}
 
     routes: Dict[str, Dict[str, Any]] = {}
-    dynamic_count = 0
     total_candidates = 0
 
     for feature, fallback in sorted(static_profile.items()):
@@ -335,8 +341,6 @@ def build_auto_route_table(
         )
         routes[feature] = route
         total_candidates += considered
-        if route.get("source") == "auto-router":
-            dynamic_count += 1
 
     for feature, fallback in sorted(pinned.items()):
         routes[feature] = {
@@ -352,6 +356,7 @@ def build_auto_route_table(
             "expires_at": expires_at.isoformat(),
         }
 
+    dynamic_count = sum(1 for route in routes.values() if route.get("source") == "auto-router")
     return {
         "profile": profile_name,
         "source": "auto-router",
@@ -533,6 +538,7 @@ def _model_rows(payload: Optional[Mapping[str, Any]]) -> Sequence[Mapping[str, A
 def _match_candidate(row: Mapping[str, Any]) -> Tuple[Optional[CandidateSpec], int]:
     name = " ".join(str(row.get(key) or "") for key in ("slug", "id", "name", "model"))
     normalized_name = _normalize_alias(name)
+    provider_hints = _row_provider_hints(row)
     matches = []
     for candidate in MODEL_CANDIDATES:
         for alias in (candidate.model, *candidate.aliases):
@@ -543,8 +549,63 @@ def _match_candidate(row: Mapping[str, Any]) -> Tuple[Optional[CandidateSpec], i
                 matches.append((len(normalized_alias), candidate))
     if not matches:
         return None, 0
+
+    provider_matches = [
+        (alias_length, candidate)
+        for alias_length, candidate in matches
+        if _candidate_matches_provider_hints(candidate, provider_hints)
+    ]
+    if provider_matches:
+        matches = provider_matches
+    elif provider_hints:
+        return None, 0
+    else:
+        longest_alias = max(alias_length for alias_length, _candidate in matches)
+        longest_matches = [
+            (alias_length, candidate) for alias_length, candidate in matches if alias_length == longest_alias
+        ]
+        if len({candidate.key for _alias_length, candidate in longest_matches}) > 1:
+            return None, 0
+        matches = longest_matches
+
     matches.sort(key=lambda item: item[0], reverse=True)
     return matches[0][1], matches[0][0]
+
+
+def _row_provider_hints(row: Mapping[str, Any]) -> set[str]:
+    hints = set()
+    for key in ("provider", "organization", "creator", "vendor", "company"):
+        value = row.get(key)
+        if isinstance(value, Mapping):
+            value = value.get("name") or value.get("slug") or value.get("id")
+        normalized = _normalize_provider_hint(value)
+        if normalized:
+            hints.add(normalized)
+
+    slug = str(row.get("slug") or row.get("id") or "").lower()
+    for provider, aliases in PROVIDER_ALIASES.items():
+        if provider in slug:
+            hints.add(provider)
+            continue
+        if any(alias in slug for alias in aliases):
+            hints.add(provider)
+
+    return hints
+
+
+def _candidate_matches_provider_hints(candidate: CandidateSpec, provider_hints: set[str]) -> bool:
+    aliases = PROVIDER_ALIASES.get(candidate.provider, frozenset({candidate.provider}))
+    return bool(provider_hints & aliases)
+
+
+def _normalize_provider_hint(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    normalized = _normalize_alias(value)
+    for provider, aliases in PROVIDER_ALIASES.items():
+        if normalized == provider or normalized in aliases:
+            return provider
+    return normalized
 
 
 def _contains_alias(name: str, alias: str) -> bool:

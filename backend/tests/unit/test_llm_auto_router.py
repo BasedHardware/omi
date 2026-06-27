@@ -65,6 +65,25 @@ def test_parser_maps_specific_model_aliases_without_colliding():
     assert metrics["openai:gpt-5.4-mini"].quality == 83
 
 
+def test_parser_uses_provider_identity_before_alias_matching():
+    payload = {
+        "data": [
+            {
+                "slug": "openrouter-gpt-4.1-mini",
+                "provider": "OpenRouter",
+                "name": "GPT-4.1 Mini",
+                "evaluations": {"artificial_analysis_intelligence_index": 99},
+                "median_output_tokens_per_second": 250,
+                "pricing": {"input": 0.01, "output": 0.02},
+            }
+        ]
+    }
+
+    metrics = parse_artificial_analysis_models(payload)
+
+    assert "openai:gpt-4.1-mini" not in metrics
+
+
 def test_build_route_table_picks_better_value_for_regular_features():
     route_table = build_auto_route_table(
         profile_name="premium",
@@ -126,3 +145,19 @@ def test_disabled_router_returns_static_routes_with_reason():
     assert route_table["routes"]["memories"]["reason"] == "benchmark_fetch_failed:RuntimeError"
     assert route_table["routes"]["fair_use"]["source"] == "pinned"
     assert route_table["ttl_seconds"] == AUTO_ROUTER_TTL_SECONDS
+
+
+def test_summary_counts_are_derived_after_pinned_overwrites():
+    route_table = build_auto_route_table(
+        profile_name="premium",
+        static_profile={"fair_use": ("gemini-2.5-flash-lite", "gemini")},
+        benchmark_payload=_payload(),
+        structured_output_features=set(),
+        anthropic_only_features=set(),
+        perplexity_only_features=set(),
+        pinned_features={"fair_use": ("gpt-5.1", "openai")},
+    )
+
+    assert route_table["routes"]["fair_use"]["source"] == "pinned"
+    assert route_table["summary"]["dynamic_count"] == 0
+    assert route_table["summary"]["static_count"] == 1

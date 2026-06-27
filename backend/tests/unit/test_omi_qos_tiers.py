@@ -361,6 +361,11 @@ class TestDynamicAutoRoutes:
     def teardown_method(self):
         model_config_module.clear_dynamic_model_routes()
 
+    def test_invalid_route_cache_seconds_env_falls_back(self, monkeypatch):
+        monkeypatch.setenv('MODEL_AUTO_ROUTER_ROUTE_CACHE_SECONDS', 'not-an-int')
+
+        assert model_config_module._env_int('MODEL_AUTO_ROUTER_ROUTE_CACHE_SECONDS', 60, minimum=1) == 60
+
     def test_dynamic_route_overrides_profile_for_regular_feature(self):
         model_config_module.set_dynamic_model_routes(
             {
@@ -437,6 +442,24 @@ class TestDynamicAutoRoutes:
         )
 
         assert get_model('memories') == MODEL_QOS_PROFILES[_active_profile_name]['memories'][0]
+
+    def test_payload_expiry_is_propagated_to_loaded_routes(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'expires_at': '2999-01-01T00:00:00+00:00',
+                'routes': {
+                    'memories': {
+                        'model': 'gemini-2.5-flash-lite',
+                        'provider': 'gemini',
+                        'source': 'auto-router',
+                    }
+                },
+            }
+        )
+
+        route = model_config_module.get_dynamic_route_info('memories')
+        assert route['expires_at'] == '2999-01-01T00:00:00+00:00'
 
     def test_anthropic_only_feature_allows_anthropic_route(self):
         model_config_module.set_dynamic_model_routes(
