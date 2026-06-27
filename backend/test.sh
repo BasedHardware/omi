@@ -47,6 +47,12 @@ pytest tests/unit/test_memory_service_parity.py -v
 pytest tests/unit/test_ws_i_write_convergence.py -v
 pytest tests/unit/test_ws_i_hardening.py -v
 pytest tests/unit/test_ws_b_short_term_lifecycle.py -v
+pytest tests/unit/test_canonical_consolidation.py -v
+pytest tests/unit/test_canonical_consolidation_apply.py -v
+pytest tests/unit/test_canonical_kg_promotion.py -v
+pytest tests/unit/test_canonical_extraction_subject_wiring.py -v
+pytest tests/unit/test_review_queue_cascade_purge.py -v
+pytest tests/unit/test_canonical_maintenance_ordering.py -v
 pytest tests/unit/test_canonical_short_term_maintenance_cron.py -v
 pytest tests/unit/test_ws_c_backfill.py -v
 pytest tests/unit/test_ws_j_delete_privacy.py -v
