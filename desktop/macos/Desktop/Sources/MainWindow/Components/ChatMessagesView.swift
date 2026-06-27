@@ -588,7 +588,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 // again; only atBottom == false is ambiguous (it can be a
                 // geometry/layout change, not user intent) and must NOT switch
                 // to .freeScrolling on its own.
-                if atBottom && scrollMode == .freeScrolling {
+                if atBottom && (scrollMode == .freeScrolling || scrollMode == .anchoringTurn) {
                     cancelAllPendingScrolls()
                     userIsScrolling = false
                     scrollMode = .followingBottom
