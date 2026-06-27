@@ -7,6 +7,13 @@ enum AgentHarnessMode: String {
     case openclaw = "openclaw"
 }
 
+extension Optional where Wrapped == AgentHarnessMode {
+    /// Whether a pill renders an external-provider identity mark (a dedicated
+    /// logo, or the robot catch-all) instead of the native Omi dot/badge.
+    /// Omi-native agents (`nil` override) keep their round dot.
+    var rendersProviderMark: Bool { self != nil }
+}
+
 enum AgentAdapterId: String {
     case piMono = "pi-mono"
     case acp = "acp"

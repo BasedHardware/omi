@@ -73,7 +73,7 @@ struct AgentPillView: View {
     }
 
     private var isProviderPill: Bool {
-        pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw
+        pill.bridgeHarnessOverride.rendersProviderMark
     }
 
     private var providerPill: some View {
@@ -161,7 +161,7 @@ struct AgentPillView: View {
     /// Show the dot only on terminal states. While running we rely on the
     /// rotating logo as the activity signal.
     private var showStatusDot: Bool {
-        if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {
+        if pill.bridgeHarnessOverride.rendersProviderMark {
             return false
         }
         switch pill.status {
@@ -231,6 +231,16 @@ struct AgentProviderLogoMark: View {
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
                     .foregroundStyle(statusColor)
+            } else if provider != nil {
+                // Catch-all for provider agents without a dedicated logo: a flat,
+                // status-tinted robot. The emoji glyph is used purely as an alpha
+                // mask so it renders as a single flat color like the other marks.
+                statusColor
+                    .mask(
+                        Text("🤖")
+                            .font(.system(size: size))
+                            .frame(width: size, height: size)
+                    )
             } else {
                 Circle().fill(statusColor)
             }

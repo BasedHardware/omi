@@ -181,8 +181,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentMorphField("))
-    XCTAssertTrue(source.contains("NotchAgentListRow(\n                                provider: pill.bridgeHarnessOverride,\n                                title: pill.title,\n                                status: pill.status,\n                                activity: pill.latestActivity,\n                                isSelected: pill.id == activePillID,\n                                progress: rowRevealProgress"))
-    XCTAssertTrue(source.contains("AgentProviderLogoMark(provider: provider, statusColor: statusColor, size: 16)"))
+    XCTAssertTrue(source.contains("NotchAgentListRow(\n                                title: pill.title,\n                                status: pill.status,\n                                activity: pill.latestActivity,\n                                isSelected: pill.id == activePillID,\n                                progress: rowRevealProgress"))
+    // The provider logo must be drawn exactly once per row — only by the traveling
+    // `notchAgentIdentityMark` that morphs from the logo ring onto the orb slot. The
+    // row itself must NOT draw its own `AgentProviderLogoMark`, or it would double up
+    // under the morph mark (the "two caduceus / two mascots" bug).
+    XCTAssertFalse(source.contains("AgentProviderLogoMark(provider: provider, statusColor: statusColor, size: 16)"))
+    XCTAssertTrue(source.contains("Color.clear\n                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 18)"))
+    XCTAssertEqual(
+        source.components(separatedBy: "AgentProviderLogoMark(provider: provider").count - 1,
+        1,
+        "Notch row path must construct the provider logo mark exactly once (only in notchAgentIdentityMark)"
+    )
     XCTAssertTrue(source.contains("notchAgentIdentityMark(\n                            provider: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("let rowWidth = max(0, min(width - NotchAgentStackMetrics.listHorizontalInset * 2, FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))"))
@@ -614,7 +624,24 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(pillViewSource.contains(".foregroundStyle(statusColor)"))
     XCTAssertFalse(pillViewSource.contains("return load(\"hermes_logo\")"))
     XCTAssertFalse(pillViewSource.contains("return load(\"openclaw_logo\")"))
-    XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {\n            return false\n        }"))
+    XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride.rendersProviderMark {\n            return false\n        }"))
+    // Provider agents without a dedicated logo fall back to a flat, status-tinted
+    // robot mark — not the Omi round dot. Omi-native agents (nil override) keep
+    // the dot via the `provider != nil` guard.
+    XCTAssertTrue(pillViewSource.contains("} else if provider != nil {"))
+    XCTAssertTrue(pillViewSource.contains("Text(\"🤖\")"))
+    XCTAssertTrue(pillViewSource.contains("statusColor\n                    .mask("))
+  }
+
+  func testProviderMarkRoutingIsCentralized() throws {
+    let routingSource = try agentRuntimeRoutingSource()
+    XCTAssertTrue(routingSource.contains("var rendersProviderMark: Bool { self != nil }"))
+
+    let pillViewSource = try agentPillsViewSource()
+    XCTAssertTrue(pillViewSource.contains("pill.bridgeHarnessOverride.rendersProviderMark"))
+
+    let windowSource = try floatingControlBarViewSource()
+    XCTAssertTrue(windowSource.contains("if provider.rendersProviderMark {"))
   }
 
   func testDirectedProviderLogoAssetsUseSingleTemplateMasks() throws {
@@ -725,6 +752,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/AgentPillsView.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func agentRuntimeRoutingSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/AgentRuntimeRouting.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

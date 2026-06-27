@@ -1808,7 +1808,6 @@ private struct NotchAgentMorphField: View {
                             onSelect(pill)
                         } label: {
                             NotchAgentListRow(
-                                provider: pill.bridgeHarnessOverride,
                                 title: pill.title,
                                 status: pill.status,
                                 activity: pill.latestActivity,
@@ -1863,7 +1862,7 @@ private struct NotchAgentMorphField: View {
         isActive: Bool,
         progress: CGFloat
     ) -> some View {
-        if provider == .hermes || provider == .openclaw {
+        if provider.rendersProviderMark {
             let scale = NotchAgentStackMetrics.logoDotScale + (1 - NotchAgentStackMetrics.logoDotScale) * progress
             AgentProviderLogoMark(provider: provider, statusColor: color, size: NotchAgentStackMetrics.listOrbSize + 5)
                 .shadow(color: color.opacity(0.55), radius: isActive ? 9 : 5)
@@ -1915,7 +1914,6 @@ private struct NotchLogoPlaceholderDot: View {
 }
 
 private struct NotchAgentListRow: View {
-    let provider: AgentHarnessMode?
     let title: String
     let status: AgentPill.Status
     let activity: String
@@ -1924,15 +1922,12 @@ private struct NotchAgentListRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Group {
-                if provider == .hermes || provider == .openclaw {
-                    AgentProviderLogoMark(provider: provider, statusColor: statusColor, size: 16)
-                } else {
-                    Color.clear
-                        .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
-                }
-            }
-            .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 18)
+            // The identity mark (Omi dot or provider logo) is rendered by the
+            // traveling `notchAgentIdentityMark` that morphs from the collapsed
+            // logo ring and lands on this slot. The row only reserves the space —
+            // drawing a logo here too would double it up under the morph mark.
+            Color.clear
+                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 18)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
