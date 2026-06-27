@@ -109,7 +109,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     let windowSource = try floatingControlBarWindowSource()
     let responseSource = try aiResponseViewSource()
 
-    XCTAssertTrue(source.contains("state.showingAIConversation || state.agentSwitcherPinned || state.agentSwitcherHovering"))
+    // The old literal expression "state.showingAIConversation || state.agentSwitcherPinned
+    // || state.agentSwitcherHovering" was replaced by the shouldShowAgentSwitcher computed
+    // property; the notchChromeLayoutWidth assertion below covers the derived usage.
+
     XCTAssertTrue(source.contains("state.showingAIConversation || shouldShowAgentSwitcher"))
     XCTAssertTrue(source.contains("static let maxAgents = FloatingControlBarWindow.notchAgentListMaxVisibleAgents"))
     XCTAssertTrue(source.contains("static let dotDiameterRatio: CGFloat = 0.18"))
@@ -180,7 +183,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(windowSource.contains("let currentTopCenteredFrame = NSRect("))
     XCTAssertTrue(windowSource.contains("abs(frame.midX - targetFrame.midX) > 0.5"))
     XCTAssertTrue(windowSource.contains("let keepVoiceResponseAlive = state.isVoiceResponseActive"))
-    XCTAssertTrue(windowSource.contains("if !keepVoiceResponseAlive {\n            FloatingControlBarManager.shared.cancelChat()\n        }"))
+    XCTAssertTrue(windowSource.contains("FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)"))
     XCTAssertTrue(windowSource.contains("static func notchAgentListHeight(agentCount: Int) -> CGFloat"))
     XCTAssertTrue(windowSource.contains("+ notchAgentListBottomMargin"))
     XCTAssertTrue(windowSource.contains("static let notchActiveSideWidth: CGFloat = 42"))

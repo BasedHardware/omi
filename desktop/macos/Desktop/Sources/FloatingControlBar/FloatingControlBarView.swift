@@ -25,6 +25,9 @@ struct FloatingControlBarView: View {
     /// 0 = agent dots collapsed into the logo ring, 1 = fanned into the row. A single
     /// continuously-animated value so the same dots morph both ways (and reverse exactly).
     @State private var notchSwitcherProgress: CGFloat = 0
+    /// Last reported text-editor height so inputViewHeight can be recomputed
+    /// when the pill list changes while the input is open. (Cubic P2.)
+    @State private var lastInputEditorHeight: CGFloat = 0
     private let conversationTransition = Animation.spring(response: 0.22, dampingFraction: 0.9)
     private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)
     private var notchHiddenCenterWidth: CGFloat {
@@ -86,11 +89,14 @@ struct FloatingControlBarView: View {
     }
 
     private var shouldShowAgentSwitcher: Bool {
-        // Do NOT include state.showingAIConversation here. When chat is open the
-        // agent-list overlay is hidden, so reserving its height only leaves a blank
-        // vertical gap and pushes/clips the chat content. The switcher expands only
-        // for explicit pinned/hover interaction. (Cubic P2 + Codex P2.)
-        !agentPills.pills.isEmpty && (state.agentSwitcherPinned || state.agentSwitcherHovering)
+        // Do NOT reserve the agent-list height while chat is open. When chat is
+        // open the agent-list overlay is hidden, so reserving its height only
+        // leaves a blank vertical gap and pushes/clips the chat content. The
+        // switcher expands only for explicit pinned/hover interaction AND only
+        // when chat is not open. (Cubic P2 + Codex P2.)
+        !agentPills.pills.isEmpty
+            && !state.showingAIConversation
+            && (state.agentSwitcherPinned || state.agentSwitcherHovering)
     }
 
     private var showingNotchWaveform: Bool {
@@ -907,30 +913,40 @@ struct FloatingControlBarView: View {
             },
             onClearVisibleConversation: onClearVisibleConversation,
             onEscape: onEscape,
-            onHeightChange: { [weak state] height in
-                guard let state = state else { return }
-                let baseHeight: CGFloat
+            onHeightChange: { [self] height in
+                lastInputEditorHeight = height
                 if state.usesNotchIsland {
-                    baseHeight = notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
-                    // When the "Back / Omi Chat" header is rendered above the
-                    // input (notch mode + agent pills), budget its height too
-                    // so the window is tall enough for header + editor + padding.
-                    // (Codex P2 — input/send control clipping.)
-                    let headerBudget = state.usesNotchIsland && !agentPills.pills.isEmpty
-                        ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
-                        : 0
-                    state.inputViewHeight = baseHeight + headerBudget
+                    recomputeNotchInputHeight()
                 } else {
-                    baseHeight = 50 + height + 24
-                    state.inputViewHeight = baseHeight
+                    state.inputViewHeight = 50 + height + 24
                 }
             }
         )
+        .onChange(of: agentPills.pills.count) { _ in
+            // The agent-pills header budget depends on whether pills exist, so
+            // recompute the input height when the pill list changes while the
+            // input/chat view is open. Without this the budget goes stale and
+            // causes clipping or extra empty space. (Cubic P2.)
+            recomputeNotchInputHeight()
+        }
         .transition(
             .asymmetric(
                 insertion: .move(edge: .top).combined(with: .opacity),
                 removal: .move(edge: .top).combined(with: .opacity)
             ))
+    }
+
+    /// Recompute inputViewHeight from the last known editor height and the
+    /// current agent-pills presence. Called on editor height change and on
+    /// pill-list change so the header height budget never goes stale.
+    private func recomputeNotchInputHeight() {
+        guard state.usesNotchIsland else { return }
+        let height = lastInputEditorHeight
+        let baseHeight = notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
+        let headerBudget = !agentPills.pills.isEmpty
+            ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
+            : 0
+        state.inputViewHeight = baseHeight + headerBudget
     }
 
     private var aiResponseView: some View {

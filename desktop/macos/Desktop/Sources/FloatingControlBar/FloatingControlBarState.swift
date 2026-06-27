@@ -204,9 +204,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
         // are cleared, and late-arriving chunks update a surface nobody sees.
         // (Cubic P2 — presentation/process desync.)
         FloatingControlBarManager.shared.cancelChat()
-        if isVoiceFollowUp {
-            PushToTalkManager.shared.cancelListening()
-        }
+        // Call cancelListening() directly instead of gating on isVoiceFollowUp:
+        // the derived UI flag is not the authoritative source of microphone
+        // state, and cancelListening() is already guarded by state != .idle.
+        // (Cubic P2 — stale PTT capture after surface hide.)
+        PushToTalkManager.shared.cancelListening()
         activeAgentChatPillID = nil
         conversationSurface = .closed
         showingAIConversation = false
@@ -237,6 +239,14 @@ class FloatingControlBarState: NSObject, ObservableObject {
     }
 
     func clearVisibleConversation() {
+        // Cancel in-flight chat streaming and PTT capture before resetting UI
+        // flags. clearVisibleConversation() is called from multiple reset
+        // paths (showAIConversation restore, notification presentation, and
+        // closeAIConversation when not restoring). Without cancellation the
+        // streaming sink keeps writing to a surface nobody sees, and an active
+        // PTT capture keeps consuming the microphone. (Cubic P2.)
+        FloatingControlBarManager.shared.cancelChat()
+        PushToTalkManager.shared.cancelListening()
         activeAgentChatPillID = nil
         conversationSurface = .closed
         responseContentHeights = [:]

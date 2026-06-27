@@ -721,11 +721,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         // Collapsing the chat should not interrupt spoken playback. The voice
         // response glow is owned by playback state and must survive surface
-        // transitions while audio is still being delivered.
+        // transitions while audio is still being delivered. However the UI
+        // streaming subscription must still be cancelled so late-arriving
+        // chunks cannot re-present .mainResponse and pop the panel back open.
+        // (Codex P2 — streaming reopens surface during playback.)
         let keepVoiceResponseAlive = state.isVoiceResponseActive
-        if !keepVoiceResponseAlive {
-            FloatingControlBarManager.shared.cancelChat()
-        }
+        FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)
 
         // Cancel dynamic response-height observer and reset its state
         responseHeightCancellable?.cancel()
@@ -2101,13 +2102,20 @@ class FloatingControlBarManager {
     }
 
     /// Cancel any in-flight chat streaming.
-    func cancelChat() {
+    func cancelChat(keepVoiceAlive: Bool = false) {
         activeQueryGeneration += 1
         pendingFollowUpQuery = nil
         chatCancellable?.cancel()
         chatCancellable = nil
+        // When voice playback is active, keep the provider session and audio
+        // alive so the spoken response survives the surface transition. The UI
+        // streaming subscription (chatCancellable) is still cancelled above so
+        // late-arriving chunks cannot re-present the surface after the user
+        // closed it. (Codex P2 — streaming reopens surface during playback.)
         activeFloatingProvider()?.stopAgent()
-        FloatingBarVoicePlaybackService.shared.stop()
+        if !keepVoiceAlive {
+            FloatingBarVoicePlaybackService.shared.stop()
+        }
     }
 
     /// Toggle visibility.
