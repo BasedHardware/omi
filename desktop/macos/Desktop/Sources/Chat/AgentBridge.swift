@@ -141,7 +141,7 @@ actor AgentBridge {
 
   func controlTool(name: String, input: [String: Any]) async throws -> String {
     try await start()
-    return try await runtime.controlTool(
+    return try await runtime.directControlTool(
       clientId: clientId,
       harnessMode: harnessMode,
       name: name,

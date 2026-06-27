@@ -91,8 +91,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _summary == null
-              ? _buildNotFound()
-              : _buildContent(),
+          ? _buildNotFound()
+          : _buildContent(),
     );
   }
 
@@ -296,8 +296,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       final message = result.statusCode == 429
           ? (result.errorDetail ?? context.l10n.recapRegenerateCooldown)
           : result.statusCode == 400
-              ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
-              : context.l10n.recapRegenerateFailed;
+          ? (result.errorDetail ?? context.l10n.recapRegenerateNoConversations)
+          : context.l10n.recapRegenerateFailed;
       AppSnackbar.showSnackbarError(message);
     }
   }
@@ -389,7 +389,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
                     )
                   : const Icon(Icons.share_outlined, color: Colors.white, size: 20),
             ),
@@ -624,8 +626,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                     initialCenter: singleLocation ? points.first : LatLng(centerLat, centerLng),
                     initialZoom: singleLocation ? 14 : 12,
                     // Use bounds fitting for multiple locations
-                    initialCameraFit:
-                        singleLocation ? null : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
+                    initialCameraFit: singleLocation
+                        ? null
+                        : CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)),
                     interactionOptions: const InteractionOptions(flags: InteractiveFlag.none),
                   ),
                   children: [
@@ -868,8 +871,8 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     final endFormatted = _formatTimeTo12Hour(location.endTime);
     final timeText = startFormatted.isNotEmpty
         ? (endFormatted.isNotEmpty && startFormatted != endFormatted
-            ? '$startFormatted - $endFormatted'
-            : startFormatted)
+              ? '$startFormatted - $endFormatted'
+              : startFormatted)
         : '';
 
     return GestureDetector(
@@ -968,15 +971,9 @@ Future<bool?> showDeleteRecapConfirmDialog(BuildContext context) {
       context: context,
       builder: (dialogCtx) => CupertinoAlertDialog(
         title: Text(l10n.deleteRecapConfirmTitle),
-        content: Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: Text(l10n.deleteRecapConfirmBody),
-        ),
+        content: Padding(padding: const EdgeInsets.only(top: 8), child: Text(l10n.deleteRecapConfirmBody)),
         actions: [
-          CupertinoDialogAction(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            child: Text(l10n.cancel),
-          ),
+          CupertinoDialogAction(onPressed: () => Navigator.pop(dialogCtx, false), child: Text(l10n.cancel)),
           CupertinoDialogAction(
             isDestructiveAction: true,
             onPressed: () => Navigator.pop(dialogCtx, true),
@@ -992,10 +989,7 @@ Future<bool?> showDeleteRecapConfirmDialog(BuildContext context) {
       title: Text(l10n.deleteRecapConfirmTitle),
       content: Text(l10n.deleteRecapConfirmBody),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogCtx, false),
-          child: Text(l10n.cancel),
-        ),
+        TextButton(onPressed: () => Navigator.pop(dialogCtx, false), child: Text(l10n.cancel)),
         TextButton(
           onPressed: () => Navigator.pop(dialogCtx, true),
           style: TextButton.styleFrom(foregroundColor: const Color(0xFFFF6B6B)),

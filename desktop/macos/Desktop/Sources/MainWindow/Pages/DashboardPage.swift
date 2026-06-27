@@ -51,12 +51,24 @@ class DashboardViewModel: ObservableObject {
 
         // Load all data in parallel
         async let scoreTask: Void = loadScores()
-        async let tasksTask: Void = tasksStore.loadTasksIfNeeded()  // Don't re-fetch if ViewModelContainer already loaded
+        async let tasksTask: Void = tasksStore.refreshDashboardTasksFromServer()
         async let goalsTask: Void = loadGoals()
 
         let _ = await (scoreTask, tasksTask, goalsTask)
 
         isLoading = false
+    }
+
+    func loadCachedDashboardData() async {
+        await loadGoalsFromLocalSnapshot()
+    }
+
+    func resetSessionState() {
+        scoreResponse = nil
+        goals = []
+        isLoading = false
+        error = nil
+        lastGoalRefreshTime = .distantPast
     }
 
     private func loadScores() async {
@@ -95,11 +107,15 @@ class DashboardViewModel: ObservableObject {
 
     private func loadGoalsFromLocal() {
         Task {
-            do {
-                goals = try await GoalStorage.shared.getLocalGoals()
-            } catch {
-                logError("Failed to load goals from local storage", error: error)
-            }
+            await loadGoalsFromLocalSnapshot()
+        }
+    }
+
+    private func loadGoalsFromLocalSnapshot() async {
+        do {
+            goals = try await GoalStorage.shared.getLocalGoals()
+        } catch {
+            logError("Failed to load goals from local storage", error: error)
         }
     }
 
@@ -201,6 +217,7 @@ struct DashboardPage: View {
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
     @ObservedObject private var deviceProvider = DeviceProvider.shared
+    @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
     @State private var isLoadingCitation = false
@@ -237,6 +254,17 @@ struct DashboardPage: View {
 
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
+    }
+
+    /// Real persisted import-connector state (UserDefaults-backed via ImportConnectorStatusStore).
+    private func isImportConnectorConnected(_ connectorID: String) -> Bool {
+        guard let connector = ImportConnector.all.first(where: { $0.id == connectorID }) else { return false }
+        return importConnectorStatusStore.snapshot(for: connector).isConnected
+    }
+
+    /// Whether the hosted MCP key exists — the app's own definition of "configured" for MCP destinations.
+    private var hasMCPDestinationConnected: Bool {
+        MemoryExportService.shared.hasStoredMCPKey
     }
 
     var body: some View {
@@ -490,7 +518,7 @@ struct DashboardPage: View {
                 .font(.system(size: 42, weight: .bold, design: .rounded))
                 .foregroundStyle(HomePalette.ink)
                 .lineLimit(1)
-                .shadow(color: HomePalette.purple.opacity(0.42), radius: 20)
+                .shadow(color: HomePalette.glow.opacity(0.42), radius: 20)
 
             Text("What omi knows")
                 .font(.system(size: 15, weight: .medium, design: .serif))
@@ -503,19 +531,19 @@ struct DashboardPage: View {
 
     private var sourceConstellation: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HomeAIChoiceButton(title: "Gmail", brand: .gmail) {
+            HomeAIChoiceButton(title: "Gmail", brand: .gmail, isConnected: isImportConnectorConnected("email")) {
                 openImportConnector("email")
             }
-            HomeAIChoiceButton(title: "Calendar", brand: .calendar) {
+            HomeAIChoiceButton(title: "Calendar", brand: .calendar, isConnected: isImportConnectorConnected("calendar")) {
                 openImportConnector("calendar")
             }
-            HomeAIChoiceButton(title: "Files", brand: .localFiles) {
+            HomeAIChoiceButton(title: "Files", brand: .localFiles, isConnected: isImportConnectorConnected("local-files")) {
                 openImportConnector("local-files")
             }
-            HomeAIChoiceButton(title: "Notes", brand: .appleNotes) {
+            HomeAIChoiceButton(title: "Notes", brand: .appleNotes, isConnected: isImportConnectorConnected("apple-notes")) {
                 openImportConnector("apple-notes")
             }
-            HomeAIChoiceButton(title: "Omi Device", usesOmiMark: true) {
+            HomeAIChoiceButton(title: "Omi Device", usesOmiMark: true, isConnected: hasOmiDeviceHistory) {
                 openOmiDeviceWebsite()
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
@@ -538,16 +566,16 @@ struct DashboardPage: View {
             }
             .frame(height: 62, alignment: .bottomLeading)
 
-            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude) {
+            HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: hasMCPDestinationConnected) {
                 openExportDestination(.claudeCode)
             }
-            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt) {
+            HomeAIChoiceButton(title: "ChatGPT / Codex", brand: .chatgpt, isConnected: hasMCPDestinationConnected) {
                 openExportDestination(.codex)
             }
-            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw) {
+            HomeAIChoiceButton(title: "OpenClaw", brand: .openclaw, isConnected: hasMCPDestinationConnected) {
                 openExportDestination(.openclaw)
             }
-            HomeAIChoiceButton(title: "Hermes", brand: .hermes) {
+            HomeAIChoiceButton(title: "Hermes", brand: .hermes, isConnected: hasMCPDestinationConnected) {
                 openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
@@ -1023,8 +1051,8 @@ private enum HomePalette {
     static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
     static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
     static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-    static let purple = Color(red: 0.48, green: 0.30, blue: 0.95)
-    static let purpleSoft = Color(red: 0.28, green: 0.17, blue: 0.57)
+    static let glow = Color(red: 0.95, green: 0.33, blue: 0.45)
+    static let glowSoft = Color(red: 0.52, green: 0.18, blue: 0.27)
     static let flowPink = Color(red: 1.0, green: 0.16, blue: 0.44)
 }
 
@@ -1046,8 +1074,8 @@ private struct HomeCanvasBackground: View {
 
             RadialGradient(
                 colors: [
-                    HomePalette.purple.opacity(0.16),
-                    HomePalette.purple.opacity(0.035),
+                    HomePalette.glow.opacity(0.16),
+                    HomePalette.glow.opacity(0.035),
                     .clear,
                 ],
                 center: .center,
@@ -1103,8 +1131,8 @@ private struct HomeFlowCloud: View {
             .fill(
                 RadialGradient(
                     colors: [
-                        (index % 2 == 0 ? HomePalette.purple : HomePalette.flowPink).opacity(opacity),
-                        HomePalette.purpleSoft.opacity(opacity * 0.58),
+                        (index % 2 == 0 ? HomePalette.glow : HomePalette.flowPink).opacity(opacity),
+                        HomePalette.glowSoft.opacity(opacity * 0.58),
                         .clear,
                     ],
                     center: .center,
@@ -1143,8 +1171,8 @@ private struct HomeFlowParticle: View {
             .fill(
                 RadialGradient(
                     colors: [
-                        (index % 3 == 0 ? HomePalette.flowPink : HomePalette.purple).opacity(opacity),
-                        HomePalette.purpleSoft.opacity(opacity * 0.46),
+                        (index % 3 == 0 ? HomePalette.flowPink : HomePalette.glow).opacity(opacity),
+                        HomePalette.glowSoft.opacity(opacity * 0.46),
                         .clear,
                     ],
                     center: .center,
@@ -1351,9 +1379,9 @@ private struct HomeSourceIconTile: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .stroke(isHovering ? HomePalette.purple.opacity(0.58) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
+                    .stroke(isHovering ? HomePalette.glow.opacity(0.58) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
             )
-            .shadow(color: isHovering ? HomePalette.purple.opacity(0.16) : .clear, radius: 14)
+            .shadow(color: isHovering ? HomePalette.glow.opacity(0.16) : .clear, radius: 14)
             .contentShape(.rect(cornerRadius: 17))
         }
         .buttonStyle(.plain)
@@ -1503,9 +1531,9 @@ private struct HomeDataSourceCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(isHovering ? HomePalette.purple.opacity(0.5) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
+                    .stroke(isHovering ? HomePalette.glow.opacity(0.5) : HomePalette.hairline.opacity(0.9), lineWidth: 1)
             )
-            .shadow(color: isHovering ? HomePalette.purple.opacity(0.12) : .clear, radius: 12)
+            .shadow(color: isHovering ? HomePalette.glow.opacity(0.12) : .clear, radius: 12)
             .contentShape(.rect(cornerRadius: 15))
         }
         .buttonStyle(.plain)
@@ -1536,34 +1564,38 @@ private struct HomeAIChoiceButton: View {
     let systemImage: String?
     let usesOmiMark: Bool
     let isPrimary: Bool
+    let isConnected: Bool
     let action: () -> Void
 
     @State private var isHovering = false
 
-    init(title: String, brand: ConnectorBrand, isPrimary: Bool = false, action: @escaping () -> Void) {
+    init(title: String, brand: ConnectorBrand, isPrimary: Bool = false, isConnected: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.brand = brand
         self.systemImage = nil
         self.usesOmiMark = false
         self.isPrimary = isPrimary
+        self.isConnected = isConnected
         self.action = action
     }
 
-    init(title: String, systemImage: String, isPrimary: Bool = false, action: @escaping () -> Void) {
+    init(title: String, systemImage: String, isPrimary: Bool = false, isConnected: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.brand = nil
         self.systemImage = systemImage
         self.usesOmiMark = false
         self.isPrimary = isPrimary
+        self.isConnected = isConnected
         self.action = action
     }
 
-    init(title: String, usesOmiMark: Bool, isPrimary: Bool = false, action: @escaping () -> Void) {
+    init(title: String, usesOmiMark: Bool, isPrimary: Bool = false, isConnected: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.brand = nil
         self.systemImage = nil
         self.usesOmiMark = usesOmiMark
         self.isPrimary = isPrimary
+        self.isConnected = isConnected
         self.action = action
     }
 
@@ -1578,6 +1610,12 @@ private struct HomeAIChoiceButton: View {
                     .lineLimit(1)
 
                 Spacer(minLength: 8)
+
+                if isConnected {
+                    Text("Connected")
+                        .scaledFont(size: 11, weight: .medium)
+                        .foregroundStyle(HomePalette.faint)
+                }
 
                 Image(systemName: "chevron.right")
                     .scaledFont(size: 10, weight: .bold)
@@ -1605,7 +1643,7 @@ private struct HomeAIChoiceButton: View {
         } else if let systemImage {
             Image(systemName: systemImage)
                 .scaledFont(size: 14, weight: .bold)
-                .foregroundStyle(HomePalette.purple)
+                .foregroundStyle(HomePalette.ink)
                 .frame(width: 24, height: 24)
         }
     }
@@ -1992,7 +2030,7 @@ private struct HomeCenterMemoryColumn: View {
                 .font(.system(size: 42, weight: .bold, design: .rounded))
                 .foregroundStyle(HomePalette.ink)
                 .lineLimit(1)
-                .shadow(color: HomePalette.purple.opacity(0.42), radius: 20)
+                .shadow(color: HomePalette.glow.opacity(0.42), radius: 20)
 
             Text("What omi knows")
                 .font(.system(size: 15, weight: .medium, design: .serif))
@@ -2130,7 +2168,7 @@ private struct HomeMemoryMetricCard: View {
 
                 Image(systemName: "arrow.up.right")
                     .scaledFont(size: 10, weight: .bold)
-                    .foregroundStyle(isHovering ? HomePalette.purple : HomePalette.faint)
+                    .foregroundStyle(isHovering ? HomePalette.glow : HomePalette.faint)
             }
             .padding(.horizontal, 14)
             .frame(height: 76)
@@ -2141,7 +2179,7 @@ private struct HomeMemoryMetricCard: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .stroke(isHovering ? HomePalette.purple.opacity(0.56) : HomePalette.hairline.opacity(0.86), lineWidth: 1)
+                    .stroke(isHovering ? HomePalette.glow.opacity(0.56) : HomePalette.hairline.opacity(0.86), lineWidth: 1)
             )
             .contentShape(.rect(cornerRadius: 17))
         }

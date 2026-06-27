@@ -207,6 +207,7 @@ export interface KernelRunDetails {
 }
 
 export interface InspectArtifactsInput {
+  artifactId?: string;
   sessionId?: string;
   runId?: string;
   attemptId?: string;
@@ -813,8 +814,8 @@ export class AgentRuntimeKernel {
   }
 
   inspectArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
-    if (!input.sessionId && !input.runId && !input.attemptId) {
-      throw new Error("Inspecting artifacts requires sessionId, runId, or attemptId");
+    if (!input.artifactId && !input.sessionId && !input.runId && !input.attemptId) {
+      throw new Error("Inspecting artifacts requires artifactId, sessionId, runId, or attemptId");
     }
     if (input.ownerId) {
       this.assertArtifactSelectorOwner(input, input.ownerId);
@@ -1948,6 +1949,9 @@ export class AgentRuntimeKernel {
   }
 
   private assertArtifactSelectorOwner(input: InspectArtifactsInput, ownerId: string): void {
+    if (input.artifactId) {
+      this.assertSessionOwner(this.readSession(this.readArtifact(input.artifactId).sessionId), ownerId);
+    }
     if (input.sessionId) {
       this.assertSessionOwner(this.readSession(input.sessionId), ownerId);
     }
@@ -2027,6 +2031,10 @@ export class AgentRuntimeKernel {
   private readArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
     const where: string[] = [];
     const values: unknown[] = [];
+    if (input.artifactId) {
+      where.push("artifact_id = ?");
+      values.push(input.artifactId);
+    }
     if (input.sessionId) {
       where.push("session_id = ?");
       values.push(input.sessionId);
