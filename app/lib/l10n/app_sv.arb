@@ -2540,6 +2540,7 @@
     "addTask": "Lägg till uppgift",
     "newTask": "Ny uppgift",
     "viewAll": "Visa alla",
+    "expand": "Expandera",
     "whatsNewInVersion": "Nyheter i {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

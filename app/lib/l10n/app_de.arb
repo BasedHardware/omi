@@ -2508,6 +2508,7 @@
     "addTask": "Aufgabe hinzufügen",
     "newTask": "Neue Aufgabe",
     "viewAll": "Alle anzeigen",
+    "expand": "Erweitern",
     "whatsNewInVersion": "Neuigkeiten in {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

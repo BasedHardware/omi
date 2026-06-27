@@ -2509,6 +2509,7 @@
     "addTask": "Afegir tasca",
     "newTask": "Nova tasca",
     "viewAll": "Veure tot",
+    "expand": "Expandeix",
     "whatsNewInVersion": "Novetats a {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

@@ -7778,6 +7778,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get viewAll => 'Tümünü gör';
 
   @override
+  String get expand => 'Genişlet';
+
+  @override
   String get addTask => 'Görev ekle';
 
   @override

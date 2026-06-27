@@ -7761,6 +7761,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get viewAll => 'Vis alle';
 
   @override
+  String get expand => 'Utvid';
+
+  @override
   String get addTask => 'Legg til oppgave';
 
   @override

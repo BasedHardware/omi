@@ -7766,6 +7766,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get viewAll => 'Xem tất cả';
 
   @override
+  String get expand => 'Mở rộng';
+
+  @override
   String get addTask => 'Thêm nhiệm vụ';
 
   @override

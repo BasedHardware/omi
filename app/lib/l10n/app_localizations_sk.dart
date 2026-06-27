@@ -7756,6 +7756,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get viewAll => 'Zobraziť všetko';
 
   @override
+  String get expand => 'Rozbaliť';
+
+  @override
   String get addTask => 'Pridať úlohu';
 
   @override

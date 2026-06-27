@@ -7787,6 +7787,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get viewAll => 'Alles bekijken';
 
   @override
+  String get expand => 'Uitvouwen';
+
+  @override
   String get addTask => 'Taak toevoegen';
 
   @override

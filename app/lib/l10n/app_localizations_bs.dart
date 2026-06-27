@@ -7788,6 +7788,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get viewAll => 'Prikaži sve';
 
   @override
+  String get expand => 'Proširi';
+
+  @override
   String get addTask => 'Dodaj zadatak';
 
   @override

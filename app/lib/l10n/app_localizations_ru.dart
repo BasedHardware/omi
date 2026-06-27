@@ -7789,6 +7789,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get viewAll => 'Показать все';
 
   @override
+  String get expand => 'Развернуть';
+
+  @override
   String get addTask => 'Добавить задачу';
 
   @override

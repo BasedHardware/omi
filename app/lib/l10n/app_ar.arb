@@ -2507,6 +2507,7 @@
     "addTask": "إضافة مهمة",
     "newTask": "مهمة جديدة",
     "viewAll": "عرض الكل",
+    "expand": "توسيع",
     "whatsNewInVersion": "ما الجديد في {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

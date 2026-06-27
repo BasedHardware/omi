@@ -2545,6 +2545,7 @@
     "addTask": "Pridať úlohu",
     "newTask": "Nová úloha",
     "viewAll": "Zobraziť všetko",
+    "expand": "Rozbaliť",
     "whatsNewInVersion": "Čo je nové vo {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

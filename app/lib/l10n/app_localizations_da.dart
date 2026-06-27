@@ -7748,6 +7748,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get viewAll => 'Vis alle';
 
   @override
+  String get expand => 'Udvid';
+
+  @override
   String get addTask => 'Tilføj opgave';
 
   @override

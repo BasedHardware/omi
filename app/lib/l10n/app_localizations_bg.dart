@@ -7794,6 +7794,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get viewAll => 'Виж всички';
 
   @override
+  String get expand => 'Разгъни';
+
+  @override
   String get addTask => 'Добавяне на задача';
 
   @override

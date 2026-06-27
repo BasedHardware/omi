@@ -7812,6 +7812,9 @@ class AppLocalizationsIt extends AppLocalizations {
   String get viewAll => 'Vedi tutto';
 
   @override
+  String get expand => 'Espandi';
+
+  @override
   String get addTask => 'Aggiungi attività';
 
   @override

@@ -7820,6 +7820,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get viewAll => 'அனைத்தையும் பார்';
 
   @override
+  String get expand => 'விரிவாக்கு';
+
+  @override
   String get addTask => 'பணியைச் சேர்க்க';
 
   @override

@@ -7703,6 +7703,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get viewAll => 'צפה בהכל';
 
   @override
+  String get expand => 'הרחב';
+
+  @override
   String get addTask => 'הוסף משימה';
 
   @override

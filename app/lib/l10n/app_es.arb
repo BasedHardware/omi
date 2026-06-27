@@ -2541,6 +2541,7 @@
     "addTask": "Añadir tarea",
     "newTask": "Nueva tarea",
     "viewAll": "Ver todo",
+    "expand": "Expandir",
     "whatsNewInVersion": "Novedades en {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

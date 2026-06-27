@@ -7811,6 +7811,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get viewAll => 'Veure tot';
 
   @override
+  String get expand => 'Expandeix';
+
+  @override
   String get addTask => 'Afegir tasca';
 
   @override

@@ -2575,6 +2575,7 @@
     "addTask": "Добавить задачу",
     "newTask": "Новая задача",
     "viewAll": "Показать все",
+    "expand": "Развернуть",
     "whatsNewInVersion": "Что нового в {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

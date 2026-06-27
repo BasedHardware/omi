@@ -7782,6 +7782,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get viewAll => 'Pokaż wszystko';
 
   @override
+  String get expand => 'Rozwiń';
+
+  @override
   String get addTask => 'Dodaj zadanie';
 
   @override

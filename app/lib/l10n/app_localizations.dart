@@ -14523,6 +14523,12 @@ abstract class AppLocalizations {
   /// **'View All'**
   String get viewAll;
 
+  /// Button text to expand/open a section such as the mind map preview
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get expand;
+
   /// Menu option to add a new task
   ///
   /// In en, this message translates to:

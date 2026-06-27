@@ -7760,6 +7760,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get viewAll => 'Zobrazit vše';
 
   @override
+  String get expand => 'Rozbalit';
+
+  @override
   String get addTask => 'Přidat úkol';
 
   @override

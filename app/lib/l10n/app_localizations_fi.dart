@@ -7764,6 +7764,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get viewAll => 'Näytä kaikki';
 
   @override
+  String get expand => 'Laajenna';
+
+  @override
   String get addTask => 'Lisää tehtävä';
 
   @override

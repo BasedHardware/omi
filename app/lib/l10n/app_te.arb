@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "అన్నీ చూడండి",
+    "expand": "విస్తరించు",
     "@viewAll": {
         "description": "Button text to view all items"
     },

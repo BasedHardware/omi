@@ -9550,6 +9550,10 @@
     "@viewAll": {
         "description": "Button text to view all items"
     },
+    "expand": "Expand",
+    "@expand": {
+        "description": "Button text to expand/open a section such as the mind map preview"
+    },
     "addTask": "Add Task",
     "@addTask": {
         "description": "Menu option to add a new task"

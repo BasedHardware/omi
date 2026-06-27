@@ -7787,6 +7787,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get viewAll => 'Lihat semua';
 
   @override
+  String get expand => 'Kembangkan';
+
+  @override
   String get addTask => 'Tambah tugas';
 
   @override

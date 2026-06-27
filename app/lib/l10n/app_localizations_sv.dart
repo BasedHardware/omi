@@ -7770,6 +7770,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get viewAll => 'Visa alla';
 
   @override
+  String get expand => 'Expandera';
+
+  @override
   String get addTask => 'Lägg till uppgift';
 
   @override

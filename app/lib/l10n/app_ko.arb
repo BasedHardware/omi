@@ -2540,6 +2540,7 @@
     "addTask": "작업 추가",
     "newTask": "새 작업",
     "viewAll": "모두 보기",
+    "expand": "펼치기",
     "whatsNewInVersion": "{version}의 새로운 기능",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",

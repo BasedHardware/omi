@@ -7762,6 +7762,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get viewAll => 'View All';
 
   @override
+  String get expand => 'Expand';
+
+  @override
   String get addTask => 'Add Task';
 
   @override

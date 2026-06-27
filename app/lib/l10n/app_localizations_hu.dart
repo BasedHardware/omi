@@ -7800,6 +7800,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get viewAll => 'Összes megtekintése';
 
   @override
+  String get expand => 'Kibontás';
+
+  @override
   String get addTask => 'Feladat hozzáadása';
 
   @override

@@ -7729,6 +7729,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get viewAll => 'ดูทั้งหมด';
 
   @override
+  String get expand => 'ขยาย';
+
+  @override
   String get addTask => 'เพิ่มงาน';
 
   @override

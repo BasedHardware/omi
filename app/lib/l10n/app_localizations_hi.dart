@@ -7740,6 +7740,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get viewAll => 'सभी देखें';
 
   @override
+  String get expand => 'विस्तार करें';
+
+  @override
   String get addTask => 'कार्य जोड़ें';
 
   @override

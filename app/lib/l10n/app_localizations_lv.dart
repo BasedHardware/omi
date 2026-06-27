@@ -7783,6 +7783,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get viewAll => 'Skatīt visu';
 
   @override
+  String get expand => 'Izvērst';
+
+  @override
   String get addTask => 'Pievienot uzdevumu';
 
   @override
