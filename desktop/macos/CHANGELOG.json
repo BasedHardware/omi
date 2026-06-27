@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "AI chat now shows actionable recovery cards for sign-in, timeouts, missing runtimes, interrupted replies, and empty results"
+  ],
   "releases": [
     {
       "version": "0.11.544",
