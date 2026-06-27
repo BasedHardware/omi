@@ -12,6 +12,7 @@ class GatewayErrorCode(str, Enum):
     CAPABILITY_NOT_SUPPORTED = 'capability_not_supported'
     INVALID_ROUTE_CONFIG = 'invalid_route_config'
     CREDENTIAL_FAILURE = 'credential_failure'
+    PROVIDER_FAILURE = 'provider_failure'
 
 
 class GatewayError(Exception):
@@ -78,6 +79,16 @@ class GatewayCredentialFailureError(GatewayError):
         super().__init__(
             message,
             code=GatewayErrorCode.CREDENTIAL_FAILURE,
+            failure_class=failure_class,
+            param=param,
+        )
+
+
+class GatewayProviderFailureError(GatewayError):
+    def __init__(self, message: str, *, failure_class: FailureClass, param: str | None = None) -> None:
+        super().__init__(
+            message,
+            code=GatewayErrorCode.PROVIDER_FAILURE,
             failure_class=failure_class,
             param=param,
         )

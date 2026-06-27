@@ -8,7 +8,7 @@ description: "Architecture spec for Omi's internal LLM routing gateway, auto lan
 
 > Status: implemented architecture in progress.
 >
-> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, and route resolution for the v1 auto lane.
+> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, and the non-streaming provider executor with fake providers for deterministic tests.
 
 ## Decision
 
@@ -420,6 +420,26 @@ The validator rejects streaming, tools, missing or invalid messages, non-text or
 
 Runtime fail-open means active route failure may use LKG only for failure classes allowed by the route artifact. Deploy/startup fail-closed means invalid LKG or invalid config prevents the service from starting. Do not use LKG for BYOK credential failures, capability mismatches, missing BYOK keys, or invalid config.
 
+## Provider Execution
+
+Implemented executor behavior is non-streaming only:
+
+- the caller passes a resolved route plus a request-level `CredentialContext`;
+- the executor sends an OpenAI-compatible chat-completions payload to the active route primary provider first;
+- the provider-facing payload replaces the lane model with the selected provider model and forces `stream: false`;
+- the caller-facing response payload keeps the normal provider response shape but reports `model` as the requested lane ID, such as `omi:auto:chat-structured`;
+- selected route artifact, provider, provider model, fallback reason, and LKG usage are returned only on the executor result metadata, not embedded into the response payload.
+
+Fallback is deliberately narrow:
+
+- active route fallbacks are attempted only when the route policy allows the normalized failure class;
+- LKG is attempted only through `select_lkg_route_for_failure`, so active route policy remains the single gate for runtime LKG;
+- BYOK missing key, auth, quota, rate limit, unsupported provider, capability mismatch, and invalid config failures fail visibly and do not fall back by default;
+- Omi-paid timeout before output, provider 429, and provider 5xx may fall back only when the route artifact allows those classes;
+- streaming-after-first-token recovery is unsupported for MVP. The executor assumes no partial output exists and does not try to recover or replay partial responses.
+
+The current provider abstraction is an async protocol plus in-memory fake providers for unit tests. Live provider HTTP adapters should use pooled `httpx.AsyncClient` instances and must not log raw provider response bodies, prompts, transcripts, screenshots, memory contents, or BYOK keys.
+
 ## Observability
 
 Record metrics with these dimensions:
@@ -452,7 +472,7 @@ Do not log raw prompts, transcripts, screenshots, memory contents, provider resp
 4. Add service-auth and credential-policy contracts. Done.
 5. Add resolver tests with no network calls. Done.
 6. Add capability validator tests for `chat-structured`. Done.
-7. Add provider executor with fake providers and fallback/error normalization tests.
+7. Add provider executor with fake providers and fallback/error normalization tests. Done.
 8. Add `/v1/chat/completions` non-streaming support behind service auth.
 9. Add `/ready`, local run command, service URL configuration, and separate-process deployment wiring before shadow traffic.
 10. Add gateway client helper in main backend so selected `model_config.py` features can call the gateway.

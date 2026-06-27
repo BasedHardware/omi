@@ -1,0 +1,217 @@
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
+
+from llm_gateway.gateway.credentials import CredentialContext, is_byok_failure_class
+from llm_gateway.gateway.errors import (
+    GatewayCapabilityMismatchError,
+    GatewayCredentialFailureError,
+    GatewayError,
+    GatewayInvalidRouteConfigError,
+    GatewayProviderFailureError,
+)
+from llm_gateway.gateway.providers import ChatCompletionProvider, ProviderFailure
+from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
+from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RouteArtifact
+
+
+@dataclass(frozen=True)
+class ExecutorResult:
+    response: dict[str, Any]
+    lane_id: str
+    selected_route_artifact_id: str
+    selected_provider: str
+    selected_model: str
+    fallback_used: bool
+    fallback_reason: FailureClass | None
+    used_lkg: bool
+
+
+class ProviderRegistry:
+    def __init__(self, providers: Mapping[str, ChatCompletionProvider] | None = None) -> None:
+        self._providers = {provider.strip().lower(): client for provider, client in (providers or {}).items()}
+
+    def provider_for(self, provider: str) -> ChatCompletionProvider | None:
+        return self._providers.get(provider.strip().lower())
+
+
+async def execute_chat_completion(
+    resolved_route: ResolvedRoute,
+    credential_context: CredentialContext,
+    provider_registry: ProviderRegistry,
+) -> ExecutorResult:
+    _validate_credential_mode(resolved_route.active_route, credential_context)
+
+    first_failure: FailureClass | None = None
+    last_error: GatewayError | None = None
+    try:
+        return await _execute_route(
+            resolved_route,
+            resolved_route.active_route,
+            credential_context,
+            provider_registry,
+            is_lkg=False,
+            fallback_reason=None,
+        )
+    except GatewayError as exc:
+        first_failure = exc.failure_class
+        last_error = exc
+
+    if first_failure is not None and select_lkg_route_for_failure(resolved_route, first_failure) is not None:
+        try:
+            return await _execute_route(
+                resolved_route,
+                resolved_route.last_known_good_route,
+                credential_context,
+                provider_registry,
+                is_lkg=True,
+                fallback_reason=first_failure,
+            )
+        except GatewayError as exc:
+            last_error = exc
+
+    if last_error is not None:
+        raise last_error
+    raise GatewayProviderFailureError(
+        'provider request failed',
+        failure_class=FailureClass.INVALID_CONFIG,
+    )
+
+
+async def _execute_route(
+    resolved_route: ResolvedRoute,
+    route: RouteArtifact,
+    credential_context: CredentialContext,
+    provider_registry: ProviderRegistry,
+    *,
+    is_lkg: bool,
+    fallback_reason: FailureClass | None,
+) -> ExecutorResult:
+    refs = [route.primary, *route.fallbacks]
+    last_error: GatewayError | None = None
+    current_fallback_reason = fallback_reason
+
+    for index, provider_ref in enumerate(refs):
+        provider = provider_registry.provider_for(provider_ref.provider)
+        if provider is None:
+            error = _unsupported_provider_error(provider_ref, credential_context)
+        elif route.credential_policy.mode == CredentialMode.BYOK and not credential_context.has_provider_key(
+            provider_ref.provider
+        ):
+            error = GatewayCredentialFailureError(
+                f'BYOK key is required for provider {provider_ref.provider}',
+                failure_class=FailureClass.MISSING_BYOK_KEY,
+                param='credentials',
+            )
+        else:
+            try:
+                provider_response = await provider.create_chat_completion(
+                    _provider_request(resolved_route, provider_ref),
+                    provider_ref=provider_ref,
+                    credentials=credential_context,
+                    timeout_ms=route.timeouts.request_ms,
+                )
+                return _executor_result(
+                    provider_response,
+                    resolved_route=resolved_route,
+                    route=route,
+                    provider_ref=provider_ref,
+                    fallback_used=index > 0 or is_lkg,
+                    fallback_reason=current_fallback_reason,
+                    used_lkg=is_lkg,
+                )
+            except ProviderFailure as exc:
+                error = _map_provider_failure(exc, credential_context)
+
+        last_error = error
+        if index == len(refs) - 1 or not _can_try_next_provider(route, error.failure_class):
+            raise error
+        current_fallback_reason = error.failure_class
+
+    if last_error is not None:
+        raise last_error
+    raise GatewayInvalidRouteConfigError(f'route {route.route_artifact_id} has no provider refs')
+
+
+def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
+    return {
+        'model': provider_ref.model,
+        'messages': list(resolved_route.validated_request.messages),
+        'response_format': dict(resolved_route.validated_request.response_format),
+        'stream': False,
+    }
+
+
+def _executor_result(
+    provider_response: Mapping[str, Any],
+    *,
+    resolved_route: ResolvedRoute,
+    route: RouteArtifact,
+    provider_ref: ProviderRef,
+    fallback_used: bool,
+    fallback_reason: FailureClass | None,
+    used_lkg: bool,
+) -> ExecutorResult:
+    response = dict(provider_response)
+    response['model'] = resolved_route.validated_request.model
+    return ExecutorResult(
+        response=response,
+        lane_id=resolved_route.lane.lane_id,
+        selected_route_artifact_id=route.route_artifact_id,
+        selected_provider=provider_ref.provider,
+        selected_model=provider_ref.model,
+        fallback_used=fallback_used,
+        fallback_reason=fallback_reason,
+        used_lkg=used_lkg,
+    )
+
+
+def _validate_credential_mode(route: RouteArtifact, credential_context: CredentialContext) -> None:
+    if route.credential_policy.mode != credential_context.mode:
+        raise GatewayInvalidRouteConfigError(
+            f'route {route.route_artifact_id} credential mode does not match request context'
+        )
+
+
+def _unsupported_provider_error(
+    provider_ref: ProviderRef,
+    credential_context: CredentialContext,
+) -> GatewayCredentialFailureError | GatewayInvalidRouteConfigError:
+    if credential_context.mode == CredentialMode.BYOK:
+        return GatewayCredentialFailureError(
+            f'BYOK provider is not supported for this route: {provider_ref.provider}',
+            failure_class=FailureClass.BYOK_UNSUPPORTED_PROVIDER,
+            param='provider',
+        )
+    return GatewayInvalidRouteConfigError(f'provider is not supported for this route: {provider_ref.provider}')
+
+
+def _map_provider_failure(exc: ProviderFailure, credential_context: CredentialContext) -> GatewayError:
+    failure_class = exc.failure_class
+    if failure_class == FailureClass.INVALID_CONFIG:
+        return GatewayInvalidRouteConfigError(_safe_failure_message(failure_class), param='provider')
+    if failure_class == FailureClass.CAPABILITY_MISMATCH:
+        return GatewayCapabilityMismatchError(_safe_failure_message(failure_class), param='provider')
+    if credential_context.mode == CredentialMode.BYOK or is_byok_failure_class(failure_class):
+        return GatewayCredentialFailureError(
+            _safe_failure_message(failure_class),
+            failure_class=failure_class,
+            param='provider',
+        )
+    return GatewayProviderFailureError(
+        _safe_failure_message(failure_class),
+        failure_class=failure_class,
+        param='provider',
+    )
+
+
+def _safe_failure_message(failure_class: FailureClass) -> str:
+    return f'provider request failed: {failure_class.value}'
+
+
+def _can_try_next_provider(route: RouteArtifact, failure_class: FailureClass | None) -> bool:
+    if failure_class is None:
+        return False
+    return is_lkg_eligible(route, failure_class)
