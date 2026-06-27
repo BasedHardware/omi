@@ -10,7 +10,10 @@ function easeOutCubic(t: number): number {
  */
 export function tweenHeights(from: number, to: number, steps: number): number[] {
   if (from === to) return [to]
-  if (steps <= 1) return [to]
+  // Guard NaN/Infinity too: `steps <= 1` is false for both, so a non-finite
+  // `steps` would otherwise hang the loop (Infinity) or return [] and never reach
+  // `to` (NaN). Collapse to a single final frame.
+  if (!Number.isFinite(steps) || steps <= 1) return [to]
 
   const out: number[] = []
   for (let i = 1; i <= steps; i++) {

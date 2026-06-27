@@ -31,6 +31,11 @@ describe('tweenHeights', () => {
     expect(tweenHeights(100, 300, 1)).toEqual([300])
   })
 
+  it('returns just the target when steps is not finite', () => {
+    expect(tweenHeights(0, 100, NaN)).toEqual([100])
+    expect(tweenHeights(0, 100, Infinity)).toEqual([100])
+  })
+
   it('produces integer heights only', () => {
     const seq = tweenHeights(100, 333, 6)
     for (const h of seq) expect(Number.isInteger(h)).toBe(true)
