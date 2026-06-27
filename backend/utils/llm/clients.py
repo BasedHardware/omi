@@ -161,7 +161,8 @@ class _OpenAIEmbeddingsProxy:
             raise
 
     def __getattr__(self, name: str):
-        attr = getattr(self._resolve(), name)
+        inst = self._resolve()
+        attr = getattr(inst, name)
         if name not in self._METHODS_TO_WRAP or not callable(attr):
             return attr
         if name.startswith('a'):
@@ -170,7 +171,15 @@ class _OpenAIEmbeddingsProxy:
                 try:
                     return await attr(*args, **kwargs)
                 except Exception as e:
-                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                    if inst is not self._default:
+                        # Notify on BYOK failure, then degrade to Omi's key on a key error
+                        # so async embeddings behave the same as the sync methods.
+                        handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                        if self._is_key_failure(e):
+                            logger.warning(
+                                "BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
+                            )
+                            return await getattr(self._default, name)(*args, **kwargs)
                     raise
 
             return _wrapped_async
@@ -179,7 +188,13 @@ class _OpenAIEmbeddingsProxy:
             try:
                 return attr(*args, **kwargs)
             except Exception as e:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                if inst is not self._default:
+                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                    if self._is_key_failure(e):
+                        logger.warning(
+                            "BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
+                        )
+                        return getattr(self._default, name)(*args, **kwargs)
                 raise
 
         return _wrapped

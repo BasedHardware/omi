@@ -40,6 +40,9 @@ logger = logging.getLogger(__name__)
 _PERMANENT_FAILURE_CODES = frozenset({'UNREGISTERED', 'INVALID_REGISTRATION_TOKEN', 'NOT_FOUND'})
 _QUOTA_ERROR_NAMES = frozenset({'RateLimitError'})
 
+# Firebase Admin SDK rejects messaging.send_each() with more than 500 messages.
+_FCM_SEND_EACH_LIMIT = 500
+
 
 def get_llm_error_source(provider: Optional[str]) -> str:
     """Return platform/byok for the current request and provider."""
@@ -174,26 +177,28 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
     data = {'type': 'byok_llm_error', 'provider': provider, 'reason': reason}
     messages = [messaging.Message(token=token, notification=notification, data=data) for token in tokens]
 
-    try:
-        response = messaging.send_each(messages)
-    except Exception as e:
-        logger.error('BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
-        # Delivery never happened — release the dedupe lock so a later error can retry
-        # instead of silently suppressing notifications for the full 24h window.
-        _release_byok_llm_error_lock(uid, provider, reason)
-        return
-
     invalid_tokens = []
     success_count = 0
-    for idx, result in enumerate(response.responses):
-        if result.success:
-            success_count += 1
-        elif result.exception:
-            error_code = getattr(result.exception, 'code', None)
-            if error_code in _PERMANENT_FAILURE_CODES:
-                invalid_tokens.append(tokens[idx])
-            else:
-                logger.error('BYOK LLM notification FCM send failed uid=%s error=%s', uid, result.exception)
+    # Firebase rejects send_each() with more than 500 messages, so send in batches.
+    for start in range(0, len(messages), _FCM_SEND_EACH_LIMIT):
+        batch_tokens = tokens[start : start + _FCM_SEND_EACH_LIMIT]
+        batch_messages = messages[start : start + _FCM_SEND_EACH_LIMIT]
+        try:
+            response = messaging.send_each(batch_messages)
+        except Exception as e:
+            logger.error(
+                'BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e
+            )
+            continue
+        for idx, result in enumerate(response.responses):
+            if result.success:
+                success_count += 1
+            elif result.exception:
+                error_code = getattr(result.exception, 'code', None)
+                if error_code in _PERMANENT_FAILURE_CODES:
+                    invalid_tokens.append(batch_tokens[idx])
+                else:
+                    logger.error('BYOK LLM notification FCM send failed uid=%s error=%s', uid, result.exception)
 
     if invalid_tokens:
         try:

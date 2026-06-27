@@ -283,3 +283,69 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
         assert result == [0.1, 0.2]
 
     sys.modules.pop('utils.llm.clients', None)
+
+
+def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
+    """The async aembed_* paths should degrade like the sync methods: notify via
+    handle_llm_error, then fall back to Omi's key on a BYOK key failure."""
+    import asyncio
+    from unittest.mock import AsyncMock
+
+    class _DummyClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    anthropic_stub = types.ModuleType('anthropic')
+    anthropic_stub.AsyncAnthropic = _DummyClient
+    callbacks_stub = types.ModuleType('langchain_core.callbacks')
+    callbacks_stub.BaseCallbackHandler = object
+    language_models_stub = types.ModuleType('langchain_core.language_models')
+    language_models_stub.BaseChatModel = _DummyClient
+    output_parsers_stub = types.ModuleType('langchain_core.output_parsers')
+    output_parsers_stub.PydanticOutputParser = _DummyClient
+    google_genai_stub = types.ModuleType('langchain_google_genai')
+    google_genai_stub.ChatGoogleGenerativeAI = _DummyClient
+    openai_stub = types.ModuleType('langchain_openai')
+    openai_stub.ChatOpenAI = _DummyClient
+    openai_stub.OpenAIEmbeddings = _DummyClient
+    tiktoken_stub = types.ModuleType('tiktoken')
+    tiktoken_stub.encoding_for_model = MagicMock(return_value=MagicMock())
+    structured_stub = types.ModuleType('models.structured')
+    structured_stub.Structured = MagicMock()
+    usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
+    usage_tracker_stub.get_usage_callback = MagicMock(return_value=object())
+
+    module_stubs = {
+        'anthropic': anthropic_stub,
+        'langchain_core.callbacks': callbacks_stub,
+        'langchain_core.language_models': language_models_stub,
+        'langchain_core.output_parsers': output_parsers_stub,
+        'langchain_google_genai': google_genai_stub,
+        'langchain_openai': openai_stub,
+        'tiktoken': tiktoken_stub,
+        'models.structured': structured_stub,
+        'utils.llm.usage_tracker': usage_tracker_stub,
+    }
+
+    with patch.dict(sys.modules, module_stubs):
+        sys.modules.pop('utils.llm.clients', None)
+        from utils.llm.clients import _OpenAIEmbeddingsProxy
+
+        default = MagicMock()
+        default.aembed_query = AsyncMock(return_value=[0.3, 0.4])
+        proxy = _OpenAIEmbeddingsProxy('text-embedding-3-small', default, {})
+
+        byok_inst = MagicMock()
+        byok_inst.aembed_query = AsyncMock(side_effect=_HTTPError('invalid_api_key', 401))
+
+        with patch.object(_OpenAIEmbeddingsProxy, '_resolve', return_value=byok_inst), patch(
+            'utils.llm.clients.handle_llm_error'
+        ) as mock_handle:
+            result = asyncio.run(proxy.aembed_query('hello world'))
+
+        mock_handle.assert_called_once()
+        assert mock_handle.call_args.kwargs.get('operation') == 'aembed_query'
+        default.aembed_query.assert_awaited_once_with('hello world')
+        assert result == [0.3, 0.4]
+
+    sys.modules.pop('utils.llm.clients', None)

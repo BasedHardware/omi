@@ -257,3 +257,34 @@ def test_handle_llm_error_keeps_lock_when_a_send_succeeds(
 
     # At least one device was notified — the dedupe lock must be kept (not released).
     mock_release.assert_not_called()
+
+
+@patch('utils.llm.byok_errors.release_byok_llm_error_notification_lock')
+@patch('utils.llm.byok_errors.messaging.send_each')
+@patch('utils.llm.byok_errors.notification_db.get_all_tokens')
+@patch('utils.llm.byok_errors.try_acquire_byok_llm_error_notification_lock', return_value=True)
+@patch('utils.llm.byok_errors.get_byok_uid', return_value='user-1')
+@patch('utils.llm.byok_errors.get_byok_key', return_value='sk-user')
+def test_handle_llm_error_batches_sends_over_500_tokens(
+    mock_get_key,
+    mock_get_uid,
+    mock_lock,
+    mock_get_tokens,
+    mock_send_each,
+    mock_release,
+):
+    from utils.llm.byok_errors import handle_llm_error
+
+    mock_get_tokens.return_value = [f'token-{i}' for i in range(600)]
+    mock_send_each.side_effect = lambda batch: SimpleNamespace(
+        responses=[SimpleNamespace(success=True, exception=None) for _ in batch]
+    )
+
+    handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
+
+    # Firebase caps send_each() at 500 messages, so 600 tokens must split into 500 + 100.
+    assert mock_send_each.call_count == 2
+    batch_sizes = [len(call.args[0]) for call in mock_send_each.call_args_list]
+    assert batch_sizes == [500, 100]
+    assert all(size <= 500 for size in batch_sizes)
+    mock_release.assert_not_called()
