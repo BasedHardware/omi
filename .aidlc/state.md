@@ -3,8 +3,8 @@
 - **Phase**: implementing
 - **Branch**: feat/ai-clone
 - **PR**: (none)
-- **Last action**: 2026-06-27T16:55:00Z
-- **Next action**: Run /implement T-003 (or pause for review)
-- **Notes**: T-001 done (`670585871`). T-002 done (`4b4b35b0a`). 6 of 8 tasks remaining: T-003/004 Telegram, T-005 WhatsApp, T-006 iMessage, T-007 Flutter screen, T-008 Chat Tools manifest. Stop here for review before T-003 (Telegram plugin scaffold) — that task is the largest of the three plugins.
+- **Last action**: 2026-06-27T17:10:00Z
+- **Next action**: Run /implement T-004 (or pause for review)
+- **Notes**: T-001 done (`670585871`). T-002 done (`4b4b35b0a`). T-003 done (`386dc38ce`). 40 tests green total (14 backend + 11 persona_client + 15 telegram). T-004 wires the persona dispatch loop into the existing /webhook handler — small task, ~30 LOC + 4-5 tests.
 
-_Updated: 2026-06-27T16:55:00Z_
+_Updated: 2026-06-27T17:10:00Z_

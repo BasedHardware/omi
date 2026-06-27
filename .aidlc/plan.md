@@ -43,15 +43,16 @@
 
 ### T-003 · `plugins/omi-telegram-app/` — skeleton + setup
 
-**Scope:**
-- `plugins/omi-telegram-app/` scaffolded per spec (main.py, telegram_client.py, simple_storage.py, persona_client.py → imports from `_shared`, requirements.txt, Dockerfile, Procfile, README.md, runtime.txt).
-- `/health`, `/setup`, `/webhook` routes stubbed. No auto-reply yet.
-- Setup flow: user pastes bot token → bot calls `set_webhook(url)` → user pastes deep-link `setup_token` → bot stores `chat_id → omi_uid` mapping. Asks user for `omi_dev_...` key + persona_id (also through `/setup`).
-- Unit tests: webhook secret verification, setup token validation, storage round-trip.
+- [x] Scaffold `plugins/omi-telegram-app/` per spec (main.py + telegram_client.py + simple_storage.py + persona_client.py + requirements.txt + Dockerfile + Procfile + runtime.txt + README.md + .gitignore).
+- [x] `/health`, `/setup`, `/webhook` routes implemented. Auto-reply stubbed (T-004 territory).
+- [x] Setup flow: bot_token + omi_uid + persona_id + omi_dev_api_key + public_base_url → setWebhook (with secret_token) → getMe → returns deep_link + bot_username + setup_token. /webhook handles `/start <setup_token>` handshake (binds chat_id to user, sends "Connected!"), nudges known chats with auto_reply disabled, silently 200s on unknown chats.
+- [x] 15 unit tests, all green (health 1, setup 5, webhook 6, simple_storage 3).
+- **Done**: `386dc38ce`
+- **Notes**: Shared WEBHOOK_SECRET (env override: `TELEGRAM_WEBHOOK_SECRET`, else random at startup). One-shot setup tokens (popped on use). `users_data.json` and `pending_setups.json` added to `.gitignore` — they hold user tokens, must never be committed. Test fixture uses `_post_webhook(secret="default"|"none"|str)` to disambiguate "use the real secret" vs "send no header" vs "use this custom value" — caught a real bug where `secret=False` was being passed as a header value.
 
-**Acceptance:** with a real test bot token, `/health` returns 200; `/setup?token=...` registers a user; `/webhook` echoes back a debug reply ("auto-reply not enabled").
+---
 
-**Risk:** Telegram webhook secret handling. Use `X-Telegram-Bot-Api-Secret-Token` header check.
+### T-004 · Telegram auto-reply (the heart of the plugin)
 
 ---
 
