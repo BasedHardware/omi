@@ -48,7 +48,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("agentMessageBubble(message)"))
     XCTAssertTrue(source.contains("agentAssistantContent(message)"))
     XCTAssertTrue(source.contains("ForEach(ContentBlockGroup.group(message.contentBlocks))"))
-    XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls)"))
+    XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
     XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
     XCTAssertTrue(source.contains("Markdown(trimmed)"))
     XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
@@ -594,6 +594,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {\n            return false\n        }"))
   }
 
+  func testFloatingAgentToolCallsUseCompactOneLinePresentation() throws {
+    let chatPageSource = try chatPageSource()
+    let providerSource = try chatProviderSource()
+
+    XCTAssertTrue(chatPageSource.contains("var compact: Bool = false"))
+    XCTAssertTrue(chatPageSource.contains("if compact {\n      compactBody\n    } else {\n      standardBody\n    }"))
+    XCTAssertTrue(chatPageSource.contains(".frame(height: 34)"))
+    XCTAssertTrue(chatPageSource.contains("summaryEmbeddedInToolName"))
+    XCTAssertTrue(providerSource.contains("cleanName.lowercased().hasPrefix(\"read:\")"))
+    XCTAssertTrue(providerSource.contains("return \"Reading file\""))
+  }
+
   private func agentPillSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -607,6 +619,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Providers/ChatProvider.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func chatPageSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

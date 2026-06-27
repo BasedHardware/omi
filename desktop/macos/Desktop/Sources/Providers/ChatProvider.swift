@@ -109,6 +109,18 @@ enum ChatContentBlock: Identifiable {
         if cleanName.hasPrefix("WebFetch:") {
             return "Fetching page"
         }
+        if cleanName.lowercased().hasPrefix("read:") {
+            return "Reading file"
+        }
+        if cleanName.lowercased().hasPrefix("write:") {
+            return "Writing file"
+        }
+        if cleanName.lowercased().hasPrefix("edit:") {
+            return "Editing file"
+        }
+        if cleanName.lowercased().hasPrefix("bash:") {
+            return "Running command"
+        }
 
         switch cleanName {
         case "execute_sql": return "Querying database"

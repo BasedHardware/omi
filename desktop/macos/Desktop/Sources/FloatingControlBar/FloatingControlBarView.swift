@@ -1520,7 +1520,7 @@ private struct AgentMainChatView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     case .toolCalls(_, let calls):
-                        ToolCallsGroup(calls: calls)
+                        ToolCallsGroup(calls: calls, compact: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     case .thinking(_, let text):
                         ThinkingBlock(text: text)

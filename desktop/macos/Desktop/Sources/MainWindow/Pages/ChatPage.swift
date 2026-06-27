@@ -1077,6 +1077,7 @@ enum ContentBlockGroup: Identifiable {
 /// Renders a group of consecutive tool calls as a single collapsed summary line
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
+  var compact: Bool = false
 
   @State private var isExpanded = false
 
@@ -1106,7 +1107,68 @@ struct ToolCallsGroup: View {
     return "Working"
   }
 
+  private var currentToolSummary: String? {
+    if let lastRunning = calls.last(where: { block in
+      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      return false
+    }), case .toolCall(_, let name, _, _, let input, _) = lastRunning {
+      return input?.summary ?? Self.summaryEmbeddedInToolName(name)
+    }
+    if case .toolCall(_, let name, _, _, let input, _) = calls.last {
+      return input?.summary ?? Self.summaryEmbeddedInToolName(name)
+    }
+    return nil
+  }
+
   var body: some View {
+    if compact {
+      compactBody
+    } else {
+      standardBody
+    }
+  }
+
+  private var compactBody: some View {
+    HStack(spacing: 7) {
+      if hasRunningTool {
+        ProgressView()
+          .controlSize(.mini)
+          .frame(width: 12, height: 12)
+      } else {
+        Image(systemName: "checkmark.circle.fill")
+          .scaledFont(size: 12)
+          .foregroundColor(.green)
+      }
+
+      Text(currentToolName)
+        .scaledFont(size: 12, weight: .semibold)
+        .foregroundColor(OmiColors.textSecondary)
+        .lineLimit(1)
+
+      if let summary = currentToolSummary, !summary.isEmpty {
+        Text(summary)
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+      }
+
+      if calls.count > 1 {
+        Text("· \(calls.count) steps")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+          .lineLimit(1)
+      }
+
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 10)
+    .frame(height: 34)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: 14)
+  }
+
+  private var standardBody: some View {
     VStack(alignment: .leading, spacing: 0) {
       // Summary header
       Button(action: {
@@ -1170,6 +1232,13 @@ struct ToolCallsGroup: View {
       }
     }
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: 16)
+  }
+
+  private static func summaryEmbeddedInToolName(_ name: String) -> String? {
+    guard let separator = name.firstIndex(of: ":") else { return nil }
+    let summary = name[name.index(after: separator)...]
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return summary.isEmpty ? nil : summary
   }
 }
 
