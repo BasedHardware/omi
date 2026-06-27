@@ -5,7 +5,6 @@ import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
-import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/utils/logger.dart';
 
 class UsageProvider with ChangeNotifier {
@@ -121,7 +120,6 @@ class UsageProvider with ChangeNotifier {
       _subscription = await getUserSubscription();
       if (_subscription != null) {
         PlatformManager.instance.analytics.setSubscriptionTier(_subscription!.subscription.plan.name);
-        reconcileSyncRateLimitWithSubscription(_subscription);
       }
     } catch (e) {
       _error = 'Failed to load subscription data. Please try again later.';

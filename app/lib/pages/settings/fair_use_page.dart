@@ -29,6 +29,11 @@ class _FairUsePageState extends State<FairUsePage> {
     });
     try {
       final result = await getFairUseStatus();
+      // Reconcile the rate-limit cooldown regardless of whether the widget is
+      // still mounted — this only touches the SyncRateLimiter singleton and
+      // must not be skipped if the user navigates away before the response
+      // returns (otherwise a stale cooldown is never cleared).
+      reconcileSyncRateLimitWithFairUseStatus(result);
       if (mounted) {
         if (result == null) {
           setState(() {
@@ -36,7 +41,6 @@ class _FairUsePageState extends State<FairUsePage> {
             _isLoading = false;
           });
         } else {
-          reconcileSyncRateLimitWithFairUseStatus(result);
           setState(() {
             _status = result;
             _isLoading = false;

@@ -46,8 +46,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   Future<void> _loadFairUseStatus() async {
     try {
       final result = await getFairUseStatus();
+      // Reconcile the rate-limit cooldown regardless of widget mount state.
+      reconcileSyncRateLimitWithFairUseStatus(result);
       if (mounted && result != null) {
-        reconcileSyncRateLimitWithFairUseStatus(result);
         setState(() => _fairUseStatus = result);
       }
     } catch (_) {
