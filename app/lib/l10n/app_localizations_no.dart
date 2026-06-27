@@ -9374,7 +9374,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceOnboardingGoodJob => 'Bra jobbet!';
 
   @override
-  String get deviceOnboardingStartSpeaking => 'Begynn å snakke ...';
+  String get deviceOnboardingStartSpeaking => 'Begynn å snakke...';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Still Omi et spørsmål';
@@ -9384,10 +9384,10 @@ class AppLocalizationsNo extends AppLocalizations {
       'Trykk på knappen én gang, still spørsmålet ditt, og trykk igjen når du er ferdig';
 
   @override
-  String get deviceOnboardingProcessingQuestion => 'Behandler spørsmålet ditt ...';
+  String get deviceOnboardingProcessingQuestion => 'Behandler spørsmålet ditt...';
 
   @override
-  String get deviceOnboardingListening => 'Lytter ...';
+  String get deviceOnboardingListening => 'Lytter...';
 
   @override
   String get deviceOnboardingTurnOffTitle => 'Slå av';
@@ -9414,7 +9414,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => 'Frakoblet';
 
   @override
-  String get deviceOnboardingStatusTurningOff => 'Slår av ...';
+  String get deviceOnboardingStatusTurningOff => 'Slår av...';
 
   @override
   String get deviceOnboardingDoubleTapTitle => 'Tilpass dobbelttrykk';

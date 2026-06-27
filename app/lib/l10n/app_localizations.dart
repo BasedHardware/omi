@@ -17451,175 +17451,175 @@ abstract class AppLocalizations {
   /// **'Paused — audio isn\'t being recorded'**
   String get transcribeLaterPaused;
 
-  /// Interactive device onboarding tutorial: deviceTutorial
+  /// Settings row that launches the interactive device tutorial (shown only when a device is connected)
   ///
   /// In en, this message translates to:
   /// **'Device Tutorial'**
   String get deviceTutorial;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingTranscriptionTitle
+  /// Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo
   ///
   /// In en, this message translates to:
   /// **'Speak Into Your Omi'**
   String get deviceOnboardingTranscriptionTitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingTranscriptionSubtitle
+  /// Tutorial step 1 subtitle — explains that spoken words appear in real time
   ///
   /// In en, this message translates to:
   /// **'Say a few words and watch them appear in real-time'**
   String get deviceOnboardingTranscriptionSubtitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingGoodJob
+  /// Tutorial step 1 success message after the user speaks enough words
   ///
   /// In en, this message translates to:
   /// **'Good job!'**
   String get deviceOnboardingGoodJob;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingStartSpeaking
+  /// Tutorial step 1 placeholder in the live transcript area before any speech is detected
   ///
   /// In en, this message translates to:
   /// **'Start speaking...'**
   String get deviceOnboardingStartSpeaking;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingAskQuestionTitle
+  /// Tutorial step 2 title — prompts the user to ask Omi a voice question with a single button press
   ///
   /// In en, this message translates to:
   /// **'Ask Omi a Question'**
   String get deviceOnboardingAskQuestionTitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingAskQuestionSubtitle
+  /// Tutorial step 2 subtitle — instructions for the single-press ask-a-question flow
   ///
   /// In en, this message translates to:
   /// **'Press the button once, speak your question, then press again when done'**
   String get deviceOnboardingAskQuestionSubtitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingProcessingQuestion
+  /// Tutorial step 2 status while the spoken question is processed by the AI
   ///
   /// In en, this message translates to:
   /// **'Processing your question...'**
   String get deviceOnboardingProcessingQuestion;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingListening
+  /// Tutorial step 2 status chip while Omi is actively listening to the question
   ///
   /// In en, this message translates to:
   /// **'Listening...'**
   String get deviceOnboardingListening;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingTurnOffTitle
+  /// Tutorial step 3 title while waiting for the user to power the device off
   ///
   /// In en, this message translates to:
   /// **'Turn Off'**
   String get deviceOnboardingTurnOffTitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingTurnOnTitle
+  /// Tutorial step 3 title while waiting for the user to power the device back on
   ///
   /// In en, this message translates to:
   /// **'Turn On'**
   String get deviceOnboardingTurnOnTitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingTurnOffSubtitle
+  /// Tutorial step 3 instruction to long-press the button to turn the device off
   ///
   /// In en, this message translates to:
   /// **'Hold the button for 3 seconds'**
   String get deviceOnboardingTurnOffSubtitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingTurnOnSubtitle
+  /// Tutorial step 3 instruction to press the button to turn the device back on
   ///
   /// In en, this message translates to:
   /// **'Press the button to turn it back on'**
   String get deviceOnboardingTurnOnSubtitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingHoldButtonHint
+  /// Tutorial step 3 hint shown if the device has not turned off after a while
   ///
   /// In en, this message translates to:
   /// **'Hold the button firmly until the light turns off'**
   String get deviceOnboardingHoldButtonHint;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingStatusConnected
+  /// Tutorial step 3 status chip — device connected (before power-off)
   ///
   /// In en, this message translates to:
   /// **'Connected'**
   String get deviceOnboardingStatusConnected;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingStatusConnectedDone
+  /// Tutorial step 3 status chip — device reconnected after the power cycle
   ///
   /// In en, this message translates to:
   /// **'Connected!'**
   String get deviceOnboardingStatusConnectedDone;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingStatusDisconnected
+  /// Tutorial step 3 status chip — device disconnected/off
   ///
   /// In en, this message translates to:
   /// **'Disconnected'**
   String get deviceOnboardingStatusDisconnected;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingStatusTurningOff
+  /// Tutorial step 3 status chip while the device is powering off
   ///
   /// In en, this message translates to:
   /// **'Turning off...'**
   String get deviceOnboardingStatusTurningOff;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingDoubleTapTitle
+  /// Tutorial step 4 title — configure the device double-tap action
   ///
   /// In en, this message translates to:
   /// **'Customize Double Tap'**
   String get deviceOnboardingDoubleTapTitle;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingEndConversation
+  /// Tutorial step 4 double-tap option title — end the current conversation
   ///
   /// In en, this message translates to:
   /// **'End Conversation'**
   String get deviceOnboardingEndConversation;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingEndConversationDesc
+  /// Tutorial step 4 double-tap option description for End Conversation
   ///
   /// In en, this message translates to:
   /// **'Save and end current conversation'**
   String get deviceOnboardingEndConversationDesc;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingMuteUnmute
+  /// Tutorial step 4 double-tap option title — mute or unmute the microphone
   ///
   /// In en, this message translates to:
   /// **'Mute / Unmute'**
   String get deviceOnboardingMuteUnmute;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingMuteUnmuteDesc
+  /// Tutorial step 4 double-tap option description for Mute/Unmute
   ///
   /// In en, this message translates to:
   /// **'Toggle microphone on or off'**
   String get deviceOnboardingMuteUnmuteDesc;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingStarConversation
+  /// Tutorial step 4 double-tap option title — star the ongoing conversation
   ///
   /// In en, this message translates to:
   /// **'Star Ongoing Conversation'**
   String get deviceOnboardingStarConversation;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingStarConversationDesc
+  /// Tutorial step 4 double-tap option description for Star Conversation
   ///
   /// In en, this message translates to:
   /// **'Mark conversation as important'**
   String get deviceOnboardingStarConversationDesc;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingSingleTapHint
+  /// Tutorial step 4 hint shown when the user single-taps instead of double-tapping
   ///
   /// In en, this message translates to:
   /// **'That was a single tap — try tapping twice quickly!'**
   String get deviceOnboardingSingleTapHint;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingTryDoubleTap
+  /// Tutorial step 4 prompt encouraging the user to double-tap the device
   ///
   /// In en, this message translates to:
   /// **'Try it now! Double tap your Omi'**
   String get deviceOnboardingTryDoubleTap;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingContinue
+  /// Onboarding tutorial primary button label to advance to the next step
   ///
   /// In en, this message translates to:
   /// **'Continue'**
   String get deviceOnboardingContinue;
 
-  /// Interactive device onboarding tutorial: deviceOnboardingFinish
+  /// Onboarding tutorial final button label to complete the tutorial
   ///
   /// In en, this message translates to:
   /// **'Finish'**
