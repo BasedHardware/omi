@@ -162,4 +162,18 @@ final class BrowserAutomationTargetTests: XCTestCase {
       "Cloud connector setup should use the macOS default browser, not the persisted Playwright/extension browser preference."
     )
   }
+
+  @MainActor
+  func testClaudeNativeSetupWaitsForAccessibilityApprovalInsteadOfAgentFallback() {
+    XCTAssertTrue(
+      MemoryExportExecutor.cloudFormFillRequiresAccessibilityApproval(
+        "Error: Accessibility permission is not available to Omi, so the native connector form filler cannot inspect browser fields."
+      )
+    )
+    XCTAssertFalse(
+      MemoryExportExecutor.cloudFormFillRequiresAccessibilityApproval(
+        "Error: Could not find a visible claude custom connector form."
+      )
+    )
+  }
 }

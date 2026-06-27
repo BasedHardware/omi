@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Foundation
 
 /// Shared "Execute" logic for connector setup. Used by both the Execute button in
@@ -125,6 +126,10 @@ enum MemoryExportExecutor {
           taskTitle: "Claude connector form submitted. If Claude shows a final consent prompt, approve Omi Memory.",
           mode: .completed)
       }
+      if cloudFormFillRequiresAccessibilityApproval(lastResult) {
+        requestAccessibilityApprovalForCloudSetup()
+        throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
+      }
       if !cloudFormFillShouldRetry(lastResult) {
         break
       }
@@ -153,10 +158,32 @@ enum MemoryExportExecutor {
       && !result.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Error:")
   }
 
+  static func cloudFormFillRequiresAccessibilityApproval(_ result: String) -> Bool {
+    result.lowercased().contains("accessibility permission is not available")
+  }
+
   private static func cloudFormFillShouldRetry(_ result: String) -> Bool {
     result.contains("Could not find a visible")
       || result.contains("Submit skipped: no enabled")
       || result.contains("set failed")
+  }
+
+  private static var cloudSetupAccessibilityPermissionMessage: String {
+    """
+    Omi needs Accessibility permission to finish Claude setup automatically.
+
+    I opened Claude in your default browser and copied the connector values. Approve Accessibility for this Omi app in System Settings, then click "Do it for me" again.
+    """
+  }
+
+  private static func requestAccessibilityApprovalForCloudSetup() {
+    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    let trusted = AXIsProcessTrustedWithOptions(options)
+    guard !trusted,
+      let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    else { return }
+    NSWorkspace.shared.open(url)
   }
 
   private static func runAssisted(_ destination: MemoryExportDestination, key: String) async {
