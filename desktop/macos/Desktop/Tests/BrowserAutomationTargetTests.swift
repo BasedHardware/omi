@@ -148,4 +148,18 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertTrue(task?.body.contains("Only fall back to bash") == true)
     XCTAssertTrue(task?.body.contains("https://claude.ai/customize/connectors?modal=add-custom-connector") == true)
   }
+
+  func testCloudSetupDoesNotReusePersistedPlaywrightBrowserSelection() throws {
+    let repoRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let executor = repoRoot
+      .appendingPathComponent("Sources/MemoryExportExecutor.swift")
+    let source = try String(contentsOf: executor)
+
+    XCTAssertFalse(
+      source.contains("BrowserAutomationTargetStore.selectedBundleIdentifier"),
+      "Cloud connector setup should use the macOS default browser, not the persisted Playwright/extension browser preference."
+    )
+  }
 }

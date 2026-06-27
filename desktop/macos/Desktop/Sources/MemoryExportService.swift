@@ -109,8 +109,9 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
 
   /// How the "Do it for me" button performs setup.
   /// - `.localAutonomous`: deterministic local CLI/config/file work.
-  /// - `.browserAutonomous`: use the user's signed-in Chromium browser through
-  ///   the Playwright MCP Bridge extension, with assisted fallback on blockers.
+  /// - `.browserAutonomous`: open the cloud connector in the user's default
+  ///   signed-in browser and use native macOS automation, with assisted fallback
+  ///   on blockers.
   /// - `.assisted`: open/copy only.
   enum MCPExecuteKind { case localAutonomous, browserAutonomous, assisted }
   var mcpExecuteKind: MCPExecuteKind {
