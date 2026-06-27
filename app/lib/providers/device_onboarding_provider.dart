@@ -38,6 +38,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   bool showSingleTapHint = false;
 
   Timer? _hintTimer;
+  bool _disposed = false;
 
   void startOnboarding() {
     currentStep = 0;
@@ -140,6 +141,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
       // After short delay, transition to waiting for reconnect
       Future.delayed(const Duration(seconds: 1), () {
+        if (_disposed) return;
         if (powerCycleState == PowerCycleSubState.deviceOff) {
           powerCycleState = PowerCycleSubState.waitingForReconnect;
           notifyListeners();
@@ -190,6 +192,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _hintTimer?.cancel();
     super.dispose();
   }
