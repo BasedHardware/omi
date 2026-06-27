@@ -762,14 +762,11 @@ def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_
 
 def delete_canonical_memory(uid: str, memory_id: str, *, db_client=None) -> None:
     client = db_client if db_client is not None else default_db_client
-    path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    snapshot = client.document(path).get()
-    if not getattr(snapshot, "exists", False):
-        return
-    item = MemoryItem.model_validate(snapshot.to_dict() or {})
-    if item.status == MemoryItemStatus.active:
-        _tombstone_memory_item(uid, item, db_client=client, reason="canonical_memory_delete")
-        invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
+    item = _read_canonical_memory_item(uid, memory_id, db_client=client)
+    if item is None:
+        raise ValueError(f"canonical memory not found: {memory_id}")
+    _tombstone_memory_item(uid, item, db_client=client, reason="canonical_memory_delete")
+    invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
 
 
 def delete_all_canonical_memories(uid: str, *, db_client=None) -> None:

@@ -454,7 +454,10 @@ def delete_memory(
 ):
     db_client = getattr(db_client_module, 'db', None)
     if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
-        MemoryService(db_client=db_client).delete(uid, memory_id)
+        try:
+            MemoryService(db_client=db_client).delete(uid, memory_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail='Memory not found')
         return {'status': 'ok'}
 
     _validate_memory(uid, memory_id)

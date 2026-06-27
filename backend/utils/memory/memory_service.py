@@ -556,7 +556,10 @@ class MemoryService:
     ) -> None:
         """Delete external memory with legacy vector cleanup when applicable."""
         if memory_system == MemorySystem.CANONICAL:
-            self.delete(uid, memory_id)
+            try:
+                self.delete(uid, memory_id)
+            except ValueError:
+                raise HTTPException(status_code=404, detail="Memory not found")
             return
 
         _require_legacy_write_guard(uid, self._db_client, consumer=consumer, operation=operation)

@@ -727,7 +727,10 @@ def execute_tool(
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
         if memory_system == MemorySystem.CANONICAL:
-            MemoryService(db_client=db).delete(user_id, memory_id)
+            try:
+                MemoryService(db_client=db).delete(user_id, memory_id)
+            except ValueError:
+                raise ToolExecutionError("Memory not found", code=-32001)
             return {"success": True}
 
         memory_write_guard = guard_legacy_memory_write(user_id, db, consumer='mcp', operation="mcp_tool_memory_delete")
@@ -759,6 +762,16 @@ def execute_tool(
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
         if memory_system == MemorySystem.CANONICAL:
+            # Validate existence and content before mutation so a stale
+            # memory_id or whitespace-only content surfaces as a clean
+            # MCP tool error instead of escaping as a stream failure.
+            # Mirrors the REST MCP path (routers/mcp.py edit_memory)
+            # and Developer API (routers/developer.py update_memory).
+            canonical_item = _read_canonical_memory_item(user_id, memory_id, db_client=db)
+            if canonical_item is None:
+                raise ToolExecutionError("Memory not found", code=-32001)
+            if not content.strip():
+                raise ToolExecutionError("content must not be empty", code=-32602)
             MemoryService(db_client=db).update_content(user_id, memory_id, content)
             return {"success": True}
 
