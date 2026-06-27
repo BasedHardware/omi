@@ -1,6 +1,7 @@
 import asyncio
 import functools
 import gc
+import math
 import os
 import time
 import uuid
@@ -96,7 +97,15 @@ def _get_audio_duration_from_bytes(data: bytes) -> float:
         with _wave.open(_io.BytesIO(data), 'rb') as wf:
             return wf.getnframes() / wf.getframerate()
     except Exception:
+        if _max_file_duration_sec > 0:
+            return float('inf')
         return 0.0
+
+
+def _duration_limit_detail(audio_dur: float) -> str:
+    if math.isinf(audio_dur):
+        return "Cannot determine audio duration"
+    return f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"
 
 
 def _on_batch_complete(queue_durations, inference_seconds, batch_size):
@@ -182,7 +191,7 @@ async def transcribe(file: UploadFile = File(...)):
             status = "rejected"
             return JSONResponse(
                 status_code=413,
-                content={"detail": f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"},
+                content={"detail": _duration_limit_detail(audio_dur)},
             )
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
@@ -238,7 +247,7 @@ async def transcribe_v2(
             status = "rejected"
             return JSONResponse(
                 status_code=413,
-                content={"detail": f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"},
+                content={"detail": _duration_limit_detail(audio_dur)},
             )
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
