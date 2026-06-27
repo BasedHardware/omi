@@ -139,8 +139,10 @@ export function Home(): React.JSX.Element {
       // A downward wheel at the bottom is a no-op; don't release.
       const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
       if (distFromBottom <= 8) {
-        // At/near bottom — only release on explicit upward wheel intent
-        if (e && 'deltaY' in e && e.deltaY < 0) {
+        // At/near bottom — only release on explicit upward wheel intent, and
+        // only if the thread actually overflows (short threads can't scroll
+        // away, so an upward wheel is a no-op that shouldn't release following).
+        if (e && 'deltaY' in e && e.deltaY < 0 && el.scrollHeight > el.clientHeight + 8) {
           releaseFollowing()
         }
         return

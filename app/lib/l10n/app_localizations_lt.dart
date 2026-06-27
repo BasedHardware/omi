@@ -9479,4 +9479,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Maždaug 1 minutė';
+  @override
+  String get jumpToLatestMessage => 'Peršokti į naujausią pranešimą';
+
+  @override
+  String get latest => 'Naujausias';
 }

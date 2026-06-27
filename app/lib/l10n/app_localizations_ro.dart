@@ -9508,4 +9508,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Aproximativ 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Sari la cel mai recent mesaj';
+
+  @override
+  String get latest => 'Recent';
 }

@@ -9490,4 +9490,9 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Približno 1 minuta';
+  @override
+  String get jumpToLatestMessage => 'Skoči na najnovejše sporočilo';
+
+  @override
+  String get latest => 'Najnovejše';
 }

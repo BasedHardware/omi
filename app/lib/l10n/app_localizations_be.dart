@@ -9492,4 +9492,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Каля 1 хвіліны';
+  @override
+  String get jumpToLatestMessage => 'Перайсці да апошняга паведамлення';
+
+  @override
+  String get latest => 'Апошні';
 }

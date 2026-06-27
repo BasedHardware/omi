@@ -9484,4 +9484,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Aproximadamente 1 minuto';
+  @override
+  String get jumpToLatestMessage => 'Ir al mensaje más reciente';
+
+  @override
+  String get latest => 'Más reciente';
 }
