@@ -12,7 +12,7 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
 from models.structured import Structured
-from utils.byok import get_byok_key
+from utils.byok import get_byok_key, get_byok_custom_provider
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
@@ -209,6 +209,25 @@ def _create_byok_client(
     return None
 
 
+def _create_custom_byok_client(model: str, api_key: str, base_url: str, streaming: bool = False) -> ChatOpenAI:
+    """Build a ChatOpenAI pointed at a user's own OpenAI-compatible endpoint (#6878).
+
+    The model name and base URL come from the request, so the user's tasks run on
+    their provider (OpenRouter, Together, Groq, a local server, ...). The base URL
+    is validated upstream in ``get_byok_custom_provider``.
+    """
+    kwargs: Dict[str, Any] = {
+        'callbacks': [_usage_callback],
+        'request_timeout': 120,
+        'max_retries': 1,
+        'base_url': base_url,
+    }
+    if streaming:
+        kwargs['streaming'] = True
+        kwargs['stream_options'] = {"include_usage": True}
+    return _cached_openai_chat(model, api_key, kwargs)
+
+
 # Anthropic client for chat agent (module-level, BYOK-aware)
 _default_anthropic_client = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
 anthropic_client = _AnthropicClientProxy(_default_anthropic_client)
@@ -272,6 +291,16 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
         raise ValueError(
             f"Feature '{feature}' is Perplexity — use get_model('{feature}') with the Perplexity HTTP client instead of get_llm()"
         )
+
+    # Custom OpenAI-compatible BYOK provider (#6878): when the request carries a
+    # fully configured custom provider (key + base URL + model), run this feature
+    # on the user's own endpoint instead of the default QoS provider. Opt-in per
+    # request; only set for BYOK-active users whose `custom` key passed fingerprint
+    # validation. The Anthropic agentic-chat path does not go through get_llm and
+    # is intentionally left on its own provider.
+    custom = get_byok_custom_provider()
+    if custom is not None:
+        return _create_custom_byok_client(custom['model'], custom['api_key'], custom['base_url'], streaming)
 
     model, provider = _get_model_config(feature)
 
