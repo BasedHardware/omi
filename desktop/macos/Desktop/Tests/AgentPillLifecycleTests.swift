@@ -645,6 +645,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     let providerSource = try chatProviderSource()
 
     XCTAssertTrue(chatPageSource.contains("var compact: Bool = false"))
+    XCTAssertTrue(chatPageSource.contains("var expandRunning: Bool = true"))
+    XCTAssertTrue(chatPageSource.contains("State(initialValue: expandRunning && Self.hasRunningTool(in: calls))"))
+    XCTAssertTrue(chatPageSource.contains(".onChange(of: hasRunningTool)"))
     XCTAssertTrue(chatPageSource.contains("if compact {\n      compactBody\n    } else {\n      standardBody\n    }"))
     XCTAssertTrue(chatPageSource.contains(".frame(height: 34)"))
     XCTAssertTrue(chatPageSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))

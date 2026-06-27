@@ -1078,15 +1078,20 @@ enum ContentBlockGroup: Identifiable {
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
   var compact: Bool = false
+  var expandRunning: Bool = true
 
-  @State private var isExpanded = false
+  @State private var isExpanded: Bool
+
+  init(calls: [ChatContentBlock], compact: Bool = false, expandRunning: Bool = true) {
+    self.calls = calls
+    self.compact = compact
+    self.expandRunning = expandRunning
+    self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
+  }
 
   /// Whether any tool in the group is still running
   private var hasRunningTool: Bool {
-    calls.contains { block in
-      if case .toolCall(_, _, .running, _, _, _) = block { return true }
-      return false
-    }
+    Self.hasRunningTool(in: calls)
   }
 
   /// Display name of the currently running tool (last running one), or last tool if all done
@@ -1195,6 +1200,12 @@ struct ToolCallsGroup: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: 14)
+    .onChange(of: hasRunningTool) { _, isRunning in
+      guard expandRunning, isRunning else { return }
+      withAnimation(.easeInOut(duration: 0.18)) {
+        isExpanded = true
+      }
+    }
   }
 
   private var standardBody: some View {
@@ -1261,6 +1272,19 @@ struct ToolCallsGroup: View {
       }
     }
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: 16)
+    .onChange(of: hasRunningTool) { _, isRunning in
+      guard expandRunning, isRunning else { return }
+      withAnimation(.easeInOut(duration: 0.18)) {
+        isExpanded = true
+      }
+    }
+  }
+
+  private static func hasRunningTool(in calls: [ChatContentBlock]) -> Bool {
+    calls.contains { block in
+      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      return false
+    }
   }
 
   private static func summaryEmbeddedInToolName(_ name: String) -> String? {
