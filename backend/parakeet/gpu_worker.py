@@ -240,6 +240,8 @@ class GPUWorker:
         if self._attn_mode == "local":
             model.change_attention_model("rel_pos_local_attn", self._attn_local_context)
             model.change_subsampling_conv_chunking_factor(1)
+            if self._model_dtype is not None:
+                model.to(self._model_dtype)
             self._attn_is_local = True
             logger.info(f"Attention mode: local (context={self._attn_local_context}) — linear VRAM scaling")
         elif self._attn_mode == "auto":
