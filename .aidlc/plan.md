@@ -29,14 +29,15 @@
 
 ### T-002 · Shared `persona_client.py` module
 
-**Scope:**
-- `plugins/_shared/persona_client.py` — single async function `chat(app_id: str, api_key: str, omi_base: str, text: str) -> str`. Uses `httpx.AsyncClient` to POST, reads the SSE stream, concatenates chunks, returns full reply. Timeout 30s.
-- `plugins/_shared/persona_client_test.py` — unit test with a mocked `httpx` transport: success path, timeout path (returns "" + logs error), 401/403 path (raises).
-- `plugins/_shared/README.md` — one paragraph describing the contract.
+- [x] `plugins/_shared/persona_client.py` — async `chat(app_id, api_key, omi_base, text, *, timeout_seconds=30.0, context=None) -> str`. POSTs to `/v2/integrations/{app_id}/user/persona-chat` with Bearer auth. Reads SSE via `httpx_sse.EventSource`, joins chunks. Returns `""` on timeout/connect error (logs ERROR), raises `httpx.HTTPStatusError` on 4xx/5xx.
+- [x] `plugins/_shared/test/test_persona_client.py` — 11 unit tests, all green (success: concat/auth/URL/JSON body; SSE: comments+empty stream; errors: 401/403/500 raise, timeout/connect return ""+log).
+- [x] `plugins/_shared/README.md` — usage example, conventions.
+- **Done**: `4b4b35b0a`
+- **Notes**: `httpx_sse` 0.4.x uses `EventSource(response).aiter_sse()` (not module-level `aiter_sse`). Test fixtures attach a real `httpx.Request` to the mocked `Response` so `raise_for_status()` works. Empty `data:` frames yield empty string chunks which `_join_chunks` filters via `_split_lines` (only nonzero content survives). Plugins import this via `sys.path` insertion in `main.py` rather than a packaged module — matches the omi-slack-app pattern (no setup.py / packaging in the plugins tree).
 
-**Acceptance:** `pytest plugins/_shared/` green. Three plugins will import this verbatim in T-003/T-005/T-006.
+---
 
-**Risk:** SSE parsing edge cases (multi-line `data:` frames, comments). Use `httpx-sse` or hand-roll a minimal parser. Decide in implementation.
+### T-003 · `plugins/omi-telegram-app/` — skeleton + setup
 
 ---
 

@@ -3,8 +3,8 @@
 - **Phase**: implementing
 - **Branch**: feat/ai-clone
 - **PR**: (none)
-- **Last action**: 2026-06-27T16:30:00Z
-- **Next action**: Run /implement T-002 (or pause for review)
-- **Notes**: T-001 done (`670585871`). 14 unit tests green. The endpoint is live at /v2/integrations/{app_id}/user/persona-chat with app API key auth. 7 of 8 tasks remaining. Stop here for review before continuing to T-002 — T-001 was substantial and the next task (shared persona_client) builds on top.
+- **Last action**: 2026-06-27T16:55:00Z
+- **Next action**: Run /implement T-003 (or pause for review)
+- **Notes**: T-001 done (`670585871`). T-002 done (`4b4b35b0a`). 6 of 8 tasks remaining: T-003/004 Telegram, T-005 WhatsApp, T-006 iMessage, T-007 Flutter screen, T-008 Chat Tools manifest. Stop here for review before T-003 (Telegram plugin scaffold) — that task is the largest of the three plugins.
 
-_Updated: 2026-06-27T16:30:00Z_
+_Updated: 2026-06-27T16:55:00Z_
