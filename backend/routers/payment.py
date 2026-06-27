@@ -831,6 +831,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 # active paid subscription — they canceled one sub and started
                 # another near-simultaneously, possibly on a new Stripe customer —
                 # don't overwrite their plan with basic. Adopt the active paid sub.
+                adopted_active_paid = False
                 if not is_paid_plan(new_subscription.plan):
                     event_sub_id = subscription_obj.get('id')
                     active_paid = await run_blocking(stripe_executor, find_active_paid_subscription_for_user, uid)
@@ -840,11 +841,22 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             f"a different active paid sub {active_paid.stripe_subscription_id} exists."
                         )
                         new_subscription = active_paid
+                        adopted_active_paid = True
                 try:
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
-                        customer_id = subscription_obj.get('customer')
-                        if customer_id:
-                            await run_blocking(db_executor, users_db.set_stripe_customer_id, uid, customer_id)
+                        # Only persist the customer id from the incoming event when we
+                        # did NOT adopt a different active paid subscription. When the
+                        # stale-downgrade guard adopted active_paid, the event's
+                        # subscription_obj['customer'] belongs to the canceled/stale
+                        # subscription (possibly a different Stripe customer), so
+                        # writing it would clobber the correct customer id that
+                        # find_active_paid_subscription_for_user used to locate
+                        # active_paid — a later reconciliation could then query the
+                        # wrong customer and miss the paid sub.
+                        if not adopted_active_paid:
+                            customer_id = subscription_obj.get('customer')
+                            if customer_id:
+                                await run_blocking(db_executor, users_db.set_stripe_customer_id, uid, customer_id)
                         await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
                         await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                         await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)

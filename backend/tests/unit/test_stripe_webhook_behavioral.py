@@ -8,6 +8,7 @@ credentials and Python 3.10+, so we extract and test the function logic directly
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -171,6 +172,67 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         sub_idx = source.find("'customer.subscription.updated'")
         assert sub_idx != -1, "customer.subscription handler not found"
         next_idx = source.find("subscription_schedule.completed", sub_idx)
+        assert next_idx != -1, "subscription_schedule handler not found after customer.subscription handler"
         block = source[sub_idx:next_idx]
         assert 'users_db.set_stripe_customer_id' in block
         assert "subscription_obj.get('customer')" in block
+
+    def test_stale_downgrade_guard_does_not_clobber_customer_id(self):
+        """When the active-paid adoption guard fires, the event's customer id
+        must not be persisted, because it belongs to the stale/canceled sub
+        (possibly a different Stripe customer) and would break later
+        reconciliation via find_active_paid_subscription_for_user."""
+        source = self._read_source()
+        # Anchor to the subscription event handler block to avoid matching an
+        # earlier set_stripe_customer_id in the checkout.session.completed path.
+        sub_idx = source.find("'customer.subscription.updated'")
+        assert sub_idx != -1, "customer.subscription handler not found"
+        handler_block = source[sub_idx:]
+        set_customer_idx = handler_block.find("users_db.set_stripe_customer_id")
+        assert set_customer_idx != -1, "set_stripe_customer_id call not found in subscription handler"
+        # The guard flag must precede the set_stripe_customer_id call
+        guard_idx = handler_block.find("adopted_active_paid = False")
+        assert guard_idx != -1, "adopted_active_paid flag not found"
+        assert guard_idx < set_customer_idx, "guard flag must precede customer id write"
+        # The write must be gated on NOT adopting active_paid
+        guard_block = handler_block[max(0, set_customer_idx - 400) : set_customer_idx]
+        assert "not adopted_active_paid" in guard_block, "customer id write must be gated on not adopted_active_paid"
+
+
+class TestStripeEntitlementMismatchScannerDrift:
+    """Guard against price→plan mapping drift between the standalone support
+    scanner and the backend subscription mapping.
+
+    find_stripe_entitlement_mismatches.py cannot import the backend chain
+    (Firestore/Google Cloud deps), so it keeps its own DEFAULT_PRICE_TO_PLAN.
+    If it drifts from backend/utils/subscription.py LEGACY_PRICE_MAP, the
+    scanner silently skips active paid subscriptions and under-reports
+    entitlement mismatches. This test catches that drift.
+    """
+
+    SUPPORT_FILE = Path(__file__).resolve().parents[2] / "scripts" / "support" / "find_stripe_entitlement_mismatches.py"
+    SUBSCRIPTION_FILE = Path(__file__).resolve().parents[2] / "utils" / "subscription.py"
+
+    def _extract_price_ids(self, source: str, start_marker: str) -> set:
+        """Extract quoted price_ IDs between start_marker and the closing brace."""
+        start = source.find(start_marker)
+        assert start != -1, f"{start_marker} not found"
+        end = source.find("\n}", start)
+        block = source[start:end]
+        return set(re.findall(r"['\"](price_[A-Za-z0-9]+)['\"]", block))
+
+    def test_support_scanner_legacy_price_ids_match_backend(self):
+        """Every legacy price id in the backend LEGACY_PRICE_MAP must appear in
+        the support scanner's DEFAULT_PRICE_TO_PLAN so the scanner never silently
+        skips a known paid price."""
+        support_src = self.SUPPORT_FILE.read_text(encoding="utf-8")
+        sub_src = self.SUBSCRIPTION_FILE.read_text(encoding="utf-8")
+
+        backend_legacy = self._extract_price_ids(sub_src, "LEGACY_PRICE_MAP = {")
+        support_default = self._extract_price_ids(support_src, "DEFAULT_PRICE_TO_PLAN = {")
+
+        missing = backend_legacy - support_default
+        assert not missing, (
+            f"Support scanner is missing legacy price IDs that the backend knows about: {missing}. "
+            "Add them to DEFAULT_PRICE_TO_PLAN to avoid under-reporting entitlement mismatches."
+        )
