@@ -172,8 +172,7 @@ async def transcribe(file: UploadFile = File(...)):
         if audio_dur > 0:
             AUDIO_DURATION.observe(audio_dur)
         if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
-            status = "error"
-            REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="rejected").inc()
+            status = "rejected"
             return JSONResponse(
                 status_code=413,
                 content={"detail": f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"},
@@ -192,7 +191,7 @@ async def transcribe(file: UploadFile = File(...)):
         status = "error"
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
     except AudioDurationExceededError as e:
-        status = "error"
+        status = "rejected"
         return JSONResponse(status_code=413, content={"detail": str(e)})
     except Exception:
         status = "error"
@@ -229,8 +228,7 @@ async def transcribe_v2(
         if audio_dur > 0:
             AUDIO_DURATION.observe(audio_dur)
         if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
-            status = "error"
-            REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="rejected").inc()
+            status = "rejected"
             return JSONResponse(
                 status_code=413,
                 content={"detail": f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"},
@@ -253,7 +251,7 @@ async def transcribe_v2(
         status = "error"
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
     except AudioDurationExceededError as e:
-        status = "error"
+        status = "rejected"
         return JSONResponse(status_code=413, content={"detail": str(e)})
     except Exception:
         status = "error"
