@@ -17,7 +17,7 @@ from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconn
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
 
-from gpu_worker import GPUWorker
+from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
 from transcribe import (
     transcribe_file,
@@ -81,6 +81,7 @@ batch_engine: Optional[BatchEngine] = None
 start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
+_max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
 
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
@@ -170,6 +171,13 @@ async def transcribe(file: UploadFile = File(...)):
         audio_dur = _get_audio_duration_from_bytes(data)
         if audio_dur > 0:
             AUDIO_DURATION.observe(audio_dur)
+        if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
+            status = "error"
+            REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="rejected").inc()
+            return JSONResponse(
+                status_code=413,
+                content={"detail": f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"},
+            )
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
@@ -183,6 +191,9 @@ async def transcribe(file: UploadFile = File(...)):
     except QueueFullError:
         status = "error"
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except AudioDurationExceededError as e:
+        status = "error"
+        return JSONResponse(status_code=413, content={"detail": str(e)})
     except Exception:
         status = "error"
         raise
@@ -217,6 +228,13 @@ async def transcribe_v2(
         audio_dur = _get_audio_duration_from_bytes(data)
         if audio_dur > 0:
             AUDIO_DURATION.observe(audio_dur)
+        if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
+            status = "error"
+            REQUESTS_TOTAL.labels(endpoint="v2_transcribe", status="rejected").inc()
+            return JSONResponse(
+                status_code=413,
+                content={"detail": f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"},
+            )
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
@@ -234,6 +252,9 @@ async def transcribe_v2(
     except QueueFullError:
         status = "error"
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except AudioDurationExceededError as e:
+        status = "error"
+        return JSONResponse(status_code=413, content={"detail": str(e)})
     except Exception:
         status = "error"
         raise
