@@ -561,9 +561,9 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
       {
         type: {
           type: "string",
-          enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
+          enum: ["screen_recording", "microphone", "accessibility", "automation", "full_disk_access"],
           description:
-            "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access",
+            "Permission type: screen_recording, microphone, accessibility, automation, or full_disk_access",
         },
       },
       ["type"],
