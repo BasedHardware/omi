@@ -368,10 +368,18 @@ def invoke_consolidation_agent(
         context_json=format_consolidation_llm_context(context),
         format_instructions=parser.get_format_instructions(),
     )
-    if llm_invoke is not None:
-        raw = llm_invoke(prompt)
-    else:
-        raw = submit_with_context(llm_executor, _invoke_consolidation_llm, prompt).result()
+    try:
+        if llm_invoke is not None:
+            raw = llm_invoke(prompt)
+        else:
+            raw = submit_with_context(llm_executor, _invoke_consolidation_llm, prompt).result()
+    except Exception as exc:
+        logger.warning(
+            "consolidation_agent_invoke_failed uid=%s error=%s",
+            context.uid,
+            type(exc).__name__,
+        )
+        return ConsolidationAgentBatch(decisions=[], reasoning=f"invoke_failed:{type(exc).__name__}")
     try:
         return parser.parse(raw)
     except Exception as exc:
@@ -408,6 +416,11 @@ class ConsolidationPartialApply(Exception):
         super().__init__(reason)
 
 
+def _agent_batch_blocks_watermark(agent_batch: ConsolidationAgentBatch) -> bool:
+    """True when agent output is unusable (invoke/parse failure)."""
+    return agent_batch.reasoning.startswith("parse_failed:") or agent_batch.reasoning.startswith("invoke_failed:")
+
+
 def _should_advance_consolidation_watermark(
     agent_batch: ConsolidationAgentBatch,
     *,
@@ -417,14 +430,31 @@ def _should_advance_consolidation_watermark(
 
     Clean runs include zero-action batches (``no_changes``) and passes that skipped
     hallucinated references before mutation — advancing prevents hourly re-fire on the
-    daily-elapsed path. ``parse_failed:*`` means unusable agent output and must retry.
-    ``watermark_blocked`` covers partial survivor+supersede applies that need retry.
+    daily-elapsed path. ``parse_failed:*`` / ``invoke_failed:*`` mean unusable agent
+    output and must retry. ``watermark_blocked`` covers partial survivor+supersede
+    applies that need retry.
     """
     if watermark_blocked:
         return False
-    if agent_batch.reasoning.startswith("parse_failed:"):
+    if _agent_batch_blocks_watermark(agent_batch):
         return False
     return True
+
+
+def _consolidation_decision_identity(
+    *,
+    uid: str,
+    decision: ConsolidationAgentDecision,
+) -> Dict[str, Any]:
+    """Stable consolidation identity for idempotency across maintenance passes."""
+    return {
+        "uid": uid,
+        "survivor": decision.survivor_memory_id,
+        "decision": decision.decision,
+        "supersedes": sorted(decision.supersedes),
+        "memory_text": (decision.memory_text or "")[:200],
+        "corroboration_increment": bool(decision.corroboration_increment),
+    }
 
 
 def _dedupe_evidence_ids(*ids: str) -> List[str]:
@@ -454,10 +484,14 @@ def _ensure_consolidation_operation(
         "result_status": LifecycleState.active.value,
         "supersedes": sorted(decision.supersedes),
     }
+    source_packet_id = deterministic_contract_id(
+        "canonical-consolidation-operation",
+        _consolidation_decision_identity(uid=uid, decision=decision),
+    )
     operation = MemoryOperation.new(
         uid=uid,
         operation_type=MemoryOperationType.long_term_apply,
-        source_packet_id=f"consolidation_{run_id}",
+        source_packet_id=source_packet_id,
         target_memory_id=decision.survivor_memory_id,
         evidence_ids=evidence_ids,
         logical_payload=logical_payload,
@@ -680,13 +714,7 @@ def apply_consolidation_decision(
     )
     idempotency_key = deterministic_contract_id(
         "canonical-consolidation-decision",
-        {
-            "uid": uid,
-            "survivor": decision.survivor_memory_id,
-            "decision": decision.decision,
-            "supersedes": sorted(decision.supersedes),
-            "memory_text": (decision.memory_text or "")[:200],
-        },
+        _consolidation_decision_identity(uid=uid, decision=decision),
     )
     patch_payload: Dict[str, Any] = {
         "patch_id": f"patch_cons_{idempotency_key[:24]}",
@@ -829,7 +857,7 @@ def run_canonical_consolidation(
         last_agent_batch = agent_batch
         pending_by_id = {item.memory_id: item for item in pending_batch}
 
-        if agent_batch.reasoning.startswith("parse_failed:"):
+        if _agent_batch_blocks_watermark(agent_batch):
             watermark_blocked = True
             break
 
@@ -860,7 +888,7 @@ def run_canonical_consolidation(
                     sanitize_pii(decision.survivor_memory_id),
                     sanitize_pii(str(exc)),
                 )
-                continue
+                break
             except (ConsolidationApplySkipped, MissingMemoryDocument) as exc:
                 report.decisions_skipped += 1
                 logger.warning(
@@ -875,6 +903,9 @@ def run_canonical_consolidation(
                 for memory_id in applied_ids:
                     if memory_id in decision.supersedes:
                         report.superseded_memory_ids.append(memory_id)
+
+        if watermark_blocked:
+            break
 
         batched_ids.extend(item.memory_id for item in pending_batch)
         offset += batch_cap
