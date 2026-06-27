@@ -30,8 +30,8 @@ enum AgentPillsLayout {
 }
 
 /// One agent pill: rounded square + provider identity + status dot. Omi pills
-/// keep the circular logo; native Hermes/OpenClaw pills use their original
-/// provider marks so the tiny row does not read as a duplicated template mask.
+/// keep the circular logo; native Hermes/OpenClaw pills use single-layer
+/// template marks tinted by status so the row does not show two status signals.
 struct AgentPillView: View {
     @ObservedObject var pill: AgentPill
     @ObservedObject var manager: AgentPillsManager
@@ -82,7 +82,7 @@ struct AgentPillView: View {
             statusColor: pill.status.tintColor,
             size: AgentPillsLayout.pillSize - 8
         )
-        .shadow(color: Color.black.opacity(0.42), radius: 5, x: 0, y: 2)
+        .shadow(color: pill.status.tintColor.opacity(0.45), radius: 7, x: 0, y: 0)
     }
 
     private var roundedSquare: some View {
@@ -227,9 +227,10 @@ struct AgentProviderLogoMark: View {
             if let logo = Self.logo(for: provider) {
                 Image(nsImage: logo)
                     .resizable()
-                    .renderingMode(.original)
+                    .renderingMode(.template)
                     .interpolation(.high)
                     .aspectRatio(contentMode: .fit)
+                    .foregroundStyle(statusColor)
             } else {
                 Circle().fill(statusColor)
             }
@@ -240,9 +241,9 @@ struct AgentProviderLogoMark: View {
     private static func logo(for provider: AgentHarnessMode?) -> NSImage? {
         switch provider {
         case .hermes:
-            return load("hermes_logo")
+            return load("hermes_logo_flat")
         case .openclaw:
-            return load("openclaw_logo")
+            return load("openclaw_logo_flat")
         default:
             return nil
         }

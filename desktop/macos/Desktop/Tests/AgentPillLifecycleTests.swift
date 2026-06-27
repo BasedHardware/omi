@@ -608,36 +608,32 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(pillViewSource.contains("AgentProviderLogoMark("))
     XCTAssertTrue(pillViewSource.contains("provider: pill.bridgeHarnessOverride"))
     XCTAssertTrue(pillViewSource.contains("private var providerPill: some View"))
-    XCTAssertTrue(pillViewSource.contains("return load(\"hermes_logo\")"))
-    XCTAssertTrue(pillViewSource.contains("return load(\"openclaw_logo\")"))
-    XCTAssertTrue(pillViewSource.contains(".renderingMode(.original)"))
-    XCTAssertFalse(pillViewSource.contains(".renderingMode(.template)"))
-    XCTAssertFalse(pillViewSource.contains("hermes_logo_flat"))
-    XCTAssertFalse(pillViewSource.contains("openclaw_logo_flat"))
+    XCTAssertTrue(pillViewSource.contains("return load(\"hermes_logo_flat\")"))
+    XCTAssertTrue(pillViewSource.contains("return load(\"openclaw_logo_flat\")"))
+    XCTAssertTrue(pillViewSource.contains(".renderingMode(.template)"))
+    XCTAssertTrue(pillViewSource.contains(".foregroundStyle(statusColor)"))
+    XCTAssertFalse(pillViewSource.contains("return load(\"hermes_logo\")"))
+    XCTAssertFalse(pillViewSource.contains("return load(\"openclaw_logo\")"))
     XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {\n            return false\n        }"))
   }
 
-  func testDirectedProviderLogoAssetsUseOriginalBrandMarks() throws {
-    let hermes = try logoMaskStats("hermes_logo")
+  func testDirectedProviderLogoAssetsUseSingleTemplateMasks() throws {
+    let hermes = try logoMaskStats("hermes_logo_flat")
     XCTAssertEqual(hermes.width, 256)
     XCTAssertEqual(hermes.height, 256)
     XCTAssertEqual(hermes.transparentCorners, 4)
     XCTAssertGreaterThan(hermes.boundsWidth, 180, "Hermes must keep the winged caduceus, not a narrow replacement glyph.")
     XCTAssertGreaterThan(hermes.boundsHeight, 170)
-    XCTAssertGreaterThan(
-      hermes.coloredPixels, 30_000,
-      "Hermes row mark must use the original colored provider tile, not a white mask.")
+    XCTAssertEqual(hermes.coloredPixels, 0, "Hermes row mark must be a template mask so status color owns identity.")
 
-    let openClaw = try logoMaskStats("openclaw_logo")
+    let openClaw = try logoMaskStats("openclaw_logo_flat")
     XCTAssertEqual(openClaw.width, 180)
     XCTAssertEqual(openClaw.height, 180)
     XCTAssertEqual(openClaw.transparentCorners, 4)
     XCTAssertGreaterThan(openClaw.boundsWidth, 150, "OpenClaw must keep the round mascot silhouette, not an arrow glyph.")
     XCTAssertGreaterThan(openClaw.boundsHeight, 130)
     XCTAssertGreaterThan(openClaw.transparentPixelsInsideBounds, 500, "Eye holes must remain transparent in the provider mark.")
-    XCTAssertGreaterThan(
-      openClaw.coloredPixels, 10_000,
-      "OpenClaw row mark must use the original colored mascot, not a white mask.")
+    XCTAssertEqual(openClaw.coloredPixels, 0, "OpenClaw row mark must be a template mask so status color owns identity.")
   }
 
   func testFloatingAgentToolCallsUseCompactOneLinePresentation() throws {
