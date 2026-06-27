@@ -121,7 +121,6 @@ while ! mkdir "$RUN_SH_LOCK_DIR" 2>/dev/null; do
         exit 1
     fi
 done
-trap '_release_run_sh_lock' EXIT INT TERM
 
 macos_copy_tree() {
     local src="$1"
@@ -207,6 +206,11 @@ AUTH_CACHE=""
 
 # Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
+    # Release the serialization lock acquired above. This must be chained
+    # into cleanup rather than set via a separate `trap` because the
+    # `trap cleanup EXIT` below overwrites any earlier trap, so a standalone
+    # `trap _release_run_sh_lock EXIT` would never fire on normal exit.
+    _release_run_sh_lock
     if [ -n "$AUTH_CACHE" ]; then
         rm -f "$AUTH_CACHE"
     fi

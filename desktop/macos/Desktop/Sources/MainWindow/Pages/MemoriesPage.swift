@@ -132,6 +132,13 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
+  /// Whether the backend supports device_scope filtering for this user.
+  /// Canonical memory users support it; legacy users get a 400. When a 400 is
+  /// received we clear this so subsequent fetches omit device_scope and fall
+  /// back to client-side filtering (ClientDeviceService.memoryMatchesThisDevice)
+  /// applied in recomputeFilteredMemories.
+  private var deviceScopeSupported = true
+
   @Published var selectedTags: Set<MemoryTag> = [] {
     didSet {
       // Reset display limit when filters change
@@ -655,6 +662,23 @@ class MemoriesViewModel: ObservableObject {
 
   // MARK: - API Actions
 
+  /// Fetch memories from the API, honoring the device-scope filter only when
+  /// the backend supports it for this user. Legacy (non-canonical) memory users
+  /// get a 400 from device_scope=current; on that we clear deviceScopeSupported
+  /// and retry without the scope so the page still loads. Client-side device
+  /// filtering (recomputeFilteredMemories) preserves the "This Mac" UX.
+  private func fetchMemoriesDeviceScopeAware(limit: Int, offset: Int) async throws -> [ServerMemory] {
+    let scope = (filterThisDeviceOnly && deviceScopeSupported) ? "current" : nil
+    do {
+      return try await APIClient.shared.getMemories(limit: limit, offset: offset, deviceScope: scope)
+    } catch APIError.httpError(let statusCode, _) where statusCode == 400 && scope != nil {
+      // Backend rejected device_scope for a non-canonical user — retry unscoped.
+      deviceScopeSupported = false
+      log("MemoriesViewModel: device_scope unsupported by backend, retrying unscoped")
+      return try await APIClient.shared.getMemories(limit: limit, offset: offset, deviceScope: nil)
+    }
+  }
+
   /// Load memories using local-first pattern:
   /// 1. Load from local cache first (instant display)
   /// 2. Fetch from API in background
@@ -703,10 +727,9 @@ class MemoriesViewModel: ObservableObject {
 
     // Step 2: Fetch from API in background and sync to local cache
     do {
-      let fetchedMemories = try await APIClient.shared.getMemories(
+      let fetchedMemories = try await fetchMemoriesDeviceScopeAware(
         limit: pageSize,
-        offset: 0,
-        deviceScope: filterThisDeviceOnly ? "current" : nil
+        offset: 0
       )
       guard isCurrentScope(token) else {
         // Scope changed mid-load; reset loading state so the replacement load
@@ -936,10 +959,9 @@ class MemoriesViewModel: ObservableObject {
     // Pass deviceScope so the server filters for device-scoped views, keeping
     // pagination server-side rather than limited to the first in-memory page.
     do {
-      let newMemories = try await APIClient.shared.getMemories(
+      let newMemories = try await fetchMemoriesDeviceScopeAware(
         limit: pageSize,
-        offset: requestedOffset,
-        deviceScope: filterThisDeviceOnly ? "current" : nil
+        offset: requestedOffset
       )
       guard isCurrentScope(token), currentOffset == requestedOffset else { return }
 

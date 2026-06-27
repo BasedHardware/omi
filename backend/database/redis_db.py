@@ -483,6 +483,7 @@ def cache_mcp_api_key(hashed_key: str, user_id: str, ttl: int = 3600):
     r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
 
 
+@try_catch_decorator
 def cache_mcp_api_key_auth_context(
     hashed_key: str,
     user_id: str,
@@ -686,8 +687,7 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script(
-    """
+_RATE_LIMIT_LUA = r.register_script("""
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -700,8 +700,7 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-"""
-)
+""")
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -730,8 +729,7 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 # Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
 # trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
 # UTC (caller passes seconds_until_midnight_utc as the TTL).
-_TTS_RATE_LIMIT_LUA = r.register_script(
-    """
+_TTS_RATE_LIMIT_LUA = r.register_script("""
 local burst_key = KEYS[1]
 local daily_key = KEYS[2]
 local now_ms = tonumber(ARGV[1])
@@ -759,8 +757,7 @@ if new_daily == char_count then
     redis.call('EXPIRE', daily_key, daily_ttl)
 end
 return {0, 0}
-"""
-)
+""")
 
 
 def _seconds_until_midnight_utc() -> int:

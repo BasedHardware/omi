@@ -48,7 +48,7 @@ from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, 
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
+from utils.memory.surface_routing import pin_memory_system
 from utils.mcp_memories import (
     McpVerifiedAuth,
     build_mcp_default_memory_read_context,
@@ -607,19 +607,32 @@ def execute_tool(
             raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
 
         if memory_system == MemorySystem.CANONICAL:
-            memories = memorydb_list_with_locked_preview(
-                MemoryService(db_client=db).read(user_id, limit=limit, offset=offset)
+            # Apply the same filters the REST MCP path (routers/mcp.py) applies
+            # so canonical SSE callers honoring categories/reviewed/sensitive/sort
+            # never receive memories they explicitly excluded. The raw
+            # MemoryService.read page ignores every parsed argument above.
+            filtered = collect_filtered_memories(
+                lambda batch_offset, batch_limit: [
+                    m.model_dump(mode='json')
+                    for m in MemoryService(db_client=db).read(user_id, limit=batch_limit, offset=batch_offset)
+                    if not valid_categories
+                    or (m.category.value if hasattr(m.category, 'value') else m.category) in set(valid_categories)
+                ],
+                limit=limit,
+                offset=offset,
+                reviewed=reviewed,
+                manually_added=manually_added,
+                include_activity=include_activity,
+                include_sensitive=include_sensitive,
+                updated_after=updated_after,
+                sort=sort,
             )
-            return {
-                "memories": [
-                    {
-                        "id": memory.id,
-                        "content": memory.content,
-                        "category": memory.category.value if hasattr(memory.category, "value") else memory.category,
-                    }
-                    for memory in memories
-                ]
-            }
+            memories = filtered['memories']
+            for memory in memories:
+                if memory.get('is_locked', False):
+                    content = memory.get('content', '')
+                    memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+            return {"memories": memories}
 
         memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
         memory_list_results = list_default_mcp_memories(
