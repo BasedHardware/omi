@@ -8,7 +8,7 @@ description: "Architecture spec for Omi's internal LLM routing gateway, auto lan
 
 > Status: implemented architecture in progress.
 >
-> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor with fake providers for deterministic tests, and local service URL configuration for backend callers.
+> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor, fake providers for deterministic tests, a live OpenAI-compatible provider adapter, and local service URL configuration for backend callers.
 
 ## Decision
 
@@ -110,7 +110,7 @@ backend/llm_gateway/
     validator.py
     resolver.py
     executor.py
-    providers.py
+  providers.py
 ```
 
 Planned modules:
@@ -449,7 +449,7 @@ Runtime fail-open means active route failure may use LKG only for failure classe
 - maps typed gateway exceptions to OpenAI-style error envelopes with `error.message`, `error.type`, `error.param`, and `error.code`;
 - rejects unknown auto lanes, bare provider model names, streaming, tools, and unsupported capabilities before provider execution.
 
-The default provider registry is empty until live provider adapters are wired, so the route fails closed with `invalid_route_config` unless tests or deployment code provide a registry. That is intentional: the route exists before it can accidentally proxy arbitrary model traffic.
+The default provider registry includes the OpenAI-compatible adapter for the checked-in `openai` provider route. It uses `OPENAI_API_KEY` and optional `OPENAI_BASE_URL`, posts to `/chat/completions` with `httpx.AsyncClient`, and fails closed with `invalid_route_config` when the managed key is absent or rejected. Tests can still override the registry with fake providers.
 
 ## Provider Execution
 
@@ -469,7 +469,12 @@ Fallback is deliberately narrow:
 - Omi-paid timeout before output, provider 429, and provider 5xx may fall back only when the route artifact allows those classes;
 - streaming-after-first-token recovery is unsupported for MVP. The executor assumes no partial output exists and does not try to recover or replay partial responses.
 
-The current provider abstraction is an async protocol plus in-memory fake providers for unit tests. Live provider HTTP adapters should use pooled `httpx.AsyncClient` instances and must not log raw provider response bodies, prompts, transcripts, screenshots, memory contents, or BYOK keys.
+The current provider abstraction is an async protocol plus:
+
+- `OpenAICompatibleChatCompletionProvider` for live non-streaming OpenAI-compatible calls;
+- in-memory fake providers for unit tests.
+
+The live adapter does not log raw provider response bodies, prompts, transcripts, screenshots, memory contents, or BYOK keys. It maps missing Omi-managed keys and provider 401/403 responses to config failure, provider 429 to Omi-paid rate-limit failure, provider 5xx/network failures to Omi-paid provider failure, and provider 4xx request failures to capability mismatch.
 
 ## Observability
 

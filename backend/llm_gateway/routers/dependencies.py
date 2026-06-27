@@ -4,6 +4,7 @@ from functools import lru_cache
 
 from llm_gateway.gateway.config_loader import GatewayConfig, load_gateway_config
 from llm_gateway.gateway.executor import ProviderRegistry
+from llm_gateway.gateway.providers import OpenAICompatibleChatCompletionProvider
 
 
 @lru_cache(maxsize=1)
@@ -12,4 +13,4 @@ def get_gateway_config() -> GatewayConfig:
 
 
 def get_provider_registry() -> ProviderRegistry:
-    return ProviderRegistry()
+    return ProviderRegistry({'openai': OpenAICompatibleChatCompletionProvider()})

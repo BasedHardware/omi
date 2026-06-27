@@ -73,8 +73,9 @@ def test_chat_completions_rejects_unsupported_capability(monkeypatch):
     assert response.json()['error']['param'] == 'stream'
 
 
-def test_chat_completions_fails_closed_when_provider_registry_is_not_wired(monkeypatch):
+def test_chat_completions_fails_closed_when_openai_key_is_not_configured(monkeypatch):
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.delenv('OPENAI_API_KEY', raising=False)
 
     response = TestClient(app).post('/v1/chat/completions', json=valid_request(), headers=auth_headers())
 
