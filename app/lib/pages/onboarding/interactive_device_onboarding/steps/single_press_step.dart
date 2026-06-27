@@ -97,7 +97,6 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
         return OnboardingStepScaffold(
           title: 'Ask Omi a Question',
           subtitle: _aiResponse != null ? '' : 'Press the button once, speak your question, then press again when done',
-          currentStep: 1,
           content: Column(
             children: [
               const Spacer(flex: 1),
