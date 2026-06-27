@@ -187,7 +187,16 @@ def remove_developer_api_key_memory_grant(
     if not doc_ref.get().exists:
         return
 
-    field_path = f'grants.{DEVELOPER_API_CONSUMER}.apps.{DEVELOPER_API_DEFAULT_APP_ID}.keys.{key_id}'
+    # UUID key ids contain hyphens; dotted field paths must use FieldPath so Firestore
+    # does not treat hyphen segments as invalid path components.
+    field_path = firestore.FieldPath(
+        "grants",
+        DEVELOPER_API_CONSUMER,
+        "apps",
+        DEVELOPER_API_DEFAULT_APP_ID,
+        "keys",
+        key_id,
+    )
     doc_ref.update({field_path: firestore.DELETE_FIELD})
 
 
