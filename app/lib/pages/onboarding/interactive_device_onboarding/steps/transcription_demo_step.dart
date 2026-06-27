@@ -44,7 +44,6 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
         return OnboardingStepScaffold(
           title: 'Speak Into Your Omi',
           subtitle: provider.transcriptionComplete ? '' : 'Say a few words and watch them appear in real-time',
-          currentStep: 0,
           content: Column(
             children: [
               if (!provider.transcriptionComplete) ...[
