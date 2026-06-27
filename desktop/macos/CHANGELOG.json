@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Improved desktop chat tool-call progress feedback with slow and stalled states plus safer Cancel handling for stuck tools"
+  ],
   "releases": [
     {
       "version": "0.11.548",
