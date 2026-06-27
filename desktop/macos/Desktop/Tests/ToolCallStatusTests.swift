@@ -19,16 +19,14 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertFalse(ToolCallStatus.failed.isInFlight)
   }
 
-  /// Adding a new enum case without updating `isInFlight` would silently
-  /// classify it as not-in-flight (no default branch — Swift exhaustive
-  /// switch catches the missing case at compile time). This test exists
-  /// to make the contract intentional rather than incidental.
+  /// Adding a new enum case without updating this expectation should
+  /// force a conscious decision about whether that state is in-flight.
   func testIsInFlightCoversEveryCase() {
-    // If a future commit adds a case, this test forces the author to
-    // think about whether it should be in-flight or not.
-    let allCases: [ToolCallStatus] = [.running, .slow, .stalled, .completed, .failed]
-    let inFlightCount = allCases.filter { $0.isInFlight }.count
-    XCTAssertEqual(inFlightCount, 3, "exactly running, slow, stalled are in-flight")
+    XCTAssertEqual(ToolCallStatus.allCases.count, 5)
+    XCTAssertEqual(
+      ToolCallStatus.allCases.filter(\.isInFlight),
+      [.running, .slow, .stalled]
+    )
   }
 
   // MARK: - Stall tracking-id derivation
