@@ -912,7 +912,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             // still keyed to that agent, so the view falls through to the main
             // response UI and subsequent height reports are ignored.
             state.leaveAgentSurface()
-            resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+            // Mirror the Back button path: when leaveAgentSurface() lands on
+            // .mainInput (no prior Omi conversation), use the input-height resize
+            // so the panel shrinks to the normal Ask Omi size instead of staying
+            // at the oversized response height with a response-height observer.
+            if state.conversationSurface == .mainInput {
+                resizeForMainInputAfterAgentExit()
+            } else {
+                resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+            }
             focusInputField()
             return
         }
@@ -1180,13 +1188,20 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             )
             return
         }
+        // On legacy displays, when the voice-response glow is still active
+        // (e.g. realtime audio received this turn), collapse to the glow-adjusted
+        // compact size so the white glow/stroke is not clipped until the idle
+        // timer clears it.
+        let compactSize: NSSize = state.isVoiceResponseActive
+            ? responseGlowWindowSizeForCurrentScreen(forSurfaceSize: Self.minBarSize)
+            : Self.minBarSize
         let targetFrame = FloatingControlBarGeometry.pushToTalkFrame(
             currentFrame: frame,
             expanded: expanded,
             draggable: ShortcutSettings.shared.draggableBarEnabled,
             visibleFrame: geometryScreenVisibleFrame(),
             topInset: Self.topInset,
-            compactSize: Self.minBarSize,
+            compactSize: compactSize,
             voiceSize: Self.voiceBarSize
         )
         resizeToFrame(targetFrame, makeResizable: false, animated: true, animationDuration: 0.18)

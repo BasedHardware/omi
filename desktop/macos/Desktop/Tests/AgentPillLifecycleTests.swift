@@ -255,6 +255,24 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)"))
   }
 
+  func testEscapeFromAgentUsesInputResizeWhenMainInput() throws {
+    let source = try floatingControlBarWindowSource()
+
+    // The Escape path must mirror the Back button: use input-height resize
+    // when leaveAgentSurface() lands on .mainInput, not the response-size helper.
+    XCTAssertTrue(source.contains("if state.conversationSurface == .mainInput {\n                resizeForMainInputAfterAgentExit()"))
+  }
+
+  func testPTTCollapsePreservesGlowPaddingOnLegacyDisplays() throws {
+    let source = try floatingControlBarWindowSource()
+
+    // Legacy PTT collapse must use the glow-adjusted compact size when
+    // isVoiceResponseActive is still true.
+    XCTAssertTrue(source.contains("let compactSize: NSSize = state.isVoiceResponseActive"))
+    XCTAssertTrue(source.contains("responseGlowWindowSizeForCurrentScreen(forSurfaceSize: Self.minBarSize)"))
+    XCTAssertTrue(source.contains("compactSize: compactSize"))
+  }
+
   func testTerminalProjectionPreservesStatusText() throws {
     let source = try agentRuntimeStatusStoreSource()
 
