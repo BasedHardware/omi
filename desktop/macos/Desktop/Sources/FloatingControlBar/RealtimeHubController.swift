@@ -152,6 +152,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// True between commit and turn-done — used to detect barge-in (a new PTT while
   /// the previous reply is still in flight).
   private var responding = false
+  /// True while native realtime PCM has been scheduled locally but has not drained yet.
+  /// Provider turn completion means the server finished sending; the Mac may still be
+  /// playing the queued tail, and a new PTT during that tail is still a barge-in.
+  private var realtimePlaybackActive = false
 
   /// Log tag for the currently-connected provider.
   private var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
@@ -360,6 +364,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     let player = StreamingPCMPlayer(sampleRate: 24000)
     player.onPlaybackIdle = { [weak self] in
       Task { @MainActor in
+        self?.realtimePlaybackActive = false
         self?.clearResponseGlowIfRealtimeAudioIdle()
       }
     }
@@ -373,8 +378,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   func beginTurn() {
     // Barge-in: was a reply from the previous turn still in flight when the user
     // started talking again?
-    let bargeIn = responding
+    let bargeIn = responding || realtimePlaybackActive || localSpeechActive || speech.isSpeaking
     responding = false
+    realtimePlaybackActive = false
     turnTranscript = ""
     assistantText = ""
     speculativeWarmDone = false
@@ -383,7 +389,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     lastTurnAt = Date()
-    pcmPlayer?.stop()  // stop any prior reply locally
+    if bargeIn {
+      pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
+    }
     // Stop any queued or active local speech BEFORE resetting the flag, so a
     // barge-in before the synthesizer started playback still cancels the prior
     // turn's reply. Using localSpeechActive (set synchronously in speak) instead
@@ -441,6 +449,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// turn behind, or the model answers the non-speech later.
   func cancelTurn() {
     responding = false
+    realtimePlaybackActive = false
     turnTranscript = ""
     assistantText = ""
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
@@ -488,6 +497,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       return
     }
     audioReceivedThisTurn = true
+    realtimePlaybackActive = true
     responseGlowGate.markPlaybackActive()
   }
 
@@ -755,6 +765,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
+    if realtimePlaybackActive {
+      log("RealtimeHub[\(providerTag)]: server turn done; waiting for local playback to drain")
+    }
     // Record the completed turn into chat history (+ backend sync) in the background.
     // The hub plays its reply itself and never routes through the query path, so this is
     // the only place voice turns get persisted. Idempotent per turn; recordVoiceTurn is
@@ -794,6 +807,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     }
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
+    realtimePlaybackActive = false
     if localSpeechActive || speech.isSpeaking {
       speech.stopSpeaking(at: .immediate)
       localSpeechActive = false

@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed push-to-talk voice replies cutting off, restored Notch Mode chat row clicks, and aligned subagent back buttons with the chat row list"
+  ],
   "releases": [
     {
       "version": "0.11.545",
