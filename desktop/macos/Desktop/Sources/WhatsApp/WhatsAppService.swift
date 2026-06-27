@@ -137,6 +137,14 @@ actor WhatsAppService {
   func pair() async {
     disconnectRequested = false
     await updateStorePath()
+
+    if followProcess?.isRunning == true {
+      await setState(.connected)
+      await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Connected") }
+      log("WhatsAppService: pair skipped because sync is already running")
+      return
+    }
+
     await stopAuthProcess()
 
     guard let binary = Self.findWacliBinary() else {
@@ -361,6 +369,12 @@ actor WhatsAppService {
     guard let event = parseEvent(line) else { return }
 
     if let error = extractError(from: event), !error.isEmpty {
+      if error.contains("store is locked"), followProcess?.isRunning == true {
+        await setState(.connected)
+        await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Connected") }
+        log("WhatsAppService: ignored auth store lock because sync is already running")
+        return
+      }
       await setState(.degraded(reason: error))
       await MainActor.run { WhatsAppState.shared.update(lastEventSummary: error) }
       return
@@ -400,6 +414,9 @@ actor WhatsAppService {
       if let message = WAIncomingMessage(event: event) {
         await WhatsAppReplyCoordinator.shared.handle(message)
       }
+    } else if isTransientSyncEvent(eventName) {
+      await setState(.connected)
+      await MainActor.run { WhatsAppState.shared.update(lastEventSummary: eventName == "reconnecting" ? "Reconnecting" : "Connected") }
     } else if isNeedsReauthEvent(eventName, event: event) {
       await setState(.needsReauth)
     } else if isConnectedEvent(eventName, event: event) {
@@ -629,11 +646,11 @@ actor WhatsAppService {
 
   private func isConnectedEvent(_ eventName: String, event: [String: Any]) -> Bool {
     let haystack = "\(eventName) \(event)".lowercased()
-    return haystack.contains("connected")
-      || haystack.contains("success")
+    return eventName == "connected"
+      || eventName == "success"
+      || haystack.contains("login.success")
       || haystack.contains("authenticated")
       || haystack.contains("logged_in")
-      || haystack.contains("login.success")
   }
 
   private func isNeedsReauthEvent(_ eventName: String, event: [String: Any]) -> Bool {
@@ -641,8 +658,12 @@ actor WhatsAppService {
     return haystack.contains("needs_reauth")
       || haystack.contains("reauth")
       || haystack.contains("logged_out")
-      || haystack.contains("disconnected")
-      || haystack.contains("offline")
+      || haystack.contains("logout")
+      || haystack.contains("not authenticated")
+  }
+
+  private func isTransientSyncEvent(_ eventName: String) -> Bool {
+    eventName == "disconnected" || eventName == "reconnecting"
   }
 
   private func summarizeMessageEvent(_ event: [String: Any]) -> String {

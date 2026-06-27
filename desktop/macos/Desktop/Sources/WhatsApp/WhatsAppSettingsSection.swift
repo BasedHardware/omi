@@ -139,6 +139,13 @@ struct WhatsAppSettingsSection: View {
             draftRow(draft)
           }
         }
+
+        if let lastDraftFailure = replyCoordinator.lastDraftFailure {
+          Text(lastDraftFailure)
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.warning)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
     }
   }
@@ -260,6 +267,12 @@ struct WhatsAppSettingsSection: View {
                 .scaledFont(size: 11)
                 .foregroundColor(OmiColors.textTertiary)
                 .lineLimit(2)
+              if let reason = entry.reason, !reason.isEmpty {
+                Text(reason)
+                  .scaledFont(size: 11)
+                  .foregroundColor(OmiColors.warning)
+                  .lineLimit(2)
+              }
             }
           }
         }

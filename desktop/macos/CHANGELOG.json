@@ -1,6 +1,9 @@
 {
   "unreleased": [
-    "Added a WhatsApp connector setup flow with QR linking and connection status"
+    "Added a WhatsApp connector setup flow with QR linking and connection status",
+    "Improved WhatsApp draft failures so account limit errors show in settings and audit history",
+    "Fixed WhatsApp linking showing a store-lock error when the account was already connected",
+    "Fixed WhatsApp reconnecting events incorrectly showing reconnect required while sync was still running"
   ],
   "releases": [
     {

@@ -200,21 +200,84 @@ final class WhatsAppReplyCoordinator: ObservableObject {
 
   private let bridge = AgentBridge(harnessMode: "piMono")
   @Published private(set) var pendingDrafts: [WhatsAppDraft] = []
+  @Published private(set) var lastDraftFailure: String?
   private var processedMessageIDs = Set<String>()
+  private var queuedMessageIDs = Set<String>()
+  private var processingChatJids = Set<String>()
+  private var queuedMessagesByChatJid: [String: [WAIncomingMessage]] = [:]
   private var latestDrafts: [String: WhatsAppDraft] = [:]
 
   private init() {}
 
   func handle(_ message: WAIncomingMessage) async {
+    guard shouldProcess(message), !queuedMessageIDs.contains(message.id) else { return }
+    queuedMessageIDs.insert(message.id)
+    queuedMessagesByChatJid[message.chatJid, default: []].append(message)
+
+    guard !processingChatJids.contains(message.chatJid) else { return }
+    await processQueuedMessages(for: message.chatJid)
+  }
+
+  private func processQueuedMessages(for chatJid: String) async {
+    processingChatJids.insert(chatJid)
+    defer { processingChatJids.remove(chatJid) }
+
+    while var queue = queuedMessagesByChatJid[chatJid], !queue.isEmpty {
+      let message = queue.removeFirst()
+      queuedMessagesByChatJid[chatJid] = queue
+      queuedMessageIDs.remove(message.id)
+      await process(message)
+    }
+
+    queuedMessagesByChatJid[chatJid] = nil
+  }
+
+  private func process(_ message: WAIncomingMessage) async {
     guard shouldProcess(message) else { return }
     processedMessageIDs.insert(message.id)
+
+    if let quotaFailure = await quotaFailureReason() {
+      lastDraftFailure = "Could not draft a WhatsApp reply for \(message.displaySender): \(quotaFailure)"
+      appendAuditFailure(for: message, reason: quotaFailure)
+      log("WhatsAppReplyCoordinator: blocked draft for \(message.chatJid) by backend quota: \(quotaFailure)")
+      return
+    }
 
     do {
       let draft = try await draftReply(for: message)
       await routeDraft(draft, for: message)
     } catch {
-      log("WhatsAppReplyCoordinator: failed to draft reply for \(message.chatJid): \(error.localizedDescription)")
+      let reason = error.localizedDescription
+      lastDraftFailure = "Could not draft a WhatsApp reply for \(message.displaySender): \(reason)"
+      appendAuditFailure(for: message, reason: reason)
+      log("WhatsAppReplyCoordinator: failed to draft reply for \(message.chatJid): \(reason)")
     }
+  }
+
+  private func quotaFailureReason() async -> String? {
+    guard let quota = await APIClient.shared.fetchChatUsageQuota() else {
+      log("WhatsAppReplyCoordinator: quota check unavailable; drafting optimistically")
+      return nil
+    }
+
+    log(
+      "WhatsAppReplyCoordinator: backend quota response allowed=\(quota.allowed) plan=\(quota.plan) unit=\(quota.unit) used=\(quota.used) limit=\(quota.limit ?? -1)"
+    )
+    guard !quota.allowed else { return nil }
+    return quotaLimitMessage(quota)
+  }
+
+  private func quotaLimitMessage(_ quota: APIClient.ChatUsageQuota) -> String {
+    let limitStr: String = {
+      guard let limit = quota.limit else { return "your monthly limit" }
+      return quota.unit == "cost_usd"
+        ? String(format: "$%.0f of monthly chat usage", limit)
+        : "\(Int(limit)) chat questions per month"
+    }()
+    let usedStr = quota.unit == "cost_usd"
+      ? String(format: "$%.2f used", quota.used)
+      : "\(Int(quota.used)) used"
+    return "Backend quota response allowed=false: you've hit your \(quota.plan) plan limit (\(limitStr); \(usedStr)). Upgrade in Settings -> Plan and Usage, or wait until the next reset."
   }
 
   func latestDraft(for messageID: String) -> WhatsAppDraft? {
@@ -304,7 +367,21 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     ))
   }
 
+  private func appendAuditFailure(for message: WAIncomingMessage, reason: String) {
+    WhatsAppReplySettings.shared.appendAuditEntry(WhatsAppAuditEntry(
+      id: UUID().uuidString,
+      createdAt: Date(),
+      chatJid: message.chatJid,
+      senderJid: message.senderJid,
+      messageID: message.id,
+      text: message.text,
+      outcome: "draft_failed",
+      reason: reason
+    ))
+  }
+
   private func enqueueDraft(_ draft: WhatsAppDraft) {
+    lastDraftFailure = nil
     latestDrafts[draft.messageID] = draft
     pendingDrafts.removeAll { $0.messageID == draft.messageID }
     pendingDrafts.insert(draft, at: 0)
