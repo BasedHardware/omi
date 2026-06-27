@@ -27,6 +27,23 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
   }
 
+  func testProviderCorrectionUsesPreviousFloatingRequestObjective() throws {
+    let directive = AgentPillsManager.providerDirective(
+      from: "I meant ask OpenClaw",
+      contextualPreviousRequest: "ask grok to search for david zhang on X and tell me who the top 3 are")
+
+    XCTAssertEqual(directive?.provider, .openclaw)
+    XCTAssertEqual(directive?.rewrittenQuery, "search for david zhang on X and tell me who the top 3 are")
+  }
+
+  func testFloatingRouterProvidesRecentVisibleRequestToProviderDirective() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)"))
+    XCTAssertTrue(source.contains("private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String?"))
+    XCTAssertTrue(source.contains("barWindow.state.chatHistory.reversed().compactMap"))
+  }
+
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
     let source = try floatingControlBarViewSource()
     let agentPillSource = try agentPillSource()
@@ -590,28 +607,37 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("provider.hasBridgeHarnessOverride ? nil : pill.model"))
     XCTAssertTrue(pillViewSource.contains("AgentProviderLogoMark("))
     XCTAssertTrue(pillViewSource.contains("provider: pill.bridgeHarnessOverride"))
-    XCTAssertTrue(pillViewSource.contains("hermes_logo_flat"))
-    XCTAssertTrue(pillViewSource.contains("openclaw_logo_flat"))
+    XCTAssertTrue(pillViewSource.contains("private var providerPill: some View"))
+    XCTAssertTrue(pillViewSource.contains("return load(\"hermes_logo\")"))
+    XCTAssertTrue(pillViewSource.contains("return load(\"openclaw_logo\")"))
+    XCTAssertTrue(pillViewSource.contains(".renderingMode(.original)"))
+    XCTAssertFalse(pillViewSource.contains(".renderingMode(.template)"))
+    XCTAssertFalse(pillViewSource.contains("hermes_logo_flat"))
+    XCTAssertFalse(pillViewSource.contains("openclaw_logo_flat"))
     XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {\n            return false\n        }"))
   }
 
-  func testDirectedProviderFlatLogoAssetsUseRecognizableTemplateMasks() throws {
-    let hermes = try logoMaskStats("hermes_logo_flat")
+  func testDirectedProviderLogoAssetsUseOriginalBrandMarks() throws {
+    let hermes = try logoMaskStats("hermes_logo")
     XCTAssertEqual(hermes.width, 256)
     XCTAssertEqual(hermes.height, 256)
     XCTAssertEqual(hermes.transparentCorners, 4)
     XCTAssertGreaterThan(hermes.boundsWidth, 180, "Hermes must keep the winged caduceus, not a narrow replacement glyph.")
     XCTAssertGreaterThan(hermes.boundsHeight, 170)
-    XCTAssertGreaterThan(hermes.nonTransparentPixels, 8_000)
-    XCTAssertLessThan(hermes.nonTransparentPixels, 18_000)
+    XCTAssertGreaterThan(
+      hermes.coloredPixels, 30_000,
+      "Hermes row mark must use the original colored provider tile, not a white mask.")
 
-    let openClaw = try logoMaskStats("openclaw_logo_flat")
+    let openClaw = try logoMaskStats("openclaw_logo")
     XCTAssertEqual(openClaw.width, 180)
     XCTAssertEqual(openClaw.height, 180)
     XCTAssertEqual(openClaw.transparentCorners, 4)
     XCTAssertGreaterThan(openClaw.boundsWidth, 150, "OpenClaw must keep the round mascot silhouette, not an arrow glyph.")
     XCTAssertGreaterThan(openClaw.boundsHeight, 130)
-    XCTAssertGreaterThan(openClaw.transparentPixelsInsideBounds, 500, "Eye holes must remain transparent after template tinting.")
+    XCTAssertGreaterThan(openClaw.transparentPixelsInsideBounds, 500, "Eye holes must remain transparent in the provider mark.")
+    XCTAssertGreaterThan(
+      openClaw.coloredPixels, 10_000,
+      "OpenClaw row mark must use the original colored mascot, not a white mask.")
   }
 
   func testFloatingAgentToolCallsUseCompactOneLinePresentation() throws {
@@ -709,6 +735,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let boundsWidth: Int
     let boundsHeight: Int
     let nonTransparentPixels: Int
+    let coloredPixels: Int
     let transparentPixelsInsideBounds: Int
     let transparentCorners: Int
   }
@@ -731,16 +758,23 @@ final class AgentPillLifecycleTests: XCTestCase {
     var maxX = -1
     var maxY = -1
     var nonTransparentPixels = 0
+    var coloredPixels = 0
 
     for y in 0..<rep.pixelsHigh {
       for x in 0..<rep.pixelsWide {
-        let alpha = rep.colorAt(x: x, y: y)?.alphaComponent ?? 0
+        let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
+        let alpha = color?.alphaComponent ?? 0
         if alpha > 0.01 {
           nonTransparentPixels += 1
           minX = min(minX, x)
           minY = min(minY, y)
           maxX = max(maxX, x)
           maxY = max(maxY, y)
+          if let color,
+            max(color.redComponent, color.greenComponent, color.blueComponent)
+              - min(color.redComponent, color.greenComponent, color.blueComponent) > 0.08 {
+            coloredPixels += 1
+          }
         }
       }
     }
@@ -773,6 +807,7 @@ final class AgentPillLifecycleTests: XCTestCase {
       boundsWidth: maxX >= minX ? maxX - minX + 1 : 0,
       boundsHeight: maxY >= minY ? maxY - minY + 1 : 0,
       nonTransparentPixels: nonTransparentPixels,
+      coloredPixels: coloredPixels,
       transparentPixelsInsideBounds: transparentPixelsInsideBounds,
       transparentCorners: transparentCorners)
   }

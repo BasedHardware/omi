@@ -2474,7 +2474,10 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         presentation: QueryPresentation
     ) async {
-        let directive = AgentPillsManager.providerDirective(from: message)
+        let directive = AgentPillsManager.providerDirective(
+            from: message,
+            contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)
+        )
         let handoff = AgentPillsManager.floatingAgentHandoff(for: message)
         if provider.isSending, directive == nil, handoff == nil {
             pendingFollowUpQuery = PendingFollowUpQuery(text: message, presentation: presentation)
@@ -2610,6 +2613,16 @@ class FloatingControlBarManager {
 
         // Chat route: continue with the requested delivery surface.
         await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+    }
+
+    private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String? {
+        let displayed = barWindow.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !displayed.isEmpty {
+            return displayed
+        }
+        return barWindow.state.chatHistory.reversed().compactMap { exchange in
+            exchange.question?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first { !$0.isEmpty }
     }
 
     private func dispatchChatQuery(

@@ -349,12 +349,19 @@ final class AgentPillsManager: ObservableObject {
     }
 
     nonisolated static func providerDirective(from text: String) -> ProviderDirective? {
+        providerDirective(from: text, contextualPreviousRequest: nil)
+    }
+
+    nonisolated static func providerDirective(
+        from text: String,
+        contextualPreviousRequest: String?
+    ) -> ProviderDirective? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
         let providerPattern = "(open\\s*claw|openclaw|hermes)"
         let patterns = [
-            #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
+            #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
             #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
         ]
 
@@ -381,7 +388,15 @@ final class AgentPillsManager: ObservableObject {
             } else {
                 rest = ""
             }
-            let objective = rest.isEmpty ? "Say how it's going." : rest
+            let contextualObjective = contextualPreviousRequest
+                .flatMap { providerObjective(from: $0) }?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let objective: String
+            if rest.isEmpty, isProviderCorrection(trimmed), contextualObjective?.isEmpty == false {
+                objective = contextualObjective!
+            } else {
+                objective = rest.isEmpty ? "Say how it's going." : rest
+            }
             return ProviderDirective(
                 provider: provider,
                 rewrittenQuery: objective,
@@ -391,6 +406,37 @@ final class AgentPillsManager: ObservableObject {
         }
 
         return nil
+    }
+
+    nonisolated static func providerObjective(from text: String) -> String {
+        let original = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else { return original }
+        let patterns = [
+            #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\S+\s+(?:to|about)\s+(.+)$"#,
+            #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\S+\s+(.+)$"#,
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(original.startIndex..., in: original)
+            guard let match = regex.firstMatch(in: original, range: range),
+                  match.numberOfRanges > 1,
+                  let objectiveRange = Range(match.range(at: 1), in: original) else {
+                continue
+            }
+            let objective = original[objectiveRange].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !objective.isEmpty {
+                return objective
+            }
+        }
+        return original
+    }
+
+    private nonisolated static func isProviderCorrection(_ text: String) -> Bool {
+        let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return lower.hasPrefix("i meant")
+            || lower.hasPrefix("meant")
+            || lower.hasSuffix("instead")
+            || lower.contains(" instead of ")
     }
 
     /// User control-plane request from the floating bar UI: create a visible sibling
