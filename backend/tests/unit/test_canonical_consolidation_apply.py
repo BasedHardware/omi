@@ -656,3 +656,140 @@ def test_batch_skips_hallucinated_evidence_and_applies_valid_decision():
     assert report.last_consolidation_run_at == NOW
     updated = _stored_item(db, "mem_valid")
     assert updated.corroboration_count == 1
+
+
+def test_partial_apply_halts_subsequent_batches():
+    """After partial apply, no further LLM batches run in the same pass."""
+    uid = UID
+    control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
+    db = _FakeDb({f"users/{uid}/memory_control/state": _stored(control)})
+    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(15)]
+
+    first_batch_response = ConsolidationAgentBatch(
+        decisions=[
+            ConsolidationAgentDecision(
+                decision="update",
+                survivor_memory_id="mem_0",
+                supersedes=["mem_1"],
+                memory_text="fact 0 updated",
+                evidence_ids=["ev_mem_0"],
+            )
+        ]
+    )
+
+    with (
+        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
+        patch("utils.memory.canonical_consolidation.consolidation_batch_cap", return_value=10),
+        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
+        patch("utils.memory.canonical_consolidation.invoke_consolidation_agent") as mock_agent,
+        patch(
+            "utils.memory.canonical_consolidation.apply_consolidation_decision",
+            side_effect=canonical_consolidation.ConsolidationPartialApply("supersede failed"),
+        ),
+    ):
+        mock_gather.side_effect = lambda _uid, batch, **kwargs: MagicMock(
+            uid=uid, pending_items=batch, candidates_by_anchor={}
+        )
+        mock_agent.return_value = first_batch_response
+        report = run_canonical_consolidation(uid, db_client=db, run_id="run-partial-halt", now=NOW, batch_threshold=10)
+
+    assert mock_agent.call_count == 1
+    assert report.decisions_partial == 1
+    assert report.watermark_blocked is True
+    assert len(report.batched_memory_ids) == 0
+
+
+def test_invoke_failure_blocks_watermark_and_defers_promotion_gate():
+    uid = UID
+    control = MemoryControlState(
+        uid=uid,
+        head_commit_id="head0",
+        account_generation=1,
+        source_generation=1,
+        last_consolidation_run_at=NOW - timedelta(days=2),
+    )
+    db = _FakeDb({f"users/{uid}/memory_control/state": _stored(control)})
+    pending = [_item(f"mem_{idx}", f"fact {idx}") for idx in range(2)]
+
+    def _raise_invoke(_prompt: str) -> str:
+        raise RuntimeError("llm unavailable")
+
+    with (
+        patch("utils.memory.canonical_consolidation.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.canonical_consolidation.list_pending_consolidation_items", return_value=pending),
+        patch("utils.memory.canonical_consolidation.gather_consolidation_candidates") as mock_gather,
+    ):
+        mock_gather.return_value = MagicMock(uid=uid, pending_items=pending, candidates_by_anchor={})
+        report = run_canonical_consolidation(
+            uid,
+            db_client=db,
+            run_id="run-invoke-fail",
+            now=NOW,
+            batch_threshold=2,
+            llm_invoke=_raise_invoke,
+        )
+
+    assert report.watermark_blocked is True
+    assert report.last_consolidation_run_at == control.last_consolidation_run_at
+
+    from utils.memory.short_term_promotion import run_canonical_short_term_promotion
+
+    with (
+        patch("utils.memory.short_term_promotion.resolve_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.short_term_promotion.list_promotable_short_term_items", return_value=pending),
+        patch("utils.memory.short_term_promotion.list_fast_track_promotable_items", return_value=[]),
+        patch("utils.memory.short_term_promotion._read_control_state", return_value=control),
+        patch("utils.memory.short_term_promotion.promote_short_term_item_via_apply") as mock_promote,
+    ):
+        promo = run_canonical_short_term_promotion(
+            uid,
+            db_client=db,
+            run_id="run-invoke-fail-promo",
+            now=NOW,
+            consolidation_batched_ids=set(),
+        )
+
+    assert promo.skipped_reason == "consolidation_watermark_blocked"
+    mock_promote.assert_not_called()
+
+
+def _read_control_state_from_db(db: _FakeDb) -> MemoryControlState:
+    return MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+
+
+def test_corroboration_increment_idempotent_across_runs():
+    survivor = _item("mem_survivor", "Enjoys hiking", corroboration_count=0)
+    db = _db_for_apply(survivor=survivor)
+    control = MemoryControlState(**db.docs[f"users/{UID}/memory_control/state"])
+    decision = ConsolidationAgentDecision(
+        decision="skip_duplicate",
+        survivor_memory_id="mem_survivor",
+        corroboration_increment=True,
+        rationale="duplicate pending item",
+    )
+
+    apply_consolidation_decision(
+        UID,
+        decision=decision,
+        pending_by_id={survivor.memory_id: survivor},
+        control=control,
+        run_id="run-first",
+        now=NOW,
+        db_client=db,
+    )
+    after_first = _stored_item(db, "mem_survivor")
+    assert after_first.corroboration_count == 1
+
+    apply_consolidation_decision(
+        UID,
+        decision=decision,
+        pending_by_id={after_first.memory_id: after_first},
+        control=_read_control_state_from_db(db),
+        run_id="run-retry",
+        now=NOW + timedelta(hours=1),
+        db_client=db,
+    )
+    after_second = _stored_item(db, "mem_survivor")
+    assert after_second.corroboration_count == 1
+    assert after_second.version == after_first.version
