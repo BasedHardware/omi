@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed agent chat and task execution failing with a \"cannot start a transaction within a transaction\" database error"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.544",
+      "date": "2026-06-27",
+      "changes": [
+        "Fixed agent chat and task execution failing with a \"cannot start a transaction within a transaction\" database error"
+      ]
+    },
     {
       "version": "0.11.543",
       "date": "2026-06-27",
