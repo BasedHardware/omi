@@ -5,6 +5,7 @@ struct WhatsAppContact: Codable, Equatable, Sendable {
   var contactName: String?
   var whatsappName: String?
   var phoneNumber: String?
+  var canonicalJid: String?
 
   var displayName: String {
     contactName?.nilIfEmpty
@@ -46,7 +47,7 @@ final class WhatsAppContactResolver: ObservableObject {
   }
 
   func displayName(for jid: String, fallback: String? = nil) -> String {
-    let normalized = normalizeJid(jid)
+    let normalized = canonicalJid(for: jid)
     if let contact = contactsByJid[normalized] {
       return contact.displayName
     }
@@ -58,6 +59,9 @@ final class WhatsAppContactResolver: ObservableObject {
 
   func detailLabel(for jid: String) -> String {
     let normalized = normalizeJid(jid)
+    if let canonical = contactsByJid[normalized]?.canonicalJid, canonical != normalized {
+      return detailLabel(for: canonical)
+    }
     if normalized.contains("@lid") {
       return contactsByJid[normalized] == nil ? normalized : "WhatsApp linked contact"
     }
@@ -67,6 +71,43 @@ final class WhatsAppContactResolver: ObservableObject {
     return normalized
   }
 
+  func phoneDigits(for jid: String) -> String? {
+    let normalized = canonicalJid(for: jid)
+    guard !normalized.contains("@lid") else { return nil }
+    let phone = contactsByJid[normalized]?.phoneNumber ?? phoneNumber(from: normalized)
+    let digits = phone?.filter(\.isNumber) ?? ""
+    return digits.count >= 7 ? digits : nil
+  }
+
+  func canonicalJid(for jid: String) -> String {
+    let normalized = normalizeJid(jid)
+    guard let canonical = contactsByJid[normalized]?.canonicalJid?.nilIfEmpty else {
+      return normalized
+    }
+    return normalizeJid(canonical)
+  }
+
+  func rememberAlias(jid: String, canonicalJid: String) {
+    let normalized = normalizeJid(jid)
+    let canonical = normalizeJid(canonicalJid)
+    guard !normalized.isEmpty, !canonical.isEmpty, normalized != canonical else { return }
+    var contact = contactsByJid[normalized] ?? WhatsAppContact(
+      jid: normalized,
+      contactName: nil,
+      whatsappName: nil,
+      phoneNumber: phoneNumber(from: normalized),
+      canonicalJid: nil
+    )
+    contact.canonicalJid = canonical
+    if let canonicalContact = contactsByJid[canonical] {
+      contact.contactName = contact.contactName ?? canonicalContact.contactName
+      contact.whatsappName = contact.whatsappName ?? canonicalContact.whatsappName
+      contact.phoneNumber = canonicalContact.phoneNumber ?? contact.phoneNumber
+    }
+    contactsByJid[normalized] = contact
+    saveCache()
+  }
+
   func remember(jid: String, contactName: String? = nil, whatsappName: String? = nil) {
     let normalized = normalizeJid(jid)
     guard !normalized.isEmpty else { return }
@@ -74,7 +115,8 @@ final class WhatsAppContactResolver: ObservableObject {
       jid: normalized,
       contactName: nil,
       whatsappName: nil,
-      phoneNumber: phoneNumber(from: normalized)
+      phoneNumber: phoneNumber(from: normalized),
+      canonicalJid: nil
     )
     contact.contactName = contactName?.nilIfEmpty ?? contact.contactName
     contact.whatsappName = whatsappName?.nilIfEmpty ?? contact.whatsappName
@@ -121,7 +163,7 @@ final class WhatsAppContactResolver: ObservableObject {
     let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { throw WhatsAppContactResolutionError.emptyInput }
     if trimmed.contains("@"), isWhatsAppJid(trimmed) {
-      return normalizeJid(trimmed)
+      return canonicalJid(for: trimmed)
     }
     if let jid = jidFromPhone(trimmed) {
       return jid
@@ -178,6 +220,7 @@ final class WhatsAppContactResolver: ObservableObject {
       existing.contactName = contact.contactName?.nilIfEmpty ?? existing.contactName
       existing.whatsappName = contact.whatsappName?.nilIfEmpty ?? existing.whatsappName
       existing.phoneNumber = contact.phoneNumber?.nilIfEmpty ?? existing.phoneNumber
+      existing.canonicalJid = contact.canonicalJid?.nilIfEmpty ?? existing.canonicalJid
       contactsByJid[contact.jid] = existing
     }
     saveCache()
@@ -206,7 +249,8 @@ final class WhatsAppContactResolver: ObservableObject {
           jid: normalized,
           contactName: stringValue(object, keys: ["contactName", "contact_name", "fullName", "full_name", "name", "Name"]),
           whatsappName: stringValue(object, keys: ["pushName", "PushName", "whatsappName", "displayName", "DisplayName", "chatName", "ChatName"]),
-          phoneNumber: stringValue(object, keys: ["phone", "phoneNumber", "number"]) ?? phoneNumber(from: normalized)
+          phoneNumber: stringValue(object, keys: ["phone", "phoneNumber", "number"]) ?? phoneNumber(from: normalized),
+          canonicalJid: nil
         ))
       }
     }

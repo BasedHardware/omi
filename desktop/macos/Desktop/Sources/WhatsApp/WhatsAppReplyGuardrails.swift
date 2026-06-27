@@ -142,9 +142,6 @@ final class WhatsAppReplySettings: ObservableObject {
     guard !message.isGroup else {
       return .draft(reason: "group_chat")
     }
-    guard mode == .auto else {
-      return .draft(reason: "draft_mode")
-    }
     guard allowlistedJids.contains(normalizeJid(message.senderJid))
       || allowlistedJids.contains(normalizeJid(message.chatJid))
     else {
@@ -266,7 +263,7 @@ final class WhatsAppReplySettings: ObservableObject {
   }
 
   private func normalizeJid(_ jid: String) -> String {
-    jid.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    WhatsAppContactResolver.shared.canonicalJid(for: jid)
   }
 }
 

@@ -90,6 +90,20 @@ struct WAIncomingMessage: Equatable, Sendable {
     )
   }
 
+  @MainActor
+  func withCanonicalJids() -> WAIncomingMessage {
+    WAIncomingMessage(
+      id: id,
+      chatJid: WhatsAppContactResolver.shared.canonicalJid(for: chatJid),
+      senderJid: WhatsAppContactResolver.shared.canonicalJid(for: senderJid),
+      senderName: senderName,
+      text: text,
+      fromMe: fromMe,
+      isGroup: isGroup,
+      timestamp: timestamp
+    ) ?? self
+  }
+
   private static func messageObject(from event: [String: Any]) -> [String: Any] {
     if let message = event["message"] as? [String: Any] {
       return message
@@ -305,17 +319,18 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     let text = Self.visibleReplyText(
       from: editedText?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? draft.text
     )
+    let routedDraft = draft.withCanonicalJids()
     let result = await ChatToolExecutor.execute(ToolCall(
       name: "wa_send_message",
       arguments: [
-        "to": draft.chatJid,
+        "to": routedDraft.chatJid,
         "message": text,
-        "client_message_id": "draft:\(draft.messageID)",
+        "client_message_id": "draft:\(routedDraft.messageID)",
       ],
       thoughtSignature: nil
     ))
     removePendingDraft(id: id)
-    appendAudit(for: draft.withText(text), outcome: "draft_sent", reason: result)
+    appendAudit(for: routedDraft.withText(text), outcome: "draft_sent", reason: result)
     return result
   }
 
@@ -329,7 +344,8 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     guard let draft = pendingDrafts.first(where: { $0.id == id }) else {
       return "Error: WhatsApp draft not found"
     }
-    WhatsAppReplySettings.shared.addAllowlistedJid(draft.senderJid)
+    let routedDraft = draft.withCanonicalJids()
+    WhatsAppReplySettings.shared.addAllowlistedJid(routedDraft.senderJid)
     return await approveDraft(id: id)
   }
 
@@ -343,7 +359,8 @@ final class WhatsAppReplyCoordinator: ObservableObject {
   }
 
   private func routeDraft(_ draft: WhatsAppDraft, for message: WAIncomingMessage) async {
-    let draft = draft.withText(Self.visibleReplyText(from: draft.text))
+    let draft = draft.withText(Self.visibleReplyText(from: draft.text)).withCanonicalJids()
+    let message = message.withCanonicalJids()
     let decision = WhatsAppReplySettings.shared.autoDecision(for: message, draftText: draft.text)
     switch decision {
     case .ignore(let reason):
@@ -558,6 +575,21 @@ struct WhatsAppDraft: Identifiable, Equatable, Sendable {
       senderName: senderName,
       incomingText: incomingText,
       text: newText,
+      createdAt: createdAt,
+      mode: mode
+    )
+  }
+
+  @MainActor
+  func withCanonicalJids() -> WhatsAppDraft {
+    WhatsAppDraft(
+      id: id,
+      messageID: messageID,
+      chatJid: WhatsAppContactResolver.shared.canonicalJid(for: chatJid),
+      senderJid: WhatsAppContactResolver.shared.canonicalJid(for: senderJid),
+      senderName: senderName,
+      incomingText: incomingText,
+      text: text,
       createdAt: createdAt,
       mode: mode
     )

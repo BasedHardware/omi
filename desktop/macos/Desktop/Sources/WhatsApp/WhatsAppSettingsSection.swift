@@ -28,19 +28,25 @@ struct WhatsAppSettingsSection: View {
     AppBuild.isNonProduction
   }
 
+  private var showsConnectedSettings: Bool {
+    state.connectionState.isConnected
+  }
+
   var body: some View {
     VStack(spacing: 20) {
       connectionCard
-      replyModeCard
-      if includePendingDrafts {
-        pendingDraftsCard
-      }
-      allowlistCard
-      guardrailsCard
-      brainSyncCard
-      if showsDeveloperDiagnostics {
-        auditCard
-        detailsCard
+      if showsConnectedSettings {
+        replyModeCard
+        if includePendingDrafts {
+          pendingDraftsCard
+        }
+        allowlistCard
+        guardrailsCard
+        brainSyncCard
+        if showsDeveloperDiagnostics {
+          auditCard
+          detailsCard
+        }
       }
     }
     .sheet(isPresented: $showConnectSheet) {
@@ -111,7 +117,7 @@ struct WhatsAppSettingsSection: View {
             Text("Reply Mode")
               .scaledFont(size: 15, weight: .semibold)
               .foregroundColor(OmiColors.textPrimary)
-            Text("Draft is the default. Auto only applies to allowlisted direct chats.")
+            Text("Draft is the default. Allowlisted direct chats can auto-send.")
               .scaledFont(size: 12)
               .foregroundColor(OmiColors.textTertiary)
           }

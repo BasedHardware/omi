@@ -168,9 +168,14 @@ enum WhatsAppReader {
 
     var messages = nestedCollectionValues(object, keys: ["data", "messages", "items", "results"])
       .flatMap { collectMessages(from: $0) }
-    guard let text = stringValue(object, keys: ["text", "body", "message", "caption", "Text", "DisplayText"]),
+    let rawText = stringValue(object, keys: ["text", "body", "message", "caption", "Text"])
+    let displayText = stringValue(object, keys: ["DisplayText", "displayText"])
+    guard let text = rawText ?? displayText,
       !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else {
+      return messages
+    }
+    if isPlaceholderMessage(rawText: rawText, displayText: displayText, object: object) {
       return messages
     }
 
@@ -216,6 +221,16 @@ enum WhatsAppReader {
 
   private static func nestedCollectionValues(_ object: [String: Any], keys: [String]) -> [Any] {
     keys.compactMap { object[$0] }
+  }
+
+  private static func isPlaceholderMessage(rawText: String?, displayText: String?, object: [String: Any]) -> Bool {
+    guard rawText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false else { return false }
+    guard displayText?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "(message)" else { return false }
+    let mediaKeys = ["MediaType", "mediaType", "MediaCaption", "mediaCaption", "Filename", "filename", "MimeType", "mimeType", "DirectPath", "directPath"]
+    return mediaKeys.allSatisfy { key in
+      guard let value = object[key] as? String else { return true }
+      return value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
   }
 
   private static func displayTitle(for jid: String, rawTitle: String?, isGroup: Bool) -> String {

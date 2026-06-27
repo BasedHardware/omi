@@ -81,6 +81,7 @@ actor WhatsAppService {
   private var followRestartAttempts = 0
   private var isStartingFollow = false
   private var followLastExitWasStoreLocked = false
+  private var expectedAuthStopGenerations: Set<Int> = []
   private var disconnectRequested = false
   private var isCapturingTerminalQR = false
   private var terminalQRLines: [String] = []
@@ -395,6 +396,12 @@ actor WhatsAppService {
     }
 
     guard let event = parseEvent(line) else { return }
+    let eventName = normalizedEventName(event)
+
+    if isWarningEvent(eventName) {
+      log("WhatsAppService: auth warning: \((warningSummary(from: event) ?? line).prefix(300))")
+      return
+    }
 
     if let error = extractError(from: event), !error.isEmpty {
       if error.contains("store is locked"), followProcess?.isRunning == true {
@@ -414,7 +421,6 @@ actor WhatsAppService {
       return
     }
 
-    let eventName = normalizedEventName(event)
     if isConnectedEvent(eventName, event: event) || parseAuthenticated(event) {
       await setState(.connected)
       await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Connected") }
@@ -430,18 +436,16 @@ actor WhatsAppService {
     guard let event = parseEvent(line) else { return }
 
     let eventName = normalizedEventName(event)
+    if isWarningEvent(eventName) {
+      log("WhatsAppService: sync warning: \((warningSummary(from: event) ?? line).prefix(300))")
+      return
+    }
+
     if let error = extractError(from: event), !error.isEmpty {
-      if eventName == "warning" || eventName.contains("warning") {
-        let summary = warningSummary(from: event) ?? error
-        await setState(.connected)
-        await MainActor.run { WhatsAppState.shared.update(lastEventSummary: summary) }
-        log("WhatsAppService: sync warning: \(error.prefix(300))")
-        return
-      }
       if isStoreLockError(error) {
         followLastExitWasStoreLocked = true
         await setState(.connected)
-        await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Waiting for WhatsApp store lock") }
+        await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Connected") }
         log("WhatsAppService: sync store lock is transient; will retry after current wacli exits")
         return
       }
@@ -471,6 +475,10 @@ actor WhatsAppService {
   }
 
   private func handleAuthTermination(exitCode: Int32, generation: Int) async {
+    if expectedAuthStopGenerations.remove(generation) != nil {
+      log("WhatsAppService: auth exited with \(exitCode) after expected stop")
+      return
+    }
     guard generation == authGeneration else { return }
     authReadTask?.cancel()
     authReadTask = nil
@@ -499,7 +507,7 @@ actor WhatsAppService {
     if followLastExitWasStoreLocked {
       followLastExitWasStoreLocked = false
       await setState(.connected)
-      await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Waiting for WhatsApp store lock") }
+      await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Connected") }
       log("WhatsAppService: sync store lock retry in \(delaySeconds)s")
     } else {
       await setState(.degraded(reason: "WhatsApp sync stopped"))
@@ -512,6 +520,9 @@ actor WhatsAppService {
   private func stopAuthProcess() async {
     authReadTask?.cancel()
     authReadTask = nil
+    if authProcess?.isRunning == true {
+      expectedAuthStopGenerations.insert(authGeneration)
+    }
     await terminate(authProcess)
     authProcess = nil
   }
@@ -696,6 +707,10 @@ actor WhatsAppService {
       }
     }
     return ""
+  }
+
+  private func isWarningEvent(_ eventName: String) -> Bool {
+    eventName == "warning" || eventName.contains("warning")
   }
 
   private func extractQR(from event: [String: Any]) -> String? {

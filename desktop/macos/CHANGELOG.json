@@ -11,7 +11,10 @@
     "Fixed WhatsApp reply drafts so reasoning text is hidden and never sent as part of the message",
     "Improved WhatsApp reliability by hardening local webhooks, message syncing, draft handling, and agent tool timeouts",
     "Hid WhatsApp audit logs and connection diagnostics from production builds",
-    "Fixed WhatsApp unread badges clearing after opening a chat"
+    "Fixed WhatsApp unread badges clearing after opening a chat",
+    "Fixed WhatsApp settings and linking screens so disconnected accounts hide reply controls and transient sync warnings stay out of the UI",
+    "Fixed WhatsApp linked-device chats merging with their real contact thread and allowlisted contacts auto-sending from Draft mode",
+    "Fixed WhatsApp thread ordering when synced chat metadata reports newer placeholder activity than real messages"
   ],
   "releases": [
     {
