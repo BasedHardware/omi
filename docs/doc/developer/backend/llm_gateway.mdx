@@ -8,7 +8,7 @@ description: "Architecture spec for Omi's internal LLM routing gateway, auto lan
 
 > Status: implemented architecture in progress.
 >
-> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, and request-level credential context helpers.
+> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, and route resolution for the v1 auto lane.
 
 ## Decision
 
@@ -34,7 +34,7 @@ The first lane is:
 omi:auto:chat-structured
 ```
 
-This is **not** the primary user chat interface. The primary chat interface is `/v2/messages`, backed by the retrieval and agentic chat graph documented in [Chat System Architecture](/doc/developer/backend/chat_system).
+For v1, this is the only supported OpenAI-compatible chat-completions interface. It is structured and non-streaming. The broader streaming product chat path remains `/v2/messages`, backed by the retrieval and agentic chat graph documented in [Chat System Architecture](/doc/developer/backend/chat_system).
 
 `chat-structured` is for non-streaming structured extraction and classification work, such as memory extraction, chat extraction helpers, conversation post-processing structure, and schema-bound feature decisions. It is the safest first lane because it has clear success checks: JSON/schema validity, parser repair rate, extraction precision/recall, latency, and cost.
 
@@ -102,18 +102,20 @@ backend/llm_gateway/
   gateway/
     schemas.py
     config_loader.py
+    auth.py
+    credentials.py
+    errors.py
+    validator.py
+    resolver.py
 ```
 
 Planned modules:
 
 ```text
 backend/llm_gateway/gateway/
-  validator.py
-  resolver.py
   executor.py
   providers.py
   metrics.py
-  errors.py
 ```
 
 Keep it a separate service entrypoint. Do not place a parallel `utils/auto_router` package under the main backend and do not wire a public task picker into `backend/main.py`.
@@ -394,19 +396,27 @@ Default behavior:
 
 Desktop, mobile, and third-party product clients must not call the gateway directly in v1.
 
-## Capability Validation
+## Request Validation And Route Resolution
 
-Before execution, validate:
+Implemented v1 route resolution is intentionally narrow:
 
-- surface: chat completions for MVP;
-- streaming: false for `chat-structured` MVP;
-- tools: false for `chat-structured` MVP;
-- structured output mode: JSON schema or parser-compatible JSON;
-- input modalities: text only for MVP;
-- provider/model supports requested response format;
-- route artifact lane matches requested lane;
-- active and LKG artifacts are valid at startup;
-- LKG matches requested lane, surface, capabilities, structured-output mode, and credential mode.
+- `is_auto_lane_id(model)` recognizes only the `omi:auto:` namespace.
+- `omi:auto:chat-structured` is the only supported auto lane.
+- unknown `omi:auto:*` lanes return a typed model-not-found error.
+- bare provider model names such as `gpt-4o-mini` are not direct gateway routes in v1 and return a typed unsupported-model error.
+- the resolver maps the supported lane to its configured `active_route` and `last_known_good` route artifact.
+- runtime route checks defensively reject active/LKG lane, surface, capability, and credential-mode mismatches as invalid config.
+
+Before execution, the validator accepts only OpenAI chat-completions-shaped requests with:
+
+- `model: "omi:auto:chat-structured"`;
+- non-empty text `messages`;
+- `stream` absent or false;
+- no tool use;
+- `response_format.type: "json_schema"`;
+- a `response_format.json_schema.schema` object.
+
+The validator rejects streaming, tools, missing or invalid messages, non-text or multimodal content, and structured-output modes other than JSON schema for this lane. These failures are typed gateway exceptions, not ad hoc strings, so future HTTP endpoint code can map them to OpenAI-compatible error envelopes.
 
 Runtime fail-open means active route failure may use LKG only for failure classes allowed by the route artifact. Deploy/startup fail-closed means invalid LKG or invalid config prevents the service from starting. Do not use LKG for BYOK credential failures, capability mismatches, missing BYOK keys, or invalid config.
 
@@ -439,9 +449,9 @@ Do not log raw prompts, transcripts, screenshots, memory contents, provider resp
 1. Add this doc and an implementation checklist. Done.
 2. Add `llm_gateway` service skeleton with health endpoint. Done.
 3. Add Pydantic schemas for lane config, route artifacts, feature bundles, capability declarations, retries, timeouts, rollout, evidence, credential policy, fallback policy, and LKG. Done.
-4. Add service-auth and credential-policy contracts.
-5. Add resolver tests with no network calls.
-6. Add capability validator tests for `chat-structured`.
+4. Add service-auth and credential-policy contracts. Done.
+5. Add resolver tests with no network calls. Done.
+6. Add capability validator tests for `chat-structured`. Done.
 7. Add provider executor with fake providers and fallback/error normalization tests.
 8. Add `/v1/chat/completions` non-streaming support behind service auth.
 9. Add `/ready`, local run command, service URL configuration, and separate-process deployment wiring before shadow traffic.

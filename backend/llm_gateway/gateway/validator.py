@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any, Mapping
+
+from llm_gateway.gateway.errors import GatewayCapabilityMismatchError, GatewayInvalidRequestError
+from llm_gateway.gateway.schemas import LaneConfig, StructuredOutputMode
+
+
+@dataclass(frozen=True)
+class ValidatedChatCompletionRequest:
+    model: str
+    messages: tuple[Mapping[str, Any], ...]
+    response_format: Mapping[str, Any]
+
+
+def validate_chat_completion_request(
+    request: Mapping[str, Any],
+    lane: LaneConfig,
+) -> ValidatedChatCompletionRequest:
+    if not isinstance(request, Mapping):
+        raise GatewayInvalidRequestError('request body must be an object')
+
+    model = request.get('model')
+    if not isinstance(model, str) or not model.strip():
+        raise GatewayInvalidRequestError('model is required', param='model')
+
+    if request.get('stream') is True:
+        raise GatewayCapabilityMismatchError('streaming is not supported for this lane', param='stream')
+    if 'tools' in request:
+        raise GatewayCapabilityMismatchError('tools are not supported for this lane', param='tools')
+    if 'tool_choice' in request and request.get('tool_choice') not in (None, 'none'):
+        raise GatewayCapabilityMismatchError('tool_choice is not supported for this lane', param='tool_choice')
+
+    messages = _validate_messages(request.get('messages'))
+    response_format = _validate_response_format(request.get('response_format'), lane)
+
+    return ValidatedChatCompletionRequest(
+        model=model.strip(),
+        messages=tuple(messages),
+        response_format=response_format,
+    )
+
+
+def _validate_messages(value: Any) -> list[Mapping[str, Any]]:
+    if not isinstance(value, list) or not value:
+        raise GatewayInvalidRequestError('messages must be a non-empty list', param='messages')
+
+    validated: list[Mapping[str, Any]] = []
+    for index, message in enumerate(value):
+        param = f'messages[{index}]'
+        if not isinstance(message, Mapping):
+            raise GatewayInvalidRequestError('each message must be an object', param=param)
+        role = message.get('role')
+        if not isinstance(role, str) or not role:
+            raise GatewayInvalidRequestError('message role is required', param=f'{param}.role')
+        if 'content' not in message:
+            raise GatewayInvalidRequestError('message content is required', param=f'{param}.content')
+        _validate_text_content(message.get('content'), param=f'{param}.content')
+        validated.append(message)
+    return validated
+
+
+def _validate_text_content(content: Any, *, param: str) -> None:
+    if isinstance(content, str):
+        return
+
+    if isinstance(content, list) and content and all(_is_text_content_part(part) for part in content):
+        return
+
+    raise GatewayCapabilityMismatchError('only text message content is supported for this lane', param=param)
+
+
+def _is_text_content_part(part: Any) -> bool:
+    return isinstance(part, Mapping) and part.get('type') == 'text' and isinstance(part.get('text'), str)
+
+
+def _validate_response_format(value: Any, lane: LaneConfig) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise GatewayInvalidRequestError('response_format with json_schema is required', param='response_format')
+
+    response_format_type = value.get('type')
+    if response_format_type != StructuredOutputMode.JSON_SCHEMA.value:
+        raise GatewayCapabilityMismatchError(
+            'only json_schema structured output is supported for this lane',
+            param='response_format.type',
+        )
+
+    if lane.capabilities.structured_output != StructuredOutputMode.JSON_SCHEMA:
+        raise GatewayCapabilityMismatchError(
+            'lane does not support json_schema structured output', param='response_format'
+        )
+
+    json_schema = value.get('json_schema')
+    if not isinstance(json_schema, Mapping):
+        raise GatewayInvalidRequestError(
+            'response_format.json_schema must be an object', param='response_format.json_schema'
+        )
+    schema = json_schema.get('schema')
+    if not isinstance(schema, Mapping):
+        raise GatewayInvalidRequestError(
+            'response_format.json_schema.schema must be an object',
+            param='response_format.json_schema.schema',
+        )
+
+    return value
