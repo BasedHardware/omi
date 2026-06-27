@@ -898,6 +898,9 @@ def _fresh_app_integrations():
         del sys.modules["utils.app_integrations"]
     import utils.app_integrations as app_int
 
+    # The developer-status cache lives in utils.dev_cache, which persists across
+    # re-imports of app_integrations, so clear it for test isolation.
+    app_int.dev_cache._DEV_STATUS_CACHE.clear()
     return app_int
 
 
@@ -909,11 +912,11 @@ def test_is_developer_detection():
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
     assert app_int._is_developer("u") is False
 
-    app_int._DEV_STATUS_CACHE.clear()
+    app_int.dev_cache._DEV_STATUS_CACHE.clear()
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[MagicMock()])
     assert app_int._is_developer("u") is True
 
-    app_int._DEV_STATUS_CACHE.clear()
+    app_int.dev_cache._DEV_STATUS_CACHE.clear()
     dev_mod.get_dev_keys_for_user = MagicMock(side_effect=Exception("firestore down"))
     assert app_int._is_developer("u") is False  # fail closed: still apply the cap
 
@@ -924,12 +927,28 @@ def test_is_developer_is_cached():
     """The developer lookup is cached, so a second cap check does not re-hit the DB."""
     app_int = _fresh_app_integrations()
     dev_mod = sys.modules["database.dev_api_key"]
-    app_int._DEV_STATUS_CACHE.clear()
+    app_int.dev_cache._DEV_STATUS_CACHE.clear()
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
 
     assert app_int._is_developer("cached-uid") is False
     assert app_int._is_developer("cached-uid") is False
     dev_mod.get_dev_keys_for_user.assert_called_once()  # second call served from cache
+
+
+def test_invalidate_developer_cache_takes_effect_immediately():
+    """Invalidating after a key change forces the next check to re-read, not serve stale status."""
+    app_int = _fresh_app_integrations()
+    dev_mod = sys.modules["database.dev_api_key"]
+    app_int.dev_cache._DEV_STATUS_CACHE.clear()
+
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
+    assert app_int._is_developer("u") is False  # cached as non-developer
+
+    # They create their first key; without invalidation the stale False would persist.
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[MagicMock()])
+    assert app_int._is_developer("u") is False  # still serving the cached value
+    app_int.dev_cache.invalidate_developer_cache("u")
+    assert app_int._is_developer("u") is True  # re-read after invalidation
 
 
 def test_resolve_daily_cap_bounds():
@@ -962,7 +981,7 @@ def test_proactive_daily_cap_helper():
     assert app_int._proactive_daily_cap_reached("u") is True
 
     # Developer: exempt even far over the cap.
-    app_int._DEV_STATUS_CACHE.clear()
+    app_int.dev_cache._DEV_STATUS_CACHE.clear()
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[MagicMock()])
     redis_mod.get_daily_notification_count.return_value = 100
     assert app_int._proactive_daily_cap_reached("u") is False
