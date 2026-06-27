@@ -934,8 +934,8 @@ function createMockBridge(): { server: Server; sockPath: string } {
   return { server, sockPath };
 }
 
-test("OMI_TOOLS: exactly 26 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 26);
+test("OMI_TOOLS: exactly 27 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 27);
 });
 
 test("OMI_TOOLS: all tools have name, label, description, parameters, execute", () => {
@@ -989,6 +989,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     semantic_search: ["query"],
     get_daily_recap: [],
     get_task_agent_status: [],
+    fill_cloud_connector_form: ["provider", "server_url"],
     list_agent_sessions: [],
     get_agent_run: ["runId"],
     cancel_agent_run: ["runId"],
@@ -1141,6 +1142,24 @@ test("OMI_TOOLS: semantic_search optional fields exist and are not required", ()
   // Verify required field
   assert.ok(required.includes("query"), "query should be required");
   assert.ok(props.query, "query property must exist in schema");
+});
+
+test("OMI_TOOLS: cloud connector form filler is registered for pi-mono agents", () => {
+  const tool = OMI_TOOLS.find(t => t.name === "fill_cloud_connector_form")!;
+  assert.ok(tool, "fill_cloud_connector_form must be available to pi-mono task agents");
+  assert.match(tool.description, /custom MCP connector form/);
+  assert.ok(
+    tool.promptGuidelines?.some(g => g.includes("Call this first")),
+    "tool should instruct agents to use it before browser-extension fallbacks",
+  );
+
+  const props = (tool.parameters as any).properties;
+  const required = (tool.parameters as any).required ?? [];
+  assert.deepEqual(required.sort(), ["provider", "server_url"].sort());
+  assert.deepEqual(props.provider.enum, ["claude", "chatgpt"]);
+  assert.equal(props.server_url.type, "string");
+  assert.equal(props.oauth_client_secret.type, "string");
+  assert.equal(props.submit.type, "boolean");
 });
 
 // ---------------------------------------------------------------------------

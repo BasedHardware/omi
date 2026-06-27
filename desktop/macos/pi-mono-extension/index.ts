@@ -700,6 +700,33 @@ export const OMI_TOOLS = [
     properties: {},
     required: [],
   }),
+  omiTool({
+    name: "fill_cloud_connector_form",
+    label: "Fill Cloud Connector Form",
+    description: "Fill the currently visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation. Use first for one-click cloud connector setup after opening the signed-in browser to the connector page.",
+    promptSnippet: "fill_cloud_connector_form - Fill and optionally submit the visible ChatGPT/Claude MCP connector form",
+    promptGuidelines: [
+      "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
+      "Do not install browser extensions before trying this tool.",
+      "If it reports missing Accessibility permission, missing form, or missing required fields, then fall back to screenshots, AppleScript, or keyboard automation.",
+    ],
+    properties: {
+      provider: Type.String({
+        enum: ["claude", "chatgpt"],
+        description: "Cloud platform whose connector form is visible.",
+      }),
+      name: Type.Optional(Type.String({ description: "Connector name, usually 'Omi Memory'." })),
+      server_url: Type.String({ description: "Remote MCP server URL to paste into the connector form." }),
+      oauth_client_id: Type.Optional(Type.String({ description: "OAuth Client ID, usually 'omi'." })),
+      oauth_client_secret: Type.Optional(Type.String({ description: "OAuth Client Secret / Omi MCP key." })),
+      authentication: Type.Optional(Type.String({ description: "Authentication mode, usually 'OAuth'." })),
+      token_auth_method: Type.Optional(Type.String({ description: "OAuth token auth method, usually 'client_secret_post'." })),
+      auth_url: Type.Optional(Type.String({ description: "OAuth authorization URL when the form asks for it." })),
+      token_url: Type.Optional(Type.String({ description: "OAuth token URL when the form asks for it." })),
+      submit: Type.Optional(Type.Boolean({ description: "Whether to press the visible Add/Connect/Create button after filling required fields." })),
+    },
+    required: ["provider", "server_url"],
+  }),
   ...agentControlCapabilityManifest.map(omiControlTool),
   omiTool({
     name: "spawn_agent",

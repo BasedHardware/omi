@@ -572,6 +572,37 @@ final class LocalAgentAPIServer {
       properties: ["task_id": ["type": "string", "description": "Task backendId"]],
       required: ["task_id"]
     ),
+    LocalAgentTool(
+      name: "fill_cloud_connector_form",
+      description:
+        "Fill the currently visible ChatGPT or Claude custom MCP connector form using native macOS Accessibility automation. Use first for one-click cloud connector setup after the signed-in browser is opened to the connector page.",
+      properties: [
+        "provider": [
+          "type": "string",
+          "enum": ["claude", "chatgpt"],
+          "description": "Cloud platform whose connector form is visible",
+        ],
+        "name": ["type": "string", "description": "Connector name, usually 'Omi Memory'"],
+        "server_url": [
+          "type": "string",
+          "description": "Remote MCP server URL to paste into the connector form",
+        ],
+        "oauth_client_id": ["type": "string", "description": "OAuth Client ID, usually 'omi'"],
+        "oauth_client_secret": ["type": "string", "description": "OAuth Client Secret / Omi MCP key"],
+        "authentication": ["type": "string", "description": "Authentication mode, usually 'OAuth'"],
+        "token_auth_method": [
+          "type": "string",
+          "description": "OAuth token auth method, usually 'client_secret_post'",
+        ],
+        "auth_url": ["type": "string", "description": "OAuth authorization URL when the form asks for it"],
+        "token_url": ["type": "string", "description": "OAuth token URL when the form asks for it"],
+        "submit": [
+          "type": "boolean",
+          "description": "Whether to press the visible Add/Connect/Create button after filling required fields",
+        ],
+      ],
+      required: ["provider", "server_url"]
+    ),
   ]
 
   private func toolJSON(_ tool: LocalAgentTool) -> [String: Any] {
@@ -579,7 +610,7 @@ final class LocalAgentAPIServer {
       "name": tool.name,
       "description": tool.description,
       "annotations": [
-        "readOnlyHint": !["complete_task", "delete_task"].contains(tool.name),
+        "readOnlyHint": !["complete_task", "delete_task", "fill_cloud_connector_form"].contains(tool.name),
         "destructiveHint": tool.name == "delete_task",
         "openWorldHint": false,
       ],
