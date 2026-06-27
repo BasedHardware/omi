@@ -664,8 +664,18 @@ function omiManifestTool(tool: OmiToolManifestEntry) {
     promptGuidelines: tool.promptGuidelines,
     properties: typeBoxPropertiesForInputSchema(tool.inputSchema),
     required: (tool.inputSchema.required ?? []) as never[],
+    schemaOptions: schemaOptionsForInputSchema(tool.inputSchema),
     timeoutMs: tool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS,
   });
+}
+
+function schemaOptionsForInputSchema(schema: OmiToolInputSchema): Record<string, unknown> {
+  const options: Record<string, unknown> = {};
+  for (const key of ["anyOf", "allOf", "oneOf", "if", "then"] as const) {
+    const value = schema[key];
+    if (value !== undefined) options[key] = value;
+  }
+  return options;
 }
 
 function loadSkillTool() {
@@ -749,11 +759,21 @@ async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   }
   const snapshot = buildToolAvailabilitySnapshot("pi-mono");
   if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
-    await writeFile(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);
+    try {
+      await writeFile(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);
+    } catch (err) {
+      process.stderr.write(
+        `[omi-tools] Failed to write tool availability snapshot: ${err instanceof Error ? err.message : err}\n`,
+      );
+    }
   }
   process.stderr.write(
     `[omi-tools] adapter=pi-mono advertisedToolCount=${snapshot.advertisedToolCount} advertisedTools=${snapshot.advertisedToolNames.join(",")}\n`,
   );
+}
+
+export async function __registerOmiToolsForTest(pi: ExtensionAPI): Promise<void> {
+  await registerOmiTools(pi);
 }
 
 // ---------------------------------------------------------------------------

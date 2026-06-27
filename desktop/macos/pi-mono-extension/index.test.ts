@@ -30,6 +30,7 @@ import {
   __callSwiftToolForTest,
   __omiRelayCorrelationForTest,
   __omiPendingCallsForTest,
+  __registerOmiToolsForTest,
   __resetOmiPipeForTest,
 } from "./index.ts";
 import type { ToolCallEvent } from "@mariozechner/pi-coding-agent";
@@ -982,12 +983,10 @@ test("OMI_TOOLS: TypeBox schemas have additionalProperties=false", () => {
   }
 });
 
-test("OMI_TOOLS: provider schemas do not use top-level composite keywords", () => {
+test("OMI_TOOLS: provider schemas do not invent top-level oneOf", () => {
   for (const tool of OMI_TOOLS) {
     const parameters = tool.parameters as any;
     assert.equal(parameters.oneOf, undefined, `${tool.name} has top-level oneOf`);
-    assert.equal(parameters.anyOf, undefined, `${tool.name} has top-level anyOf`);
-    assert.equal(parameters.allOf, undefined, `${tool.name} has top-level allOf`);
   }
 });
 
@@ -1038,13 +1037,23 @@ test("OMI_TOOLS: top-level schemas keep the object contract", () => {
   }
 });
 
-test("OMI_TOOLS: agent control schemas avoid top-level composite preconditions", () => {
+test("OMI_TOOLS: agent control schemas preserve top-level composite preconditions", () => {
   const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
-  assert.equal((inspectArtifacts?.parameters as any).anyOf, undefined);
+  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
+    { required: ["artifactId"] },
+    { required: ["sessionId"] },
+    { required: ["runId"] },
+    { required: ["attemptId"] },
+  ]);
   assert.match(inspectArtifacts?.description ?? "", /session, run, or attempt/);
 
   const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.equal((delegateAgent?.parameters as any).allOf, undefined);
+  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
+    {
+      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
+      then: { required: ["childSessionId"] },
+    },
+  ]);
   assert.ok(
     delegateAgent?.promptGuidelines?.some((guideline) =>
       guideline.includes("Use call for a structured child result")
@@ -1092,8 +1101,8 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
       [...manifestTool.required].sort(),
       `${manifestTool.name} required fields drifted`
     );
-    assert.equal((tool!.parameters as any).anyOf, undefined, `${manifestTool.name} anyOf should not be emitted`);
-    assert.equal((tool!.parameters as any).allOf, undefined, `${manifestTool.name} allOf should not be emitted`);
+    assert.deepEqual((tool!.parameters as any).anyOf, manifestTool.jsonSchemaOptions?.anyOf, `${manifestTool.name} anyOf drifted`);
+    assert.deepEqual((tool!.parameters as any).allOf, manifestTool.jsonSchemaOptions?.allOf, `${manifestTool.name} allOf drifted`);
 
     for (const [propertyName, manifestProperty] of Object.entries(manifestTool.properties)) {
       const property = (tool!.parameters as any).properties[propertyName];
@@ -1104,6 +1113,55 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
       assert.equal(typedSchema.description, manifestProperty.description, `${manifestTool.name}.${propertyName} description drifted`);
       assert.deepEqual(typedSchema.enum, manifestProperty.enum, `${manifestTool.name}.${propertyName} enum drifted`);
     }
+  }
+});
+
+test("registerOmiTools: snapshot write failure logs and still registers tools", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-snapshot-failure-"));
+  const previousPipe = process.env.OMI_BRIDGE_PIPE;
+  const previousSnapshotPath = process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH;
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  const stderrLines: string[] = [];
+  const registeredTools: string[] = [];
+
+  process.env.OMI_BRIDGE_PIPE = sockPath;
+  process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH = dir;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderrLines.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    await __registerOmiToolsForTest({
+      registerTool(tool: { name: string }) {
+        registeredTools.push(tool.name);
+      },
+    } as any);
+
+    assert.deepEqual(registeredTools, toolNamesForAdapter("pi-mono"));
+    assert.ok(
+      stderrLines.some((line) => line.includes("Failed to write tool availability snapshot")),
+      "snapshot write failure should be logged",
+    );
+  } finally {
+    __resetOmiPipeForTest();
+    process.stderr.write = originalStderrWrite;
+    if (previousPipe === undefined) {
+      delete process.env.OMI_BRIDGE_PIPE;
+    } else {
+      process.env.OMI_BRIDGE_PIPE = previousPipe;
+    }
+    if (previousSnapshotPath === undefined) {
+      delete process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH;
+    } else {
+      process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH = previousSnapshotPath;
+    }
+    server.close();
+    await rm(dir, { recursive: true, force: true });
+    try { await unlink(sockPath); } catch {}
   }
 });
 

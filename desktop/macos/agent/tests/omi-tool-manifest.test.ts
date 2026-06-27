@@ -71,10 +71,17 @@ describe("omi tool manifest", () => {
     const askFollowup = toolsForAdapter("omi-tools-stdio", { onboarding: true }).find(
       (tool) => tool.name === "ask_followup",
     );
+    const requestPermission = toolsForAdapter("omi-tools-stdio", { onboarding: true }).find(
+      (tool) => tool.name === "request_permission",
+    );
 
     expect(saveKnowledgeGraph?.inputSchema.properties.nodes).toMatchObject({ type: "array" });
     expect(saveKnowledgeGraph?.inputSchema.properties.edges).toMatchObject({ type: "array" });
     expect(askFollowup?.inputSchema.properties.options).toMatchObject({ type: "array" });
+    expect(askFollowup?.inputSchema.required).toEqual(["question", "options"]);
+    expect(requestPermission?.inputSchema.properties.type).toMatchObject({
+      enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
+    });
   });
 
   it("preserves control-tool schema preconditions in MCP projections", () => {

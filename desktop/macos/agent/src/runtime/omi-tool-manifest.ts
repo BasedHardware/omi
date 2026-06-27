@@ -557,7 +557,17 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     description: "Open or guide the user through granting a required macOS permission.",
     promptSnippet: "request_permission - Request a macOS permission",
     latency: "fast local",
-    inputSchema: schema({ type: { type: "string", enum: ["screen_recording", "microphone", "accessibility", "automation", "full_disk_access"] } }, ["type"]),
+    inputSchema: schema(
+      {
+        type: {
+          type: "string",
+          enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
+          description:
+            "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access",
+        },
+      },
+      ["type"],
+    ),
     annotations: localWrite,
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },
@@ -605,10 +615,14 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     latency: "async background",
     inputSchema: schema(
       {
-        question: { type: "string" },
-        options: { type: "array", items: { type: "string" } },
+        question: { type: "string", description: "The question to present to the user" },
+        options: {
+          type: "array",
+          items: { type: "string" },
+          description: "2-3 quick-reply button labels. For permissions, include 'Grant [Permission]' and 'Skip'.",
+        },
       },
-      ["question"],
+      ["question", "options"],
     ),
     annotations: localWrite,
     timeoutClass: "long",
