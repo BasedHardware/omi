@@ -719,7 +719,18 @@ _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False
 
 
 def install_firestore_transactional_stub() -> None:
-    """Install a fake-transaction-compatible ``transactional`` on ``firestore_v1``."""
+    """Install a fake-transaction-compatible ``transactional`` on ``firestore_v1``.
+
+    Load the real Firestore client modules first when available so ``FieldFilter`` and
+    related symbols remain importable (e.g. ``database.knowledge_graph`` in isolated apply
+    tests). ``setdefault`` below must not replace an already-loaded real module.
+    """
+    try:
+        import google.cloud.firestore  # noqa: F401
+        import google.cloud.firestore_v1  # noqa: F401
+    except ImportError:
+        pass
+
     google_stub = sys.modules.setdefault("google", types.ModuleType("google"))
     cloud_stub = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
     firestore_v1_stub = sys.modules.setdefault(
