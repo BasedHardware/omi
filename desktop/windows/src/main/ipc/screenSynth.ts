@@ -30,7 +30,9 @@ export function registerScreenSynthHandlers(): void {
   ipcMain.handle('screenSynth:advanceWatermark', async (_e, ts: number) => {
     if (typeof ts === 'number' && ts > 0) advanceWatermark(ts)
   })
-  ipcMain.handle('screenSynth:recordRun', async (_e, run: ScreenSynthRun) =>
-    recordRun(run.lastRunAt, run.lastCount)
-  )
+  ipcMain.handle('screenSynth:recordRun', async (_e, run: ScreenSynthRun) => {
+    // Guard a missing/partial payload (matches the advanceWatermark handler) so a
+    // bad call no-ops instead of rejecting the renderer's invoke.
+    if (run && typeof run.lastRunAt === 'number') recordRun(run.lastRunAt, run.lastCount ?? 0)
+  })
 }
