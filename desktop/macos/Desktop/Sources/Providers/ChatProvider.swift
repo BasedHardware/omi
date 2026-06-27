@@ -740,6 +740,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// after session/new the ACP SDK tracks ongoing history natively.
     private var cachedMainSystemPrompt: String = ""
     private var cachedFloatingSystemPrompt: String = ""
+    private var cachedFloatingPillSystemPrompt: String = ""
 
     // MARK: - CLAUDE.md & Skills (Global)
     @Published var claudeMdContent: String?
@@ -1022,11 +1023,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let promptContext = formatMemoriesSection()
             let mainSystemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
+            let floatingPillSystemPrompt = buildFloatingBarSystemPrompt(
+                contextString: promptContext,
+                excludingToolNames: ["spawn_agent", "delegate_agent"]
+            )
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
                 ? ModelQoS.Claude.defaultSelection
                 : ShortcutSettings.shared.selectedModel
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
+            cachedFloatingPillSystemPrompt = floatingPillSystemPrompt
             // Hermes and OpenClaw ignore Omi's Claude model aliases, so leave
             // the model hint nil to avoid recording a model ID in binding metadata
             // that could trigger spurious context-changed sessions later.
@@ -1070,6 +1076,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         schemaLoaded = false
         cachedMainSystemPrompt = ""
         cachedFloatingSystemPrompt = ""
+        cachedFloatingPillSystemPrompt = ""
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
@@ -3023,10 +3030,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } else {
                 if systemPromptStyle == .floating {
                     if legacyClientScope == AgentLegacyClientScope.floatingPill {
-                        systemPrompt = buildFloatingBarSystemPrompt(
-                            contextString: formatMemoriesSection(),
-                            excludingToolNames: ["spawn_agent", "delegate_agent"]
-                        )
+                        if cachedFloatingPillSystemPrompt.isEmpty {
+                            cachedFloatingPillSystemPrompt = buildFloatingBarSystemPrompt(
+                                contextString: formatMemoriesSection(),
+                                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                            )
+                        }
+                        systemPrompt = cachedFloatingPillSystemPrompt
                     } else if cachedFloatingSystemPrompt.isEmpty {
                         cachedFloatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: formatMemoriesSection())
                         systemPrompt = cachedFloatingSystemPrompt

@@ -55,6 +55,7 @@ final class AgentPill: ObservableObject, Identifiable {
     let query: String
     let createdAt: Date
     let model: String
+    let bridgeHarnessOverride: AgentHarnessMode?
 
     @Published var title: String
     @Published var status: Status = .queued
@@ -71,9 +72,10 @@ final class AgentPill: ObservableObject, Identifiable {
         (completedAt ?? Date()).timeIntervalSince(createdAt)
     }
 
-    init(query: String, model: String) {
+    init(query: String, model: String, bridgeHarnessOverride: AgentHarnessMode? = nil) {
         self.query = query
         self.model = model
+        self.bridgeHarnessOverride = bridgeHarnessOverride
         self.title = AgentPill.deriveTitle(from: query)
         self.createdAt = Date()
     }
@@ -531,7 +533,8 @@ final class AgentPillsManager: ObservableObject {
         model: String,
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
-        preFetchedAck: String? = nil
+        preFetchedAck: String? = nil,
+        bridgeHarnessOverride: AgentHarnessMode? = nil
     ) -> AgentPill {
         let count = AgentPillsManager.parseAgentCount(from: handoff.originalRequest)
         if count <= 1 {
@@ -540,7 +543,8 @@ final class AgentPillsManager: ObservableObject {
                 model: model,
                 fromVoice: fromVoice,
                 preFetchedTitle: preFetchedTitle,
-                preFetchedAck: preFetchedAck
+                preFetchedAck: preFetchedAck,
+                bridgeHarnessOverride: bridgeHarnessOverride
             )
         }
         var first: AgentPill?
@@ -551,11 +555,17 @@ final class AgentPillsManager: ObservableObject {
                 model: model,
                 fromVoice: fromVoice && first == nil,
                 preFetchedTitle: first == nil ? preFetchedTitle : nil,
-                preFetchedAck: first == nil ? preFetchedAck : nil
+                preFetchedAck: first == nil ? preFetchedAck : nil,
+                bridgeHarnessOverride: bridgeHarnessOverride
             )
             if first == nil { first = pill }
         }
-        return first ?? spawn(query: handoff.agentTask, model: model, fromVoice: fromVoice)
+        return first ?? spawn(
+            query: handoff.agentTask,
+            model: model,
+            fromVoice: fromVoice,
+            bridgeHarnessOverride: bridgeHarnessOverride
+        )
     }
 
     /// Spawn a new agent pill. Each pill gets its own ChatProvider so the
@@ -572,7 +582,7 @@ final class AgentPillsManager: ObservableObject {
         systemPromptSuffix: String? = nil,
         bridgeHarnessOverride: AgentHarnessMode? = nil
     ) -> AgentPill {
-        let pill = AgentPill(query: query, model: model)
+        let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
             pill.title = preFetchedTitle
         }

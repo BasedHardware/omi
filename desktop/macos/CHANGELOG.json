@@ -1,5 +1,6 @@
 {
   "unreleased": [
+    "Fixed Hermes agent startup from the desktop app by launching it with its managed Python environment",
     "Improved OpenClaw multi-turn continuity in desktop agent chats",
     "Fixed push-to-talk voice replies cutting off, restored Notch Mode chat row clicks, and aligned subagent back buttons with the chat row list"
   ],

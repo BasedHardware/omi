@@ -16,6 +16,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try chatProviderSource()
 
     XCTAssertTrue(source.contains("legacyClientScope == AgentLegacyClientScope.floatingPill"))
+    XCTAssertTrue(source.contains("private var cachedFloatingPillSystemPrompt: String = \"\""))
+    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = floatingPillSystemPrompt"))
+    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
+    XCTAssertTrue(source.contains("if cachedFloatingPillSystemPrompt.isEmpty"))
+    XCTAssertTrue(source.contains("systemPrompt = cachedFloatingPillSystemPrompt"))
     XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "delegate_agent"]"#))
     XCTAssertTrue(source.contains("let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)"))
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
@@ -23,10 +28,15 @@ final class AgentPillLifecycleTests: XCTestCase {
 
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
     let source = try floatingControlBarViewSource()
+    let agentPillSource = try agentPillSource()
 
     XCTAssertTrue(source.contains("if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
-    XCTAssertTrue(source.contains("let sibling = manager.spawnFromHandoff(handoff, model: pill.model)"))
+    XCTAssertTrue(source.contains("bridgeHarnessOverride: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("state.present(.agent(sibling.id))"))
+    XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
+    XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
+    XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
+    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {

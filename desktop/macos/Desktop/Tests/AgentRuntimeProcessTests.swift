@@ -155,6 +155,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains("guard adapterId == .hermes || adapterId == .openclaw else"))
     XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
     XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
+    XCTAssertTrue(source.contains(#""\(home)/.hermes/hermes-agent/venv/bin""#))
+    XCTAssertTrue(source.contains("adapterPathPrefixDirs + existingPath.split"))
+    XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
   }

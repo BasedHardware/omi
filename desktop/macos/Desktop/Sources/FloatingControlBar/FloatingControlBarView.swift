@@ -1547,7 +1547,11 @@ private struct AgentMainChatView: View {
         guard !trimmed.isEmpty else { return }
         followUpText = ""
         if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
-            let sibling = manager.spawnFromHandoff(handoff, model: pill.model)
+            let sibling = manager.spawnFromHandoff(
+                handoff,
+                model: pill.model,
+                bridgeHarnessOverride: pill.bridgeHarnessOverride
+            )
             state.present(.agent(sibling.id))
             // Route through the window resize/observer setup so the new
             // sibling's reportContentHeight(.agent(sibling.id)) updates are
