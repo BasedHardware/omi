@@ -5,7 +5,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 USERS_SRC = Path(__file__).resolve().parents[2] / "database" / "users.py"
 
 
