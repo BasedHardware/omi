@@ -349,11 +349,14 @@ Validation rejects duplicate `route_artifact_id` values and exposes a content di
 ```python
 @dataclass(frozen=True)
 class ExplicitRouteRef:
+    feature: str
     model: str
     provider: str
+    options: dict[str, object]
 
 @dataclass(frozen=True)
 class AutoLaneRouteRef:
+    feature: str
     lane_id: str
 ```
 
@@ -371,7 +374,9 @@ get_route_ref(feature) -> ExplicitRouteRef | AutoLaneRouteRef
 is_auto_lane_id(model: str) -> bool
 ```
 
-Backend callers that use `get_llm(feature)` can be migrated feature by feature. For the first pilot, route only one structured feature through the gateway and keep all other features explicit.
+Implemented route refs are additive only. `get_route_ref(feature)` currently returns an `ExplicitRouteRef` for every existing feature by default, including pinned routes, profile routes, fallback routes, and provider/model construction options from `get_route_options(feature, model, provider)`. `AutoLaneRouteRef` is available behind an intentionally empty feature-to-lane mapping in `model_config.py` so a later ticket can map selected features to `omi:auto:chat-structured` without changing the legacy helpers.
+
+Backend callers that use `get_llm(feature)` can be migrated feature by feature. This route-ref ticket does not migrate any production callsite, does not send shadow traffic, and does not change return values from `get_model(feature)`, `get_provider(feature)`, or `get_llm(feature)`. For the first pilot, route only one structured feature through the gateway and keep all other features explicit.
 
 ## BYOK Policy
 

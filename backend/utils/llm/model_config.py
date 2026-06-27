@@ -7,9 +7,29 @@ continue to use ``clients.get_llm(feature)``.
 
 import logging
 import os
-from typing import Dict, Tuple
+from dataclasses import dataclass
+from typing import Dict, Tuple, Union
+
+from utils.llm.gateway_client import is_auto_lane_id
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ExplicitRouteRef:
+    feature: str
+    model: str
+    provider: str
+    options: Dict[str, object]
+
+
+@dataclass(frozen=True)
+class AutoLaneRouteRef:
+    feature: str
+    lane_id: str
+
+
+RouteRef = Union[ExplicitRouteRef, AutoLaneRouteRef]
 
 # ---------------------------------------------------------------------------
 # Model QoS Profile System
@@ -225,6 +245,11 @@ _STRUCTURED_OUTPUT_FEATURES = {
 
 _DEFAULT_CONFIG: Tuple[str, str] = ('gpt-4.1-mini', 'openai')
 
+# Future migration point for features that should call the gateway via an auto
+# lane. Keep empty until a ticket explicitly wires and verifies shadow/live
+# traffic; existing direct LLM routing never consults this map.
+_AUTO_LANE_FEATURES: Dict[str, str] = {}
+
 
 def _get_model_config(feature: str) -> Tuple[str, str]:
     """Get the (model, provider) tuple for a feature. Internal — used by get_llm/get_model/get_provider.
@@ -273,6 +298,29 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
         # Mechanical Gemini-routed features do not need paid thinking tokens.
         options['thinking_budget'] = 0
     return options
+
+
+def get_route_ref(feature: str) -> RouteRef:
+    """Return the typed route reference for a feature without changing legacy routing.
+
+    Existing features resolve to explicit provider/model refs by default. Auto-lane
+    refs are opt-in through _AUTO_LANE_FEATURES and are not used by get_model(),
+    get_provider(), or get_llm().
+    """
+
+    lane_id = _AUTO_LANE_FEATURES.get(feature)
+    if lane_id is not None:
+        if not is_auto_lane_id(lane_id):
+            raise ValueError(f"Auto lane route for feature '{feature}' must use omi:auto: namespace")
+        return AutoLaneRouteRef(feature=feature, lane_id=lane_id)
+
+    model, provider = _get_model_config(feature)
+    return ExplicitRouteRef(
+        feature=feature,
+        model=model,
+        provider=provider,
+        options=get_route_options(feature, model, provider),
+    )
 
 
 def supports_prompt_cache(model: str) -> bool:

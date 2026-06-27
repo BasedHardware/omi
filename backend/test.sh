@@ -53,6 +53,7 @@ pytest tests/unit/test_llm_gateway_executor.py -v
 pytest tests/unit/test_llm_gateway_openai_compatible.py -v
 pytest tests/unit/test_llm_gateway_readiness.py -v
 pytest tests/unit/test_llm_gateway_client_config.py -v
+pytest tests/unit/test_llm_gateway_route_refs.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
