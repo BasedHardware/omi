@@ -15,6 +15,7 @@ import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/pages/referral/referral_page.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/models/subscription.dart';
@@ -579,14 +580,16 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                             Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DeviceSettings()));
                           },
                         ),
-                        const Divider(height: 1, color: Color(0xFF3C3C43)),
-                        _buildSettingsItem(
-                          title: context.l10n.deviceTutorial,
-                          icon: const FaIcon(FontAwesomeIcons.graduationCap, color: Color(0xFF8E8E93), size: 20),
-                          onTap: () {
-                            routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true));
-                          },
-                        ),
+                        if (deviceProvider.connectedDevice?.type == DeviceType.omi) ...[
+                          const Divider(height: 1, color: Color(0xFF3C3C43)),
+                          _buildSettingsItem(
+                            title: context.l10n.deviceTutorial,
+                            icon: const FaIcon(FontAwesomeIcons.graduationCap, color: Color(0xFF8E8E93), size: 20),
+                            onTap: () {
+                              routeToPage(context, const InteractiveDeviceOnboardingWrapper(allowExit: true));
+                            },
+                          ),
+                        ],
                       ],
                     );
                   },

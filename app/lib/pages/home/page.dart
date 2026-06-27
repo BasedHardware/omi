@@ -478,6 +478,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   bool _deviceOnboardingShown = false;
 
   void _checkDeviceOnboarding(BtDevice device) async {
+    if (device.type != DeviceType.omi) return;
     if (_deviceOnboardingShown) return;
     if (SharedPreferencesUtil().deviceOnboardingCompleted) return;
 
