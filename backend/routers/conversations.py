@@ -41,6 +41,7 @@ from models.other import Person
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.executors import postprocess_executor, submit_with_context
 from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -476,13 +477,13 @@ def delete_conversation(
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
         # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
-        deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
-        for memory_id in deletion_result.get('vector_delete_ids', []):
-            delete_memory_vector(uid, memory_id)
-
-        # Canonical cohort: tombstone conversation-sourced items + neutral vector purge outbox (inert when legacy).
-        pin_memory_system(uid)
-        MemoryService().retract_conversation_memories(uid, conversation_id)
+        memory_system = pin_memory_system(uid)
+        if memory_system == MemorySystem.CANONICAL:
+            MemoryService().retract_conversation_memories(uid, conversation_id)
+        else:
+            deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
+            for memory_id in deletion_result.get('vector_delete_ids', []):
+                delete_memory_vector(uid, memory_id)
 
         # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
