@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import Vision
 
 @MainActor
 enum CloudConnectorFormAutomation {
@@ -42,6 +43,12 @@ enum CloudConnectorFormAutomation {
         NSPasteboard.general.setString(string, forType: .string)
       }
     }
+  }
+
+  struct OCRTextCandidate: Equatable {
+    let text: String
+    let confidence: Double
+    let imageRect: CGRect
   }
 
   enum ClaudeConnectorPageState: Equatable {
@@ -341,14 +348,44 @@ enum CloudConnectorFormAutomation {
     guard claudeConnectorPageState(nodes: nodes) == .connectorDetailNotConnected else {
       return "Error: Refusing Claude Connect because the verified page state changed."
     }
-    guard let button = findClaudeConnectorDetailConnectButton(in: nodes) else {
+    if let button = findClaudeConnectorDetailConnectButton(in: nodes) {
+      _ = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
+      try? await Task.sleep(nanoseconds: 700_000_000)
+      return await claudeConnectResultLines(target: target, appElement: appElement, method: "Accessibility")
+    }
+
+    guard CGPreflightScreenCaptureAccess() else {
+      return
+        "Error: Screen Recording permission is not available to Omi, so the native connector form filler cannot OCR the hidden Claude Connect button."
+    }
+
+    guard let clickPoint = await resolveClaudeConnectorConnectPointByOCR(
+      target: target,
+      nodes: nodes
+    ) else {
       return
         "Error: Claude connector is added, but the Connect button is not exposed to Accessibility. Refusing blind coordinate or keyboard clicks."
     }
 
-    _ = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
+    guard let activeTarget = frontmostClaudeConnectorKeyboardTarget(),
+      activeTarget.state == .connectorDetailNotConnected,
+      let refreshedPoint = await resolveClaudeConnectorConnectPointByOCR(target: target, nodes: nodes),
+      pointDistance(refreshedPoint, clickPoint) <= 8
+    else {
+      return "Error: Refusing Claude Connect because the OCR target was not stable."
+    }
+
+    postLeftClick(at: refreshedPoint)
     try? await Task.sleep(nanoseconds: 700_000_000)
 
+    return await claudeConnectResultLines(target: target, appElement: appElement, method: "OCR")
+  }
+
+  private static func claudeConnectResultLines(
+    target: (app: NSRunningApplication, state: ClaudeConnectorPageState),
+    appElement: AXUIElement,
+    method: String
+  ) async -> String {
     let afterNodes = focusedAndWindowRoots(for: appElement)
       .flatMap { collectNodes(from: $0, maxDepth: 10, maxNodes: 500) }
     let afterState = claudeConnectorPageState(nodes: afterNodes)
@@ -356,7 +393,7 @@ enum CloudConnectorFormAutomation {
       "Native connector form filler result:",
       "Provider: claude",
       "Browser/app: \(target.app.localizedName ?? target.app.bundleIdentifier ?? "unknown")",
-      "Submitted with button: Connect (Accessibility)",
+      "Submitted with button: Connect (\(method))",
     ]
     if afterState == .connectorDetailConnected {
       lines.append("Claude connector connected.")
@@ -689,6 +726,194 @@ enum CloudConnectorFormAutomation {
     }
     guard candidates.count == 1 else { return nil }
     return candidates[0]
+  }
+
+  private static func resolveClaudeConnectorConnectPointByOCR(
+    target: (app: NSRunningApplication, state: ClaudeConnectorPageState),
+    nodes: [AccessibleNode]
+  ) async -> CGPoint? {
+    guard target.state == .connectorDetailNotConnected else { return nil }
+    guard let windowFrame = largestWindowFrame(in: nodes),
+      let windowID = frontmostWindowID(for: target.app.processIdentifier, matching: windowFrame)
+    else { return nil }
+
+    let captureService = ScreenCaptureService()
+    guard case .success(let image) = await captureService.captureWindowCGImage(windowID: windowID) else {
+      return nil
+    }
+
+    let candidates = (try? await ocrTextCandidates(in: image)) ?? []
+    guard let candidate = findClaudeConnectOCRCandidate(
+      candidates,
+      imageSize: CGSize(width: image.width, height: image.height),
+      windowFrame: windowFrame
+    ) else { return nil }
+
+    let imageSize = CGSize(width: image.width, height: image.height)
+    let screenRect = imageRectToScreen(candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
+    let point = CGPoint(x: screenRect.midX, y: screenRect.midY)
+    guard pointIsInVerifiedBrowserContent(point, app: target.app, windowFrame: windowFrame) else { return nil }
+    return point
+  }
+
+  nonisolated static func findClaudeConnectOCRCandidate(
+    _ candidates: [OCRTextCandidate],
+    imageSize: CGSize,
+    windowFrame: CGRect
+  ) -> OCRTextCandidate? {
+    let safeTopInset = max(88, windowFrame.height * 0.08)
+    let matching = candidates.filter { candidate in
+      let label = candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      let screenRect = imageRectToScreen(candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
+      return label == "connect"
+        && candidate.confidence >= 0.75
+        && screenRect.midX > windowFrame.midX
+        && screenRect.midY > windowFrame.minY + safeTopInset
+        && screenRect.maxX < windowFrame.maxX - 12
+        && screenRect.minY > windowFrame.minY + 12
+        && screenRect.maxY < windowFrame.maxY - 12
+    }
+    guard matching.count == 1 else { return nil }
+    return matching[0]
+  }
+
+  private static func ocrTextCandidates(in image: CGImage) async throws -> [OCRTextCandidate] {
+    try await withCheckedThrowingContinuation { continuation in
+      let request = VNRecognizeTextRequest { request, error in
+        if let error {
+          continuation.resume(throwing: error)
+          return
+        }
+
+        let observations = (request.results as? [VNRecognizedTextObservation]) ?? []
+        let candidates = observations.compactMap { observation -> OCRTextCandidate? in
+          guard let candidate = observation.topCandidates(1).first else { return nil }
+          let rect = observation.boundingBox
+          guard rect.origin.x.isFinite, rect.origin.y.isFinite, rect.width.isFinite, rect.height.isFinite
+          else { return nil }
+          let imageRect = CGRect(
+            x: rect.origin.x * CGFloat(image.width),
+            y: (1 - rect.origin.y - rect.height) * CGFloat(image.height),
+            width: rect.width * CGFloat(image.width),
+            height: rect.height * CGFloat(image.height)
+          )
+          return OCRTextCandidate(
+            text: candidate.string,
+            confidence: Double(candidate.confidence),
+            imageRect: imageRect
+          )
+        }
+        continuation.resume(returning: candidates)
+      }
+      request.recognitionLevel = .accurate
+      request.usesLanguageCorrection = true
+      request.recognitionLanguages = ["en-US"]
+      do {
+        try VNImageRequestHandler(cgImage: image, options: [:]).perform([request])
+      } catch {
+        continuation.resume(throwing: error)
+      }
+    }
+  }
+
+  nonisolated private static func pointDistance(_ lhs: CGPoint, _ rhs: CGPoint) -> CGFloat {
+    hypot(lhs.x - rhs.x, lhs.y - rhs.y)
+  }
+
+  private static func largestWindowFrame(in nodes: [AccessibleNode]) -> CGRect? {
+    nodes
+      .filter { $0.role.lowercased().contains("window") && !$0.frame.isNull && !$0.frame.isEmpty }
+      .map(\.frame)
+      .max(by: { $0.width * $0.height < $1.width * $1.height })
+  }
+
+  private static func frontmostWindowID(
+    for pid: pid_t,
+    matching frame: CGRect
+  ) -> CGWindowID? {
+    guard
+      let windowList = CGWindowListCopyWindowInfo(
+        [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+    else { return nil }
+
+    let candidate = windowList.first { window in
+      guard let windowPID = window[kCGWindowOwnerPID as String] as? Int32,
+        windowPID == pid,
+        let bounds = window[kCGWindowBounds as String] as? [String: CGFloat],
+        let x = bounds["X"],
+        let y = bounds["Y"],
+        let width = bounds["Width"],
+        let height = bounds["Height"]
+      else { return false }
+      let windowFrame = CGRect(x: x, y: y, width: width, height: height)
+      return abs(windowFrame.midX - frame.midX) <= 4
+        && abs(windowFrame.midY - frame.midY) <= 4
+        && abs(windowFrame.width - frame.width) <= 8
+        && abs(windowFrame.height - frame.height) <= 8
+    }
+    return candidate?[kCGWindowNumber as String] as? CGWindowID
+  }
+
+  nonisolated private static func imageRectToScreen(
+    _ imageRect: CGRect,
+    imageSize: CGSize,
+    windowFrame: CGRect
+  ) -> CGRect {
+    let scaleX = windowFrame.width / imageSize.width
+    let scaleY = windowFrame.height / imageSize.height
+    return CGRect(
+      x: windowFrame.minX + imageRect.minX * scaleX,
+      y: windowFrame.minY + imageRect.minY * scaleY,
+      width: imageRect.width * scaleX,
+      height: imageRect.height * scaleY
+    )
+  }
+
+  private static func pointIsInVerifiedBrowserContent(
+    _ point: CGPoint,
+    app: NSRunningApplication,
+    windowFrame: CGRect
+  ) -> Bool {
+    guard point.x > windowFrame.midX,
+      point.y > windowFrame.minY + max(88, windowFrame.height * 0.08),
+      point.x < windowFrame.maxX - 12,
+      point.y < windowFrame.maxY - 12
+    else { return false }
+
+    var rawElement: AXUIElement?
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    let result = AXUIElementCopyElementAtPosition(
+      appElement,
+      Float(point.x),
+      Float(point.y),
+      &rawElement
+    )
+    guard result == .success, let element = rawElement else { return false }
+    let node = node(from: element)
+    let text = node.searchableText
+    if text.contains("address") || text.contains("toolbar") || text.contains("tab") || text.contains("search") {
+      return false
+    }
+    return true
+  }
+
+  private static func postLeftClick(at point: CGPoint) {
+    let source = CGEventSource(stateID: .hidSystemState)
+    let down = CGEvent(
+      mouseEventSource: source,
+      mouseType: .leftMouseDown,
+      mouseCursorPosition: point,
+      mouseButton: .left
+    )
+    let up = CGEvent(
+      mouseEventSource: source,
+      mouseType: .leftMouseUp,
+      mouseCursorPosition: point,
+      mouseButton: .left
+    )
+    down?.post(tap: .cghidEventTap)
+    Thread.sleep(forTimeInterval: 0.05)
+    up?.post(tap: .cghidEventTap)
   }
 
   private static func bestLabel(for node: AccessibleNode) -> String {

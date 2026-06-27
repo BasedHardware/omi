@@ -175,6 +175,16 @@ final class BrowserAutomationTargetTests: XCTestCase {
         "Error: Could not find a visible claude custom connector form."
       )
     )
+    XCTAssertTrue(
+      MemoryExportExecutor.cloudFormFillRequiresScreenRecordingApproval(
+        "Error: Screen Recording permission is not available to Omi, so the native connector form filler cannot OCR the hidden Claude Connect button."
+      )
+    )
+    XCTAssertFalse(
+      MemoryExportExecutor.cloudFormFillRequiresScreenRecordingApproval(
+        "Error: Claude connector is added, but the Connect button is not exposed to Accessibility."
+      )
+    )
   }
 
   func testClaudeConnectorPageStateClassification() {
@@ -263,6 +273,91 @@ final class BrowserAutomationTargetTests: XCTestCase {
         submit: true
       ),
       .refuse
+    )
+  }
+
+  func testClaudeConnectOCRCandidateRequiresExactUniqueRightPaneConnect() {
+    let imageSize = CGSize(width: 1600, height: 1000)
+    let windowFrame = CGRect(x: 100, y: 100, width: 1600, height: 1000)
+    let candidate = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Connect",
+      confidence: 0.92,
+      imageRect: CGRect(x: 970, y: 710, width: 120, height: 46)
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.findClaudeConnectOCRCandidate(
+        [candidate],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      ),
+      candidate
+    )
+  }
+
+  func testClaudeConnectOCRCandidateRejectsUnsafeMatches() {
+    let imageSize = CGSize(width: 1600, height: 1000)
+    let windowFrame = CGRect(x: 100, y: 100, width: 1600, height: 1000)
+    let good = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Connect",
+      confidence: 0.92,
+      imageRect: CGRect(x: 970, y: 710, width: 120, height: 46)
+    )
+    let sidebar = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Connect",
+      confidence: 0.92,
+      imageRect: CGRect(x: 360, y: 190, width: 120, height: 46)
+    )
+    let toolbar = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Connect",
+      confidence: 0.92,
+      imageRect: CGRect(x: 970, y: 24, width: 120, height: 38)
+    )
+    let lowConfidence = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Connect",
+      confidence: 0.4,
+      imageRect: CGRect(x: 970, y: 710, width: 120, height: 46)
+    )
+    let substring = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Connected",
+      confidence: 0.92,
+      imageRect: CGRect(x: 970, y: 710, width: 120, height: 46)
+    )
+
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeConnectOCRCandidate(
+        [sidebar],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeConnectOCRCandidate(
+        [toolbar],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeConnectOCRCandidate(
+        [lowConfidence],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeConnectOCRCandidate(
+        [substring],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeConnectOCRCandidate(
+        [good, good],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
     )
   }
 }

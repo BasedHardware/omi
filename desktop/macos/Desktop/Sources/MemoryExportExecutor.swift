@@ -130,6 +130,10 @@ enum MemoryExportExecutor {
         requestAccessibilityApprovalForCloudSetup()
         throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
       }
+      if cloudFormFillRequiresScreenRecordingApproval(lastResult) {
+        requestScreenRecordingApprovalForCloudSetup()
+        throw ExecutorError.browserSetupRequired(cloudSetupScreenRecordingPermissionMessage)
+      }
       if !cloudFormFillShouldRetry(lastResult) {
         break
       }
@@ -164,6 +168,10 @@ enum MemoryExportExecutor {
     result.lowercased().contains("accessibility permission is not available")
   }
 
+  static func cloudFormFillRequiresScreenRecordingApproval(_ result: String) -> Bool {
+    result.lowercased().contains("screen recording permission is not available")
+  }
+
   private static func cloudFormFillShouldRetry(_ result: String) -> Bool {
     result.contains("Could not find a visible")
       || result.contains("Submit skipped: no enabled")
@@ -178,12 +186,27 @@ enum MemoryExportExecutor {
     """
   }
 
+  private static var cloudSetupScreenRecordingPermissionMessage: String {
+    """
+    Omi needs Screen Recording permission to finish Claude setup automatically.
+
+    I added the Claude connector, but Claude hides the final Connect button from Accessibility in this browser. Approve Screen Recording for this Omi app in System Settings, then click "Do it for me" again.
+    """
+  }
+
   private static func requestAccessibilityApprovalForCloudSetup() {
     let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
     let trusted = AXIsProcessTrustedWithOptions(options)
     guard !trusted,
       let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    else { return }
+    NSWorkspace.shared.open(url)
+  }
+
+  private static func requestScreenRecordingApprovalForCloudSetup() {
+    guard let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     else { return }
     NSWorkspace.shared.open(url)
   }
