@@ -541,6 +541,36 @@ Available app tool names: {app_tool_names}
 </available_app_tools>"""
 
 
+def _coerce_tool_input_to_params(tool_input: Any) -> dict:
+    """Coerce a LangChain tool-call input into a dict for the safety guard.
+
+    The guard inspects argument content (for loop detection and per-call limits),
+    so a non-dict input must not be flattened to an empty dict — that would hide
+    the real arguments. Known shapes are unwrapped; anything else is preserved
+    under a stable key so the guard still sees the payload.
+    """
+    if isinstance(tool_input, dict):
+        return tool_input
+    if tool_input is None:
+        return {}
+    # LangChain ToolCall-like objects expose their arguments under ``args``.
+    args = getattr(tool_input, 'args', None)
+    if isinstance(args, dict):
+        return args
+    # Pydantic models / objects that can serialize themselves to a dict.
+    for dumper in ('model_dump', 'dict'):
+        method = getattr(tool_input, dumper, None)
+        if callable(method):
+            try:
+                dumped = method()
+            except Exception:
+                continue
+            if isinstance(dumped, dict):
+                return dumped
+    # Fallback: keep the raw payload so loop detection and content scrutiny still apply.
+    return {'input': tool_input}
+
+
 async def _run_openai_agent_stream(
     agent,
     messages: List,
@@ -564,9 +594,11 @@ async def _run_openai_agent_stream(
 
             elif kind == "on_tool_start":
                 tool_name = event.get("name", "unknown")
-                tool_input = event.get("data", {}).get("input", {})
-                if not isinstance(tool_input, dict):
-                    tool_input = {}
+                # Preserve argument content for the safety guard even when the
+                # event delivers a non-dict input (e.g. a ToolCall object on some
+                # LangChain versions). Flattening to {} would blind the guard's
+                # loop detection and argument-level scrutiny for those calls.
+                guard_params = _coerce_tool_input_to_params(event.get("data", {}).get("input", {}))
 
                 logger.info(f"Tool started: {tool_name}")
 
@@ -577,7 +609,7 @@ async def _run_openai_agent_stream(
 
                 if safety_guard:
                     try:
-                        safety_guard.validate_tool_call(tool_name, tool_input)
+                        safety_guard.validate_tool_call(tool_name, guard_params)
                         warning = safety_guard.should_warn_user()
                         if warning:
                             await callback.put_thought(warning)
