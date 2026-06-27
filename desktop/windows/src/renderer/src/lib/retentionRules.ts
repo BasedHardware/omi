@@ -16,7 +16,7 @@ export type SweepConvo = {
 export function transcriptWordCount(transcript: string): number {
   const cleaned = (transcript ?? '')
     .replace(/^(microphone|system audio):/gim, ' ')
-    .replace(/^[A-Za-z ]{1,20}:/gm, ' ') // leading "You:" / "Speaker 1:" labels
+    .replace(/^[A-Za-z][A-Za-z0-9 ]{0,19}:/gm, ' ') // leading "You:" / "Speaker 1:" labels
     .replace(/\s+/g, ' ')
     .trim()
   if (!cleaned) return 0

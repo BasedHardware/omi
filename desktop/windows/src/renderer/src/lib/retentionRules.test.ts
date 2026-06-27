@@ -18,6 +18,11 @@ it('transcriptWordCount ignores speaker/section scaffolding', () => {
   expect(transcriptWordCount('System audio:\n')).toBe(0)
 })
 
+it('transcriptWordCount strips numbered speaker labels so a diarized-but-empty recording counts as empty', () => {
+  expect(transcriptWordCount('Speaker 1:\nSpeaker 2:\nSpeaker 3:')).toBe(0)
+  expect(isEmptyConversation('Speaker 1:\nSpeaker 2:\nSpeaker 3:')).toBe(true)
+})
+
 it('isEmptyConversation is true under 5 real words', () => {
   expect(isEmptyConversation('You: hey ok bye')).toBe(true) // 3 words
   expect(isEmptyConversation('You: this is a real sentence now')).toBe(false) // 6 words
