@@ -10,6 +10,7 @@ from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
 from models.product_memory import MemoryItem, MemoryLayer
 from utils.llm.knowledge_graph import extract_knowledge_from_memory
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,9 @@ def extract_kg_for_promoted_memory(
     db_client=None,
 ) -> bool:
     """Extract KG nodes/edges for a newly promoted long_term memory. Returns True on success."""
+    client = db_client if db_client is not None else default_db_client
+    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
+        return False
     if item.tier != MemoryLayer.long_term:
         return False
     if getattr(item, "kg_extracted", False):
