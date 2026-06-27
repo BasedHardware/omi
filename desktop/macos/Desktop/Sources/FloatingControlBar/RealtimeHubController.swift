@@ -380,12 +380,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     speculativeWarmDone = false
     speculativeScreenshot = nil
     audioReceivedThisTurn = false
-    localSpeechActive = false
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     lastTurnAt = Date()
     pcmPlayer?.stop()  // stop any prior reply locally
-    if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    // Stop any queued or active local speech BEFORE resetting the flag, so a
+    // barge-in before the synthesizer started playback still cancels the prior
+    // turn's reply. Using localSpeechActive (set synchronously in speak) instead
+    // of speech.isSpeaking, which is false until playback actually starts.
+    if localSpeechActive || speech.isSpeaking {
+      speech.stopSpeaking(at: .immediate)
+      localSpeechActive = false
+    }
     responseGlowGate.clearImmediately()
     if bargeIn {
       // Interrupt the in-flight reply IN-SESSION (no teardown — the warm socket and
@@ -785,7 +791,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     }
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
-    if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    if localSpeechActive || speech.isSpeaking {
+      speech.stopSpeaking(at: .immediate)
+      localSpeechActive = false
+    }
     exitVoiceUI(clearResponseGlow: true)
     teardownSession()
     // A session that died fast (connected, then the provider rejected/aborted it — e.g.

@@ -268,6 +268,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("localSpeechActive = true"))
   }
 
+  func testBeginTurnStopsQueuedLocalSpeechOnBargeIn() throws {
+    let source = try realtimeHubControllerSource()
+
+    // beginTurn must check localSpeechActive (not just speech.isSpeaking) when
+    // stopping speech, so a barge-in before the synthesizer starts playback
+    // still cancels the prior turn's reply. localSpeechActive must be reset
+    // AFTER the stopSpeaking call, not before.
+    XCTAssertTrue(source.contains("if localSpeechActive || speech.isSpeaking {"))
+    XCTAssertTrue(source.contains("speech.stopSpeaking(at: .immediate)\n      localSpeechActive = false\n    }"))
+    XCTAssertFalse(source.contains("audioReceivedThisTurn = false\n    localSpeechActive = false\n    suppressAssistantOutputForCurrentTurn = false"))
+  }
+
   func testSpeechSynthesizerDidCancelClearsGlow() throws {
     let source = try realtimeHubControllerSource()
 
