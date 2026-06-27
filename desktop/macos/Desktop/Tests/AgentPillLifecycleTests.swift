@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -594,6 +595,25 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride == .hermes || pill.bridgeHarnessOverride == .openclaw {\n            return false\n        }"))
   }
 
+  func testDirectedProviderFlatLogoAssetsUseRecognizableTemplateMasks() throws {
+    let hermes = try logoMaskStats("hermes_logo_flat")
+    XCTAssertEqual(hermes.width, 256)
+    XCTAssertEqual(hermes.height, 256)
+    XCTAssertEqual(hermes.transparentCorners, 4)
+    XCTAssertGreaterThan(hermes.boundsWidth, 180, "Hermes must keep the winged caduceus, not a narrow replacement glyph.")
+    XCTAssertGreaterThan(hermes.boundsHeight, 170)
+    XCTAssertGreaterThan(hermes.nonTransparentPixels, 8_000)
+    XCTAssertLessThan(hermes.nonTransparentPixels, 18_000)
+
+    let openClaw = try logoMaskStats("openclaw_logo_flat")
+    XCTAssertEqual(openClaw.width, 180)
+    XCTAssertEqual(openClaw.height, 180)
+    XCTAssertEqual(openClaw.transparentCorners, 4)
+    XCTAssertGreaterThan(openClaw.boundsWidth, 150, "OpenClaw must keep the round mascot silhouette, not an arrow glyph.")
+    XCTAssertGreaterThan(openClaw.boundsHeight, 130)
+    XCTAssertGreaterThan(openClaw.transparentPixelsInsideBounds, 500, "Eye holes must remain transparent after template tinting.")
+  }
+
   func testFloatingAgentToolCallsUseCompactOneLinePresentation() throws {
     let chatPageSource = try chatPageSource()
     let providerSource = try chatProviderSource()
@@ -606,6 +626,25 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(chatPageSource.contains("summaryEmbeddedInToolName"))
     XCTAssertTrue(providerSource.contains("cleanName.lowercased().hasPrefix(\"read:\")"))
     XCTAssertTrue(providerSource.contains("return \"Reading file\""))
+  }
+
+  func testSelectableMarkdownRoutesGFMTablesThroughMarkdownUI() throws {
+    let selectableSource = try selectableMarkdownSource()
+    let chatPageSource = try chatPageSource()
+    let table = """
+    | Rank | Skill | Loads |
+    |---:|---|---:|
+    | 1 | omi | 39 |
+    """
+
+    XCTAssertTrue(SelectableMarkdown.containsGFMTable(table))
+    XCTAssertFalse(SelectableMarkdown.containsGFMTable("Rank | Skill | Loads"))
+    XCTAssertTrue(selectableSource.contains("Markdown(content)"))
+    XCTAssertTrue(selectableSource.contains(".scaledMarkdownTheme(sender)"))
+    XCTAssertTrue(selectableSource.contains(".inlineOnlyPreservingWhitespace"))
+    XCTAssertTrue(chatPageSource.contains(".table { configuration in"))
+    XCTAssertTrue(chatPageSource.contains(".markdownTableBorderStyle"))
+    XCTAssertTrue(chatPageSource.contains(".markdownTableBackgroundStyle"))
   }
 
   private func agentPillSource() throws -> String {
@@ -632,6 +671,14 @@ final class AgentPillLifecycleTests: XCTestCase {
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
+  private func selectableMarkdownSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Components/SelectableMarkdown.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
   private func floatingControlBarViewSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -654,6 +701,80 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/AgentPillsView.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private struct LogoMaskStats {
+    let width: Int
+    let height: Int
+    let boundsWidth: Int
+    let boundsHeight: Int
+    let nonTransparentPixels: Int
+    let transparentPixelsInsideBounds: Int
+    let transparentCorners: Int
+  }
+
+  private func logoMaskStats(_ name: String) throws -> LogoMaskStats {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Resources/\(name).png")
+    let data = try Data(contentsOf: url)
+    guard let rep = NSBitmapImageRep(data: data) else {
+      throw NSError(
+        domain: "AgentPillLifecycleTests",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Could not load \(name).png"])
+    }
+
+    var minX = rep.pixelsWide
+    var minY = rep.pixelsHigh
+    var maxX = -1
+    var maxY = -1
+    var nonTransparentPixels = 0
+
+    for y in 0..<rep.pixelsHigh {
+      for x in 0..<rep.pixelsWide {
+        let alpha = rep.colorAt(x: x, y: y)?.alphaComponent ?? 0
+        if alpha > 0.01 {
+          nonTransparentPixels += 1
+          minX = min(minX, x)
+          minY = min(minY, y)
+          maxX = max(maxX, x)
+          maxY = max(maxY, y)
+        }
+      }
+    }
+
+    var transparentPixelsInsideBounds = 0
+    if maxX >= minX, maxY >= minY {
+      for y in minY...maxY {
+        for x in minX...maxX {
+          let alpha = rep.colorAt(x: x, y: y)?.alphaComponent ?? 0
+          if alpha <= 0.01 {
+            transparentPixelsInsideBounds += 1
+          }
+        }
+      }
+    }
+
+    let cornerPoints = [
+      (0, 0),
+      (rep.pixelsWide - 1, 0),
+      (0, rep.pixelsHigh - 1),
+      (rep.pixelsWide - 1, rep.pixelsHigh - 1),
+    ]
+    let transparentCorners = cornerPoints.filter { point in
+      (rep.colorAt(x: point.0, y: point.1)?.alphaComponent ?? 0) <= 0.01
+    }.count
+
+    return LogoMaskStats(
+      width: rep.pixelsWide,
+      height: rep.pixelsHigh,
+      boundsWidth: maxX >= minX ? maxX - minX + 1 : 0,
+      boundsHeight: maxY >= minY ? maxY - minY + 1 : 0,
+      nonTransparentPixels: nonTransparentPixels,
+      transparentPixelsInsideBounds: transparentPixelsInsideBounds,
+      transparentCorners: transparentCorners)
   }
 
   private func resizeHandleSource() throws -> String {

@@ -1,4 +1,5 @@
 import SwiftUI
+import MarkdownUI
 
 /// A markdown text view that supports text selection across paragraph breaks.
 ///
@@ -34,13 +35,13 @@ struct SelectableMarkdown: View {
         Group {
             if cachedSegments.count == 1, case .text = cachedSegments[0].kind {
                 // Single text segment — no VStack overhead
-                textView(cachedSegments[0].content)
+                textSegmentView(cachedSegments[0].content)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     ForEach(cachedSegments) { segment in
                         switch segment.kind {
                         case .text:
-                            textView(segment.content)
+                            textSegmentView(segment.content)
                         case .codeBlock:
                             codeBlockView(segment.content)
                         }
@@ -60,6 +61,15 @@ struct SelectableMarkdown: View {
     }
 
     // MARK: - Text Segment (selectable across paragraphs)
+
+    @ViewBuilder
+    private func textSegmentView(_ content: String) -> some View {
+        if Self.containsGFMTable(content) {
+            markdownBlockView(content)
+        } else {
+            textView(content)
+        }
+    }
 
     @ViewBuilder
     private func textView(_ content: String) -> some View {
@@ -96,6 +106,14 @@ struct SelectableMarkdown: View {
                 attrCache[content] = styled
             }
         }
+    }
+
+    @ViewBuilder
+    private func markdownBlockView(_ content: String) -> some View {
+        Markdown(content)
+            .scaledMarkdownTheme(sender)
+            .textSelection(.enabled)
+            .if_available_writingToolsNone()
     }
 
     // MARK: - Code Block (boxed, monospace)
@@ -192,6 +210,41 @@ struct SelectableMarkdown: View {
 
             return processed
         }.joined(separator: "\n")
+    }
+
+    static func containsGFMTable(_ text: String) -> Bool {
+        let lines = text.components(separatedBy: "\n")
+        guard lines.count >= 2 else { return false }
+
+        for index in 0..<(lines.count - 1) {
+            let header = lines[index].trimmingCharacters(in: .whitespaces)
+            let separator = lines[index + 1].trimmingCharacters(in: .whitespaces)
+            guard header.filter({ $0 == "|" }).count >= 2,
+                  separator.filter({ $0 == "|" }).count >= 2 else {
+                continue
+            }
+            if isMarkdownTableSeparator(separator) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private static func isMarkdownTableSeparator(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let cells = trimmed
+            .trimmingCharacters(in: CharacterSet(charactersIn: "|"))
+            .split(separator: "|", omittingEmptySubsequences: false)
+        guard !cells.isEmpty else { return false }
+
+        return cells.allSatisfy { cell in
+            let value = cell.trimmingCharacters(in: .whitespaces)
+            return value.range(
+                of: #"^:?-{3,}:?$"#,
+                options: .regularExpression
+            ) != nil
+        }
     }
 
     // MARK: - Segment Splitting

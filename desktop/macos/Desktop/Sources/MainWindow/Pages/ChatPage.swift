@@ -2037,6 +2037,25 @@ extension Theme {
         ForegroundColor(.white.opacity(0.9))
         UnderlineStyle(.single)
       }
+      .table { configuration in
+        ScrollView(.horizontal, showsIndicators: false) {
+          configuration.label
+            .fixedSize(horizontal: true, vertical: true)
+            .markdownTableBorderStyle(.init(color: .white.opacity(0.18)))
+            .markdownTableBackgroundStyle(.alternatingRows(.white.opacity(0.06), .white.opacity(0.03)))
+        }
+        .markdownMargin(top: 0, bottom: 10)
+      }
+      .tableCell { configuration in
+        configuration.label
+          .markdownTextStyle {
+            if configuration.row == 0 {
+              FontWeight(.semibold)
+            }
+          }
+          .padding(.vertical, 5)
+          .padding(.horizontal, 9)
+      }
   }
 
   static func aiMessage(scale: CGFloat = 1.0) -> Theme {
@@ -2069,6 +2088,27 @@ extension Theme {
       }
       .link {
         ForegroundColor(OmiColors.purplePrimary)
+      }
+      .table { configuration in
+        ScrollView(.horizontal, showsIndicators: false) {
+          configuration.label
+            .fixedSize(horizontal: true, vertical: true)
+            .markdownTableBorderStyle(.init(color: Color.white.opacity(0.14)))
+            .markdownTableBackgroundStyle(
+              .alternatingRows(OmiColors.backgroundTertiary.opacity(0.92), Color.white.opacity(0.035))
+            )
+        }
+        .markdownMargin(top: 0, bottom: 10)
+      }
+      .tableCell { configuration in
+        configuration.label
+          .markdownTextStyle {
+            if configuration.row == 0 {
+              FontWeight(.semibold)
+            }
+          }
+          .padding(.vertical, 5)
+          .padding(.horizontal, 9)
       }
   }
 }
