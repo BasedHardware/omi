@@ -9379,7 +9379,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcribeLaterPaused => 'روکا گیا — آڈیو ریکارڈ نہیں ہو رہی';
 
   @override
-  String get deviceTutorial => 'ڈیوائس ٹیوٹوریل';
+  String get deviceTutorial => 'Omi کیسے استعمال کریں';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'اپنے Omi سے بولیں';
@@ -9465,4 +9465,13 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'مکمل کریں';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'اپنے Omi کو جانیں';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'آپ کا Omi جو کچھ کر سکتا ہے اس کا ایک تیز اور عملی جائزہ۔';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'تقریباً 1 منٹ';
 }

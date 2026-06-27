@@ -9370,7 +9370,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcribeLaterPaused => 'Pausad – inget ljud spelas in';
 
   @override
-  String get deviceTutorial => 'Enhetsguide';
+  String get deviceTutorial => 'Så använder du Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Prata in i din Omi';
@@ -9456,4 +9456,13 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Slutför';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Lär känna din Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'En snabb, praktisk rundtur i allt din Omi kan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
 }

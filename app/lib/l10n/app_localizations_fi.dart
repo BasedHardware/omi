@@ -9365,7 +9365,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
 
   @override
-  String get deviceTutorial => 'Laitteen opastus';
+  String get deviceTutorial => 'Näin käytät Omia';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Puhu Omi-laitteeseesi';
@@ -9451,4 +9451,13 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Valmis';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutustu Omiisi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Nopea ja käytännönläheinen kierros kaikkeen, mitä Omisi osaa.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Noin 1 minuutti';
 }

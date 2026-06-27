@@ -9432,7 +9432,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get transcribeLaterPaused => 'இடைநிறுத்தப்பட்டது — ஒலி பதிவு செய்யப்படவில்லை';
 
   @override
-  String get deviceTutorial => 'சாதனப் பயிற்சி';
+  String get deviceTutorial => 'Omi ஐ எவ்வாறு பயன்படுத்துவது';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'உங்கள் Omi-யிடம் பேசுங்கள்';
@@ -9518,4 +9518,14 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'உங்கள் Omi செய்யக்கூடிய அனைத்தையும் விரைவாக நேரடியாகப் பார்க்கும் சுற்றுலா.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'சுமார் 1 நிமிடம்';
 }

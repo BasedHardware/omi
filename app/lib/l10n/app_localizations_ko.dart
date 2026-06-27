@@ -9212,7 +9212,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcribeLaterPaused => '일시중지됨 — 오디오가 녹음되지 않고 있습니다';
 
   @override
-  String get deviceTutorial => '기기 튜토리얼';
+  String get deviceTutorial => 'Omi 사용법';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Omi에 대고 말해보세요';
@@ -9297,4 +9297,13 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '완료';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi 알아보기';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.';
+
+  @override
+  String get deviceOnboardingIntroDuration => '약 1분';
 }

@@ -9388,7 +9388,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcribeLaterPaused => 'Dijeda — audio tidak dirakam';
 
   @override
-  String get deviceTutorial => 'Tutorial Peranti';
+  String get deviceTutorial => 'Cara Menggunakan Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Bercakap dengan Omi Anda';
@@ -9475,4 +9475,14 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Selesai';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kenali Omi Anda';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'Lawatan ringkas dan praktikal tentang semua yang Omi anda boleh lakukan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Kira-kira 1 minit';
 }

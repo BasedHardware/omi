@@ -3098,7 +3098,7 @@
     "captureModeLiveDescription": "Transkrybuj w czasie rzeczywistym podczas mówienia.",
     "captureModeLaterDescription": "Zapisz dźwięk teraz i transkrybuj, kiedy chcesz.",
     "backgroundModeUnavailable": "Tryb w tle jest niedostępny, ponieważ nie podłączono zgodnego urządzenia. Podłącz urządzenie Omi, OpenGlass lub Friend Pendant, aby użyć tej funkcji.",
-    "deviceTutorial": "Samouczek urządzenia",
+    "deviceTutorial": "Jak korzystać z Omi",
     "deviceOnboardingTranscriptionTitle": "Mów do Omi",
     "deviceOnboardingTranscriptionSubtitle": "Powiedz kilka słów i zobacz, jak pojawiają się na żywo",
     "deviceOnboardingGoodJob": "Świetna robota!",
@@ -3126,5 +3126,8 @@
     "deviceOnboardingSingleTapHint": "To było pojedyncze dotknięcie — spróbuj dotknąć dwa razy szybko!",
     "deviceOnboardingTryDoubleTap": "Spróbuj teraz! Dotknij dwukrotnie Omi",
     "deviceOnboardingContinue": "Kontynuuj",
-    "deviceOnboardingFinish": "Zakończ"
+    "deviceOnboardingFinish": "Zakończ",
+    "deviceOnboardingIntroTitle": "Poznaj swoje Omi",
+    "deviceOnboardingIntroSubtitle": "Szybki, praktyczny przegląd wszystkiego, co potrafi Twoje Omi.",
+    "deviceOnboardingIntroDuration": "Około 1 minuty"
 }

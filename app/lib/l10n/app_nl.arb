@@ -3063,7 +3063,7 @@
     "captureModeLiveDescription": "Transcribeer in realtime terwijl je praat.",
     "captureModeLaterDescription": "Sla audio nu op en transcribeer wanneer je wilt.",
     "backgroundModeUnavailable": "Achtergrondmodus is niet beschikbaar omdat er geen compatibel apparaat is verbonden. Verbind een Omi-, OpenGlass- of Friend Pendant-apparaat om deze functie te gebruiken.",
-    "deviceTutorial": "Uitleg apparaat",
+    "deviceTutorial": "Hoe je Omi gebruikt",
     "deviceOnboardingTranscriptionTitle": "Spreek in je Omi",
     "deviceOnboardingTranscriptionSubtitle": "Zeg een paar woorden en zie ze in realtime verschijnen",
     "deviceOnboardingGoodJob": "Goed gedaan!",
@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "Dat was één tik — probeer twee keer snel te tikken!",
     "deviceOnboardingTryDoubleTap": "Probeer het nu! Dubbeltik op je Omi",
     "deviceOnboardingContinue": "Doorgaan",
-    "deviceOnboardingFinish": "Voltooien"
+    "deviceOnboardingFinish": "Voltooien",
+    "deviceOnboardingIntroTitle": "Maak kennis met je Omi",
+    "deviceOnboardingIntroSubtitle": "Een snelle, praktische rondleiding langs alles wat je Omi kan.",
+    "deviceOnboardingIntroDuration": "Ongeveer 1 minuut"
 }

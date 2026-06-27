@@ -9419,7 +9419,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcribeLaterPaused => 'En pausa — no s\'està gravant àudio';
 
   @override
-  String get deviceTutorial => 'Tutorial del dispositiu';
+  String get deviceTutorial => 'Com utilitzar l\'Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Parla a l\'Omi';
@@ -9505,4 +9505,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Finalitza';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Coneix el teu Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un recorregut ràpid i pràctic per tot el que pot fer el teu Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximadament 1 minut';
 }

@@ -9314,7 +9314,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get transcribeLaterPaused => 'หยุดชั่วคราว — ไม่ได้กำลังบันทึกเสียง';
 
   @override
-  String get deviceTutorial => 'บทแนะนำการใช้อุปกรณ์';
+  String get deviceTutorial => 'วิธีใช้ Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'พูดใส่ Omi ของคุณ';
@@ -9399,4 +9399,13 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'เสร็จสิ้น';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'ทำความรู้จักกับ Omi ของคุณ';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'ทัวร์สั้น ๆ แบบลงมือทำจริงเกี่ยวกับทุกสิ่งที่ Omi ของคุณทำได้';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'ประมาณ 1 นาที';
 }

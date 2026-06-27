@@ -3063,7 +3063,7 @@
     "captureModeLiveDescription": "Transkribuokite tikruoju laiku, kol kalbate.",
     "captureModeLaterDescription": "Išsaugokite garsą dabar ir transkribuokite kada panorėję.",
     "backgroundModeUnavailable": "Foninis režimas nepasiekiamas, nes neprijungtas suderinamas įrenginys. Prijunkite Omi, OpenGlass arba Friend Pendant įrenginį, kad galėtumėte naudoti šią funkciją.",
-    "deviceTutorial": "Įrenginio mokymo programa",
+    "deviceTutorial": "Kaip naudoti Omi",
     "deviceOnboardingTranscriptionTitle": "Kalbėkite į Omi",
     "deviceOnboardingTranscriptionSubtitle": "Pasakykite kelis žodžius ir stebėkite, kaip jie atsiranda realiuoju laiku",
     "deviceOnboardingGoodJob": "Šaunu!",
@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "Tai buvo vienas bakstelėjimas — pabandykite greitai bakstelėti du kartus!",
     "deviceOnboardingTryDoubleTap": "Išbandykite dabar! Dukart bakstelėkite Omi",
     "deviceOnboardingContinue": "Tęsti",
-    "deviceOnboardingFinish": "Baigti"
+    "deviceOnboardingFinish": "Baigti",
+    "deviceOnboardingIntroTitle": "Susipažinkite su savo Omi",
+    "deviceOnboardingIntroSubtitle": "Greita praktinė apžvalga visko, ką gali jūsų Omi.",
+    "deviceOnboardingIntroDuration": "Maždaug 1 minutė"
 }

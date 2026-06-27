@@ -9400,7 +9400,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcribeLaterPaused => 'На пауза — звукът не се записва';
 
   @override
-  String get deviceTutorial => 'Урок за устройството';
+  String get deviceTutorial => 'Как да използвате Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Говорете към вашето Omi';
@@ -9486,4 +9486,13 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Готово';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Опознайте своя Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Бърза практическа обиколка на всичко, което вашият Omi може да прави.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Около 1 минута';
 }

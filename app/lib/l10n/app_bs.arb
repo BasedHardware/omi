@@ -10641,7 +10641,7 @@
     "captureModeLiveDescription": "Transkribirajte u stvarnom vremenu dok govorite.",
     "captureModeLaterDescription": "Spremite zvuk sada i transkribirajte kad god želite.",
     "backgroundModeUnavailable": "Pozadinski način rada nije dostupan jer nije povezan kompatibilan uređaj. Povežite Omi, OpenGlass ili Friend Pendant uređaj da koristite ovu funkciju.",
-    "deviceTutorial": "Vodič za uređaj",
+    "deviceTutorial": "Kako koristiti Omi",
     "deviceOnboardingTranscriptionTitle": "Govori u svoj Omi",
     "deviceOnboardingTranscriptionSubtitle": "Izgovori nekoliko riječi i gledaj kako se pojavljuju u stvarnom vremenu",
     "deviceOnboardingGoodJob": "Odlično!",
@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "To je bio jedan dodir — pokušaj brzo dodirnuti dvaput!",
     "deviceOnboardingTryDoubleTap": "Probaj odmah! Dvaput dodirni svoj Omi",
     "deviceOnboardingContinue": "Nastavi",
-    "deviceOnboardingFinish": "Završi"
+    "deviceOnboardingFinish": "Završi",
+    "deviceOnboardingIntroTitle": "Upoznajte svoj Omi",
+    "deviceOnboardingIntroSubtitle": "Brz, praktičan obilazak svega što vaš Omi može.",
+    "deviceOnboardingIntroDuration": "Oko 1 minute"
 }

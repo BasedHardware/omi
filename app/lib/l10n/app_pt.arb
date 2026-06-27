@@ -3099,7 +3099,7 @@
     "captureModeLiveDescription": "Transcreva em tempo real enquanto fala.",
     "captureModeLaterDescription": "Salve o áudio agora e transcreva quando quiser.",
     "backgroundModeUnavailable": "O modo em segundo plano não está disponível porque nenhum dispositivo compatível está conectado. Conecte um dispositivo Omi, OpenGlass ou Friend Pendant para usar este recurso.",
-    "deviceTutorial": "Tutorial do dispositivo",
+    "deviceTutorial": "Como usar o Omi",
     "deviceOnboardingTranscriptionTitle": "Fale com o seu Omi",
     "deviceOnboardingTranscriptionSubtitle": "Diga algumas palavras e veja-as aparecer em tempo real",
     "deviceOnboardingGoodJob": "Muito bem!",
@@ -3127,5 +3127,8 @@
     "deviceOnboardingSingleTapHint": "Isso foi um toque único — tente tocar duas vezes rapidamente!",
     "deviceOnboardingTryDoubleTap": "Experimente agora! Toque duas vezes no seu Omi",
     "deviceOnboardingContinue": "Continuar",
-    "deviceOnboardingFinish": "Concluir"
+    "deviceOnboardingFinish": "Concluir",
+    "deviceOnboardingIntroTitle": "Conheça o seu Omi",
+    "deviceOnboardingIntroSubtitle": "Um tour rápido e prático por tudo o que o seu Omi pode fazer.",
+    "deviceOnboardingIntroDuration": "Cerca de 1 minuto"
 }

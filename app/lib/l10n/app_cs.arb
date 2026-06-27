@@ -3032,7 +3032,7 @@
     "captureModeLiveDescription": "Přepis v reálném čase, jak mluvíte.",
     "captureModeLaterDescription": "Uložte zvuk nyní a přepište jej, kdykoli budete chtít.",
     "backgroundModeUnavailable": "Režim na pozadí není k dispozici, protože není připojeno žádné kompatibilní zařízení. Pro použití této funkce připojte zařízení Omi, OpenGlass nebo Friend Pendant.",
-    "deviceTutorial": "Návod k zařízení",
+    "deviceTutorial": "Jak používat Omi",
     "deviceOnboardingTranscriptionTitle": "Mluvte do svého Omi",
     "deviceOnboardingTranscriptionSubtitle": "Řekněte pár slov a sledujte, jak se zobrazují v reálném čase",
     "deviceOnboardingGoodJob": "Skvělá práce!",
@@ -3060,5 +3060,8 @@
     "deviceOnboardingSingleTapHint": "To bylo jen jedno klepnutí – zkuste klepnout dvakrát rychle za sebou!",
     "deviceOnboardingTryDoubleTap": "Vyzkoušejte to! Dvakrát klepněte na své Omi",
     "deviceOnboardingContinue": "Pokračovat",
-    "deviceOnboardingFinish": "Dokončit"
+    "deviceOnboardingFinish": "Dokončit",
+    "deviceOnboardingIntroTitle": "Poznejte svůj Omi",
+    "deviceOnboardingIntroSubtitle": "Rychlá praktická prohlídka všeho, co váš Omi umí.",
+    "deviceOnboardingIntroDuration": "Přibližně 1 minuta"
 }

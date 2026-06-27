@@ -9390,7 +9390,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get transcribeLaterPaused => 'Wstrzymano — dźwięk nie jest nagrywany';
 
   @override
-  String get deviceTutorial => 'Samouczek urządzenia';
+  String get deviceTutorial => 'Jak korzystać z Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Mów do Omi';
@@ -9476,4 +9476,13 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Zakończ';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Poznaj swoje Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Szybki, praktyczny przegląd wszystkiego, co potrafi Twoje Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Około 1 minuty';
 }

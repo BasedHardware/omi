@@ -10641,7 +10641,7 @@
     "captureModeLiveDescription": "I-transcribe nang real time habang nagsasalita ka.",
     "captureModeLaterDescription": "I-save ang audio ngayon at i-transcribe kahit kailan mo gusto.",
     "backgroundModeUnavailable": "Hindi available ang Background Mode dahil walang nakakonektang compatible na device. Magkonekta ng Omi, OpenGlass, o Friend Pendant device para magamit ang feature na ito.",
-    "deviceTutorial": "Gabay sa Device",
+    "deviceTutorial": "Paano Gamitin ang Omi",
     "deviceOnboardingTranscriptionTitle": "Magsalita sa Iyong Omi",
     "deviceOnboardingTranscriptionSubtitle": "Magsabi ng ilang salita at panoorin itong lumitaw nang real-time",
     "deviceOnboardingGoodJob": "Magaling!",
@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "Isang tap lang iyon — subukang mag-tap nang dalawang beses nang mabilis!",
     "deviceOnboardingTryDoubleTap": "Subukan mo ngayon! I-double tap ang iyong Omi",
     "deviceOnboardingContinue": "Magpatuloy",
-    "deviceOnboardingFinish": "Tapusin"
+    "deviceOnboardingFinish": "Tapusin",
+    "deviceOnboardingIntroTitle": "Kilalanin ang Iyong Omi",
+    "deviceOnboardingIntroSubtitle": "Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.",
+    "deviceOnboardingIntroDuration": "Mga 1 minuto"
 }

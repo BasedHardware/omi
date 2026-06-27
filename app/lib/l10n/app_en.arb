@@ -11071,9 +11071,9 @@
     "@transcribeLaterPaused": {
         "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
     },
-    "deviceTutorial": "Device Tutorial",
+    "deviceTutorial": "How to Use Your Omi",
     "@deviceTutorial": {
-        "description": "Settings row that launches the interactive device tutorial (shown only when a device is connected)"
+        "description": "Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)"
     },
     "deviceOnboardingTranscriptionTitle": "Speak Into Your Omi",
     "@deviceOnboardingTranscriptionTitle": {
@@ -11186,5 +11186,17 @@
     "deviceOnboardingFinish": "Finish",
     "@deviceOnboardingFinish": {
         "description": "Onboarding tutorial final button label to complete the tutorial"
+    },
+    "deviceOnboardingIntroTitle": "Get to Know Your Omi",
+    "@deviceOnboardingIntroTitle": {
+        "description": "Onboarding intro screen title shown before the device tutorial steps"
+    },
+    "deviceOnboardingIntroSubtitle": "A quick, hands-on tour of everything your Omi can do.",
+    "@deviceOnboardingIntroSubtitle": {
+        "description": "Onboarding intro screen subtitle explaining the tutorial"
+    },
+    "deviceOnboardingIntroDuration": "About 1 minute",
+    "@deviceOnboardingIntroDuration": {
+        "description": "Onboarding intro screen estimated duration hint"
     }
 }

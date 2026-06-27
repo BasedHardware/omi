@@ -17451,10 +17451,10 @@ abstract class AppLocalizations {
   /// **'Paused — audio isn\'t being recorded'**
   String get transcribeLaterPaused;
 
-  /// Settings row that launches the interactive device tutorial (shown only when a device is connected)
+  /// Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)
   ///
   /// In en, this message translates to:
-  /// **'Device Tutorial'**
+  /// **'How to Use Your Omi'**
   String get deviceTutorial;
 
   /// Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo
@@ -17624,6 +17624,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Finish'**
   String get deviceOnboardingFinish;
+
+  /// Onboarding intro screen title shown before the device tutorial steps
+  ///
+  /// In en, this message translates to:
+  /// **'Get to Know Your Omi'**
+  String get deviceOnboardingIntroTitle;
+
+  /// Onboarding intro screen subtitle explaining the tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'A quick, hands-on tour of everything your Omi can do.'**
+  String get deviceOnboardingIntroSubtitle;
+
+  /// Onboarding intro screen estimated duration hint
+  ///
+  /// In en, this message translates to:
+  /// **'About 1 minute'**
+  String get deviceOnboardingIntroDuration;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

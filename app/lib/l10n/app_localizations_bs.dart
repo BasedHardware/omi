@@ -9390,7 +9390,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
 
   @override
-  String get deviceTutorial => 'Vodič za uređaj';
+  String get deviceTutorial => 'Kako koristiti Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Govori u svoj Omi';
@@ -9477,4 +9477,13 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Završi';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Upoznajte svoj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Brz, praktičan obilazak svega što vaš Omi može.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Oko 1 minute';
 }

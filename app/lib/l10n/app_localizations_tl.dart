@@ -9450,7 +9450,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
 
   @override
-  String get deviceTutorial => 'Gabay sa Device';
+  String get deviceTutorial => 'Paano Gamitin ang Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Magsalita sa Iyong Omi';
@@ -9538,4 +9538,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Tapusin';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kilalanin ang Iyong Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Mga 1 minuto';
 }

@@ -9405,7 +9405,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
 
   @override
-  String get deviceTutorial => 'Eszközoktató';
+  String get deviceTutorial => 'Az Omi használata';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Beszélj az Omihoz';
@@ -9491,4 +9491,13 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Befejezés';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Ismerd meg az Omidat';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
 }

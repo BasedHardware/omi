@@ -3030,7 +3030,7 @@
     "captureModeLiveDescription": "تفريغ نصي فوري أثناء حديثك.",
     "captureModeLaterDescription": "احفظ الصوت الآن وفرّغه نصيًا متى شئت.",
     "backgroundModeUnavailable": "وضع الخلفية غير متاح لأنه لا يوجد جهاز متوافق متصل. وصّل جهاز Omi أو OpenGlass أو Friend Pendant لاستخدام هذه الميزة.",
-    "deviceTutorial": "دليل الجهاز",
+    "deviceTutorial": "كيفية استخدام Omi",
     "deviceOnboardingTranscriptionTitle": "تحدّث إلى Omi",
     "deviceOnboardingTranscriptionSubtitle": "قل بضع كلمات وشاهدها تظهر في الوقت الفعلي",
     "deviceOnboardingGoodJob": "أحسنت!",
@@ -3058,5 +3058,8 @@
     "deviceOnboardingSingleTapHint": "كانت تلك نقرة واحدة — جرّب النقر مرتين بسرعة!",
     "deviceOnboardingTryDoubleTap": "جرّبه الآن! انقر على Omi نقراً مزدوجاً",
     "deviceOnboardingContinue": "متابعة",
-    "deviceOnboardingFinish": "إنهاء"
+    "deviceOnboardingFinish": "إنهاء",
+    "deviceOnboardingIntroTitle": "تعرّف على Omi",
+    "deviceOnboardingIntroSubtitle": "جولة سريعة وعملية على كل ما يمكن أن يفعله جهاز Omi.",
+    "deviceOnboardingIntroDuration": "حوالي دقيقة واحدة"
 }

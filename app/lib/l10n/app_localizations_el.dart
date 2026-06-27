@@ -9431,7 +9431,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcribeLaterPaused => 'Σε παύση — δεν γίνεται εγγραφή ήχου';
 
   @override
-  String get deviceTutorial => 'Οδηγός Συσκευής';
+  String get deviceTutorial => 'Πώς να χρησιμοποιήσετε το Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Μιλήστε στο Omi σας';
@@ -9518,4 +9518,13 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Τέλος';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Γνωρίστε το Omi σας';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Μια γρήγορη, πρακτική περιήγηση σε όλα όσα μπορεί να κάνει το Omi σας.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Περίπου 1 λεπτό';
 }

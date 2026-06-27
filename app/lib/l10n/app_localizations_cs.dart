@@ -9365,7 +9365,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcribeLaterPaused => 'Pozastaveno — zvuk se nenahrává';
 
   @override
-  String get deviceTutorial => 'Návod k zařízení';
+  String get deviceTutorial => 'Jak používat Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Mluvte do svého Omi';
@@ -9451,4 +9451,13 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Dokončit';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Poznejte svůj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Rychlá praktická prohlídka všeho, co váš Omi umí.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Přibližně 1 minuta';
 }

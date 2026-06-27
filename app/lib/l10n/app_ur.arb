@@ -10641,7 +10641,7 @@
     "captureModeLiveDescription": "بولتے وقت حقیقی وقت میں ٹرانسکرائب کریں۔",
     "captureModeLaterDescription": "ابھی آڈیو محفوظ کریں اور جب چاہیں ٹرانسکرائب کریں۔",
     "backgroundModeUnavailable": "پس منظر موڈ دستیاب نہیں ہے کیونکہ کوئی مطابقت رکھنے والا آلہ منسلک نہیں ہے۔ اس خصوصیت کو استعمال کرنے کے لیے Omi، OpenGlass یا Friend Pendant ڈیوائس منسلک کریں۔",
-    "deviceTutorial": "ڈیوائس ٹیوٹوریل",
+    "deviceTutorial": "Omi کیسے استعمال کریں",
     "deviceOnboardingTranscriptionTitle": "اپنے Omi سے بولیں",
     "deviceOnboardingTranscriptionSubtitle": "چند الفاظ کہیں اور انہیں فوری طور پر نمودار ہوتے دیکھیں",
     "deviceOnboardingGoodJob": "شاباش!",
@@ -10669,5 +10669,8 @@
     "deviceOnboardingSingleTapHint": "یہ سنگل ٹیپ تھا — جلدی سے دو بار ٹیپ کرنے کی کوشش کریں!",
     "deviceOnboardingTryDoubleTap": "ابھی آزمائیں! اپنے Omi کو ڈبل ٹیپ کریں",
     "deviceOnboardingContinue": "جاری رکھیں",
-    "deviceOnboardingFinish": "مکمل کریں"
+    "deviceOnboardingFinish": "مکمل کریں",
+    "deviceOnboardingIntroTitle": "اپنے Omi کو جانیں",
+    "deviceOnboardingIntroSubtitle": "آپ کا Omi جو کچھ کر سکتا ہے اس کا ایک تیز اور عملی جائزہ۔",
+    "deviceOnboardingIntroDuration": "تقریباً 1 منٹ"
 }

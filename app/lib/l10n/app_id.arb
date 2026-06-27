@@ -3105,7 +3105,7 @@
     "captureModeLiveDescription": "Transkripsikan secara langsung saat Anda berbicara.",
     "captureModeLaterDescription": "Simpan audio sekarang dan transkripsikan kapan saja.",
     "backgroundModeUnavailable": "Mode Latar Belakang tidak tersedia karena tidak ada perangkat kompatibel yang terhubung. Hubungkan perangkat Omi, OpenGlass, atau Friend Pendant untuk menggunakan fitur ini.",
-    "deviceTutorial": "Tutorial Perangkat",
+    "deviceTutorial": "Cara Menggunakan Omi",
     "deviceOnboardingTranscriptionTitle": "Bicara ke Omi Anda",
     "deviceOnboardingTranscriptionSubtitle": "Ucapkan beberapa kata dan lihat kata-katanya muncul secara langsung",
     "deviceOnboardingGoodJob": "Bagus sekali!",
@@ -3133,5 +3133,8 @@
     "deviceOnboardingSingleTapHint": "Itu hanya satu ketukan — coba ketuk dua kali dengan cepat!",
     "deviceOnboardingTryDoubleTap": "Coba sekarang! Ketuk Omi Anda dua kali",
     "deviceOnboardingContinue": "Lanjutkan",
-    "deviceOnboardingFinish": "Selesai"
+    "deviceOnboardingFinish": "Selesai",
+    "deviceOnboardingIntroTitle": "Kenali Omi Anda",
+    "deviceOnboardingIntroSubtitle": "Tur singkat dan praktis tentang semua yang bisa dilakukan Omi Anda.",
+    "deviceOnboardingIntroDuration": "Sekitar 1 menit"
 }

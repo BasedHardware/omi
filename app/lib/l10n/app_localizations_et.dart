@@ -9362,7 +9362,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
 
   @override
-  String get deviceTutorial => 'Seadme õpetus';
+  String get deviceTutorial => 'Kuidas Omi\'t kasutada';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Räägi oma Omisse';
@@ -9448,4 +9448,13 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Lõpeta';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutvu oma Omiga';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Kiire ja praktiline ülevaade kõigest, mida sinu Omi suudab.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Umbes 1 minut';
 }

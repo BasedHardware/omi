@@ -3063,7 +3063,7 @@
     "captureModeLiveDescription": "Μεταγραφή σε πραγματικό χρόνο καθώς μιλάτε.",
     "captureModeLaterDescription": "Αποθηκεύστε τον ήχο τώρα και μεταγράψτε τον όποτε θέλετε.",
     "backgroundModeUnavailable": "Η λειτουργία παρασκηνίου δεν είναι διαθέσιμη επειδή δεν είναι συνδεδεμένη κάποια συμβατή συσκευή. Συνδέστε μια συσκευή Omi, OpenGlass ή Friend Pendant για να χρησιμοποιήσετε αυτήν τη λειτουργία.",
-    "deviceTutorial": "Οδηγός Συσκευής",
+    "deviceTutorial": "Πώς να χρησιμοποιήσετε το Omi",
     "deviceOnboardingTranscriptionTitle": "Μιλήστε στο Omi σας",
     "deviceOnboardingTranscriptionSubtitle": "Πείτε λίγες λέξεις και δείτε τες να εμφανίζονται σε πραγματικό χρόνο",
     "deviceOnboardingGoodJob": "Μπράβο!",
@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "Αυτό ήταν μονό πάτημα — δοκιμάστε να πατήσετε δύο φορές γρήγορα!",
     "deviceOnboardingTryDoubleTap": "Δοκιμάστε το τώρα! Πατήστε δύο φορές το Omi σας",
     "deviceOnboardingContinue": "Συνέχεια",
-    "deviceOnboardingFinish": "Τέλος"
+    "deviceOnboardingFinish": "Τέλος",
+    "deviceOnboardingIntroTitle": "Γνωρίστε το Omi σας",
+    "deviceOnboardingIntroSubtitle": "Μια γρήγορη, πρακτική περιήγηση σε όλα όσα μπορεί να κάνει το Omi σας.",
+    "deviceOnboardingIntroDuration": "Περίπου 1 λεπτό"
 }

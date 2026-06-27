@@ -3098,7 +3098,7 @@
     "captureModeLiveDescription": "Расшифровка в реальном времени, пока вы говорите.",
     "captureModeLaterDescription": "Сохраните аудио сейчас и расшифруйте, когда захотите.",
     "backgroundModeUnavailable": "Фоновый режим недоступен, потому что не подключено совместимое устройство. Подключите устройство Omi, OpenGlass или Friend Pendant, чтобы использовать эту функцию.",
-    "deviceTutorial": "Обучение работе с устройством",
+    "deviceTutorial": "Как пользоваться Omi",
     "deviceOnboardingTranscriptionTitle": "Говорите в Omi",
     "deviceOnboardingTranscriptionSubtitle": "Скажите несколько слов и смотрите, как они появляются в реальном времени",
     "deviceOnboardingGoodJob": "Отлично!",
@@ -3126,5 +3126,8 @@
     "deviceOnboardingSingleTapHint": "Это было одиночное касание — попробуйте коснуться дважды подряд!",
     "deviceOnboardingTryDoubleTap": "Попробуйте! Дважды коснитесь Omi",
     "deviceOnboardingContinue": "Продолжить",
-    "deviceOnboardingFinish": "Готово"
+    "deviceOnboardingFinish": "Готово",
+    "deviceOnboardingIntroTitle": "Знакомство с Omi",
+    "deviceOnboardingIntroSubtitle": "Быстрый практический обзор всего, что умеет ваш Omi.",
+    "deviceOnboardingIntroDuration": "Около 1 минуты"
 }

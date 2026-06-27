@@ -3063,7 +3063,7 @@
     "captureModeLiveDescription": "Transkriber i sanntid mens du snakker.",
     "captureModeLaterDescription": "Lagre lyden nå og transkriber når du vil.",
     "backgroundModeUnavailable": "Bakgrunnsmodus er ikke tilgjengelig fordi ingen kompatibel enhet er tilkoblet. Koble til en Omi-, OpenGlass- eller Friend Pendant-enhet for å bruke denne funksjonen.",
-    "deviceTutorial": "Enhetsveiledning",
+    "deviceTutorial": "Slik bruker du Omi",
     "deviceOnboardingTranscriptionTitle": "Snakk til Omi",
     "deviceOnboardingTranscriptionSubtitle": "Si noen ord og se dem dukke opp i sanntid",
     "deviceOnboardingGoodJob": "Bra jobbet!",
@@ -3091,5 +3091,8 @@
     "deviceOnboardingSingleTapHint": "Det var ett enkelt trykk – prøv å trykke to ganger raskt!",
     "deviceOnboardingTryDoubleTap": "Prøv nå! Dobbelttrykk på Omi",
     "deviceOnboardingContinue": "Fortsett",
-    "deviceOnboardingFinish": "Fullfør"
+    "deviceOnboardingFinish": "Fullfør",
+    "deviceOnboardingIntroTitle": "Bli kjent med din Omi",
+    "deviceOnboardingIntroSubtitle": "En rask, praktisk omvisning i alt din Omi kan.",
+    "deviceOnboardingIntroDuration": "Cirka 1 minutt"
 }
