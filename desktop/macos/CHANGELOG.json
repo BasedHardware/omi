@@ -5,7 +5,8 @@
     "Fixed WhatsApp linking showing a store-lock error when the account was already connected",
     "Fixed WhatsApp reconnecting events incorrectly showing reconnect required while sync was still running",
     "Improved WhatsApp reply drafts by including the last few synced thread messages as context",
-    "Added opt-in WhatsApp brain sync, automatic tone learning, contact names, and calendar-aware reply drafting"
+    "Added opt-in WhatsApp brain sync, automatic tone learning, contact names, and calendar-aware reply drafting",
+    "Added a Messages page with a WhatsApp-style chat and draft inbox, opened from the new Messages tile on the dashboard; moved WhatsApp settings into the Messages page"
   ],
   "releases": [
     {
