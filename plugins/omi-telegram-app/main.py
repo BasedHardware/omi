@@ -280,6 +280,7 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
             api_key=user["omi_dev_api_key"],
             omi_base=OMI_BASE_URL,
             text=text,
+            uid=user["omi_uid"],
         )
     except httpx.HTTPError as e:
         logger.error("persona chat HTTP error for chat %s: %s", chat_id, e)

@@ -931,6 +931,31 @@ def verify_api_key(app_id: str, api_key: str) -> bool:
     return stored_key is not None
 
 
+def verify_api_key_for_uid(app_id: str, uid: str, api_key: str) -> bool:
+    """Verify an API key was issued for the given uid.
+
+    Stricter than verify_api_key: in addition to checking the key exists for
+    the app, this confirms the key was issued by that specific uid. Used by
+    endpoints where the caller impersonates the user (e.g. persona-chat) so
+    a developer holding a valid app-level key can't act on behalf of any
+    enabled user — only the user they actually own the key for.
+
+    Returns False if the key doesn't exist, or if the key was issued for a
+    different uid (legacy keys without a uid field are also rejected —
+    sensitive endpoints should require the new key shape).
+    """
+    if api_key.startswith("sk_"):
+        api_key = api_key[3:]
+    hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
+    stored_key = get_api_key_by_hash_db(app_id, hashed_key)
+    if not stored_key:
+        return False
+    # Legacy keys (created before this function existed) don't have a uid
+    # field. Reject them for sensitive endpoints — they should be regenerated.
+    key_uid = stored_key.get("uid")
+    return key_uid == uid
+
+
 def app_has_action(app: dict, action_name: str) -> bool:
     """Check if an app has a specific action capability."""
     if not app or not isinstance(app, dict):

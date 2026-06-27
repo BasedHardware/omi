@@ -33,6 +33,7 @@ async def chat(
     omi_base: str,
     text: str,
     *,
+    uid: str,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     context: Optional[dict] = None,
 ) -> str:
@@ -43,6 +44,10 @@ async def chat(
         api_key: The user's app API key (`omi_dev_...`). Sent as `Authorization: Bearer`.
         omi_base: Backend base URL (e.g. "https://api.omi.me").
         text: Inbound message text from the chat platform.
+        uid: The Omi user id the persona reply is generated for. REQUIRED —
+            the backend route enforces that the API key was issued for this
+            exact uid (auth boundary; an app-level key cannot impersonate
+            arbitrary users).
         timeout_seconds: Total request timeout. On timeout the function returns "".
         context: Optional platform context (sender name, chat title, etc.).
             Forwarded to the persona prompt but not used for retrieval.
@@ -67,7 +72,10 @@ async def chat(
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(url, headers=headers, json=body)
+            # uid is sent as a query parameter because the backend uses it for
+            # both route lookup (FastAPI extracts it from the URL) and the
+            # tight auth check (api_key must be issued for this exact uid).
+            response = await client.post(url, headers=headers, params={"uid": uid}, json=body)
             response.raise_for_status()
             chunks: list[str] = []
             async for event in EventSource(response).aiter_sse():
@@ -79,16 +87,18 @@ async def chat(
             return _join_chunks(chunks)
     except httpx.TimeoutException as e:
         logger.error(
-            "persona chat timed out after %.1fs (app_id=%s)",
+            "persona chat timed out after %.1fs (app_id=%s, uid=%s)",
             timeout_seconds,
             app_id,
+            uid,
             extra={"err": str(e)},
         )
         return ""
     except httpx.ConnectError as e:
         logger.error(
-            "persona chat connection failed (app_id=%s): %s",
+            "persona chat connection failed (app_id=%s, uid=%s): %s",
             app_id,
+            uid,
             e,
         )
         return ""
