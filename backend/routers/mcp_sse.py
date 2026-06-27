@@ -803,15 +803,19 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
         fetch_limit = min(limit * 3, 60)
 
-        if memory_system == MemorySystem.CANONICAL:
-            memory_service = MemoryService(db_client=db)
-            return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
-
+        # Fail closed: authorize the memory read scope before any system branch.
+        # The REST search route checks this first; the SSE path must match so a
+        # legacy MCP key without a persisted memories.read grant cannot search
+        # canonical memories.
         if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory memory authorization", code=-32009)
         app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
             raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+
+        if memory_system == MemorySystem.CANONICAL:
+            memory_service = MemoryService(db_client=db)
+            return {"memories": memory_service.search_mcp(user_id, query, limit=limit)}
 
         memory_rollout = read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')
         vector_search_results = search_default_mcp_memories_vector(

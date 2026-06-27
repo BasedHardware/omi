@@ -37,6 +37,10 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var inputDeviceName: String?
     var headline: String?
 
+    // Capture-device provenance (preserved through SQLite cache round-trip)
+    var primaryCaptureDevice: String?
+    var captureDeviceIdsJson: String?
+
     // Status flags
     var isRead: Bool
     var isDismissed: Bool
@@ -75,6 +79,8 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         currentActivity: String? = nil,
         inputDeviceName: String? = nil,
         headline: String? = nil,
+        primaryCaptureDevice: String? = nil,
+        captureDeviceIdsJson: String? = nil,
         isRead: Bool = false,
         isDismissed: Bool = false,
         deleted: Bool = false,
@@ -105,6 +111,8 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
         self.currentActivity = currentActivity
         self.inputDeviceName = inputDeviceName
         self.headline = headline
+        self.primaryCaptureDevice = primaryCaptureDevice
+        self.captureDeviceIdsJson = captureDeviceIdsJson
         self.isRead = isRead
         self.isDismissed = isDismissed
         self.deleted = deleted
@@ -127,6 +135,24 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
               let array = try? JSONDecoder().decode([String].self, from: data)
         else { return [] }
         return array
+    }
+
+    /// Get capture device IDs as array (decoded from JSON column)
+    var captureDeviceIds: [String] {
+        guard let json = captureDeviceIdsJson,
+              let data = json.data(using: .utf8),
+              let array = try? JSONDecoder().decode([String].self, from: data)
+        else { return [] }
+        return array
+    }
+
+    /// Encode capture device IDs array to JSON string for persistence (nil if empty)
+    private static func encodeCaptureDeviceIds(_ ids: [String]) -> String? {
+        guard !ids.isEmpty,
+              let data = try? JSONEncoder().encode(ids),
+              let json = String(data: data, encoding: .utf8)
+        else { return nil }
+        return json
     }
 
     /// Set tags from array
@@ -206,6 +232,8 @@ extension MemoryRecord {
             currentActivity: memory.currentActivity,
             inputDeviceName: memory.inputDeviceName,
             headline: memory.headline,
+            primaryCaptureDevice: memory.primaryCaptureDevice,
+            captureDeviceIdsJson: encodeCaptureDeviceIds(memory.captureDeviceIds),
             isRead: memory.isRead,
             isDismissed: memory.isDismissed,
             deleted: false,
@@ -267,6 +295,10 @@ extension MemoryRecord {
         if let headline = memory.headline {
             self.headline = headline
         }
+
+        // Preserve capture-device provenance through cache sync/reload
+        self.primaryCaptureDevice = memory.primaryCaptureDevice
+        self.captureDeviceIdsJson = Self.encodeCaptureDeviceIds(memory.captureDeviceIds)
 
         // Update status
         self.isRead = memory.isRead
@@ -333,8 +365,8 @@ extension MemoryRecord {
             inputDeviceName: inputDeviceName,
             windowTitle: windowTitle,
             headline: headline,
-            primaryCaptureDevice: nil,
-            captureDeviceIds: []
+            primaryCaptureDevice: primaryCaptureDevice,
+            captureDeviceIds: captureDeviceIds
         )
     }
 }

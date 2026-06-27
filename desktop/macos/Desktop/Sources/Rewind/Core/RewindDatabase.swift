@@ -2287,6 +2287,13 @@ actor RewindDatabase {
             }
         }
 
+        migrator.registerMigration("addCaptureDeviceProvenance") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "primaryCaptureDevice", .text)
+                t.add(column: "captureDeviceIdsJson", .text)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

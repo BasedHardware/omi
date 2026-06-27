@@ -1378,7 +1378,7 @@ struct MemoriesPage: View {
           fill: viewModel.selectedLayerFilter == .defaultAccess
             ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
           radius: 18,
-          stroke: viewModel.selectedLayerFilter == .defaultAccess ? nil : OmiColors.purplePrimary.opacity(0.28)
+          stroke: viewModel.selectedLayerFilter == .defaultAccess ? nil : OmiColors.border.opacity(0.6)
         )
       }
       .menuStyle(.button)
@@ -1404,7 +1404,7 @@ struct MemoriesPage: View {
           fill: viewModel.filterThisDeviceOnly
             ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary,
           radius: 18,
-          stroke: viewModel.filterThisDeviceOnly ? OmiColors.purplePrimary.opacity(0.28) : nil
+          stroke: viewModel.filterThisDeviceOnly ? OmiColors.border.opacity(0.6) : nil
         )
       }
       .buttonStyle(.plain)
@@ -1434,7 +1434,7 @@ struct MemoriesPage: View {
           fill: viewModel.selectedTags.isEmpty
             ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
           radius: 18,
-          stroke: viewModel.selectedTags.isEmpty ? nil : OmiColors.purplePrimary.opacity(0.28)
+          stroke: viewModel.selectedTags.isEmpty ? nil : OmiColors.border.opacity(0.6)
         )
       }
       .buttonStyle(.plain)
