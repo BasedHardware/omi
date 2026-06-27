@@ -260,6 +260,13 @@ def _materialize_memory_item(
     )
 
 
+def _resolved_update_content(existing: MemoryItem, patch: DurableMemoryPatch) -> str:
+    """Preserve existing content when patch omits or blanks memory_text."""
+    if patch.memory_text is not None and patch.memory_text.strip():
+        return patch.memory_text
+    return existing.content
+
+
 def _apply_update_memory_item(
     *,
     existing: MemoryItem,
@@ -275,7 +282,7 @@ def _apply_update_memory_item(
         tier = patch.target_tier if isinstance(patch.target_tier, MemoryTier) else MemoryTier(patch.target_tier)
     else:
         tier = existing.tier
-    content = patch.memory_text if patch.memory_text is not None else existing.content
+    content = _resolved_update_content(existing, patch)
     status = existing.status
     if patch.result_status in {LifecycleState.hidden, LifecycleState.rejected}:
         status = MemoryItemStatus.hidden
