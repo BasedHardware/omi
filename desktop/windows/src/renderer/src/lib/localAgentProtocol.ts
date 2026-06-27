@@ -113,14 +113,13 @@ export function formatContextBlock(sections: ContextSection[]): string {
 export function raceWithBudget<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
   return new Promise<T>((resolve) => {
     let settled = false
-    let timer: ReturnType<typeof setTimeout>
     const done = (v: T): void => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       resolve(v)
     }
-    timer = setTimeout(() => done(fallback), ms)
+    const timer = setTimeout(() => done(fallback), ms)
     void p.then(
       (v) => done(v),
       () => done(fallback)

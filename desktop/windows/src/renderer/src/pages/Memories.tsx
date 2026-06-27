@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Brain, Plus, Loader2, CheckSquare, Trash2, X } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
@@ -31,7 +31,13 @@ export function Memories(): React.JSX.Element {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
-  const stopRef = useState({ stop: false })[0]
+  const stopRef = useRef({ stop: false })
+
+  useEffect(() => {
+    return () => {
+      stopRef.current.stop = true
+    }
+  }, [])
 
   const closeCompose = (): void => {
     setComposing(false)
@@ -99,7 +105,7 @@ export function Memories(): React.JSX.Element {
     )
       return
     setDeleting(true)
-    stopRef.stop = false
+    stopRef.current.stop = false
     setTally({ deleted: 0, failed: 0 })
     const res = await deleteMemoriesPaced(
       ids,
@@ -114,7 +120,7 @@ export function Memories(): React.JSX.Element {
           })
         }
       },
-      () => stopRef.stop
+      () => stopRef.current.stop
     )
     setDeleting(false)
     toast(`Deleted ${res.deleted} of ${ids.length}`, {
@@ -181,7 +187,7 @@ export function Memories(): React.JSX.Element {
                 <span className="text-sm text-text-tertiary">
                   Deleting {tally.deleted}/{selected.size + tally.deleted}…
                 </span>
-                <button onClick={() => (stopRef.stop = true)} className="btn-ghost px-3 py-1.5 text-sm">
+                <button onClick={() => (stopRef.current.stop = true)} className="btn-ghost px-3 py-1.5 text-sm">
                   Stop
                 </button>
               </>
@@ -257,16 +263,17 @@ export function Memories(): React.JSX.Element {
             return (
               <li
                 key={m.id}
-                onClick={manage ? () => toggle(m.id) : undefined}
-                className={`surface-card-interactive p-5 ${manage ? 'cursor-pointer' : ''} ${
-                  isSel ? 'ring-2 ring-white/40' : ''
-                }`}
+                onClick={manage && !deleting ? () => toggle(m.id) : undefined}
+                className={`surface-card-interactive p-5 ${
+                  deleting ? 'pointer-events-none' : manage ? 'cursor-pointer' : ''
+                } ${isSel ? 'ring-2 ring-white/40' : ''}`}
               >
                 <div className="flex items-start gap-3">
                   {manage && (
                     <input
                       type="checkbox"
                       checked={isSel}
+                      disabled={deleting}
                       onChange={() => toggle(m.id)}
                       onClick={(e) => e.stopPropagation()}
                       className="mt-1.5 h-4 w-4 shrink-0"

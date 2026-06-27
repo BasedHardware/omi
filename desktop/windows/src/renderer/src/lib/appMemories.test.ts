@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { fromPartial } from '@total-typescript/shoehorn'
 import { appMemoryIdsToDelete, APP_MEMORY_TAG } from './appMemories'
 import type { Memory } from '../hooks/useMemories'
 
@@ -10,7 +11,7 @@ vi.mock('./apiClient', () => ({
 }))
 
 function mem(id: string, tags?: string[]): Memory {
-  return { id, uid: 'u', content: 'Uses Whatever', tags, created_at: '', updated_at: '' } as Memory
+  return fromPartial({ id, uid: 'u', content: 'Uses Whatever', tags, created_at: '', updated_at: '' })
 }
 
 describe('appMemoryIdsToDelete', () => {

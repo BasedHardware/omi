@@ -1,10 +1,11 @@
 // src/renderer/src/lib/insightActivity.test.ts
 import { describe, it, expect } from 'vitest'
+import { fromPartial } from '@total-typescript/shoehorn'
 import { summarizeActivity } from './insightActivity'
 import type { RewindFrame } from '../../../shared/types'
 
 const f = (app: string, windowTitle: string, ocrText: string): RewindFrame =>
-  ({ id: 0, ts: 0, app, windowTitle, processName: app.toLowerCase(), ocrText, imagePath: '', width: 0, height: 0, indexed: 1 }) as RewindFrame
+  fromPartial({ app, windowTitle, ocrText })
 
 describe('summarizeActivity', () => {
   it('groups by app/window, dedupes identical OCR, and budgets length', () => {
