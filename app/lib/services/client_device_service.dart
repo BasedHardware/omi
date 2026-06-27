@@ -33,7 +33,11 @@ class ClientDeviceService {
       return null;
     }
     if (primaryCaptureDevice == clientDeviceId) {
-      return Platform.isIOS ? 'This iPhone' : Platform.isAndroid ? 'This phone' : 'This device';
+      return Platform.isIOS
+          ? 'This iPhone'
+          : Platform.isAndroid
+          ? 'This phone'
+          : 'This device';
     }
     final platformPrefix = primaryCaptureDevice.split('_').first;
     switch (platformPrefix) {
