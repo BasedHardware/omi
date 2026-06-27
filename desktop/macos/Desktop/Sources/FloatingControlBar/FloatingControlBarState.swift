@@ -265,15 +265,21 @@ class FloatingControlBarState: NSObject, ObservableObject {
         }
     }
 
-    func clearVisibleConversation() {
-        // Cancel in-flight chat streaming and PTT capture before resetting UI
-        // flags. clearVisibleConversation() is called from multiple reset
-        // paths (showAIConversation restore, notification presentation, and
-        // closeAIConversation when not restoring). Without cancellation the
-        // streaming sink keeps writing to a surface nobody sees, and an active
-        // PTT capture keeps consuming the microphone. (Cubic P2.)
-        FloatingControlBarManager.shared.cancelChat()
-        PushToTalkManager.shared.cancelListening()
+    func clearVisibleConversation(cancelInFlightWork: Bool = true) {
+        // When cancelInFlightWork is true (default), cancel in-flight chat
+        // streaming and PTT capture before resetting UI flags. This is needed
+        // from close/restore/notification paths where stale streams and mic
+        // capture should be stopped. (Cubic P2.)
+        //
+        // Callers that only need a UI reset (e.g. openAIInputWithQuery, which
+        // already cancelled its own subscriptions and is about to route a new
+        // typed query) pass cancelInFlightWork: false to avoid killing a
+        // provider session that the new query depends on. (Cubic P2 — semantic
+        // mismatch between method name and hard-cancellation side effects.)
+        if cancelInFlightWork {
+            FloatingControlBarManager.shared.cancelChat()
+            PushToTalkManager.shared.cancelListening()
+        }
         activeAgentChatPillID = nil
         conversationSurface = .closed
         responseContentHeights = [:]

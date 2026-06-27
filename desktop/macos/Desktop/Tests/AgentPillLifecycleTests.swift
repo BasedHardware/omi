@@ -460,6 +460,35 @@ final class AgentPillLifecycleTests: XCTestCase {
     }
   }
 
+  func testFloatingAgentHandoffHonorsExplicitNegation() throws {
+    // Explicit no-agent requests that contain an agent noun + action verb must
+    // not be treated as spawn requests. (Codex P2 — honor explicit no-agent
+    // requests.)
+    let negationRequests = [
+      "Don't run an agent, just answer here",
+      "Do not spawn a subagent for this",
+      "Without launching a background agent, summarize this",
+      "No agent please, just answer inline",
+      "Not creating a pill, just respond normally",
+    ]
+    for request in negationRequests {
+      XCTAssertNil(
+        AgentPillsManager.floatingAgentHandoff(for: request),
+        "Expected nil handoff for negated request: \(request)")
+    }
+
+    // Genuine affirmative requests must still produce a handoff.
+    let genuineRequests = [
+      "Spawn a background agent to summarize my notes",
+      "Start a subagent that tracks my calendar",
+    ]
+    for request in genuineRequests {
+      XCTAssertNotNil(
+        AgentPillsManager.floatingAgentHandoff(for: request),
+        "Expected non-nil handoff for genuine request: \(request)")
+    }
+  }
+
   func testFloatingPillDoesNotTreatMissingTerminalProjectionAsSuccess() throws {
     let source = try agentPillSource()
 
