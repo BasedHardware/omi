@@ -85,6 +85,45 @@ def create_review_conflict(
     return item
 
 
+def purge_stale_review_conflicts_for_memories(
+    uid: str,
+    memory_ids: List[str],
+    *,
+    reason: str = "source_memory_deleted",
+) -> List[str]:
+    """Drop pending review items that reference tombstoned/superseded/deleted memories."""
+    target_ids = {memory_id for memory_id in memory_ids if memory_id}
+    if not target_ids:
+        return []
+
+    now = datetime.now(timezone.utc)
+    purged: List[str] = []
+    queue_ref = db.collection(users_collection).document(uid).collection(review_queue_collection)
+    for doc in queue_ref.stream():
+        item = doc.to_dict() or {}
+        if item.get('status') not in ('pending', 'pending_review'):
+            continue
+        fact_id = item.get('fact_id')
+        conflict_with = item.get('conflict_with') or []
+        candidate_id = (item.get('candidate') or {}).get('id')
+        referenced = {fact_id, candidate_id, *conflict_with}
+        referenced.discard(None)
+        if not referenced & target_ids:
+            continue
+        review_id = item.get('review_id') or doc.id
+        doc.reference.update(
+            {
+                'status': 'dropped',
+                'decision': 'drop',
+                'reason': reason,
+                'resolved_at': now,
+                'updated_at': now,
+            }
+        )
+        purged.append(review_id)
+    return purged
+
+
 def list_review_conflicts(uid: str, status: str = 'pending', limit: int = 100) -> List[Dict[str, Any]]:
     queue_ref = db.collection(users_collection).document(uid).collection(review_queue_collection)
     items = []
