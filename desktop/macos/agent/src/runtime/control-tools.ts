@@ -5,6 +5,7 @@ import { agentControlCapabilityManifest, agentControlInputSchema } from "./contr
 import type { McpServerBuildContext } from "./compatibility-facade.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
+const agentSurfaceKindSchema = z.enum(["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
@@ -13,7 +14,7 @@ const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
 const listAgentSessionsSchema = z.object({
   ownerId: z.string().min(1).optional(),
   status: sessionStatusSchema.optional(),
-  surfaceKind: z.string().min(1).optional(),
+  surfaceKind: agentSurfaceKindSchema.optional(),
   limit: z.coerce.number().int().positive().max(200).default(50),
   beforeUpdatedAtMs: z.coerce.number().int().positive().optional(),
 });
@@ -32,6 +33,7 @@ const cancelAgentRunSchema = z.object({
 
 const inspectAgentArtifactsSchema = z
   .object({
+    artifactId: z.string().min(1).optional(),
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
     attemptId: z.string().min(1).optional(),
@@ -39,8 +41,8 @@ const inspectAgentArtifactsSchema = z
     role: artifactRoleSchema.optional(),
     limit: z.coerce.number().int().positive().max(200).default(50),
   })
-  .refine((value) => value.sessionId || value.runId || value.attemptId, {
-    message: "Provide sessionId, runId, or attemptId",
+  .refine((value) => value.artifactId || value.sessionId || value.runId || value.attemptId, {
+    message: "Provide artifactId, sessionId, runId, or attemptId",
   });
 
 const updateAgentArtifactLifecycleSchema = z.object({
@@ -163,6 +165,13 @@ export interface ControlRequestContextInput extends ControlRequestKeyInput {
   requireOwnerGuard?: boolean;
 }
 
+export interface SignedDirectControlOwnerInput {
+  requestKey?: string;
+  ownerGuard?: string;
+  ownerIdForRequest: (requestKey: string) => string | undefined;
+  registerOwner: (requestKey: string, ownerId: string) => boolean;
+}
+
 export interface ResolvedControlRequestContext {
   requestKey?: string;
   activeOwnerId: string;
@@ -178,6 +187,17 @@ export function controlRequestKey(input: ControlRequestKeyInput): string | undef
 
 export function legacyControlRequestKey(input: ControlRequestKeyInput): string | undefined {
   return input.requestId ? JSON.stringify([input.clientId ?? DEFAULT_LEGACY_JSONL_CLIENT_ID, input.requestId]) : undefined;
+}
+
+export function registerSignedDirectControlOwner(input: SignedDirectControlOwnerInput): boolean {
+  const ownerGuard = input.ownerGuard?.trim();
+  if (!input.requestKey || !ownerGuard || ownerGuard === DEFAULT_LOCAL_OWNER_ID) {
+    return false;
+  }
+  if (input.ownerIdForRequest(input.requestKey)) {
+    return false;
+  }
+  return input.registerOwner(input.requestKey, ownerGuard);
 }
 
 export function resolveControlRequestContext(input: ControlRequestContextInput): ResolvedControlRequestContext {

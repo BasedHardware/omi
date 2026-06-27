@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class FairUsePage extends StatefulWidget {
@@ -28,6 +29,11 @@ class _FairUsePageState extends State<FairUsePage> {
     });
     try {
       final result = await getFairUseStatus();
+      // Reconcile the rate-limit cooldown regardless of whether the widget is
+      // still mounted — this only touches the SyncRateLimiter singleton and
+      // must not be skipped if the user navigates away before the response
+      // returns (otherwise a stale cooldown is never cleared).
+      reconcileSyncRateLimitWithFairUseStatus(result);
       if (mounted) {
         if (result == null) {
           setState(() {

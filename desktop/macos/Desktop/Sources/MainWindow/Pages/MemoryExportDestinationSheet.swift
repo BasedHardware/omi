@@ -46,12 +46,6 @@ struct ExportsSection: View {
           }
         }
       }
-      .background(OmiColors.backgroundPrimary)
-      .cornerRadius(12)
-      .overlay(
-        RoundedRectangle(cornerRadius: 12)
-          .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
-      )
     }
   }
 }

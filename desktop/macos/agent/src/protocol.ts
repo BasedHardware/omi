@@ -58,6 +58,12 @@ export interface ControlToolRequestMessage extends ProtocolEnvelope {
   input: Record<string, unknown>;
 }
 
+export interface DirectControlToolRequestMessage extends ProtocolEnvelope {
+  type: "direct_control_tool";
+  name: string;
+  input: Record<string, unknown>;
+}
+
 export interface StopMessage {
   type: "stop";
 }
@@ -103,6 +109,7 @@ export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
   | ControlToolRequestMessage
+  | DirectControlToolRequestMessage
   | StopMessage
   | InterruptMessage
   | InvalidateSessionMessage

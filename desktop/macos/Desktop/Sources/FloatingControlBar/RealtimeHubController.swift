@@ -50,8 +50,55 @@ enum RealtimeHubCloseClassifier {
   }
 }
 
+/// Keeps the response glow tied to perceived playback instead of raw PCM chunk
+/// boundaries. Realtime providers can leave short gaps between streamed audio
+/// buffers; clearing the glow on every empty queue makes the notch resize and
+/// shimmer restart repeatedly.
+final class RealtimeResponseGlowGate {
+  private let idleClearDelay: TimeInterval
+  private let setActive: (Bool) -> Void
+  private var idleClearWorkItem: DispatchWorkItem?
+  private(set) var isActive = false
+
+  init(idleClearDelay: TimeInterval = 0.75, setActive: @escaping (Bool) -> Void) {
+    self.idleClearDelay = idleClearDelay
+    self.setActive = setActive
+  }
+
+  func markPlaybackActive() {
+    idleClearWorkItem?.cancel()
+    idleClearWorkItem = nil
+    guard !isActive else { return }
+    isActive = true
+    setActive(true)
+  }
+
+  func scheduleIdleClear() {
+    idleClearWorkItem?.cancel()
+    let workItem = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.isActive = false
+      self.setActive(false)
+      self.idleClearWorkItem = nil
+    }
+    idleClearWorkItem = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + idleClearDelay, execute: workItem)
+  }
+
+  func clearImmediately() {
+    idleClearWorkItem?.cancel()
+    idleClearWorkItem = nil
+    guard isActive else {
+      setActive(false)
+      return
+    }
+    isActive = false
+    setActive(false)
+  }
+}
+
 @MainActor
-final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
+final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeechSynthesizerDelegate {
   static let shared = RealtimeHubController()
 
   private weak var barState: FloatingControlBarState?
@@ -59,6 +106,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var sessionProvider: RealtimeHubProvider?
   private var pcmPlayer: StreamingPCMPlayer?
   private let speech = AVSpeechSynthesizer()
+  private lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active in
+    self?.barState?.isVoiceResponseActive = active
+  }
+  private let agentControlService = AgentControlService()
 
   // Per-turn state.
   private var turnTranscript = ""
@@ -66,6 +117,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
   private var audioReceivedThisTurn = false
+  /// Tracks whether local AVSpeechSynthesizer speech is queued or active this
+  /// turn. Set synchronously in speak() to avoid the race where exitVoiceUI
+  /// checks speech.isSpeaking before the synthesizer has started the queued
+  /// utterance (which can clear the response glow mid-utterance). Cleared in
+  /// both didFinish and didCancel delegate callbacks so cancellation paths
+  /// (system interruption, stopSpeaking) always release the glow.
+  private var localSpeechActive = false
   /// `spawn_agent` is a handoff, not a read tool. After the tool result returns,
   /// the realtime model sometimes continues with meta/control text; never speak it.
   private var suppressAssistantOutputForCurrentTurn = false
@@ -94,6 +152,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// True between commit and turn-done — used to detect barge-in (a new PTT while
   /// the previous reply is still in flight).
   private var responding = false
+  /// True while native realtime PCM has been scheduled locally but has not drained yet.
+  /// Provider turn completion means the server finished sending; the Mac may still be
+  /// playing the queued tail, and a new PTT during that tail is still a barge-in.
+  private var realtimePlaybackActive = false
 
   /// Log tag for the currently-connected provider.
   private var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
@@ -112,10 +174,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// spawn creates its own provider; warming this one primes node/auth caches.
   private var warmProvider: ChatProvider?
 
-  private override init() {
-    super.init()
-  }
-
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
 
@@ -123,6 +181,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
   /// nil = on the primary; non-nil = the provider we failed over TO.
   private var fallbackProvider: RealtimeHubProvider?
+
+  private override init() {
+    super.init()
+    speech.delegate = self
+  }
 
   /// The realtime provider to actually connect: the failover pick if we've switched to
   /// it, otherwise the user/Auto-selected one.
@@ -279,7 +342,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
     // AVSpeech is only a no-audio fallback.
     if pcmPlayer == nil {
-      pcmPlayer = StreamingPCMPlayer(sampleRate: 24000)
+      pcmPlayer = makePCMPlayer()
     }
     s.start()
     log(
@@ -297,6 +360,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
   }
 
+  private func makePCMPlayer() -> StreamingPCMPlayer {
+    let player = StreamingPCMPlayer(sampleRate: 24000)
+    player.onPlaybackIdle = { [weak self] in
+      Task { @MainActor in
+        self?.realtimePlaybackActive = false
+        self?.clearResponseGlowIfRealtimeAudioIdle()
+      }
+    }
+    return player
+  }
+
   // MARK: - PTT integration
 
   /// PTT-down: make sure the socket is warm and reset per-turn state. Captures a
@@ -304,8 +378,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   func beginTurn() {
     // Barge-in: was a reply from the previous turn still in flight when the user
     // started talking again?
-    let bargeIn = responding
+    let bargeIn = responding || realtimePlaybackActive || localSpeechActive || speech.isSpeaking
     responding = false
+    realtimePlaybackActive = false
     turnTranscript = ""
     assistantText = ""
     speculativeWarmDone = false
@@ -314,8 +389,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     lastTurnAt = Date()
-    pcmPlayer?.stop()  // stop any prior reply locally
-    if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
+    if bargeIn {
+      pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
+    }
+    // Stop any queued or active local speech BEFORE resetting the flag, so a
+    // barge-in before the synthesizer started playback still cancels the prior
+    // turn's reply. Using localSpeechActive (set synchronously in speak) instead
+    // of speech.isSpeaking, which is false until playback actually starts.
+    if localSpeechActive || speech.isSpeaking {
+      speech.stopSpeaking(at: .immediate)
+      localSpeechActive = false
+    }
+    responseGlowGate.clearImmediately()
     if bargeIn {
       // Interrupt the in-flight reply IN-SESSION (no teardown — the warm socket and
       // its conversation context survive). OpenAI: response.cancel + clear input.
@@ -364,13 +449,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// turn behind, or the model answers the non-speech later.
   func cancelTurn() {
     responding = false
+    realtimePlaybackActive = false
     turnTranscript = ""
     assistantText = ""
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
     // and leave the reply gated off so the model never answers the silence. Keeps the
     // warm session (and its context) so the next real turn is instant and in-context.
     session?.abandonInputTurn()
-    exitVoiceUI()
+    exitVoiceUI(clearResponseGlow: true)
   }
 
   // MARK: - RealtimeHubSessionDelegate
@@ -403,9 +489,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidReceiveAudio(_ pcm24k: Data) {
     guard !suppressAssistantOutputForCurrentTurn else { return }
+    // If PTT muted music/system output while listening, make sure the model's
+    // reply is audible even if capture teardown restore is delayed by hardware.
+    SystemAudioMuteController.shared.restore()
+    guard pcmPlayer?.enqueue(pcm24k) == true else {
+      log("RealtimeHub[\(providerTag)]: native audio chunk could not be scheduled; keeping text fallback armed")
+      return
+    }
     audioReceivedThisTurn = true
-    barState?.isVoiceResponseActive = true
-    pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
+    realtimePlaybackActive = true
+    responseGlowGate.markPlaybackActive()
   }
 
   func hubDidEmitText(_ text: String, isFinal: Bool) {
@@ -417,7 +510,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // speak it locally via macOS AVSpeechSynthesizer. Normally both providers
       // stream spoken audio (played by StreamingPCMPlayer) so this stays unused.
       if !audioReceivedThisTurn, !reply.isEmpty {
-        barState?.isVoiceResponseActive = true
+        responseGlowGate.markPlaybackActive()
         speak(reply)
       }
       if !reply.isEmpty { log("RealtimeHub: reply — \(reply.prefix(160))") }
@@ -563,6 +656,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let result = AgentPillsManager.shared.manage(action: action, agentId: agentId)
       log("RealtimeHub[\(providerTag)]: tool manage_agent_pills action=\(action)")
       session?.sendToolResult(callId: callId, name: name, output: result)
+    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle:
+      runToolAndSpeak(
+        callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
+        emptyText: "No canonical agent data came back.",
+        errorText: "Could not reach the agent control plane right now."
+      ) {
+        try await self.agentControlService.executeVoiceTool(name: name, arguments: arguments)
+      }
     case .searchScreenHistory:
       // Fast LOCAL semantic search over screen history (same executor as chat).
       let query = arg("query")
@@ -680,6 +781,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
+    if realtimePlaybackActive {
+      log("RealtimeHub[\(providerTag)]: server turn done; waiting for local playback to drain")
+    }
     // Record the completed turn into chat history (+ backend sync) in the background.
     // The hub plays its reply itself and never routes through the query path, so this is
     // the only place voice turns get persisted. Idempotent per turn; recordVoiceTurn is
@@ -719,8 +823,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
-    if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
-    exitVoiceUI()
+    realtimePlaybackActive = false
+    if localSpeechActive || speech.isSpeaking {
+      speech.stopSpeaking(at: .immediate)
+      localSpeechActive = false
+    }
+    exitVoiceUI(clearResponseGlow: true)
     teardownSession()
     // A session that died fast (connected, then the provider rejected/aborted it — e.g.
     // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider
@@ -747,14 +855,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   /// Return the floating bar from its PTT voice state to compact after a hub turn.
-  private func exitVoiceUI() {
+  private func exitVoiceUI(clearResponseGlow: Bool = false) {
     guard let barState else { return }
     // Capture before clearing: a mid-turn error or silent-tap cancel clears the
     // listening flag here, so PushToTalkManager.updateBarState() (which resizes only
     // on a wasListening→false transition) would see no change and leave the bar wide.
     let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
-    barState.isVoiceResponseActive = false
+    // When the turn fell back to local AVSpeechSynthesizer speech (no realtime audio)
+    // or the spawn_agent path spoke a local ack, audioReceivedThisTurn is false but
+    // the synthesizer has been asked to speak. Keep the glow active until the delegate
+    // (didFinish/didCancel) clears it, so the spoken-response indicator doesn't
+    // disappear mid-utterance. Using localSpeechActive (set synchronously in speak)
+    // instead of speech.isSpeaking avoids the race where isSpeaking is still false
+    // because the synthesizer hasn't started the queued utterance yet.
+    if clearResponseGlow || (!audioReceivedThisTurn && !localSpeechActive) {
+      responseGlowGate.clearImmediately()
+    }
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false
@@ -766,6 +883,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     else { return }
     FloatingControlBarManager.shared.resizeForPTT(expanded: false)
+  }
+
+  private func clearResponseGlowIfRealtimeAudioIdle() {
+    responseGlowGate.scheduleIdleClear()
   }
 
   // MARK: - Tools
@@ -831,7 +952,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     utterance.voice =
       AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
       ?? AVSpeechSynthesisVoice(language: "en-US")
+    // Set synchronously so exitVoiceUI sees it even before the synthesizer
+    // starts playback (isSpeaking is false until the queued utterance begins).
+    localSpeechActive = true
     speech.speak(utterance)
+  }
+
+  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      self.localSpeechActive = false
+      self.responseGlowGate.clearImmediately()
+    }
+  }
+
+  /// Handles non-explicit cancellation paths (system interruption, future code,
+  /// or unexpected state) so the response glow doesn't stay stuck when speech
+  /// is cancelled without didFinish firing.
+  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      self.localSpeechActive = false
+      self.responseGlowGate.clearImmediately()
+    }
   }
 
   /// Local synthetic mouse click (point_click tool).

@@ -9417,4 +9417,92 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'En pausa — no s\'està gravant àudio';
+
+  @override
+  String get deviceTutorial => 'Tutorial del dispositiu';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Parla a l\'Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Digues unes paraules i mira com apareixen en temps real';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Ben fet!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Comença a parlar...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Fes una pregunta a l\'Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Prem el botó una vegada, fes la pregunta i torna a prémer quan acabis';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'S\'està processant la pregunta...';
+
+  @override
+  String get deviceOnboardingListening => 'Escoltant...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Apaga';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Engega';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Mantén premut el botó 3 segons';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Prem el botó per tornar-lo a engegar';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Mantén el botó premut amb fermesa fins que el llum s\'apagui';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Connectat';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Connectat!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Desconnectat';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'S\'està apagant...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalitza el doble toc';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Finalitza la conversa';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Desa i finalitza la conversa actual';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Silencia / Activa';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Activa o desactiva el micròfon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Destaca la conversa en curs';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Marca la conversa com a important';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Això ha estat un sol toc: prova de tocar dues vegades ràpidament!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Prova-ho ara! Fes un doble toc a l\'Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continua';
+
+  @override
+  String get deviceOnboardingFinish => 'Finalitza';
 }

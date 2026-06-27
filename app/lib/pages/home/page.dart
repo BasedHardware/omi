@@ -70,6 +70,7 @@ import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'widgets/battery_info_widget.dart';
 import 'widgets/capture_mode_chip.dart';
 
@@ -461,9 +462,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         connectedDevice: deviceProvider.connectedDevice,
       );
 
-      // Register callback for device connection to check firmware announcements
-      deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
+      // Register callback for device connection to check firmware announcements and device onboarding
+      deviceProvider.onDeviceConnected = (BtDevice device) {
+        _onDeviceConnectedForAnnouncements(device);
+        _checkDeviceOnboarding(device);
+      };
+
+      // Also check if already connected right now
+      if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
+        _checkDeviceOnboarding(deviceProvider.connectedDevice!);
+      }
     });
+  }
+
+  bool _deviceOnboardingShown = false;
+
+  void _checkDeviceOnboarding(BtDevice device) async {
+    if (device.type != DeviceType.omi) return;
+    if (_deviceOnboardingShown) return;
+    if (SharedPreferencesUtil().deviceOnboardingCompleted) return;
+
+    // Double-check with Firestore
+    final state = await getUserOnboardingState();
+    if (state?['device_onboarding_completed'] == true) {
+      SharedPreferencesUtil().deviceOnboardingCompleted = true;
+      return;
+    }
+
+    if (!mounted || _deviceOnboardingShown) return;
+    _deviceOnboardingShown = true;
+    routeToPage(context, const InteractiveDeviceOnboardingWrapper());
   }
 
   void _registerAutoSyncCallback() {

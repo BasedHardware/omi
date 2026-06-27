@@ -53,6 +53,7 @@ final class StreamingPCMPlayer {
   private let format: AVAudioFormat
   private var configObserver: NSObjectProtocol?
   private let playbackQueue = StreamingPCMPlaybackQueue<AVAudioPCMBuffer>()
+  var onPlaybackIdle: (() -> Void)?
 
   init(sampleRate: Double = 24000) {
     // Float32 mono at the source rate; the mixer resamples to the device rate.
@@ -77,7 +78,7 @@ final class StreamingPCMPlayer {
       self.engine.stop()
       self.engine.disconnectNodeOutput(self.player)
       self.engine.connect(self.player, to: self.engine.mainMixerNode, format: self.format)
-      self.ensureRunning()
+      _ = self.ensureRunning()
       for buffer in buffersToReplay {
         self.schedule(buffer)
       }
@@ -94,7 +95,7 @@ final class StreamingPCMPlayer {
   /// the real `isRunning`/`isPlaying` state (not a one-shot flag) is what makes
   /// playback survive past the first turn: AVAudioEngine auto-suspends when idle
   /// after a reply finishes, so later turns must restart it.
-  private func ensureRunning() {
+  private func ensureRunning() -> Bool {
     if !engine.isRunning {
       engine.prepare()
       do {
@@ -104,21 +105,23 @@ final class StreamingPCMPlayer {
         )
       } catch {
         log("StreamingPCMPlayer: engine start FAILED: \(error.localizedDescription)")
-        return
+        return false
       }
     }
     if !player.isPlaying {
       player.play()
     }
+    return player.isPlaying
   }
 
   /// `data` = little-endian Int16 PCM, mono, at the configured sample rate.
-  func enqueue(_ data: Data) {
+  @discardableResult
+  func enqueue(_ data: Data) -> Bool {
     let sampleCount = data.count / 2
     guard sampleCount > 0,
       let buffer = AVAudioPCMBuffer(
         pcmFormat: format, frameCapacity: AVAudioFrameCount(sampleCount))
-    else { return }
+    else { return false }
     buffer.frameLength = AVAudioFrameCount(sampleCount)
     let channel = buffer.floatChannelData![0]
     data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
@@ -127,8 +130,9 @@ final class StreamingPCMPlayer {
         channel[i] = max(-1.0, min(1.0, Float(src[i]) / 32768.0))
       }
     }
-    ensureRunning()
+    guard ensureRunning() else { return false }
     schedule(buffer)
+    return true
   }
 
   private func schedule(_ buffer: AVAudioPCMBuffer) {
@@ -137,6 +141,9 @@ final class StreamingPCMPlayer {
       DispatchQueue.main.async {
         guard let self, let buffer else { return }
         self.playbackQueue.markPlayed(buffer, generation: generation)
+        if self.playbackQueue.isEmpty {
+          self.onPlaybackIdle?()
+        }
       }
     }
   }

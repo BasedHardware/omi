@@ -186,7 +186,7 @@ final class ChatDiscoverabilityTests: XCTestCase {
             XCTAssertEqual(capability.title, entry.label, "\(entry.name) label drifted")
             XCTAssertEqual(capability.latency.rawValue, entry.latency, "\(entry.name) latency drifted")
             XCTAssertEqual(capability.summary, entry.summary, "\(entry.name) summary drifted")
-            XCTAssertEqual(capability.surfaces, [.desktopChat], "\(entry.name) surface drifted")
+            XCTAssertEqual(capability.surfaces, entry.surfaces, "\(entry.name) surface drifted")
             XCTAssertFalse(entry.promptSnippet.isEmpty, "\(entry.name) manifest promptSnippet is empty")
             XCTAssertFalse(entry.runtimePreconditions.isEmpty, "\(entry.name) manifest runtimePreconditions is empty")
             for guideline in entry.promptGuidelines {
@@ -218,6 +218,7 @@ final class ChatDiscoverabilityTests: XCTestCase {
         let promptSnippet: String
         let promptGuidelines: [String]
         let latency: String
+        let surfaces: Set<DesktopCapabilityRegistry.Surface>
         let runtimePreconditions: [String]
     }
 
@@ -248,6 +249,7 @@ final class ChatDiscoverabilityTests: XCTestCase {
                 promptSnippet: try stringLiteralValue("promptSnippet", in: block),
                 promptGuidelines: try arrayStringValues("promptGuidelines", in: block),
                 latency: try stringLiteralValue("latency", in: block),
+                surfaces: try surfaceValues(in: block),
                 runtimePreconditions: try arrayStringValues("runtimePreconditions", in: block))
         }
     }
@@ -294,6 +296,21 @@ final class ChatDiscoverabilityTests: XCTestCase {
             guard let valueRange = Range(match.range(at: 1), in: arrayBody) else { return nil }
             return String(arrayBody[valueRange])
         }
+    }
+
+    private func surfaceValues(in text: String) throws -> Set<DesktopCapabilityRegistry.Surface> {
+        let values = try arrayStringValues("surfaces", in: text)
+        return Set(values.compactMap { value in
+            switch value {
+            case "desktopChat":
+                return .desktopChat
+            case "realtimeHub":
+                return .realtimeHub
+            default:
+                XCTFail("Unknown manifest surface \(value)")
+                return nil
+            }
+        })
     }
 
     // MARK: - Table Annotations Completeness

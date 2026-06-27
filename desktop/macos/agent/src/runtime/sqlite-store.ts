@@ -35,6 +35,7 @@ export interface SqliteAgentStoreOptions {
   databasePath?: string;
   reconcileOnOpen?: boolean;
   nowMs?: () => number;
+  databaseFactory?: DatabaseFactory;
 }
 
 export interface NodeSqliteProbeOptions {
@@ -323,11 +324,13 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
 export class SqliteAgentStore implements AgentStore {
   private readonly db: DatabaseSync;
   private readonly nowMs: () => number;
+  private transactionDepth = 0;
 
   constructor(options: SqliteAgentStoreOptions = {}) {
     const databasePath = options.databasePath ?? databasePathForStateDir(requiredStateDir(options.stateDir));
     mkdirSync(dirname(databasePath), { recursive: true });
-    this.db = new DatabaseSync(databasePath);
+    const Database = options.databaseFactory ?? DatabaseSync;
+    this.db = new Database(databasePath) as DatabaseSync;
     this.nowMs = options.nowMs ?? Date.now;
 
     applyConnectionPragmas(this.db);
@@ -352,7 +355,30 @@ export class SqliteAgentStore implements AgentStore {
   }
 
   withTransaction<T>(work: () => T): T {
-    return runTransaction(this.db, work);
+    // Track nesting depth ourselves rather than trusting db.isTransaction: the
+    // bundled agent runtime does not reliably report an open transaction, so a
+    // nested call that issued its own BEGIN would fail with "cannot start a
+    // transaction within a transaction" and break every agent operation.
+    if (this.transactionDepth > 0) {
+      this.transactionDepth += 1;
+      try {
+        return work();
+      } finally {
+        this.transactionDepth -= 1;
+      }
+    }
+    this.transactionDepth += 1;
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const result = work();
+      this.db.exec("COMMIT");
+      return result;
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    } finally {
+      this.transactionDepth -= 1;
+    }
   }
 
   reconcileStartup(): StartupReconciliationResult {
@@ -586,13 +612,22 @@ export class SqliteAgentStore implements AgentStore {
       lastUsedAtMs: input.lastUsedAtMs ?? null,
       invalidatedAtMs: input.invalidatedAtMs ?? null,
     };
-    this.db.prepare(
-      `INSERT INTO adapter_bindings (
-        binding_id, session_id, adapter_id, binding_generation, adapter_native_session_id,
-        adapter_instance_id, resume_fidelity, status, cwd, model_id, system_prompt_hash,
-        metadata_json, created_at_ms, updated_at_ms, last_used_at_ms, invalidated_at_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(...bindingValues(binding));
+    this.withTransaction(() => {
+      if (binding.adapterNativeSessionId) {
+        this.db.prepare(
+          `UPDATE adapter_bindings
+           SET status = ?, adapter_instance_id = NULL, invalidated_at_ms = COALESCE(invalidated_at_ms, ?), updated_at_ms = ?
+           WHERE adapter_id = ? AND adapter_native_session_id = ? AND status != ?`,
+        ).run("closed", now, now, binding.adapterId, binding.adapterNativeSessionId, "closed");
+      }
+      this.db.prepare(
+        `INSERT INTO adapter_bindings (
+          binding_id, session_id, adapter_id, binding_generation, adapter_native_session_id,
+          adapter_instance_id, resume_fidelity, status, cwd, model_id, system_prompt_hash,
+          metadata_json, created_at_ms, updated_at_ms, last_used_at_ms, invalidated_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(...bindingValues(binding));
+    });
     return binding;
   }
 

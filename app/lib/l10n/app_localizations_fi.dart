@@ -9363,4 +9363,92 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
+
+  @override
+  String get deviceTutorial => 'Laitteen opastus';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Puhu Omi-laitteeseesi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Sano muutama sana ja katso, miten ne ilmestyvät reaaliajassa';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Hienosti!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Ala puhua...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Esitä Omille kysymys';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Paina painiketta kerran, esitä kysymyksesi ja paina uudelleen, kun olet valmis';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Käsitellään kysymystäsi...';
+
+  @override
+  String get deviceOnboardingListening => 'Kuunnellaan...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Sammuta';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Käynnistä';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Pidä painiketta pohjassa 3 sekuntia';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Käynnistä se uudelleen painamalla painiketta';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Pidä painiketta tiukasti pohjassa, kunnes valo sammuu';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Yhdistetty';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Yhdistetty!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Yhteys katkaistu';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Sammutetaan...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Mukauta kaksoisnapautus';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Lopeta keskustelu';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Tallenna ja lopeta nykyinen keskustelu';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Mykistä / poista mykistys';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Kytke mikrofoni päälle tai pois';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Tähditä käynnissä olevaa keskustelua';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Merkitse keskustelu tärkeäksi';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Tuo oli yksittäisnapautus – yritä napauttaa kahdesti nopeasti!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Kokeile nyt! Kaksoisnapauta Omi-laitettasi';
+
+  @override
+  String get deviceOnboardingContinue => 'Jatka';
+
+  @override
+  String get deviceOnboardingFinish => 'Valmis';
 }

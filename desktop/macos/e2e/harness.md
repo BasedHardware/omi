@@ -37,6 +37,15 @@ python3 scripts/omi-harness compare <before-run> <after-run> --markdown
 python3 scripts/omi-harness cleanup --keep 10
 ```
 
+For process CPU/RSS sampling, pass a unique command-line match for the named
+bundle process:
+
+```bash
+python3 scripts/omi-harness run e2e/flows/ask-omi-chat-power-benchmark.yaml \
+  --port 47888 \
+  --process-match "/Applications/omi-harness-test.app/Contents/MacOS/Omi Computer"
+```
+
 For `ui` lane AX assertions, pass the named bundle id:
 
 ```bash
@@ -56,6 +65,7 @@ Supported step types:
 - `trace.expect`
 - `log.expect`
 - `ax.expect`
+- `power.sample`
 
 Use `wait:` after bridge steps when a state or trace must settle before the next
 step. Keep automated checks to facts the harness can measure directly: state,
@@ -81,4 +91,18 @@ a normal action response returns:
     target: floating
     frames: 8
     interval_ms: 16
+```
+
+Use `power.sample` after a bridge step has opened the target UI state. It samples
+the app process with `ps` and records average/peak CPU plus RSS in the run
+summary. This is not a replacement for Instruments or `powermetrics`, but it is
+cheap enough for agents to run repeatedly while optimizing idle UI power.
+
+```yaml
+- name: Sample Open Chat Idle Power
+  power.sample:
+    warmup_ms: 500
+    duration_ms: 8000
+    interval_ms: 250
+    max_avg_cpu_percent: 5
 ```
