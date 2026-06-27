@@ -5,6 +5,7 @@ import os
 import time
 
 import httpx
+from cachetools import TTLCache
 
 from utils.http_client import (
     get_webhook_client,
@@ -316,16 +317,31 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
+# Developer status rarely changes, but the cap is checked on every proactive
+# notification attempt, so cache it briefly to avoid a Firestore read per attempt.
+_DEV_STATUS_CACHE: TTLCache = TTLCache(maxsize=4096, ttl=300)
+_dev_status_lock = threading.Lock()
+
+
 def _is_developer(uid: str) -> bool:
     """A user with at least one developer API key is treated as a developer and
     is exempt from the daily proactive-notification cap (#3346), so building and
-    testing an app is not throttled. Fails closed (treats the user as a
-    non-developer) so a lookup error never silently lifts the cap for everyone."""
+    testing an app is not throttled. Result is cached for a few minutes to keep
+    the cap check off the Firestore hot path. Fails closed (treats the user as a
+    non-developer, and does not cache the failure) so a lookup error never
+    silently lifts the cap for everyone."""
+    with _dev_status_lock:
+        cached = _DEV_STATUS_CACHE.get(uid)
+    if cached is not None:
+        return cached
     try:
-        return bool(dev_api_key_db.get_dev_keys_for_user(uid))
+        result = bool(dev_api_key_db.get_dev_keys_for_user(uid))
     except Exception as e:
         logger.warning(f"proactive daily cap: developer check failed uid={uid}, applying cap: {e}")
         return False
+    with _dev_status_lock:
+        _DEV_STATUS_CACHE[uid] = result
+    return result
 
 
 def _proactive_daily_cap_reached(uid: str) -> bool:
