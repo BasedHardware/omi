@@ -18,6 +18,7 @@ import {
   mcpToolDefinitionsForAdapter,
   normalizeOmiToolName,
   toolManifestEntry,
+  toolsForAdapter,
 } from "./runtime/omi-tool-manifest.js";
 
 // Current query mode
@@ -175,6 +176,8 @@ async function requestSwiftTool(
 const isOnboarding = process.env.OMI_ONBOARDING === "true";
 
 // Tool order is owned by the canonical manifest projection.
+const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const ADVERTISED_CANONICAL_TOOL_NAMES = new Set(ADVERTISED_TOOLS.map((tool) => tool.name));
 // Filter tools based on session type: onboarding sessions get onboarding tools,
 // regular sessions exclude them
 const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
@@ -232,6 +235,17 @@ async function handleJsonRpc(
       const normalizedTool = normalizeOmiToolName("omi-tools-stdio", params.name as string);
       const toolName = normalizedTool.canonicalName;
       const args = (params.arguments ?? {}) as Record<string, unknown>;
+
+      if (!ADVERTISED_CANONICAL_TOOL_NAMES.has(toolName)) {
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            error: { code: -32601, message: `Unknown tool: ${params.name as string}` },
+          });
+        }
+        return;
+      }
 
       if (toolName === "execute_sql") {
         const query = args.query as string;
@@ -486,7 +500,11 @@ async function main(): Promise<void> {
 
   const snapshot = buildToolAvailabilitySnapshot("omi-tools-stdio", { onboarding: isOnboarding });
   if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
-    writeFileSync(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);
+    try {
+      writeFileSync(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);
+    } catch (err) {
+      logErr(`Failed to write tool availability snapshot: ${err instanceof Error ? err.message : err}`);
+    }
   }
   logErr(
     `omi-tools stdio MCP server started adapter=omi-tools-stdio advertisedToolCount=${snapshot.advertisedToolCount} advertisedTools=${snapshot.advertisedToolNames.join(",")}`,

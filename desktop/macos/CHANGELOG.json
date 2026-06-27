@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Improved Omi agent tool registration reliability across desktop chat, pi-mono, and local agent APIs"
+  ],
   "releases": [
     {
       "version": "0.11.547",

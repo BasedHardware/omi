@@ -21,6 +21,11 @@ export interface OmiToolInputSchema {
   properties: Record<string, unknown>;
   required?: string[];
   additionalProperties?: boolean;
+  anyOf?: unknown[];
+  allOf?: unknown[];
+  oneOf?: unknown[];
+  if?: unknown;
+  then?: unknown;
 }
 
 export interface OmiToolAdapterAvailability {
@@ -696,6 +701,7 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     latency: tool.latency,
     inputSchema: {
       ...agentControlInputSchema(tool),
+      ...tool.jsonSchemaOptions,
       additionalProperties: false,
     } as OmiToolInputSchema,
     annotations: readOnlyLocal,

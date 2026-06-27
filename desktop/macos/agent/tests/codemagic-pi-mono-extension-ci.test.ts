@@ -19,6 +19,18 @@ describe("macOS release CI", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
     const runScript = readFileSync(new URL("../../run.sh", import.meta.url), "utf8");
 
+    for (const manifestFile of [
+      "control-tool-manifest.js",
+      "control-tool-manifest.ts",
+      "omi-tool-manifest.ts",
+    ]) {
+      expect(codemagic).toContain(
+        `cp -f agent/src/runtime/${manifestFile} "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
+      );
+      expect(runScript).toContain(
+        `cp -f "$AGENT_DIR/src/runtime/${manifestFile}" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
+      );
+    }
     expect(codemagic).toContain(
       'cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"'
     );

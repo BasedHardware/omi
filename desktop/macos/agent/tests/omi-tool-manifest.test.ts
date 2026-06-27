@@ -51,6 +51,8 @@ describe("omi tool manifest", () => {
 
     expect(regular.has("request_permission")).toBe(false);
     expect(regular.has("get_email_insights")).toBe(false);
+    expect(regular.has("capture_screen")).toBe(false);
+    expect(regular.has("get_work_context")).toBe(false);
     expect(onboarding.has("request_permission")).toBe(true);
     expect(onboarding.has("get_email_insights")).toBe(true);
     expect(onboarding.has("capture_screen")).toBe(false);
@@ -73,6 +75,25 @@ describe("omi tool manifest", () => {
     expect(saveKnowledgeGraph?.inputSchema.properties.nodes).toMatchObject({ type: "array" });
     expect(saveKnowledgeGraph?.inputSchema.properties.edges).toMatchObject({ type: "array" });
     expect(askFollowup?.inputSchema.properties.options).toMatchObject({ type: "array" });
+  });
+
+  it("preserves control-tool schema preconditions in MCP projections", () => {
+    const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio");
+    const inspectArtifacts = tools.find((tool) => tool.name === "inspect_agent_artifacts");
+    const delegateAgent = tools.find((tool) => tool.name === "delegate_agent");
+
+    expect(inspectArtifacts?.inputSchema.anyOf).toEqual([
+      { required: ["artifactId"] },
+      { required: ["sessionId"] },
+      { required: ["runId"] },
+      { required: ["attemptId"] },
+    ]);
+    expect(delegateAgent?.inputSchema.allOf).toEqual([
+      {
+        if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
+        then: { required: ["childSessionId"] },
+      },
+    ]);
   });
 
   it("normalizes MCP-prefixed and explicit aliases", () => {
