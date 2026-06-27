@@ -438,7 +438,12 @@ actor MemoryStorage {
         within scope: MemoryLayerScope
     ) async throws -> Int {
         try await syncServerMemories(memories)
-        guard !memories.isEmpty else { return 0 }
+        // An empty snapshot is authoritative, not a no-op: the sole caller
+        // (refreshMemoriesAfterConversationCascade) exhaustively fetches the
+        // whole backend. If the cascade delete removed every default-scope
+        // memory, `memories` is empty and synced local rows must be tombstoned.
+        // softDeleteSyncedOrphans only touches rows with a non-nil backendId,
+        // so local-only (unsynced) rows are preserved even with an empty keep-set.
         return try await softDeleteSyncedOrphans(
             keepingBackendIds: Set(memories.map(\.id)),
             within: scope
