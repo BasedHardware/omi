@@ -1,0 +1,3 @@
+{
+  "change": "Fixed legacy memories failing to load on desktop due to memory_id alias conflicts, and preserved device-scoped memory results after cache reload"
+}
