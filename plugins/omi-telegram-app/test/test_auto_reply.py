@@ -274,7 +274,7 @@ class TestToggle:
         _seed_user(777, auto_reply_enabled=False)
 
         client = TestClient(app)
-        resp = client.post("/toggle", json={"chat_id": "777", "enabled": True})
+        resp = client.post("/toggle", json={"chat_id": "777", "enabled": True, "bot_token": "123:abc"})
         assert resp.status_code == 200
         assert resp.json() == {"chat_id": "777", "auto_reply_enabled": True}
 
@@ -291,7 +291,7 @@ class TestToggle:
         _seed_user(777, auto_reply_enabled=True)
 
         client = TestClient(app)
-        resp = client.post("/toggle", json={"chat_id": "777", "enabled": False})
+        resp = client.post("/toggle", json={"chat_id": "777", "enabled": False, "bot_token": "123:abc"})
         assert resp.status_code == 200
         assert resp.json() == {"chat_id": "777", "auto_reply_enabled": False}
 
@@ -306,5 +306,40 @@ class TestToggle:
         users.clear()
 
         client = TestClient(app)
-        resp = client.post("/toggle", json={"chat_id": "no-such-chat", "enabled": True})
+        resp = client.post("/toggle", json={"chat_id": "no-such-chat", "enabled": True, "bot_token": "123:abc"})
         assert resp.status_code == 404
+
+    def test_toggle_wrong_bot_token_returns_403(self, telegram_api, persona_mock):
+        from fastapi.testclient import TestClient
+
+        from main import app
+        from simple_storage import users
+
+        users.clear()
+        _seed_user(777, auto_reply_enabled=True)
+
+        client = TestClient(app)
+        resp = client.post(
+            "/toggle",
+            json={"chat_id": "777", "enabled": False, "bot_token": "wrong-token"},
+        )
+        assert resp.status_code == 403
+        # State should NOT have changed
+        assert users["777"]["auto_reply_enabled"] is True
+
+    def test_toggle_missing_bot_token_returns_422(self, telegram_api, persona_mock):
+        """Pydantic should reject the request if bot_token is missing."""
+        from fastapi.testclient import TestClient
+
+        from main import app
+        from simple_storage import users
+
+        users.clear()
+        _seed_user(777, auto_reply_enabled=True)
+
+        client = TestClient(app)
+        resp = client.post(
+            "/toggle",
+            json={"chat_id": "777", "enabled": False},
+        )
+        assert resp.status_code == 422
