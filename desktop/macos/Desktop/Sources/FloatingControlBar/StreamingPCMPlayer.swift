@@ -20,11 +20,14 @@ final class StreamingPCMPlaybackQueue<Buffer: AnyObject> {
     return generation
   }
 
-  func markPlayed(_ buffer: Buffer, generation completionGeneration: Int) {
-    guard completionGeneration == generation else { return }
+  @discardableResult
+  func markPlayed(_ buffer: Buffer, generation completionGeneration: Int) -> Bool {
+    guard completionGeneration == generation else { return false }
     if let index = scheduledBuffers.firstIndex(where: { $0 === buffer }) {
       scheduledBuffers.remove(at: index)
+      return true
     }
+    return false
   }
 
   func buffersToReplayAfterConfigurationChange() -> [Buffer] {
@@ -53,7 +56,9 @@ final class StreamingPCMPlayer {
   private let format: AVAudioFormat
   private var configObserver: NSObjectProtocol?
   private let playbackQueue = StreamingPCMPlaybackQueue<AVAudioPCMBuffer>()
-  var onPlaybackIdle: (() -> Void)?
+  private(set) var playbackEpoch = 0
+  var onPlaybackScheduled: ((Int) -> Void)?
+  var onPlaybackIdle: ((Int) -> Void)?
 
   init(sampleRate: Double = 24000) {
     // Float32 mono at the source rate; the mixer resamples to the device rate.
@@ -136,19 +141,23 @@ final class StreamingPCMPlayer {
   }
 
   private func schedule(_ buffer: AVAudioPCMBuffer) {
+    playbackEpoch += 1
+    let scheduledPlaybackEpoch = playbackEpoch
+    onPlaybackScheduled?(scheduledPlaybackEpoch)
     let generation = playbackQueue.appendScheduled(buffer)
     player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self, weak buffer] _ in
       DispatchQueue.main.async {
         guard let self, let buffer else { return }
-        self.playbackQueue.markPlayed(buffer, generation: generation)
-        if self.playbackQueue.isEmpty {
-          self.onPlaybackIdle?()
+        let didMarkPlayed = self.playbackQueue.markPlayed(buffer, generation: generation)
+        if didMarkPlayed, self.playbackQueue.isEmpty {
+          self.onPlaybackIdle?(scheduledPlaybackEpoch)
         }
       }
     }
   }
 
   func stop() {
+    playbackEpoch += 1
     playbackQueue.clearForExplicitStop()
     player.stop()
     engine.stop()

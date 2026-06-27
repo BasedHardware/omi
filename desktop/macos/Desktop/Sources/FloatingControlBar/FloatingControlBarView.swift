@@ -661,7 +661,7 @@ struct FloatingControlBarView: View {
     }
 
     private func showAgentListFromConversation() {
-        (window as? FloatingControlBarWindow)?.showAgentRowsFromConversation() ?? onCloseAI()
+        (window as? FloatingControlBarWindow)?.leaveAgentConversation() ?? onCloseAI()
     }
 
     private func handleBarHover(_ hovering: Bool) {
