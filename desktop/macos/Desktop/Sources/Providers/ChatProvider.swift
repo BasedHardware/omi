@@ -2478,6 +2478,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Stop the running agent, keeping partial response
     func stopAgent() {
         guard isSending else { return }
+        let counts = currentStreamingToolStatusCounts()
+        AnalyticsManager.shared.chatAgentStopRequested(
+            inFlightToolCount: counts.inFlight,
+            slowToolCount: counts.slow,
+            stalledToolCount: counts.stalled
+        )
         isStopping = true
         sendGeneration += 1
         let myGen = sendGeneration
@@ -3901,13 +3907,51 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 if case .toolCall(let blockId, let name, let oldStatus, let tuid, let input, let output) = messages[index].contentBlocks[i],
                    ChatProvider.stallTrackingId(toolUseId: tuid, name: name) == id,
                    oldStatus.isInFlight {
+                    let newStatus = mapDetectorState(to)
                     messages[index].contentBlocks[i] = .toolCall(
-                        id: blockId, name: name, status: mapDetectorState(to),
+                        id: blockId, name: name, status: newStatus,
                         toolUseId: tuid, input: input, output: output
                     )
+                    trackStallTransition(toolName: name, status: newStatus)
                 }
             }
         }
+    }
+
+    private func trackStallTransition(toolName: String, status: ToolCallStatus) {
+        let thresholdMs: Int
+        let statusName: String
+        switch status {
+        case .slow:
+            thresholdMs = StallThresholds.v1Defaults.slowGapMs
+            statusName = "slow"
+        case .stalled:
+            thresholdMs = StallThresholds.v1Defaults.stalledGapMs
+            statusName = "stalled"
+        case .running, .completed, .failed:
+            return
+        }
+
+        AnalyticsManager.shared.chatToolStallTransition(
+            toolName: toolName,
+            status: statusName,
+            thresholdMs: thresholdMs
+        )
+    }
+
+    private func currentStreamingToolStatusCounts() -> (inFlight: Int, slow: Int, stalled: Int) {
+        var counts = (inFlight: 0, slow: 0, stalled: 0)
+        guard let message = messages.last(where: { $0.sender == .ai && $0.isStreaming }) else {
+            return counts
+        }
+
+        for block in message.contentBlocks {
+            guard case .toolCall(_, _, let status, _, _, _) = block else { continue }
+            if status.isInFlight { counts.inFlight += 1 }
+            if status == .slow { counts.slow += 1 }
+            if status == .stalled { counts.stalled += 1 }
+        }
+        return counts
     }
 
     /// Serialize tool calls from a message's contentBlocks into a JSON metadata string.
