@@ -84,6 +84,32 @@ def test_parser_uses_provider_identity_before_alias_matching():
     assert "openai:gpt-4.1-mini" not in metrics
 
 
+def test_parser_does_not_treat_model_family_inside_slug_as_provider():
+    payload = {
+        "data": [
+            {
+                "slug": "openrouter-claude-sonnet-4-6",
+                "name": "Claude Sonnet 4.6",
+                "evaluations": {"artificial_analysis_intelligence_index": 99},
+                "median_output_tokens_per_second": 250,
+                "pricing": {"input": 0.01, "output": 0.02},
+            },
+            {
+                "slug": "openrouter-google-gemini-2.5-flash-lite",
+                "name": "Gemini 2.5 Flash Lite",
+                "evaluations": {"artificial_analysis_intelligence_index": 99},
+                "median_output_tokens_per_second": 250,
+                "pricing": {"input": 0.01, "output": 0.02},
+            },
+        ]
+    }
+
+    metrics = parse_artificial_analysis_models(payload)
+
+    assert "anthropic:claude-sonnet-4-6" not in metrics
+    assert "gemini:gemini-2.5-flash-lite" not in metrics
+
+
 def test_build_route_table_picks_better_value_for_regular_features():
     route_table = build_auto_route_table(
         profile_name="premium",

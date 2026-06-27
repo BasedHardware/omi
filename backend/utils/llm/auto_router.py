@@ -26,7 +26,7 @@ PROVIDER_ALIASES = {
     "gemini": frozenset({"gemini", "google", "google-ai", "google-deepmind"}),
     "openrouter": frozenset({"openrouter"}),
     "anthropic": frozenset({"anthropic", "claude"}),
-    "perplexity": frozenset({"perplexity"}),
+    "perplexity": frozenset({"perplexity", "sonar"}),
 }
 
 
@@ -573,22 +573,26 @@ def _match_candidate(row: Mapping[str, Any]) -> Tuple[Optional[CandidateSpec], i
 
 
 def _row_provider_hints(row: Mapping[str, Any]) -> set[str]:
-    hints = set()
+    explicit_hints = set()
     for key in ("provider", "organization", "creator", "vendor", "company"):
         value = row.get(key)
         if isinstance(value, Mapping):
             value = value.get("name") or value.get("slug") or value.get("id")
         normalized = _normalize_provider_hint(value)
         if normalized:
-            hints.add(normalized)
+            explicit_hints.add(normalized)
+    if explicit_hints:
+        return explicit_hints
 
-    slug = str(row.get("slug") or row.get("id") or "").lower()
-    for provider, aliases in PROVIDER_ALIASES.items():
-        if provider in slug:
-            hints.add(provider)
+    hints = set()
+    for key in ("slug", "id", "model"):
+        value = row.get(key)
+        if not isinstance(value, str):
             continue
-        if any(alias in slug for alias in aliases):
-            hints.add(provider)
+        normalized = _normalize_alias(value)
+        for provider, aliases in PROVIDER_ALIASES.items():
+            if any(normalized == alias or normalized.startswith(f"{alias}-") for alias in aliases):
+                hints.add(provider)
 
     return hints
 
