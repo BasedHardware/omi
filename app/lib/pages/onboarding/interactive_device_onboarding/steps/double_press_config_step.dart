@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/double_tap_demo_animation.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class DoublePressConfigStep extends StatefulWidget {
   final VoidCallback onComplete;
@@ -21,7 +22,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
     return Consumer<DeviceOnboardingProvider>(
       builder: (context, provider, _) {
         return OnboardingStepScaffold(
-          title: 'Customize Double Tap',
+          title: context.l10n.deviceOnboardingDoubleTapTitle,
           subtitle: '',
           content: Column(
             children: [
@@ -29,24 +30,24 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                 provider: provider,
                 action: 0,
                 icon: Icons.stop_circle_outlined,
-                title: 'End Conversation',
-                description: 'Save and end current conversation',
+                title: context.l10n.deviceOnboardingEndConversation,
+                description: context.l10n.deviceOnboardingEndConversationDesc,
               ),
               const SizedBox(height: 12),
               _buildOptionCard(
                 provider: provider,
                 action: 1,
                 icon: Icons.mic_off,
-                title: 'Mute / Unmute',
-                description: 'Toggle microphone on or off',
+                title: context.l10n.deviceOnboardingMuteUnmute,
+                description: context.l10n.deviceOnboardingMuteUnmuteDesc,
               ),
               const SizedBox(height: 12),
               _buildOptionCard(
                 provider: provider,
                 action: 2,
                 icon: Icons.star_outline,
-                title: 'Star Ongoing Conversation',
-                description: 'Mark conversation as important',
+                title: context.l10n.deviceOnboardingStarConversation,
+                description: context.l10n.deviceOnboardingStarConversationDesc,
               ),
               const Spacer(),
               if (provider.showSingleTapHint) ...[
@@ -56,14 +57,14 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                     color: const Color(0xFFFFA726).withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(100),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.touch_app, color: Color(0xFFFFA726), size: 24),
-                      SizedBox(width: 12),
+                      const Icon(Icons.touch_app, color: Color(0xFFFFA726), size: 24),
+                      const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'That was a single tap — try tapping twice quickly!',
-                          style: TextStyle(color: Color(0xFFFFA726), fontSize: 15),
+                          context.l10n.deviceOnboardingSingleTapHint,
+                          style: const TextStyle(color: Color(0xFFFFA726), fontSize: 15),
                         ),
                       ),
                     ],
@@ -80,10 +81,10 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
                     children: [
                       Icon(Icons.touch_app, color: Colors.white.withValues(alpha: 0.6), size: 24),
                       const SizedBox(width: 12),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'Try it now! Double tap your Omi',
-                          style: TextStyle(color: Color(0xFF9E9E9E), fontSize: 15),
+                          context.l10n.deviceOnboardingTryDoubleTap,
+                          style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 15),
                         ),
                       ),
                     ],
@@ -93,7 +94,7 @@ class _DoublePressConfigStepState extends State<DoublePressConfigStep> {
             ],
           ),
           bottomAction: provider.doublePressCount > 0 && !provider.showSingleTapHint
-              ? OnboardingContinueButton(label: 'Finish', onPressed: widget.onComplete)
+              ? OnboardingContinueButton(label: context.l10n.deviceOnboardingFinish, onPressed: widget.onComplete)
               : null,
         );
       },
