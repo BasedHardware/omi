@@ -273,11 +273,9 @@ def get_memories(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
-    memory_system = pin_memory_system(uid, db_client=db)
-    if memory_system == MemorySystem.CANONICAL:
-        memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
-        return [CleanerMemory.model_validate(memory.model_dump()) for memory in memories]
-
+    # Grant check must run before the memory-system branch so a canonical-cohort
+    # user holding a legacy/read-only Developer key without a persisted default-read
+    # grant is denied, instead of listing canonical memories before authorization.
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -292,6 +290,11 @@ def get_memories(
                 'key_id': auth_context.key_id,
             },
         )
+
+    memory_system = pin_memory_system(uid, db_client=db)
+    if memory_system == MemorySystem.CANONICAL:
+        memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
+        return [CleanerMemory.model_validate(memory.model_dump()) for memory in memories]
     memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
     memory_result = search_memory_default_developer_memories(
         uid=uid,
@@ -360,6 +363,25 @@ def search_memories_vector(
     """
 
     uid = auth_context.uid
+
+    # Grant check must run before the memory-system branch so a canonical-cohort
+    # user holding a legacy/read-only Developer key without a persisted default-read
+    # grant is denied, instead of searching canonical memories before authorization.
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(
+            status_code=app_key_grant.status_code,
+            detail={
+                'enabled': False,
+                'reason': app_key_grant.reason,
+                'consumer': 'developer_api',
+                'archive_default_visible': False,
+                'archive_capability': False,
+                'app_id': auth_context.app_id,
+                'key_id': auth_context.key_id,
+            },
+        )
+
     memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
         matches = MemoryService(db_client=db).search(uid, query, limit=min(limit, 20))
@@ -385,21 +407,6 @@ def search_memories_vector(
                 'raw_provenance_capability': False,
             },
         }
-
-    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
-    if not app_key_grant.allowed:
-        raise HTTPException(
-            status_code=app_key_grant.status_code,
-            detail={
-                'enabled': False,
-                'reason': app_key_grant.reason,
-                'consumer': 'developer_api',
-                'archive_default_visible': False,
-                'archive_capability': False,
-                'app_id': auth_context.app_id,
-                'key_id': auth_context.key_id,
-            },
-        )
 
     memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
     memory_result = search_memory_default_developer_memories_vector(
