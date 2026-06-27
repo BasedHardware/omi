@@ -771,6 +771,9 @@ async def persona_chat_via_integration(
 
     # Convert to Pydantic App for the chat stream path. Wrap in try/except so a
     # malformed Firestore doc returns 502 rather than crashing with a stack trace.
+    # The exception detail (Pydantic validation messages) is logged server-side
+    # only — returning it in the response would leak internal model field names
+    # and data shape to anyone hitting the endpoint.
     if isinstance(app_dict, App):
         app = app_dict
     else:
@@ -778,7 +781,7 @@ async def persona_chat_via_integration(
             app = App(**app_dict)
         except Exception as e:
             logger.error(f"Failed to parse app {app_id} into App model: {e}")
-            raise HTTPException(status_code=502, detail=f"App data is malformed: {e}")
+            raise HTTPException(status_code=502, detail="App data is malformed")
 
     # Build a single HumanMessage and stream the persona reply via the
     # existing execute_chat_stream (which dispatches to the persona handler

@@ -308,10 +308,18 @@ def _is_bot_sender(update: dict) -> bool:
 
 # ---------------------------------------------------------------------------
 # /toggle — flips auto_reply_enabled for a chat (called by Chat Tools).
+#
+# Auth: the request must include the bot_token that was registered for that
+# chat_id. The bot_token is a real secret (only the user has it; calling
+# setWebhook with the wrong token fails at Telegram). chat_id alone is NOT
+# sufficient — it's exposed in Telegram update payloads and could be guessed
+# by anyone scraping a public channel. Pairing the two raises the bar from
+# "knows chat_id" to "knows chat_id AND bot_token".
 # ---------------------------------------------------------------------------
 class ToggleRequest(BaseModel):
     chat_id: str
     enabled: bool
+    bot_token: str  # required: must match the stored token for chat_id
 
 
 class ToggleResponse(BaseModel):
@@ -323,11 +331,16 @@ class ToggleResponse(BaseModel):
 async def toggle(req: ToggleRequest):
     """Enable or disable auto-reply for the given chat_id.
 
-    Returns 404 if the chat_id is not registered. Called by the Chat Tools
-    manifest entry `toggle_auto_reply` (T-008).
+    Returns 404 if the chat_id is not registered. Returns 403 if bot_token
+    doesn't match the stored token. Called by the Chat Tools manifest entry
+    `toggle_auto_reply` (T-008).
     """
-    if simple_storage.get_user_by_chat_id(req.chat_id) is None:
+    user = simple_storage.get_user_by_chat_id(req.chat_id)
+    if user is None:
         raise HTTPException(status_code=404, detail=f"Unknown chat_id: {req.chat_id}")
+    # Constant-time compare to avoid leaking which token prefix is wrong.
+    if not secrets.compare_digest(req.bot_token, user["bot_token"]):
+        raise HTTPException(status_code=403, detail="bot_token does not match this chat_id")
     simple_storage.update_auto_reply(req.chat_id, req.enabled)
     return ToggleResponse(chat_id=req.chat_id, auto_reply_enabled=req.enabled)
 
