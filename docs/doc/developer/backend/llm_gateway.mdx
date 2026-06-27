@@ -6,9 +6,9 @@ description: "Architecture for Omi's internal LLM routing gateway, auto lanes, r
 
 # LLM Gateway Architecture
 
-> Status: v1 foundation implemented; first backend pilot is available behind an off-by-default flag.
+> Status: v1 foundation implemented; first backend pilot is code-on by default with application-level fallback.
 >
-> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor, fake providers for deterministic tests, a live OpenAI-compatible provider adapter, local service URL configuration for backend callers, and a gated `chat_extraction.requires_context` caller pilot.
+> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor, fake providers for deterministic tests, a live OpenAI-compatible provider adapter, local service URL configuration for backend callers, and a code-on `chat_extraction.requires_context` caller pilot with application-level fallback.
 
 ## Decision
 
@@ -38,11 +38,13 @@ For v1, this is the only supported OpenAI-compatible chat-completions interface.
 
 `chat-structured` is for non-streaming structured extraction and classification work, such as memory extraction, chat extraction helpers, conversation post-processing structure, and schema-bound feature decisions. It is the safest first lane because it has clear success checks: JSON/schema validity, parser repair rate, extraction precision/recall, latency, and cost.
 
-The first concrete backend pilot is `utils.llm.chat.requires_context(question: str) -> bool`, enabled only when `OMI_LLM_GATEWAY_CHAT_EXTRACTION_ENABLED=true`. When the flag is off, the helper does not call the gateway and continues to use `get_llm('chat_extraction').with_structured_output(RequiresContext)`.
+The first concrete backend pilot is `utils.llm.chat.requires_context(question: str) -> bool`. Non-BYOK requests call the gateway first and fall back to the existing provider path if the gateway misses or fails, so this is an infrastructure change with no intended user-visible behavior change.
 
-When the flag is on, non-BYOK requests call `/v1/chat/completions` first with `model: "omi:auto:chat-structured"`, text-only messages, and a JSON schema response format for `RequiresContext`. The caller sends low-cardinality metadata identifying `chat_extraction.requires_context`, not raw user text in logs or telemetry. Service auth uses the existing bearer-token contract; backend callers read `OMI_LLM_GATEWAY_SERVICE_TOKEN` first and then `LLM_GATEWAY_SERVICE_TOKEN` for local compatibility.
+Non-BYOK requests call `/v1/chat/completions` first with `model: "omi:auto:chat-structured"`, text-only messages, and a JSON schema response format for `RequiresContext`. The caller sends low-cardinality metadata identifying `chat_extraction.requires_context`, not raw user text in logs or telemetry. Service auth uses the existing bearer-token contract; backend callers read `OMI_LLM_GATEWAY_SERVICE_TOKEN` first and then `LLM_GATEWAY_SERVICE_TOKEN` for local compatibility.
 
 BYOK requests skip this pilot because gateway BYOK forwarding is not implemented yet. The application-level fallback is the safety mechanism: any gateway HTTP error, timeout, unsupported capability response, malformed JSON, missing or invalid content, Pydantic validation failure, or unexpected exception falls back to the existing `get_llm('chat_extraction').with_structured_output(...)` path and returns that result. The pilot does not depend on gateway route/LKG fallback; if the gateway internally returns an error after trying its configured policy, the caller still treats that as a miss and uses the existing path.
+
+The backend exposes the Prometheus counter `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for this pilot. Current outcomes are `success`, `fallback`, and `skipped`; reasons are bounded classes such as `ok`, `timeout`, `request_error`, `http_503`, `invalid_json`, `schema_validation`, `unexpected_error`, and `byok`.
 
 Primary user chat should follow later as a separate lane, likely:
 
@@ -382,7 +384,7 @@ is_auto_lane_id(model: str) -> bool
 
 Implemented route refs are additive only. `get_route_ref(feature)` currently returns an `ExplicitRouteRef` for every existing feature by default, including pinned routes, profile routes, fallback routes, and provider/model construction options from `get_route_options(feature, model, provider)`. `AutoLaneRouteRef` is available behind an intentionally empty feature-to-lane mapping in `model_config.py` so a later ticket can map selected features to `omi:auto:chat-structured` without changing the legacy helpers.
 
-Backend callers that use `get_llm(feature)` can be migrated feature by feature. Route refs do not change return values from `get_model(feature)`, `get_provider(feature)`, or `get_llm(feature)`. The first pilot routes only `utils.llm.chat.requires_context` through the gateway when `OMI_LLM_GATEWAY_CHAT_EXTRACTION_ENABLED=true`; all other `chat_extraction` helpers remain on the existing explicit path.
+Backend callers that use `get_llm(feature)` can be migrated feature by feature. Route refs do not change return values from `get_model(feature)`, `get_provider(feature)`, or `get_llm(feature)`. The first pilot routes only non-BYOK `utils.llm.chat.requires_context` calls through the gateway first; all other `chat_extraction` helpers remain on the existing explicit path.
 
 ## BYOK Policy
 

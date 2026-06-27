@@ -6,9 +6,10 @@ from collections.abc import Mapping
 from typing import TypeVar
 
 import httpx
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-LLM_GATEWAY_CHAT_EXTRACTION_ENABLED_ENV_VAR = 'OMI_LLM_GATEWAY_CHAT_EXTRACTION_ENABLED'
+from utils.metrics import LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS
+
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
 LEGACY_LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
 LLM_GATEWAY_URL_ENV_VAR = 'OMI_LLM_GATEWAY_URL'
@@ -34,11 +35,6 @@ def get_llm_gateway_service_token() -> str | None:
     return None
 
 
-def is_llm_gateway_chat_extraction_enabled() -> bool:
-    configured = os.getenv(LLM_GATEWAY_CHAT_EXTRACTION_ENABLED_ENV_VAR, '')
-    return configured.strip().lower() in {'1', 'true', 'yes', 'on'}
-
-
 def is_auto_lane_id(model_or_lane: object) -> bool:
     return isinstance(model_or_lane, str) and model_or_lane.startswith(LLM_GATEWAY_AUTO_LANE_PREFIX)
 
@@ -59,13 +55,42 @@ def invoke_chat_structured_gateway(
         response.raise_for_status()
         content = _extract_choice_content(response.json())
         if not isinstance(content, str) or not content.strip():
+            record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='empty_content')
             return None
-        decoded = json.loads(content)
+        try:
+            decoded = json.loads(content)
+        except json.JSONDecodeError:
+            record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='invalid_json')
+            return None
         if not isinstance(decoded, Mapping):
+            record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='invalid_json_shape')
             return None
-        return _validate_output_model(output_model, decoded)
-    except Exception:
+        result = _validate_output_model(output_model, decoded)
+        record_chat_extraction_gateway_result(feature=feature, outcome='success', reason='ok')
+        return result
+    except httpx.HTTPStatusError as exc:
+        reason = f'http_{exc.response.status_code}' if exc.response is not None else 'http_status'
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
         return None
+    except httpx.TimeoutException:
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='timeout')
+        return None
+    except httpx.RequestError:
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='request_error')
+        return None
+    except ValidationError:
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='schema_validation')
+        return None
+    except Exception:
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='unexpected_error')
+        return None
+
+
+def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str) -> None:
+    try:
+        LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS.labels(feature=feature, outcome=outcome, reason=reason).inc()
+    except Exception:
+        pass
 
 
 def _gateway_headers() -> dict[str, str]:

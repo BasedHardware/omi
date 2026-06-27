@@ -78,22 +78,39 @@ def clear_byok_context():
     byok.set_byok_keys({})
 
 
-def test_requires_context_flag_off_skips_gateway_and_uses_existing_path(monkeypatch):
-    monkeypatch.delenv('OMI_LLM_GATEWAY_CHAT_EXTRACTION_ENABLED', raising=False)
-    existing_calls = []
-    monkeypatch.setattr(chat, 'get_llm', lambda feature: FakeLLM(chat.RequiresContext(value=True), existing_calls))
+class FakeCounterChild:
+    def __init__(self, parent, labels):
+        self.parent = parent
+        self.labels = labels
+
+    def inc(self, amount=1):
+        self.parent.calls.append((self.labels, amount))
+
+
+class FakeCounter:
+    def __init__(self):
+        self.calls = []
+
+    def labels(self, **labels):
+        return FakeCounterChild(self, labels)
+
+
+def test_requires_context_non_byok_tries_gateway_by_default(monkeypatch):
     monkeypatch.setattr(
         chat,
         'invoke_chat_structured_gateway',
-        lambda *args, **kwargs: pytest.fail('gateway should not be called when pilot flag is off'),
+        lambda prompt, output_model, *, feature: output_model(value=True),
+    )
+    monkeypatch.setattr(
+        chat,
+        'get_llm',
+        lambda feature: pytest.fail('existing path should not be called after gateway success'),
     )
 
     assert chat.requires_context('hello?') is True
-    assert existing_calls == [chat.RequiresContext]
 
 
-def test_requires_context_flag_on_gateway_success_returns_parsed_result(monkeypatch):
-    monkeypatch.setenv('OMI_LLM_GATEWAY_CHAT_EXTRACTION_ENABLED', 'true')
+def test_requires_context_gateway_success_returns_parsed_result(monkeypatch):
     monkeypatch.setattr(
         chat,
         'get_llm',
@@ -108,8 +125,7 @@ def test_requires_context_flag_on_gateway_success_returns_parsed_result(monkeypa
     assert chat.requires_context('what did I discuss yesterday?') is True
 
 
-def test_requires_context_flag_on_gateway_failure_falls_back(monkeypatch):
-    monkeypatch.setenv('OMI_LLM_GATEWAY_CHAT_EXTRACTION_ENABLED', 'true')
+def test_requires_context_gateway_failure_falls_back(monkeypatch):
     existing_calls = []
     monkeypatch.setattr(chat, 'get_llm', lambda feature: FakeLLM(chat.RequiresContext(value=False), existing_calls))
     monkeypatch.setattr(chat, 'invoke_chat_structured_gateway', lambda *args, **kwargs: None)
@@ -119,9 +135,13 @@ def test_requires_context_flag_on_gateway_failure_falls_back(monkeypatch):
 
 
 def test_requires_context_byok_context_skips_gateway(monkeypatch):
-    monkeypatch.setenv('OMI_LLM_GATEWAY_CHAT_EXTRACTION_ENABLED', 'true')
     byok.set_byok_keys({'openai': 'secret'})
     existing_calls = []
+    counter = FakeCounter()
+    monkeypatch.setattr(
+        chat, 'record_chat_extraction_gateway_result', gateway_client.record_chat_extraction_gateway_result
+    )
+    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     monkeypatch.setattr(chat, 'get_llm', lambda feature: FakeLLM(chat.RequiresContext(value=True), existing_calls))
     monkeypatch.setattr(
         chat,
@@ -131,10 +151,19 @@ def test_requires_context_byok_context_skips_gateway(monkeypatch):
 
     assert chat.requires_context('what did I discuss yesterday?') is True
     assert existing_calls == [chat.RequiresContext]
+    assert counter.calls == [
+        (
+            {
+                'feature': 'chat_extraction.requires_context',
+                'outcome': 'skipped',
+                'reason': 'byok',
+            },
+            1,
+        )
+    ]
 
 
 def test_requires_context_invalid_gateway_content_falls_back(monkeypatch):
-    monkeypatch.setenv('OMI_LLM_GATEWAY_CHAT_EXTRACTION_ENABLED', 'true')
     existing_calls = []
     monkeypatch.setattr(chat, 'get_llm', lambda feature: FakeLLM(chat.RequiresContext(value=False), existing_calls))
     monkeypatch.setattr(
@@ -172,6 +201,62 @@ def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeyp
     assert captured['json']['messages'] == [{'role': 'user', 'content': 'classified prompt'}]
     assert captured['json']['response_format']['type'] == 'json_schema'
     assert captured['json']['response_format']['json_schema']['schema']['properties']['value']['type'] == 'boolean'
+
+
+def test_chat_structured_gateway_records_success_metric(monkeypatch):
+    counter = FakeCounter()
+    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(
+        gateway_client.httpx,
+        'post',
+        lambda *args, **kwargs: FakeGatewayResponse({'choices': [{'message': {'content': '{"value": true}'}}]}),
+    )
+
+    result = gateway_client.invoke_chat_structured_gateway(
+        'classified prompt',
+        chat.RequiresContext,
+        feature='chat_extraction.requires_context',
+    )
+
+    assert result == chat.RequiresContext(value=True)
+    assert counter.calls == [
+        (
+            {
+                'feature': 'chat_extraction.requires_context',
+                'outcome': 'success',
+                'reason': 'ok',
+            },
+            1,
+        )
+    ]
+
+
+def test_chat_structured_gateway_records_fallback_reason_metric(monkeypatch):
+    counter = FakeCounter()
+    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(
+        gateway_client.httpx,
+        'post',
+        lambda *args, **kwargs: FakeGatewayResponse({'choices': [{'message': {'content': '{"unexpected": true}'}}]}),
+    )
+
+    result = gateway_client.invoke_chat_structured_gateway(
+        'classified prompt',
+        chat.RequiresContext,
+        feature='chat_extraction.requires_context',
+    )
+
+    assert result is None
+    assert counter.calls == [
+        (
+            {
+                'feature': 'chat_extraction.requires_context',
+                'outcome': 'fallback',
+                'reason': 'schema_validation',
+            },
+            1,
+        )
+    ]
 
 
 def test_chat_structured_gateway_failure_does_not_log_raw_prompt_or_response(monkeypatch, caplog):

@@ -21,7 +21,7 @@ from models.structured import ActionItem, Event
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.byok import has_byok_keys
-from utils.llm.gateway_client import invoke_chat_structured_gateway, is_llm_gateway_chat_extraction_enabled
+from utils.llm.gateway_client import invoke_chat_structured_gateway, record_chat_extraction_gateway_result
 from utils.llms.memory import get_prompt_memories
 from utils.llm.usage_tracker import track_usage, Features
 
@@ -103,6 +103,7 @@ class DatesContext(BaseModel):
 
 
 def requires_context(question: str) -> bool:
+    feature = 'chat_extraction.requires_context'
     prompt = f'''
     Based on the current question your task is to determine whether the user is asking a question that requires context outside the conversation to be answered.
     Take as example: if the user is saying "Hi", "Hello", "How are you?", "Good morning", etc, the answer is False.
@@ -110,12 +111,12 @@ def requires_context(question: str) -> bool:
     User's Question:
     {question}
     '''
-    if is_llm_gateway_chat_extraction_enabled() and not has_byok_keys():
-        gateway_response = invoke_chat_structured_gateway(
-            prompt, RequiresContext, feature='chat_extraction.requires_context'
-        )
+    if not has_byok_keys():
+        gateway_response = invoke_chat_structured_gateway(prompt, RequiresContext, feature=feature)
         if gateway_response is not None:
             return gateway_response.value
+    else:
+        record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
 
     with_parser = get_llm('chat_extraction').with_structured_output(RequiresContext)
     response: RequiresContext = with_parser.invoke(prompt)
