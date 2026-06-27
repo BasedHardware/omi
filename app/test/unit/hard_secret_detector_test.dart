@@ -10,6 +10,16 @@ void main() {
       expect(HardSecretDetector.contains('-----BEGIN PRIVATE KEY-----'), isTrue);
     });
 
+    test('drops underscore-prefixed Stripe-style keys (parity with desktop)', () {
+      // Stripe production keys use sk_ (underscore) separators. The mobile detector
+      // must catch these, matching the Swift desktop detector's sk[-_] pattern,
+      // so they are dropped before forwarding transcripts. Uses fake test values.
+      expect(HardSecretDetector.contains('found sk_NOT_A_REAL_KEY_test1234'), isTrue);
+      expect(HardSecretDetector.contains('key sk_DEMO_KEY_FAKE_VALUE1234'), isTrue);
+      // Hyphen form must still be caught (regression guard).
+      expect(HardSecretDetector.contains('token sk-FAKE_KEY_TEST_VALUE1234'), isTrue);
+    });
+
     test('does not classify email PII as a hard secret', () {
       expect(HardSecretDetector.contains('Reach me at user@example.com.'), isFalse);
       expect(HardSecretDetector.categories('Reach me at user@example.com.'), isEmpty);

@@ -3,21 +3,14 @@ class HardSecretDetection {
   final int start;
   final int end;
 
-  const HardSecretDetection({
-    required this.category,
-    required this.start,
-    required this.end,
-  });
+  const HardSecretDetection({required this.category, required this.start, required this.end});
 }
 
 class HardSecretDetector {
   static final List<({String category, RegExp pattern})> _patterns = [
     (
       category: 'private_key',
-      pattern: RegExp(
-        r'-----BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+|DSA\s+)?PRIVATE\s+KEY-----',
-        caseSensitive: false,
-      ),
+      pattern: RegExp(r'-----BEGIN\s+(?:RSA\s+|EC\s+|OPENSSH\s+|DSA\s+)?PRIVATE\s+KEY-----', caseSensitive: false),
     ),
     (
       category: 'database_url',
@@ -28,10 +21,7 @@ class HardSecretDetector {
     ),
     (
       category: 'api_key',
-      pattern: RegExp(
-        r'\b(?:sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b',
-        caseSensitive: true,
-      ),
+      pattern: RegExp(r'\b(?:sk[-_][A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b', caseSensitive: true),
     ),
     (
       category: 'token',
@@ -42,10 +32,7 @@ class HardSecretDetector {
     ),
     (
       category: 'password',
-      pattern: RegExp(
-        r"""\b(?:password|passwd|pwd)\b\s*[:=]\s*["']?[^"'\s]{8,}""",
-        caseSensitive: false,
-      ),
+      pattern: RegExp(r"""\b(?:password|passwd|pwd)\b\s*[:=]\s*["']?[^"'\s]{8,}""", caseSensitive: false),
     ),
     (
       category: 'cookie',
