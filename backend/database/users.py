@@ -1224,6 +1224,23 @@ def get_user_subscription(uid: str) -> Subscription:
     return default_subscription
 
 
+def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
+    """Gets the user's stored subscription without creating a default record."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get(['subscription'])
+    if not user_doc.exists:
+        return None
+
+    user_data = user_doc.to_dict()
+    if 'subscription' not in user_data:
+        return None
+
+    sub_data = user_data['subscription']
+    if sub_data.get('plan') == 'free':
+        sub_data['plan'] = PlanType.basic.value
+    return Subscription(**sub_data)
+
+
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
     """Get user's training data opt-in status."""
     user_ref = db.collection('users').document(uid)
