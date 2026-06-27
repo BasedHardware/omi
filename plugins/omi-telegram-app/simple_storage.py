@@ -41,11 +41,25 @@ def load_storage() -> None:
 
 
 def _save(path: str, payload: dict) -> None:
+    """Atomically write payload to path. Write to <path>.tmp, fsync, then os.replace.
+
+    A process crash mid-write leaves the original file untouched and a stray
+    .tmp on disk for the next startup to clean up.
+    """
+    tmp = path + ".tmp"
     try:
-        with open(path, "w") as f:
+        with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
     except Exception as e:
         print(f"⚠️  Could not save {path}: {e}", flush=True)
+        try:
+            if os.path.exists(tmp):
+                os.remove(tmp)
+        except Exception:
+            pass
 
 
 load_storage()
@@ -63,6 +77,7 @@ def save_user(
     bot_token: str,
     auto_reply_enabled: bool = False,
 ) -> None:
+    existing = users.get(chat_id, {})
     users[chat_id] = {
         "chat_id": chat_id,
         "omi_uid": omi_uid,
@@ -70,8 +85,11 @@ def save_user(
         "omi_dev_api_key": omi_dev_api_key,
         "bot_token": bot_token,
         "auto_reply_enabled": auto_reply_enabled,
-        "created_at": users.get(chat_id, {}).get("created_at", datetime.utcnow().isoformat()),
+        "created_at": existing.get("created_at", datetime.utcnow().isoformat()),
         "updated_at": datetime.utcnow().isoformat(),
+        # last_nudge_at tracks when we last told the user their auto-reply was off,
+        # so we don't spam them on every message. 4h cooldown; see main._NUDGE_COOLDOWN.
+        "last_nudge_at": existing.get("last_nudge_at"),
     }
     _save(USERS_FILE, users)
 
@@ -87,13 +105,44 @@ def get_user_by_uid(uid: str) -> Optional[dict]:
     return None
 
 
-def update_auto_reply(chat_id: str, enabled: bool) -> bool:
+def update_auto_reply(chat_id: str, enabled: bool) -> None:
+    """Set auto_reply_enabled for chat_id. Raises KeyError if unknown.
+
+    The caller is expected to have already verified the chat_id exists
+    (e.g. via get_user_by_chat_id); we raise here to surface any bug in
+    that assumption rather than silently no-oping.
+    """
+    if str(chat_id) not in users:
+        raise KeyError(f"Unknown chat_id: {chat_id}")
+    users[str(chat_id)]["auto_reply_enabled"] = enabled
+    users[str(chat_id)]["updated_at"] = datetime.utcnow().isoformat()
+    _save(USERS_FILE, users)
+
+
+def should_nudge(user: dict, cooldown_seconds: float) -> bool:
+    """True if it's been longer than cooldown_seconds since the last nudge.
+
+    Returns True if last_nudge_at is missing/None (never nudged) or older than
+    the cooldown window. Used by the webhook handler to throttle the
+    "auto-reply is disabled" message.
+    """
+    last = user.get("last_nudge_at")
+    if not last:
+        return True
+    try:
+        last_dt = datetime.fromisoformat(last)
+    except (TypeError, ValueError):
+        return True
+    elapsed = (datetime.utcnow() - last_dt).total_seconds()
+    return elapsed >= cooldown_seconds
+
+
+def mark_nudged(chat_id: str) -> None:
+    """Stamp last_nudge_at on a user so the next message skips the nudge."""
     if str(chat_id) in users:
-        users[str(chat_id)]["auto_reply_enabled"] = enabled
+        users[str(chat_id)]["last_nudge_at"] = datetime.utcnow().isoformat()
         users[str(chat_id)]["updated_at"] = datetime.utcnow().isoformat()
         _save(USERS_FILE, users)
-        return True
-    return False
 
 
 # ---------------------------------------------------------------------------

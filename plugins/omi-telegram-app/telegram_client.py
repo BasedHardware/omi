@@ -48,7 +48,22 @@ async def send_message(bot_token: str, chat_id: int | str, text: str) -> Optiona
 
     Does not raise — Telegram's API is best-effort for our purposes; if a
     reply fails we log and move on rather than crash the webhook handler.
+
+    Telegram caps messages at 4096 chars. Longer replies are truncated and a
+    trailing ellipsis is added so the user sees their reply ended mid-sentence.
     """
+    # Telegram Bot API hard limit on text length.
+    MAX_LEN = 4096
+    if text and len(text) > MAX_LEN:
+        original_len = len(text)
+        text = text[: MAX_LEN - 1].rstrip() + "\u2026"
+        logger.warning(
+            "send_message: truncated reply for chat_id=%s (%d -> %d chars)",
+            chat_id,
+            original_len,
+            len(text),
+        )
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.post(

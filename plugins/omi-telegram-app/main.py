@@ -1,19 +1,20 @@
-"""OMI Telegram AI-Clone plugin — T-003 skeleton + setup flow.
+"""OMI Telegram AI-Clone plugin.
 
 Routes:
 - GET  /health
 - POST /setup     Register a new bot token, return a deep-link URL.
-- POST /webhook   Receive Telegram updates, handle /start handshake.
+- POST /webhook   Receive Telegram updates: handle /start handshake, dispatch
+                  to persona if auto-reply is on, otherwise nudge (rate-limited).
+- POST /toggle    Flip auto_reply_enabled for a chat (called by Chat Tools).
 
-Auto-reply (persona dispatch) is implemented in T-004.
-
-The plugin is intentionally minimal: no framework, no async lifecycle
-beyond FastAPI's request handler. Mirrors plugins/omi-slack-app/main.py
-in shape (FastAPI + simple_storage + client wrapper).
+The plugin is intentionally minimal: no framework, no async lifecycle beyond
+FastAPI's request handler. Mirrors plugins/omi-slack-app/main.py in shape.
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 import secrets
@@ -26,15 +27,13 @@ _SHARED = os.path.abspath(os.path.join(_HERE, "..", "_shared"))
 if _SHARED not in sys.path:
     sys.path.insert(0, _SHARED)
 
+import httpx  # noqa: E402
 from fastapi import FastAPI, Header, HTTPException, Request  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 import simple_storage  # noqa: E402
 import telegram_client  # noqa: E402
 from persona_client import chat as _persona_chat  # noqa: E402  (re-export of plugins/_shared/persona_client.chat)
-
-# The shared persona client is imported lazily inside the webhook handler
-# (T-004) so the import is gated on auto-reply being enabled.
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("omi-telegram-clone")
@@ -47,10 +46,16 @@ logger = logging.getLogger("omi-telegram-clone")
 # on every webhook delivery. Set via env in production (so it survives restarts);
 # fall back to a fresh random value at startup so dev installs work out of the box.
 WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET") or secrets.token_urlsafe(32)
-logger.info("Webhook secret: %s...", WEBHOOK_SECRET[:8])
+if os.getenv("TELEGRAM_WEBHOOK_SECRET"):
+    logger.info("Webhook secret: configured via env")
+else:
+    logger.warning("Webhook secret: auto-generated (set TELEGRAM_WEBHOOK_SECRET to persist across restarts)")
 
 # Base URL of the Omi backend that the persona API lives on. Defaults to prod.
 OMI_BASE_URL = os.getenv("OMI_BASE_URL", "https://api.omi.me")
+
+# How often we re-nudge a user who has auto-reply disabled. Default 4 hours.
+_NUDGE_COOLDOWN_SECONDS = float(os.getenv("NUDGE_COOLDOWN_SECONDS", "14400"))
 
 
 app = FastAPI(
@@ -95,7 +100,7 @@ async def setup(req: SetupRequest):
     # to verify requests actually came from Telegram.
     try:
         await telegram_client.set_webhook(req.bot_token, webhook_url, WEBHOOK_SECRET)
-    except Exception as e:
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
         logger.error("set_webhook failed: %s", e)
         raise HTTPException(status_code=502, detail=f"Telegram setWebhook failed: {e}")
 
@@ -103,7 +108,7 @@ async def setup(req: SetupRequest):
     try:
         me = await telegram_client.get_me(req.bot_token)
         bot_username = (me.get("result") or {}).get("username") or "bot"
-    except Exception as e:
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
         logger.error("getMe failed: %s", e)
         raise HTTPException(status_code=502, detail=f"Telegram getMe failed: {e}")
 
@@ -165,18 +170,36 @@ async def webhook(
     request: Request,
     x_telegram_bot_api_secret_token: Optional[str] = Header(default=None),
 ):
-    """Receive a Telegram update.
+    """Receive a Telegram update. Always returns 200 on success, 401 on bad secret.
 
-    Two paths:
+    Paths:
     - `/start <setup_token>` from a chat that completed /setup: register chat_id.
-    - Regular text message from a known chat with auto_reply disabled: nudge.
-    - Anything else (unknown chat, group, no text): silently return 200.
+    - Regular text from a known private chat with auto_reply enabled: dispatch
+      to the persona, send the reply.
+    - Regular text from a known private chat with auto_reply disabled: nudge
+      (rate-limited by last_nudge_at).
+    - Anything else (unknown chat, group/channel, bot sender, no text,
+      malformed JSON): silently return 200.
+
+    Telegram retries indefinitely on non-2xx, so we never raise from here
+    unless the secret is wrong (then 401).
     """
     # Auth: Telegram echoes the secret_token we set at setWebhook time.
-    if x_telegram_bot_api_secret_token != WEBHOOK_SECRET:
+    # Use secrets.compare_digest for constant-time comparison.
+    presented = x_telegram_bot_api_secret_token or ""
+    if not secrets.compare_digest(presented, WEBHOOK_SECRET):
         raise HTTPException(status_code=401, detail="Invalid or missing Telegram webhook secret")
 
-    update = await request.json()
+    # Telegram's webhook sends JSON; if the body is malformed, log and 200 (don't retry).
+    try:
+        update = await request.json()
+    except json.JSONDecodeError:
+        logger.warning("webhook received malformed JSON, ignoring")
+        return {"ok": True}
+    if not isinstance(update, dict):
+        logger.warning("webhook received non-dict JSON, ignoring")
+        return {"ok": True}
+
     chat_id, text = _extract_text_and_chat(update)
     if chat_id is None:
         return {"ok": True}
@@ -227,9 +250,11 @@ async def webhook(
     if user is None:
         return {"ok": True}
 
-    # Auto-reply disabled -> nudge, don't dispatch.
+    # Auto-reply disabled -> nudge (rate-limited) instead of spamming the user.
     if not user.get("auto_reply_enabled"):
-        await _send_auto_reply_disabled_notice(user["bot_token"], chat_id)
+        if simple_storage.should_nudge(user, _NUDGE_COOLDOWN_SECONDS):
+            await _send_auto_reply_disabled_notice(user["bot_token"], chat_id)
+            simple_storage.mark_nudged(str(chat_id))
         return {"ok": True}
 
     # Auto-reply on -> call the persona, send the reply.
@@ -241,10 +266,10 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
     """Call the persona API and send the reply back to Telegram.
 
     Empty replies (timeout/connect error) and HTTP errors are logged but do not
-    raise — the webhook must always return 200 to Telegram.
+    raise — the webhook must always return 200 to Telegram. The except clause
+    is narrowed to httpx + asyncio errors so genuine bugs in our code surface
+    via FastAPI's error middleware rather than being silently swallowed.
     """
-    import httpx as _httpx
-
     try:
         reply = await _persona_chat(
             app_id=user["persona_id"],
@@ -252,16 +277,11 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
             omi_base=OMI_BASE_URL,
             text=text,
         )
-    except _httpx.HTTPStatusError as e:
-        logger.error(
-            "persona chat HTTP error for chat %s: %s",
-            chat_id,
-            e,
-        )
+    except httpx.HTTPError as e:
+        logger.error("persona chat HTTP error for chat %s: %s", chat_id, e)
         return
-    except Exception as e:
-        # Catch-all: never crash the webhook on an unexpected error.
-        logger.exception("persona chat unexpected error for chat %s: %s", chat_id, e)
+    except asyncio.TimeoutError as e:
+        logger.error("persona chat timeout for chat %s: %s", chat_id, e)
         return
 
     if not reply:
