@@ -3063,7 +3063,7 @@
     "captureModeLiveDescription": "Transcrie în timp real în timp ce vorbești.",
     "captureModeLaterDescription": "Salvează audio acum și transcrie oricând dorești.",
     "backgroundModeUnavailable": "Modul de fundal nu este disponibil deoarece nu este conectat niciun dispozitiv compatibil. Conectează un dispozitiv Omi, OpenGlass sau Friend Pendant pentru a folosi această funcție.",
-    "deviceTutorial": "Tutorial dispozitiv",
+    "deviceTutorial": "Cum să folosești Omi",
     "deviceOnboardingTranscriptionTitle": "Vorbește în Omi",
     "deviceOnboardingTranscriptionSubtitle": "Spune câteva cuvinte și privește-le cum apar în timp real",
     "deviceOnboardingGoodJob": "Bravo!",

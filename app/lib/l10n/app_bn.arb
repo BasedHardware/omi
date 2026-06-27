@@ -10641,7 +10641,7 @@
     "captureModeLiveDescription": "আপনি কথা বলার সাথে সাথে রিয়েল-টাইমে ট্রান্সক্রাইব করুন।",
     "captureModeLaterDescription": "এখন অডিও সংরক্ষণ করুন এবং যখন খুশি ট্রান্সক্রাইব করুন।",
     "backgroundModeUnavailable": "কোনো সামঞ্জস্যপূর্ণ ডিভাইস সংযুক্ত না থাকায় ব্যাকগ্রাউন্ড মোড উপলভ্য নয়। এই ফিচারটি ব্যবহার করতে একটি Omi, OpenGlass বা Friend Pendant ডিভাইস সংযুক্ত করুন।",
-    "deviceTutorial": "ডিভাইস টিউটোরিয়াল",
+    "deviceTutorial": "Omi কীভাবে ব্যবহার করবেন",
     "deviceOnboardingTranscriptionTitle": "আপনার Omi-তে কথা বলুন",
     "deviceOnboardingTranscriptionSubtitle": "কয়েকটি শব্দ বলুন এবং রিয়েল-টাইমে সেগুলো ভেসে উঠতে দেখুন",
     "deviceOnboardingGoodJob": "দারুণ!",

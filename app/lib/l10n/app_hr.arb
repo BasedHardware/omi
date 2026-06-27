@@ -10641,7 +10641,7 @@
     "captureModeLiveDescription": "Transkribiraj u stvarnom vremenu dok govoriš.",
     "captureModeLaterDescription": "Spremi zvuk sada i transkribiraj kad god želiš.",
     "backgroundModeUnavailable": "Pozadinski način nije dostupan jer nije povezan kompatibilan uređaj. Povežite Omi, OpenGlass ili Friend Pendant uređaj da biste koristili ovu značajku.",
-    "deviceTutorial": "Vodič za uređaj",
+    "deviceTutorial": "Kako koristiti Omi",
     "deviceOnboardingTranscriptionTitle": "Govorite u svoj Omi",
     "deviceOnboardingTranscriptionSubtitle": "Recite nekoliko riječi i gledajte kako se pojavljuju u stvarnom vremenu",
     "deviceOnboardingGoodJob": "Odlično!",

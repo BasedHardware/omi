@@ -11071,9 +11071,9 @@
     "@transcribeLaterPaused": {
         "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
     },
-    "deviceTutorial": "Device Tutorial",
+    "deviceTutorial": "How to Use Your Omi",
     "@deviceTutorial": {
-        "description": "Settings row that launches the interactive device tutorial (shown only when a device is connected)"
+        "description": "Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)"
     },
     "deviceOnboardingTranscriptionTitle": "Speak Into Your Omi",
     "@deviceOnboardingTranscriptionTitle": {
