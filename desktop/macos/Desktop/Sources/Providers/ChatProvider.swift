@@ -3508,13 +3508,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     messages.remove(at: index)
                 } else {
                     messages[index].isStreaming = false
-                    let terminalStatus: ToolCallStatus = {
-                        if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
-                            return .completed
-                        }
-                        return .failed
-                    }()
-                    completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: terminalStatus)
+                    completeRemainingToolCalls(
+                        messageId: aiMessageId,
+                        terminalStatus: ChatProvider.remainingToolStatusAfterPartialResponseError(error)
+                    )
                     log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
                     // Still try to persist the partial response.
                     //
@@ -3866,6 +3863,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         default:
             return .completed
         }
+    }
+
+    /// Intentional user stops should not make in-flight tool rows look
+    /// like execution errors. Real bridge failures still surface as failed.
+    nonisolated static func remainingToolStatusAfterPartialResponseError(_ error: Error) -> ToolCallStatus {
+        if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+            return .completed
+        }
+        return .failed
     }
 
     /// Map a `StallDetector.State` to the matching `ToolCallStatus`.

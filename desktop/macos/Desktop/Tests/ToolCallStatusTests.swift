@@ -61,4 +61,18 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("started"), .running)
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("completed"), .completed)
   }
+
+  func testIntentionalStoppedErrorCompletesRemainingToolsWithoutFailureUI() {
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(BridgeError.stopped),
+      .completed
+    )
+  }
+
+  func testBridgeFailuresMarkRemainingToolsFailed() {
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(BridgeError.timeout),
+      .failed
+    )
+  }
 }
