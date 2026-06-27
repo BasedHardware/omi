@@ -783,3 +783,57 @@ class TestAutoAttentionSwitching:
             worker._model.change_attention_model.assert_not_called()
             assert worker._attn_is_local is False
             worker.stop()
+
+    def test_auto_switches_back_to_full_after_local(self):
+        with patch.dict(
+            os.environ,
+            {
+                "PARAKEET_ATTENTION_MODE": "auto",
+                "PARAKEET_AUTO_ATTN_THRESHOLD": "600",
+                "PARAKEET_MAX_FILE_DURATION": "0",
+            },
+        ):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=700.0)
+            worker._batch_transcribe({"audio_paths": ["/tmp/long.wav"], "timestamps": True, "batch_size": 1})
+            assert worker._attn_is_local is True
+
+            worker._get_audio_duration_sec = MagicMock(return_value=100.0)
+            worker._batch_transcribe({"audio_paths": ["/tmp/short.wav"], "timestamps": True, "batch_size": 1})
+            assert worker._attn_is_local is False
+            worker._model.change_attention_model.assert_called_with("rel_pos")
+            worker.stop()
+
+    def test_auto_threshold_boundary_exact_triggers_local(self):
+        with patch.dict(
+            os.environ,
+            {
+                "PARAKEET_ATTENTION_MODE": "auto",
+                "PARAKEET_AUTO_ATTN_THRESHOLD": "600",
+                "PARAKEET_MAX_FILE_DURATION": "0",
+            },
+        ):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=600.0)
+            worker._batch_transcribe({"audio_paths": ["/tmp/exact.wav"], "timestamps": True, "batch_size": 1})
+            assert worker._attn_is_local is True
+            worker.stop()
+
+
+class TestDurationGuardBoundary:
+
+    def test_duration_exactly_at_limit_passes(self):
+        with patch.dict(os.environ, {"PARAKEET_MAX_FILE_DURATION": "60"}):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=60.0)
+            results = worker._batch_transcribe({"audio_paths": ["/tmp/exact.wav"], "timestamps": True, "batch_size": 1})
+            assert len(results) == 1
+            worker.stop()
+
+    def test_duration_just_over_limit_raises(self):
+        with patch.dict(os.environ, {"PARAKEET_MAX_FILE_DURATION": "60"}):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=60.01)
+            with pytest.raises(AudioDurationExceededError):
+                worker._batch_transcribe({"audio_paths": ["/tmp/over.wav"], "timestamps": True, "batch_size": 1})
+            worker.stop()
