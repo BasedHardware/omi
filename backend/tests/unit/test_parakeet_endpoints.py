@@ -242,6 +242,14 @@ class TestAudioDurationFromBytes:
 
         assert _get_audio_duration_from_bytes(b"") == 0.0
 
+    def test_invalid_bytes_return_inf_when_guard_enabled(self):
+        _, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            assert mod._get_audio_duration_from_bytes(b"not audio") == float('inf')
+        finally:
+            mod._max_file_duration_sec = 0.0
+
     def test_flac_returns_positive_duration(self):
         from main import _get_audio_duration_from_bytes
 
@@ -293,14 +301,44 @@ class TestDurationGuardHTTP413:
     def test_v1_returns_413_for_oversized_flac(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
         mod._max_file_duration_sec = 5.0
-        buf = io.BytesIO()
-        sf.write(buf, np.zeros(16000 * 10, dtype='float32'), 16000, format='FLAC')
-        flac_data = buf.getvalue()
-        client = TestClient(app, raise_server_exceptions=False)
-        resp = client.post("/v1/transcribe", files={"file": ("long.flac", flac_data, "audio/flac")})
-        assert resp.status_code == 413
-        assert "exceeds limit" in resp.json()["detail"].lower()
-        mod._max_file_duration_sec = 0.0
+        try:
+            buf = io.BytesIO()
+            sf.write(buf, np.zeros(16000 * 10, dtype='float32'), 16000, format='FLAC')
+            flac_data = buf.getvalue()
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("long.flac", flac_data, "audio/flac")})
+            assert resp.status_code == 413
+            assert "exceeds limit" in resp.json()["detail"].lower()
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_v1_rejects_unprobeable_audio_before_batch(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("bad.bin", b"not audio", "application/octet-stream")})
+            assert resp.status_code == 413
+            assert "cannot determine audio duration" in resp.json()["detail"].lower()
+            engine.submit.assert_not_called()
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_v2_rejects_unprobeable_audio_before_batch(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post(
+                "/v2/transcribe",
+                files={"file": ("bad.bin", b"not audio", "application/octet-stream")},
+                data={"diarize": "true"},
+            )
+            assert resp.status_code == 413
+            assert "cannot determine audio duration" in resp.json()["detail"].lower()
+            engine.submit.assert_not_called()
+        finally:
+            mod._max_file_duration_sec = 0.0
 
     def test_v1_passes_when_under_limit(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
