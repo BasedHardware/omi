@@ -180,12 +180,6 @@ class $AssetsImagesGen {
   /// File path: assets/images/ic_dollar.svg
   String get icDollar => 'assets/images/ic_dollar.svg';
 
-  /// File path: assets/images/ic_persona_profile.svg
-  String get icPersonaProfile => 'assets/images/ic_persona_profile.svg';
-
-  /// File path: assets/images/ic_setting_persona.svg
-  String get icSettingPersona => 'assets/images/ic_setting_persona.svg';
-
   /// File path: assets/images/imessage_logo.svg
   String get imessageLogo => 'assets/images/imessage_logo.svg';
 
@@ -373,8 +367,6 @@ class $AssetsImagesGen {
     icCloneChat,
     icClonePlus,
     icDollar,
-    icPersonaProfile,
-    icSettingPersona,
     imessageLogo,
     instagramLogo,
     instruction1,

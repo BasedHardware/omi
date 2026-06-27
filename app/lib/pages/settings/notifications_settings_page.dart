@@ -1,13 +1,10 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/services/notifications/daily_reflection_notification.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:provider/provider.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -26,14 +23,11 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   bool _dailySummaryEnabled = true;
   int _dailySummaryHour = 22; // Default to 10 PM
 
-  // Daily Reflection settings
-  bool _dailyReflectionEnabled = true;
-
   @override
   void initState() {
     super.initState();
     _loadSettings();
-    MixpanelManager().dailySummarySettingsOpened();
+    PlatformManager.instance.analytics.dailySummarySettingsOpened();
   }
 
   Future<void> _loadSettings() async {
@@ -44,7 +38,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     final mentorSettings = await getMentorNotificationSettings();
 
     // Load settings from local prefs
-    final reflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
     final localFrequency = SharedPreferencesUtil().notificationFrequency;
 
     if (mounted) {
@@ -59,14 +52,16 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         if (mentorSettings != null) {
           SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
         }
-        _dailyReflectionEnabled = reflectionEnabled;
         _isLoading = false;
       });
     }
   }
 
   Future<void> _updateNotificationFrequency(int value) async {
-    MixpanelManager().notificationFrequencyChanged(oldFrequency: _notificationFrequency, newFrequency: value);
+    PlatformManager.instance.analytics.notificationFrequencyChanged(
+      oldFrequency: _notificationFrequency,
+      newFrequency: value,
+    );
     setState(() => _notificationFrequency = value);
     SharedPreferencesUtil().notificationFrequency = value;
     await setMentorNotificationSettings(value);
@@ -119,26 +114,13 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   Future<void> _updateDailySummaryEnabled(bool value) async {
     setState(() => _dailySummaryEnabled = value);
     await setDailySummarySettings(enabled: value);
-    MixpanelManager().dailySummaryToggled(enabled: value);
+    PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
   }
 
   Future<void> _updateDailySummaryHour(int hour) async {
     setState(() => _dailySummaryHour = hour);
     await setDailySummarySettings(hour: hour);
-    MixpanelManager().dailySummaryTimeChanged(hour: hour);
-  }
-
-  void _updateDailyReflectionEnabled(bool value) {
-    MixpanelManager().dailyReflectionToggled(enabled: value);
-    setState(() => _dailyReflectionEnabled = value);
-    SharedPreferencesUtil().dailyReflectionEnabled = value;
-
-    // Schedule or cancel the notification based on the setting
-    if (value) {
-      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
-    } else {
-      DailyReflectionNotification.cancelNotification();
-    }
+    PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
   }
 
   Future<void> _showHourPicker() async {
@@ -212,67 +194,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
   }
 
-  Future<void> _showGenerateSummaryPicker() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: now,
-      firstDate: now.subtract(const Duration(days: 365)),
-      lastDate: now,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Color(0xFF6366F1),
-              onPrimary: Colors.white,
-              surface: Color(0xFF1C1C1E),
-              onSurface: Colors.white,
-            ),
-            dialogBackgroundColor: const Color(0xFF1C1C1E),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null && mounted) {
-      final dateStr =
-          '${picked.year}-${picked.month.toString().padLeft(2, '0')}-${picked.day.toString().padLeft(2, '0')}';
-
-      // Show loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
-      );
-
-      final summaryId = await generateDailySummary(date: dateStr);
-
-      if (!mounted) return;
-      Navigator.pop(context); // Dismiss loading
-
-      if (summaryId != null) {
-        MixpanelManager().dailySummaryTestGenerated(date: dateStr);
-
-        // Refresh the hasDailySummaries flag so the Recap tab shows
-        Provider.of<ConversationProvider>(context, listen: false).checkHasDailySummaries();
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.summaryGeneratedFor('${picked.month}/${picked.day}/${picked.year}')),
-            backgroundColor: Colors.green.shade700,
-          ),
-        );
-      } else {
-        MixpanelManager().dailySummaryTestGenerationFailed(date: dateStr);
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.failedToGenerateSummary), backgroundColor: Colors.red.shade700),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -281,29 +202,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         title: Text(context.l10n.notifications),
         backgroundColor: Theme.of(context).colorScheme.primary,
         elevation: 0,
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert, color: Colors.white),
-            color: const Color(0xFF1C1C1E),
-            onSelected: (value) {
-              if (value == 'generate') {
-                _showGenerateSummaryPicker();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                value: 'generate',
-                child: Row(
-                  children: [
-                    const Icon(Icons.auto_awesome, color: Colors.white, size: 20),
-                    const SizedBox(width: 12),
-                    Text(context.l10n.generateSummary, style: const TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
@@ -337,20 +235,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
                     ),
                   ),
                   _buildDailySummaryCard(),
-
-                  const SizedBox(height: 32),
-
-                  // Daily Reflection Section
-                  _buildSectionHeader(context.l10n.dailyReflection),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Text(
-                      context.l10n.dailyReflectionDescription,
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
-                    ),
-                  ),
-                  _buildDailyReflectionCard(),
                 ],
               ),
             ),
@@ -493,22 +377,6 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDailyReflectionCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-      child: _buildSettingRow(
-        icon: FontAwesomeIcons.moon,
-        title: context.l10n.enable,
-        trailing: Switch(
-          value: _dailyReflectionEnabled,
-          onChanged: _updateDailyReflectionEnabled,
-          activeColor: const Color(0xFF6366F1),
-        ),
       ),
     );
   }

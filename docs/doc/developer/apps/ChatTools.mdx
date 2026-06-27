@@ -44,7 +44,7 @@ sequenceDiagram
     U->>O: "Send hello to #general"
     O->>O: AI decides to use your tool
     O->>Y: POST /api/send_message
-    Note over Y: {uid, app_id, tool_name, channel, message}
+    Note over Y: {uid, app_id, tool_name, geolocation?, ...params}
     Y->>Y: Process request
     Y-->>O: {result: "Message sent!"}
     O-->>U: "Done! Message sent to #general"
@@ -85,6 +85,7 @@ Your backend server needs to expose endpoints that Omi will call when tools are 
       - `uid`: User ID
       - `app_id`: Your app ID
       - `tool_name`: Name of the tool being called
+      - `geolocation` (optional): User's cached location, see [Geolocation](#geolocation) below
       - Plus any tool-specific parameters
     - Return JSON with either:
       - `result`: Success message (string)
@@ -614,7 +615,14 @@ Abuse of chat messages (spam, excessive notifications) may result in your app be
   "app_id": "your_app_id",
   "tool_name": "send_slack_message",
   "channel": "#general",
-  "message": "Hello from Omi!"
+  "message": "Hello from Omi!",
+  "geolocation": {
+    "latitude": 30.2672,
+    "longitude": -97.7431,
+    "address": "123 Main St, Austin, TX 78701",
+    "google_place_id": "ChIJLwPMoJm1RIYRetVp1EtGm10",
+    "location_type": "approximate"
+  }
 }
 ```
 
@@ -622,6 +630,43 @@ Abuse of chat messages (spam, excessive notifications) may result in your app be
 ```
 GET /api/search?uid=user_id&app_id=app_id&tool_name=search_slack_messages&query=meeting
 ```
+
+### Geolocation
+
+Tool call payloads include an optional `geolocation` field when the user has shared their location with Omi. Use it to make your tool location-aware (e.g., tag entries with where the user was, find nearby stores, localize search results).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `latitude` | float | User's latitude in decimal degrees |
+| `longitude` | float | User's longitude in decimal degrees |
+| `address` | string \| null | Reverse-geocoded human-readable address |
+| `google_place_id` | string \| null | Google Maps place identifier |
+| `location_type` | string \| null | How the location was determined (e.g., `approximate`) |
+
+<Note>
+**Backward compatible**: The `geolocation` field is **only present when location data is available**. If the user has never granted location permission or their cached location has expired, the field is **omitted entirely** from the payload — it's not set to `null`. Always treat it as optional when parsing.
+</Note>
+
+```python
+@app.route('/api/add_product_entry', methods=['POST'])
+def add_product_entry():
+    data = request.json
+    geolocation = data.get('geolocation')  # may be None
+
+    store_location = None
+    if geolocation:
+        store_location = {
+            'lat': geolocation['latitude'],
+            'lng': geolocation['longitude'],
+            'address': geolocation.get('address'),
+        }
+
+    # ... save entry with store_location ...
+```
+
+<Tip>
+Location data is cached server-side for 30 minutes. If the user moves significantly, your tool will receive updated coordinates on the next call.
+</Tip>
 
 ### Response Format
 

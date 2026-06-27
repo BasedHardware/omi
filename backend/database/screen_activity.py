@@ -12,6 +12,14 @@ SCREEN_ACTIVITY_COLLECTION = 'screen_activity'
 USERS_COLLECTION = 'users'
 
 
+def get_screen_activity_ids(uid: str) -> List[str]:
+    """Return all screen activity document IDs for a user (IDs-only projection).
+
+    Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
+    coll = db.collection(USERS_COLLECTION).document(uid).collection(SCREEN_ACTIVITY_COLLECTION)
+    return [doc.id for doc in coll.select([]).stream()]
+
+
 def upsert_screen_activity(uid: str, rows: List[Dict[str, Any]]) -> int:
     """Batch write screen activity rows to Firestore users/{uid}/screen_activity/{id}."""
     if not rows:

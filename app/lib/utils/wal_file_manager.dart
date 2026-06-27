@@ -1,8 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -20,9 +18,7 @@ class WalFileManager {
   static File? _walBackupFile;
 
   static Future<void> init() async {
-    final directory = Platform.isMacOS
-        ? await getApplicationSupportDirectory()
-        : await getApplicationDocumentsDirectory();
+    final directory = await getApplicationDocumentsDirectory();
     _walFile = File('${directory.path}/$_walFileName');
     _walBackupFile = File('${directory.path}/$_walBackupFileName');
   }
@@ -43,7 +39,13 @@ class WalFileManager {
       return [];
     }
 
-    final jsonData = jsonDecode(content);
+    dynamic jsonData;
+    try {
+      jsonData = jsonDecode(content);
+    } on FormatException catch (e) {
+      Logger.debug('WAL file is corrupted ($e), trying backup');
+      return await _loadFromBackup();
+    }
     if (jsonData is! Map<String, dynamic> || jsonData['wals'] is! List) {
       Logger.debug('Invalid WAL file format, returning empty list');
       return [];
@@ -99,7 +101,13 @@ class WalFileManager {
       return [];
     }
 
-    final jsonData = jsonDecode(content);
+    dynamic jsonData;
+    try {
+      jsonData = jsonDecode(content);
+    } on FormatException catch (e) {
+      Logger.debug('WAL backup file is also corrupted ($e), returning empty list');
+      return [];
+    }
     if (jsonData is! Map<String, dynamic> || jsonData['wals'] is! List) {
       return [];
     }

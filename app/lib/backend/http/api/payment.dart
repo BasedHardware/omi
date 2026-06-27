@@ -4,12 +4,16 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
-Future<Map<String, dynamic>?> createCheckoutSession({required String priceId}) async {
+Future<Map<String, dynamic>?> createCheckoutSession({required String priceId, String? promotionCode}) async {
+  final body = <String, dynamic>{'price_id': priceId};
+  if (promotionCode != null && promotionCode.trim().isNotEmpty) {
+    body['promotion_code'] = promotionCode.trim();
+  }
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/checkout-session',
     headers: {},
     method: 'POST',
-    body: jsonEncode({'price_id': priceId}),
+    body: jsonEncode(body),
   );
   if (response != null && response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
@@ -30,12 +34,12 @@ Future<Map<String, dynamic>?> createCheckoutSession({required String priceId}) a
   return null;
 }
 
-Future<bool> cancelSubscription() async {
+Future<bool> cancelSubscription({String? reason, String? reasonDetails}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/subscription',
     headers: {},
     method: 'DELETE',
-    body: '',
+    body: reason != null ? jsonEncode({'reason': reason, 'reason_details': reasonDetails}) : '',
   );
   if (response != null && response.statusCode == 200) {
     return true;
@@ -43,17 +47,30 @@ Future<bool> cancelSubscription() async {
   return false;
 }
 
-Future<Map<String, dynamic>?> upgradeSubscription({required String priceId}) async {
+Future<Map<String, dynamic>?> upgradeSubscription({required String priceId, String? promotionCode}) async {
+  final body = <String, dynamic>{'price_id': priceId};
+  if (promotionCode != null && promotionCode.trim().isNotEmpty) {
+    body['promotion_code'] = promotionCode.trim();
+  }
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/payments/upgrade-subscription',
     headers: {},
     method: 'POST',
-    body: jsonEncode({'price_id': priceId}),
+    body: jsonEncode(body),
   );
-  if (response != null && response.statusCode == 200) {
+  if (response == null) return null;
+  if (response.statusCode == 200) {
     var jsonResponse = jsonDecode(response.body);
     Logger.debug('upgradeSubscription response: ${response.body}');
     return jsonResponse;
+  }
+  if (response.statusCode == 400) {
+    try {
+      final errorBody = jsonDecode(response.body);
+      return {'error': true, 'detail': errorBody['detail']};
+    } catch (_) {
+      return {'error': true};
+    }
   }
   return null;
 }

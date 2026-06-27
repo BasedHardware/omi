@@ -153,6 +153,8 @@ PODS:
   - flutter_sound_core (9.25.1)
   - flutter_timezone (0.0.1):
     - Flutter
+  - flutter_tts (0.0.1):
+    - Flutter
   - frame_sdk (0.0.2):
     - Flutter
   - geolocator_apple (1.2.0):
@@ -221,12 +223,6 @@ PODS:
     - Flutter
     - iOSMcuManagerLibrary (= 1.6)
     - SwiftProtobuf
-  - Mixpanel-swift (5.1.0):
-    - Mixpanel-swift/Complete (= 5.1.0)
-  - Mixpanel-swift/Complete (5.1.0)
-  - mixpanel_flutter (2.4.4):
-    - Flutter
-    - Mixpanel-swift (= 5.1.0)
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
     - nanopb/encode (= 3.30910.0)
@@ -301,6 +297,7 @@ DEPENDENCIES:
   - flutter_native_splash (from `.symlinks/plugins/flutter_native_splash/ios`)
   - flutter_sound (from `.symlinks/plugins/flutter_sound/ios`)
   - flutter_timezone (from `.symlinks/plugins/flutter_timezone/ios`)
+  - flutter_tts (from `.symlinks/plugins/flutter_tts/ios`)
   - frame_sdk (from `.symlinks/plugins/frame_sdk/ios`)
   - geolocator_apple (from `.symlinks/plugins/geolocator_apple/darwin`)
   - google_sign_in_ios (from `.symlinks/plugins/google_sign_in_ios/darwin`)
@@ -311,7 +308,6 @@ DEPENDENCIES:
   - just_audio (from `.symlinks/plugins/just_audio/darwin`)
   - map_launcher (from `.symlinks/plugins/map_launcher/ios`)
   - mcumgr_flutter (from `.symlinks/plugins/mcumgr_flutter/ios`)
-  - mixpanel_flutter (from `.symlinks/plugins/mixpanel_flutter/ios`)
   - nordic_dfu (from `.symlinks/plugins/nordic_dfu/ios`)
   - opus_flutter_ios (from `.symlinks/plugins/opus_flutter_ios/ios`)
   - package_info_plus (from `.symlinks/plugins/package_info_plus/ios`)
@@ -355,7 +351,6 @@ SPEC REPOS:
     - IosAwnCore
     - iOSDFULibrary
     - iOSMcuManagerLibrary
-    - Mixpanel-swift
     - nanopb
     - PromisesObjC
     - PromisesSwift
@@ -410,6 +405,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/flutter_sound/ios"
   flutter_timezone:
     :path: ".symlinks/plugins/flutter_timezone/ios"
+  flutter_tts:
+    :path: ".symlinks/plugins/flutter_tts/ios"
   frame_sdk:
     :path: ".symlinks/plugins/frame_sdk/ios"
   geolocator_apple:
@@ -430,8 +427,6 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/map_launcher/ios"
   mcumgr_flutter:
     :path: ".symlinks/plugins/mcumgr_flutter/ios"
-  mixpanel_flutter:
-    :path: ".symlinks/plugins/mixpanel_flutter/ios"
   nordic_dfu:
     :path: ".symlinks/plugins/nordic_dfu/ios"
   opus_flutter_ios:
@@ -499,6 +494,7 @@ SPEC CHECKSUMS:
   flutter_sound: 69343c1dd74d2cc5a7fe6693f20369b63ea2e249
   flutter_sound_core: 065aca7698f13a934d8cb8156a2865efd282b1e8
   flutter_timezone: ee50ce7786b5fde27e2fe5375bbc8c9661ffc13f
+  flutter_tts: 35ac3c7d42412733e795ea96ad2d7e05d0a75113
   frame_sdk: 4d4df786d828557bf57e05f6f1856613896cc9db
   geolocator_apple: ab36aa0e8b7d7a2d7639b3b4e48308394e8cef5e
   google_sign_in_ios: 39f46834c156be9a4dfef914258e0145b7117725
@@ -518,8 +514,6 @@ SPEC CHECKSUMS:
   just_audio: 4e391f57b79cad2b0674030a00453ca5ce817eed
   map_launcher: fe43bda6720bb73c12fcc1bdd86123ff49a4d4d6
   mcumgr_flutter: 8c4a598cb1b4d10a9adbc0f13288334297185506
-  Mixpanel-swift: 7b26468fc0e2e521104e51d65c4bbf7cab8162f8
-  mixpanel_flutter: a0b6b937035899cd01951735ad5f87718b2ffee5
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   nordic_dfu: e4fb6f461f4a290b28ea4b1dfb69071665cdfa3e
   opus_flutter_ios: f16ed3599997ced564ad44509e87003159a86def

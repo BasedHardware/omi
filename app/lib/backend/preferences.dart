@@ -36,30 +36,6 @@ class SharedPreferencesUtil {
 
   //-------------------------------- Device ----------------------------------//
 
-  bool? get hasOmiDevice => _preferences?.getBool('hasOmiDevice');
-
-  set hasOmiDevice(bool? value) {
-    if (value != null) {
-      _preferences?.setBool('hasOmiDevice', value);
-    } else {
-      _preferences?.remove('hasOmiDevice');
-    }
-  }
-
-  bool get hasPersonaCreated => getBool('hasPersonaCreated');
-
-  set hasPersonaCreated(bool value) => saveBool('hasPersonaCreated', value);
-
-  String? get verifiedPersonaId => getString('verifiedPersonaId');
-
-  set verifiedPersonaId(String? value) {
-    if (value != null) {
-      _preferences?.setString('verifiedPersonaId', value);
-    } else {
-      _preferences?.remove('verifiedPersonaId');
-    }
-  }
-
   set btDevice(BtDevice value) {
     saveString('btDevice', jsonEncode(value.toJson()));
   }
@@ -85,6 +61,29 @@ class SharedPreferencesUtil {
   bool get deviceOnboardingCompleted => getBool('deviceOnboardingCompleted');
 
   set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
+
+  bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
+
+  set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
+
+  // Batch (offline) capture mode: when on, BLE audio is stored to local .bin files
+  // by the native layer instead of being transcribed in real time. Mutually
+  // exclusive with the realtime transcription socket (see CaptureProvider).
+  bool get batchModeEnabled => getBool('batchModeEnabled');
+
+  set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
+
+  // Transcribe Later: pause capture (native writer drops packets, keeps the file
+  // open) so the user can mute a sensitive moment and resume the same recording.
+  bool get batchMuted => getBool('batchMuted');
+
+  set batchMuted(bool value) => saveBool('batchMuted', value);
+
+  // Transcribe Later: one-shot flag — when set, the native writer finalizes the
+  // current file and starts a fresh one (manual "New recording" cut), then clears it.
+  bool get batchCutRequested => getBool('batchCutRequested');
+
+  set batchCutRequested(bool value) => saveBool('batchCutRequested', value);
 
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
@@ -114,6 +113,12 @@ class SharedPreferencesUtil {
   }
 
   bool get useCustomStt => customSttConfig.isEnabled;
+
+  // Whether offline recordings auto-sync to Omi when the device connects.
+  // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
+  bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
+
+  set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
 
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {
@@ -190,6 +195,21 @@ class SharedPreferencesUtil {
 
   bool get showTasksEnabled => getBool('showTasksEnabled', defaultValue: true);
 
+  // Phone call floating button on home screen - default is true
+  set showPhoneCallButton(bool value) => saveBool('showPhoneCallButton', value);
+
+  bool get showPhoneCallButton => getBool('showPhoneCallButton', defaultValue: true);
+
+  // Voice response playback mode for hardware-button replies.
+  //   0 = off (never speak)
+  //   1 = headphones only — AirPods / wired / USB / AirPlay (default)
+  //   2 = always, including the phone speaker
+  // Default is 1 so Omi never blasts a private answer out of the speaker
+  // in public unless the user explicitly opts in.
+  set voiceResponseMode(int value) => saveInt('voiceResponseMode', value);
+
+  int get voiceResponseMode => getInt('voiceResponseMode', defaultValue: 1);
+
   // VAD Gate — server-side voice activity gating to save Deepgram costs (experimental)
   set vadGateEnabled(bool value) => saveBool('vadGateEnabled', value);
 
@@ -199,11 +219,6 @@ class SharedPreferencesUtil {
   set claudeAgentEnabled(bool value) => saveBool('claudeAgentEnabled', value);
 
   bool get claudeAgentEnabled => getBool('claudeAgentEnabled');
-
-  // Daily reflection notification at 9 PM - default is true (enabled)
-  set dailyReflectionEnabled(bool value) => saveBool('dailyReflectionEnabled', value);
-
-  bool get dailyReflectionEnabled => getBool('dailyReflectionEnabled', defaultValue: true);
 
   // Notification frequency (0-5): 0 = off, 5 = most frequent. Default is 0 (disabled)
   set notificationFrequency(int value) => saveInt('notificationFrequency', value);
@@ -301,6 +316,14 @@ class SharedPreferencesUtil {
 
   set onboardingCompleted(bool value) => saveBool('onboardingCompleted', value);
 
+  bool get permissionsCompleted => getBool('permissionsCompleted');
+
+  set permissionsCompleted(bool value) => saveBool('permissionsCompleted', value);
+
+  bool get aiConsentGiven => getBool('aiConsentGiven');
+
+  set aiConsentGiven(bool value) => saveBool('aiConsentGiven', value);
+
   String gptCompletionCache(String key) => getString('gptCompletionCache:$key');
 
   setGptCompletionCache(String key, String value) => saveString('gptCompletionCache:$key', value);
@@ -335,20 +358,10 @@ class SharedPreferencesUtil {
 
   set unlimitedLocalStorageEnabled(bool value) => saveBool('unlimitedLocalStorageEnabled', value);
 
-  // Preferred sync method for SD card files: 'wifi' (Fast Transfer) or 'ble' (Bluetooth)
-  String get preferredSyncMethod => getString('preferredSyncMethod', defaultValue: 'ble');
-
-  set preferredSyncMethod(String value) => saveString('preferredSyncMethod', value);
-
   // Whether connected device supports new multi-file storage sync (persisted so it works when disconnected)
   bool get deviceSupportsMultiFileSync => getBool('deviceSupportsMultiFileSync');
 
   set deviceSupportsMultiFileSync(bool value) => saveBool('deviceSupportsMultiFileSync', value);
-
-  // Whether the user has been shown the Fast Transfer explanation dialog
-  bool get hasSeenFastTransferIntro => getBool('hasSeenFastTransferIntro');
-
-  set hasSeenFastTransferIntro(bool value) => saveBool('hasSeenFastTransferIntro', value);
 
   bool get hasSpeakerProfile => getBool('hasSpeakerProfile');
 
@@ -571,31 +584,6 @@ class SharedPreferencesUtil {
 
   bool get calendarEnabled => getBool('calendarEnabled');
 
-  set calendarId(String value) => saveString('calendarId', value);
-
-  String get calendarId => getString('calendarId');
-
-  set calendarType(String value) => saveString('calendarType2', value); // auto, manual (only for now)
-
-  String get calendarType => getString('calendarType2', defaultValue: 'manual');
-
-  set calendarIntegrationEnabled(bool value) => saveBool('calendarIntegrationEnabled', value);
-
-  bool get calendarIntegrationEnabled => getBool('calendarIntegrationEnabled');
-
-  // Calendar UI Settings
-  set showEventsWithNoParticipants(bool value) => saveBool('showEventsWithNoParticipants', value);
-
-  bool get showEventsWithNoParticipants => getBool('showEventsWithNoParticipants');
-
-  set showMeetingsInMenuBar(bool value) => saveBool('showMeetingsInMenuBar', value);
-
-  bool get showMeetingsInMenuBar => getBool('showMeetingsInMenuBar');
-
-  set enabledCalendarIds(List<String> value) => saveStringList('enabledCalendarIds', value);
-
-  List<String> get enabledCalendarIds => getStringList('enabledCalendarIds');
-
   //--------------------------------- Auth ------------------------------------//
 
   String get authToken => getString('authToken');
@@ -635,8 +623,8 @@ class SharedPreferencesUtil {
   //------------------------ TestFlight API Environment ----------------------//
 
   /// Which API environment the TestFlight user prefers: 'staging' or 'production'.
-  /// Default is 'staging' (preserves current auto-switch behavior).
-  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'staging');
+  /// Default is 'production' so new TestFlight installs hit prod by default.
+  String get testFlightApiEnvironment => getString('testFlightApiEnvironment', defaultValue: 'production');
 
   set testFlightApiEnvironment(String value) => saveString('testFlightApiEnvironment', value);
 

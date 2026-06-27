@@ -1,9 +1,12 @@
 import json
+import logging
 from datetime import datetime
 from enum import Enum
 from typing import List, Literal, Optional, Set
 
 from pydantic import BaseModel, field_validator
+
+logger = logging.getLogger(__name__)
 
 # Fields to exclude when reducing App data for list views and cache
 APP_REDUCE_EXCLUDE_FIELDS = {
@@ -106,7 +109,11 @@ class ChatTool(BaseModel):
     def deserialize_parameters(cls, v):
         """Deserialize parameters from JSON string (stored that way in Firestore to avoid nesting limits)."""
         if isinstance(v, str):
-            return json.loads(v)
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                logger.warning('ChatTool.parameters is not valid JSON; dropping malformed parameters')
+                return None
         return v
 
 
@@ -154,6 +161,8 @@ class AppBaseModel(BaseModel):
     official: Optional[bool] = False
     chat_tools: Optional[List[ChatTool]] = []
     source_code_url: Optional[str] = None
+    disabled: Optional[bool] = False
+    disabled_reason: Optional[str] = None
 
 
 class App(AppBaseModel):
@@ -286,6 +295,8 @@ class AppUpdate(BaseModel):
     chat_tools: Optional[List[ChatTool]] = None
     updated_at: Optional[datetime] = None
     source_code_url: Optional[str] = None
+    disabled: Optional[bool] = None
+    disabled_reason: Optional[str] = None
 
 
 class UsageHistoryType(str, Enum):

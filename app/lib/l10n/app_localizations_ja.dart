@@ -15,7 +15,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationTab => '会話';
 
   @override
-  String get transcriptTab => 'トランスクリプト';
+  String get transcriptTab => '文字起こし';
 
   @override
   String get actionItemsTab => 'アクションアイテム';
@@ -61,6 +61,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get copySummary => '要約をコピー';
+
+  @override
+  String get copyConversationId => '会話IDをコピー';
+
+  @override
+  String get conversationIdCopied => '会話IDをクリップボードにコピーしました';
 
   @override
   String get testPrompt => 'プロンプトをテスト';
@@ -260,7 +266,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noMessagesYet => 'まだメッセージがありません！\n会話を始めてみませんか？';
 
   @override
-  String get deletingMessages => 'Omiのメモリからメッセージを削除しています...';
+  String get deletingMessages => 'Omiの記憶からメッセージを削除しています...';
 
   @override
   String get messageCopied => '✨ メッセージをクリップボードにコピーしました';
@@ -414,6 +420,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get offlineSync => 'オフライン同期';
+
+  @override
+  String get autoSync => '自動同期';
+
+  @override
+  String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
 
   @override
   String get deviceSettings => 'デバイス設定';
@@ -624,9 +636,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get saving => '保存中...';
 
   @override
-  String get personaConfig => 'AIペルソナを設定';
-
-  @override
   String get beta => 'ベータ';
 
   @override
@@ -666,7 +675,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get docs => 'ドキュメント';
 
   @override
-  String get yourOmiInsights => 'Omiの分析情報';
+  String get yourOmiInsights => 'Omiのインサイト';
 
   @override
   String get today => '今日';
@@ -684,7 +693,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noActivityYet => 'アクティビティはまだありません';
 
   @override
-  String get startConversationToSeeInsights => 'Omiと会話を始めて\n分析情報をここに表示しましょう。';
+  String get startConversationToSeeInsights => 'Omiと会話を始めて\nインサイトをここに表示しましょう。';
 
   @override
   String get listening => 'リスニング';
@@ -904,7 +913,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get intervalSeconds => '間隔（秒）';
 
   @override
-  String get daySummary => '日次サマリー';
+  String get daySummary => '日次の要約';
 
   @override
   String get summaryGenerated => '要約が生成されました';
@@ -928,10 +937,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get understandingWords => '理解（語数）';
 
   @override
-  String get insights => '洞察';
+  String get insights => 'インサイト';
 
   @override
-  String get memories => '思い出';
+  String get memories => '記憶';
 
   @override
   String minsUsedThisMonth(String used, int limit) {
@@ -946,11 +955,6 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String insightsUsedThisMonth(String used, String limit) {
     return '今月 $limit個中$used個のインサイト取得済み';
-  }
-
-  @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '今月 $limit個中$used個の記憶作成済み';
   }
 
   @override
@@ -1439,7 +1443,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get payYourSttProvider => 'omiを無料で使用。STTプロバイダーに直接支払います。';
 
   @override
-  String get freeMinutesMonth => '月1,200分無料。無制限は';
+  String get freeMinutesMonth => '月600分無料。無制限は';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1618,7 +1622,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get finalTouches => '最終調整';
 
   @override
-  String get processing => '処理中...';
+  String get processing => '処理中';
 
   @override
   String get features => '機能';
@@ -1651,7 +1655,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get perMonth => '/月';
 
   @override
-  String get tailoredConversationSummaries => 'カスタマイズされた会話サマリー';
+  String get tailoredConversationSummaries => 'カスタマイズされた会話の要約';
 
   @override
   String get customChatbotPersonality => 'カスタムチャットボットパーソナリティ';
@@ -1859,7 +1863,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get omiYourAiCompanion => 'Omi – あなたのAIコンパニオン';
 
   @override
-  String get captureEveryMoment => 'すべての瞬間を記録。AI搭載のサマリーで、もうメモを取る必要はありません。';
+  String get captureEveryMoment => 'すべての瞬間を記録。AI搭載の要約で、もうメモを取る必要はありません。';
 
   @override
   String get appleWatchSetup => 'Apple Watchのセットアップ';
@@ -2008,90 +2012,90 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteSelected => '選択項目を削除';
 
   @override
-  String get searchMemories => '思い出を検索...';
+  String get searchMemories => '記憶を検索...';
 
   @override
-  String get memoryDeleted => 'メモリを削除しました';
+  String get memoryDeleted => '記憶を削除しました';
 
   @override
   String get undo => '元に戻す';
 
   @override
-  String get noMemoriesYet => '🧠 まだ思い出がありません';
+  String get noMemoriesYet => '🧠 まだ記憶がありません';
 
   @override
-  String get noAutoMemories => '自動メモリはまだありません';
+  String get noAutoMemories => '自動で作成された記憶はまだありません';
 
   @override
-  String get noManualMemories => '手動メモリはまだありません';
+  String get noManualMemories => '手動で作成した記憶はまだありません';
 
   @override
-  String get noMemoriesInCategories => 'このカテゴリのメモリはありません';
+  String get noMemoriesInCategories => 'このカテゴリの記憶はありません';
 
   @override
-  String get noMemoriesFound => '🔍 思い出が見つかりませんでした';
+  String get noMemoriesFound => '🔍 記憶が見つかりませんでした';
 
   @override
-  String get addFirstMemory => '最初のメモリを追加';
+  String get addFirstMemory => '最初の記憶を追加';
 
   @override
-  String get clearMemoryTitle => 'Omiのメモリを消去';
+  String get clearMemoryTitle => 'Omiの記憶を消去';
 
   @override
-  String get clearMemoryMessage => 'Omiのメモリを消去してもよろしいですか？この操作は取り消せません。';
+  String get clearMemoryMessage => 'Omiの記憶を消去してもよろしいですか？この操作は取り消せません。';
 
   @override
-  String get clearMemoryButton => 'メモリをクリア';
+  String get clearMemoryButton => '記憶をクリア';
 
   @override
-  String get memoryClearedSuccess => 'Omiのあなたに関するメモリが消去されました';
+  String get memoryClearedSuccess => 'Omiのあなたに関する記憶が消去されました';
 
   @override
-  String get noMemoriesToDelete => '削除するメモリがありません';
+  String get noMemoriesToDelete => '削除する記憶がありません';
 
   @override
-  String get createMemoryTooltip => '新しいメモリを作成';
+  String get createMemoryTooltip => '新しい記憶を作成';
 
   @override
   String get createActionItemTooltip => '新しいアクションアイテムを作成';
 
   @override
-  String get memoryManagement => 'メモリ管理';
+  String get memoryManagement => '記憶の管理';
 
   @override
-  String get filterMemories => 'メモリをフィルタリング';
+  String get filterMemories => '記憶をフィルタリング';
 
   @override
   String totalMemoriesCount(int count) {
-    return '合計 $count 件のメモリがあります';
+    return '合計 $count 件の記憶があります';
   }
 
   @override
-  String get publicMemories => '公開メモリ';
+  String get publicMemories => '公開された記憶';
 
   @override
-  String get privateMemories => '非公開メモリ';
+  String get privateMemories => '非公開の記憶';
 
   @override
-  String get makeAllPrivate => 'すべてのメモリを非公開にする';
+  String get makeAllPrivate => 'すべての記憶を非公開にする';
 
   @override
-  String get makeAllPublic => 'すべてのメモリを公開する';
+  String get makeAllPublic => 'すべての記憶を公開する';
 
   @override
-  String get deleteAllMemories => 'すべてのメモリを削除';
+  String get deleteAllMemories => 'すべての記憶を削除';
 
   @override
-  String get allMemoriesPrivateResult => 'すべてのメモリが非公開になりました';
+  String get allMemoriesPrivateResult => 'すべての記憶が非公開になりました';
 
   @override
-  String get allMemoriesPublicResult => 'すべてのメモリが公開されました';
+  String get allMemoriesPublicResult => 'すべての記憶が公開されました';
 
   @override
-  String get newMemory => '✨ 新しいメモリ';
+  String get newMemory => '✨ 新しい記憶';
 
   @override
-  String get editMemory => '✏️ メモリを編集';
+  String get editMemory => '✏️ 記憶を編集';
 
   @override
   String get memoryContentHint => 'アイスクリームが好き...';
@@ -2100,7 +2104,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedToSaveMemory => '保存に失敗しました。接続を確認してください。';
 
   @override
-  String get saveMemory => 'メモリを保存';
+  String get saveMemory => '記憶を保存';
 
   @override
   String get retry => '再試行';
@@ -2237,10 +2241,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deleteFolder => 'フォルダを削除';
 
   @override
-  String get transcriptCopiedToClipboard => 'トランスクリプトをクリップボードにコピーしました';
+  String get transcriptCopiedToClipboard => '文字起こしをクリップボードにコピーしました';
 
   @override
-  String get summaryCopiedToClipboard => '概要をクリップボードにコピーしました';
+  String get summaryCopiedToClipboard => '要約をクリップボードにコピーしました';
 
   @override
   String get conversationUrlCouldNotBeShared => '会話URLを共有できませんでした。';
@@ -2249,10 +2253,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get urlCopiedToClipboard => 'URLをクリップボードにコピーしました';
 
   @override
-  String get exportTranscript => 'トランスクリプトをエクスポート';
+  String get exportTranscript => '文字起こしをエクスポート';
 
   @override
-  String get exportSummary => '概要をエクスポート';
+  String get exportSummary => '要約をエクスポート';
 
   @override
   String get exportButton => 'エクスポート';
@@ -2264,27 +2268,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get summarize => '要約';
 
   @override
-  String get generateSummary => 'サマリーを生成';
+  String get generateSummary => '要約を生成';
 
   @override
   String get conversationNotFoundOrDeleted => '会話が見つからないか、削除されました';
 
   @override
-  String get deleteMemory => 'メモリを削除';
+  String get deleteMemory => '記憶を削除';
 
   @override
   String get thisActionCannotBeUndone => 'この操作は元に戻せません。';
 
   @override
   String memoriesCount(int count) {
-    return '$count個の思い出';
+    return '$count個の記憶';
   }
 
   @override
-  String get noMemoriesInCategory => 'このカテゴリにはまだメモリがありません';
+  String get noMemoriesInCategory => 'このカテゴリにはまだ記憶がありません';
 
   @override
-  String get addYourFirstMemory => '最初の思い出を追加';
+  String get addYourFirstMemory => '最初の記憶を追加';
 
   @override
   String get firmwareDisconnectUsb => 'USBを切断';
@@ -2328,6 +2332,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get batteryLevel => 'バッテリー残量';
+
+  @override
+  String get charging => '充電中';
 
   @override
   String get productUpdate => '製品アップデート';
@@ -2384,12 +2391,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createKeyToGetStarted => '開始するにはキーを作成してください';
 
   @override
-  String get persona => 'ペルソナ';
-
-  @override
-  String get configureYourAiPersona => 'AIペルソナを設定する';
-
-  @override
   String get configureSttProvider => 'STTプロバイダーを設定';
 
   @override
@@ -2434,13 +2435,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get useYourMcpApiKey => 'MCP APIキーを使用';
 
   @override
-  String get realTimeTranscript => 'リアルタイム転写';
+  String get realTimeTranscript => 'リアルタイム文字起こし';
 
   @override
   String get experimental => '実験的';
 
   @override
-  String get transcriptionDiagnostics => '転写診断';
+  String get transcriptionDiagnostics => '文字起こし診断';
 
   @override
   String get detailedDiagnosticMessages => '詳細な診断メッセージ';
@@ -2462,12 +2463,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get trackPersonalGoalsOnHomepage => 'ホームページで個人目標を追跡';
-
-  @override
-  String get dailyReflection => 'デイリー振り返り';
-
-  @override
-  String get get9PmReminderToReflect => '午後9時に一日を振り返るリマインダーを受け取る';
 
   @override
   String get actionItemDescriptionCannotBeEmpty => 'アクションアイテムの説明を空にすることはできません';
@@ -2521,7 +2516,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get howDoesItWork => 'どのように機能しますか？';
 
   @override
-  String get sdCardSyncDescription => 'SDカード同期は、SDカードからアプリに思い出をインポートします';
+  String get sdCardSyncDescription => 'SDカード同期は、SDカードからアプリに記憶をインポートします';
 
   @override
   String get checksForAudioFiles => 'SDカード上のオーディオファイルをチェックします';
@@ -2530,7 +2525,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get omiSyncsAudioFiles => 'Omiはその後、オーディオファイルをサーバーと同期します';
 
   @override
-  String get serverProcessesAudio => 'サーバーがオーディオファイルを処理し、思い出を作成します';
+  String get serverProcessesAudio => 'サーバーがオーディオファイルを処理し、記憶を作成します';
 
   @override
   String get youreAllSet => '準備完了です！';
@@ -2624,7 +2619,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationsProcessedAutomatically => '会話は自動的に処理されます';
 
   @override
-  String get getInsightsInstantly => 'すぐに洞察と要約を取得できます';
+  String get getInsightsInstantly => 'すぐにインサイトと要約を取得できます';
 
   @override
   String get showAll => 'すべて表示 →';
@@ -2810,7 +2805,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationPrompt => '会話プロンプト';
 
   @override
-  String get conversationPromptPlaceholder => 'あなたは素晴らしいアプリです。会話のトランスクリプトと要約が提供されます...';
+  String get conversationPromptPlaceholder => 'あなたは素晴らしいアプリです。会話の文字起こしと要約が提供されます...';
 
   @override
   String get notificationScopes => '通知スコープ';
@@ -2892,9 +2887,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get aboutTheApp => 'アプリについて';
-
-  @override
-  String get aboutThePersona => 'ペルソナについて';
 
   @override
   String get chatPersonality => 'チャットパーソナリティ';
@@ -3216,10 +3208,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get wearableAiCompanion => 'ウェアラブルAIコンパニオン';
 
   @override
-  String get loadingMemories => '思い出を読み込んでいます...';
+  String get loadingMemories => '記憶を読み込んでいます...';
 
   @override
-  String get allMemories => 'すべての思い出';
+  String get allMemories => 'すべての記憶';
 
   @override
   String get aboutYou => 'あなたについて';
@@ -3228,10 +3220,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get manual => '手動';
 
   @override
-  String get loadingYourMemories => '思い出を読み込んでいます...';
+  String get loadingYourMemories => '記憶を読み込んでいます...';
 
   @override
-  String get createYourFirstMemory => '最初の思い出を作成して始めましょう';
+  String get createYourFirstMemory => '最初の記憶を作成して始めましょう';
 
   @override
   String get tryAdjustingFilter => '検索またはフィルターを調整してみてください';
@@ -3249,51 +3241,51 @@ class AppLocalizationsJa extends AppLocalizations {
   String get failedToSaveCheckConnection => '保存に失敗しました。接続を確認してください。';
 
   @override
-  String get createMemory => 'メモリを作成';
+  String get createMemory => '記憶を作成';
 
   @override
-  String get deleteMemoryConfirmation => 'このメモリを削除してもよろしいですか？この操作は元に戻せません。';
+  String get deleteMemoryConfirmation => 'この記憶を削除してもよろしいですか？この操作は元に戻せません。';
 
   @override
   String get makePrivate => '非公開にする';
 
   @override
-  String get organizeAndControlMemories => 'メモリを整理・管理する';
+  String get organizeAndControlMemories => '記憶を整理・管理する';
 
   @override
   String get total => '合計';
 
   @override
-  String get makeAllMemoriesPrivate => 'すべてのメモリを非公開にする';
+  String get makeAllMemoriesPrivate => 'すべての記憶を非公開にする';
 
   @override
-  String get setAllMemoriesToPrivate => 'すべてのメモリを非公開に設定';
+  String get setAllMemoriesToPrivate => 'すべての記憶を非公開に設定';
 
   @override
-  String get makeAllMemoriesPublic => 'すべてのメモリを公開にする';
+  String get makeAllMemoriesPublic => 'すべての記憶を公開にする';
 
   @override
-  String get setAllMemoriesToPublic => 'すべてのメモリを公開に設定';
+  String get setAllMemoriesToPublic => 'すべての記憶を公開に設定';
 
   @override
-  String get permanentlyRemoveAllMemories => 'Omiからすべてのメモリを完全に削除';
+  String get permanentlyRemoveAllMemories => 'Omiからすべての記憶を完全に削除';
 
   @override
-  String get allMemoriesAreNowPrivate => 'すべてのメモリが非公開になりました';
+  String get allMemoriesAreNowPrivate => 'すべての記憶が非公開になりました';
 
   @override
-  String get allMemoriesAreNowPublic => 'すべてのメモリが公開になりました';
+  String get allMemoriesAreNowPublic => 'すべての記憶が公開になりました';
 
   @override
-  String get clearOmisMemory => 'Omiのメモリをクリア';
+  String get clearOmisMemory => 'Omiの記憶をクリア';
 
   @override
   String clearMemoryConfirmation(int count) {
-    return 'Omiのメモリをクリアしてもよろしいですか？この操作は元に戻せず、すべての$count個のメモリが完全に削除されます。';
+    return 'Omiの記憶をクリアしてもよろしいですか？この操作は元に戻せず、すべての$count個の記憶が完全に削除されます。';
   }
 
   @override
-  String get omisMemoryCleared => 'あなたに関するOmiのメモリがクリアされました';
+  String get omisMemoryCleared => 'あなたに関するOmiの記憶がクリアされました';
 
   @override
   String get welcomeToOmi => 'Omiへようこそ';
@@ -3424,9 +3416,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get changeYourName => '名前を変更';
 
   @override
-  String get manageYourOmiPersona => 'Omiペルソナを管理';
-
-  @override
   String get voiceAndPeople => '音声と人物';
 
   @override
@@ -3501,7 +3490,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get everyXSeconds => 'x秒ごと';
 
   @override
-  String get triggersWhenDaySummaryGenerated => '日次サマリーが生成されたときにトリガーされます。';
+  String get triggersWhenDaySummaryGenerated => '日次の要約が生成されたときにトリガーされます。';
 
   @override
   String get tryLatestExperimentalFeatures => 'Omiチームの最新の実験的機能をお試しください。';
@@ -3534,7 +3523,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get syncingDeveloperSettings => '開発者設定を同期中...';
 
   @override
-  String get summary => '概要';
+  String get summary => '要約';
 
   @override
   String get auto => '自動';
@@ -3560,10 +3549,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unknownApp => '不明なアプリ';
 
   @override
-  String get noSummaryAvailable => '概要がありません';
+  String get noSummaryAvailable => '要約がありません';
 
   @override
-  String get conversationNoSummaryYet => 'この会話にはまだ概要がありません。';
+  String get conversationNoSummaryYet => 'この会話にはまだ要約がありません。';
 
   @override
   String get chooseSummarizationApp => '要約アプリを選択';
@@ -3592,7 +3581,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get conversationLinkCopiedToClipboard => '会話のリンクがクリップボードにコピーされました';
 
   @override
-  String get conversationTranscriptCopiedToClipboard => '会話のトランスクリプトがクリップボードにコピーされました';
+  String get conversationTranscriptCopiedToClipboard => '会話の文字起こしをクリップボードにコピーしました';
 
   @override
   String get editConversationDialogTitle => '会話を編集';
@@ -3747,7 +3736,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get calendarIntegration => 'カレンダー統合';
 
   @override
-  String get dailySummary => 'デイリーサマリー';
+  String get dailySummary => '日次の要約';
 
   @override
   String get developer => '開発者';
@@ -3777,19 +3766,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enterWordsHint => '単語を入力（カンマ区切り）';
 
   @override
-  String get dailySummaryHeader => '日次サマリー';
+  String get dailySummaryHeader => '日次の要約';
 
   @override
-  String get dailySummaryTitle => '日次サマリー';
+  String get dailySummaryTitle => '日次の要約';
 
   @override
-  String get dailySummaryDescription => '1日の会話のパーソナライズされたサマリーを通知として受け取ります。';
+  String get dailySummaryDescription => '1日の会話のパーソナライズされた要約を通知として受け取ります。';
 
   @override
   String get deliveryTime => '配信時間';
 
   @override
-  String get deliveryTimeDescription => '日次サマリーを受け取る時刻';
+  String get deliveryTimeDescription => '日次の要約を受け取る時刻';
 
   @override
   String get subscription => 'サブスクリプション';
@@ -3831,9 +3820,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get shortcutChangeInstruction => 'ショートカットをクリックして変更します。Escapeキーでキャンセル。';
 
   @override
-  String get configurePersonaDescription => 'AIペルソナを設定';
-
-  @override
   String get configureSTTProvider => 'STTプロバイダーを設定';
 
   @override
@@ -3868,9 +3854,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get trackPersonalGoals => 'ホームページで個人目標を追跡';
-
-  @override
-  String get dailyReflectionDescription => '午後9時に1日を振り返り、考えを記録するリマインダーを受け取ります。';
 
   @override
   String get endpointURL => 'エンドポイント URL';
@@ -4138,7 +4121,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get omiApiKeys => 'Omi APIキー';
 
   @override
-  String get apiKeysDescription => 'APIキーは、アプリがOMIサーバーと通信する際の認証に使用されます。アプリケーションがメモリを作成し、他のOMIサービスに安全にアクセスできるようにします。';
+  String get apiKeysDescription => 'APIキーは、アプリがOMIサーバーと通信する際の認証に使用されます。アプリケーションが記憶を作成し、他のOMIサービスに安全にアクセスできるようにします。';
 
   @override
   String get aboutOmiApiKeys => 'Omi APIキーについて';
@@ -4177,16 +4160,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get createAndShareYourApp => 'アプリを作成して共有';
 
   @override
-  String get createMyClone => 'クローンを作成';
-
-  @override
-  String get createYourDigitalClone => 'デジタルクローンを作成';
-
-  @override
   String get itemApp => 'アプリ';
-
-  @override
-  String get itemPersona => 'ペルソナ';
 
   @override
   String keepItemPublic(String item) {
@@ -4215,9 +4189,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get manageApp => 'アプリを管理';
-
-  @override
-  String get updatePersonaDetails => 'ペルソナの詳細を更新';
 
   @override
   String deleteItemTitle(String item) {
@@ -4272,7 +4243,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get externalAppAccess => '外部アプリのアクセス';
 
   @override
-  String get externalAppAccessDescription => '以下のインストール済みアプリは外部連携があり、会話やメモリーなどのデータにアクセスできます。';
+  String get externalAppAccessDescription => '以下のインストール済みアプリは外部連携があり、会話や記憶などのデータにアクセスできます。';
 
   @override
   String get noExternalAppsHaveAccess => '外部アプリはデータにアクセスできません。';
@@ -4478,12 +4449,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String planEndedOn(String date) {
-    return 'プランは$dateに終了しました。\\n今すぐ再登録 - 新しい請求期間の料金が即座に請求されます。';
+    return 'プランは$dateに終了しました。\n今すぐ再登録 - 新しい請求期間の料金が即座に請求されます。';
   }
 
   @override
   String planSetToCancelOn(String date) {
-    return 'プランは$dateにキャンセル予定です。\\n特典を維持するために今すぐ再登録 - $dateまで請求はありません。';
+    return 'プランは$dateにキャンセル予定です。\n特典を維持するために今すぐ再登録 - $dateまで請求はありません。';
   }
 
   @override
@@ -4501,7 +4472,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get askOmiAnything => 'Omiにあなたの人生について何でも聞いてください';
 
   @override
-  String get unlockOmiInfiniteMemory => 'Omiの無限メモリーをアンロック';
+  String get unlockOmiInfiniteMemory => 'Omiの無限の記憶をアンロック';
 
   @override
   String get youreOnAnnualPlan => '年間プランをご利用中です';
@@ -4513,7 +4484,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get unableToLoadPlans => 'プランを読み込めません';
 
   @override
-  String get checkConnectionTryAgain => '接続を確認してもう一度お試しください';
+  String get checkConnectionTryAgain => '接続を確認して再試行してください';
 
   @override
   String get useFreePlan => '無料プランを使用';
@@ -4575,40 +4546,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get thankYouText => 'Omiの大切なユーザーであることに感謝します。ご質問やご不明な点がございましたら、team@basedhardware.comまでお気軽にお問い合わせください。';
 
   @override
-  String get wifiSyncSettings => 'WiFi同期設定';
-
-  @override
-  String get enterHotspotCredentials => 'スマートフォンのホットスポット認証情報を入力';
-
-  @override
-  String get wifiSyncUsesHotspot => 'WiFi同期はスマートフォンをホットスポットとして使用します。設定 > インターネット共有で名前とパスワードを確認してください。';
-
-  @override
-  String get hotspotNameSsid => 'ホットスポット名（SSID）';
-
-  @override
-  String get exampleIphoneHotspot => '例：iPhoneホットスポット';
-
-  @override
   String get password => 'パスワード';
-
-  @override
-  String get enterHotspotPassword => 'ホットスポットのパスワードを入力';
 
   @override
   String get saveCredentials => '認証情報を保存';
 
   @override
   String get clearCredentials => '認証情報をクリア';
-
-  @override
-  String get pleaseEnterHotspotName => 'ホットスポット名を入力してください';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi認証情報を保存しました';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi認証情報をクリアしました';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -4676,7 +4620,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '特定のデータアクセスは設定されていません。';
 
   @override
-  String get basicPlanDescription => '1,200プレミアム分 + デバイス無制限';
+  String get basicPlanDescription => '600プレミアム分 + デバイス無制限';
 
   @override
   String get minutes => '分';
@@ -4773,7 +4717,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get howItWorksTitle => '仕組みは？';
 
   @override
-  String get howPeopleWorks => '人物を作成したら、会話のトランスクリプトに移動して対応するセグメントを割り当てることで、Omiがその人の音声も認識できるようになります！';
+  String get howPeopleWorks => '人物を作成したら、会話の文字起こしに移動して対応するセグメントを割り当てることで、Omiがその人の音声も認識できるようになります！';
 
   @override
   String get tapToDelete => 'タップして削除';
@@ -5031,7 +4975,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get consentDataMessage =>
-      '続行すると、このアプリと共有するすべてのデータ（会話、録音、個人情報を含む）が安全に当社のサーバーに保存され、AI搭載のインサイトを提供し、すべてのアプリ機能を有効にします。';
+      '続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。';
 
   @override
   String get tasksEmptyStateMessage => '会話からのタスクがここに表示されます。\n手動で作成するには + をタップしてください。';
@@ -5185,7 +5129,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get enterWordsCommaSeparated => '単語を入力（カンマ区切り）';
 
   @override
-  String get whenToReceiveDailySummary => 'デイリーサマリーを受け取る時間';
+  String get whenToReceiveDailySummary => '日次の要約を受け取る時間';
 
   @override
   String get checkingNextSevenDays => '今後7日間を確認中';
@@ -5615,11 +5559,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String summaryGeneratedFor(String date) {
-    return '$dateのサマリーを生成しました';
+    return '$dateの要約を生成しました';
   }
 
   @override
-  String get failedToGenerateSummary => 'サマリーの生成に失敗しました。その日の会話があることを確認してください。';
+  String get failedToGenerateSummary => '要約の生成に失敗しました。その日の会話があることを確認してください。';
 
   @override
   String get recap => 'まとめ';
@@ -5710,9 +5654,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chooseFile => 'ファイルを選択';
 
   @override
-  String get configureAiPersona => 'AIペルソナを設定';
-
-  @override
   String get connectAiAssistantsToYourData => 'AIアシスタントをデータに接続';
 
   @override
@@ -5737,9 +5678,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => '高速転送';
-
-  @override
   String get syncingStatus => '同期中';
 
   @override
@@ -5749,15 +5687,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String etaLabel(String time) {
     return '予想時間: $time';
   }
-
-  @override
-  String get transferMethod => '転送方法';
-
-  @override
-  String get fast => '高速';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => '電話';
@@ -5778,25 +5707,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get processedFilesDeleted => '処理済みファイルを削除しました';
 
   @override
-  String get wifiEnableFailed => 'デバイスでWiFiを有効にできませんでした。もう一度お試しください。';
-
-  @override
-  String get deviceNoFastTransfer => 'お使いのデバイスは高速転送に対応していません。Bluetoothをご使用ください。';
-
-  @override
-  String get enableHotspotMessage => '電話のホットスポットを有効にしてもう一度お試しください。';
-
-  @override
-  String get transferStartFailed => '転送を開始できませんでした。もう一度お試しください。';
-
-  @override
   String get deviceNotResponding => 'デバイスが応答しません。もう一度お試しください。';
-
-  @override
-  String get invalidWifiCredentials => 'WiFi認証情報が無効です。ホットスポットの設定を確認してください。';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi接続に失敗しました。もう一度お試しください。';
 
   @override
   String get sdCardProcessing => 'SDカード処理';
@@ -5808,9 +5719,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get process => '処理';
-
-  @override
-  String get wifiSyncFailed => 'WiFi同期に失敗しました';
 
   @override
   String get processingFailed => '処理に失敗しました';
@@ -5982,7 +5890,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cloudProvider => 'クラウドプロバイダー';
 
   @override
-  String get premiumMinutesInfo => '月間1,200分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
+  String get premiumMinutesInfo => '月間600分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
 
   @override
   String get viewUsage => '使用状況を表示';
@@ -6060,7 +5968,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryDrainSignificantly => 'バッテリー消費が大幅に増加します。';
 
   @override
-  String get premiumMinutesMonth => '月間1,200プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
+  String get premiumMinutesMonth => '月間600プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
 
   @override
   String get audioProcessedLocally => '音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。';
@@ -6151,7 +6059,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get permissionReadConversations => '会話を読む';
 
   @override
-  String get permissionReadMemories => 'メモリーを読む';
+  String get permissionReadMemories => '記憶を読む';
 
   @override
   String get permissionReadTasks => 'タスクを読む';
@@ -6160,7 +6068,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get permissionCreateConversations => '会話を作成';
 
   @override
-  String get permissionCreateMemories => 'メモリーを作成';
+  String get permissionCreateMemories => '記憶を作成';
 
   @override
   String get permissionTypeAccess => 'アクセス';
@@ -6175,7 +6083,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get permissionDescReadConversations => 'このアプリはあなたの会話にアクセスできます。';
 
   @override
-  String get permissionDescReadMemories => 'このアプリはあなたのメモリーにアクセスできます。';
+  String get permissionDescReadMemories => 'このアプリはあなたの記憶にアクセスできます。';
 
   @override
   String get permissionDescReadTasks => 'このアプリはあなたのタスクにアクセスできます。';
@@ -6184,7 +6092,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get permissionDescCreateConversations => 'このアプリは新しい会話を作成できます。';
 
   @override
-  String get permissionDescCreateMemories => 'このアプリは新しいメモリーを作成できます。';
+  String get permissionDescCreateMemories => 'このアプリは新しい記憶を作成できます。';
 
   @override
   String get realtimeListening => 'リアルタイムリスニング';
@@ -6328,16 +6236,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noKnowledgeGraphYet => 'ナレッジグラフはまだありません';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => '思い出からナレッジグラフを構築中...';
+  String get buildingKnowledgeGraphFromMemories => '記憶からナレッジグラフを構築中...';
 
   @override
-  String get knowledgeGraphWillBuildAutomatically => '新しい思い出を作成すると、ナレッジグラフが自動的に構築されます。';
+  String get knowledgeGraphWillBuildAutomatically => '新しい記憶を作成すると、ナレッジグラフが自動的に構築されます。';
 
   @override
   String get buildGraphButton => 'グラフを構築';
 
   @override
-  String get checkOutMyMemoryGraph => '私のメモリーグラフをご覧ください！';
+  String get checkOutMyMemoryGraph => '私の記憶グラフをご覧ください！';
 
   @override
   String get getButton => '入手';
@@ -6414,28 +6322,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sharePublicLink => '公開リンクを共有';
 
   @override
-  String get makePersonaPublic => 'ペルソナを公開';
-
-  @override
   String get connectedKnowledgeData => '接続されたナレッジデータ';
 
   @override
   String get enterName => '名前を入力';
-
-  @override
-  String get disconnectTwitter => 'Twitterを切断';
-
-  @override
-  String get disconnectTwitterConfirmation => 'Twitterアカウントを切断してもよろしいですか？ペルソナはTwitterデータにアクセスできなくなります。';
-
-  @override
-  String get getOmiDeviceDescription => '個人の会話でより正確なクローンを作成';
-
-  @override
-  String get getOmi => 'Omiを入手';
-
-  @override
-  String get iHaveOmiDevice => 'Omiデバイスを持っています';
 
   @override
   String get goal => '目標';
@@ -6481,7 +6371,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String setDefaultAppContent(String appName) {
-    return '$appNameをデフォルトの要約アプリとして設定しますか？\\n\\nこのアプリは今後のすべての会話の要約に自動的に使用されます。';
+    return '$appNameをデフォルトの要約アプリとして設定しますか？\n\nこのアプリは今後のすべての会話の要約に自動的に使用されます。';
   }
 
   @override
@@ -6596,24 +6486,13 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi同期';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$itemがクリップボードにコピーされました';
   }
 
   @override
-  String get wifiConnectionFailedTitle => '接続に失敗しました';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceNameに接続中';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceNameのWiFiを有効化';
   }
 
   @override
@@ -6708,9 +6587,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get statusUnprocessed => '未処理';
 
   @override
-  String get switchedToFastTransfer => '高速転送に切り替えました';
-
-  @override
   String get transferCompleteMessage => '転送完了！この録音を再生できます。';
 
   @override
@@ -6722,31 +6598,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transferCancelled => '転送がキャンセルされました';
 
   @override
-  String get fastTransferEnabled => '高速転送が有効になりました';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth同期が有効になりました';
-
-  @override
-  String get enableFastTransfer => '高速転送を有効にする';
-
-  @override
-  String get fastTransferDescription => '高速転送はWiFiを使用して約5倍の速度を実現します。転送中、電話は一時的にOmiデバイスのWiFiネットワークに接続されます。';
-
-  @override
-  String get internetAccessPausedDuringTransfer => '転送中はインターネットアクセスが一時停止されます';
-
-  @override
-  String get chooseTransferMethodDescription => 'Omiデバイスから電話への録音の転送方法を選択してください。';
-
-  @override
-  String get wifiSpeed => 'WiFi経由で約150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '5倍高速';
-
-  @override
-  String get fastTransferMethodDescription => 'Omiデバイスへの直接WiFi接続を作成します。転送中、電話は通常のWiFiから一時的に切断されます。';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6767,7 +6619,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'バッテリー残量低下アラート';
 
   @override
-  String get lowBatteryAlertBody => 'デバイスのバッテリーが少なくなっています。充電してください！🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'バッテリー残量は $level% です。充電してください！🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omiは満充電です';
+
+  @override
+  String get batteryFullyChargedBody => 'Omiデバイスが満充電になりました。充電ケーブルを外してください！';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Omiデバイスが切断されました';
@@ -6978,49 +6838,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get addAppPersonaConflictWithCapabilities => 'ペルソナは他の機能と同時に選択できません';
 
   @override
-  String get personaTwitterHandleNotFound => 'Twitterハンドルが見つかりません';
-
-  @override
-  String get personaTwitterHandleSuspended => 'Twitterハンドルは停止されています';
-
-  @override
-  String get personaFailedToVerifyTwitter => 'Twitterハンドルの確認に失敗しました';
-
-  @override
-  String get personaFailedToFetch => 'ペルソナの取得に失敗しました';
-
-  @override
-  String get personaFailedToCreate => 'ペルソナの作成に失敗しました';
-
-  @override
-  String get personaConnectKnowledgeSource => '少なくとも1つのデータソース（OmiまたはTwitter）を接続してください';
-
-  @override
-  String get personaUpdatedSuccessfully => 'ペルソナが正常に更新されました';
-
-  @override
-  String get personaFailedToUpdate => 'ペルソナの更新に失敗しました';
-
-  @override
-  String get personaPleaseSelectImage => '画像を選択してください';
-
-  @override
-  String get personaFailedToCreateTryLater => 'ペルソナの作成に失敗しました。後でもう一度お試しください。';
-
-  @override
-  String personaFailedToCreateWithError(String error) {
-    return 'ペルソナの作成に失敗: $error';
-  }
-
-  @override
-  String get personaFailedToEnable => 'ペルソナの有効化に失敗しました';
-
-  @override
-  String personaErrorEnablingWithError(String error) {
-    return 'ペルソナの有効化エラー: $error';
-  }
-
-  @override
   String get paymentFailedToFetchCountries => '対応国の取得に失敗しました。後でもう一度お試しください。';
 
   @override
@@ -7095,21 +6912,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get aiGenPleaseGenerateAppFirst => '先にアプリを生成してください';
 
   @override
-  String get xHandleTitle => 'Xのユーザー名は？';
-
-  @override
-  String get xHandleDescription => 'アカウントのアクティビティに基づいて\nOmiクローンを事前トレーニングします';
-
-  @override
-  String get xHandleHint => '@nikshevchenko';
-
-  @override
-  String get xHandlePleaseEnter => 'Xのユーザー名を入力してください';
-
-  @override
-  String get xHandlePleaseEnterValid => '有効なXのユーザー名を入力してください';
-
-  @override
   String get nextButton => '次へ';
 
   @override
@@ -7164,12 +6966,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String mergeConversationsSuccessBody(int count) {
     return '$count件の会話が正常にマージされました';
   }
-
-  @override
-  String get dailyReflectionNotificationTitle => 'デイリー振り返りの時間です';
-
-  @override
-  String get dailyReflectionNotificationBody => '今日のことを教えてください';
 
   @override
   String get actionItemReminderTitle => 'Omiリマインダー';
@@ -7440,10 +7236,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get msgUploadFileFailed => 'ファイルのアップロードに失敗しました。後でもう一度お試しください';
 
   @override
-  String get msgReadingMemories => '思い出を読み込んでいます...';
+  String get msgReadingMemories => '記憶を読み込んでいます...';
 
   @override
-  String get msgLearningMemories => '思い出から学習しています...';
+  String get msgLearningMemories => '記憶から学習しています...';
 
   @override
   String get msgUploadAttachedFileFailed => '添付ファイルのアップロードに失敗しました。';
@@ -7480,19 +7276,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get devModeInvalidConversationCreatedWebhookUrl => '会話作成のWebhook URLが無効です';
 
   @override
-  String get devModeInvalidDaySummaryWebhookUrl => '日次サマリーのWebhook URLが無効です';
+  String get devModeInvalidDaySummaryWebhookUrl => '日次の要約のWebhook URLが無効です';
 
   @override
   String get devModeSettingsSaved => '設定を保存しました！';
 
   @override
   String get voiceFailedToTranscribe => '音声の文字起こしに失敗しました';
-
-  @override
-  String get locationPermissionRequired => '位置情報の許可が必要です';
-
-  @override
-  String get locationPermissionContent => '高速転送にはWiFi接続を確認するために位置情報の許可が必要です。続行するには位置情報の許可を付与してください。';
 
   @override
   String get pdfTranscriptExport => '文字起こしエクスポート';
@@ -7633,16 +7423,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get resumeRecording => '録音を再開';
 
   @override
-  String get noDailyRecapsYet => 'まだ日次サマリーはありません';
+  String get noDailyRecapsYet => 'まだ日次の要約はありません';
 
   @override
-  String get dailyRecapsDescription => '日次サマリーは生成されるとここに表示されます';
-
-  @override
-  String get chooseTransferMethod => '転送方法を選択';
-
-  @override
-  String get fastTransferSpeed => 'WiFi経由で約150 KB/s';
+  String get dailyRecapsDescription => '日次の要約は生成されるとここに表示されます';
 
   @override
   String largeTimeGapDetected(String gap) {
@@ -7653,9 +7437,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return '大きな時間差が検出されました ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'デバイスはWiFi同期をサポートしていません。Bluetoothに切り替えています';
 
   @override
   String get appleHealthNotAvailable => 'Apple Healthはこのデバイスでは利用できません';
@@ -7700,16 +7481,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get audioShareFailed => '共有に失敗しました';
 
   @override
-  String get dailyRecaps => 'デイリーレキャップ';
+  String get dailyRecaps => '日次の要約';
 
   @override
   String get removeFilter => 'フィルターを削除';
 
   @override
   String get categoryConversationAnalysis => '会話分析';
-
-  @override
-  String get categoryPersonalityClone => 'パーソナリティクローン';
 
   @override
   String get categoryHealth => '健康';
@@ -7772,19 +7550,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get triggerConversationCreation => '会話作成';
 
   @override
-  String get triggerTranscriptProcessed => 'トランスクリプト処理済み';
+  String get triggerTranscriptProcessed => '文字起こし処理済み';
 
   @override
   String get actionCreateConversations => '会話を作成';
 
   @override
-  String get actionCreateMemories => 'メモリーを作成';
+  String get actionCreateMemories => '記憶を作成';
 
   @override
   String get actionReadConversations => '会話を読み取り';
 
   @override
-  String get actionReadMemories => 'メモリーを読み取り';
+  String get actionReadMemories => '記憶を読み取り';
 
   @override
   String get actionReadTasks => 'タスクを読み取り';
@@ -7802,7 +7580,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get scopeUserChat => 'ユーザーチャット';
 
   @override
-  String get capabilitySummary => 'サマリー';
+  String get capabilitySummary => '要約';
 
   @override
   String get capabilityFeatured => '注目';
@@ -7812,9 +7590,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get capabilityIntegrations => '連携';
-
-  @override
-  String get categoryPersonalityClones => 'パーソナリティクローン';
 
   @override
   String get categoryProductivityLifestyle => '生産性とライフスタイル';
@@ -8016,6 +7791,14 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String uploadingToCloud(int current, int total) {
     return '$current/$totalをアップロード中';
+  }
+
+  @override
+  String get processingOnServer => 'サーバーで処理中...';
+
+  @override
+  String processingOnServerProgress(int current, int total) {
+    return '処理中... $current/$total セグメント';
   }
 
   @override
@@ -8270,6 +8053,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get phoneCallSettingsTitle => '通話設定';
 
   @override
+  String get showPhoneCallButtonTitle => '通話ボタンを表示';
+
+  @override
+  String get showPhoneCallButtonDesc => 'ホーム画面に通話ボタンを表示する';
+
+  @override
   String get yourVerifiedNumbers => '認証済みの番号';
 
   @override
@@ -8402,7 +8191,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get manageStorage => 'ストレージを管理';
 
   @override
-  String get safelyBackedUp => 'スマホに安全にバックアップ済み';
+  String get safelyBackedUp => '作成された会話';
 
   @override
   String get notYetSynced => 'まだスマホに同期されていません';
@@ -8567,4 +8356,857 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get storageSection => 'ストレージ';
+
+  @override
+  String get permissions => '権限';
+
+  @override
+  String get permissionEnabled => '有効';
+
+  @override
+  String get permissionEnable => '有効にする';
+
+  @override
+  String get permissionsPageDescription => 'これらの権限はOmiの動作に不可欠です。通知、位置情報に基づく体験、音声キャプチャなどの主要機能を有効にします。';
+
+  @override
+  String get permissionsRequiredDescription => 'Omiが正しく動作するためにいくつかの権限が必要です。続行するには許可してください。';
+
+  @override
+  String get permissionsSetupTitle => '最高の体験を手に入れよう';
+
+  @override
+  String get permissionsSetupDescription => 'いくつかの権限を有効にして、Omiの魔法を体験しましょう。';
+
+  @override
+  String get permissionsChangeAnytime => '設定 > 権限からいつでも変更できます';
+
+  @override
+  String get location => '位置情報';
+
+  @override
+  String get microphone => 'マイク';
+
+  @override
+  String get whyAreYouCanceling => 'キャンセルの理由は？';
+
+  @override
+  String get cancelReasonSubtitle => '退会の理由を教えていただけますか？';
+
+  @override
+  String get cancelReasonTooExpensive => '高すぎる';
+
+  @override
+  String get cancelReasonNotUsing => '十分に使っていない';
+
+  @override
+  String get cancelReasonMissingFeatures => '機能が不足';
+
+  @override
+  String get cancelReasonAudioQuality => '音声/文字起こしの品質';
+
+  @override
+  String get cancelReasonBatteryDrain => 'バッテリー消費の懸念';
+
+  @override
+  String get cancelReasonFoundAlternative => '代替品を見つけた';
+
+  @override
+  String get cancelReasonOther => 'その他';
+
+  @override
+  String get tellUsMore => '詳しく教えてください（任意）';
+
+  @override
+  String get cancelReasonDetailHint => 'フィードバックをお待ちしています...';
+
+  @override
+  String get justAMoment => '少しお待ちください';
+
+  @override
+  String get cancelConsequencesSubtitle => 'キャンセルの代わりに、他のオプションを検討されることを強くお勧めします。';
+
+  @override
+  String cancelBillingPeriodInfo(String date) {
+    return 'プランは$dateまで有効です。その後、機能が制限された無料版に移行されます。';
+  }
+
+  @override
+  String get ifYouCancel => 'キャンセルすると：';
+
+  @override
+  String get cancelConsequenceNoAccess => '請求期間終了後、無制限アクセスがなくなります。';
+
+  @override
+  String get cancelConsequenceBattery => '7倍のバッテリー消費（デバイス上の処理）';
+
+  @override
+  String get cancelConsequenceQuality => '30%低い文字起こし品質（デバイス上のモデル）';
+
+  @override
+  String get cancelConsequenceDelay => '5-7秒の処理遅延（デバイス上のモデル）';
+
+  @override
+  String get cancelConsequenceSpeakers => '話者を識別できません。';
+
+  @override
+  String get confirmAndCancel => '確認してキャンセル';
+
+  @override
+  String get cancelConsequencePhoneCalls => 'リアルタイム通話文字起こしなし';
+
+  @override
+  String get feedbackTitleTooExpensive => 'どの価格帯が適切ですか？';
+
+  @override
+  String get feedbackTitleMissingFeatures => 'どの機能が不足していますか？';
+
+  @override
+  String get feedbackTitleAudioQuality => 'どのような問題がありましたか？';
+
+  @override
+  String get feedbackTitleBatteryDrain => 'バッテリーの問題について教えてください';
+
+  @override
+  String get feedbackTitleFoundAlternative => '何に乗り換えますか？';
+
+  @override
+  String get feedbackTitleNotUsing => 'Omiをもっと使うきっかけは何ですか？';
+
+  @override
+  String get feedbackSubtitleTooExpensive => 'フィードバックは適切なバランスを見つけるのに役立ちます。';
+
+  @override
+  String get feedbackSubtitleMissingFeatures => '常に開発中です — 優先順位付けに役立ちます。';
+
+  @override
+  String get feedbackSubtitleAudioQuality => '何が問題だったか理解したいです。';
+
+  @override
+  String get feedbackSubtitleBatteryDrain => 'ハードウェアチームの改善に役立ちます。';
+
+  @override
+  String get feedbackSubtitleFoundAlternative => '何が気になったか教えてください。';
+
+  @override
+  String get feedbackSubtitleNotUsing => 'Omiをもっと便利にしたいです。';
+
+  @override
+  String get deviceDiagnostics => 'デバイス診断';
+
+  @override
+  String get signalStrength => '信号強度';
+
+  @override
+  String get connectionUptime => '稼働時間';
+
+  @override
+  String get reconnections => '再接続';
+
+  @override
+  String get disconnectHistory => '切断履歴';
+
+  @override
+  String get noDisconnectsRecorded => '切断は記録されていません';
+
+  @override
+  String get diagnostics => '診断';
+
+  @override
+  String get waitingForData => 'データを待っています...';
+
+  @override
+  String get liveRssiOverTime => 'リアルタイムRSSI推移';
+
+  @override
+  String get noRssiDataYet => 'RSSIデータはまだありません';
+
+  @override
+  String get collectingData => 'データ収集中...';
+
+  @override
+  String get cleanDisconnect => '正常切断';
+
+  @override
+  String get connectionTimeout => '接続タイムアウト';
+
+  @override
+  String get remoteDeviceTerminated => 'リモートデバイスが接続を終了しました';
+
+  @override
+  String get pairedToAnotherPhone => '別の電話にペアリング済み';
+
+  @override
+  String get linkKeyMismatch => 'リンクキーの不一致';
+
+  @override
+  String get connectionFailed => '接続失敗';
+
+  @override
+  String get appClosed => 'アプリが閉じられました';
+
+  @override
+  String get manualDisconnect => '手動切断';
+
+  @override
+  String lastNEvents(int count) {
+    return '最新の$count件のイベント';
+  }
+
+  @override
+  String get signal => '信号';
+
+  @override
+  String get battery => 'バッテリー';
+
+  @override
+  String get excellent => '優秀';
+
+  @override
+  String get good => '良好';
+
+  @override
+  String get fair => '普通';
+
+  @override
+  String get weak => '弱い';
+
+  @override
+  String gattError(String code) {
+    return 'GATTエラー ($code)';
+  }
+
+  @override
+  String get batteryHistory => 'バッテリー';
+
+  @override
+  String get noBatteryDataYet => 'バッテリーデータはまだありません';
+
+  @override
+  String get day => '日';
+
+  @override
+  String get week => '週';
+
+  @override
+  String get rollbackToStableFirmware => '安定版ファームウェアに戻す';
+
+  @override
+  String get rollbackConfirmTitle => 'ファームウェアを戻しますか？';
+
+  @override
+  String rollbackConfirmMessage(String version) {
+    return '現在のファームウェアが最新の安定版（$version）に置き換えられます。更新後、デバイスは再起動します。';
+  }
+
+  @override
+  String get stableFirmware => '安定版ファームウェア';
+
+  @override
+  String get fetchingStableFirmware => '最新の安定版ファームウェアを取得中...';
+
+  @override
+  String get noStableFirmwareFound => 'お使いのデバイスに対応する安定版ファームウェアが見つかりませんでした。';
+
+  @override
+  String get installStableFirmware => '安定版ファームウェアをインストール';
+
+  @override
+  String get alreadyOnStableFirmware => 'すでに最新の安定版を使用しています。';
+
+  @override
+  String audioSavedLocally(String duration) {
+    return '$duration の音声をローカルに保存しました';
+  }
+
+  @override
+  String get willSyncAutomatically => '自動的に同期されます';
+
+  @override
+  String get enableLocationTitle => '位置情報を有効にする';
+
+  @override
+  String get enableLocationDescription => '近くのBluetoothデバイスを検出するには位置情報の許可が必要です。';
+
+  @override
+  String get voiceRecordingFound => '録音が見つかりました';
+
+  @override
+  String get transcriptionConnecting => '文字起こしに接続中...';
+
+  @override
+  String get transcriptionReconnecting => '文字起こしに再接続中...';
+
+  @override
+  String get transcriptionUnavailable => '文字起こしは利用できません';
+
+  @override
+  String get audioOutput => 'オーディオ出力';
+
+  @override
+  String get firmwareWarningTitle => '重要：更新前にお読みください';
+
+  @override
+  String get firmwareFormatWarning =>
+      'このファームウェアはSDカードをフォーマットします。アップグレード前にすべてのオフラインデータが同期されていることを確認してください。\n\nこのバージョンのインストール後に赤いライトが点滅しても心配しないでください。デバイスをアプリに接続するだけで青に変わるはずです。赤いライトはデバイスの時計がまだ同期されていないことを意味します。';
+
+  @override
+  String get continueAnyway => '続行';
+
+  @override
+  String get tasksClearCompleted => '完了済みをクリア';
+
+  @override
+  String get tasksSelectAll => 'すべて選択';
+
+  @override
+  String tasksDeleteSelected(int count) {
+    return '$count件のタスクを削除';
+  }
+
+  @override
+  String get tasksMarkComplete => '完了としてマーク';
+
+  @override
+  String get appleHealthManageNote =>
+      'Omi は Apple の HealthKit フレームワークを通じて Apple Health にアクセスします。アクセスはいつでも iOS の設定から取り消せます。';
+
+  @override
+  String get appleHealthConnectCta => 'Apple Health に接続';
+
+  @override
+  String get appleHealthDisconnectCta => 'Apple Health の接続を解除';
+
+  @override
+  String get appleHealthConnectedBadge => '接続済み';
+
+  @override
+  String get appleHealthFeatureChatTitle => '健康についてチャット';
+
+  @override
+  String get appleHealthFeatureChatDesc => '歩数、睡眠、心拍数、ワークアウトについて Omi に質問できます。';
+
+  @override
+  String get appleHealthFeatureReadOnlyTitle => '読み取り専用アクセス';
+
+  @override
+  String get appleHealthFeatureReadOnlyDesc => 'Omi は Apple Health に書き込みや変更を行いません。';
+
+  @override
+  String get appleHealthFeatureSecureTitle => '安全な同期';
+
+  @override
+  String get appleHealthFeatureSecureDesc => 'Apple Health のデータは Omi アカウントに安全に同期されます。';
+
+  @override
+  String get appleHealthDeniedTitle => 'Apple Health へのアクセスが拒否されました';
+
+  @override
+  String get appleHealthDeniedBody =>
+      'Omi は Apple Health データを読み取る権限がありません。iOS の設定 → プライバシーとセキュリティ → ヘルスケア → Omi で有効にしてください。';
+
+  @override
+  String get deleteFlowReasonTitle => 'どうして離れるのですか?';
+
+  @override
+  String get deleteFlowReasonSubtitle => 'あなたのフィードバックは、みんなのためにOmiを改善するのに役立ちます。';
+
+  @override
+  String get deleteReasonPrivacy => 'プライバシーへの懸念';
+
+  @override
+  String get deleteReasonNotUsing => 'あまり使っていない';
+
+  @override
+  String get deleteReasonMissingFeatures => '必要な機能が足りない';
+
+  @override
+  String get deleteReasonTechnicalIssues => '技術的な問題が多すぎる';
+
+  @override
+  String get deleteReasonFoundAlternative => '他のものを使っている';
+
+  @override
+  String get deleteReasonTakingBreak => '少し休みたいだけ';
+
+  @override
+  String get deleteReasonOther => 'その他';
+
+  @override
+  String get deleteFlowFeedbackTitle => 'もう少し聞かせてください';
+
+  @override
+  String get deleteFlowFeedbackSubtitle => '何があればOmiはあなたに合っていましたか?';
+
+  @override
+  String get deleteFlowFeedbackHint => '任意 — あなたの声がより良い製品づくりに役立ちます。';
+
+  @override
+  String get deleteFlowConfirmTitle => 'この操作は取り消せません';
+
+  @override
+  String get deleteFlowConfirmSubtitle => 'アカウントを削除すると、復元することはできません。';
+
+  @override
+  String get deleteConsequenceSubscription => '有効なサブスクリプションはキャンセルされます。';
+
+  @override
+  String get deleteConsequenceNoRecovery => 'アカウントは復元できません — サポートでも対応できません。';
+
+  @override
+  String get deleteTypeToConfirm => '確認のためにDELETEと入力してください';
+
+  @override
+  String get deleteConfirmationWord => 'DELETE';
+
+  @override
+  String get deleteAccountPermanently => 'アカウントを完全に削除';
+
+  @override
+  String get keepMyAccount => 'アカウントを残す';
+
+  @override
+  String get deleteAccountFailed => 'アカウントを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get planUpdate => 'プラン更新';
+
+  @override
+  String get planDeprecationMessage =>
+      'Unlimitedプランは廃止予定です。Operatorプランに切り替えてください — 同じ優れた機能が月額\$49でご利用いただけます。現在のプランは当面の間引き続きご利用いただけます。';
+
+  @override
+  String get upgradeYourPlan => 'プランをアップグレード';
+
+  @override
+  String get youAreOnAPaidPlan => '有料プランをご利用中です。';
+
+  @override
+  String get chatTitle => 'チャット';
+
+  @override
+  String get chatMessages => 'メッセージ';
+
+  @override
+  String get unlimitedChatThisMonth => '今月のチャットメッセージは無制限です';
+
+  @override
+  String chatUsedOfLimitCompute(String used, String limit) {
+    return '$used / $limit のコンピュート予算を使用';
+  }
+
+  @override
+  String chatUsedOfLimitMessages(String used, String limit) {
+    return '今月 $used / $limit メッセージ使用済み';
+  }
+
+  @override
+  String chatUsageProgress(String used, String limit) {
+    return '$used / $limit 使用済み';
+  }
+
+  @override
+  String get chatLimitReachedUpgrade => 'チャット上限に達しました。アップグレードしてください。';
+
+  @override
+  String get chatLimitReachedTitle => 'チャット上限に達しました';
+
+  @override
+  String chatUsageDescription(String used, String limitDisplay, String plan) {
+    return '$planプランで$limitDisplayのうち$usedを使用しました。';
+  }
+
+  @override
+  String resetsInDays(int count) {
+    return '$count日後にリセット';
+  }
+
+  @override
+  String resetsInHours(int count) {
+    return '$count時間後にリセット';
+  }
+
+  @override
+  String get resetsSoon => 'まもなくリセット';
+
+  @override
+  String get upgradePlan => 'プランをアップグレード';
+
+  @override
+  String get billingMonthly => '月額';
+
+  @override
+  String get billingYearly => '年額';
+
+  @override
+  String get savePercent => '約17%お得';
+
+  @override
+  String get popular => '人気';
+
+  @override
+  String get currentPlan => '現在';
+
+  @override
+  String neoSubtitle(int count) {
+    return '月$count件の質問';
+  }
+
+  @override
+  String operatorSubtitle(int count) {
+    return '月$count件の質問';
+  }
+
+  @override
+  String get architectSubtitle => 'パワーユーザーAI — 数千のチャット + エージェント自動化';
+
+  @override
+  String chatUsageCost(String used, String limit) {
+    return 'チャット: \$$used / \$$limit 今月の使用量';
+  }
+
+  @override
+  String chatUsageCostNoLimit(String used) {
+    return 'チャット: \$$used 今月の使用量';
+  }
+
+  @override
+  String chatUsageMessages(String used, String limit) {
+    return 'チャット: $used / $limit 件の今月のメッセージ';
+  }
+
+  @override
+  String chatUsageMessagesNoLimit(String used) {
+    return 'チャット: $used 件の今月のメッセージ';
+  }
+
+  @override
+  String get chatQuotaSubtitle => 'AI chat messages used with Omi this month.';
+
+  @override
+  String get chatQuotaExceededReply => '月間制限に達しました。制限なくOmiとチャットを続けるにはアップグレードしてください。';
+
+  @override
+  String get voiceResponseAudio => 'Omiの応答を音声で再生';
+
+  @override
+  String get voiceResponseMode => '音声応答';
+
+  @override
+  String get voiceResponseModeTitle => '応答を読み上げるタイミング';
+
+  @override
+  String get voiceResponseOff => 'オフ';
+
+  @override
+  String get voiceResponseHeadphonesOnly => 'ヘッドフォンのみ';
+
+  @override
+  String get voiceResponseAlways => '常に';
+
+  @override
+  String get agreeAndContinue => '同意して続ける';
+
+  @override
+  String get startVoiceRecording => '音声録音を開始';
+
+  @override
+  String get startCallRecording => '通話録音を開始';
+
+  @override
+  String get mindMap => 'Mind Map';
+
+  @override
+  String get voiceMode => '音声モード';
+
+  @override
+  String get quickActionAskOmi => 'Omiに何でも聞く';
+
+  @override
+  String get record => '録音';
+
+  @override
+  String get stop => '停止';
+
+  @override
+  String get recordWithPhoneMic => '電話のマイクで録音';
+
+  @override
+  String get recordWithPhoneMicSubtitle => '周囲の音声を録音';
+
+  @override
+  String get phoneCall => '電話';
+
+  @override
+  String get phoneCallSubtitle => 'ライブ文字起こしで通話を録音';
+
+  @override
+  String get searchActionItems => 'アクション項目を検索';
+
+  @override
+  String get selectActionItems => '複数選択';
+
+  @override
+  String chooseExportDestination(int count) {
+    return '$count件をエクスポート先…';
+  }
+
+  @override
+  String get bulkExportInProgress => 'エクスポート中…';
+
+  @override
+  String bulkExportSuccess(int count, String platform) {
+    return '$count件を$platformにエクスポートしました';
+  }
+
+  @override
+  String bulkExportPartial(int success, int total, String platform) {
+    return '$total件中$success件を$platformにエクスポートしました';
+  }
+
+  @override
+  String get showCompletedTasks => '完了を表示';
+
+  @override
+  String get hideCompletedTasks => '完了を非表示';
+
+  @override
+  String get selectAllTasksMenu => 'すべて選択';
+
+  @override
+  String get connectTaskAppToExport => 'エクスポートするには設定でタスクアプリを接続してください';
+
+  @override
+  String get connectAction => '接続';
+
+  @override
+  String get deselectAllTasksMenu => 'すべて選択解除';
+
+  @override
+  String get bulkExportAlreadyExported => '選択したタスクはすべてエクスポート済みです';
+
+  @override
+  String get bulkDeleteFailed => 'タスクを削除できませんでした。もう一度お試しください。';
+
+  @override
+  String get deleteRecap => 'リキャップを削除';
+
+  @override
+  String get deleteRecapConfirmTitle => 'このリキャップを削除しますか?';
+
+  @override
+  String get deleteRecapConfirmBody => 'このリキャップは完全に削除されます。その日の元の会話には影響しません。';
+
+  @override
+  String get deleteRecapAction => '削除';
+
+  @override
+  String get recapDeletedSnackbar => 'リキャップを削除しました';
+
+  @override
+  String get recapDeleteFailed => 'リキャップを削除できませんでした。後でもう一度お試しください。';
+
+  @override
+  String get syncStatusBackedUp => 'バックアップ済み';
+
+  @override
+  String get syncStatusBackingUp => '同期中…';
+
+  @override
+  String get syncStatusWaiting => '同期を待機中';
+
+  @override
+  String get syncStatusRetrying => '処理できませんでした — 再試行中';
+
+  @override
+  String get syncStatusFailed => '失敗 — 「再試行」をタップ';
+
+  @override
+  String get syncStatusFileUnavailable => 'ファイルを利用できません';
+
+  @override
+  String get noRecordingsYet => 'まだ録音がありません';
+
+  @override
+  String get syncInProgress => '同期中';
+
+  @override
+  String get syncStatusUploaded => 'アップロード済み · Omi で処理中';
+
+  @override
+  String get deleteWhileProcessingTitle => 'まだ処理中です';
+
+  @override
+  String get deleteWhileProcessingMessage => 'この録音はアップロード済みですが、Omi はまだ会話を作成しています。今削除して処理が失敗すると復元できません。それでも削除しますか？';
+
+  @override
+  String get syncCardAllBackedUp => 'すべての録音を同期済み';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を同期できます',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omiで処理中…';
+
+  @override
+  String get syncCardWaitingInternet => 'インターネット接続を待機中';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '確認が必要な録音が$count件',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro => '録音はデバイスからこの電話に転送されてローカルに保存され、その後 Omi のサーバーにアップロードされて文字起こしされ、会話に変換されます。';
+
+  @override
+  String get syncStepUpload => '同期';
+
+  @override
+  String get syncStepUploadDesc => '録音はOmiのサーバーに送信されます';
+
+  @override
+  String get syncStepProcess => '文字起こし';
+
+  @override
+  String get syncStepProcessDesc => 'Omi が音声を会話に変換します';
+
+  @override
+  String get syncStepBackedUp => '会話の準備が完了';
+
+  @override
+  String get syncStepBackedUpDesc => '会話 から見つけられます';
+
+  @override
+  String get syncFailureFootnote => '処理に失敗した場合、次回の同期で録音が自動的に再試行されます。';
+
+  @override
+  String get syncStatusConversationCreated => '会話を作成しました';
+
+  @override
+  String get syncCardUploadingTitle => 'Omiへアップロード中';
+
+  @override
+  String get syncCardDownloadingTitle => 'デバイスからダウンロード中';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total件中$current件';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'デバイス上';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'デバイスからダウンロード中';
+
+  @override
+  String get newestFirst => '新しい順';
+
+  @override
+  String get noSyncedRecordingsYet => '同期済みの録音はまだありません';
+
+  @override
+  String get morePaymentMethodsComingSoon => '他の支払い方法を近日追加予定';
+
+  @override
+  String get syncProcessingBackgroundHint => 'この処理はバックグラウンドで続きます — この画面から移動してかまいません。';
+
+  @override
+  String get syncCardRateLimited => '利用上限に達しました — 同期は自動的に再開されます';
+
+  @override
+  String get syncCardBackendBusy => 'Omi のサーバーが混雑しています — 空き容量が戻り次第、録音が同期されます';
+
+  @override
+  String get unableToDetermineFirmwareVersion => '現在のファームウェアバージョンを特定できません';
+
+  @override
+  String get promoCode => 'プロモコード';
+
+  @override
+  String get enterPromoCode => 'プロモコードを入力';
+
+  @override
+  String get invalidPromotionCode => '無効なプロモコードです。';
+
+  @override
+  String get backgroundModeTitle => 'バックグラウンドモード';
+
+  @override
+  String get backgroundModeDescription => 'アプリを完全に閉じても Omi の録音を続けます。';
+
+  @override
+  String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
+
+  @override
+  String get backgroundModeUnavailable =>
+      '互換性のあるデバイスが接続されていないため、バックグラウンドモードは利用できません。この機能を使用するには、Omi、OpenGlass、またはFriend Pendantデバイスを接続してください。';
+
+  @override
+  String get regenerateRecap => '要約を再生成';
+
+  @override
+  String get recapRegeneratedSnackbar => '要約を再生成しました';
+
+  @override
+  String get recapRegenerateFailed => '要約を再生成できませんでした。後でもう一度お試しください。';
+
+  @override
+  String get recapRegenerateCooldown => '再生成する前に数秒お待ちください。';
+
+  @override
+  String get recapRegenerateNoConversations => 'この日の要約対象となる会話はありません。';
+
+  @override
+  String get syncCustomSttWarningTitle => '同期では Omi の文字起こしを使用します';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
+
+  @override
+  String get transcribeLaterTitle => '後で文字起こし';
+
+  @override
+  String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
+
+  @override
+  String get transcribeLaterNote => '現在はOmiデバイスでのみご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
+
+  @override
+  String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
+
+  @override
+  String get recordingMode => '録音モード';
+
+  @override
+  String get captureModeLater => '後で';
+
+  @override
+  String get captureModeLiveDescription => '話しながらリアルタイムで文字起こしします。';
+
+  @override
+  String get captureModeLaterDescription => '今すぐ音声を保存して、好きなときに文字起こしできます。';
+
+  @override
+  String get unmute => 'ミュート解除';
+
+  @override
+  String get newRecording => '新規録音';
+
+  @override
+  String get transcribeLaterPaused => '一時停止中 — 音声は録音されていません';
 }

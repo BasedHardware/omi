@@ -36,8 +36,8 @@ def get_app_changelogs(from_version: str, to_version: str) -> List[Announcement]
         # Skip entries without app_version, then filter by version range
         if (
             app_version
-            and _compare_versions(from_version, app_version) < 0
-            and _compare_versions(app_version, to_version) <= 0
+            and compare_versions(from_version, app_version) < 0
+            and compare_versions(app_version, to_version) <= 0
         ):
             changelogs.append(Announcement.from_dict(data))
 
@@ -65,7 +65,7 @@ def get_recent_changelogs(limit: int = 5, max_version: Optional[str] = None) -> 
         app_version = data.get("app_version")
         if app_version:
             # Filter out versions newer than max_version if specified
-            if max_version and _compare_versions(app_version, max_version) > 0:
+            if max_version and compare_versions(app_version, max_version) > 0:
                 continue
             changelogs.append(Announcement.from_dict(data))
 
@@ -270,7 +270,7 @@ def _version_tuple(version: str) -> tuple:
     return semantic + (build,)
 
 
-def _compare_versions(v1: str, v2: str) -> int:
+def compare_versions(v1: str, v2: str) -> int:
     """
     Two-pass version comparison.
 
@@ -431,10 +431,10 @@ def get_pending_announcements(
 
         # 5. Check app version range
         if targeting.app_version_min:
-            if _compare_versions(app_version, targeting.app_version_min) < 0:
+            if compare_versions(app_version, targeting.app_version_min) < 0:
                 continue
         if targeting.app_version_max:
-            if _compare_versions(app_version, targeting.app_version_max) > 0:
+            if compare_versions(app_version, targeting.app_version_max) > 0:
                 continue
 
         # 6. Check firmware version range (only if firmware_version provided)
@@ -442,10 +442,10 @@ def get_pending_announcements(
             if not firmware_version:
                 continue
             if targeting.firmware_version_min:
-                if _compare_versions(firmware_version, targeting.firmware_version_min) < 0:
+                if compare_versions(firmware_version, targeting.firmware_version_min) < 0:
                     continue
             if targeting.firmware_version_max:
-                if _compare_versions(firmware_version, targeting.firmware_version_max) > 0:
+                if compare_versions(firmware_version, targeting.firmware_version_max) > 0:
                     continue
 
         # 7. Check device model targeting

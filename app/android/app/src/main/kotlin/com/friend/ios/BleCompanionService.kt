@@ -4,6 +4,7 @@ import android.companion.AssociationInfo
 import android.companion.CompanionDeviceManager
 import android.companion.CompanionDeviceService
 import android.companion.DevicePresenceEvent
+import android.content.Context
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -11,10 +12,7 @@ import java.util.Locale
 
 /**
  * CompanionDeviceService that receives device appear/disappear events from the OS,
- * even when the app is not running. This is how the app auto-connects when the
- * Omi device comes into BLE range — no polling timer needed.
- *
- * Enables zero-polling reconnection via OS-level BLE presence monitoring.
+ * even when the app is not running.
  */
 class BleCompanionService : CompanionDeviceService() {
 
@@ -38,38 +36,36 @@ class BleCompanionService : CompanionDeviceService() {
 
     private fun handleDeviceAppeared(address: String) {
         Log.i(TAG, "Device appeared: $address")
-        if (OmiBleManager.instance.appClosed) {
-            Log.i(TAG, "App is closed, skipping reconnect")
+
+        if (!hasBluetoothPermission()) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) {
+            Log.i(TAG, "Device appeared but Background Mode is off; not starting service")
             return
         }
-        if (OmiBleManager.instance.isManuallyDisconnected(address)) {
-            Log.i(TAG, "Device was manually disconnected, skipping reconnect")
-            return
-        }
-        if (!hasBluetoothPermission()) {
-            Log.w(TAG, "No Bluetooth permission, cannot start foreground service")
-            return
-        }
-        OmiBleForegroundService.startService(applicationContext, address, shouldConnect = true, caller = "CompanionSvc.deviceAppeared")
+
+        val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("user_disconnected", false)) return
+
+        val saved = prefs.getString("managed_device", null)
+        val requiresBond = if (saved != null) {
+            val parts = saved.split("|")
+            parts.size == 2 && parts[0].equals(address, ignoreCase = true) && parts[1].toBoolean()
+        } else false
+
+        OmiBleForegroundService.startService(
+            applicationContext, address,
+            requiresBond = requiresBond,
+            caller = "CompanionSvc.deviceAppeared"
+        )
     }
 
     private fun handleDeviceDisappeared() {
-        Log.i(TAG, "Device disappeared")
-        // Keep service running for reconnect — don't stop it
-    }
-
-    /**
-     * Fallback: on create, start foreground service with first associated device.
-     */
-    private fun startForegroundServiceFallback() {
-        if (!hasBluetoothPermission()) return
-
-        val cdm = getSystemService("companiondevice") as? CompanionDeviceManager ?: return
-        val association = cdm.myAssociations.firstOrNull() ?: return
-        val address = association.deviceMacAddress?.toString()?.uppercase(Locale.ROOT) ?: return
-
-        Log.i(TAG, "Fallback: starting foreground service with $address")
-        OmiBleForegroundService.startService(applicationContext, address, shouldConnect = true, caller = "CompanionSvc.fallback")
+        // Intentionally a no-op. Omi holds a live connection, and a connected BLE peripheral stops
+        // advertising — so the OS fires BLE_DISAPPEARED while we are connected and streaming.
+        // Stopping the service here tears down a healthy link (and then flaps). A genuinely off /
+        // out-of-range device is handled by the parked autoConnect, which is low power and
+        // auto-reconnects when it returns.
+        Log.i(TAG, "Device disappeared (ignored; live-connection model)")
     }
 
     // ---- Lifecycle ----
@@ -77,9 +73,22 @@ class BleCompanionService : CompanionDeviceService() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "onCreate")
-        if (hasBluetoothPermission() && !OmiBleManager.instance.appClosed) {
-            startForegroundServiceFallback()
-        }
+
+        if (!hasBluetoothPermission()) return
+        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) return
+
+        val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
+        if (prefs.getBoolean("user_disconnected", false)) return
+
+        val saved = prefs.getString("managed_device", null) ?: return
+        val parts = saved.split("|")
+        if (parts.size != 2) return
+
+        OmiBleForegroundService.startService(
+            applicationContext, parts[0],
+            requiresBond = parts[1].toBoolean(),
+            caller = "CompanionSvc.onCreateFallback"
+        )
     }
 
     // ---- API 31-35: String-based callbacks ----

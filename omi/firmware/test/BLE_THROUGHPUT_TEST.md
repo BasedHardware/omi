@@ -13,7 +13,7 @@ Create a `prj.conf` file with the following content:
 #
 CONFIG_BT=y
 CONFIG_BT_PERIPHERAL=y
-CONFIG_BT_DEVICE_NAME="Omi BLE Thoughput Test"
+CONFIG_BT_DEVICE_NAME="Omi BLE Throughput Test"
 CONFIG_BT_MAX_CONN=1
 CONFIG_BT_MAX_PAIRED=1
 CONFIG_BT_DEVICE_APPEARANCE=22
@@ -115,5 +115,5 @@ $ screen /dev/tty.usbmodem1101 115200
 ### 7. Test with Omi AI App
 
 1. Download the Omi AI app on your smartphone
-2. Connect to the BLE device named "Omi BLE Thoughput Test"
+2. Connect to the BLE device named "Omi BLE Throughput Test"
 3. Monitor the logs on your serial console to see throughput metrics

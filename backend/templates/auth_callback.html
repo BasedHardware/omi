@@ -92,15 +92,54 @@
     </div>
 
     <script>
-        // Get values from template variables (passed from backend)
-        const code = "{{ code }}";
-        const state = "{{ state }}";
-        const error = "{{ error if error is defined else '' }}";
+        // Get values from template variables (passed from backend).
+        // Use |tojson for safe JS interpolation (prevents XSS via template injection).
+        // ``baseRedirect`` was validated server-side at /authorize time; here
+        // we still re-check the scheme/host before navigating, as defense in
+        // depth against a misconfigured upstream.
+        const code = {{ code | tojson }};
+        const state = {{ state | tojson }};
+        const error = {{ (error if error is defined else '') | tojson }};
+        const baseRedirect = {{ redirect_uri | default('omi://auth/callback') | tojson }};
 
         const errorElement = document.getElementById('error');
         const messageElement = document.getElementById('message');
         const spinnerElement = document.getElementById('spinner');
         const manualLinkElement = document.getElementById('manualLink');
+
+        function isAllowedRedirect(uri) {
+            // Mirrors the server-side allowlist in backend/routers/auth.py
+            // (see _validate_redirect_uri / _FORBIDDEN_REDIRECT_SCHEMES).
+            // Must accept ALL native app schemes the Omi family registers
+            // (omi://, omi-computer://, omi-computer-dev://, com.omi.app://, ...)
+            // plus http loopback for the CLI; reject https and any
+            // browser-executable scheme.
+            if (!uri) return false;
+
+            // Pull out the scheme via regex so we don't depend on URL parser
+            // behavior with unusual custom schemes across browsers.
+            const m = uri.match(/^([a-zA-Z][a-zA-Z0-9+\-.]*):/);
+            if (!m) return false;
+            const scheme = m[1].toLowerCase();
+
+            const forbidden = ['https', 'javascript', 'data', 'vbscript', 'file', 'blob', 'filesystem', 'about'];
+            if (forbidden.indexOf(scheme) !== -1) return false;
+
+            if (scheme === 'http') {
+                try {
+                    const u = new URL(uri);
+                    // URL.hostname returns the bracketless form for IPv6 — compare
+                    // against the bare ``::1`` rather than ``[::1]``.
+                    const host = u.hostname.toLowerCase();
+                    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+                } catch (_) {
+                    return false;
+                }
+            }
+
+            // Native-app custom scheme (omi://, omi-computer://, etc.)
+            return true;
+        }
 
         if (error) {
             // Handle OAuth error
@@ -108,32 +147,58 @@
             spinnerElement.style.display = 'none';
             messageElement.textContent = 'Please close this window and try again.';
         } else if (code) {
-            // Build the custom scheme redirect URL
-            let redirectUrl = 'omi://auth/callback?code=' + encodeURIComponent(code);
-            if (state) {
-                redirectUrl += '&state=' + encodeURIComponent(state);
-            }
+            if (!isAllowedRedirect(baseRedirect)) {
+                errorElement.textContent = 'Invalid redirect target. Please close this window.';
+                spinnerElement.style.display = 'none';
+                messageElement.textContent = '';
+            } else {
+                // Append code + state preserving any existing query params.
+                const sep = baseRedirect.indexOf('?') === -1 ? '?' : '&';
+                let redirectUrl = baseRedirect + sep + 'code=' + encodeURIComponent(code);
+                if (state) {
+                    redirectUrl += '&state=' + encodeURIComponent(state);
+                }
+                const isLoopback = redirectUrl.indexOf('http://') === 0;
 
-            // Set up manual link
-            manualLinkElement.href = redirectUrl;
+                // Loopback users (CLI / desktop apps) get a "you can close this tab" hint —
+                // their localhost server picks up the code automatically. Mobile users get
+                // the existing manual-link fallback in case the deep link doesn't fire.
+                if (isLoopback) {
+                    messageElement.textContent = 'Returning to your terminal — you can close this tab.';
+                } else {
+                    messageElement.textContent = 'Redirecting you back to the app...';
+                }
 
-            // Attempt automatic redirect
-            try {
-                console.log('Redirecting to:', redirectUrl);
-                window.location.href = redirectUrl;
+                // Set up manual link
+                manualLinkElement.href = redirectUrl;
+                if (isLoopback) {
+                    manualLinkElement.textContent = 'Open Manually';
+                }
 
-                // Show manual link after 3 seconds if automatic redirect doesn't work
-                setTimeout(() => {
-                    messageElement.textContent = 'If the app doesn\'t open automatically, click below:';
+                // Attempt automatic redirect
+                try {
+                    console.log('Redirecting to:', redirectUrl);
+                    window.location.href = redirectUrl;
+
+                    // Show manual link after 3 seconds if automatic redirect doesn't work
+                    setTimeout(() => {
+                        if (isLoopback) {
+                            messageElement.textContent = 'If your terminal didn\'t pick it up, click below:';
+                        } else {
+                            messageElement.textContent = 'If the app doesn\'t open automatically, click below:';
+                        }
+                        spinnerElement.style.display = 'none';
+                        manualLinkElement.style.display = 'inline-block';
+                    }, 3000);
+                } catch (e) {
+                    console.error('Redirect error:', e);
+                    errorElement.textContent = isLoopback
+                        ? 'Could not automatically redirect to your local CLI.'
+                        : 'Could not automatically redirect to the app.';
+                    messageElement.textContent = 'Please click below to continue:';
                     spinnerElement.style.display = 'none';
                     manualLinkElement.style.display = 'inline-block';
-                }, 3000);
-            } catch (e) {
-                console.error('Redirect error:', e);
-                errorElement.textContent = 'Could not automatically redirect to the app.';
-                messageElement.textContent = 'Please click below to continue:';
-                spinnerElement.style.display = 'none';
-                manualLinkElement.style.display = 'inline-block';
+                }
             }
         } else {
             // No code or error in URL

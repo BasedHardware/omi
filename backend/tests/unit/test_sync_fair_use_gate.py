@@ -17,10 +17,14 @@ for mod_name in [
     'database.user_usage',
     'database.conversations',
     'firebase_admin',
+    'firebase_admin.auth',
     'firebase_admin.messaging',
 ]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = ModuleType(mod_name)
+
+sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
+sys.modules['firebase_admin.auth'].get_user = MagicMock()
 
 # Stub redis_db.r
 _mock_redis = MagicMock()
@@ -223,7 +227,8 @@ class TestCreateConversationLockPropagation:
 
     def test_conversation_inherits_lock_from_create(self):
         """Conversation(**create_dict) inherits is_locked=True."""
-        from models.conversation import CreateConversation, Conversation, Structured
+        from models.conversation import Conversation, CreateConversation
+        from models.structured import Structured
         from datetime import datetime, timezone
 
         cc = CreateConversation(
@@ -251,12 +256,30 @@ class TestSyncEndpointCodeStructure:
         import os
 
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             return f.read()
 
-    def test_no_402_block(self):
-        """sync.py must not raise 402 (lock instead of block)."""
+    @staticmethod
+    def _function_body(source, marker):
+        start = source.find(marker)
+        assert start != -1, f'{marker} not found in sync.py'
+        end = source.find('\n@router.', start + 1)
+        if end == -1:
+            end = len(source)
+        return source[start:end]
+
+    def _sync_local_files_bodies(self):
         source = self._read_sync_source()
+        return '\n'.join(
+            [
+                self._function_body(source, 'async def sync_local_files('),
+                self._function_body(source, 'async def sync_local_files_v2('),
+            ]
+        )
+
+    def test_no_402_block(self):
+        """sync-local-files must not raise 402 (lock instead of block)."""
+        source = self._sync_local_files_bodies()
         assert 'status_code=402' not in source
 
     def test_should_lock_flag_exists(self):
@@ -293,8 +316,9 @@ class TestSyncEndpointCodeStructure:
             if in_triggered_block:
                 if stripped and not stripped.startswith('#') and not line.startswith(' ' * 16):
                     break  # exited the block
-                assert 'should_lock' not in stripped, \
-                    "soft cap trigger must not set should_lock — matches transcribe.py behavior"
+                assert (
+                    'should_lock' not in stripped
+                ), "soft cap trigger must not set should_lock — matches transcribe.py behavior"
 
 
 class TestLockDecisionBehavior:
@@ -327,9 +351,7 @@ class TestLockDecisionBehavior:
 
     def test_credits_exhausted_no_soft_cap_locks(self):
         """User with exhausted credits must be locked even without soft cap."""
-        is_locked = self._compute_lock_decision(
-            has_credits=False, fair_use_enabled=True, triggered_caps=[]
-        )
+        is_locked = self._compute_lock_decision(has_credits=False, fair_use_enabled=True, triggered_caps=[])
         assert is_locked is True, "Credit exhaustion must lock regardless of soft caps"
 
     def test_credits_exhausted_with_soft_cap_locks(self):
@@ -341,16 +363,12 @@ class TestLockDecisionBehavior:
 
     def test_credits_available_fair_use_disabled_no_lock(self):
         """With fair-use disabled and credits available, no lock."""
-        is_locked = self._compute_lock_decision(
-            has_credits=True, fair_use_enabled=False, triggered_caps=[]
-        )
+        is_locked = self._compute_lock_decision(has_credits=True, fair_use_enabled=False, triggered_caps=[])
         assert is_locked is False
 
     def test_credits_available_no_caps_no_lock(self):
         """Normal unlimited user with no caps triggered: no lock."""
-        is_locked = self._compute_lock_decision(
-            has_credits=True, fair_use_enabled=True, triggered_caps=[]
-        )
+        is_locked = self._compute_lock_decision(has_credits=True, fair_use_enabled=True, triggered_caps=[])
         assert is_locked is False
 
 

@@ -10,29 +10,213 @@ import os
 import struct
 import sys
 import wave
+from types import ModuleType
 
 import numpy as np
 import pytest
 
 # Mock modules that initialize GCP clients at import time
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+
+
+def _cosine_cdist(a, b, metric="cosine"):
+    if metric != "cosine":
+        raise ValueError(f"Unsupported test cdist metric: {metric}")
+
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    numerator = a @ b.T
+    denominator = np.linalg.norm(a, axis=1)[:, None] * np.linalg.norm(b, axis=1)[None, :]
+
+    with np.errstate(divide="ignore", invalid="ignore"):
+        similarity = numerator / denominator
+    return 1.0 - similarity
+
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-sys.modules.setdefault("database._client", MagicMock())
-sys.modules.setdefault("utils.other.storage", MagicMock())
-sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
-
-from utils.audio import AudioRingBuffer
-from utils.speaker_identification import detect_speaker_from_text, SPEAKER_IDENTIFICATION_PATTERNS, _pcm_to_wav_bytes
-from utils.stt.speaker_embedding import (
-    compare_embeddings,
-    is_same_speaker,
-    find_best_match,
-    SPEAKER_MATCH_THRESHOLD,
-    _get_wav_duration,
+_RESTORED_MODULES = (
+    "database._client",
+    "database.conversations",
+    "database.users",
+    "av",
+    "utils.audio",
+    "utils.http_client",
+    "utils.other",
+    "utils.other.storage",
+    "utils.speaker_identification",
+    "utils.speaker_sample",
+    "utils.speaker_sample_migration",
+    "utils.stt",
+    "utils.stt.speaker_embedding",
+    "utils.stt.pre_recorded",
+    "scipy",
+    "scipy.spatial",
+    "scipy.spatial.distance",
 )
+_PARENT_ATTRS = (
+    ("database", "_client"),
+    ("database", "conversations"),
+    ("database", "users"),
+    ("utils", "audio"),
+    ("utils", "http_client"),
+    ("utils", "other"),
+    ("utils.other", "storage"),
+    ("utils", "speaker_identification"),
+    ("utils", "speaker_sample"),
+    ("utils", "speaker_sample_migration"),
+    ("utils", "stt"),
+    ("utils.stt", "speaker_embedding"),
+    ("utils.stt", "pre_recorded"),
+    ("scipy", "spatial"),
+    ("scipy.spatial", "distance"),
+)
+_MISSING = object()
+_NOT_IMPORTED = object()
+_saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+_saved_parent_attrs = {
+    (parent_name, attr): getattr(sys.modules.get(parent_name), attr, _MISSING) for parent_name, attr in _PARENT_ATTRS
+}
+
+
+def _install_module(name, module):
+    sys.modules[name] = module
+    if "." in name:
+        parent_name, attr = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+
+
+def _drop_module_and_parent_attr(name):
+    current = sys.modules.pop(name, _MISSING)
+    if "." not in name:
+        return
+
+    parent_name, attr = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is None:
+        return
+
+    if current is _MISSING:
+        if hasattr(parent, attr):
+            delattr(parent, attr)
+    elif getattr(parent, attr, _MISSING) is current:
+        delattr(parent, attr)
+
+
+def _restore_parent_attr(parent, attr, original, current):
+    if original is _MISSING:
+        if current is not _NOT_IMPORTED and getattr(parent, attr, _MISSING) is current:
+            delattr(parent, attr)
+    else:
+        setattr(parent, attr, original)
+
+
+def _restore_stub_modules():
+    current_modules = {name: sys.modules.get(name, _NOT_IMPORTED) for name in _RESTORED_MODULES}
+    for name in sorted(_RESTORED_MODULES, key=lambda module_name: module_name.count("."), reverse=True):
+        original = _saved_modules[name]
+        if original is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = original
+
+    for (parent_name, attr), original in _saved_parent_attrs.items():
+        parent = sys.modules.get(parent_name)
+        if parent is None:
+            continue
+        child_name = f"{parent_name}.{attr}"
+        _restore_parent_attr(parent, attr, original, current_modules.get(child_name, _NOT_IMPORTED))
+
+
+for _real_import in (
+    "utils.audio",
+    "utils.speaker_identification",
+    "utils.speaker_sample",
+    "utils.stt.speaker_embedding",
+):
+    _drop_module_and_parent_attr(_real_import)
+
+_install_module("database._client", MagicMock())
+_conversations_mod = ModuleType("database.conversations")
+_conversations_mod.get_conversation = MagicMock(return_value=None)
+_install_module("database.conversations", _conversations_mod)
+
+_users_mod = ModuleType("database.users")
+_users_mod.get_person = MagicMock(return_value=None)
+_users_mod.get_person_speech_samples_count = MagicMock(return_value=0)
+_users_mod.add_person_speech_sample = MagicMock(return_value=True)
+_users_mod.set_person_speaker_embedding = MagicMock(return_value=None)
+_install_module("database.users", _users_mod)
+
+_http_client_mod = ModuleType("utils.http_client")
+_http_client_mod.get_stt_client = MagicMock()
+_install_module("utils.http_client", _http_client_mod)
+
+_av_mod = ModuleType("av")
+
+
+def _av_open(*args, **kwargs):
+    raise RuntimeError("av is not installed; this test module only covers helpers that do not decode audio")
+
+
+_av_mod.open = _av_open
+_install_module("av", _av_mod)
+
+_storage_mod = ModuleType("utils.other.storage")
+for _name in [
+    "delete_speech_profile_blob",
+    "download_audio_chunks_and_merge",
+    "download_speech_profile_bytes",
+    "list_audio_chunks",
+    "upload_person_speech_sample_from_bytes",
+]:
+    setattr(_storage_mod, _name, MagicMock())
+_install_module("utils.other.storage", _storage_mod)
+
+_migration_mod = ModuleType("utils.speaker_sample_migration")
+_migration_mod.maybe_migrate_person_samples = AsyncMock(side_effect=lambda _uid, person: person)
+_install_module("utils.speaker_sample_migration", _migration_mod)
+
+_install_module("utils.stt.pre_recorded", MagicMock())
+try:
+    from scipy.spatial.distance import cdist as _scipy_cdist  # noqa: F401
+except ImportError:
+    scipy_mod = ModuleType("scipy")
+    spatial_mod = ModuleType("scipy.spatial")
+    distance_mod = ModuleType("scipy.spatial.distance")
+    distance_mod.cdist = _cosine_cdist
+    scipy_mod.spatial = spatial_mod
+    spatial_mod.distance = distance_mod
+    _install_module("scipy", scipy_mod)
+    _install_module("scipy.spatial", spatial_mod)
+    _install_module("scipy.spatial.distance", distance_mod)
+
+try:
+    from utils.audio import AudioRingBuffer
+    from utils.speaker_identification import (
+        detect_speaker_from_text,
+        SPEAKER_IDENTIFICATION_PATTERNS,
+        _pcm_to_wav_bytes,
+    )
+    from utils.stt.speaker_embedding import (
+        compare_embeddings,
+        is_same_speaker,
+        find_best_match,
+        SPEAKER_MATCH_THRESHOLD,
+        _get_wav_duration,
+    )
+finally:
+    _restore_stub_modules()
 
 # ─── AudioRingBuffer ─────────────────────────────────────────────────────────
+
+
+class TestImportStubCleanup:
+    def test_restore_parent_attr_ignores_missing_child_and_absent_attr(self):
+        parent = ModuleType("parent")
+        _restore_parent_attr(parent, "child", _MISSING, _NOT_IMPORTED)
+        assert not hasattr(parent, "child")
 
 
 class TestAudioRingBuffer:
@@ -243,6 +427,18 @@ class TestDetectSpeakerFromText:
         "I am",  # No name follows
     ]
 
+    # Run-on / garbled transcripts where the regex captures a pronoun or filler
+    # word instead of a name — these created phantom contacts "It", "You", "Them" (#5223).
+    STOPWORD_CASES = [
+        "And I am It was great",
+        "I'm You know, the guy",
+        "Yeah, I'm Them and the others",
+        "My name is It",
+        "I am Sorry about that",
+        "I'm Just saying",
+        "i am Gonna do it",
+    ]
+
     @pytest.mark.parametrize("lang,text,expected_name", POSITIVE_CASES)
     def test_positive_detection(self, lang, text, expected_name):
         """Detects speaker name from self-introduction in each language."""
@@ -261,6 +457,17 @@ class TestDetectSpeakerFromText:
         """Non-introduction text returns None."""
         result = detect_speaker_from_text(text)
         assert result is None, f"False positive on: {text!r}"
+
+    @pytest.mark.parametrize("text", STOPWORD_CASES)
+    def test_pronoun_stopwords_rejected(self, text):
+        """Pronouns/fillers captured by the intro patterns are not returned as names."""
+        result = detect_speaker_from_text(text)
+        assert result is None, f"Stopword leaked as speaker name: {text!r} -> {result}"
+
+    def test_real_name_after_stopword_guard(self):
+        """Genuine introductions still detect after the stopword guard."""
+        assert detect_speaker_from_text("I am John") == "John"
+        assert detect_speaker_from_text("My name is Alice") == "Alice"
 
     def test_empty_string_returns_none(self):
         """Empty string input returns None."""
@@ -322,6 +529,12 @@ class TestSpeakerEmbeddingMath:
         distance = compare_embeddings(a, b)
         assert distance == pytest.approx(1.0, abs=1e-6)
 
+    def test_compare_zero_vector_distance_nan(self):
+        """Zero-norm inputs match scipy cosine behavior."""
+        zero = np.zeros((1, 512), dtype=np.float32)
+        emb = self._random_embedding(seed=42)
+        assert np.isnan(compare_embeddings(zero, emb))
+
     def test_compare_opposite_vectors_distance_two(self):
         """Opposite vectors → cosine distance 2."""
         emb = self._random_embedding(seed=42)
@@ -365,6 +578,15 @@ class TestSpeakerEmbeddingMath:
         # Random 512-d vectors typically have distance ~1.0
         assert is_match is False
         assert distance >= SPEAKER_MATCH_THRESHOLD
+
+    def test_is_same_speaker_exact_threshold_boundary(self):
+        """Distance exactly at threshold returns False (strict < comparison)."""
+        # is_same_speaker uses distance < threshold, so equality means no match
+        emb = self._random_embedding(seed=42)
+        # Use distance=0.0 (identical), threshold=0.0 → 0 < 0 is False
+        is_match, distance = is_same_speaker(emb, emb, threshold=0.0)
+        assert distance == pytest.approx(0.0, abs=1e-6)
+        assert is_match is False  # strict <, not <=
 
     def test_is_same_speaker_custom_threshold(self):
         """Custom threshold is respected."""
@@ -642,3 +864,120 @@ class TestEmbeddingShapes:
         assert len(result) == 2
         assert isinstance(result[0], bool)
         assert isinstance(result[1], float)
+
+
+# ─── User Embedding Cache Integration ─────────────────────────────────────────
+
+
+class TestUserEmbeddingCacheIntegration:
+    """Tests for user speech profile embedding loading and matching.
+
+    Validates the contract: when a user's speech profile embedding is cached
+    with the 'user' sentinel key, the matching logic correctly routes to
+    the user-specific path (speaker_to_person_map + segment_person_assignment_map).
+    """
+
+    USER_SELF_PERSON_ID = 'user'
+
+    def _random_embedding(self, dim=512, seed=None):
+        rng = np.random.RandomState(seed)
+        vec = rng.randn(1, dim).astype(np.float32)
+        vec /= np.linalg.norm(vec)
+        return vec
+
+    def test_user_embedding_cached_with_correct_sentinel(self):
+        """User profile embedding is cached with 'user' sentinel key."""
+        person_embeddings_cache = {}
+        user_embedding = self._random_embedding(seed=42)
+
+        # Simulate the caching logic from speaker_identification_task
+        person_embeddings_cache[self.USER_SELF_PERSON_ID] = {
+            'embedding': user_embedding,
+            'name': 'User',
+        }
+
+        assert self.USER_SELF_PERSON_ID in person_embeddings_cache
+        assert person_embeddings_cache[self.USER_SELF_PERSON_ID]['name'] == 'User'
+        assert np.array_equal(person_embeddings_cache[self.USER_SELF_PERSON_ID]['embedding'], user_embedding)
+
+    def test_user_embedding_loaded_from_firestore_list(self):
+        """Embedding stored as list in Firestore is correctly reconstructed as numpy array."""
+        # Simulate what Firestore returns: a plain Python list of floats
+        original = self._random_embedding(seed=42)
+        firestore_list = original.flatten().tolist()
+
+        # Simulate the reconstruction in speaker_identification_task
+        reconstructed = np.array(firestore_list, dtype=np.float32).reshape(1, -1)
+
+        # Must be identical to original
+        np.testing.assert_array_almost_equal(reconstructed, original, decimal=6)
+
+        # Must work in cosine distance comparison
+        distance = compare_embeddings(original, reconstructed)
+        assert distance == pytest.approx(0.0, abs=1e-6)
+
+    def test_user_embedding_match_routes_to_user_path(self):
+        """When best match is the user sentinel, speaker_to_person_map and
+        segment_person_assignment_map are updated correctly."""
+        user_embedding = self._random_embedding(seed=42)
+        other_embedding = self._random_embedding(seed=99)
+
+        person_embeddings_cache = {
+            self.USER_SELF_PERSON_ID: {'embedding': user_embedding, 'name': 'User'},
+            'person-123': {'embedding': other_embedding, 'name': 'Alice'},
+        }
+
+        # Simulate matching logic: query is nearly identical to user embedding
+        query_embedding = user_embedding.copy()
+        noise = np.random.RandomState(7).randn(1, 512).astype(np.float32) * 0.001
+        query_embedding = query_embedding + noise
+        query_embedding /= np.linalg.norm(query_embedding)
+
+        # Find best match (same logic as _match_speaker_embedding)
+        best_match = None
+        best_distance = float('inf')
+        for person_id, data in person_embeddings_cache.items():
+            distance = compare_embeddings(query_embedding, data['embedding'])
+            if distance < best_distance:
+                best_distance = distance
+                best_match = (person_id, data['name'])
+
+        assert best_match is not None
+        assert best_match[0] == self.USER_SELF_PERSON_ID
+        assert best_distance < SPEAKER_MATCH_THRESHOLD
+
+        # Simulate the routing logic
+        speaker_to_person_map = {}
+        segment_person_assignment_map = {}
+        speaker_id = 0
+        segment_id = 'test-seg-1'
+
+        person_id, person_name = best_match
+        if person_id == self.USER_SELF_PERSON_ID:
+            speaker_to_person_map[speaker_id] = (self.USER_SELF_PERSON_ID, 'User')
+            segment_person_assignment_map[segment_id] = self.USER_SELF_PERSON_ID
+
+        assert speaker_to_person_map[speaker_id] == (self.USER_SELF_PERSON_ID, 'User')
+        assert segment_person_assignment_map[segment_id] == self.USER_SELF_PERSON_ID
+
+    def test_user_embedding_not_matched_when_distant(self):
+        """User embedding is not matched when query is distant."""
+        user_embedding = self._random_embedding(seed=42)
+
+        person_embeddings_cache = {
+            self.USER_SELF_PERSON_ID: {'embedding': user_embedding, 'name': 'User'},
+        }
+
+        # Query from a completely different speaker
+        query_embedding = self._random_embedding(seed=999)
+
+        best_match = None
+        best_distance = float('inf')
+        for person_id, data in person_embeddings_cache.items():
+            distance = compare_embeddings(query_embedding, data['embedding'])
+            if distance < best_distance:
+                best_distance = distance
+                best_match = (person_id, data['name'])
+
+        # Random 512-d vectors are ~1.0 apart, well above threshold
+        assert best_distance >= SPEAKER_MATCH_THRESHOLD

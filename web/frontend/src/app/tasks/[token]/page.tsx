@@ -10,13 +10,14 @@ interface TasksParams {
 }
 
 interface TasksPageProps {
-  params: TasksParams;
+  params: Promise<TasksParams>;
 }
 
 export async function generateMetadata(
-  { params }: { params: TasksParams },
+  props: { params: Promise<TasksParams> },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
+  const params = await props.params;
   const prevData = (await parent) as Metadata;
   let data: { sender_name?: string; count?: number } | null = null;
 
@@ -84,14 +85,15 @@ function formatDueDate(dateStr: string): string {
   });
 }
 
-export default async function SharedTasksPage({ params }: TasksPageProps) {
+export default async function SharedTasksPage(props: TasksPageProps) {
+  const params = await props.params;
   const token = params.token;
   const data = await getSharedTasks(token);
   if (!data) {
     notFound();
   }
 
-  const userAgent = headers().get('user-agent') || '';
+  const userAgent = (await headers()).get('user-agent') || '';
   const link = getPlatformLink(userAgent, token);
 
   return (

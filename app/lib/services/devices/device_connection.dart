@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
@@ -18,12 +15,7 @@ import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/omi_connection.dart';
 import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
-import 'package:omi/services/devices/wifi_sync_error.dart';
-import 'package:omi/app_globals.dart';
-import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
-import 'package:omi/services/devices/transports/ble_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
@@ -59,6 +51,45 @@ class StorageFileInfo {
   String toString() => 'StorageFileInfo(index=$index, ts=$timestamp, size=$sizeBytes)';
 }
 
+/// Status of the device's ring-buffer storage (firmware 3.0.20+).
+/// Returned by a 16-byte read of the status characteristic — four uint32 LE fields.
+class RingStatus {
+  final int usedBytes;
+  final int unreadPackets;
+  final int freeBytes;
+  final int rtcValid; // 0 = device RTC not yet synced (timestamps unreliable), 1 = synced
+
+  RingStatus({required this.usedBytes, required this.unreadPackets, required this.freeBytes, required this.rtcValid});
+
+  bool get isRtcValid => rtcValid != 0;
+
+  @override
+  String toString() => 'RingStatus(used=$usedBytes, unread=$unreadPackets, free=$freeBytes, rtcValid=$rtcValid)';
+}
+
+/// Ring-buffer info returned via NOTIFY_INFO (0x02) on the control characteristic.
+class RingInfo {
+  final int readSeq; // u64 BE — oldest unread packet
+  final int writeSeq; // u64 BE — next sequence after newest committed packet
+  final int capacityPackets; // u32 BE
+  final int droppedPackets; // u64 BE — incremented when ring overwrites old data
+  final int packetSize; // u16 BE — current packet_size (444 in fw 3.0.20)
+
+  RingInfo({
+    required this.readSeq,
+    required this.writeSeq,
+    required this.capacityPackets,
+    required this.droppedPackets,
+    required this.packetSize,
+  });
+
+  int get unreadPackets => writeSeq - readSeq;
+
+  @override
+  String toString() =>
+      'RingInfo(read=$readSeq, write=$writeSeq, cap=$capacityPackets, dropped=$droppedPackets, pktSize=$packetSize)';
+}
+
 class DeviceConnectionFactory {
   static DeviceConnection? create(BtDevice device) {
     DeviceTransport transport;
@@ -67,11 +98,20 @@ class DeviceConnectionFactory {
     final locator = device.locator;
     if (locator == null) return null;
 
+    // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
+    final deviceName = device.name.toLowerCase();
+    final isOmiGlass =
+        device.type == DeviceType.openglass ||
+        deviceName.contains('openglass') ||
+        deviceName.contains('omiglass') ||
+        deviceName.contains('glass');
+
     switch (locator.kind) {
       case TransportKind.bluetooth:
         final deviceId = locator.bluetoothId;
         if (deviceId == null) return null;
-        transport = NativeBleTransport(deviceId);
+        final needsBond = device.type == DeviceType.limitless;
+        transport = NativeBleTransport(deviceId, requiresBond: needsBond);
         break;
 
       case TransportKind.watchConnectivity:
@@ -81,14 +121,6 @@ class DeviceConnectionFactory {
       default:
         return null;
     }
-
-    // Create device connection with transport
-    // Use name-based detection as fallback for OmiGlass devices
-    final deviceName = device.name.toLowerCase();
-    final isOmiGlass = device.type == DeviceType.openglass ||
-        deviceName.contains('openglass') ||
-        deviceName.contains('omiglass') ||
-        deviceName.contains('glass');
 
     switch (device.type) {
       case DeviceType.omi:
@@ -164,8 +196,9 @@ abstract class DeviceConnection {
     switch (transportState) {
       case DeviceTransportState.connected:
         return DeviceConnectionState.connected;
-      case DeviceTransportState.disconnected:
       case DeviceTransportState.connecting:
+        return DeviceConnectionState.connecting;
+      case DeviceTransportState.disconnected:
       case DeviceTransportState.disconnecting:
         return DeviceConnectionState.disconnected;
     }
@@ -232,7 +265,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performRetrieveBatteryLevel();
     }
-    _showDeviceDisconnectedNotification();
     return -1;
   }
 
@@ -242,7 +274,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetBleBatteryLevelListener(onBatteryLevelChange: onBatteryLevelChange);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -261,7 +292,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -299,7 +329,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetAudioCodec();
     }
-    _showDeviceDisconnectedNotification();
     return BleAudioCodec.pcm8;
   }
 
@@ -381,13 +410,80 @@ abstract class DeviceConnection {
     return false;
   }
 
+  // --- Ring-buffer storage protocol (firmware 3.0.20+) ---
+  //
+  // Same service UUID 30295780 and same characteristics as the multi-file protocol.
+  // Control char (30295781) carries both commands (Write) and protocol notifications (Notify).
+  // Status char (30295782) returns a 16-byte cached snapshot via Read.
+  //
+  // Records are 444 bytes each: [timestamp:4 BE][audio_payload:440].
+  // The 440-byte payload uses the same packed [size:1][frame:size]... framing
+  // as the multi-file protocol, so the audio parser is reused unchanged.
+
+  Future<RingStatus?> getRingStatus() async {
+    if (await isConnected()) {
+      return await performGetRingStatus();
+    }
+    return null;
+  }
+
+  Future<RingStatus?> performGetRingStatus() async {
+    return null;
+  }
+
+  Future<RingInfo?> getRingInfo() async {
+    if (await isConnected()) {
+      return await performGetRingInfo();
+    }
+    return null;
+  }
+
+  Future<RingInfo?> performGetRingInfo() async {
+    return null;
+  }
+
+  /// Send CMD_RING_READ. If [packetCount] is null or 0, firmware streams everything from [startSeq].
+  Future<bool> readRingFromSeq(int startSeq, {int? packetCount}) async {
+    if (await isConnected()) {
+      return await performReadRingFromSeq(startSeq, packetCount: packetCount);
+    }
+    return false;
+  }
+
+  Future<bool> performReadRingFromSeq(int startSeq, {int? packetCount}) async {
+    return false;
+  }
+
+  /// Send CMD_RING_ADVANCE — durably commits consumer progress.
+  /// Only call this AFTER the corresponding chunk has been safely persisted on the phone.
+  Future<bool> advanceRing(int newReadSeq) async {
+    if (await isConnected()) {
+      return await performAdvanceRing(newReadSeq);
+    }
+    return false;
+  }
+
+  Future<bool> performAdvanceRing(int newReadSeq) async {
+    return false;
+  }
+
+  Future<bool> clearRing() async {
+    if (await isConnected()) {
+      return await performClearRing();
+    }
+    return false;
+  }
+
+  Future<bool> performClearRing() async {
+    return false;
+  }
+
   // --- Legacy storage protocol ---
 
   Future<List<int>> getStorageList() async {
     if (await isConnected()) {
       return await performGetStorageList();
     }
-    _showDeviceDisconnectedNotification();
     return Future.value(<int>[]);
   }
 
@@ -417,7 +513,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performWriteToStorage(numFile, command, offset);
     }
-    _showDeviceDisconnectedNotification();
     return Future.value(false);
   }
 
@@ -427,7 +522,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetBleStorageBytesListener(onStorageBytesReceived: onStorageBytesReceived);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -439,7 +533,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performCameraStartPhotoController();
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -449,7 +542,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performCameraStopPhotoController();
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -459,7 +551,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performHasPhotoStreamingCharacteristic();
     }
-    _showDeviceDisconnectedNotification();
     return false;
   }
 
@@ -471,7 +562,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetImageListener(onImageReceived: onImageReceived);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -483,7 +573,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetAccelListener(onAccelChange: onAccelChange);
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -495,7 +584,6 @@ abstract class DeviceConnection {
       _features = await performGetFeatures();
       return _features!;
     }
-    _showDeviceDisconnectedNotification();
     return 0;
   }
 
@@ -505,7 +593,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performSetLedDimRatio(ratio);
     }
-    _showDeviceDisconnectedNotification();
   }
 
   Future<void> performSetLedDimRatio(int ratio);
@@ -514,7 +601,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetLedDimRatio();
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
@@ -524,7 +610,6 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performSetMicGain(gain);
     }
-    _showDeviceDisconnectedNotification();
   }
 
   Future<void> performSetMicGain(int gain);
@@ -533,87 +618,14 @@ abstract class DeviceConnection {
     if (await isConnected()) {
       return await performGetMicGain();
     }
-    _showDeviceDisconnectedNotification();
     return null;
   }
 
   Future<int?> performGetMicGain();
 
-  Future<bool> isWifiSyncSupported() async {
-    if (await isConnected()) {
-      return await performIsWifiSyncSupported();
-    }
-    return false;
-  }
-
-  Future<bool> performIsWifiSyncSupported() async {
-    return false;
-  }
-
-  Future<WifiSyncSetupResult> setupWifiSync(String ssid, String password) async {
-    final connected = await isConnected();
-    debugPrint('DeviceConnection: setupWifiSync - isConnected: $connected, ssid: $ssid');
-    if (connected) {
-      final result = await performSetupWifiSync(ssid, password);
-      debugPrint('DeviceConnection: setupWifiSync - result: ${result.success}, error: ${result.errorCode}');
-      return result;
-    }
-    debugPrint('DeviceConnection: setupWifiSync - device disconnected');
-    return WifiSyncSetupResult.connectionFailed();
-  }
-
-  Future<WifiSyncSetupResult> performSetupWifiSync(String ssid, String password) async {
-    return WifiSyncSetupResult.failure(WifiSyncErrorCode.wifiHardwareNotAvailable);
-  }
-
-  Future<bool> startWifiSync() async {
-    final connected = await isConnected();
-    debugPrint('DeviceConnection: startWifiSync - isConnected: $connected');
-    if (connected) {
-      final result = await performStartWifiSync();
-      debugPrint('DeviceConnection: startWifiSync - performStartWifiSync returned: $result');
-      return result;
-    }
-    debugPrint('DeviceConnection: startWifiSync - device disconnected, showing notification');
-    _showDeviceDisconnectedNotification();
-    return false;
-  }
-
-  Future<bool> performStartWifiSync() async {
-    return false;
-  }
-
-  Future<bool> stopWifiSync() async {
-    if (await isConnected()) {
-      return await performStopWifiSync();
-    }
-    _showDeviceDisconnectedNotification();
-    return false;
-  }
-
-  Future<bool> performStopWifiSync() async {
-    return false;
-  }
-
-  Future<StreamSubscription?> getWifiSyncStatusListener({required void Function(int status) onStatusReceived}) async {
-    if (await isConnected()) {
-      return await performGetWifiSyncStatusListener(onStatusReceived: onStatusReceived);
-    }
-    return null;
-  }
-
-  Future<StreamSubscription?> performGetWifiSyncStatusListener({
-    required void Function(int status) onStatusReceived,
-  }) async {
-    return null;
-  }
-
-  void _showDeviceDisconnectedNotification() {
-    final ctx = globalNavigatorKey.currentContext;
-    final deviceName = device.name;
-    NotificationService.instance.createNotification(
-      title: ctx?.l10n.deviceDisconnectedTitle(deviceName) ?? '$deviceName Disconnected',
-      body: ctx?.l10n.deviceDisconnectedBody(deviceName) ?? 'Please reconnect to continue using your $deviceName.',
-    );
-  }
+  /// Called when the server transcription WebSocket reconnects after a
+  /// network-only outage (BLE stayed connected throughout). Override to
+  /// re-initialize device streaming if the device may have stopped sending
+  /// audio while the socket was dead.
+  Future<void> onNetworkSocketReconnected() async {}
 }

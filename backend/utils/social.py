@@ -1,8 +1,8 @@
+import asyncio
 import os
-import time
 from datetime import datetime, timezone
 from typing import Dict, Any, Callable, TypeVar, List, Optional, Tuple
-import httpx
+
 from pydantic import BaseModel
 from ulid import ULID
 
@@ -13,6 +13,8 @@ from database.apps import (
     get_persona_by_username_twitter_handle_db,
 )
 from database.redis_db import delete_generic_cache, save_username, is_username_taken
+import httpx
+
 from utils.llm.persona import condense_tweets, generate_twitter_persona_prompt
 from utils.conversations.memories import process_twitter_memories
 import logging
@@ -65,20 +67,20 @@ class TwitterProfile(BaseModel):
 T = TypeVar('T')
 
 
-def with_retry(operation_name: str, func: Callable[[], T]) -> T:
+async def async_with_retry(operation_name: str, func: Callable) -> T:
     max_retries = 5
     base_delay = 1
 
     for attempt in range(max_retries):
         try:
-            return func()
+            return await func()
         except Exception as e:
             delay = base_delay * (2**attempt)
             if attempt == max_retries - 1:
                 raise
             logger.error(f"Error in {operation_name} (attempt {attempt + 1}/{max_retries}): {str(e)}")
             logger.warning(f"Retrying in {delay} seconds...")
-            time.sleep(delay)
+            await asyncio.sleep(delay)
     raise Exception("Maximum retries exceeded")
 
 
@@ -88,22 +90,23 @@ async def get_twitter_profile(handle: str) -> TwitterProfile:
 
     headers = {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host}
 
-    def fetch_profile():
-        response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('status') == 'error':
-                raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
+    async def fetch_profile():
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=2.0)) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'error':
+                    raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
 
-            # Ensure avatar URL is properly formatted (full size)
-            if 'avatar' in data and data['avatar'] and '_normal' in data['avatar']:
-                data['avatar'] = data['avatar'].replace('_normal', '')
+                # Ensure avatar URL is properly formatted (full size)
+                if 'avatar' in data and data['avatar'] and '_normal' in data['avatar']:
+                    data['avatar'] = data['avatar'].replace('_normal', '')
 
-            return TwitterProfile.from_dict(data)
-        # else
-        response.raise_for_status()
+                return TwitterProfile.from_dict(data)
+            # else
+            response.raise_for_status()
 
-    return with_retry(f"fetching Twitter profile for {handle}", fetch_profile)
+    return await async_with_retry(f"fetching Twitter profile for {handle}", fetch_profile)
 
 
 def create_memories_from_twitter_tweets(uid: str, persona_id: str, tweets: List[TwitterTweet]) -> None:
@@ -122,25 +125,26 @@ async def get_twitter_timeline(handle: str) -> TwitterTimeline:
 
     headers = {"X-RapidAPI-Key": rapid_api_key, "X-RapidAPI-Host": rapid_api_host}
 
-    def fetch_timeline():
-        response = httpx.get(url, headers=headers, timeout=defaultTimeoutSec)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('status') == 'error':
-                raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
+    async def fetch_timeline():
+        async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=2.0)) as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                if data.get('status') == 'error':
+                    raise Exception(f"API returned error status: {data.get('message', 'Unknown error')}")
 
-            # Convert raw timeline to structured model
-            timeline_data = data.get('timeline', [])
-            tweets = [
-                TwitterTweet(text=tweet['text'], created_at=tweet['created_at'], id=tweet['tweet_id'])
-                for tweet in timeline_data
-            ]
+                # Convert raw timeline to structured model
+                timeline_data = data.get('timeline', [])
+                tweets = [
+                    TwitterTweet(text=tweet['text'], created_at=tweet['created_at'], id=tweet['tweet_id'])
+                    for tweet in timeline_data
+                ]
 
-            return TwitterTimeline(timeline=tweets)
-        # else
-        response.raise_for_status()
+                return TwitterTimeline(timeline=tweets)
+            # else
+            response.raise_for_status()
 
-    return with_retry(f"fetching Twitter timeline for {handle}", fetch_timeline)
+    return await async_with_retry(f"fetching Twitter timeline for {handle}", fetch_timeline)
 
 
 async def verify_latest_tweet(username: str, handle: str) -> Dict[str, Any]:

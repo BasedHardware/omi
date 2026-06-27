@@ -41,25 +41,6 @@ Future<ActionItemsResponse> getActionItems({
   }
 }
 
-Future<ActionItemWithMetadata?> getActionItem(String actionItemId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/action-items/$actionItemId',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-
-  if (response == null) return null;
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    return ActionItemWithMetadata.fromJson(jsonDecode(body));
-  } else {
-    Logger.debug('getActionItem error ${response.statusCode}');
-    return null;
-  }
-}
-
 Future<ActionItemWithMetadata?> createActionItem({
   required String description,
   DateTime? dueAt,
@@ -102,6 +83,7 @@ Future<ActionItemWithMetadata?> updateActionItem(
   bool? exported,
   DateTime? exportDate,
   String? exportPlatform,
+  String? appleReminderId,
   int? sortOrder,
   int? indentLevel,
 }) async {
@@ -128,6 +110,9 @@ Future<ActionItemWithMetadata?> updateActionItem(
   if (exportPlatform != null) {
     requestBody['export_platform'] = exportPlatform;
   }
+  if (appleReminderId != null) {
+    requestBody['apple_reminder_id'] = appleReminderId;
+  }
   if (sortOrder != null) {
     requestBody['sort_order'] = sortOrder;
   }
@@ -153,25 +138,6 @@ Future<ActionItemWithMetadata?> updateActionItem(
   }
 }
 
-Future<ActionItemWithMetadata?> toggleActionItemCompletion(String actionItemId, bool completed) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/action-items/$actionItemId/completed?completed=$completed',
-    headers: {},
-    method: 'PATCH',
-    body: '',
-  );
-
-  if (response == null) return null;
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    return ActionItemWithMetadata.fromJson(jsonDecode(body));
-  } else {
-    Logger.debug('toggleActionItemCompletion error ${response.statusCode}');
-    return null;
-  }
-}
-
 Future<bool> deleteActionItem(String actionItemId) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/action-items/$actionItemId',
@@ -185,43 +151,24 @@ Future<bool> deleteActionItem(String actionItemId) async {
   return response.statusCode == 204;
 }
 
-// Conversation-specific action items
-Future<ActionItemsResponse> getConversationActionItems(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
-    headers: {},
-    method: 'GET',
-    body: '',
+Future<List<String>?> bulkDeleteActionItems(List<String> ids) async {
+  if (ids.isEmpty) return const [];
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/batch-delete',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode({'ids': ids}),
   );
 
-  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
-
-  if (response.statusCode == 200) {
-    var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return ActionItemsResponse(
-      actionItems: (data['action_items'] as List<dynamic>)
-          .map((item) => ActionItemWithMetadata.fromJson(item))
-          .toList(),
-      hasMore: false, // Conversation-specific calls don't have pagination
-    );
-  } else {
-    Logger.debug('getConversationActionItems error ${response.statusCode}');
-    return ActionItemsResponse(actionItems: [], hasMore: false);
+  if (response == null) return null;
+  if (response.statusCode != 200) {
+    Logger.debug('bulkDeleteActionItems error ${response.statusCode}');
+    return null;
   }
-}
 
-Future<bool> deleteConversationActionItems(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',
-    headers: {},
-    method: 'DELETE',
-    body: '',
-  );
-
-  if (response == null) return false;
-
-  return response.statusCode == 204;
+  final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+  final deleted = (body['deleted_ids'] as List?)?.cast<String>() ?? const [];
+  return deleted;
 }
 
 // Task sharing
@@ -301,23 +248,40 @@ Future<bool> batchUpdateActionItems(List<Map<String, dynamic>> items) async {
   }
 }
 
-// Batch operations
-Future<List<ActionItemWithMetadata>> createActionItemsBatch(List<Map<String, dynamic>> actionItems) async {
+// Apple Reminders sync
+Future<PendingSyncResponse?> getPendingSyncItems({String platform = 'apple_reminders'}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/action-items/batch',
+    url: '${Env.apiBaseUrl}v1/action-items/pending-sync?platform=$platform',
     headers: {},
-    method: 'POST',
-    body: jsonEncode(actionItems),
+    method: 'GET',
+    body: '',
   );
 
-  if (response == null) return [];
+  if (response == null) return null;
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['action_items'] as List<dynamic>).map((item) => ActionItemWithMetadata.fromJson(item)).toList();
+    return PendingSyncResponse.fromJson(jsonDecode(body));
   } else {
-    Logger.debug('createActionItemsBatch error ${response.statusCode}');
-    return [];
+    Logger.debug('getPendingSyncItems error ${response.statusCode}');
+    return null;
+  }
+}
+
+Future<bool> syncBatchUpdate(List<Map<String, dynamic>> items) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/sync-batch',
+    headers: {},
+    method: 'PATCH',
+    body: jsonEncode({'items': items}),
+  );
+
+  if (response == null) return false;
+
+  if (response.statusCode == 200) {
+    return true;
+  } else {
+    Logger.debug('syncBatchUpdate error ${response.statusCode}');
+    return false;
   }
 }

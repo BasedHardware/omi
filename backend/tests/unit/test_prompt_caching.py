@@ -11,14 +11,105 @@ import inspect
 import re
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
 # Mock modules that initialize GCP clients or require API keys at import time
-sys.modules.setdefault("database._client", MagicMock())
-_mock_clients = MagicMock()
-sys.modules.setdefault("utils.llm.clients", _mock_clients)
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
-from models.conversation import CalendarMeetingContext, MeetingParticipant, ConversationPhoto
+
+def _ensure_package(name: str, path: Path) -> ModuleType:
+    module = sys.modules.get(name)
+    if not isinstance(module, ModuleType):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+    if "." in name:
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.setdefault(parent_name, ModuleType(parent_name))
+        setattr(parent, child_name, module)
+    return module
+
+
+_ensure_package("utils", BACKEND_DIR / "utils")
+llm_package = _ensure_package("utils.llm", BACKEND_DIR / "utils" / "llm")
+_ensure_package("models", BACKEND_DIR / "models")
+
+
+def _drop_module_if_missing_attrs(module_name, required_attrs):
+    module = sys.modules.get(module_name)
+    if module is None or all(hasattr(module, name) for name in required_attrs):
+        return
+    sys.modules.pop(module_name, None)
+    parent_name, child_name = module_name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_drop_module_if_missing_attrs("models.conversation_enums", ("CategoryEnum",))
+_drop_module_if_missing_attrs(
+    "models.structured",
+    ("ActionItem", "ActionItemsExtraction", "Event", "Structured"),
+)
+
+_conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
+if _conversation_processing_stub is not None and not hasattr(
+    _conversation_processing_stub, "_build_conversation_context"
+):
+    sys.modules.pop("utils.llm.conversation_processing", None)
+
+sys.modules.setdefault("database._client", MagicMock())
+_mock_clients = sys.modules.get("utils.llm.clients")
+if not isinstance(_mock_clients, ModuleType):
+    _mock_clients = ModuleType("utils.llm.clients")
+    sys.modules["utils.llm.clients"] = _mock_clients
+_mock_clients.get_llm = MagicMock()
+_mock_clients.parser = MagicMock()
+setattr(llm_package, "clients", _mock_clients)
+
+
+class _FakePydanticOutputParser:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def get_format_instructions(self):
+        return ""
+
+
+class _FakeChatPromptTemplate:
+    @classmethod
+    def from_messages(cls, messages):
+        return MagicMock()
+
+
+def _install_langchain_child_stub(module_name, **attrs):
+    mod = ModuleType(module_name)
+    for name, value in attrs.items():
+        setattr(mod, name, value)
+    sys.modules.setdefault("langchain_core", ModuleType("langchain_core"))
+    sys.modules[module_name] = mod
+
+
+try:
+    from langchain_core.output_parsers import PydanticOutputParser as _real_parser  # noqa: F401
+except ImportError:
+    _install_langchain_child_stub(
+        "langchain_core.output_parsers",
+        PydanticOutputParser=_FakePydanticOutputParser,
+    )
+
+try:
+    from langchain_core.prompts import ChatPromptTemplate as _real_prompt  # noqa: F401
+except ImportError:
+    _install_langchain_child_stub(
+        "langchain_core.prompts",
+        ChatPromptTemplate=_FakeChatPromptTemplate,
+    )
+
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from models.conversation_photo import ConversationPhoto
 from utils.llm.conversation_processing import (
     _build_conversation_context,
     extract_action_items,
@@ -256,34 +347,23 @@ class TestPromptCacheRetention:
         from pathlib import Path
 
         clients_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "clients.py"
-        return clients_path.read_text()
+        return clients_path.read_text(encoding="utf-8")
 
-    def test_llm_medium_experiment_has_cache_retention(self):
-        """llm_medium_experiment must have extra_body with prompt_cache_retention=24h."""
+    def test_qos_gpt51_has_cache_retention(self):
+        """QoS _get_or_create_openai_llm must set prompt_cache_retention=24h for gpt-5.1."""
         source = self._read_clients_source()
-        # Find the llm_medium_experiment definition block and check extra_body
         match = re.search(
-            r'llm_medium_experiment\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"',
+            r"_get_or_create_openai_llm.*?gpt-5\.1.*?prompt_cache_retention.*?24h",
             source,
             re.DOTALL,
         )
-        assert match, "llm_medium_experiment missing extra_body with prompt_cache_retention='24h'"
+        assert match, "_get_or_create_openai_llm should set prompt_cache_retention='24h' for gpt-5.1"
 
-    def test_llm_agent_has_cache_retention(self):
-        """llm_agent must have extra_body with prompt_cache_retention=24h."""
+    def test_qos_tier_medium_gets_cache_retention(self):
+        """Omi QoS tier medium (gpt-5.1) must set prompt_cache_retention=24h via _get_or_create_openai_llm."""
         source = self._read_clients_source()
-        match = re.search(
-            r'llm_agent\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"', source, re.DOTALL
-        )
-        assert match, "llm_agent missing extra_body with prompt_cache_retention='24h'"
-
-    def test_llm_agent_stream_has_cache_retention(self):
-        """llm_agent_stream must have extra_body with prompt_cache_retention=24h."""
-        source = self._read_clients_source()
-        match = re.search(
-            r'llm_agent_stream\s*=.*?extra_body\s*=\s*\{[^}]*"prompt_cache_retention"\s*:\s*"24h"', source, re.DOTALL
-        )
-        assert match, "llm_agent_stream missing extra_body with prompt_cache_retention='24h'"
+        match = re.search(r'_get_or_create_openai_llm.*?gpt-5\.1.*?prompt_cache_retention.*?24h', source, re.DOTALL)
+        assert match, "QoS _get_or_create_openai_llm should set prompt_cache_retention='24h' for gpt-5.1"
 
     def test_cache_retention_not_in_model_kwargs(self):
         """prompt_cache_retention must NOT be in model_kwargs (SDK rejects it there)."""
@@ -293,26 +373,24 @@ class TestPromptCacheRetention:
             assert 'prompt_cache_retention' not in block, f"prompt_cache_retention must not be in model_kwargs: {block}"
 
     def test_prompt_cache_key_in_structure_function(self):
-        """get_transcript_structure must use prompt_cache_key='omi-transcript-structure'."""
+        """get_transcript_structure must pass cache_key='omi-transcript-structure' via get_llm."""
         source = inspect.getsource(get_transcript_structure)
         assert (
-            'prompt_cache_key="omi-transcript-structure"' in source
-        ), "get_transcript_structure missing prompt_cache_key binding"
+            "cache_key='omi-transcript-structure'" in source
+        ), "get_transcript_structure missing cache_key in get_llm call"
 
     def test_prompt_cache_key_in_action_items_function(self):
-        """extract_action_items must use prompt_cache_key='omi-extract-actions'."""
+        """extract_action_items must pass cache_key='omi-extract-actions' via get_llm."""
         source = inspect.getsource(extract_action_items)
-        assert (
-            'prompt_cache_key="omi-extract-actions"' in source
-        ), "extract_action_items missing prompt_cache_key binding"
+        assert "cache_key='omi-extract-actions'" in source, "extract_action_items missing cache_key in get_llm call"
 
     def test_distinct_cache_keys_per_function(self):
-        """Each function must have a distinct prompt_cache_key to avoid cache conflation."""
+        """Each function must have a distinct cache_key to avoid cache conflation."""
         source_structure = inspect.getsource(get_transcript_structure)
         source_actions = inspect.getsource(extract_action_items)
-        key_structure = re.search(r'prompt_cache_key="([^"]+)"', source_structure)
-        key_actions = re.search(r'prompt_cache_key="([^"]+)"', source_actions)
-        assert key_structure and key_actions, "Both functions must have prompt_cache_key"
+        key_structure = re.search(r"cache_key='([^']+)'", source_structure)
+        key_actions = re.search(r"cache_key='([^']+)'", source_actions)
+        assert key_structure and key_actions, "Both functions must have cache_key"
         assert key_structure.group(1) != key_actions.group(
             1
         ), f"Cache keys must be distinct: structure={key_structure.group(1)}, actions={key_actions.group(1)}"

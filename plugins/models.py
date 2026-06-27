@@ -98,7 +98,7 @@ class TranscriptSegment(BaseModel):
 
         segments.extend(joined_similar_segments)
 
-        # Speechmatics specific issue with punctuation
+        # Normalize punctuation spacing
         for i, segment in enumerate(segments):
             segments[i].text = (
                 segments[i].text.strip().replace('  ', '').replace(' ,', ',').replace(' .', '.').replace(' ?', '?')

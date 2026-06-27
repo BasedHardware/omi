@@ -79,6 +79,8 @@ ingress:
   #      - chart-example.local
 
 env:
+  - name: USE_VERTEX_AI
+    value: "true"
   - name: GEMINI_API_KEY
     valueFrom:
       secretKeyRef:
@@ -89,6 +91,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: DEEPGRAM_API_KEY
+  - name: MODULATE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MODULATE_API_KEY
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -109,11 +116,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GITHUB_TOKEN
-  - name: SONIOX_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: SONIOX_API_KEY
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles-dev"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
@@ -148,16 +150,18 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
-  - name: WORKFLOW_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: WORKFLOW_API_KEY
   - name: STT_SERVICE_MODELS
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: STT_SERVICE_MODELS
+  - name: STT_PRERECORDED_MODEL
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: STT_PRERECORDED_MODEL
+  - name: HOSTED_PARAKEET_API_URL
+    value: "http://dev-omi-parakeet.dev-omi-backend.svc.cluster.local:8080"
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: HOSTED_PUSHER_API_URL
@@ -243,16 +247,18 @@ env:
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
     value: "0"
-  - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
-    value: "0"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
     value: "price_1RrxXL1F8wnoWYvwIddzR902"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
     value: "price_1RrxXL1F8wnoWYvw3kDbWmjs"
-  - name: STRIPE_PRO_MONTHLY_PRICE_ID
-    value: ""
-  - name: STRIPE_PRO_ANNUAL_PRICE_ID
-    value: ""
+  - name: STRIPE_ARCHITECT_MONTHLY_PRICE_ID
+    value: "price_1TLFXK1F8wnoWYvwG1TaUkZ3"
+  - name: STRIPE_ARCHITECT_ANNUAL_PRICE_ID
+    value: "price_1TN7sF1F8wnoWYvwd0QaLZNA"
+  - name: STRIPE_OPERATOR_MONTHLY_PRICE_ID
+    value: "price_1TN7jS1F8wnoWYvwM5GqfxDw"
+  - name: STRIPE_OPERATOR_ANNUAL_PRICE_ID
+    value: "price_1TN7jo1F8wnoWYvw6Xu1zAtC"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
@@ -325,6 +331,46 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: METRICS_SECRET
+  - name: GROQ_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GROQ_API_KEY
+  - name: OPENROUTER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OPENROUTER_API_KEY
+  - name: RAPID_API_HOST
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: RAPID_API_HOST
+  - name: RAPID_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: RAPID_API_KEY
+  - name: CONVERSATION_SUMMARIZED_APP_IDS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: CONVERSATION_SUMMARIZED_APP_IDS
+  - name: X_OAUTH_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: X_OAUTH_CLIENT_ID
+  - name: X_OAUTH_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: X_OAUTH_CLIENT_SECRET
+  - name: X_OAUTH_REDIRECT_URI
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: X_OAUTH_REDIRECT_URI
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

@@ -8,14 +8,33 @@ Verifies that:
 5. geo.dict() is used for serialization (Pydantic-safe)
 """
 
+import asyncio
 import json
 import sys
+import types
 from unittest.mock import MagicMock, patch
 
 # Mock database._client before importing anything that touches GCP
 sys.modules.setdefault("database._client", MagicMock())
 
-from models.conversation import Geolocation
+# Stub database.redis_db with r attribute (needed by location.py)
+if "database.redis_db" not in sys.modules:
+    _redis_mod = types.ModuleType("database.redis_db")
+    _redis_mod.r = MagicMock()
+    sys.modules["database.redis_db"] = _redis_mod
+elif not hasattr(sys.modules["database.redis_db"], 'r'):
+    sys.modules["database.redis_db"].r = MagicMock()
+
+# Stub utils.http_client (needed by location.py)
+_http_mod = sys.modules.get("utils.http_client")
+if _http_mod is None:
+    _http_mod = types.ModuleType("utils.http_client")
+    sys.modules["utils.http_client"] = _http_mod
+_http_mod.get_maps_client = MagicMock()
+_http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(1))
+_http_mod.get_webhook_client = MagicMock()
+
+from models.geolocation import Geolocation
 from utils.conversations.location import get_google_maps_location
 
 
@@ -27,10 +46,10 @@ class TestCacheKeyPrecision:
         # 37.78512 -> 37.785, -122.40932 -> -122.409
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = {"status": "OK", "results": []}
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 get_google_maps_location(37.78512, -122.40932)
 
@@ -63,11 +82,11 @@ class TestCacheHit:
         }
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = json.dumps(cached)
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 result = get_google_maps_location(37.78512, -122.40932)
 
                 # Should NOT call Google API
-                mock_req.get.assert_not_called()
+                mock_httpx.get.assert_not_called()
 
         assert isinstance(result, Geolocation)
         assert result.google_place_id == "ChIJIQBpAG2ahYAR_6128GcTUEo"
@@ -79,9 +98,9 @@ class TestCacheHit:
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = json.dumps(cached)
             with patch.dict("os.environ", {}, clear=True):
-                with patch("utils.conversations.location.requests") as mock_req:
+                with patch("utils.conversations.location.httpx") as mock_httpx:
                     result = get_google_maps_location(37.785, -122.409)
-                    mock_req.get.assert_not_called()
+                    mock_httpx.get.assert_not_called()
         assert result is not None
 
 
@@ -101,10 +120,10 @@ class TestCacheMiss:
         }
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = api_response
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 result = get_google_maps_location(37.785, -122.409)
 
@@ -122,10 +141,10 @@ class TestCacheMiss:
     def test_api_no_results_returns_none(self):
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = {"status": "OK", "results": []}
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 result = get_google_maps_location(37.785, -122.409)
 
@@ -148,10 +167,10 @@ class TestRedisFailure:
         }
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.side_effect = ConnectionError("Redis down")
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = api_response
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 with patch("utils.conversations.location.logging") as mock_log:
                     result = get_google_maps_location(37.785, -122.409)
@@ -174,10 +193,10 @@ class TestRedisFailure:
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
             mock_r.set.side_effect = ConnectionError("Redis down")
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = api_response
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 with patch("utils.conversations.location.logging") as mock_log:
                     result = get_google_maps_location(37.785, -122.409)
@@ -194,10 +213,10 @@ class TestApiEdgeCases:
         """Non-OK status (e.g. ZERO_RESULTS, OVER_QUERY_LIMIT) returns None."""
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = {"status": "ZERO_RESULTS", "results": []}
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 result = get_google_maps_location(37.785, -122.409)
 
@@ -208,13 +227,13 @@ class TestApiEdgeCases:
         """Result with no place_id returns None."""
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = {
                     "status": "OK",
                     "results": [{"place_id": None, "formatted_address": "Nowhere", "types": []}],
                 }
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 result = get_google_maps_location(37.785, -122.409)
 
@@ -224,13 +243,13 @@ class TestApiEdgeCases:
         """Result with no place_id key at all returns None."""
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = {
                     "status": "OK",
                     "results": [{"formatted_address": "No ID St", "types": ["route"]}],
                 }
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 result = get_google_maps_location(37.785, -122.409)
 
@@ -240,13 +259,13 @@ class TestApiEdgeCases:
         """Result with no types gives location_type=None."""
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = {
                     "status": "OK",
                     "results": [{"place_id": "ChIJ_notype", "formatted_address": "No Type St", "types": []}],
                 }
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 result = get_google_maps_location(37.785, -122.409)
 
@@ -257,13 +276,13 @@ class TestApiEdgeCases:
         """Result with no 'types' key at all gives location_type=None."""
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = None
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = {
                     "status": "OK",
                     "results": [{"place_id": "ChIJ_nokey", "formatted_address": "No Key St"}],
                 }
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 result = get_google_maps_location(37.785, -122.409)
 
@@ -288,10 +307,10 @@ class TestCorruptCache:
         }
         with patch("utils.conversations.location.r") as mock_r:
             mock_r.get.return_value = "not-valid-json{{"
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = api_response
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 with patch("utils.conversations.location.logging") as mock_log:
                     result = get_google_maps_location(37.785, -122.409)
@@ -315,10 +334,10 @@ class TestCorruptCache:
         with patch("utils.conversations.location.r") as mock_r:
             # Missing required 'latitude' and 'longitude' fields
             mock_r.get.return_value = json.dumps({"bad_field": "bad_value"})
-            with patch("utils.conversations.location.requests") as mock_req:
+            with patch("utils.conversations.location.httpx") as mock_httpx:
                 mock_resp = MagicMock()
                 mock_resp.json.return_value = api_response
-                mock_req.get.return_value = mock_resp
+                mock_httpx.get.return_value = mock_resp
 
                 with patch("utils.conversations.location.logging") as mock_log:
                     result = get_google_maps_location(37.785, -122.409)

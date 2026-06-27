@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -7,17 +8,16 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/apple_reminders_service.dart';
 import 'package:omi/services/asana_service.dart';
 import 'package:omi/services/clickup_service.dart';
 import 'package:omi/services/google_tasks_service.dart';
 import 'package:omi/services/todoist_service.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -65,7 +65,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
     final newState = !widget.actionItem.completed;
 
     // Track action item checked/unchecked
-    MixpanelManager().actionItemChecked(
+    PlatformManager.instance.analytics.actionItemChecked(
       actionItemId: widget.actionItem.id,
       completed: newState,
       timestamp: DateTime.now(),
@@ -428,7 +428,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'todoist');
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'Todoist',
           timestamp: exportTime,
@@ -540,7 +540,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'asana');
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'Asana',
           timestamp: exportTime,
@@ -661,7 +661,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         );
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'Google Tasks',
           timestamp: exportTime,
@@ -753,7 +753,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         await updateActionItem(widget.actionItem.id, exported: true, exportDate: exportTime, exportPlatform: 'clickup');
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'ClickUp',
           timestamp: exportTime,
@@ -842,13 +842,14 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
       );
     }
 
-    // Add to Apple Reminders
-    final success = await service.addReminder(
+    // Add to Apple Reminders — now returns calendarItemIdentifier
+    final calendarItemId = await service.addReminder(
       title: widget.actionItem.description,
       notes: 'From Omi',
       dueDate: widget.actionItem.dueAt,
-      listName: 'Reminders',
     );
+
+    final success = calendarItemId != null;
 
     if (context.mounted) {
       // Clear the loading snackbar
@@ -873,7 +874,7 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
         ),
       );
 
-      // If successful, update the action item with export metadata
+      // If successful, update the action item with export metadata + apple_reminder_id
       if (success) {
         final exportTime = DateTime.now();
         await updateActionItem(
@@ -881,10 +882,11 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
           exported: true,
           exportDate: exportTime,
           exportPlatform: 'apple_reminders',
+          appleReminderId: calendarItemId,
         );
 
         // Track action item export
-        MixpanelManager().actionItemExported(
+        PlatformManager.instance.analytics.actionItemExported(
           actionItemId: widget.actionItem.id,
           appName: 'Apple Reminders',
           timestamp: exportTime,
@@ -1008,7 +1010,8 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                     filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
                     child: GestureDetector(
                       onTap: () {
-                        MixpanelManager().paywallOpened('Action Item');
+                        if (!context.read<UsageProvider>().showSubscriptionUI) return;
+                        PlatformManager.instance.analytics.paywallOpened('Action Item');
                         routeToPage(context, const UsagePage(showUpgradeDialog: true));
                         return;
                       },
@@ -1018,10 +1021,12 @@ class _ActionItemTileWidgetState extends State<ActionItemTileWidget> {
                           color: Colors.black.withValues(alpha: 0.01),
                           borderRadius: const BorderRadius.all(Radius.circular(8)),
                         ),
-                        child: Text(
-                          context.l10n.upgradeToUnlimited,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        child: context.watch<UsageProvider>().showSubscriptionUI
+                            ? Text(
+                                context.l10n.upgradeToUnlimited,
+                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              )
+                            : const SizedBox.shrink(),
                       ),
                     ),
                   ),

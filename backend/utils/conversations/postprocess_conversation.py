@@ -1,16 +1,21 @@
 import asyncio
 import os
-import threading
 import time
+from typing import List
+
+from utils.executors import storage_executor
 
 from pydub import AudioSegment
 
 import database.conversations as conversations_db
 from database.users import get_user_store_recording_permission
-from models.conversation import *
+from models.conversation import Conversation
+from models.conversation_enums import PostProcessingStatus
+from utils.conversations.factory import deserialize_conversation
+from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
-from utils.stt.pre_recorded import deepgram_prerecorded, postprocess_words
+from utils.stt.pre_recorded import postprocess_words, prerecorded
 from utils.stt.speech_profile import get_speech_profile_matching_predictions
 from utils.stt.vad import vad_is_empty
 import logging
@@ -27,7 +32,7 @@ def postprocess_conversation(
     if not conversation_data:
         return 404, "Conversation not found"
 
-    conversation = Conversation(**conversation_data)
+    conversation = deserialize_conversation(conversation_data)
     if conversation.discarded:
         logger.info('postprocess_conversation: Conversation is discarded')
         return 400, "Conversation is discarded"
@@ -68,13 +73,13 @@ def postprocess_conversation(
     try:
         aseg = AudioSegment.from_wav(file_path)
         signed_url = upload_postprocessing_audio(file_path)
-        threading.Thread(target=_delete_postprocessing_audio, args=(file_path,)).start()
+        storage_executor.submit(_delete_postprocessing_audio, file_path)
 
         if aseg.frame_rate == 16000 and get_user_store_recording_permission(uid):
             upload_conversation_recording(file_path, uid, conversation_id)
 
         speakers_count = len(set([segment.speaker for segment in conversation.transcript_segments]))
-        words = deepgram_prerecorded(signed_url, speakers_count=speakers_count)
+        words = prerecorded(signed_url, speakers_count=speakers_count)
         fal_segments = postprocess_words(words, aseg.duration_seconds)
 
         # if new transcript is 90% shorter than the original, cancel post-processing, smth wrong with audio or FAL

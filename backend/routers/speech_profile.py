@@ -6,25 +6,19 @@ import av
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
-from database.conversations import get_conversation
-from database.redis_db import remove_user_soniox_speech_profile, set_speech_profile_duration
-from database.users import get_person
-from models.conversation import Conversation
-from models.other import UploadProfile
+from database.redis_db import set_speech_profile_duration
+from database.users import set_user_speaker_embedding
 from utils.other import endpoints as auth
 from utils.other.storage import (
     upload_profile_audio,
     get_profile_audio_if_exists,
-    get_conversation_recording_if_exists,
-    upload_additional_profile_audio,
     delete_additional_profile_audio,
     get_additional_profile_recordings,
-    upload_user_person_speech_sample,
     delete_user_person_speech_sample,
     get_user_person_speech_samples,
-    delete_speech_sample_for_people,
     get_user_has_speech_profile,
 )
+from utils.stt.speaker_embedding import extract_embedding
 from utils.stt.vad import apply_vad_for_speech_profile
 import logging
 
@@ -35,7 +29,7 @@ router = APIRouter()
 
 @router.get('/v3/speech-profile', tags=['v3'])
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
-    return {'has_profile': get_user_has_speech_profile(uid, max_age_days=90)}
+    return {'has_profile': get_user_has_speech_profile(uid)}
 
 
 @router.get('/v4/speech-profile', tags=['v3'])
@@ -58,7 +52,10 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     with open(file_path, 'wb') as f:
         f.write(file.file.read())
 
-    aseg = AudioSegment.from_wav(file_path)
+    try:
+        aseg = AudioSegment.from_wav(file_path)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid audio file: must be a valid 16kHz WAV.")
     if aseg.frame_rate != 16000:
         raise HTTPException(status_code=400, detail="Invalid codec, must be opus 16khz.")
 
@@ -73,7 +70,15 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
     set_speech_profile_duration(uid, duration)
 
     url = upload_profile_audio(file_path, uid)
-    remove_user_soniox_speech_profile(uid)
+
+    # Extract and store speaker embedding for user identification in listen sessions
+    try:
+        embedding = extract_embedding(file_path)
+        set_user_speaker_embedding(uid, embedding.flatten().tolist())
+        logger.info(f"Speech profile: stored speaker embedding for {uid}")
+    except Exception as e:
+        logger.error(f"Speech profile: failed to extract/store speaker embedding for {uid}: {e}")
+
     return {"url": url}
 
 

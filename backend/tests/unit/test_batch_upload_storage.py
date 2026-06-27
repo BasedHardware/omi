@@ -17,6 +17,9 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 # Mock heavy dependencies at sys.modules level before importing storage
 sys.modules.setdefault("database._client", MagicMock())
+sys.modules.setdefault("database.redis_db", MagicMock())
+sys.modules.setdefault("database.users", MagicMock())
+sys.modules.setdefault("opuslib", MagicMock())
 
 _mock_gcs_storage = MagicMock()
 _mock_gcs_client_instance = MagicMock()
@@ -586,6 +589,8 @@ class TestCopyAudioChunksForMergeBatchAware:
             'database.tasks',
             'database.plugins',
             'database.notifications',
+            'database.vector_db',
+            'pinecone',
         ]:
             sys.modules.setdefault(mod_name, MagicMock())
 

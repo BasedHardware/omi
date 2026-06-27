@@ -28,6 +28,8 @@ class CategoryChip extends StatelessWidget {
         return Colors.amber;
       case MemoryCategory.manual:
         return Colors.purple;
+      case MemoryCategory.workflow:
+        return Colors.teal;
     }
   }
 
@@ -39,6 +41,8 @@ class CategoryChip extends StatelessWidget {
         return Icons.lightbulb_outlined;
       case MemoryCategory.manual:
         return Icons.edit_outlined;
+      case MemoryCategory.workflow:
+        return Icons.account_tree_outlined;
     }
   }
 
@@ -55,6 +59,9 @@ class CategoryChip extends StatelessWidget {
         break;
       case MemoryCategory.manual:
         displayName = "Manual";
+        break;
+      case MemoryCategory.workflow:
+        displayName = "Workflow";
         break;
     }
 

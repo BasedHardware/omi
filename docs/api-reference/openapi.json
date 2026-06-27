@@ -27,6 +27,7 @@
   "tags": [
     { "name": "Memories", "description": "Read and write user memories — timeless facts, preferences, and insights." },
     { "name": "Conversations", "description": "Create and retrieve conversation transcripts with AI-generated summaries." },
+    { "name": "Folders", "description": "Retrieve user-defined folders for organizing conversations." },
     { "name": "Action Items", "description": "Manage tasks and to-dos extracted from conversations or created manually." },
     { "name": "API Keys", "description": "Create, list, and revoke developer API keys." }
   ],
@@ -240,6 +241,54 @@
         }
       }
     },
+    "/v1/dev/user/folders": {
+      "get": {
+        "operationId": "listFolders",
+        "summary": "List folders",
+        "description": "Retrieve all folders for the authenticated user. This endpoint is strictly read-only and returns an empty list if the user has no folders yet. System folders (Work, Personal, Social) are initialized lazily through other paths (the mobile app opening the conversations screen, or the conversation post-processing pipeline), not by this endpoint.",
+        "tags": ["Folders"],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "List of folders.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/Folder" }
+                },
+                "example": [
+                  {
+                    "id": "folder_uuid_work",
+                    "name": "Work",
+                    "description": "Work, business, professional, and career-related conversations",
+                    "color": "#3B82F6",
+                    "icon": "💼",
+                    "created_at": "2025-01-15T10:00:00Z",
+                    "updated_at": "2025-01-20T13:50:00Z",
+                    "order": 0,
+                    "is_default": false,
+                    "is_system": true,
+                    "category_mapping": "work",
+                    "conversation_count": 12
+                  }
+                ]
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": {
+            "description": "Insufficient permissions. Required scope: `conversations:read`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "Insufficient permissions. Required scope: conversations:read" }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/dev/user/conversations": {
       "get": {
         "operationId": "listConversations",
@@ -276,6 +325,24 @@
             "in": "query",
             "description": "Include full transcript segments in the response.",
             "schema": { "type": "boolean", "default": false }
+          },
+          {
+            "name": "categories",
+            "in": "query",
+            "description": "Comma-separated list of conversation categories to filter by (e.g. `work,personal`). Matches conversations whose category is any of the listed values (OR semantics).",
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "folder_id",
+            "in": "query",
+            "description": "Filter conversations by folder ID. Each conversation belongs to at most one folder, so this is a single-value filter. Must be a non-empty string.",
+            "schema": { "type": "string", "minLength": 1 }
+          },
+          {
+            "name": "starred",
+            "in": "query",
+            "description": "Filter by starred status. Pass `true` for starred conversations only, `false` for non-starred.",
+            "schema": { "type": "boolean" }
           }
         ],
         "responses": {
@@ -308,7 +375,26 @@
               }
             }
           },
-          "401": { "$ref": "#/components/responses/Unauthorized" }
+          "400": {
+            "description": "Invalid `categories` value (must be a comma-separated list of valid `CategoryEnum` values).",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "Invalid category 'foo' is not a valid CategoryEnum" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": {
+            "description": "Insufficient permissions. Required scope: `conversations:read`.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" },
+                "example": { "detail": "Insufficient permissions. Required scope: conversations:read" }
+              }
+            }
+          },
+          "422": { "$ref": "#/components/responses/ValidationError" }
         }
       },
       "post": {
@@ -876,7 +962,9 @@
             "items": { "$ref": "#/components/schemas/TranscriptSegment" },
             "description": "Transcript segments (only present when `include_transcript=true`)."
           },
-          "geolocation": { "$ref": "#/components/schemas/Geolocation" }
+          "geolocation": { "$ref": "#/components/schemas/Geolocation" },
+          "folder_id": { "type": ["string", "null"], "description": "ID of the folder this conversation belongs to, or null if not in any folder." },
+          "folder_name": { "type": ["string", "null"], "description": "Display name of the folder, or null if not in any folder." }
         }
       },
       "StructuredData": {
@@ -1039,7 +1127,13 @@
           "name": { "type": "string", "description": "Descriptive name." },
           "key_prefix": { "type": "string", "description": "First part of the key (for identification)." },
           "created_at": { "type": "string", "format": "date-time" },
-          "last_used_at": { "type": ["string", "null"], "format": "date-time", "description": "When the key was last used." }
+          "last_used_at": { "type": ["string", "null"], "format": "date-time", "description": "When the key was last used." },
+
+          "scopes": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Permission scopes assigned to the API key. Null for legacy keys (treated as read-only)."
+          }
         }
       },
       "ApiKeyCreated": {
@@ -1050,20 +1144,57 @@
           "key_prefix": { "type": "string" },
           "key": { "type": "string", "description": "The full API key. **Only returned once during creation.**" },
           "created_at": { "type": "string", "format": "date-time" },
-          "last_used_at": { "type": ["string", "null"], "format": "date-time" }
+          "last_used_at": { "type": ["string", "null"], "format": "date-time" },
+
+          "scopes": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Permission scopes assigned to the API key. Null for legacy keys (treated as read-only)."
+          }
         }
       },
       "CreateApiKey": {
         "type": "object",
         "required": ["name"],
         "properties": {
-          "name": { "type": "string", "description": "Descriptive name for the key." }
+          "name": { "type": "string", "description": "Descriptive name for the key." },
+
+          "scopes": {
+           "type": "array",
+           "items": {
+             "type": "string",
+             "enum": [
+               "conversations:read", "conversations:write",
+               "memories:read", "memories:write",
+               "action_items:read", "action_items:write",
+               "goals:read", "goals:write"
+              ]
+            },
+            "description": "Optional scopes to assign. Defaults to read-only (conversations:read, memories:read, action_items:read, goals:read) if not provided."
+          }
         }
       },
       "SuccessResponse": {
         "type": "object",
         "properties": {
           "success": { "type": "boolean" }
+        }
+      },
+      "Folder": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string", "description": "Unique identifier." },
+          "name": { "type": "string", "minLength": 1, "maxLength": 100, "description": "Display name of the folder." },
+          "description": { "type": ["string", "null"], "maxLength": 500, "description": "Natural language description of what belongs in this folder." },
+          "color": { "type": "string", "default": "#6B7280", "description": "Hex color code for the folder." },
+          "icon": { "type": "string", "default": "folder", "description": "Emoji or icon identifier for the folder." },
+          "created_at": { "type": "string", "format": "date-time", "description": "When the folder was created." },
+          "updated_at": { "type": "string", "format": "date-time", "description": "When the folder was last updated." },
+          "order": { "type": "integer", "default": 0, "description": "Display order index (lower = earlier)." },
+          "is_default": { "type": "boolean", "default": false, "description": "Whether this is the default folder for unassigned conversations." },
+          "is_system": { "type": "boolean", "default": false, "description": "True for category-based system folders (Work, Personal, Social)." },
+          "category_mapping": { "type": ["string", "null"], "description": "Maps to a CategoryEnum value for backwards compatibility with category-based filtering." },
+          "conversation_count": { "type": "integer", "default": 0, "description": "Number of non-discarded conversations in this folder." }
         }
       },
       "ErrorResponse": {

@@ -3,7 +3,8 @@ import time
 import uuid
 from typing import Callable, Dict, List, Optional
 
-from utils.llm.clients import llm_mini
+from utils.executors import llm_executor, run_blocking
+from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
 import logging
 
@@ -213,7 +214,7 @@ Transcript: "{transcript}"
 Reply with only "yes" or "no"."""
 
             with track_usage(self.uid, Features.ONBOARDING):
-                response = await asyncio.to_thread(llm_mini.invoke, prompt)
+                response = await run_blocking(llm_executor, get_llm('onboarding').invoke, prompt)
             return 'yes' in response.content.lower()
         except Exception as e:
             logger.error(f"AI check error: {e}")

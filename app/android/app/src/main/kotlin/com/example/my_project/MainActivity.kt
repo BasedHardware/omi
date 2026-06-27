@@ -14,6 +14,7 @@ import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
+    private val NATIVE_BLE_TRANSCRIPT_CHANNEL = "com.friend.ios/native_ble_transcript"
     private var bleHostApiImpl: BleHostApiImpl? = null
 
     override fun configureFlutterEngine(@NonNull flutterEngine: FlutterEngine) {
@@ -27,11 +28,24 @@ class MainActivity: FlutterActivity() {
 
         // Register Native BLE Pigeon APIs
         OmiBleManager.initialize(application)
+        getSharedPreferences("FlutterSharedPreferences", MODE_PRIVATE)
+            .edit()
+            .putBoolean("flutter.nativeBleForegroundReady", false)
+            .apply()
+        OmiBleManager.isFlutterAlive = true
         OmiBleManager.instance.flutterApi = BleFlutterApi(flutterEngine.dartExecutor.binaryMessenger)
         val hostApi = BleHostApiImpl { this }
         hostApi.initCompanionManager(this)
         bleHostApiImpl = hostApi
         BleHostApi.setUp(flutterEngine.dartExecutor.binaryMessenger, hostApi)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, NATIVE_BLE_TRANSCRIPT_CHANNEL).setMethodCallHandler {
+            call, result ->
+            if (call.method == "drain") {
+                result.success(OmiBackgroundAudioStreamer.drainCachedTranscriptMessages())
+            } else {
+                result.notImplemented()
+            }
+        }
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler {
             call, result ->
@@ -58,17 +72,30 @@ class MainActivity: FlutterActivity() {
         // Handle CompanionDeviceManager chooser result
         val address = bleHostApiImpl?.onActivityResult(requestCode, resultCode, data)
         if (address != null) {
-            // Device selected — start foreground service (no connect — Dart calls connectPeripheral)
+            // Device selected — start foreground service (Dart will call manageDevice)
             OmiBleForegroundService.startService(this, address, caller = "MainActivity.onActivityResult")
         }
     }
 
+    override fun onResume() {
+        super.onResume()
+        OmiBleManager.isAppForeground = true
+    }
+
+    override fun onPause() {
+        OmiBleManager.isAppForeground = false
+        super.onPause()
+    }
+
     override fun onDestroy() {
-        // When user closes the app (swipe away), disconnect BLE and stop the foreground service.
-        // Omi streams via WebSocket which requires the app — no point keeping BLE alive without it.
-        // isFinishing distinguishes user close from config changes (rotation, etc.)
         if (isFinishing) {
-            OmiBleManager.instance.disconnectAllPeripherals()
+            OmiBleManager.isFlutterAlive = false
+            // With Background Mode on, the foreground service keeps the pendant connected and
+            // transcribing after a task close. With it off (default), tear it down so the device
+            // disconnects when the app is closed.
+            if (!OmiBleForegroundService.isBackgroundModeEnabled(this)) {
+                OmiBleForegroundService.stopService(this)
+            }
         }
         super.onDestroy()
     }

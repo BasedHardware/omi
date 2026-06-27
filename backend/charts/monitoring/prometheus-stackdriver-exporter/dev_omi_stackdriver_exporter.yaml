@@ -4,6 +4,7 @@ stackdriver:
   metrics:
     prefixes:
       - 'loadbalancing.googleapis.com/https/backend_request_count'
+      - 'loadbalancing.googleapis.com/https/internal/backend_latencies'
     # The filters to refine the metrics query by using Filter objects that Google provides.
     # Filter objects: project, group.id, resource.type, resource.labels.[KEY], metric.type, metric.labels.[KEY]
     # https://cloud.google.com/monitoring/api/v3/filters

@@ -5,8 +5,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import database.calendar_meetings as calendar_db
-from models.conversation import CalendarMeetingContext, MeetingParticipant
+from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from utils.other import endpoints as auth
+from utils.request_validation import CalendarMeetingsLimit
 
 router = APIRouter()
 
@@ -96,7 +97,7 @@ def list_calendar_meetings(
     uid: str = Depends(auth.get_current_user_uid),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    limit: int = 50,
+    limit: CalendarMeetingsLimit = 50,
 ):
     """List calendar meetings within a date range"""
     meetings = calendar_db.list_meetings(uid, start_date=start_date, end_date=end_date, limit=limit)

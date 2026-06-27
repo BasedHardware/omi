@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -8,6 +9,8 @@ import firebase_admin
 from fastapi import FastAPI
 
 from routers import pusher, metrics
+from utils.http_client import close_all_clients
+from utils.executors import drain_background_tasks, log_executor_health
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -26,6 +29,17 @@ for path in paths:
         os.makedirs(path)
 
 
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(log_executor_health())
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await drain_background_tasks(timeout=10.0)
+    await close_all_clients()
+
+
 @app.get('/health')
-def health_check():
+async def health_check():
     return {"status": "healthy"}

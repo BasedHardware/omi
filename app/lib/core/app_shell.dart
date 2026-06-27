@@ -6,7 +6,6 @@ import 'package:app_links/app_links.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/action_items.dart' as action_items_api;
-import 'package:omi/backend/http/clock_skew_detector.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/mobile/mobile_app.dart';
 import 'package:omi/pages/action_items/widgets/accept_shared_tasks_sheet.dart';
@@ -45,8 +44,6 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   late AppLinks _appLinks;
   StreamSubscription<Uri>? _linkSubscription;
-  StreamSubscription<ClockSkewEvent>? _clockSkewSubscription;
-
   Future<void> initDeepLinks() async {
     _appLinks = AppLinks();
 
@@ -74,7 +71,7 @@ class _AppShellState extends State<AppShell> {
       if (mounted) {
         var app = await context.read<AppProvider>().getAppFromId(uri.pathSegments[1]);
         if (app != null) {
-          PlatformManager.instance.mixpanel.track('App Opened From DeepLink', properties: {'appId': app.id});
+          PlatformManager.instance.analytics.track('App Opened From DeepLink', properties: {'appId': app.id});
           if (mounted) {
             Navigator.of(context).push(MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
           }
@@ -85,18 +82,19 @@ class _AppShellState extends State<AppShell> {
       }
     } else if (uri.pathSegments.first == 'wrapped') {
       if (mounted) {
-        PlatformManager.instance.mixpanel.track('Wrapped Opened From DeepLink');
+        PlatformManager.instance.analytics.track('Wrapped Opened From DeepLink');
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const Wrapped2025Page()));
       }
     } else if (uri.pathSegments.first == 'tasks' && uri.pathSegments.length > 1) {
       if (mounted) {
         final token = uri.pathSegments[1];
-        PlatformManager.instance.mixpanel.track('Shared Tasks Opened From DeepLink', properties: {'token': token});
+        PlatformManager.instance.analytics.track('Shared Tasks Opened From DeepLink', properties: {'token': token});
         _handleSharedTasksDeepLink(token);
       }
     } else if (uri.pathSegments.first == 'unlimited') {
       if (mounted) {
-        PlatformManager.instance.mixpanel.track('Plans Opened From DeepLink');
+        if (!context.read<UsageProvider>().showSubscriptionUI) return;
+        PlatformManager.instance.analytics.track('Plans Opened From DeepLink');
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true)));
       }
     } else if (uri.host == 'todoist' && uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'callback') {
@@ -230,6 +228,7 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (success) {
+      PlatformManager.instance.analytics.taskIntegrationEnabled(appName: 'todoist', success: true);
       Logger.debug('✓ Todoist authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Todoist - authentication complete');
       AppSnackbar.showSnackbar(context.l10n.successfullyConnectedTodoist);
@@ -237,6 +236,7 @@ class _AppShellState extends State<AppShell> {
       // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
+      PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'todoist');
       Logger.debug('Failed to complete Todoist authentication');
       AppSnackbar.showSnackbarError(context.l10n.failedToConnectTodoistRetry);
     }
@@ -249,6 +249,7 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (success) {
+      PlatformManager.instance.analytics.taskIntegrationEnabled(appName: 'asana', success: true);
       Logger.debug('✓ Asana authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Asana - authentication complete');
       AppSnackbar.showSnackbar(context.l10n.successfullyConnectedAsana);
@@ -261,6 +262,7 @@ class _AppShellState extends State<AppShell> {
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AsanaSettingsPage()));
       }
     } else {
+      PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'asana');
       Logger.debug('Failed to complete Asana authentication');
       AppSnackbar.showSnackbarError(context.l10n.failedToConnectAsanaRetry);
     }
@@ -273,6 +275,7 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (success) {
+      PlatformManager.instance.analytics.taskIntegrationEnabled(appName: 'google_tasks', success: true);
       Logger.debug('✓ Google Tasks authentication completed successfully');
       Logger.debug('✓ Task integration enabled: Google Tasks - authentication complete');
       AppSnackbar.showSnackbar(context.l10n.successfullyConnectedGoogleTasks);
@@ -280,6 +283,7 @@ class _AppShellState extends State<AppShell> {
       // Notify task integration provider to refresh UI from Firebase
       context.read<TaskIntegrationProvider>().refresh();
     } else {
+      PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'google_tasks');
       Logger.debug('Failed to complete Google Tasks authentication');
       AppSnackbar.showSnackbarError(context.l10n.failedToConnectGoogleTasksRetry);
     }
@@ -292,6 +296,7 @@ class _AppShellState extends State<AppShell> {
     if (!mounted) return;
 
     if (success) {
+      PlatformManager.instance.analytics.taskIntegrationEnabled(appName: 'clickup', success: true);
       Logger.debug('✓ ClickUp authentication completed successfully');
       Logger.debug('✓ Task integration enabled: ClickUp - authentication complete');
       AppSnackbar.showSnackbar(context.l10n.successfullyConnectedClickUp);
@@ -304,6 +309,7 @@ class _AppShellState extends State<AppShell> {
         Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ClickUpSettingsPage()));
       }
     } else {
+      PlatformManager.instance.analytics.taskIntegrationAuthFailed(appName: 'clickup');
       Logger.debug('Failed to complete ClickUp authentication');
       AppSnackbar.showSnackbarError(context.l10n.failedToConnectClickUpRetry);
     }
@@ -334,14 +340,6 @@ class _AppShellState extends State<AppShell> {
   @override
   void initState() {
     super.initState();
-    _clockSkewSubscription = ClockSkewDetector.instance.onClockSkew.listen((event) {
-      if (mounted) {
-        AppSnackbar.showSnackbarError(
-          context.l10n.clockSkewWarning(event.skewMinutes),
-          duration: const Duration(seconds: 6),
-        );
-      }
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _initializeProviders();
       // Start deep link handling AFTER providers are ready,
@@ -385,7 +383,6 @@ class _AppShellState extends State<AppShell> {
 
   @override
   void dispose() {
-    _clockSkewSubscription?.cancel();
     _linkSubscription?.cancel();
     super.dispose();
   }

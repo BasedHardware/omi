@@ -18,6 +18,11 @@ sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
 sys.modules.setdefault('google.auth', MagicMock())
 sys.modules.setdefault('google.auth.transport.requests', MagicMock())
 
+redis_db_stub = sys.modules.setdefault('database.redis_db', MagicMock())
+redis_db_stub.get_generic_cache = MagicMock(return_value=None)
+redis_db_stub.set_generic_cache = MagicMock()
+redis_db_stub.delete_generic_cache = MagicMock()
+
 from fastapi import FastAPI
 
 from routers.updates import (
@@ -71,6 +76,22 @@ class TestParseDesktopVersion:
     def test_no_v_prefix(self):
         result = _parse_desktop_version("1.0.0+100-macos")
         assert result is not None
+
+    def test_two_component_version_macos(self):
+        # Newer release tags omit the patch component (e.g. v11.0+11000-macos).
+        result = _parse_desktop_version("v11.0+11000-macos")
+        assert result is not None
+        assert result["major"] == "11"
+        assert result["minor"] == "0"
+        assert result["patch"] == "0"
+        assert result["build"] == "11000"
+        assert result["version"] == "11.0.0+11000"
+
+    def test_two_component_version_desktop_cm(self):
+        result = _parse_desktop_version("v11.3+11003-desktop-cm")
+        assert result is not None
+        assert result["version"] == "11.3.0+11003"
+        assert result["build"] == "11003"
 
 
 # --- _parse_changelog_to_changes ---
@@ -470,16 +491,15 @@ class TestDownloadEndpoint:
         mock_releases = [
             {
                 "channel": "stable",
+                "version_info": {"version": "1.0.0+100", "build": "100"},
                 "release": {"assets": [_dmg_asset("https://example.com/Omi-stable.dmg")]},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
-            async with AsyncClient(
-                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
-            ) as client:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=stable")
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "https://example.com/Omi-stable.dmg"
+        assert resp.status_code == 200
+        assert "https://example.com/Omi-stable.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_404_no_releases(self):
@@ -493,50 +513,50 @@ class TestDownloadEndpoint:
         mock_releases = [
             {
                 "channel": "beta",
+                "version_info": {"version": "1.0.0+100", "build": "100"},
                 "release": {"assets": [_dmg_asset("https://example.com/beta.dmg")]},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
-            async with AsyncClient(
-                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
-            ) as client:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=stable")
-        assert resp.status_code == 302
-        assert "beta.dmg" in resp.headers["location"]
+        assert resp.status_code == 200
+        assert "beta.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_beta_no_fallback(self):
         mock_releases = [
             {
                 "channel": "stable",
+                "version_info": {"version": "1.0.0+100", "build": "100"},
                 "release": {"assets": [_dmg_asset("https://example.com/stable.dmg")]},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
             async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=beta")
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "https://example.com/stable.dmg"
+        assert resp.status_code == 200
+        assert "https://example.com/stable.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_beta_uses_latest_release_even_if_marked_stable(self):
         mock_releases = [
             {
                 "channel": "stable",
+                "version_info": {"version": "2.0.0+200", "build": "200"},
                 "release": {"assets": [_dmg_asset("https://example.com/latest.dmg")]},
             },
             {
                 "channel": "beta",
+                "version_info": {"version": "1.0.0+100", "build": "100"},
                 "release": {"assets": [_dmg_asset("https://example.com/older-beta.dmg")]},
             },
         ]
         with patch("routers.updates._get_live_desktop_releases", new_callable=AsyncMock, return_value=mock_releases):
-            async with AsyncClient(
-                transport=ASGITransport(app=_test_app), base_url="http://test", follow_redirects=False
-            ) as client:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
                 resp = await client.get("/v2/desktop/download/latest?channel=beta")
-        assert resp.status_code == 302
-        assert resp.headers["location"] == "https://example.com/latest.dmg"
+        assert resp.status_code == 200
+        assert "https://example.com/latest.dmg" in resp.text
 
     @pytest.mark.asyncio
     async def test_404_when_no_dmg_asset(self):
@@ -574,7 +594,9 @@ class TestClearCacheEndpoint:
                 resp = await client.post("/v2/desktop/clear-cache", headers={"secret-key": "real-secret"})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
-        mock_delete.assert_called_once_with("github_releases_desktop")
+        # Both the live cache and the last-known-good fallback are cleared.
+        cleared_keys = {call.args[0] for call in mock_delete.call_args_list}
+        assert cleared_keys == {"github_releases_desktop", "github_releases_desktop:lkg"}
 
     @pytest.mark.asyncio
     async def test_missing_header_returns_422(self):

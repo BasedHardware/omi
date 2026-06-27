@@ -97,7 +97,7 @@ async def main():
         for samples in third_samples:
             if samples != '':
                 f_.write(f"{samples}\n")
-    
+
     print(f"Every third sample written to {output_file_path}")
     f = open('every_third_sample2.txt','r').read()
     f = np.array(list(map(int,f.split('\n')[:-1]))).astype(np.int16).tobytes()
@@ -105,7 +105,7 @@ async def main():
     remaining_bytes = np.array([len(f)]).astype(np.uint32)[0]
     remaining_bytes_b = np.array([len(f)]).astype(np.uint32).tobytes()
     if (remaining_bytes> MAX_ALLOWED_SAMPLES):
-        print("Array too large to play. Exitting")
+        print("Array too large to play. Exiting")
         exit()
     print("Number of samples about to be sent: ",remaining_bytes)
     print("about to start...")
@@ -125,13 +125,13 @@ async def main():
             global audio_write_characteristic_uuid
             print(np.frombuffer(data,dtype=np.int16)[0])
             if (remaining_bytes > packet_size):
-                
+
                 final_offset = total_offset
                 total_offset = packet_size + total_offset
                 remaining_bytes = remaining_bytes - packet_size
                 print("sending indexes %d to %d",final_offset,final_offset+packet_size)
                 await client.write_gatt_char(audio_write_characteristic_uuid, f[final_offset:(final_offset+packet_size)], response=True)
-                
+
             elif (remaining_bytes > 0 and remaining_bytes <= packet_size):
                 print('almost done')
                 print(remaining_bytes)
@@ -149,7 +149,7 @@ async def main():
         await client.start_notify(audio_write_characteristic_uuid, on_notify)
         await asyncio.sleep(1)
         await client.write_gatt_char(audio_write_characteristic_uuid, remaining_bytes_b, response=True)
-        await asyncio.sleep(1)   
+        await asyncio.sleep(1)
         while True:
            await asyncio.sleep(1)
 

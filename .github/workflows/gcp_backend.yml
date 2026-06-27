@@ -15,6 +15,10 @@ on:
         description: 'Branch to deploy from'
         required: true
         default: 'main'
+      release_version:
+        description: 'Release version (optional)'
+        required: false
+        default: ''
 
 env:
   SERVICE: backend
@@ -51,6 +55,9 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
@@ -60,13 +67,18 @@ jobs:
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
 
+      - name: Compute short SHA
+        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./backend/Dockerfile
           push: true
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ env.SHORT_SHA }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
@@ -86,16 +98,18 @@ jobs:
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
-      - name: Connect to GKE cluster
-        run: |
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
-          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
-      - name: Deploy ${{ env.SERVICE }}-listen to GKE
+      - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
         run: |
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout restart deploy ${{ vars.ENV }}-omi-backend-listen
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen ./backend/charts/backend-listen \
+            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.tag=${{ env.SHORT_SHA }}
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
@@ -105,6 +119,37 @@ jobs:
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
+      # Mirror every secret declared in the backend-secrets chart into the
+      # three Cloud Run revisions (additive). GKE picks them up via the helm
+      # chart's ExternalSecret + deployment env refs; Cloud Run needs the
+      # matching --update-secrets bindings. Without this, a new chart key
+      # ships to GKE but stays undefined on Cloud Run, and the new code
+      # reads None even though everything looks deployed.
+      - name: Sync Cloud Run secrets from backend-secrets chart
+        run: |
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          bash backend/scripts/sync_cloudrun_secrets_from_chart.sh ${{ vars.ENV }} backend backend-sync backend-integration
+
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}
+
+      - name: Generate deployment summary
+        if: always() && github.event.inputs.environment == 'prod'
+        uses: ./.github/actions/deployment-summary
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          service: ${{ env.SERVICE }}
+
+      - name: Notify deployment status on Telegram
+        if: always() && github.event.inputs.environment == 'prod'
+        uses: ./.github/actions/deployment-notifier
+        with:
+          environment: ${{ github.event.inputs.environment }}
+          release_version: ${{ github.event.inputs.release_version }}
+          status: ${{ job.status }}
+          telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          telegram_chat_id: ${{ secrets.TELEGRAM_CHAT_ID }}

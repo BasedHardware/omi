@@ -197,14 +197,19 @@ int app_settings_init(void)
         return err;
     }
 
-    err = settings_load();
-    if (err) {
-        LOG_ERR("Failed to load settings (err %d)", err);
+    /*
+     * Load only app-owned settings here.
+     * BT-side settings_load() is done later in transport_start() after
+     * bt_enable(), which is the correct ordering.
+     */
+    err = settings_load_subtree("omi");
+    if (err && err != -ENOENT) {
+        LOG_ERR("Failed to load app settings (err %d)", err);
     }
 
     LOG_INF("Settings initialized. dim_ratio=%u mic_gain=%u rtc_epoch=%llu lsm6_base_epoch=%llu lsm6_base_ts=0x%08x",
 		dim_light_ratio, mic_gain, rtc_epoch, lsm6dsl_time_base.epoch_s, lsm6dsl_time_base.ts);
-    return err;
+    return (err == -ENOENT) ? 0 : err;
 }
 
 int app_settings_save_dim_ratio(uint8_t new_ratio)

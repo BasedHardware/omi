@@ -21,9 +21,6 @@ from .action_item_tools import (
 from .omi_tools import (
     get_omi_product_info_tool,
 )
-from .perplexity_tools import (
-    perplexity_web_search_tool,
-)
 from .calendar_tools import (
     get_calendar_events_tool,
     create_calendar_event_tool,
@@ -56,6 +53,9 @@ from .screen_activity_tools import (
 from .preference_tools import (
     save_user_preference_tool,
 )
+from .web_tools import (
+    fetch_url_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -66,7 +66,6 @@ __all__ = [
     'create_action_item_tool',
     'update_action_item_tool',
     'get_omi_product_info_tool',
-    'perplexity_web_search_tool',
     'get_calendar_events_tool',
     'create_calendar_event_tool',
     'update_calendar_event_tool',
@@ -83,4 +82,5 @@ __all__ = [
     'get_screen_activity_tool',
     'search_screen_activity_tool',
     'save_user_preference_tool',
+    'fetch_url_tool',
 ]

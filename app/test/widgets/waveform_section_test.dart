@@ -76,6 +76,9 @@ void main() {
 
       // Widget should still be present and functional
       expect(find.byType(WaveformSection), findsOneWidget);
+
+      // Unmount widget tree to cancel the 250ms periodic timer in WaveformSection.dispose()
+      await tester.pumpWidget(const SizedBox.shrink());
     });
   });
 }

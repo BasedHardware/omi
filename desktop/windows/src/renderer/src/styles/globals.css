@@ -1,0 +1,433 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@keyframes logoReveal {
+  0% {
+    top: 50%;
+    opacity: 0;
+    transform: translateY(-50%) scale(4);
+  }
+  25% {
+    top: 50%;
+    opacity: 1;
+    transform: translateY(-50%) scale(4);
+  }
+  100% {
+    top: 2rem;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes contentReveal {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.logo-reveal {
+  animation: logoReveal 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@layer base {
+  :root {
+    --glass-bg: rgba(0, 0, 0, 0.42);
+    --glass-bg-subtle: rgba(0, 0, 0, 0.30);
+    --glass-bg-strong: rgba(0, 0, 0, 0.52);
+    --glass-border: rgba(255, 255, 255, 0.10);
+    --glass-border-strong: rgba(255, 255, 255, 0.18);
+    --glass-highlight: rgba(255, 255, 255, 0.07);
+    --glass-blur: 24px;
+    --glass-blur-strong: 36px;
+    /* Accent color for the active nav item's icon. Change this one value to
+       re-theme the sidebar highlight. */
+    --accent: #5b02e0;
+    /* Neutral grey used for the selected/hovered sidebar row + the tab
+       background gradient's top-left corner (no accent tint). */
+    --nav-sel: #141414;
+    /* Surface tone for content panels (chat box, widgets) — darker than the
+       nav grey but not pure black. */
+    --surface: #0c0c0c;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+    margin: 0;
+    background: #000000;
+    background-attachment: fixed;
+    color: rgba(255, 255, 255, 0.92);
+    font-family:
+      'SF Pro Display',
+      'SF Pro Text',
+      -apple-system,
+      BlinkMacSystemFont,
+      'Segoe UI Variable',
+      system-ui,
+      sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+  }
+}
+
+@layer components {
+  .app-canvas {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .app-canvas::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    /* Full-screen gradient (same as the tabs) so there's no black gap behind the
+       sidebar while it slides in. */
+    background: linear-gradient(135deg, var(--nav-sel) 0%, #000000 70%);
+  }
+
+  @keyframes auraDrift {
+    0% { opacity: 0.6; transform: translate(0, 0) scale(1); }
+    50% { opacity: 1; transform: translate(10px, -10px) scale(1.05); }
+    100% { opacity: 0.6; transform: translate(-10px, 10px) scale(1); }
+  }
+
+  .panel-header {
+    @apply rounded-2xl border border-white/10 px-7 py-5;
+    background: rgba(255, 255, 255, 0.04);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    backdrop-filter: blur(12px) saturate(1.2);
+  }
+
+  .page-outlet {
+    contain: layout style;
+    isolation: isolate;
+    /* Background lives on the full-screen .app-canvas::before gradient so it's
+       continuous behind the sidebar; the outlet stays transparent to avoid a
+       seam where the two gradients would meet. */
+  }
+
+  .page-outlet > * {
+    animation: none;
+  }
+
+  .glass {
+    @apply rounded-2xl;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.35);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.35);
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.18),
+      inset 0 1px 0 var(--glass-highlight);
+  }
+
+  .glass-subtle {
+    @apply rounded-2xl;
+    background: var(--glass-bg-subtle);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    backdrop-filter: blur(12px) saturate(1.2);
+  }
+
+  .glass-strong {
+    @apply rounded-3xl;
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border-strong);
+    -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(1.4);
+    backdrop-filter: blur(var(--glass-blur-strong)) saturate(1.4);
+    box-shadow:
+      0 12px 40px rgba(0, 0, 0, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .surface-card {
+    @apply glass;
+  }
+
+  .surface-card-interactive {
+    @apply glass transition-all duration-200 ease-out;
+  }
+
+  .surface-card-interactive:hover {
+    background: rgba(0, 0, 0, 0.28);
+    border-color: rgba(255, 255, 255, 0.14);
+    transform: translateY(-1px);
+  }
+
+  .surface-card-interactive:active {
+    transform: translateY(0);
+    transition-duration: 80ms;
+  }
+
+  .section-label {
+    @apply text-xs font-medium tracking-wide text-white/50;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-white/20 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    background: rgba(255, 255, 255, 0.14);
+    -webkit-backdrop-filter: blur(12px) saturate(1.2);
+    backdrop-filter: blur(12px) saturate(1.2);
+  }
+
+  .btn-primary:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.28);
+  }
+
+  .btn-record {
+    @apply btn-primary;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-white/15 px-4 py-2.5 text-sm font-semibold text-white/85 transition-all duration-200 active:scale-[0.98] disabled:opacity-50;
+    background: rgba(0, 0, 0, 0.28);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  .btn-danger:hover {
+    background: rgba(0, 0, 0, 0.38);
+    color: #fff;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 px-4 py-2.5 text-sm font-medium text-white/70 transition-all duration-200 hover:border-white/20 hover:text-white;
+    background: rgba(0, 0, 0, 0.12);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+
+  .btn-ghost:hover {
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .input-field {
+    @apply w-full rounded-2xl border border-white/10 px-4 py-3 text-sm text-white transition-all duration-200 placeholder:text-white/40 focus:border-white/25 focus:outline-none focus:ring-1 focus:ring-white/10;
+    background: rgba(0, 0, 0, 0.18);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+
+  .input-field:focus {
+    background: rgba(0, 0, 0, 0.24);
+  }
+
+  .skeleton {
+    @apply animate-shimmer rounded-2xl bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%];
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full border border-white/10 px-2.5 py-0.5 text-[11px] font-medium text-white/65;
+    background: rgba(0, 0, 0, 0.2);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+  }
+
+  .badge-warning {
+    @apply badge text-white/75;
+  }
+
+  .nav-active {
+    background: var(--nav-sel) !important;
+    color: #fff !important;
+  }
+
+  /* Dashboard widget surface (Home): black, slightly transparent so the tab
+     gradient shows through. Fixed height so cards never grow with their content
+     — sized to fit the header + 2 preview rows + a "+N more" line; shorter
+     content just leaves empty space at the bottom. */
+  .widget-card {
+    @apply flex h-40 flex-col rounded-2xl border border-white/10 p-4 transition-colors duration-200;
+    background: var(--surface);
+  }
+
+  .widget-card:hover {
+    background: var(--nav-sel);
+  }
+
+  /* Sidebar entrance — slides in from the left. This is the first thing to
+     animate on startup; the main content fades in slightly after. */
+  .slide-in-left {
+    /* 0.3s delay so the slide starts AFTER the one-time first-paint stall
+       (~290ms in, measured via bench:anim) instead of stuttering through it. */
+    animation: slideInLeft 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+    will-change: transform;
+  }
+
+  @keyframes slideInLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-100%);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Slow content fade-in, delayed so it follows the sidebar slide. */
+  .fade-in-slow {
+    animation: fadeInSlow 0.9s ease-out 0.4s both;
+    will-change: opacity;
+  }
+
+  @keyframes fadeInSlow {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Widget card entrance — a slow, gentle fade + rise that plays when the card
+     mounts (i.e. once its data is ready). Delayed so it follows the chat box. */
+  .widget-fade {
+    animation: widgetFade 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.6s both;
+    will-change: transform, opacity;
+  }
+
+  @keyframes widgetFade {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Chat bubble entrance — a gentle, slow rise + fade for a smooth feel. */
+  .bubble-in {
+    animation: bubbleIn 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+    will-change: transform, opacity;
+  }
+
+  @keyframes bubbleIn {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* When the user enables Reduce motion in Settings, every animation
+     resolved to a near-instant no-op. Existing transitions still snap to
+     their final state, so toggle UX, hover effects, etc. don't feel dead. */
+  html[data-reduce-motion='true'] *,
+  html[data-reduce-motion='true'] *::before,
+  html[data-reduce-motion='true'] *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.05ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Onboarding "discovery" scanner: dots orbit a shared ring. One keyframe
+     drives a full clockwise turn; counter-clockwise dots use
+     animation-direction: reverse. transform-origin is set per-dot inline to
+     the SVG center so each group spins in place. Honors reduce-motion via the
+     global kill-switch above. */
+  @keyframes orbitSpin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Page transition wrapper — every routed page fades + lifts in. */
+  .page-enter {
+    animation: pageEnter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes pageEnter {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  /* Post-login entrance. The home panel and dock mount once when the app
+     shell appears after sign-in, so these mount animations fire exactly
+     once. The greeting, chat bar, and buttons rise in together; the dock
+     drops in from above once that content has settled. */
+  .fade-rise {
+    animation: fadeRise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes fadeRise {
+    0% {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  .fade-drop {
+    animation: fadeDrop 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    /* Wait for the home content to finish rising before the dock arrives. */
+    animation-delay: 700ms;
+  }
+
+  @keyframes fadeDrop {
+    0% {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* Hide the scrollbar while keeping scroll (the Rewind activity timeline is panned
+   by wheel/drag, so the bar itself shouldn't show a scrollbar). */
+.no-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}

@@ -1,0 +1,101 @@
+# Pusher service requirements — lightweight subset of backend/requirements.txt
+# No torch, onnxruntime, pyannote, speechbrain, librosa, matplotlib, pandas, scipy
+
+# Web framework
+fastapi==0.121.0
+uvicorn==0.30.5
+uvloop==0.20.0
+starlette==0.49.1
+websockets==12.0
+httpx==0.28.0
+python-multipart==0.0.27
+
+# Data validation
+pydantic==2.11.10
+pydantic-settings==2.10.1
+pydantic_core==2.33.2
+
+# Google Cloud
+firebase-admin==6.5.0
+google-cloud-firestore==2.20.0
+google-cloud-storage==2.18.0
+google-cloud-tasks==2.16.4
+google-cloud-translate==3.20.2
+google-auth==2.32.0
+google-api-python-client==2.139.0
+
+# Cache & rate limiting
+redis==5.0.8
+
+# HTTP
+requests~=2.33.0
+
+# Audio encoding & processing
+opuslib==3.0.1
+av==12.0.0
+pydub==0.25.1
+lc3py==1.1.3
+webrtcvad==2.0.10
+
+# Numeric
+numpy==1.26.4
+
+# Metrics
+prometheus-client==0.21.1
+
+# LLM services (for process_conversation)
+anthropic>=0.52.0
+openai==2.38.0
+groq==0.9.0
+langchain==1.2.9
+langchain-community==0.4.1
+langchain-core==1.3.3
+langchain-google-genai==3.2.0
+langchain-openai==1.1.14
+langchain-pinecone==0.2.13
+langchain-text-splitters==1.1.2
+langgraph==1.0.10
+langsmith==0.8.0
+
+# Vector databases
+pinecone==7.3.0
+qdrant-client==1.11.0
+
+# Knowledge graph
+neo4j==5.23.1
+
+# Speech-to-text (Deepgram SDK for transcript handling)
+deepgram-sdk==4.8.1
+
+# Security & encryption
+cryptography==46.0.7
+
+# Image processing (via tools/__init__ -> file_tools -> chat_file -> PIL)
+pillow==12.2.0
+
+# Utilities
+python-dotenv==1.2.2
+tenacity==8.2.3
+python-dateutil==2.9.0.post0
+orjson==3.11.6
+tiktoken==0.7.0
+jiwer==3.0.4
+python-ulid==3.0.0
+pytz==2024.1
+
+# Payment & communication
+stripe==11.3.0
+twilio==9.5.0
+
+# Search
+typesense==0.21.0
+
+# Locale
+pycountry==24.6.1
+langdetect==1.0.9
+
+# Speaker embedding (via speaker_identification -> speaker_embedding -> scipy)
+scipy==1.14.0
+
+# Audio transcription (via speaker_sample -> pre_recorded -> fal_client)
+fal_client==0.4.1

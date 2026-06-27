@@ -297,8 +297,9 @@ class AiAppGeneratorProvider extends ChangeNotifier {
         return _createdAppId;
       } else {
         _state = GenerationState.error;
-        _errorMessage =
-            result.$2.isNotEmpty ? result.$2 : globalNavigatorKey.currentContext!.l10n.aiGenFailedToCreateApp;
+        _errorMessage = result.$2.isNotEmpty
+            ? result.$2
+            : globalNavigatorKey.currentContext!.l10n.aiGenFailedToCreateApp;
         notifyListeners();
         return null;
       }
@@ -377,7 +378,6 @@ class AiAppGeneratorProvider extends ChangeNotifier {
   String getCategoryDisplayName() {
     final categories = {
       'conversation-analysis': 'Conversation Analysis',
-      'personality-emulation': 'Personality Clone',
       'health-and-wellness': 'Health',
       'education-and-learning': 'Education',
       'communication-improvement': 'Communication',

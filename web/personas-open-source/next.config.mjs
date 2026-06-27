@@ -1,9 +1,6 @@
-import next from 'next';
-const NextConfig = next.default;
-
+/** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: 'standalone',
-  /* other config options */
+  /* config options */
 };
 
 export default nextConfig;

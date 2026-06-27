@@ -1,5 +1,8 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
+from pydantic import ValidationError
 
 import database.folders as folders_db
 import database.conversations as conversations_db
@@ -12,7 +15,10 @@ from models.folder import (
     ReorderFoldersRequest,
 )
 from models.conversation import Conversation
+from utils.conversations.render import redact_conversations_for_list
 from utils.other import endpoints as auth
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -85,12 +91,23 @@ def delete_folder(
     if folder.get('is_system'):
         raise HTTPException(status_code=400, detail="Cannot delete system folder")
 
+    if move_to_folder_id:
+        if move_to_folder_id == folder_id:
+            raise HTTPException(status_code=400, detail="Cannot move conversations to the folder being deleted")
+        if not folders_db.get_folder(uid, move_to_folder_id):
+            raise HTTPException(status_code=404, detail="Target folder not found")
+
     folders_db.delete_folder(uid, folder_id, move_to_folder_id)
 
 
 @router.post('/v1/folders/reorder', tags=['folders'])
 def reorder_folders(request: ReorderFoldersRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Reorder folders by providing an ordered list of folder IDs."""
+    existing_ids = {folder['id'] for folder in folders_db.get_folders(uid)}
+    unknown_ids = [folder_id for folder_id in request.folder_ids if folder_id not in existing_ids]
+    if unknown_ids:
+        raise HTTPException(status_code=422, detail={"message": "Unknown folder IDs", "folder_ids": unknown_ids})
+
     folders_db.reorder_folders(uid, request.folder_ids)
     return {"status": "ok"}
 
@@ -111,16 +128,18 @@ def get_folder_conversations(
     conversations = folders_db.get_conversations_in_folder(
         uid, folder_id, limit=limit, offset=offset, include_discarded=include_discarded
     )
+    redact_conversations_for_list(conversations)
+    # Validate each record individually so one malformed/legacy conversation doesn't fail the whole list
+    # with a 500.
+    valid_conversations = []
     for conv in conversations:
-        if conv.get('is_locked', False):
-            if 'structured' in conv:
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-            conv['apps_results'] = []
-            conv['plugins_results'] = []
-            conv['suggested_summarization_apps'] = []
-            conv['transcript_segments'] = []
-    return conversations
+        try:
+            valid_conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(f"Skipping invalid conversation in folder {folder_id} for uid {uid}: {invalid_fields}")
+            continue
+    return valid_conversations
 
 
 @router.patch('/v1/conversations/{conversation_id}/folder', tags=['folders'])
@@ -131,6 +150,8 @@ def move_conversation_to_folder(
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     if request.folder_id:
         folder = folders_db.get_folder(uid, request.folder_id)
@@ -149,6 +170,14 @@ def bulk_move_conversations(
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
+
+    # Validate none of the conversations are locked
+    for conv_id in request.conversation_ids:
+        conv = conversations_db.get_conversation(uid, conv_id)
+        if not conv:
+            raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
+        if conv.get('is_locked', False):
+            raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     moved = folders_db.bulk_move_conversations_to_folder(uid, request.conversation_ids, folder_id)
     return {"status": "ok", "moved_count": moved}

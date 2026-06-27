@@ -1,19 +1,19 @@
 import 'package:pigeon/pigeon.dart';
 
-@ConfigurePigeon(PigeonOptions(
-  dartOut: 'lib/gen/pigeon_communicator.g.dart',
-  dartOptions: DartOptions(),
-  swiftOut: 'ios/Runner/PigeonCommunicator.g.swift',
-  swiftOptions: SwiftOptions(),
-  kotlinOut: 'android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt',
-  kotlinOptions: KotlinOptions(package: 'com.friend.ios'),
-  dartPackageName: 'omi_pigeon',
-))
-
+@ConfigurePigeon(
+  PigeonOptions(
+    dartOut: 'lib/gen/pigeon_communicator.g.dart',
+    dartOptions: DartOptions(),
+    swiftOut: 'ios/Runner/PigeonCommunicator.g.swift',
+    swiftOptions: SwiftOptions(),
+    kotlinOut: 'android/app/src/main/kotlin/com/friend/ios/PigeonCommunicator.g.kt',
+    kotlinOptions: KotlinOptions(package: 'com.friend.ios'),
+    dartPackageName: 'omi_pigeon',
+  ),
+)
 // =============================================================================
 // Watch Recorder APIs
 // =============================================================================
-
 @HostApi()
 abstract class WatchRecorderHostAPI {
   @SwiftFunction('startRecording()')
@@ -71,12 +71,7 @@ class BlePeripheral {
   final int rssi;
   final List<String> serviceUuids;
 
-  BlePeripheral({
-    required this.uuid,
-    required this.name,
-    required this.rssi,
-    required this.serviceUuids,
-  });
+  BlePeripheral({required this.uuid, required this.name, required this.rssi, required this.serviceUuids});
 }
 
 /// Discovered BLE service with its characteristic UUIDs.
@@ -87,31 +82,95 @@ class BleService {
   BleService({required this.uuid, required this.characteristicUuids});
 }
 
+/// A single disconnect event stored in native preferences.
+class BleDisconnectEvent {
+  final int timestamp;
+  final String reason;
+  final int reasonCode;
+  final bool isManual;
+
+  /// Kind of event: "disconnect" (link lost after connect) or "fail_to_connect"
+  /// (connect attempt never established). Defaults to "disconnect" for legacy records.
+  final String eventType;
+
+  /// Last RSSI sample captured before this event (dBm). 0 if unknown.
+  final int lastRssi;
+
+  /// How long the link was established before this event (ms). 0 if unknown
+  /// or for fail_to_connect events.
+  final int connectionDurationMs;
+
+  /// App lifecycle state at the moment of the event: "foreground", "background",
+  /// or "inactive" (iOS transitioning). Empty string if unknown.
+  final String appState;
+
+  /// ms between this disconnect and the subsequent successful reconnect.
+  /// 0 while the device has not yet reconnected.
+  final int timeToReconnectMs;
+
+  /// RSSI trajectory over the ~15s before this event. One of:
+  ///   "fading"  — signal declined ≥10 dB before the drop (walk-away)
+  ///   "sudden"  — signal stable then link died (interference/stall/device off)
+  ///   "gap"     — no recent RSSI samples (keep-alive wasn't running)
+  ///   "unknown" — insufficient samples to classify
+  /// Empty string on legacy records written before this field existed.
+  final String rssiTrend;
+
+  BleDisconnectEvent({
+    required this.timestamp,
+    required this.reason,
+    required this.reasonCode,
+    required this.isManual,
+    required this.eventType,
+    required this.lastRssi,
+    required this.connectionDurationMs,
+    required this.appState,
+    required this.timeToReconnectMs,
+    required this.rssiTrend,
+  });
+}
+
+/// A single battery level reading persisted by the native BLE layer.
+class BleBatteryPoint {
+  final int timestamp;
+  final int level;
+
+  BleBatteryPoint({required this.timestamp, required this.level});
+}
+
+/// Diagnostics data read from native preferences on demand.
+class BleDeviceDiagnostics {
+  final List<BleDisconnectEvent> disconnectHistory;
+  final int reconnectionCount;
+  final int connectedAt;
+
+  /// Count of connect attempts that never reached didConnect. Surfaces the
+  /// silent-failure path separately from established-then-dropped disconnects.
+  final int failToConnectCount;
+
+  BleDeviceDiagnostics({
+    required this.disconnectHistory,
+    required this.reconnectionCount,
+    required this.connectedAt,
+    required this.failToConnectCount,
+  });
+}
+
 /// Dart → Native: commands sent from Flutter to the native BLE module.
 @HostApi()
 abstract class BleHostApi {
-  // Scanning
   @SwiftFunction('startScan(timeout:serviceUuids:)')
   void startScan(int timeoutSeconds, List<String> serviceUuids);
 
   @SwiftFunction('stopScan()')
   void stopScan();
 
-  // Connection
-  @SwiftFunction('connectPeripheral(uuid:)')
-  void connectPeripheral(String uuid);
+  @SwiftFunction('manageDevice(uuid:requiresBond:)')
+  void manageDevice(String uuid, bool requiresBond);
 
-  @SwiftFunction('disconnectPeripheral(uuid:)')
-  void disconnectPeripheral(String uuid);
+  @SwiftFunction('unmanageDevice(uuid:)')
+  void unmanageDevice(String uuid);
 
-  /// Reconnect a previously-paired peripheral. No active scanning — the platform
-  /// handles reconnection at the chipset level (iOS: retrievePeripherals, Android: autoConnect).
-  @SwiftFunction('reconnectKnownPeripheral(uuid:)')
-  void reconnectKnownPeripheral(String uuid);
-
-  /// Request bonding/pairing for a connected peripheral.
-  /// Only needed for devices that require encrypted links (e.g. Limitless).
-  /// Waits for bond to complete or timeout. Returns true if bonded.
   @async
   @SwiftFunction('requestBond(uuid:)')
   bool requestBond(String uuid);
@@ -135,37 +194,50 @@ abstract class BleHostApi {
   @SwiftFunction('getBluetoothState()')
   String getBluetoothState();
 
+  /// (Android only) Show the system "enable Bluetooth" prompt. Resolves to true
+  /// once Bluetooth is on. No-op on iOS — returns whether the adapter is powered on.
+  @async
+  @SwiftFunction('enableBluetooth()')
+  bool enableBluetooth();
+
   @SwiftFunction('isPeripheralConnected(uuid:)')
   bool isPeripheralConnected(String uuid);
 
+  // Diagnostics
+  @SwiftFunction('startRssiStreaming(uuid:)')
+  void startRssiStreaming(String uuid);
+
+  @SwiftFunction('stopRssiStreaming(uuid:)')
+  void stopRssiStreaming(String uuid);
+
+  @async
+  @SwiftFunction('getDeviceDiagnostics(uuid:)')
+  BleDeviceDiagnostics getDeviceDiagnostics(String uuid);
+
+  @async
+  @SwiftFunction('getBatteryHistory(uuid:)')
+  List<BleBatteryPoint> getBatteryHistory(String uuid);
+
   /// (Android only) Check if any CompanionDeviceManager association exists.
-  /// Returns true on iOS (state restoration handles background reconnection).
   @SwiftFunction('hasCompanionDeviceAssociation()')
   bool hasCompanionDeviceAssociation();
 
   /// (Android only) Initiate CompanionDeviceManager association for a device.
-  /// Shows the system chooser dialog filtered to this device's address.
-  /// Returns the associated device address on success, empty string on failure/cancel.
-  /// On iOS, returns empty string (state restoration handles background reconnection).
   @async
   @SwiftFunction('requestCompanionDeviceAssociation(deviceAddress:)')
   String requestCompanionDeviceAssociation(String deviceAddress);
 }
 
-/// Native → Dart: events pushed from the native BLE module to Flutter.
 @FlutterApi()
 abstract class BleFlutterApi {
   void onBluetoothStateChanged(String state);
 
   void onPeripheralDiscovered(BlePeripheral peripheral);
 
-  void onPeripheralConnected(String peripheralUuid);
+  void onDeviceReady(String peripheralUuid, List<BleService> services);
 
   void onPeripheralDisconnected(String peripheralUuid, String? error);
 
-  void onServicesDiscovered(String peripheralUuid, List<BleService> services);
-
-  /// Individual characteristic value update (non-audio characteristics).
   void onCharacteristicValueUpdated(
     String peripheralUuid,
     String serviceUuid,
@@ -173,6 +245,11 @@ abstract class BleFlutterApi {
     Uint8List value,
   );
 
-  /// Called after app relaunch when iOS restores previously-connected peripherals.
+  void onRssiUpdate(String peripheralUuid, int rssi);
+
   void onStateRestored(List<String> peripheralUuids);
+
+  /// Native batch writer finalized a recording file (rotation / gap / stop) so
+  /// Dart can rescan the recordings dir without waiting for a disconnect.
+  void onBatchRecordingFinalized(String fileName);
 }

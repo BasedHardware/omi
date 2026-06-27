@@ -2,8 +2,12 @@ import asyncio
 import hashlib
 import json
 import math
+import uuid
+from datetime import datetime
+from typing import List, Optional, Union
 from firebase_admin import messaging, auth
 import database.notifications as notification_db
+from utils.executors import db_executor, run_blocking
 from database.redis_db import (
     set_credit_limit_notification_sent,
     has_credit_limit_notification_been_sent,
@@ -315,7 +319,7 @@ async def send_bulk_notification(user_tokens: list, title: str, body: str):
             return response, invalid_tokens
 
         tasks = [
-            asyncio.to_thread(send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
+            run_blocking(db_executor, send_batch, user_tokens[i * batch_size : (i + 1) * batch_size])
             for i in range(num_batches)
         ]
         results = await asyncio.gather(*tasks)
@@ -504,6 +508,58 @@ def send_action_item_deletion_message(user_id: str, action_item_id: str):
     }
     tag = _generate_tag(f"{user_id}:action_item_delete:{action_item_id}")
     _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
+
+
+def sync_action_item_reminder(
+    user_id: str,
+    action_item_id: str,
+    description: str,
+    completed: bool,
+    due_at: Optional[Union[datetime, str]],
+):
+    """Reconcile the client-scheduled reminder after an action item is created or updated (#5085).
+
+    The mobile client schedules a local reminder from the action-item update/data message and
+    cancels it on the 'action_item_delete' message. The reminder must be cancelled when the task is
+    completed or no longer has a due date, and (re)scheduled only for an open task that still has a
+    due date. Reusing send_action_item_deletion_message is intentional: the client treats it as
+    "cancel the scheduled local notification by id", not as a task deletion.
+    """
+    if completed or not due_at:
+        send_action_item_deletion_message(user_id=user_id, action_item_id=action_item_id)
+        return
+    due_iso = due_at.isoformat() if hasattr(due_at, 'isoformat') else due_at
+    send_action_item_update_message(
+        user_id=user_id, action_item_id=action_item_id, description=description or '', due_at=due_iso
+    )
+
+
+def send_action_items_batch_deletion_message(user_id: str, action_item_ids: List[str]):
+    """
+    Bulk equivalent of send_action_item_deletion_message — one FCM data
+    message per chunk of ids (chunked to stay under FCM's 4KB data payload
+    ceiling) instead of one message per id. The app splits the comma-joined
+    ids and cancels each scheduled local notification client-side.
+    """
+    if not action_item_ids:
+        return
+
+    # Action item ids are UUID-shaped (~36 chars); 100 per chunk keeps the
+    # serialized payload comfortably under FCM's 4KB limit.
+    chunk_size = 100
+    # Per-invocation nonce so concurrent bulk-delete calls that happen to
+    # share a leading id don't collide on FCM tags (which would let the
+    # second dispatch silently replace the first).
+    nonce = uuid.uuid4().hex[:8]
+    for start in range(0, len(action_item_ids), chunk_size):
+        chunk = action_item_ids[start : start + chunk_size]
+        data = {
+            'type': 'action_item_batch_delete',
+            'ids': ','.join(chunk),
+        }
+        tag = _generate_tag(f"{user_id}:action_item_batch_delete:{nonce}:{start}")
+        _send_to_user(user_id, tag, data=data, is_background=True, priority='high')
+    logger.info(f'send_action_items_batch_deletion_message to user {user_id} count={len(action_item_ids)}')
 
 
 def send_action_item_created_notification(user_id: str, action_item_description: str):

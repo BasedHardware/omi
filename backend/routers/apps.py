@@ -1,17 +1,22 @@
 import json
+import logging
 import os
 import asyncio
 import time
 from datetime import datetime, timezone
+
+import httpx
 from typing import List, Optional
 from urllib.parse import urlparse
 from pydantic import BaseModel as PydanticBaseModel, ValidationError
-import requests
 from ulid import ULID
 from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
 from fastapi.responses import HTMLResponse
 
+from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
+from utils.executors import db_executor, llm_executor, storage_executor, run_blocking
+from utils.http_client import get_webhook_client
 from utils.mcp_client import (
     discover_oauth_metadata,
     register_oauth_client,
@@ -47,6 +52,7 @@ from database.apps import (
     set_app_popular_db,
     search_apps_db,
 )
+from database.webhook_health import clear_app_webhook_health
 from database.auth import get_user_from_uid
 from database.redis_db import (
     delete_generic_cache,
@@ -100,6 +106,7 @@ from utils.apps import (
     build_capability_groups_response,
     group_capability_apps_by_category,
     build_capability_category_groups_response,
+    validate_app_endpoints_for_reenable,
 )
 
 from database.memories import migrate_memories
@@ -109,6 +116,11 @@ from utils.llm.app_generator import generate_description
 from utils.llm.usage_tracker import track_usage, Features
 from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
+from utils.request_validation import (
+    backfill_app_home_url_from_auth_steps,
+    normalize_required_webhook_url,
+    parse_form_json,
+)
 from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
@@ -122,6 +134,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _write_file(path: str, data: bytes):
+    """Write bytes to file — offloaded to storage_executor."""
+    with open(path, 'wb') as f:
+        f.write(data)
 
 
 def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
@@ -216,7 +234,7 @@ def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
 def get_apps_v2(
     capability: str | None = Query(default=None, description='Filter by capability id'),
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=20, ge=1, le=50),
+    limit: int = Query(default=20, ge=1, le=100),
     include_reviews: bool = Query(default=False),
 ):
     """Public omi apps, paginated by capability groups.
@@ -454,15 +472,18 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 
 @router.post('/v1/apps', tags=['v1'])
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
-    data = json.loads(app_data)
+    data = parse_form_json(dict, app_data, 'app_data')
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
     data['id'] = str(ULID())
+    data['uid'] = uid
     if not data.get('author') and not data.get('email'):
-        user = get_user_from_uid(uid)
-        data['author'] = user.get('display_name', '')
-        data['email'] = user['email']
+        user = get_user_from_uid(uid) or {}
+        email = user.get('email')
+        # author is required + non-null on AppCreate; display_name/email can both be null.
+        data['author'] = user.get('display_name') or (email.split('@')[0] if email else None) or 'Anonymous'
+        data['email'] = email
     if not data.get('is_paid'):
         data['is_paid'] = False
     else:
@@ -479,7 +500,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
             raise HTTPException(status_code=422, detail='Triggers on or actions is required')
         # Trigger on
         if external_integration.get('triggers_on'):
-            external_integration['webhook_url'] = external_integration['webhook_url'].strip()
+            normalize_required_webhook_url(external_integration)
             if external_integration.get('setup_instructions_file_path'):
                 external_integration['setup_instructions_file_path'] = external_integration[
                     'setup_instructions_file_path'
@@ -508,9 +529,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
     data['created_at'] = datetime.now(timezone.utc)
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
-        ext_int = data['external_integration']
-        if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
-            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+        backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
         app = AppCreate.model_validate(data)
@@ -536,7 +555,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
-    data = json.loads(persona_data)
+    data = parse_form_json(dict, persona_data, 'persona_data')
     data['approved'] = False
     data['status'] = 'under-review'
     data['category'] = 'personality-emulation'
@@ -544,24 +563,24 @@ async def create_persona(
     data['id'] = str(ULID())
     data['uid'] = uid
     data['capabilities'] = ['persona']
-    user = get_user_from_uid(uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
     data['author'] = user.get('display_name', '')
-    data['email'] = user['email']
+    data['email'] = user.get('email')
 
     if 'username' not in data or data['username'] == '' or data['username'] is None:
         data['username'] = data['name'].replace(' ', '').lower()
-        data['username'] = increment_username(data['username'])
-    save_username(data['username'], uid)
+        data['username'] = await run_blocking(db_executor, increment_username, data['username'])
+    await run_blocking(db_executor, save_username, data['username'], uid)
 
     if 'connected_accounts' not in data or data['connected_accounts'] is None:
         data['connected_accounts'] = ['omi']
     data['persona_prompt'] = await generate_persona_prompt(uid, data)
-    data['description'] = generate_persona_desc(uid, data['name'])
+    data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
     os.makedirs(f'_temp/apps', exist_ok=True)
     file_path = f"_temp/apps/{file.filename}"
-    with open(file_path, 'wb') as f:
-        f.write(file.file.read())
-    img_url = upload_app_logo(file_path, data['id'])
+    contents = await file.read()
+    await run_blocking(storage_executor, _write_file, file_path, contents)
+    img_url = await run_blocking(storage_executor, upload_app_logo, file_path, data['id'])
     data['image'] = img_url
     data['created_at'] = datetime.now(timezone.utc)
 
@@ -570,7 +589,7 @@ async def create_persona(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    add_app_to_db(app_create.model_dump(exclude_unset=True))
+    await run_blocking(db_executor, add_app_to_db, app_create.model_dump(exclude_unset=True))
 
     return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
 
@@ -582,8 +601,8 @@ async def update_persona(
     file: UploadFile = File(None),
     uid=Depends(auth.get_current_user_uid),
 ):
-    data = json.loads(persona_data)
-    persona = get_available_app_by_id(persona_id, uid)
+    data = parse_form_json(dict, persona_data, 'persona_data')
+    persona = await run_blocking(db_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
     if persona['uid'] != uid:
@@ -596,16 +615,16 @@ async def update_persona(
             and len(persona['image']) > 0
             and persona['image'].startswith('https://storage.googleapis.com/')
         ):
-            delete_app_logo(persona['image'])
+            await run_blocking(storage_executor, delete_app_logo, persona['image'])
         os.makedirs(f'_temp/apps', exist_ok=True)
         file_path = f"_temp/apps/{file.filename}"
-        with open(file_path, 'wb') as f:
-            f.write(file.file.read())
-        img_url = upload_app_logo(file_path, persona_id)
+        contents = await file.read()
+        await run_blocking(storage_executor, _write_file, file_path, contents)
+        img_url = await run_blocking(storage_executor, upload_app_logo, file_path, persona_id)
         data['image'] = img_url
 
-    save_username(data['username'], uid)
-    data['description'] = generate_persona_desc(uid, data['name'])
+    await run_blocking(db_executor, save_username, data['username'], uid)
+    data['description'] = await run_blocking(llm_executor, generate_persona_desc, uid, data['name'])
     data['updated_at'] = datetime.now(timezone.utc)
 
     # Update 'omi' connected_accounts
@@ -617,11 +636,11 @@ async def update_persona(
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    update_app_in_db(update_app.model_dump(exclude_unset=True))
+    await run_blocking(db_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
 
     if persona['approved'] and (persona['private'] is None or persona['private'] is False):
-        invalidate_approved_apps_cache()
-    delete_app_cache_by_id(persona_id)
+        await run_blocking(db_executor, invalidate_approved_apps_cache)
+    await run_blocking(db_executor, delete_app_cache_by_id, persona_id)
     return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
 
@@ -649,13 +668,13 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     If not, create a new one with default values.
     """
     # Check if user already has a persona
-    persona = get_user_persona_by_uid(uid)
+    persona = await run_blocking(db_executor, get_user_persona_by_uid, uid)
     if persona:
         # Return existing persona
         return persona
 
     # Create a new persona for the user
-    user = get_user_from_uid(uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid)
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
@@ -664,7 +683,9 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     persona_data = {
         'id': persona_id,
         'name': user.get('display_name', 'My Persona'),
-        'username': increment_username((user.get('display_name') or 'MyPersona').replace(' ', '').lower()),
+        'username': await run_blocking(
+            db_executor, increment_username, (user.get('display_name') or 'MyPersona').replace(' ', '').lower()
+        ),
         'description': f"This is {user.get('display_name', 'my')} personal AI clone.",
         'image': '',  # Empty image as specified in the task
         'uid': uid,
@@ -688,32 +709,19 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
         raise HTTPException(status_code=422, detail=str(e))
 
     # Save username
-    save_username(persona_data['username'], uid)
+    await run_blocking(db_executor, save_username, persona_data['username'], uid)
 
     # Add persona to database
-    add_app_to_db(persona_create.model_dump(exclude_unset=True))
+    await run_blocking(db_executor, add_app_to_db, persona_create.model_dump(exclude_unset=True))
 
     return persona_data
-
-
-@router.get('/v1/apps/check-username', tags=['v1'])
-def check_username(username: str, uid: str = Depends(auth.get_current_user_uid)):
-    is_taken = is_username_taken(username)
-    return {'is_taken': is_taken}
-
-
-@router.get('/v1/personas/generate-username', tags=['v1'])
-def generate_username(handle: str, uid: str = Depends(auth.get_current_user_uid)):
-    username = handle.replace(' ', '')
-    username = increment_username(username)
-    return {'username': username}
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'])
 def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
 ):
-    data = json.loads(app_data)
+    data = parse_form_json(dict, app_data, 'app_data')
     app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
@@ -732,9 +740,7 @@ def update_app(
 
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
-        ext_int = data['external_integration']
-        if not ext_int.get('app_home_url') and ext_int.get('auth_steps') and len(ext_int['auth_steps']) == 1:
-            ext_int['app_home_url'] = ext_int['auth_steps'][0]['url']
+        backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
         update_app = AppUpdate.model_validate(data)
@@ -747,6 +753,14 @@ def update_app(
     # Fetch chat tools from manifest URL (only way to add/update chat tools)
     if external_integration := data.get('external_integration'):
         update_dict = _process_chat_tools_manifest(external_integration, update_dict)
+
+    if update_dict.get('disabled') is False and app.get('disabled'):
+        validate_app_endpoints_for_reenable(app, update_dict, app_id)
+        clear_app_webhook_health(app_id)
+        update_dict.setdefault('disabled_reason', '')
+        update_dict.setdefault('disabled_error', '')
+        update_dict.setdefault('disabled_at', '')
+        update_dict.setdefault('disabled_failure_duration_hours', 0)
 
     update_app_in_db(update_dict)
 
@@ -986,11 +1000,15 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     if not reviewer_uid:
         raise HTTPException(status_code=422, detail='Reviewer UID is required')
 
+    response = data.get('response')
+    if not isinstance(response, str) or not response.strip():
+        raise HTTPException(status_code=422, detail='Response is required')
+
     review = get_specific_user_review(app_id, reviewer_uid)
     if not review:
         raise HTTPException(status_code=404, detail='Review not found')
 
-    review['response'] = data['response']
+    review['response'] = response
     review['responded_at'] = datetime.now(timezone.utc).isoformat()
     set_app_review(app_id, reviewer_uid, review)
 
@@ -998,7 +1016,7 @@ def reply_to_review(app_id: str, data: dict, uid: str = Depends(auth.get_current
     send_app_review_reply_notification(
         reviewer_uid,
         app.uid,
-        data['response'],
+        response,
         app_id,
         app.name,
     )
@@ -1149,12 +1167,14 @@ def generate_description_and_emoji_endpoint(data: dict, uid: str = Depends(auth.
 
 
 @router.get('/v1/app/generate-prompts', tags=['v1'])
-async def generate_sample_prompts_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+async def generate_sample_prompts_endpoint(
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),
+):
     """
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.
     """
-    from utils.llm.clients import llm_mini
+    from utils.llm.clients import get_llm
     import json
 
     system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
@@ -1175,10 +1195,10 @@ Be creative, fun, and varied. No generic ideas."""
 
     try:
         with track_usage(uid, Features.APP_GENERATOR):
-            response = await llm_mini.ainvoke(
+            response = await get_llm('app_integration').ainvoke(
                 [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": "Generate 5 creative app ideas now"},
+                    SystemMessage(content=system_prompt),
+                    HumanMessage(content="Generate 5 creative app ideas now"),
                 ]
             )
 
@@ -1314,11 +1334,11 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
     }
 
     # By user persona first
-    persona = get_user_persona_by_uid(uid)
+    persona = await run_blocking(db_executor, get_user_persona_by_uid, uid)
 
     # Get matching persona if exists
     if not persona:
-        persona = get_persona_by_twitter_handle_db(handle)
+        persona = await run_blocking(db_executor, get_persona_by_twitter_handle_db, handle)
 
     if persona:
         res['persona_id'] = persona['id']
@@ -1332,7 +1352,7 @@ async def verify_twitter_ownership_tweet(
     username: str, handle: str, uid: str = Depends(auth.get_current_user_uid), persona_id: str | None = None
 ):
     # Get user info to check auth provider
-    user = get_user_from_uid(uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -1361,7 +1381,7 @@ async def verify_twitter_ownership_tweet(
 
 
 @router.get('/v1/personas/twitter/initial-message', tags=['v1'])
-async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
+def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):
@@ -1372,11 +1392,10 @@ async def get_twitter_initial_message(username: str, uid: str = Depends(auth.get
 
 @router.post('/v1/apps/migrate-owner', tags=['v1'])
 async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
-    # Migrate app ownership in the database
-    migrate_app_owner_id_db(uid, old_id)
+    await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
     # Start async tasks to migrate memories and update persona connected accounts
-    asyncio.create_task(migrate_memories(old_id, uid))
+    asyncio.create_task(run_blocking(db_executor, migrate_memories, old_id, uid))
     asyncio.create_task(update_omi_persona_connected_accounts(uid))
 
     return {"status": "ok", "message": "Migration started"}
@@ -1384,24 +1403,23 @@ async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid
 
 async def update_omi_persona_connected_accounts(uid: str):
     try:
-        # Get all personas owned by the user
-        personas = get_omi_persona_apps_by_uid_db(uid)
+        personas = await run_blocking(db_executor, get_omi_persona_apps_by_uid_db, uid)
 
-        # Update each persona to add 'omi' to connected_accounts
         for persona in personas:
             connected_accounts = persona.get('connected_accounts', [])
             if 'omi' not in connected_accounts:
                 connected_accounts.append('omi')
 
-                # Update the persona with the new connected_accounts
                 update_data = persona
                 update_data['connected_accounts'] = connected_accounts
                 update_data['updated_at'] = datetime.now(timezone.utc)
                 update_data['persona_prompt'] = await generate_persona_prompt(uid, update_data)
-                update_data['description'] = generate_persona_desc(uid, update_data['name'])
+                update_data['description'] = await run_blocking(
+                    llm_executor, generate_persona_desc, uid, update_data['name']
+                )
 
-                update_app_in_db(update_data)
-                delete_app_cache_by_id(persona['id'])
+                await run_blocking(db_executor, update_app_in_db, update_data)
+                await run_blocking(db_executor, delete_app_cache_by_id, persona['id'])
     except Exception as e:
         logger.error(f"Error updating persona connected accounts: {e}")
 
@@ -1456,7 +1474,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
     logo_url = await fetch_brandfetch_logo(domain) or ''
 
     app_id = str(ULID())
-    user = get_user_from_uid(uid)
+    user = await run_blocking(db_executor, get_user_from_uid, uid)
 
     # Check for OAuth metadata
     oauth_meta = await discover_oauth_metadata(server_url)
@@ -1526,7 +1544,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
             },
             'chat_tools': [],
         }
-        add_app_to_db(app_dict)
+        await run_blocking(db_executor, add_app_to_db, app_dict)
 
         return {
             'app_id': app_id,
@@ -1566,7 +1584,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
             },
             'chat_tools': _serialize_chat_tools_for_firestore(tools),
         }
-        add_app_to_db(app_dict)
+        await run_blocking(db_executor, add_app_to_db, app_dict)
 
         return {
             'app_id': app_id,
@@ -1588,7 +1606,7 @@ async def mcp_oauth_callback(code: str, state: str):
     except ValueError:
         return HTMLResponse('<html><body><h1>Invalid state parameter</h1></body></html>', status_code=400)
 
-    app_data = get_app_by_id_db(app_id)
+    app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
         return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
 
@@ -1637,11 +1655,11 @@ async def mcp_oauth_callback(code: str, state: str):
         },
         'chat_tools': _serialize_chat_tools_for_firestore(tools),
     }
-    update_app_in_db(update_dict)
-    delete_app_cache_by_id(app_id)
+    await run_blocking(db_executor, update_app_in_db, update_dict)
+    await run_blocking(db_executor, delete_app_cache_by_id, app_id)
 
     # Auto-enable the app for the user
-    enable_app(uid, app_id)
+    await run_blocking(db_executor, enable_app, uid, app_id)
 
     tool_count = len(tools)
     tool_names = ', '.join(t.name for t in tools)
@@ -1669,7 +1687,7 @@ async def mcp_oauth_callback(code: str, state: str):
 @router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])
 async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Re-discover tools from an MCP server and update the app."""
-    app_data = get_app_by_id_db(app_id)
+    app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
         raise HTTPException(status_code=404, detail='App not found')
     if app_data.get('uid') != uid:
@@ -1708,8 +1726,8 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
                 },
                 'chat_tools': _serialize_chat_tools_for_firestore(tools),
             }
-            update_app_in_db(update_dict)
-            delete_app_cache_by_id(app_id)
+            await run_blocking(db_executor, update_app_in_db, update_dict)
+            await run_blocking(db_executor, delete_app_cache_by_id, app_id)
 
             return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
         raise HTTPException(status_code=401, detail='MCP server requires re-authorization')
@@ -1720,8 +1738,8 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
         'id': app_id,
         'chat_tools': _serialize_chat_tools_for_firestore(tools),
     }
-    update_app_in_db(update_dict)
-    delete_app_cache_by_id(app_id)
+    await run_blocking(db_executor, update_app_in_db, update_dict)
+    await run_blocking(db_executor, delete_app_cache_by_id, app_id)
 
     return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
 
@@ -1732,27 +1750,37 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 
 
 @router.post('/v1/apps/enable')
-def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = get_available_app_by_id(app_id, uid)
+async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
     app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
+    if app.disabled:
+        raise HTTPException(
+            status_code=400,
+            detail='This app is currently unavailable due to connectivity issues. The developer has been notified.',
+        )
     if app.private is not None:
-        if app.private and app.uid != uid and not is_tester(uid):
+        if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     if app.works_externally() and app.external_integration.setup_completed_url:
-        res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+        client = get_webhook_client()
+        res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
         if res.status_code != 200 or not res.json().get('is_setup_completed', False):
             raise HTTPException(status_code=400, detail='App setup is not completed')
 
     # Check payment status
-    if app.is_paid and get_is_user_paid_app(app.id, uid) == False:
+    if app.is_paid and await run_blocking(db_executor, get_is_user_paid_app, app.id, uid) == False:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
-    enable_app(uid, app_id)
-    if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
-        increase_app_installs_count(app_id)
+    await run_blocking(db_executor, enable_app, uid, app_id)
+    if (
+        (app.private is None or not app.private)
+        and (app.uid is None or app.uid != uid)
+        and not await run_blocking(db_executor, is_tester, uid)
+    ):
+        await run_blocking(db_executor, increase_app_installs_count, app_id)
     return {'status': 'ok'}
 
 
@@ -1891,11 +1919,11 @@ async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str =
     temp_path = f'_temp/thumbnails/{thumbnail_id}.jpg'
 
     try:
-        with open(temp_path, 'wb') as f:
-            f.write(await file.read())
+        contents = await file.read()
+        await run_blocking(storage_executor, _write_file, temp_path, contents)
 
         # Upload to cloud storage
-        url = upload_app_thumbnail(temp_path, thumbnail_id)
+        url = await run_blocking(storage_executor, upload_app_thumbnail, temp_path, thumbnail_id)
 
         return {'thumbnail_url': url, 'thumbnail_id': thumbnail_id}
 

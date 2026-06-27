@@ -1,8 +1,8 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'delete_confirmation.dart';
@@ -68,10 +68,10 @@ class _MemoryDialogState extends State<MemoryDialog> {
                       Text(
                         isEditing
                             ? (widget.memory!.category == MemoryCategory.manual
-                                  ? context.l10n.filterManual
-                                  : widget.memory!.category == MemoryCategory.interesting
-                                  ? context.l10n.filterInteresting
-                                  : context.l10n.filterSystem)
+                                ? context.l10n.filterManual
+                                : widget.memory!.category == MemoryCategory.interesting
+                                    ? context.l10n.filterInteresting
+                                    : context.l10n.filterSystem)
                             : context.l10n.newMemory,
                         style: const TextStyle(color: Colors.white, fontSize: 14),
                       ),
@@ -169,7 +169,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
       if (isEditing) {
         success = await widget.provider.editMemory(widget.memory!, contentController.text);
         if (success) {
-          MixpanelManager().memoriesPageEditedMemory();
+          PlatformManager.instance.analytics.memoriesPageEditedMemory();
         }
       } else {
         success = await widget.provider.createMemory(
@@ -178,7 +178,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
           MemoryCategory.manual,
         );
         if (success) {
-          MixpanelManager().memoriesPageCreatedMemory(MemoryCategory.manual);
+          PlatformManager.instance.analytics.memoriesPageCreatedMemory(MemoryCategory.manual);
         }
       }
     } catch (e) {

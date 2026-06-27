@@ -8,6 +8,7 @@ Verifies:
 
 import asyncio
 import sys
+from types import ModuleType
 from unittest.mock import MagicMock, patch, AsyncMock
 
 import pytest
@@ -19,7 +20,6 @@ for mod_name in [
     'database._client',
     'database.users',
     'utils.other.storage',
-    'utils.stt.soniox_util',
     'deepgram',
     'deepgram.clients',
     'deepgram.clients.live',
@@ -31,14 +31,31 @@ for mod_name in [
         _mock_modules[mod_name] = MagicMock()
         sys.modules[mod_name] = _mock_modules[mod_name]
 
-# Provide expected attributes for type-annotation imports
-sys.modules['deepgram'].DeepgramClient = MagicMock
-sys.modules['deepgram'].DeepgramClientOptions = MagicMock
-sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
-sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+# Provide expected attributes only if this file owns the deepgram mock.
+# When another test file (e.g. test_dg_start_guard.py) imported streaming.py first,
+# overwriting LiveTranscriptionEvents would break event-identity assertions (#6302).
+if 'deepgram' in _mock_modules:
+    sys.modules['deepgram'].DeepgramClient = MagicMock
+    sys.modules['deepgram'].DeepgramClientOptions = MagicMock
+    sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
+    sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
+
+_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+_speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+_speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
+sys.modules.setdefault('utils.stt.speaker_embedding', _speaker_embedding)
+
+_vad = ModuleType('utils.stt.vad')
+_vad._get_ort_session = MagicMock()
+_vad.make_fresh_state = MagicMock(return_value=(None, None))
+_vad.run_vad_window = MagicMock(return_value=0.0)
+_vad.VAD_WINDOW_SAMPLES = 512
+sys.modules.setdefault('utils.stt.vad', _vad)
 
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg  # noqa: E402
 from utils.stt.streaming import deepgram_options, deepgram_cloud_options  # noqa: E402
+from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -52,7 +69,7 @@ async def test_returns_connection_on_first_success():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
         )
     assert result is mock_conn
 
@@ -84,7 +101,7 @@ async def test_retries_with_async_sleep():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             retries=3,
         )
 
@@ -110,7 +127,7 @@ async def test_raises_after_all_retries_exhausted():
                 language='en',
                 sample_rate=16000,
                 channels=1,
-                model='nova-2-general',
+                model='nova-3',
                 retries=3,
             )
 
@@ -125,7 +142,7 @@ async def test_aborts_before_first_attempt_when_inactive():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             is_active=lambda: False,
         )
     assert result is None
@@ -153,7 +170,7 @@ async def test_aborts_between_retries_when_inactive():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             retries=3,
             is_active=lambda: active[0],
         )
@@ -185,7 +202,7 @@ async def test_is_active_none_skips_check():
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
             retries=3,
             is_active=None,
         )
@@ -204,7 +221,7 @@ async def test_retries_zero_raises_immediately():
                 language='en',
                 sample_rate=16000,
                 channels=1,
-                model='nova-2-general',
+                model='nova-3',
                 retries=0,
             )
     mock_connect.assert_not_called()
@@ -228,36 +245,35 @@ async def test_retries_one_failure_raises_no_sleep():
                 language='en',
                 sample_rate=16000,
                 channels=1,
-                model='nova-2-general',
+                model='nova-3',
                 retries=1,
             )
     assert len(sleep_calls) == 0  # no sleep with only 1 retry
 
 
 @pytest.mark.asyncio
-async def test_connect_uses_asyncio_to_thread():
-    """connect_to_deepgram is offloaded via asyncio.to_thread to avoid blocking the event loop."""
+async def test_connect_uses_run_blocking():
+    """connect_to_deepgram is offloaded via run_blocking to avoid blocking the event loop."""
     mock_conn = MagicMock()
 
-    async def fake_to_thread(func, *args):
-        return func(*args)
+    async def fake_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
 
     with patch('utils.stt.streaming.connect_to_deepgram', return_value=mock_conn) as mock_connect, patch(
-        'utils.stt.streaming.asyncio.to_thread', side_effect=fake_to_thread
-    ) as mock_to_thread:
+        'utils.stt.streaming.run_blocking', side_effect=fake_run_blocking
+    ) as mock_run_blocking:
         result = await connect_to_deepgram_with_backoff(
             on_message=MagicMock(),
             on_error=MagicMock(),
             language='en',
             sample_rate=16000,
             channels=1,
-            model='nova-2-general',
+            model='nova-3',
         )
     assert result is mock_conn
-    mock_to_thread.assert_called_once()
-    # Verify connect_to_deepgram was passed as the first arg to to_thread
-    call_args = mock_to_thread.call_args
-    assert call_args[0][0] is mock_connect
+    mock_run_blocking.assert_called_once()
+    call_args = mock_run_blocking.call_args
+    assert call_args[0][1] is mock_connect
 
 
 @pytest.mark.asyncio
@@ -275,19 +291,78 @@ async def test_process_audio_dg_returns_none_when_inactive():
 
 
 @pytest.mark.asyncio
-async def test_process_audio_dg_no_vad_wrap_on_none():
-    """process_audio_dg does not wrap None with GatedDeepgramSocket when VAD gate is provided."""
-    mock_gate = MagicMock()
+async def test_process_audio_dg_returns_none_on_failed_connection():
+    """process_audio_dg returns None when connection cannot be established."""
     with patch('utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=None):
         result = await process_audio_dg(
             stream_transcript=MagicMock(),
             language='en',
             sample_rate=16000,
             channels=1,
-            vad_gate=mock_gate,
             is_active=lambda: False,
         )
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_retries_on_none_then_succeeds():
+    """When connect_to_deepgram returns None (start()==False), backoff retries and succeeds on later attempt."""
+    mock_conn = MagicMock()
+    call_count = 0
+
+    def none_then_succeed(*args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count < 3:
+            return None  # start() returned False
+        return mock_conn
+
+    sleep_calls = []
+
+    async def fake_sleep(duration):
+        sleep_calls.append(duration)
+
+    with patch('utils.stt.streaming.connect_to_deepgram', side_effect=none_then_succeed), patch(
+        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    ):
+        result = await connect_to_deepgram_with_backoff(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-3',
+            retries=3,
+        )
+
+    assert result is mock_conn
+    assert call_count == 3
+    assert len(sleep_calls) == 2  # slept between attempt 1->2 and 2->3
+
+
+@pytest.mark.asyncio
+async def test_returns_none_after_all_none_retries_exhausted():
+    """When connect_to_deepgram returns None on all attempts, backoff returns None (not raise)."""
+    sleep_calls = []
+
+    async def fake_sleep(duration):
+        sleep_calls.append(duration)
+
+    with patch('utils.stt.streaming.connect_to_deepgram', return_value=None), patch(
+        'utils.stt.streaming.asyncio.sleep', side_effect=fake_sleep
+    ):
+        result = await connect_to_deepgram_with_backoff(
+            on_message=MagicMock(),
+            on_error=MagicMock(),
+            language='en',
+            sample_rate=16000,
+            channels=1,
+            model='nova-3',
+            retries=3,
+        )
+
+    assert result is None
+    assert len(sleep_calls) == 2  # slept between retries
 
 
 def test_deepgram_options_no_keepalive():
@@ -319,13 +394,11 @@ async def test_process_audio_dg_returns_safe_socket_no_gate():
 
 
 @pytest.mark.asyncio
-async def test_process_audio_dg_returns_gated_socket_with_gate():
-    """process_audio_dg returns GatedDeepgramSocket wrapping SafeDeepgramSocket when VAD gate provided (#5870)."""
+async def test_process_audio_dg_returns_safe_socket_always():
+    """process_audio_dg always returns SafeDeepgramSocket; VAD wrapping is done by caller (#7140)."""
     from utils.stt.safe_socket import SafeDeepgramSocket
-    from utils.stt.vad_gate import GatedDeepgramSocket, VADStreamingGate
 
     mock_dg_conn = MagicMock()
-    mock_gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
     with patch(
         'utils.stt.streaming.connect_to_deepgram_with_backoff', new_callable=AsyncMock, return_value=mock_dg_conn
     ):
@@ -334,10 +407,8 @@ async def test_process_audio_dg_returns_gated_socket_with_gate():
             language='en',
             sample_rate=16000,
             channels=1,
-            vad_gate=mock_gate,
         )
-    assert isinstance(result, GatedDeepgramSocket)
-    assert isinstance(result._conn, SafeDeepgramSocket)
+    assert isinstance(result, SafeDeepgramSocket)
     assert result.is_connection_dead is False
     result.finish()
 
@@ -612,53 +683,6 @@ def test_send_after_finish_is_noop():
     safe.finalize()
     mock_conn.send.assert_not_called()
     mock_conn.finalize.assert_not_called()
-
-
-def test_profile_socket_routing_when_main_dies():
-    """Profile socket continues receiving audio when main DG socket dies (#5870).
-
-    Mimics the routing logic in transcribe.py flush_stt_buffer: when dg_socket
-    is_connection_dead becomes True, profile socket should still get chunks.
-    """
-    from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
-
-    # Main socket that is dead
-    mock_main_conn = MagicMock()
-    cfg = KeepaliveConfig(keepalive_interval_sec=5.0, check_period_sec=999.0)
-    main_socket = SafeDeepgramSocket(mock_main_conn, cfg=cfg)
-    main_socket._dg_dead = True  # Simulate dead connection
-
-    # Profile socket still alive
-    mock_profile_conn = MagicMock()
-    profile_socket = SafeDeepgramSocket(mock_profile_conn, cfg=cfg)
-
-    try:
-        # Simulate routing logic from transcribe.py:2308-2348
-        dg_socket = main_socket
-        deepgram_profile_socket = profile_socket
-        profile_complete = False
-        chunk = b'\x00' * 960
-
-        # Dead check (separated from routing)
-        if dg_socket is not None and dg_socket.is_connection_dead:
-            dg_socket = None
-
-        # Routing
-        if dg_socket is not None:
-            if profile_complete or not deepgram_profile_socket:
-                dg_socket.send(chunk)
-            else:
-                deepgram_profile_socket.send(chunk)
-        elif deepgram_profile_socket and not profile_complete:
-            deepgram_profile_socket.send(chunk)
-
-        # Profile socket should have received the chunk
-        mock_profile_conn.send.assert_called_once_with(chunk)
-        # Main socket should NOT have received anything
-        mock_main_conn.send.assert_not_called()
-    finally:
-        main_socket.finish()
-        profile_socket.finish()
 
 
 # ---------------------------------------------------------------------------
@@ -1009,3 +1033,292 @@ def test_gated_socket_death_reason_delegates_none_when_alive():
         assert gated.death_reason is None
     finally:
         safe.finish()
+
+
+# ---------------------------------------------------------------------------
+# get_stt_service_for_language — Nova-3 unified model selection (#6382)
+# ---------------------------------------------------------------------------
+
+
+class TestGetSttServiceForLanguage:
+    """Verify get_stt_service_for_language returns nova-3 for all languages."""
+
+    def test_english_multi_enabled(self):
+        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=True)
+        assert service == STTService.deepgram
+        assert lang == 'multi'
+        assert model == 'nova-3'
+
+    def test_english_multi_disabled(self):
+        service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
+
+    def test_chinese_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('zh', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'zh'
+        assert model == 'nova-3'
+
+    def test_chinese_traditional_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('zh-TW', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'zh-TW'
+        assert model == 'nova-3'
+
+    def test_thai_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('th', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'th'
+        assert model == 'nova-3'
+
+    def test_arabic_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('ar', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'ar'
+        assert model == 'nova-3'
+
+    def test_tamil_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('ta', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'ta'
+        assert model == 'nova-3'
+
+    def test_urdu_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('ur', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'ur'
+        assert model == 'nova-3'
+
+    def test_hebrew_returns_nova3(self):
+        service, lang, model = get_stt_service_for_language('he', multi_lang_enabled=False)
+        assert service == STTService.deepgram
+        assert lang == 'he'
+        assert model == 'nova-3'
+
+    def test_unsupported_falls_back_to_english(self):
+        service, lang, model = get_stt_service_for_language('xx-INVALID')
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
+
+    def test_multi_language_returns_multi(self):
+        service, lang, model = get_stt_service_for_language('multi')
+        assert service == STTService.deepgram
+        assert lang == 'multi'
+        assert model == 'nova-3'
+
+    def test_french_multi_enabled(self):
+        """French is in the multi set — should return 'multi' when multi_lang_enabled."""
+        service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
+        assert lang == 'multi'
+        assert model == 'nova-3'
+
+    def test_french_multi_disabled(self):
+        """French with multi disabled — should return 'fr' directly."""
+        service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
+        assert lang == 'fr'
+        assert model == 'nova-3'
+
+    def test_empty_string_falls_back_to_english(self):
+        """Empty string language should fall back to English nova-3."""
+        service, lang, model = get_stt_service_for_language('')
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
+
+    def test_none_language_falls_back_to_english(self):
+        """None language should fall back to English nova-3."""
+        service, lang, model = get_stt_service_for_language(None)
+        assert service == STTService.deepgram
+        assert lang == 'en'
+        assert model == 'nova-3'
+
+
+class TestFillerWordsLanguageBehavior:
+    """Filler words should be stripped for English but preserved for all other languages (#6575).
+
+    Deepgram's filler_words=False strips "um", "uh" etc. This is desirable for English
+    but destructive for other languages where those sounds are real words (e.g. Portuguese "um" = "a/one").
+    """
+
+    def _get_filler_words_option(self, language):
+        """Call connect_to_deepgram with given language and capture the filler_words option."""
+        from types import SimpleNamespace
+        from utils.stt.streaming import connect_to_deepgram
+
+        captured = {}
+
+        def capture_live_options(**kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(**kwargs)
+
+        mock_dg_conn = MagicMock()
+        mock_dg_conn.on = MagicMock()
+        mock_dg_conn.start.return_value = True
+
+        mock_client = MagicMock()
+        mock_client.listen.websocket.v.return_value = mock_dg_conn
+
+        with patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client), patch(
+            'utils.stt.streaming.LiveOptions', side_effect=capture_live_options
+        ):
+            connect_to_deepgram(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language=language,
+                sample_rate=16000,
+                channels=1,
+                model='nova-3',
+            )
+
+        return captured['filler_words']
+
+    def test_english_strips_fillers(self):
+        """English ('en') should strip filler words (filler_words=False)."""
+        assert self._get_filler_words_option('en') is False
+
+    def test_english_us_strips_fillers(self):
+        """American English ('en-US') should strip filler words."""
+        assert self._get_filler_words_option('en-US') is False
+
+    def test_english_gb_strips_fillers(self):
+        """British English ('en-GB') should strip filler words."""
+        assert self._get_filler_words_option('en-GB') is False
+
+    def test_english_au_strips_fillers(self):
+        """Australian English ('en-AU') should strip filler words."""
+        assert self._get_filler_words_option('en-AU') is False
+
+    def test_english_in_strips_fillers(self):
+        """Indian English ('en-IN') should strip filler words."""
+        assert self._get_filler_words_option('en-IN') is False
+
+    def test_multi_preserves_fillers(self):
+        """Multi-language mode should preserve filler words (#6575)."""
+        assert self._get_filler_words_option('multi') is True
+
+    def test_portuguese_preserves_fillers(self):
+        """Portuguese ('pt') should preserve fillers — 'um' means 'a/one' (#6575)."""
+        assert self._get_filler_words_option('pt') is True
+
+    def test_portuguese_br_preserves_fillers(self):
+        """Brazilian Portuguese ('pt-BR') should preserve fillers."""
+        assert self._get_filler_words_option('pt-BR') is True
+
+    def test_spanish_preserves_fillers(self):
+        """Spanish ('es') should preserve filler words."""
+        assert self._get_filler_words_option('es') is True
+
+    def test_french_preserves_fillers(self):
+        """French ('fr') should preserve filler words."""
+        assert self._get_filler_words_option('fr') is True
+
+    def test_german_preserves_fillers(self):
+        """German ('de') should preserve filler words."""
+        assert self._get_filler_words_option('de') is True
+
+    def test_japanese_preserves_fillers(self):
+        """Japanese ('ja') should preserve filler words."""
+        assert self._get_filler_words_option('ja') is True
+
+    def test_hindi_preserves_fillers(self):
+        """Hindi ('hi') should preserve filler words."""
+        assert self._get_filler_words_option('hi') is True
+
+    def test_russian_preserves_fillers(self):
+        """Russian ('ru') should preserve filler words."""
+        assert self._get_filler_words_option('ru') is True
+
+    def test_korean_preserves_fillers(self):
+        """Korean ('ko') should preserve filler words."""
+        assert self._get_filler_words_option('ko') is True
+
+    def test_chinese_preserves_fillers(self):
+        """Chinese ('zh') should preserve filler words."""
+        assert self._get_filler_words_option('zh') is True
+
+
+class TestConnectKeywordsNoneGuard:
+    """connect_to_deepgram must tolerate keywords=None.
+
+    The multi-channel / phone-call path opens the STT socket without passing a
+    vocabulary list, so keywords arrives as None. Previously `if len(keywords) > 0`
+    raised "object of type 'NoneType' has no len()", which aborted the socket open
+    ("Could not open socket: ...") and left the client stuck reconnecting. This is a
+    regression guard for that phone-call breakage.
+    """
+
+    def _connect(self, keywords):
+        """Call connect_to_deepgram with the given keywords; return (raised, keyword_set_called)."""
+        from utils.stt.streaming import connect_to_deepgram
+
+        mock_dg_conn = MagicMock()
+        mock_dg_conn.on = MagicMock()
+        mock_dg_conn.start.return_value = True
+
+        mock_client = MagicMock()
+        mock_client.listen.websocket.v.return_value = mock_dg_conn
+
+        keyword_set = MagicMock(side_effect=lambda options, kw: options)
+
+        with patch('utils.stt.streaming._deepgram_client_for_request', return_value=mock_client), patch(
+            'utils.stt.streaming.LiveOptions', side_effect=lambda **kwargs: MagicMock()
+        ), patch('utils.stt.streaming._dg_keywords_set', keyword_set):
+            result = connect_to_deepgram(
+                on_message=MagicMock(),
+                on_error=MagicMock(),
+                language='en',
+                sample_rate=16000,
+                channels=2,
+                model='nova-3',
+                keywords=keywords,
+            )
+        return result, keyword_set.called
+
+    def test_none_keywords_does_not_raise(self):
+        """keywords=None (phone-call path) opens the socket without crashing."""
+        result, keyword_set_called = self._connect(None)
+        assert result is not None  # socket opened (start() returned True)
+        assert keyword_set_called is False  # no keyterms applied when none given
+
+    def test_empty_keywords_does_not_apply(self):
+        """keywords=[] opens the socket and applies no keyterms."""
+        result, keyword_set_called = self._connect([])
+        assert result is not None
+        assert keyword_set_called is False
+
+    def test_nonempty_keywords_applied(self):
+        """A real vocabulary list (single-channel path) is still applied to the options."""
+        result, keyword_set_called = self._connect(['Omi'])
+        assert result is not None
+        assert keyword_set_called is True
+
+
+class TestShouldPreserveFillerWords:
+    """Direct tests for the should_preserve_filler_words helper (#6575)."""
+
+    def test_english_false(self):
+        assert should_preserve_filler_words('en') is False
+
+    def test_english_us_false(self):
+        assert should_preserve_filler_words('en-US') is False
+
+    def test_english_gb_false(self):
+        assert should_preserve_filler_words('en-GB') is False
+
+    def test_multi_true(self):
+        assert should_preserve_filler_words('multi') is True
+
+    def test_portuguese_true(self):
+        assert should_preserve_filler_words('pt') is True
+
+    def test_portuguese_br_true(self):
+        assert should_preserve_filler_words('pt-BR') is True
+
+    def test_spanish_true(self):
+        assert should_preserve_filler_words('es') is True
+
+    def test_arabic_true(self):
+        assert should_preserve_filler_words('ar') is True

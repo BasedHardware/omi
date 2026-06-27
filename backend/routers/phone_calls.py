@@ -12,8 +12,8 @@ from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
-import database.users as users_db
-from utils.subscription import is_paid_plan
+import database.phone_call_usage as phone_call_usage_db
+from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
 from utils.twilio_service import (
@@ -33,13 +33,6 @@ def _redact_phone(number: str) -> str:
     if len(number) > 4:
         return number[:2] + '***' + number[-4:]
     return '***'
-
-
-def _require_unlimited_plan(uid: str):
-    """Raise 403 if the user is not on a paid plan."""
-    subscription = users_db.get_user_valid_subscription(uid)
-    if not subscription or not is_paid_plan(subscription.plan):
-        raise HTTPException(status_code=403, detail="Phone calls require a paid subscription")
 
 
 router = APIRouter()
@@ -95,7 +88,7 @@ def verify_phone_number(
     _: None = Depends(rate_limit_dependency(endpoint="phone_verify", requests_per_window=5, window_seconds=3600)),
 ):
     """Initiate phone number verification via Twilio caller ID validation."""
-    _require_unlimited_plan(uid)
+    check_call_access(uid)
     phone_number = request.phone_number.strip()
     if not E164_PATTERN.match(phone_number):
         raise HTTPException(status_code=400, detail="Phone number must be in E.164 format (e.g., +15551234567)")
@@ -142,7 +135,7 @@ def check_phone_verification(
     ),
 ):
     """Check if a phone number has been verified. Poll this endpoint every 2s (60s timeout)."""
-    _require_unlimited_plan(uid)
+    check_call_access(uid)
     phone_number = request.phone_number.strip()
 
     # Check if already stored locally (avoid duplicates from repeated polling)
@@ -181,7 +174,7 @@ def check_phone_verification(
 @router.get("/v1/phone/numbers", tags=['phone-calls'])
 def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
     """List all verified phone numbers for the user."""
-    _require_unlimited_plan(uid)
+    check_call_access(uid)
     numbers = phone_calls_db.get_phone_numbers(uid)
     return {'numbers': numbers}
 
@@ -189,7 +182,7 @@ def list_phone_numbers(uid: str = Depends(auth.get_current_user_uid)):
 @router.delete("/v1/phone/numbers/{phone_number_id}", tags=['phone-calls'])
 def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Remove a verified phone number."""
-    _require_unlimited_plan(uid)
+    check_call_access(uid)
     phone_number = phone_calls_db.get_phone_number(uid, phone_number_id)
     if not phone_number:
         raise HTTPException(status_code=404, detail="Phone number not found")
@@ -211,7 +204,7 @@ def remove_phone_number(phone_number_id: str, uid: str = Depends(auth.get_curren
 @router.post("/v1/phone/token", response_model=TokenResponse, tags=['phone-calls'])
 def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
     """Generate a Twilio access token for making VoIP calls."""
-    _require_unlimited_plan(uid)
+    check_call_access(uid)
     # Verify user has at least one verified number
     primary = phone_calls_db.get_primary_phone_number(uid)
     if not primary:
@@ -288,6 +281,19 @@ async def twiml_voice_webhook(request: Request):
         response.say('Invalid destination number format. Goodbye.')
         return Response(content=str(response), media_type='text/xml')
 
+    # Final quota + destination check before placing the call. Free-tier users
+    # on exhausted monthly buckets or disallowed destinations are turned away
+    # here so Twilio never actually dials; we then refuse to count the attempt.
+    snapshot = get_quota_snapshot(uid)
+    if not snapshot.has_access:
+        response.say('Monthly phone call limit reached. Goodbye.')
+        return Response(content=str(response), media_type='text/xml')
+    try:
+        check_destination_allowed(snapshot, to_number)
+    except HTTPException:
+        response.say('This destination is not available on your plan. Goodbye.')
+        return Response(content=str(response), media_type='text/xml')
+
     # Verify the number is still a valid outgoing caller ID in Twilio
     is_verified = check_caller_id_verified(caller_number)
     print(
@@ -299,7 +305,19 @@ async def twiml_voice_webhook(request: Request):
         response.say('Your caller ID is not verified. Please re-verify your phone number.')
         return Response(content=str(response), media_type='text/xml')
 
-    dial = Dial(caller_id=caller_number)
+    # Count the call against the free-tier bucket before handing Twilio the
+    # dial instructions. We increment only after all guards pass so rejected
+    # attempts don't eat the user's quota.
+    try:
+        if not snapshot.is_paid:
+            phone_call_usage_db.increment_current_month(uid)
+    except Exception:
+        traceback.print_exc()
+
+    dial_kwargs = {'caller_id': caller_number}
+    if snapshot.max_duration_seconds and snapshot.max_duration_seconds > 0:
+        dial_kwargs['time_limit'] = int(snapshot.max_duration_seconds)
+    dial = Dial(**dial_kwargs)
     dial.number(to_number)
     response.append(dial)
 

@@ -2,13 +2,35 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'subscription.g.dart';
 
-enum PlanType { basic, unlimited }
+enum PlanType { basic, unlimited, architect, operator }
 
 enum SubscriptionStatus { active, inactive }
 
 @JsonSerializable(fieldRename: FieldRename.snake)
+class PlanLimits {
+  final int? transcriptionSeconds;
+  final int? wordsTranscribed;
+  final int? insightsGained;
+  final int? chatQuestionsPerMonth;
+  final double? chatCostUsdPerMonth;
+
+  PlanLimits({
+    this.transcriptionSeconds,
+    this.wordsTranscribed,
+    this.insightsGained,
+    this.chatQuestionsPerMonth,
+    this.chatCostUsdPerMonth,
+  });
+
+  factory PlanLimits.fromJson(Map<String, dynamic> json) => _$PlanLimitsFromJson(json);
+  Map<String, dynamic> toJson() => _$PlanLimitsToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
 class Subscription {
+  @JsonKey(unknownEnumValue: PlanType.basic)
   final PlanType plan;
+  @JsonKey(unknownEnumValue: SubscriptionStatus.inactive)
   final SubscriptionStatus status;
   final int? currentPeriodEnd;
   final String? stripeSubscriptionId;
@@ -17,6 +39,10 @@ class Subscription {
   final List<String> features;
   @JsonKey(defaultValue: false)
   final bool cancelAtPeriodEnd;
+  @JsonKey(defaultValue: false)
+  final bool deprecated;
+  final String? deprecationMessage;
+  final PlanLimits limits;
 
   Subscription({
     required this.plan,
@@ -26,7 +52,10 @@ class Subscription {
     this.currentPriceId,
     this.features = const [],
     this.cancelAtPeriodEnd = false,
-  });
+    this.deprecated = false,
+    this.deprecationMessage,
+    PlanLimits? limits,
+  }) : limits = limits ?? PlanLimits();
 
   factory Subscription.fromJson(Map<String, dynamic> json) => _$SubscriptionFromJson(json);
   Map<String, dynamic> toJson() => _$SubscriptionToJson(this);
@@ -61,6 +90,34 @@ class SubscriptionPlan {
 }
 
 @JsonSerializable(fieldRename: FieldRename.snake)
+class PhoneCallQuota {
+  final bool hasAccess;
+  final bool isPaid;
+  final int? monthlyLimit;
+  @JsonKey(defaultValue: 0)
+  final int monthlyUsed;
+  final int? remaining;
+  final int? maxDurationSeconds;
+  @JsonKey(defaultValue: [])
+  final List<String> allowedCountries;
+  final int? resetAt;
+
+  PhoneCallQuota({
+    required this.hasAccess,
+    required this.isPaid,
+    this.monthlyLimit,
+    this.monthlyUsed = 0,
+    this.remaining,
+    this.maxDurationSeconds,
+    this.allowedCountries = const [],
+    this.resetAt,
+  });
+
+  factory PhoneCallQuota.fromJson(Map<String, dynamic> json) => _$PhoneCallQuotaFromJson(json);
+  Map<String, dynamic> toJson() => _$PhoneCallQuotaToJson(this);
+}
+
+@JsonSerializable(fieldRename: FieldRename.snake)
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -69,12 +126,20 @@ class UserSubscriptionResponse {
   final int wordsTranscribedLimit;
   final int insightsGainedUsed;
   final int insightsGainedLimit;
-  final int memoriesCreatedUsed;
-  final int memoriesCreatedLimit;
   @JsonKey(defaultValue: [])
   final List<SubscriptionPlan> availablePlans;
-  @JsonKey(defaultValue: false)
+  @JsonKey(defaultValue: true)
   final bool showSubscriptionUi;
+  // Chat quota fields — populated from subscription endpoint
+  @JsonKey(defaultValue: 0.0)
+  final double chatQuotaUsed;
+  final String? chatQuotaUnit;
+  @JsonKey(defaultValue: 0.0)
+  final double chatQuotaPercent;
+  @JsonKey(defaultValue: true)
+  final bool chatQuotaAllowed;
+  final int? chatQuotaResetAt;
+  final PhoneCallQuota? phoneCallQuota;
 
   UserSubscriptionResponse({
     required this.subscription,
@@ -84,10 +149,14 @@ class UserSubscriptionResponse {
     required this.wordsTranscribedLimit,
     required this.insightsGainedUsed,
     required this.insightsGainedLimit,
-    required this.memoriesCreatedUsed,
-    required this.memoriesCreatedLimit,
     this.availablePlans = const [],
     this.showSubscriptionUi = true,
+    this.chatQuotaUsed = 0.0,
+    this.chatQuotaUnit,
+    this.chatQuotaPercent = 0.0,
+    this.chatQuotaAllowed = true,
+    this.chatQuotaResetAt,
+    this.phoneCallQuota,
   });
 
   factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) => _$UserSubscriptionResponseFromJson(json);

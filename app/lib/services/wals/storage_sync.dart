@@ -218,17 +218,56 @@ class StorageSyncImpl implements StorageSync {
 
   @override
   Future deleteWal(Wal wal) async {
+    await _deleteWalsOnDevice([wal]);
     _wals = _wals.where((w) => w.id != wal.id).toList();
+    listener.onWalUpdated();
   }
 
   @override
   Future<void> deleteAllSyncedWals() async {
+    final toDelete = _wals.where((w) => w.status == WalStatus.synced).toList();
+    await _deleteWalsOnDevice(toDelete);
     _wals = _wals.where((w) => w.status != WalStatus.synced).toList();
+    listener.onWalUpdated();
   }
 
   @override
   Future<void> deleteAllPendingWals() async {
+    final toDelete = _wals.where((w) => w.status == WalStatus.miss).toList();
+    await _deleteWalsOnDevice(toDelete);
     _wals = _wals.where((w) => w.status != WalStatus.miss).toList();
+    listener.onWalUpdated();
+  }
+
+  /// Deletes files on the device via CMD_DELETE_FILE. Firmware re-indexes files
+  /// after each delete (higher indices shift down by 1), so delete highest index
+  /// first to keep remaining fileNums valid.
+  Future<void> _deleteWalsOnDevice(List<Wal> wals) async {
+    if (wals.isEmpty || _device == null) return;
+    final connection = await ServiceManager.instance().device.ensureConnection(_device!.id);
+    if (connection == null) {
+      Logger.debug('StorageSync._deleteWalsOnDevice: no connection, skipping firmware delete');
+      return;
+    }
+    final targets = wals.where((w) => w.fileNum >= 0).toList()..sort((a, b) => b.fileNum.compareTo(a.fileNum));
+    final deletedIds = targets.map((w) => w.id).toSet();
+    for (final wal in targets) {
+      try {
+        final ok = await connection.deleteStorageFile(wal.fileNum);
+        Logger.debug('StorageSync._deleteWalsOnDevice: deleted fileNum=${wal.fileNum} ok=$ok');
+        if (ok) {
+          // Firmware shifts remaining indices down by 1 for any file above the deleted one.
+          for (final other in _wals) {
+            if (deletedIds.contains(other.id)) continue;
+            if (other.fileNum > wal.fileNum) {
+              other.fileNum -= 1;
+            }
+          }
+        }
+      } catch (e) {
+        Logger.debug('StorageSync._deleteWalsOnDevice: failed fileNum=${wal.fileNum}: $e');
+      }
+    }
   }
 
   @override
@@ -241,10 +280,7 @@ class StorageSyncImpl implements StorageSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncAll({
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncAll({IWalSyncProgressListener? progress}) async {
     if (_device == null) {
       Logger.debug('StorageSync.syncAll: _device is null, returning');
       return null;
@@ -323,11 +359,7 @@ class StorageSyncImpl implements StorageSync {
   }
 
   @override
-  Future<SyncLocalFilesResponse?> syncWal({
-    required Wal wal,
-    IWalSyncProgressListener? progress,
-    IWifiConnectionListener? connectionListener,
-  }) async {
+  Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _resetSyncState();
     _isSyncing = true;
 
@@ -565,7 +597,7 @@ class StorageSyncImpl implements StorageSync {
   }
 
   /// Write opus frames to disk in WAL format: [frame_length_u32_le][frame_data]...
-  /// This format is compatible with /v1/sync-local-files backend endpoint.
+  /// This format is compatible with /v2/sync-local-files backend endpoint.
   /// Uses same ByteData conversion as SDCardWalSync._flushToDisk for consistency.
   Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart) async {
     final directory = await getApplicationDocumentsDirectory();

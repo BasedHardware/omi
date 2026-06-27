@@ -1,7 +1,7 @@
 import asyncio
-import concurrent.futures
-import threading
 from datetime import datetime, time, timedelta
+
+from utils.executors import postprocess_executor, run_blocking
 
 import pytz
 
@@ -11,8 +11,10 @@ import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
 from models.conversation import Conversation
+from utils.conversations.factory import deserialize_conversation
 from utils.llm.external_integrations import get_conversation_summary, generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
+from utils.subscription import is_trial_paywalled
 from utils.webhooks import day_summary_webhook
 import database.daily_summaries as daily_summaries_db
 import logging
@@ -77,6 +79,17 @@ def _send_summary_notification(user_data: tuple):
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
+    # Trial paywall: skip the daily-summary LLM job entirely for paywalled
+    # desktop users. We don't know the originating platform here (this is a
+    # server-initiated cron), so we conservatively check both desktop and
+    # macos — if either trips the paywall, skip. Mobile users with the same
+    # uid still get their daily summary because `is_trial_paywalled` requires
+    # the platform check to pass; passing `macos` is the right gate here
+    # because the desktop trial is the paid-tier we're enforcing.
+    if is_trial_paywalled(uid, 'macos'):
+        logger.info(f'trial paywall: skipping daily summary for uid={uid}')
+        return
+
     # Calculate local day boundaries for conversation fetching
     # date_str is set based on current hour:
     #   - Before 12 PM (noon): use previous day's date
@@ -125,12 +138,33 @@ def _send_summary_notification(user_data: tuple):
     if not try_acquire_daily_summary_lock(uid, date_str):
         return
 
-    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+    # Durable idempotency guard (#4608): the Redis lock above is best-effort (2h TTL, evictable, lost on
+    # failover), and create_daily_summary writes a fresh-uuid doc with no by-date check, so a later cron
+    # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
+    # any LLM tokens or resending the notification. The regenerate flow stays in-place via update_daily_summary.
+    existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+    if existing_summary:
+        logger.info(
+            f"Daily summary already exists for uid={uid} date={date_str} "
+            f"id={existing_summary.get('id')}; skipping duplicate generation"
+        )
+        return
+
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+    )
     if not conversations_data or len(conversations_data) == 0:
         return
 
-    conversations = [Conversation(**convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')]
+    conversations = [
+        deserialize_conversation(convo_data) for convo_data in conversations_data if not convo_data.get('is_locked')
+    ]
     if not conversations:
+        return
+
+    # Skip recap if no conversation captured any speech.
+    if not any(c.transcript_segments for c in conversations if not c.discarded):
+        logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with transcript content')
         return
 
     summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
@@ -154,8 +188,10 @@ def _send_summary_notification(user_data: tuple):
         navigate_to=f"/daily-summary/{summary_id}",
     )
 
-    # Also send webhook with the full summary data
-    threading.Thread(target=day_summary_webhook, args=(uid, str(summary_data))).start()
+    # Also send webhook with the full summary data (day_summary_webhook is async, so wrap in asyncio.run).
+    # ``summary`` is the legacy str(...) form, kept for backward compatibility; ``summary_json``
+    # carries the same payload as a real JSON object for receivers to migrate to.
+    postprocess_executor.submit(asyncio.run, day_summary_webhook(uid, str(summary_data), summary_data))
 
     tokens = user_data[1] if len(user_data) > 1 else None
     send_notification(
@@ -164,10 +200,14 @@ def _send_summary_notification(user_data: tuple):
 
 
 async def _send_bulk_summary_notification(users: list):
-    loop = asyncio.get_running_loop()
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        tasks = [loop.run_in_executor(pool, _send_summary_notification, user_tokens) for user_tokens in users]
-        await asyncio.gather(*tasks)
+    _BATCH_SIZE = 8
+    for i in range(0, len(users), _BATCH_SIZE):
+        batch = users[i : i + _BATCH_SIZE]
+        tasks = [run_blocking(postprocess_executor, _send_summary_notification, user_tokens) for user_tokens in batch]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for j, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.error(f"Daily summary failed for user batch[{i + j}]: {result}")
 
 
 async def send_daily_notification():

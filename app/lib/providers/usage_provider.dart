@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
@@ -9,6 +10,10 @@ import 'package:omi/utils/logger.dart';
 class UsageProvider with ChangeNotifier {
   UserSubscriptionResponse? _subscription;
   UserSubscriptionResponse? get subscription => _subscription;
+
+  /// Defaults to true when the subscription response hasn't loaded yet, so a
+  /// network blip doesn't silently hide paid surfaces from real users.
+  bool get showSubscriptionUI => _subscription?.showSubscriptionUi ?? true;
   UsageStats? _todayUsage;
   UsageStats? get todayUsage => _todayUsage;
 
@@ -43,6 +48,40 @@ class UsageProvider with ChangeNotifier {
 
   bool _forceOutOfCredits = false;
 
+  // Chat quota derived from subscription response
+  double get chatQuotaUsed => _subscription?.chatQuotaUsed ?? 0.0;
+  String? get chatQuotaUnit => _subscription?.chatQuotaUnit;
+  double get chatQuotaPercent => _subscription?.chatQuotaPercent ?? 0.0;
+  bool get chatQuotaAllowed => _subscription?.chatQuotaAllowed ?? true;
+
+  // Phone call feature — derived from subscription response. Only consult
+  // the server-driven quota when the user is on the free tier or the
+  // subscription UI is hidden; paid users with the paywall visible skip
+  // straight to the existing unlimited behavior.
+  PhoneCallQuota? get phoneCallQuota => _subscription?.phoneCallQuota;
+
+  bool get _isPaidPlan {
+    final plan = _subscription?.subscription.plan;
+    return plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
+  }
+
+  bool get canAccessPhoneCalls {
+    if (_isPaidPlan) return true;
+    final quota = phoneCallQuota;
+    if (quota == null) return false;
+    return quota.hasAccess;
+  }
+
+  bool get shouldShowPhoneCallsEntry {
+    if (_isPaidPlan) return true;
+    final quota = phoneCallQuota;
+    final freeTierEnabled = quota != null && (quota.monthlyLimit ?? 0) > 0;
+    if (freeTierEnabled) return true;
+    // Free tier disabled → only surface the entry for real users who can still
+    // see the paywall. Hidden-paywall builds (App Review) keep it off-screen.
+    return showSubscriptionUI;
+  }
+
   // Payment-related state
   Map<String, dynamic>? _availablePlans;
   Map<String, dynamic>? get availablePlans => _availablePlans;
@@ -52,7 +91,8 @@ class UsageProvider with ChangeNotifier {
   bool get isOutOfCredits {
     if (_forceOutOfCredits) return true;
     if (_subscription == null) return false;
-    if (_subscription!.subscription.plan == PlanType.unlimited) return false;
+    final plan = _subscription!.subscription.plan;
+    if (plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect) return false;
     // For basic plan, check if used is >= limit and limit is not 0 (unlimited).
     if (_subscription!.transcriptionSecondsLimit > 0 &&
         _subscription!.transcriptionSecondsUsed >= _subscription!.transcriptionSecondsLimit) {
@@ -78,6 +118,9 @@ class UsageProvider with ChangeNotifier {
 
     try {
       _subscription = await getUserSubscription();
+      if (_subscription != null) {
+        PlatformManager.instance.analytics.setSubscriptionTier(_subscription!.subscription.plan.name);
+      }
     } catch (e) {
       _error = 'Failed to load subscription data. Please try again later.';
       Logger.debug('Failed to fetch subscription: $e');
@@ -155,7 +198,7 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> cancelUserSubscription() async {
+  Future<bool> cancelUserSubscription({String? reason, String? reasonDetails}) async {
     if (_isPaymentLoading) return false;
 
     _isPaymentLoading = true;
@@ -163,7 +206,7 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final success = await cancelSubscription();
+      final success = await cancelSubscription(reason: reason, reasonDetails: reasonDetails);
       if (success) {
         await fetchSubscription();
         await loadAvailablePlans();
@@ -179,7 +222,7 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId}) async {
+  Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId, String? promotionCode}) async {
     if (_isPaymentLoading) return null;
 
     _isPaymentLoading = true;
@@ -187,10 +230,10 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await upgradeSubscription(priceId: priceId);
-      if (result != null) {
-        await fetchSubscription(); // Refresh subscription data
-        await loadAvailablePlans(); // Refresh available plans
+      final result = await upgradeSubscription(priceId: priceId, promotionCode: promotionCode);
+      if (result != null && result['error'] != true) {
+        await fetchSubscription();
+        await loadAvailablePlans();
       }
       return result;
     } catch (e) {
@@ -203,7 +246,7 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
     if (_isPaymentLoading) return null;
 
     _isPaymentLoading = true;
@@ -211,7 +254,7 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionData = await createCheckoutSession(priceId: priceId);
+      final sessionData = await createCheckoutSession(priceId: priceId, promotionCode: promotionCode);
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';

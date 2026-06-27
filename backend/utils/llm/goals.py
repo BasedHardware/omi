@@ -14,7 +14,7 @@ import database.memories as memories_db
 import database.conversations as conversations_db
 import database.chat as chat_db
 from database.vector_db import query_vectors as vector_search
-from utils.llm.clients import llm_mini, llm_medium
+from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import track_usage, Features
 import logging
 
@@ -147,7 +147,7 @@ Choose a goal type:
 Make the goal specific, measurable, and relevant to their interests."""
 
         with track_usage(uid, Features.GOALS):
-            response = llm_mini.invoke(prompt).content
+            response = get_llm('goals').invoke(prompt).content
 
         # Find JSON in response
         json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
@@ -227,7 +227,7 @@ Give ONE specific action in 1-2 sentences. Be concise but complete. No generic a
 
         # Use the better model for high-quality advice
         with track_usage(uid, Features.GOALS):
-            advice = llm_medium.invoke(prompt).content
+            advice = get_llm('goals_advice').invoke(prompt).content
 
         # Clean up quotes but keep full text
         advice = advice.strip().strip('"').strip("'")
@@ -290,7 +290,7 @@ Example output: [{{"goal_id": "goal_abc123", "found": true, "value": 2500, "reas
 Only include a goal if you're confident the message is about that SPECIFIC goal."""
 
         with track_usage(uid, Features.GOALS):
-            response = llm_mini.invoke(prompt).content
+            response = get_llm('goals').invoke(prompt).content
 
         # Parse JSON array from response using non-greedy extraction
         results = _parse_json_array(response)

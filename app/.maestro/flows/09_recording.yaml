@@ -1,0 +1,57 @@
+# Flow: Recording & Transcription — Start recording, verify transcription
+# Tags: device_required, recording
+# Tests: Start a recording session, verify audio capture, check transcription output
+# Requires: User signed in, Omi device connected (or phone microphone capture enabled)
+# NOTE: This flow requires audio input. Use with physical device or phone mic capture mode.
+
+appId: com.friend.ios.dev
+tags:
+  - device_required
+  - recording
+
+---
+
+# Ensure we're on home screen
+- assertVisible:
+    text: "Conversations|Home"
+    optional: true
+
+# Start recording via center mic button
+- tapOn:
+    id: ".*record.*|.*mic.*|.*capture.*"
+    optional: true
+- takeScreenshot: "09_recording_started"
+
+# Verify recording UI is shown
+- extendedWaitUntil:
+    visible:
+      text: "Recording|Listening|Capturing|Live"
+    timeout: 10000
+    optional: true
+- takeScreenshot: "09_recording_active"
+
+# Let it record for 30 seconds to capture some audio
+- wait: 30000
+
+# Verify transcription is appearing
+- takeScreenshot: "09_recording_transcribing"
+
+# Stop recording
+- tapOn:
+    id: ".*stop.*|.*record.*|.*mic.*"
+    optional: true
+- takeScreenshot: "09_recording_stopped"
+
+# Wait for conversation to be processed
+- extendedWaitUntil:
+    visible:
+      text: "Processing|Saving|Conversation"
+    timeout: 30000
+    optional: true
+- takeScreenshot: "09_recording_processed"
+
+# Verify new conversation appears in list
+- tapOn:
+    text: "Conversations|Home"
+    optional: true
+- takeScreenshot: "09_recording_new_conversation"

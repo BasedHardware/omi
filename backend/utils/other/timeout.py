@@ -7,7 +7,7 @@ import time
 
 
 class TimeoutMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, methods_timeout: dict = None):
+    def __init__(self, app, methods_timeout: dict = None, paths_timeout: dict = None):
         super().__init__(app)
 
         self.default_timeout = self._get_timeout_from_env("HTTP_DEFAULT_TIMEOUT", default=2 * 60)
@@ -15,6 +15,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         self.clock_skew_allowance = self._get_timeout_from_env("HTTP_CLOCK_SKEW_ALLOWANCE", default=5 * 60)
 
         self.methods_timeout = self._parse_methods_timeout(methods_timeout or {})
+        self.paths_timeout = self._parse_paths_timeout(paths_timeout or {})
 
     @staticmethod
     def _get_timeout_from_env(env_var: str, default: float) -> float:
@@ -34,6 +35,18 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
                 result[method.upper()] = float(timeout)
             except ValueError:
                 raise ValueError(f"Invalid timeout value for method {method}: {timeout}")
+        return result
+
+    @staticmethod
+    def _parse_paths_timeout(paths_timeout: dict) -> dict:
+        result = {}
+        for path, timeout in paths_timeout.items():
+            if timeout is None:
+                continue
+            try:
+                result[path] = float(timeout)
+            except ValueError:
+                raise ValueError(f"Invalid timeout value for path {path}: {timeout}")
         return result
 
     async def dispatch(self, request: Request, call_next):
@@ -61,7 +74,10 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             except (ValueError, TypeError):
                 pass
 
-        timeout = self.methods_timeout.get(request.method, self.default_timeout)
+        path_timeout = self.paths_timeout.get(request.url.path)
+        timeout = (
+            path_timeout if path_timeout is not None else self.methods_timeout.get(request.method, self.default_timeout)
+        )
         try:
             return await asyncio.wait_for(call_next(request), timeout=timeout)
         except asyncio.TimeoutError:

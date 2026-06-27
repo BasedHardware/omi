@@ -17,6 +17,7 @@ import sys
 import types
 import importlib
 import importlib.util
+from datetime import timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -87,6 +88,8 @@ mock_llm = MagicMock()
 mock_llm.invoke = MagicMock(return_value=MagicMock(content="test"))
 
 clients_mod = _stub_module("utils.llm.clients")
+clients_mod.get_llm = MagicMock(return_value=mock_llm)
+clients_mod.get_model = MagicMock(return_value="gpt-4.1-mini")
 clients_mod.llm_mini = mock_llm
 clients_mod.llm_mini_stream = mock_llm
 clients_mod.llm_medium = mock_llm
@@ -100,6 +103,7 @@ clients_mod.ANTHROPIC_AGENT_COMPLEX_MODEL = "claude-opus-4-6-20250414"
 clients_mod.embeddings = MagicMock()
 clients_mod.encoding = MagicMock()
 clients_mod.num_tokens_from_string = MagicMock(return_value=100)
+clients_mod.parser = MagicMock()
 
 llm_mod = _stub_module("utils.llm")
 if not hasattr(llm_mod, "__path__"):
@@ -110,6 +114,13 @@ tracker_mod.set_usage_context = MagicMock()
 tracker_mod.reset_usage_context = MagicMock()
 tracker_mod.Features = MagicMock()
 tracker_mod.track_usage = MagicMock()
+
+# --- langchain core stubs ---
+langchain_core_mod = _stub_module("langchain_core")
+if not hasattr(langchain_core_mod, "__path__"):
+    langchain_core_mod.__path__ = []
+langchain_runnables_mod = _stub_module("langchain_core.runnables")
+langchain_runnables_mod.RunnableConfig = dict
 
 # --- LLMs/memory stubs ---
 llms_mod = _stub_module("utils.llms")
@@ -169,7 +180,11 @@ def _load_module_from_file(module_name: str, file_path: Path):
     spec = importlib.util.spec_from_file_location(module_name, str(file_path))
     mod = importlib.util.module_from_spec(spec)
     sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
+    try:
+        spec.loader.exec_module(mod)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
     return mod
 
 
@@ -224,10 +239,31 @@ def _set_user(chat_mod, name: str, tz: str, goal=None):
     chat_mod.notification_db.get_user_time_zone = MagicMock(return_value=tz)
     chat_mod.goals_db.get_user_goal = MagicMock(return_value=goal)
     chat_mod.goals_db.get_user_goals = MagicMock(return_value=[goal] if goal else [])
+    chat_mod.ZoneInfo = _test_zone_info
+
+
+def _test_zone_info(name: str):
+    if name in {"UTC", "Etc/UTC"}:
+        return timezone.utc
+    if name in {"US/Pacific", "America/Los_Angeles"}:
+        return timezone(timedelta(hours=-8), name)
+    if name == "Asia/Tokyo":
+        return timezone(timedelta(hours=9), name)
+    if name == "Europe/London":
+        return timezone.utc
+    if name == "Pacific/Fiji":
+        return timezone(timedelta(hours=12), name)
+    if name == "America/New_York":
+        return timezone(timedelta(hours=-5), name)
+    raise KeyError(name)
 
 
 def _get_agentic_module():
     """Load and return the real utils.retrieval.agentic module."""
+    agentic_stub = sys.modules.get("utils.retrieval.agentic")
+    if agentic_stub is not None and not hasattr(agentic_stub, "CORE_TOOLS"):
+        sys.modules.pop("utils.retrieval.agentic", None)
+
     # First make sure tool submodules are stubbed (they import from database)
     tools_pkg = _stub_module("utils.retrieval.tools")
     if not hasattr(tools_pkg, "__path__"):
@@ -243,7 +279,6 @@ def _get_agentic_module():
         "create_action_item_tool",
         "update_action_item_tool",
         "get_omi_product_info_tool",
-        "perplexity_web_search_tool",
         "get_calendar_events_tool",
         "create_calendar_event_tool",
         "update_calendar_event_tool",
@@ -260,6 +295,7 @@ def _get_agentic_module():
         "get_screen_activity_tool",
         "search_screen_activity_tool",
         "save_user_preference_tool",
+        "fetch_url_tool",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -494,7 +530,7 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 
 
 def test_core_tools_has_25_tools():
-    """CORE_TOOLS must contain exactly 25 tools."""
+    """CORE_TOOLS must contain exactly 25 tools (web search is now a built-in server tool)."""
     agentic_mod = _get_agentic_module()
     assert len(agentic_mod.CORE_TOOLS) == 25, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 25"
 
@@ -540,7 +576,6 @@ def test_core_tools_order_matches_exports():
         "create_action_item_tool",
         "update_action_item_tool",
         "get_omi_product_info_tool",
-        "perplexity_web_search_tool",
         "get_calendar_events_tool",
         "create_calendar_event_tool",
         "update_calendar_event_tool",
@@ -557,6 +592,7 @@ def test_core_tools_order_matches_exports():
         "get_screen_activity_tool",
         "search_screen_activity_tool",
         "save_user_preference_tool",
+        "fetch_url_tool",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
@@ -606,12 +642,15 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     fake_tiktoken.encoding_for_model = MagicMock(return_value=MagicMock())
 
     # Read source, replace imports, exec in isolated namespace
-    source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text()
+    source = (BACKEND_DIR / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
+    source = source.replace("from langchain_core.language_models import BaseChatModel", "")
     source = source.replace("from langchain_openai import ChatOpenAI, OpenAIEmbeddings", "")
+    source = source.replace("from langchain_google_genai import ChatGoogleGenerativeAI", "")
     source = source.replace("import tiktoken", "")
     source = source.replace("import anthropic", "")
     source = source.replace("from langchain_core.output_parsers import PydanticOutputParser", "")
-    source = source.replace("from models.conversation import Structured", "")
+    source = source.replace("from models.structured import Structured", "")
+    source = source.replace("from utils.byok import get_byok_key", "")
     source = source.replace("from utils.llm.usage_tracker import get_usage_callback", "")
 
     # Create a fake anthropic module with AsyncAnthropic
@@ -620,36 +659,34 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
 
     ns = {
         "os": os,
+        "BaseChatModel": object,
         "ChatOpenAI": FakeChatOpenAI,
+        "ChatGoogleGenerativeAI": FakeChatOpenAI,
         "OpenAIEmbeddings": FakeOpenAIEmbeddings,
         "tiktoken": fake_tiktoken,
         "anthropic": fake_anthropic,
         "PydanticOutputParser": MagicMock(),
         "Structured": MagicMock(),
+        "get_byok_key": MagicMock(return_value=None),
         "get_usage_callback": MagicMock(return_value=[]),
         "List": list,
     }
     exec(source, ns)
 
-    # Find clients that have prompt cache kwargs (should be exactly the 2 agent clients)
-    cache_clients = [c for c in captured_calls if "prompt_cache_key" in c.get("model_kwargs", {})]
-    assert len(cache_clients) == 2, f"Expected exactly 2 clients with prompt_cache_key, found {len(cache_clients)}"
+    # Verify gpt-5.1 clients get prompt_cache_retention via extra_body
+    gpt51_clients = [c for c in captured_calls if c.get("model") == "gpt-5.1"]
+    for call in gpt51_clients:
+        eb = call.get("extra_body", {})
+        assert (
+            eb.get("prompt_cache_retention") == "24h"
+        ), f"gpt-5.1 client missing prompt_cache_retention in extra_body: {call}"
 
-    for call in cache_clients:
-        mkw = call["model_kwargs"]
-        assert mkw["prompt_cache_key"] == "omi-agent-v1", f"Wrong prompt_cache_key: {mkw}"
-        assert call["model"] == "gpt-5.1", f"Cache kwargs should only be on gpt-5.1, got {call['model']}"
-
-    # Verify one is streaming, one is not
-    streaming_cache = [c for c in cache_clients if c.get("streaming")]
-    non_streaming_cache = [c for c in cache_clients if not c.get("streaming")]
-    assert len(streaming_cache) == 1, "Should have exactly 1 streaming agent with cache"
-    assert len(non_streaming_cache) == 1, "Should have exactly 1 non-streaming agent with cache"
-
-    # Verify non-cache clients do NOT have prompt_cache_key
-    non_cache_clients = [c for c in captured_calls if "prompt_cache_key" not in c.get("model_kwargs", {})]
-    assert len(non_cache_clients) > 0, "Should have some clients without cache kwargs"
-    for call in non_cache_clients:
+    # Verify non-gpt-5.1 clients do NOT have prompt_cache_retention
+    non_gpt51_clients = [c for c in captured_calls if c.get("model") != "gpt-5.1"]
+    for call in non_gpt51_clients:
+        eb = call.get("extra_body", {})
+        assert "prompt_cache_retention" not in eb, f"Non-gpt-5.1 client should not have prompt_cache_retention: {call}"
+    for call in non_gpt51_clients:
         mkw = call.get("model_kwargs", {})
         assert "prompt_cache_key" not in mkw, f"Client {call.get('model')} should not have prompt_cache_key"
 
@@ -668,10 +705,14 @@ def test_convert_tools_produces_valid_anthropic_schemas():
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS), "Should produce one schema per tool"
-    assert len(tool_registry) == len(agentic_mod.CORE_TOOLS), "Should register all tools"
+    # +1 for web_search server tool
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 1, "Should produce one schema per tool + web_search"
+    assert len(tool_registry) == len(agentic_mod.CORE_TOOLS), "Should register all client tools"
 
-    for schema in tool_schemas:
+    # First schema should be web_search server tool
+    assert tool_schemas[0]["type"] == "web_search_20260209"
+
+    for schema in tool_schemas[1:]:  # Skip web_search server tool
         assert "name" in schema, "Schema must have a name"
         assert "description" in schema, "Schema must have a description"
         assert "input_schema" in schema, "Schema must have input_schema"
@@ -698,11 +739,13 @@ def test_convert_tools_defers_app_tools():
 
     tool_schemas, tool_registry = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS, [mock_app_tool])
 
-    # Should have tool_search_tool + core tools + 1 app tool
-    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 2  # +1 search tool, +1 app tool
+    # Should have web_search + tool_search_tool + core tools + 1 app tool
+    assert len(tool_schemas) == len(agentic_mod.CORE_TOOLS) + 3  # +1 web_search, +1 search tool, +1 app tool
 
-    # First should be tool_search_tool
-    assert tool_schemas[0]["type"] == "tool_search_tool_regex_20251119"
+    # First should be web_search server tool
+    assert tool_schemas[0]["type"] == "web_search_20260209"
+    # Second should be tool_search_tool
+    assert tool_schemas[1]["type"] == "tool_search_tool_regex_20251119"
 
     # Last should be the deferred app tool
     assert tool_schemas[-1]["name"] == "custom_weather_app"
@@ -721,7 +764,8 @@ def test_convert_tools_preserves_core_tool_order():
 
     tool_schemas, _ = agentic_mod._convert_tools(agentic_mod.CORE_TOOLS)
 
-    schema_names = [s["name"] for s in tool_schemas]
+    # Skip web_search server tool (first element) when checking core tool order
+    schema_names = [s["name"] for s in tool_schemas[1:]]
     core_names = [t.name for t in agentic_mod.CORE_TOOLS]
     assert schema_names == core_names, "Tool schema order must match CORE_TOOLS order"
 
@@ -815,6 +859,50 @@ def test_page_context_in_dynamic_section():
     assert "<current_context>" not in static_prefix, "Page context leaked into static prefix"
     assert "<current_context>" in dynamic_suffix, "Page context should be in dynamic suffix"
     assert "Meeting with team" in dynamic_suffix
+
+
+# ---------------------------------------------------------------------------
+# Tests: Anthropic cache_control includes TTL
+# ---------------------------------------------------------------------------
+
+
+def test_anthropic_cache_control_has_ttl():
+    """
+    The cache_control dict in _run_anthropic_agent_stream must include
+    ttl="1h" so that interactive chat sessions (with gaps >5min between
+    turns) get cache hits instead of re-writing on every request.
+
+    Regression: Anthropic changed default TTL from 1h→5m on 2026-03-06.
+    """
+    agentic_mod = _get_agentic_module()
+
+    # Inspect the source to find the system_blocks construction
+    import inspect
+
+    src = inspect.getsource(agentic_mod._run_anthropic_agent_stream)
+    assert '"ttl": "1h"' in src or "'ttl': '1h'" in src, (
+        "cache_control must include ttl='1h' to avoid 5-min default "
+        f"(source excerpt: ...{src[src.find('cache_control'):src.find('cache_control')+120]}...)"
+    )
+    assert "ephemeral" in src, "cache type must be ephemeral"
+
+
+def test_anthropic_cache_control_not_5min_default():
+    """
+    Guard against regression: ensure we are NOT relying on the 5-minute
+    default TTL that Anthropic introduced in March 2026.
+    """
+    agentic_mod = _get_agentic_module()
+    import inspect
+
+    src = inspect.getsource(agentic_mod._run_anthropic_agent_stream)
+    # The old (broken) pattern was just {"type": "ephemeral"} with no ttl field
+    # Find the cache_control line(s)
+    lines_with_cache_ctrl = [l for l in src.splitlines() if "cache_control" in l]
+    for line in lines_with_cache_ctrl:
+        # Must NOT be the bare {"type": "ephemeral"} form
+        if '"type": "ephemeral"' in line or "'type': 'ephemeral'" in line:
+            assert "ttl" in line, f"cache_control line missing ttl field: {line.strip()}"
 
 
 # ---------------------------------------------------------------------------

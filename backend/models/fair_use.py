@@ -24,6 +24,7 @@ class UsageType(str, Enum):
     TV_MOVIE = "tv_movie"
     COMMERCIAL = "commercial"
     UNKNOWN = "unknown"
+    FREE_EXHAUSTED = "free_exhausted"
 
 
 class SoftCapTrigger(str, Enum):

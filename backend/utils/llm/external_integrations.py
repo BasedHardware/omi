@@ -1,30 +1,73 @@
+import json
+import re
+import uuid
 from datetime import datetime, timezone
 from typing import List
 import pytz
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import ValidationError
+import database.action_items as action_items_db
 import database.users as users_db
-from models.conversation import Structured, Conversation
+from models.conversation import Conversation
+from models.daily_summary_payload import DailySummaryPayload
+from models.structured import Structured
 from models.other import Person
-from utils.llm.clients import parser, llm_mini, llm_medium_experiment
+from utils.conversations.render import conversations_to_string
+from utils.llm.clients import get_llm, parser
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llms.memory import get_prompt_memories
+from utils.log_sanitizer import sanitize, sanitize_validation_error
 import logging
 
 logger = logging.getLogger(__name__)
 
 
+def _basic_daily_summary(
+    date_str: str,
+    total_conversations: int,
+    total_duration_minutes: float,
+    actual_action_items: list,
+    locations: list,
+) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "date": date_str,
+        "created_at": datetime.utcnow().isoformat(),
+        "headline": "Your Day in Review",
+        "overview": f"You had {total_conversations} conversations today.",
+        "day_emoji": "📅",
+        "stats": {
+            "total_conversations": total_conversations,
+            "total_duration_minutes": int(total_duration_minutes),
+            "action_items_count": len(actual_action_items),
+        },
+        "highlights": [],
+        "action_items": actual_action_items,
+        "unresolved_questions": [],
+        "decisions_made": [],
+        "knowledge_nuggets": [],
+        "locations": locations,
+    }
+
+
 def get_message_structure(
-    text: str, started_at: datetime, language_code: str, tz: str, text_source_spec: str = None
+    text: str,
+    started_at: datetime,
+    language_code: str,
+    tz: str,
+    text_source_spec: str = None,
+    output_language_code: str = None,
 ) -> Structured:
+    response_language = output_language_code or language_code
     prompt_text = '''
     You are an expert message analyzer. Your task is to analyze the message content and provide structure and clarity.
-    The message language is {language_code}. Use the same language {language_code} for your response.
+    The message language is {language_code}. You MUST respond entirely in {response_language}.
 
     For the title, create a concise title that captures the main topic of the message.
     For the overview, summarize the message with the main points discussed, make sure to capture the key information and important details.
     For the action items, include any tasks or actions that need to be taken based on the message.
     For the category, classify the message into one of the available categories.
-    For Calendar Events, include any events or meetings mentioned in the message. For date context, this message was sent on {started_at}. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    For Calendar Events, include any events or meetings mentioned in the message. For date context, this message was sent on {started_at}. {tz} is the user's timezone, respond in user local timezone.
 
     Message Content: ```{text}```
     Message Source: {text_source_spec}
@@ -32,11 +75,12 @@ def get_message_structure(
     {format_instructions}'''.replace('    ', '').strip()
 
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | llm_mini | parser
+    chain = prompt | get_llm('external_structure') | parser
 
     response = chain.invoke(
         {
             'language_code': language_code,
+            'response_language': response_language,
             'started_at': started_at.isoformat(),
             'tz': tz,
             'text': text,
@@ -70,7 +114,7 @@ def summarize_experience_text(text: str, text_source_spec: str = None) -> Struct
       Text: ```{text}```
       '''.replace('    ', '').strip()
 
-    response = llm_mini.with_structured_output(Structured).invoke(prompt)
+    response = get_llm('external_structure').with_structured_output(Structured).invoke(prompt)
 
     # Set created_at for action items if not already set
     for action_item in response.action_items or []:
@@ -93,7 +137,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
         people_data = users_db.get_people_by_ids(uid, list(set(all_person_ids)))
         people = [Person(**p) for p in people_data]
 
-    conversation_history = Conversation.conversations_to_string(memories, people=people)
+    conversation_history = conversations_to_string(memories, people=people)
 
     language_instruction = ''
     if user_language and user_language != 'en':
@@ -117,7 +161,7 @@ def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
     """.replace('    ', '').strip()
     # print(prompt)
     with track_usage(uid, Features.DAILY_SUMMARY):
-        return llm_mini.invoke(prompt).content
+        return get_llm('daily_summary_simple').invoke(prompt).content
 
 
 def generate_comprehensive_daily_summary(
@@ -128,10 +172,6 @@ def generate_comprehensive_daily_summary(
 
     Returns a dictionary matching the DailySummary model structure.
     """
-    import json
-    import uuid
-    import database.action_items as action_items_db
-
     # Get user's timezone
     user_profile = users_db.get_user_profile(uid)
     user_tz_str = user_profile.get('time_zone', 'UTC')
@@ -143,7 +183,7 @@ def generate_comprehensive_daily_summary(
     user_name, memories_str = get_prompt_memories(uid)
 
     # Get user's language preference for generating summary in their language
-    user_language = users_db.get_user_language_preference(uid)
+    output_language = user_profile.get('language', '') or 'en'
 
     all_person_ids = []
     for m in conversations:
@@ -156,7 +196,7 @@ def generate_comprehensive_daily_summary(
         people = [Person(**p) for p in people_data]
         people_names = [p.name for p in people if p.name]
 
-    conversation_history = Conversation.conversations_to_string(conversations, people=people)
+    conversation_history = conversations_to_string(conversations, people=people)
 
     # Calculate stats - exclude discarded conversations
     non_discarded = [c for c in conversations if not c.discarded]
@@ -186,11 +226,12 @@ def generate_comprehensive_daily_summary(
                 }
             )
 
-    # Fetch actual action items from the database for this date range
+    # Fetch action items for the specific conversations being summarised.
+    # Querying by conversation_id (not date range) prevents pulling in items whose
+    # async processing happened to land on the same UTC day as an unrelated conversation.
     actual_action_items = []
-    if start_date_utc and end_date_utc:
-        db_action_items = action_items_db.get_action_items(uid, start_date=start_date_utc, end_date=end_date_utc)
-        for item in db_action_items:
+    for c in non_discarded:
+        for item in action_items_db.get_action_items(uid, conversation_id=c.id):
             actual_action_items.append(
                 {
                     "description": item.get("description", ""),
@@ -204,6 +245,7 @@ def generate_comprehensive_daily_summary(
     convo_id_map = {i + 1: c.id for i, c in enumerate(non_discarded)}
 
     prompt = f"""You are creating a daily summary for {user_name}. {memories_str}
+OUTPUT LANGUAGE: {output_language}. You MUST write every word of this summary in {output_language}, regardless of the language the conversations are in.
 
 Today's date: {date_str}
 Conversations: {total_conversations}
@@ -255,13 +297,13 @@ RULES:
 - conversation_number: Reference which conversation (1-{total_conversations}) it came from.
 - SKIP sections entirely if no quality content.
 - Be snappy. No fluff. No corporate speak. Only include sections that are genuinely useful and relevant.
-{f'- IMPORTANT: You MUST write the ENTIRE summary in {user_language}. All text including headline, overview, highlights, questions, decisions, and knowledge nuggets MUST be in {user_language}. Do NOT write in English.' if user_language and user_language != 'en' else ''}
+- OUTPUT LANGUAGE: Every word — headline, overview, highlights, questions, decisions, knowledge nuggets — MUST be in {output_language}. Do not use any other language.
 
 Respond with ONLY valid JSON. Do not include any other text or comments."""
 
     try:
         with track_usage(uid, Features.DAILY_SUMMARY):
-            response = llm_medium_experiment.invoke(prompt).content
+            response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(prompt).content
         # Clean up response - remove markdown if present
         response = response.strip()
         if response.startswith('```'):
@@ -271,12 +313,10 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
         response = response.strip()
 
         # Try to repair common JSON issues from LLM
-        import re
-
         response = re.sub(r':\s*\\"([^"]*)\\"', r': "\1"', response)
         response = response.replace('\\"', '"')
 
-        summary_data = json.loads(response)
+        summary_data = DailySummaryPayload.model_validate(json.loads(response))
 
         # Helper to map conversation number to ID
         def get_convo_id(num):
@@ -286,38 +326,34 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
 
         # Process highlights - map conversation_numbers to conversation_ids
         highlights = []
-        for h in summary_data.get("highlights", []):
-            convo_nums = h.get("conversation_numbers", [])
+        for h in summary_data.highlights:
+            convo_nums = h.conversation_numbers
             convo_ids = [get_convo_id(n) for n in convo_nums if get_convo_id(n)]
             highlights.append(
                 {
-                    "topic": h.get("topic", ""),
-                    "emoji": h.get("emoji", "💡"),
-                    "summary": h.get("summary", ""),
+                    "topic": h.topic,
+                    "emoji": h.emoji or "💡",
+                    "summary": h.summary,
                     "conversation_ids": convo_ids,
                 }
             )
 
         # Process unresolved questions
         unresolved_questions = []
-        for q in summary_data.get("unresolved_questions", []):
+        for q in summary_data.unresolved_questions:
             unresolved_questions.append(
-                {"question": q.get("question", ""), "conversation_id": get_convo_id(q.get("conversation_number"))}
+                {"question": q.question, "conversation_id": get_convo_id(q.conversation_number)}
             )
 
         # Process decisions made
         decisions_made = []
-        for d in summary_data.get("decisions_made", []):
-            decisions_made.append(
-                {"decision": d.get("decision", ""), "conversation_id": get_convo_id(d.get("conversation_number"))}
-            )
+        for d in summary_data.decisions_made:
+            decisions_made.append({"decision": d.decision, "conversation_id": get_convo_id(d.conversation_number)})
 
         # Process knowledge nuggets
         knowledge_nuggets = []
-        for k in summary_data.get("knowledge_nuggets", []):
-            knowledge_nuggets.append(
-                {"insight": k.get("insight", ""), "conversation_id": get_convo_id(k.get("conversation_number"))}
-            )
+        for k in summary_data.knowledge_nuggets:
+            knowledge_nuggets.append({"insight": k.insight, "conversation_id": get_convo_id(k.conversation_number)})
 
         # Build the complete summary object
         summary_id = str(uuid.uuid4())
@@ -325,9 +361,9 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "id": summary_id,
             "date": date_str,
             "created_at": datetime.utcnow().isoformat(),
-            "headline": summary_data.get("headline", "Your Day in Review"),
-            "overview": summary_data.get("overview", ""),
-            "day_emoji": summary_data.get("day_emoji", "📅"),
+            "headline": summary_data.headline,
+            "overview": summary_data.overview,
+            "day_emoji": summary_data.day_emoji,
             "stats": {
                 "total_conversations": total_conversations,
                 "total_duration_minutes": int(total_duration_minutes),
@@ -341,25 +377,12 @@ Respond with ONLY valid JSON. Do not include any other text or comments."""
             "locations": locations,
         }
     except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse LLM response as JSON: {e}")
-        logger.info(f"Response was: {response}")
-        # Return a basic summary on parse failure
-        return {
-            "id": str(uuid.uuid4()),
-            "date": date_str,
-            "created_at": datetime.utcnow().isoformat(),
-            "headline": "Your Day in Review",
-            "overview": f"You had {total_conversations} conversations today.",
-            "day_emoji": "📅",
-            "stats": {
-                "total_conversations": total_conversations,
-                "total_duration_minutes": int(total_duration_minutes),
-                "action_items_count": len(actual_action_items),
-            },
-            "highlights": [],
-            "action_items": actual_action_items,
-            "unresolved_questions": [],
-            "decisions_made": [],
-            "knowledge_nuggets": [],
-            "locations": locations,
-        }
+        logger.error("Failed to decode daily summary payload JSON: %s", sanitize(str(e)))
+        return _basic_daily_summary(
+            date_str, total_conversations, total_duration_minutes, actual_action_items, locations
+        )
+    except ValidationError as e:
+        logger.error("Failed to validate daily summary payload: %s", sanitize_validation_error(e))
+        return _basic_daily_summary(
+            date_str, total_conversations, total_duration_minutes, actual_action_items, locations
+        )

@@ -18,7 +18,7 @@ abstract class Env {
 
   static String? get openAIAPIKey => _instance.openAIAPIKey;
 
-  static String? get mixpanelProjectToken => _instance.mixpanelProjectToken;
+  static String? get posthogApiKey => _instance.posthogApiKey;
 
   // static String? get apiBaseUrl => 'https://omi-backend.ngrok.app/';
   static String? get apiBaseUrl => _apiBaseUrlOverride ?? _instance.apiBaseUrl;
@@ -58,8 +58,6 @@ abstract class Env {
     return 'wss://$host/v1/agent/ws';
   }
 
-  static String? get growthbookApiKey => _instance.growthbookApiKey;
-
   static String? get googleMapsApiKey => _instance.googleMapsApiKey;
 
   static String? get intercomAppId => _instance.intercomAppId;
@@ -80,11 +78,9 @@ abstract class Env {
 abstract class EnvFields {
   String? get openAIAPIKey;
 
-  String? get mixpanelProjectToken;
+  String? get posthogApiKey;
 
   String? get apiBaseUrl;
-
-  String? get growthbookApiKey;
 
   String? get googleMapsApiKey;
 

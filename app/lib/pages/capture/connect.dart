@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -7,7 +8,6 @@ import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -26,11 +26,11 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
   @override
   void initState() {
     super.initState();
-    MixpanelManager().connectDevicePageOpened();
+    PlatformManager.instance.analytics.connectDevicePageOpened();
   }
 
   void _showConnectionGuide() {
-    MixpanelManager().connectionGuideOpened();
+    PlatformManager.instance.analytics.connectionGuideOpened();
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

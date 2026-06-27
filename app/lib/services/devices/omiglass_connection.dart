@@ -480,9 +480,6 @@ class OmiGlassConnection extends DeviceConnection {
       null;
 
   @override
-  Future<bool> performIsWifiSyncSupported() async => false;
-
-  @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
   }) async {

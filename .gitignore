@@ -1,6 +1,7 @@
 *.env
 .env*
 !.env.template
+!.env.example
 *__pycache__/
 *venv/
 libraries/
@@ -208,6 +209,7 @@ CLAUDE.md
 web/app/next-env.d.ts
 .claude/settings.local.json
 .claude/worktrees/
+.mcp.json
 LOCAL_DEV_SETUP.md
 app/macos/Config/Prod/GoogleService-Info.plist
 app/.metadata
@@ -219,3 +221,6 @@ app/macos/Runner/LocalDev.entitlements
 # Generated browser snapshots (contain PII)
 builds-snapshot.md
 *-snapshot.md
+
+# Per-worktree dev isolation (pidfiles, scratch) — scripts/dev-instance.sh
+.dev/

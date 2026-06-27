@@ -23,7 +23,13 @@ sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
 sys.modules.setdefault('google.auth', MagicMock())
 sys.modules.setdefault('google.auth.transport.requests', MagicMock())
 
-from routers.firmware import get_omi_github_releases, FIRMWARE_TAG_PATTERN, MAX_PAGES
+from routers.firmware import (
+    get_omi_github_releases,
+    FIRMWARE_TAG_PATTERN,
+    MAX_PAGES,
+    _parse_firmware_version,
+    _find_candidate_releases,
+)
 
 
 def _make_release(tag_name, draft=False, published_at="2026-01-30T00:00:00Z"):
@@ -112,8 +118,12 @@ class TestPagination:
         assert "Omi_DK2_v2.0.10" in tags
         # Verify no desktop releases leaked through
         assert not any("macos" in r["tag_name"] for r in result)
-        # Verify cache was set
-        mock_set_cache.assert_called_once()
+        # Verify both short cache (5min) and last-known-good cache (24h)
+        # were set on a successful non-empty fetch.
+        cache_keys_set = [call.args[0] for call in mock_set_cache.call_args_list]
+        assert "test_key" in cache_keys_set
+        assert "test_key:lkg" in cache_keys_set
+        assert mock_set_cache.call_count == 2
 
     @pytest.mark.asyncio
     async def test_no_pagination_without_filter(self):
@@ -201,4 +211,226 @@ class TestCacheBehavior:
             result = await get_omi_github_releases("test_key")
 
         assert result == []
-        mock_set.assert_called_once_with("test_key", [], ttl=300)
+        # Empty fetch with no LKG fallback caches with the SHORT TTL (60s)
+        # so the next request retries GitHub soon, instead of poisoning
+        # the cache with empty for the full 5-minute success TTL.
+        mock_set.assert_called_once_with("test_key", [], ttl=60)
+
+
+class TestLastKnownGoodFallback:
+    """When GitHub returns empty / errors, serve the previous good cache."""
+
+    @pytest.mark.asyncio
+    async def test_empty_fetch_falls_back_to_lkg(self):
+        """If GitHub returns [] but we have an LKG, return the LKG instead."""
+        lkg = _desktop_releases(3)
+
+        # First call (short key) misses; second call (LKG key) hits.
+        cache_calls = []
+
+        def fake_get(key):
+            cache_calls.append(key)
+            return None if key == "test_key" else lkg
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = []  # GitHub outage signature
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', side_effect=fake_get), patch(
+            'routers.firmware.set_generic_cache'
+        ) as mock_set, patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == lkg
+        # Both keys were consulted
+        assert "test_key" in cache_calls and "test_key:lkg" in cache_calls
+        # LKG was re-cached under the short key with a short TTL so we
+        # retry GitHub soon, but service stays up.
+        mock_set.assert_called_once_with("test_key", lkg, ttl=60)
+
+    @pytest.mark.asyncio
+    async def test_500_response_falls_back_to_lkg(self):
+        """If GitHub returns a non-200, fall back to LKG instead of raising 500."""
+        lkg = _desktop_releases(2)
+
+        def fake_get(key):
+            return None if key == "test_key" else lkg
+
+        mock_response = MagicMock()
+        mock_response.status_code = 503
+        mock_response.text = "Service Unavailable"
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', side_effect=fake_get), patch(
+            'routers.firmware.set_generic_cache'
+        ), patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == lkg
+
+    @pytest.mark.asyncio
+    async def test_exception_falls_back_to_lkg(self):
+        """Network exception → LKG fallback (instead of bubbling)."""
+        lkg = _desktop_releases(4)
+
+        def fake_get(key):
+            return None if key == "test_key" else lkg
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=RuntimeError("connection reset"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', side_effect=fake_get), patch(
+            'routers.firmware.set_generic_cache'
+        ), patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == lkg
+
+    @pytest.mark.asyncio
+    async def test_successful_fetch_writes_both_caches(self):
+        """Non-empty fetch refreshes both short cache (5min) and LKG (24h)."""
+        releases = _desktop_releases(5)
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = releases
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch('routers.firmware.get_generic_cache', return_value=None), patch(
+            'routers.firmware.set_generic_cache'
+        ) as mock_set, patch('routers.firmware.httpx.AsyncClient', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+
+            result = await get_omi_github_releases("test_key")
+
+        assert result == releases
+        ttl_by_key = {call.args[0]: call.kwargs.get("ttl") for call in mock_set.call_args_list}
+        assert ttl_by_key["test_key"] == 300
+        assert ttl_by_key["test_key:lkg"] == 86400
+
+
+class TestParseFirmwareVersion:
+    """`_parse_firmware_version` now returns None for unparseable input so callers can
+    distinguish "unknown" from "very old". Treating unknown as (0,0,0) is what caused
+    /v2/firmware/latest to recommend a stale legacy release to users with current
+    firmware whose BLE characteristic read transiently failed."""
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("3.0.19", (3, 0, 19)),
+            ("v3.0.19", (3, 0, 19)),
+            ("V3.0.19", (3, 0, 19)),
+            ("1.2", (1, 2, 0)),
+            ("1", (1, 0, 0)),
+            ("0.0.0", (0, 0, 0)),
+        ],
+    )
+    def test_parses_valid_versions(self, value, expected):
+        assert _parse_firmware_version(value) == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            None,
+            "",
+            "unknown",
+            "Unknown",
+            "abc",
+            "1.x.0",
+            "1..2",
+        ],
+    )
+    def test_returns_none_for_invalid(self, value):
+        assert _parse_firmware_version(value) is None
+
+
+class TestFindCandidateReleasesGuardsAgainstBadMetadata:
+    """Defense-in-depth: releases with garbled `release_firmware_version` in their body
+    are skipped instead of crashing the comparison, and garbled `minimum_firmware_required`
+    is treated as "no requirement" (matches the missing-key behavior).
+    """
+
+    @staticmethod
+    def _release(tag, body, published_at="2026-01-30T00:00:00Z"):
+        return {
+            "tag_name": tag,
+            "body": body,
+            "draft": False,
+            "prerelease": False,
+            "published_at": published_at,
+        }
+
+    def test_skips_release_with_unparseable_release_firmware_version(self):
+        releases = [
+            self._release(
+                "Omi_CV1_v3.0.19",
+                "<!-- KEY_VALUE_START\nrelease_firmware_version:not-a-version\nKEY_VALUE_END -->",
+            ),
+            self._release(
+                "Omi_CV1_v3.0.18",
+                "<!-- KEY_VALUE_START\nrelease_firmware_version:3.0.18\nKEY_VALUE_END -->",
+            ),
+        ]
+        candidates = _find_candidate_releases(releases, "Omi_CV1", (3, 0, 17))
+        tags = [c["tag_name"] for c in candidates]
+        assert tags == ["Omi_CV1_v3.0.18"]
+
+    def test_treats_unparseable_min_req_as_unset(self):
+        releases = [
+            self._release(
+                "Omi_CV1_v3.0.19",
+                "<!-- KEY_VALUE_START\nrelease_firmware_version:3.0.19\nminimum_firmware_required:garbage\nKEY_VALUE_END -->",
+            ),
+        ]
+        # User on 1.0.0 — would normally be blocked by minimum_firmware_required:3.0.6.
+        # With garbled min_req, treat as no requirement (same as missing key).
+        candidates = _find_candidate_releases(releases, "Omi_CV1", (1, 0, 0))
+        assert len(candidates) == 1
+
+
+class TestGetLatestVersionRejectsUnknownCurrent:
+    """`/v2/firmware/latest` must refuse to recommend an upgrade when it can't trust
+    the caller's reported current firmware. Without this, an empty / garbled
+    firmware_revision matched every legacy release and surfaced stale upgrade
+    prompts to up-to-date users."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("firmware_revision", ["", "unknown", "abc"])
+    async def test_invalid_current_firmware_returns_400(self, firmware_revision):
+        from routers.firmware import get_latest_version
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await get_latest_version(
+                device_model="Omi CV 1",
+                firmware_revision=firmware_revision,
+                hardware_revision="1",
+                manufacturer_name="Omi",
+            )
+        assert exc.value.status_code == 400

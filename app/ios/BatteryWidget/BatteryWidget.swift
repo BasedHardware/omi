@@ -55,7 +55,7 @@ struct OmiBatteryWidget: Widget {
         }
         .configurationDisplayName("Omi Battery")
         .description("Shows your Omi device battery level and mic state.")
-        .supportedFamilies([.accessoryRectangular, .accessoryInline])
+        .supportedFamilies([.accessoryRectangular, .accessoryCircular])
     }
 }
 
@@ -67,10 +67,10 @@ struct BatteryWidgetEntryView: View {
 
     var body: some View {
         switch family {
-        case .accessoryRectangular:
-            AccessoryRectangularView(info: entry.info)
+        case .accessoryCircular:
+            AccessoryCircularView(info: entry.info)
         default:
-            AccessoryInlineView(info: entry.info)
+            AccessoryRectangularView(info: entry.info)
         }
     }
 }
@@ -131,29 +131,20 @@ struct AccessoryRectangularView: View {
     }
 }
 
-// MARK: - Lock Screen: Inline
+// MARK: - Lock Screen: Circular (compact 1×1)
 
-struct AccessoryInlineView: View {
+struct AccessoryCircularView: View {
     let info: DeviceBatteryInfo
 
     var body: some View {
-        if info.isConnected && info.batteryLevel >= 0 {
-            Label("\(displayName) \(info.batteryLevel)%", systemImage: deviceIcon)
-        } else {
-            Label("\(displayName) --", systemImage: deviceIcon)
-        }
-    }
-
-    private var displayName: String {
-        info.deviceName.isEmpty || info.deviceName == "Unknown" ? "Omi" : info.deviceName
-    }
-
-    private var deviceIcon: String {
-        switch info.deviceType.lowercased() {
-        case "applewatch": return "applewatch"
-        case "openglass", "frame": return "eyeglasses"
-        default: return "mic.fill"
-        }
+        let text = (info.isConnected && info.batteryLevel >= 0)
+            ? "\(info.batteryLevel)%"
+            : "--"
+        Text(text)
+            .font(.system(size: 20, weight: .bold, design: .rounded))
+            .minimumScaleFactor(0.5)
+            .lineLimit(1)
+            .widgetAccentable()
     }
 }
 

@@ -30,7 +30,14 @@ import { ManagePeopleModal } from './ManagePeopleModal';
 import { AudioPlayer, AudioPlayerRef } from './AudioPlayer';
 import { usePeople } from '@/hooks/usePeople';
 import { precacheConversationAudio, getConversationAudioUrls } from '@/lib/api';
-import type { Conversation, ActionItem, AppResponse, TranscriptSegment, AudioFile, Geolocation } from '@/types/conversation';
+import type {
+  Conversation,
+  ActionItem,
+  AppResponse,
+  TranscriptSegment,
+  AudioFile,
+  Geolocation,
+} from '@/types/conversation';
 
 // Dynamic import for Leaflet map (SSR not supported)
 const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
@@ -95,16 +102,14 @@ function ActionItemRow({ item }: { item: ActionItem }) {
       className={cn(
         'flex items-start gap-3 p-4 rounded-xl',
         'bg-bg-tertiary border border-bg-quaternary/50',
-        item.completed && 'opacity-60'
+        item.completed && 'opacity-60',
       )}
     >
       <div
         className={cn(
           'w-5 h-5 rounded-md border-2 flex-shrink-0 mt-0.5',
           'flex items-center justify-center',
-          item.completed
-            ? 'bg-success border-success'
-            : 'border-text-quaternary'
+          item.completed ? 'bg-success border-success' : 'border-text-quaternary',
         )}
       >
         {item.completed && (
@@ -121,7 +126,7 @@ function ActionItemRow({ item }: { item: ActionItem }) {
         <span
           className={cn(
             'text-text-primary',
-            item.completed && 'line-through text-text-tertiary'
+            item.completed && 'line-through text-text-tertiary',
           )}
         >
           {item.description}
@@ -200,9 +205,13 @@ function SummaryTab({
                 ref={textRef}
                 className={cn(
                   'transition-all duration-300',
-                  !isExpanded && needsTruncation && 'overflow-hidden'
+                  !isExpanded && needsTruncation && 'overflow-hidden',
                 )}
-                style={!isExpanded && needsTruncation && mapHeight > 0 ? { maxHeight: mapHeight - 56 } : undefined}
+                style={
+                  !isExpanded && needsTruncation && mapHeight > 0
+                    ? { maxHeight: mapHeight - 56 }
+                    : undefined
+                }
               >
                 {category && (
                   <div className="mb-3">
@@ -211,9 +220,7 @@ function SummaryTab({
                     </span>
                   </div>
                 )}
-                <p className="text-text-secondary leading-relaxed text-lg">
-                  {overview}
-                </p>
+                <p className="text-text-secondary leading-relaxed text-lg">{overview}</p>
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
                     <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -224,10 +231,13 @@ function SummaryTab({
 
               {/* Gradient fade and Show more button */}
               {needsTruncation && (
-                <div className={cn(
-                  'mt-2',
-                  !isExpanded && 'absolute bottom-0 left-0 right-0 pt-12 pb-4 px-5 bg-gradient-to-t from-bg-secondary via-bg-secondary/90 to-transparent'
-                )}>
+                <div
+                  className={cn(
+                    'mt-2',
+                    !isExpanded &&
+                      'absolute bottom-0 left-0 right-0 pt-12 pb-4 px-5 bg-gradient-to-t from-bg-secondary via-bg-secondary/90 to-transparent',
+                  )}
+                >
                   <button
                     onClick={() => setIsExpanded(!isExpanded)}
                     className="flex items-center gap-1 text-sm text-purple-primary hover:text-purple-400 transition-colors"
@@ -268,9 +278,7 @@ function SummaryTab({
               </span>
             </div>
           )}
-          <p className="text-text-secondary leading-relaxed text-lg">
-            {overview}
-          </p>
+          <p className="text-text-secondary leading-relaxed text-lg">{overview}</p>
         </div>
       )}
 
@@ -305,7 +313,8 @@ function SummaryTab({
         {/* Empty state for templates */}
         {!hasAppSummaries && (
           <p className="text-sm text-text-tertiary mt-2">
-            No summaries yet. Click Templates above to generate one or create a custom template.
+            No summaries yet. Click Templates above to generate one or create a custom
+            template.
           </p>
         )}
       </div>
@@ -317,7 +326,7 @@ function SummaryTab({
  * Action items tab content
  */
 function ActionItemsTab({ items }: { items: ActionItem[] }) {
-  const completedCount = items.filter(i => i.completed).length;
+  const completedCount = items.filter((i) => i.completed).length;
 
   return (
     <div className="space-y-4">
@@ -401,7 +410,9 @@ export function ConversationDetailPanel({
   const audioPlayerRef = useRef<AudioPlayerRef>(null);
   const [audioAvailable, setAudioAvailable] = useState(false);
   const [fetchedAudioFiles, setFetchedAudioFiles] = useState<AudioFile[]>([]);
-  const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number | undefined>(undefined);
+  const [currentPlaybackTime, setCurrentPlaybackTime] = useState<number | undefined>(
+    undefined,
+  );
 
   // Check audio availability for the conversation
   const audio_files = conversation?.audio_files || [];
@@ -415,10 +426,11 @@ export function ConversationDetailPanel({
     async function checkAudioAvailability() {
       // Helper to map audio URLs to AudioFile format
       const mapAudioUrls = (urls: Awaited<ReturnType<typeof getConversationAudioUrls>>) =>
-        urls.map(af => ({
+        urls.map((af) => ({
           id: af.id,
           duration: af.duration || 0,
           signed_url: af.signed_url,
+          status: af.status,
         }));
 
       // If audio_files array has data, audio is available
@@ -453,7 +465,7 @@ export function ConversationDetailPanel({
       for (let attempt = 0; attempt < 3; attempt++) {
         if (signal.aborted) return;
         if (attempt > 0) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise((resolve) => setTimeout(resolve, 500));
         }
 
         const audioUrls = await getConversationAudioUrls(conversationId, signal);
@@ -488,42 +500,44 @@ export function ConversationDetailPanel({
   }, []);
 
   // Handle segment updates from transcript editing
-  const handleSegmentsUpdate = useCallback((
-    segmentIds: string[],
-    personId: string | null,
-    isUser: boolean
-  ) => {
-    if (!conversation || !onConversationUpdate) return;
+  const handleSegmentsUpdate = useCallback(
+    (segmentIds: string[], personId: string | null, isUser: boolean) => {
+      if (!conversation || !onConversationUpdate) return;
 
-    const updatedSegments = conversation.transcript_segments.map((seg) => {
-      if (seg.id && segmentIds.includes(seg.id)) {
-        return {
-          ...seg,
-          is_user: isUser,
-          person_id: isUser ? null : personId,
-        };
-      }
-      return seg;
-    });
+      const updatedSegments = conversation.transcript_segments.map((seg) => {
+        if (seg.id && segmentIds.includes(seg.id)) {
+          return {
+            ...seg,
+            is_user: isUser,
+            person_id: isUser ? null : personId,
+          };
+        }
+        return seg;
+      });
 
-    onConversationUpdate({
-      ...conversation,
-      transcript_segments: updatedSegments,
-    });
-  }, [conversation, onConversationUpdate]);
-
-  // Handle title change - update conversation with new title
-  const handleTitleChange = useCallback((newTitle: string) => {
-    if (conversation && onConversationUpdate) {
       onConversationUpdate({
         ...conversation,
-        structured: {
-          ...conversation.structured,
-          title: newTitle,
-        },
+        transcript_segments: updatedSegments,
       });
-    }
-  }, [conversation, onConversationUpdate]);
+    },
+    [conversation, onConversationUpdate],
+  );
+
+  // Handle title change - update conversation with new title
+  const handleTitleChange = useCallback(
+    (newTitle: string) => {
+      if (conversation && onConversationUpdate) {
+        onConversationUpdate({
+          ...conversation,
+          structured: {
+            ...conversation.structured,
+            title: newTitle,
+          },
+        });
+      }
+    },
+    [conversation, onConversationUpdate],
+  );
 
   // Handle delete
   const handleDelete = useCallback(() => {
@@ -570,10 +584,10 @@ export function ConversationDetailPanel({
   ];
 
   // Filter to only enabled tabs
-  const enabledTabs = tabs.filter(tab => !tab.disabled);
+  const enabledTabs = tabs.filter((tab) => !tab.disabled);
 
   // Ensure active tab is valid
-  if (!enabledTabs.find(t => t.id === activeTab)) {
+  if (!enabledTabs.find((t) => t.id === activeTab)) {
     const firstEnabled = enabledTabs[0];
     if (firstEnabled && activeTab !== firstEnabled.id) {
       setActiveTab(firstEnabled.id);
@@ -662,7 +676,7 @@ export function ConversationDetailPanel({
                   'text-sm font-medium transition-all duration-150',
                   activeTab === tab.id
                     ? 'bg-purple-primary text-white'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
                 )}
               >
                 {tab.icon}
@@ -671,9 +685,7 @@ export function ConversationDetailPanel({
                   <span
                     className={cn(
                       'px-1.5 py-0.5 rounded-full text-xs',
-                      activeTab === tab.id
-                        ? 'bg-white/20'
-                        : 'bg-bg-tertiary'
+                      activeTab === tab.id ? 'bg-white/20' : 'bg-bg-tertiary',
                     )}
                   >
                     {tab.count}

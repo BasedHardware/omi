@@ -13,16 +13,12 @@ final class ProdEnv implements EnvFields {
   final String? openAIAPIKey = _ProdEnv.openAIAPIKey;
 
   @override
-  @EnviedField(varName: 'MIXPANEL_PROJECT_TOKEN', obfuscate: true)
-  final String? mixpanelProjectToken = _ProdEnv.mixpanelProjectToken;
+  @EnviedField(varName: 'POSTHOG_API_KEY', obfuscate: true)
+  final String? posthogApiKey = _ProdEnv.posthogApiKey;
 
   @override
   @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
   final String? apiBaseUrl = _ProdEnv.apiBaseUrl;
-
-  @override
-  @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
-  final String? growthbookApiKey = _ProdEnv.growthbookApiKey;
 
   @override
   @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)

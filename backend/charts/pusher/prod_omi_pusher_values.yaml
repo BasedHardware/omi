@@ -105,13 +105,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
-  - name: SONIOX_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SONIOX_API_KEY
-  - name: HOSTED_VAD_API_URL
-    value: "http://vad.omi.me:80/v1/vad"
   - name: HOSTED_SPEECH_PROFILE_API_URL
     value: "http://vad.omi.me:80/v1/speaker-identification"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
@@ -150,11 +143,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
-  - name: WORKFLOW_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: WORKFLOW_API_KEY
   - name: NO_SOCKET_TIMEOUT
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
@@ -264,17 +252,23 @@ env:
         name: prod-omi-backend-secrets
         key: STT_SERVICE_MODELS
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "1200"
+    value: "600"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-    value: "0"
-  - name: BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
     value: "0"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
     value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
     value: "price_1RtJQ71F8wnoWYvwKMPaGlGY"
+  - name: STRIPE_ARCHITECT_MONTHLY_PRICE_ID
+    value: "price_1TAfBB1F8wnoWYvw8XBFM1dX"
+  - name: STRIPE_ARCHITECT_ANNUAL_PRICE_ID
+    value: "price_1TLFac1F8wnoWYvwtPxZhtzE"
+  - name: STRIPE_OPERATOR_MONTHLY_PRICE_ID
+    value: "price_1TMxVM1F8wnoWYvw9uaoYX7V"
+  - name: STRIPE_OPERATOR_ANNUAL_PRICE_ID
+    value: "price_1TMxVM1F8wnoWYvwNfXdF6LW"
   - name: SUBSCRIPTION_LAUNCH_DATE
     value: "2025-08-21"
   - name: METRICS_SECRET
@@ -297,30 +291,33 @@ resources:
 
 # This is to setup the liveness and readiness probes more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
 livenessProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
-  failureThreshold: 3
+  failureThreshold: 5
   periodSeconds: 10
-  timeoutSeconds: 1
+  timeoutSeconds: 5
 
 readinessProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
   failureThreshold: 3
   periodSeconds: 10
-  timeoutSeconds: 1
+  timeoutSeconds: 5
 
 startupProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
   failureThreshold: 60
   periodSeconds: 10
-  timeoutSeconds: 1
+  timeoutSeconds: 5
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 20
+  minReplicas: 12
   maxReplicas: 40
   behavior:
     scaleDown:
@@ -345,7 +342,7 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 60
   # targetMemoryUtilizationPercentage: 60
-  activeConnectionsPerPod: 22
+  activeConnectionsPerPod: 30
 
 podDisruptionBudget:
   minAvailable: "80%"
@@ -396,26 +393,4 @@ affinity:
             - key: version
               operator: In
               values:
-                - v2
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        preference:
-          matchExpressions:
-            - key: topology.kubernetes.io/zone
-              operator: In
-              values:
-                - us-central1-a
-      - weight: 70
-        preference:
-          matchExpressions:
-            - key: topology.kubernetes.io/zone
-              operator: In
-              values:
-                - us-central1-b
-      - weight: 50
-        preference:
-          matchExpressions:
-            - key: topology.kubernetes.io/zone
-              operator: In
-              values:
-                - us-central1-c
+                - v3

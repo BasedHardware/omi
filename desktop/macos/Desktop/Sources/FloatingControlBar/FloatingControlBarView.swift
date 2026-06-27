@@ -1,0 +1,2019 @@
+import AppKit
+import Combine
+import MarkdownUI
+import SwiftUI
+
+/// Main floating control bar SwiftUI view composing all sub-views.
+struct FloatingControlBarView: View {
+    @EnvironmentObject var state: FloatingControlBarState
+    @ObservedObject private var shortcutSettings = ShortcutSettings.shared
+    @ObservedObject private var agentPills = AgentPillsManager.shared
+    weak var window: NSWindow?
+    var onPlayPause: () -> Void
+    var onAskAI: () -> Void
+    var onHide: () -> Void
+    var onSendQuery: (String) -> Void
+    var onCloseAI: () -> Void
+    var onEscape: () -> Void
+    var onClearVisibleConversation: () -> Void
+    var onRate: ((String, Int?) -> Void)?
+    var onShareLink: (() async -> String?)?
+
+    @State private var isHovering = false
+    @State private var notchLogoHovering = false
+    @State private var agentSwitcherCollapseWorkItem: DispatchWorkItem?
+    /// 0 = agent dots collapsed into the logo ring, 1 = fanned into the row. A single
+    /// continuously-animated value so the same dots morph both ways (and reverse exactly).
+    @State private var notchSwitcherProgress: CGFloat = 0
+    /// Last reported text-editor height so inputViewHeight can be recomputed
+    /// when the pill list changes while the input is open. (Cubic P2.)
+    @State private var lastInputEditorHeight: CGFloat = 0
+    private let conversationTransition = Animation.spring(response: 0.22, dampingFraction: 0.9)
+    private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)
+    private var notchHiddenCenterWidth: CGFloat {
+        FloatingControlBarWindow.notchHiddenCenterWidth(for: window?.screen ?? NSScreen.main)
+    }
+    private var notchSideWidth: CGFloat {
+        if state.showingAIConversation {
+            return agentPills.pills.isEmpty
+                ? FloatingControlBarWindow.notchCompactSideWidth
+                : FloatingControlBarWindow.notchActiveSideWidth
+        }
+        if agentPills.pills.isEmpty && !state.isVoiceListening {
+            return FloatingControlBarWindow.notchCompactSideWidth
+        }
+        return FloatingControlBarWindow.notchActiveSideWidth
+    }
+    private var notchChromeWidth: CGFloat {
+        notchHiddenCenterWidth + notchSideWidth * 2
+    }
+    private var notchChromeLayoutWidth: CGFloat {
+        state.showingAIConversation || shouldShowNotchHoverMenu
+            ? max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
+            : notchChromeWidth
+    }
+    private var notchSurfaceHorizontalInset: CGFloat {
+        state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetX : 0
+    }
+    private var notchSurfaceBottomInset: CGFloat {
+        state.usesNotchIsland ? FloatingControlBarWindow.notchGlowOutsetBottom : 0
+    }
+    private var notchHoverMenuHeight: CGFloat {
+        FloatingControlBarWindow.notchHoverMenuHeight(agentCount: agentPills.pills.count)
+    }
+    private var notchHoverRowWidth: CGFloat {
+        max(
+            0,
+            min(
+                notchChromeLayoutWidth - NotchAgentStackMetrics.listHorizontalInset * 2,
+                FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2
+            )
+        )
+    }
+    var body: some View {
+        Group {
+            if state.usesNotchIsland {
+                notchModeBody
+            } else {
+                VStack(spacing: state.isShowingNotification && !state.showingAIConversation ? 8 : 0) {
+                    barChrome
+
+                    if let notification = state.currentNotification, !state.showingAIConversation {
+                        notificationView(notification)
+                            .padding(.horizontal, 8)
+                            .padding(.bottom, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: state.usesNotchIsland ? .top : .center)
+        .background(Color.clear)
+        .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
+    }
+
+    /// Whether the bar chrome should stretch to fill the window width
+    private var barNeedsFullWidth: Bool {
+        isHovering || state.showingAIConversation || state.isVoiceListening
+    }
+
+    private var shouldShowAgentSwitcher: Bool {
+        // Do NOT reserve the agent-list height while chat is open. When chat is
+        // open the agent-list overlay is hidden, so reserving its height only
+        // leaves a blank vertical gap and pushes/clips the chat content. The
+        // switcher expands only for explicit pinned/hover interaction AND only
+        // when chat is not open. (Cubic P2 + Codex P2.)
+        !agentPills.pills.isEmpty
+            && shouldShowNotchHoverMenu
+    }
+
+    private var shouldShowNotchHoverMenu: Bool {
+        state.isNotchHoverMenuVisible
+    }
+
+    private var showingNotchWaveform: Bool {
+        state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation
+    }
+
+    private var notchModeBody: some View {
+        VStack(spacing: 0) {
+            notchChrome
+
+            if shouldShowNotchHoverMenu {
+                VStack(spacing: 0) {
+                    notchOmiChatRow
+                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+                        .opacity(notchSwitcherProgress)
+                        .allowsHitTesting(notchSwitcherProgress > 0.6)
+
+                    Color.clear
+                        .frame(
+                            width: notchChromeLayoutWidth,
+                            height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight
+                        )
+                }
+                    .frame(width: notchChromeLayoutWidth, height: notchHoverMenuHeight, alignment: .top)
+                    .onHover { setAgentSwitcherHovering($0) }
+                    .transition(.identity)
+            }
+
+            if state.showingAIConversation {
+                conversationView
+                    .padding(.horizontal, 12)
+                    .padding(.top, 0)
+                    .padding(.bottom, FloatingControlBarWindow.notchConversationBottomPadding)
+                    .transition(.opacity)
+            }
+
+            if let notification = state.currentNotification, !state.showingAIConversation {
+                notificationView(notification)
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .overlay(alignment: .top) {
+            if shouldShowNotchHoverMenu && !showingNotchWaveform {
+                ZStack(alignment: .top) {
+                    if !agentPills.pills.isEmpty {
+                        NotchAgentMorphField(
+                            manager: agentPills,
+                            activePillID: state.activeAgentChatPillID,
+                            progress: notchSwitcherProgress,
+                            notchHiddenCenterWidth: notchHiddenCenterWidth,
+                            notchSideWidth: notchSideWidth,
+                            rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight,
+                            onSelect: openAgentInChat
+                        )
+                        .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                        .allowsHitTesting(notchSwitcherProgress > 0.6)
+
+                        notchAgentLogoHitTarget
+                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                    }
+                }
+                .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                .onHover { setAgentSwitcherHovering($0) }
+            }
+        }
+        .onAppear { notchSwitcherProgress = shouldShowNotchHoverMenu ? 1 : 0 }
+        .padding(.horizontal, notchSurfaceHorizontalInset)
+        .padding(.bottom, notchSurfaceBottomInset)
+        .background(alignment: .top) {
+            GeometryReader { geometry in
+                let hasExpandedSurface = state.showingAIConversation || state.currentNotification != nil || shouldShowNotchHoverMenu
+                let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
+                let surfaceWidth = hasExpandedSurface
+                    ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
+                    : notchChromeWidth
+                let surfaceHeight = hasExpandedSurface
+                    ? max(notchChromeHeight, geometry.size.height - notchSurfaceBottomInset)
+                    : notchChromeHeight
+
+                ZStack(alignment: .top) {
+                    NotchDockShape(bottomRadius: bottomRadius)
+                        .fill(Color.black)
+                        .frame(width: surfaceWidth, height: surfaceHeight)
+
+                    if state.isVoiceResponseActive {
+                        NotchResponseGlowView(bottomRadius: bottomRadius)
+                            .frame(width: surfaceWidth, height: surfaceHeight)
+                    }
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if state.showingAIConversation {
+                ZStack {
+                    ResizeHandleView(targetWindow: window)
+                        .frame(width: 20, height: 20)
+                    ResizeGripShape()
+                        .foregroundStyle(.white.opacity(0.3))
+                        .frame(width: 14, height: 14)
+                        .allowsHitTesting(false)
+                }
+                .padding(.trailing, notchSurfaceHorizontalInset + 4)
+                .padding(.bottom, notchSurfaceBottomInset + 4)
+            }
+        }
+        .scaleEffect(
+            x: max(0.001, state.notchRevealProgress),
+            y: max(0.001, state.notchRevealProgress),
+            anchor: .top
+        )
+        .opacity(min(1, max(0, state.notchRevealProgress * 1.4)))
+        .contentShape(Rectangle())
+        .contextMenu { barContextMenu }
+        .onHover(perform: handleBarHover)
+        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
+        .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)
+        .onChange(of: shouldShowNotchHoverMenu) { _, visible in
+            (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
+            // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
+            // dots are back in the notch before the surface shrinks (no stranded dots).
+            let morphAnim: Animation = visible
+                ? .spring(response: 0.34, dampingFraction: 0.86)
+                : .spring(response: 0.18, dampingFraction: 0.92)
+            withAnimation(morphAnim) {
+                notchSwitcherProgress = visible ? 1 : 0
+            }
+        }
+        .onChange(of: state.showingAIConversation) { _, isShowing in
+            guard !isShowing, shouldShowNotchHoverMenu else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                guard shouldShowNotchHoverMenu else { return }
+                (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: true)
+            }
+        }
+        .onChange(of: agentPills.pills.isEmpty) { _, isEmpty in
+            if isEmpty {
+                state.agentSwitcherPinned = false
+                state.agentSwitcherHovering = false
+                notchLogoHovering = false
+            }
+        }
+        .onDisappear { state.setNotchHoverMenuOpen(false) }
+    }
+
+    private var notchChrome: some View {
+        ZStack {
+            HStack(spacing: 0) {
+                notchAgentLobe
+                    .frame(width: notchSideWidth, height: notchChromeHeight)
+
+                Spacer(minLength: notchHiddenCenterWidth)
+
+                notchControlLobe
+                    .frame(width: notchSideWidth, height: notchChromeHeight)
+            }
+
+            Color.clear
+                .frame(width: notchHiddenCenterWidth, height: notchChromeHeight)
+                .allowsHitTesting(false)
+        }
+        .frame(width: notchChromeWidth, height: notchChromeHeight)
+    }
+
+    private var notchAgentLobe: some View {
+        HStack(spacing: 0) {
+            if showingNotchWaveform {
+                VoiceWaveformBars(isActive: true)
+                    .scaleEffect(0.72)
+                    .frame(width: 28, height: 15)
+                    .frame(width: 38, height: 27)
+            } else {
+                ZStack(alignment: .trailing) {
+                    NotchAgentPillsRowView(manager: agentPills, barWindow: window)
+                        // Compact mode lets the morph field own the ring while agents unfurl.
+                        // Chat mode hides that field, so the lobe owns the logo/settings slot.
+                        .opacity((agentPills.pills.isEmpty || state.showingAIConversation || !shouldShowNotchHoverMenu) && !notchLogoHovering ? 1 : 0)
+                        .scaleEffect(notchLogoHovering ? 0.72 : 1.0)
+                        .rotationEffect(.degrees(notchLogoHovering ? -28 : 0))
+
+                    Image(systemName: "gearshape.fill")
+                        .scaledFont(size: 15, weight: .semibold)
+                        .foregroundColor(.white.opacity(0.88))
+                        .frame(width: NotchAgentStackMetrics.logoFrameSize, height: NotchAgentStackMetrics.logoFrameSize)
+                        .opacity(notchLogoHovering ? 1 : 0)
+                        .scaleEffect(notchLogoHovering ? 1 : 0.5)
+                        .rotationEffect(.degrees(notchLogoHovering ? 0 : 42))
+                }
+                .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
+                .padding(.trailing, 2)
+                .contentShape(Rectangle())
+                .onHover { setNotchLogoHovering($0) }
+                .onTapGesture {
+                    openFloatingBarSettings()
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+    }
+
+    private var notchAgentLogoHitTarget: some View {
+        GeometryReader { geometry in
+            let logoCenterX = NotchAgentStackMetrics.logoCenterX(
+                rowWidth: geometry.size.width,
+                notchHiddenCenterWidth: notchHiddenCenterWidth,
+                notchSideWidth: notchSideWidth
+            )
+
+            Color.clear
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+                .position(x: logoCenterX, y: notchChromeHeight / 2)
+                .onHover { setNotchLogoHovering($0) }
+                .onTapGesture {
+                    openFloatingBarSettings()
+                }
+                .accessibilityLabel("Floating Bar Settings")
+                .accessibilityHint("Open settings")
+        }
+    }
+
+    private var notchControlLobe: some View {
+        // Right-side lobe of the notch chrome. In notch mode the legacy
+        // controlBarView is never rendered, so this lobe is the only hit
+        // target on the right side of the notch. Wire it to open Ask Omi on
+        // tap and accept hover so users on notched displays can still reach
+        // the conversation/PTT entry point by clicking the notch. (Codex P1.)
+        // It is intentionally subtle (transparent) to preserve the minimal
+        // notch aesthetic.
+        Color.clear
+            .contentShape(Rectangle())
+            .onTapGesture {
+                onAskAI()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .padding(.leading, 5)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Ask Omi")
+            .accessibilityHint("Open the conversation")
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction {
+                onAskAI()
+            }
+    }
+
+    private var notchOmiChatRow: some View {
+        Button {
+            onAskAI()
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "message.fill")
+                    .scaledFont(size: 11, weight: .semibold)
+                    .foregroundStyle(.white.opacity(0.86))
+                    .frame(
+                        width: NotchAgentStackMetrics.listOrbSize,
+                        height: NotchAgentStackMetrics.listOrbSize
+                    )
+                    .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, alignment: .leading)
+
+                Text("Omi Chat")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundStyle(.white.opacity(0.94))
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                notchShortcutHint("Ask", keys: shortcutSettings.askOmiShortcut.displayTokens)
+                notchShortcutHint(systemImage: "mic.fill", keys: shortcutSettings.pttShortcut.displayTokens)
+            }
+            .padding(.leading, NotchAgentStackMetrics.listRowLeadingPadding)
+            .padding(.trailing, 10)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .overlay(alignment: .bottom) {
+                Rectangle()
+                    .fill(Color.white.opacity(0.11))
+                    .frame(height: 0.6)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func notchShortcutHint(_ title: String, keys: [String]) -> some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .scaledFont(size: 8, weight: .semibold)
+                .foregroundStyle(.white.opacity(0.54))
+            notchShortcutKeys(keys)
+        }
+    }
+
+    private func notchShortcutHint(systemImage: String, keys: [String]) -> some View {
+        HStack(spacing: 3) {
+            Image(systemName: systemImage)
+                .scaledFont(size: 8, weight: .semibold)
+                .foregroundStyle(.white.opacity(0.58))
+                .frame(width: 8, height: 10)
+            notchShortcutKeys(keys)
+        }
+    }
+
+    private func notchShortcutKeys(_ keys: [String]) -> some View {
+        ForEach(keys.prefix(2), id: \.self) { key in
+            Text(key)
+                .scaledFont(size: 8, weight: .medium)
+                .foregroundStyle(.white.opacity(0.75))
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .padding(.horizontal, key.count > 1 ? 3 : 0)
+                .frame(minWidth: 12, minHeight: 12)
+                .background(Color.white.opacity(0.12))
+                .cornerRadius(3)
+        }
+    }
+
+    private var notchChromeHeight: CGFloat {
+        FloatingControlBarWindow.notchChromeHeight
+    }
+
+    private var barChrome: some View {
+        VStack(spacing: 0) {
+            // Main control bar - always visible
+            controlBarView
+
+            // AI conversation view - conditionally visible
+            if state.showingAIConversation {
+                conversationView
+                .padding(.horizontal, 8)
+                .padding(.bottom, 8)
+                .transition(.opacity)
+            }
+        }
+        .frame(maxWidth: barNeedsFullWidth ? .infinity : nil, alignment: .top)
+        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
+        .animation(conversationTransition, value: state.showingAIResponse)
+        .overlay(alignment: .topLeading) {
+            if state.showingAIConversation {
+                Button {
+                    onCloseAI()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .strokeBorder(Color.white.opacity(0.2), lineWidth: 0.5)
+                            .frame(width: 16, height: 16)
+
+                        Image(systemName: "xmark")
+                            .font(.system(size: 8))
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .frame(width: 28, height: 28)
+                .contentShape(Rectangle())
+                .padding(2)
+                .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if isHovering && !state.isVoiceListening {
+                Button {
+                    openFloatingBarSettings()
+                } label: {
+                    Image(systemName: "gearshape.fill")
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.7))
+                        .frame(width: 22, height: 22)
+                        .background(Color.white.opacity(0.12))
+                        .cornerRadius(5)
+                }
+                .buttonStyle(.plain)
+                .padding(6)
+                .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if state.showingAIConversation {
+                ZStack {
+                    ResizeHandleView(targetWindow: window)
+                        .frame(width: 20, height: 20)
+                    ResizeGripShape()
+                        .foregroundStyle(.white.opacity(0.3))
+                        .frame(width: 14, height: 14)
+                        .allowsHitTesting(false)
+                }
+                .padding(4)
+            }
+        }
+        .clipped()
+        .background(DraggableAreaView(targetWindow: window))
+        .floatingBackground(cornerRadius: barNeedsFullWidth ? 20 : 5)
+        .contextMenu {
+            barContextMenu
+        }
+        .onHover(perform: handleBarHover)
+    }
+
+    @ViewBuilder
+    private var barContextMenu: some View {
+        Button("Disable for 2 hours") {
+            FloatingControlBarManager.shared.snooze(
+                for: FloatingControlBarManager.snoozeTwoHoursDuration
+            )
+        }
+    }
+
+    private var conversationView: some View {
+        ZStack(alignment: .top) {
+            if case .agent = state.conversationSurface, let activeAgentChatPill {
+                AgentMainChatView(
+                    pill: activeAgentChatPill,
+                    manager: agentPills,
+                    onBackToOmi: {
+                        exitAgentSurface()
+                    },
+                    onEscape: onEscape,
+                    onSpawnSibling: { siblingID in
+                        (window as? FloatingControlBarWindow)?
+                            .resizeForActiveAgentChatPublic(pillID: siblingID, animated: false)
+                    }
+                )
+                .id(activeAgentChatPill.id)
+                .zIndex(1)
+            } else if state.conversationSurface == .mainResponse {
+                mainConversationContainer {
+                    aiResponseView
+                        .id("response")
+                }
+                .zIndex(1)
+            } else {
+                mainConversationContainer {
+                    aiInputView
+                        .id("input")
+                }
+                .zIndex(1)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    @ViewBuilder
+    private func mainConversationContainer<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        if state.usesNotchIsland && !agentPills.pills.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    Button(action: showAgentListFromConversation) {
+                        Image(systemName: "chevron.left")
+                            .scaledFont(size: 13, weight: .semibold)
+                            .foregroundColor(.white.opacity(0.82))
+                            .frame(width: 36, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Back to subagents")
+
+                    Text("Omi Chat")
+                        .scaledFont(size: 13, weight: .bold)
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Spacer(minLength: 0)
+
+                    if state.hasVisibleConversation {
+                        escToClearHint
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+
+                content()
+            }
+        } else {
+            content()
+        }
+    }
+
+    private var activeAgentChatPill: AgentPill? {
+        guard let id = state.activeAgentChatPillID else { return nil }
+        return agentPills.pills.first { $0.id == id }
+    }
+
+    private var escToClearHint: some View {
+        HStack(spacing: 4) {
+            Text("esc")
+                .scaledFont(size: 11)
+                .foregroundColor(.secondary)
+                .frame(width: 30, height: 16)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(4)
+            Text("to clear")
+                .scaledFont(size: 11)
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private func setAgentSwitcherHovering(_ hovering: Bool) {
+        agentSwitcherCollapseWorkItem?.cancel()
+        agentSwitcherCollapseWorkItem = nil
+
+        if hovering {
+            (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
+            return
+        }
+
+        let workItem = DispatchWorkItem {
+            (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
+            if !shouldShowNotchHoverMenu {
+                notchLogoHovering = false
+            }
+        }
+        agentSwitcherCollapseWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12, execute: workItem)
+    }
+
+    private func toggleAgentSwitcherPinned() {
+        guard !agentPills.pills.isEmpty else { return }
+        agentSwitcherCollapseWorkItem?.cancel()
+        agentSwitcherCollapseWorkItem = nil
+        state.agentSwitcherPinned.toggle()
+        state.agentSwitcherHovering = state.agentSwitcherPinned
+    }
+
+    private func exitAgentSurface() {
+        state.leaveAgentSurface()
+        let barWindow = window as? FloatingControlBarWindow
+        // When backing out of an agent chat with no main Omi conversation,
+        // leaveAgentSurface() lands on .mainInput. The response-sizing helper
+        // would force at least response height and install a response-height
+        // observer, leaving an oversized blank input panel. Route to the input
+        // height path instead so the panel shrinks to the normal Ask Omi size.
+        if state.conversationSurface == .mainInput {
+            barWindow?.resizeForMainInputAfterAgentExit()
+        } else {
+            barWindow?.resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+        }
+    }
+
+    private func setNotchLogoHovering(_ hovering: Bool) {
+        withAnimation(.spring(response: 0.18, dampingFraction: 0.74)) {
+            notchLogoHovering = hovering
+        }
+        setAgentSwitcherHovering(hovering)
+    }
+
+    private func openAgentInChat(_ pill: AgentPill) {
+        guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
+        if state.conversationSurface == .agent(pill.id) {
+            exitAgentSurface()
+            return
+        }
+        agentPills.markViewed(pillID: pill.id)
+        let barWindow = window as? FloatingControlBarWindow
+        let wasShowingConversation = state.showingAIConversation
+        state.setNotchHoverMenuOpen(false)
+        notchLogoHovering = false
+        barWindow?.makeKeyAndOrderFront(nil)
+        withAnimation(agentChatSwitchTransition) {
+            state.present(.agent(pill.id))
+            state.isAILoading = false
+            state.aiInputText = ""
+        }
+        barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
+    }
+
+    private func showAgentListFromConversation() {
+        guard !agentPills.pills.isEmpty else {
+            onCloseAI()
+            return
+        }
+        withAnimation(agentChatSwitchTransition) {
+            state.hideConversationSurface()
+        }
+        DispatchQueue.main.async {
+            (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
+        }
+    }
+
+    private func handleBarHover(_ hovering: Bool) {
+        if state.usesNotchIsland {
+            (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
+            withAnimation(.easeInOut(duration: 0.12)) {
+                isHovering = state.isNotchHoverMenuVisible
+            }
+            if !state.isNotchHoverMenuVisible {
+                notchLogoHovering = false
+            }
+            return
+        }
+
+        if !hovering {
+            state.requiresHoverReset = false
+        }
+
+        let effectiveHover = hovering && !state.requiresHoverReset && isWithinActivationZoneForCurrentMode()
+        state.isHoveringBar = effectiveHover
+        // Resize window BEFORE updating SwiftUI state on expand so the expanded
+        // content never renders in a too-small window (which causes overflow).
+        if effectiveHover {
+            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: true)
+        }
+        withAnimation(.easeInOut(duration: 0.12)) {
+            isHovering = effectiveHover
+        }
+        if !effectiveHover {
+            (window as? FloatingControlBarWindow)?.resizeForHover(expanded: false)
+        }
+    }
+
+    private func isWithinActivationZoneForCurrentMode() -> Bool {
+        guard state.usesNotchIsland else { return true }
+        guard let window else { return false }
+        let hitHeight = state.isAgentSwitcherExpanded
+            ? max(FloatingControlBarWindow.notchChromeHeight, window.frame.height - notchSurfaceBottomInset)
+            : FloatingControlBarWindow.notchActivationHeight
+        return FloatingControlBarGeometry.notchChromeActivationContains(
+            mouseLocation: NSEvent.mouseLocation,
+            windowFrame: window.frame,
+            chromeHeight: hitHeight,
+            horizontalOutset: FloatingControlBarWindow.notchGlowOutsetX
+        )
+    }
+
+    private func notificationView(_ notification: FloatingBarNotification) -> some View {
+        // The entire card opens the chat. A SwiftUI Button only hit-tests its
+        // visible content, so the previous layout left the padding and spacer
+        // as dead zones — users reported clicks landing "on the box" doing
+        // nothing. Wrapping the whole card in a single Button with
+        // contentShape(Rectangle()) makes every pixel clickable. The dismiss
+        // (X) button sits in an overlay on top so it keeps its own hit region.
+        Button {
+            FloatingControlBarManager.shared.openNotificationAsChat(notification)
+        } label: {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 34, height: 34)
+
+                    Image(systemName: "bell.badge.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(notification.title)
+                        .scaledFont(size: 13, weight: .semibold)
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Text(notification.message)
+                        .scaledFont(size: 12)
+                        .foregroundColor(.white.opacity(0.72))
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+
+                // Reserve space so text never runs under the overlaid action buttons.
+                // Wider for actionable (task) notifications that also show Execute.
+                Color.clear
+                    .frame(width: notification.assistantId == "task" ? 90 : 36, height: 18)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .overlay(alignment: .topTrailing) {
+            HStack(spacing: 6) {
+                // Execute is only meaningful for actionable notifications (tasks).
+                // Focus / Insight (tips) / other passive notifications are
+                // informational — spawning an agent there made no sense.
+                if notification.assistantId == "task" {
+                    Button {
+                        let model = ShortcutSettings.shared.selectedModel.isEmpty
+                            ? ModelQoS.Claude.defaultSelection
+                            : ShortcutSettings.shared.selectedModel
+                        let query = ProactiveTaskExecute.buildQuery(
+                            title: notification.title,
+                            message: notification.message
+                        )
+                        _ = AgentPillsManager.shared.spawn(
+                            query: query,
+                            model: model,
+                            systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix
+                        )
+                        FloatingControlBarManager.shared.dismissCurrentNotification()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 9, weight: .bold))
+                            Text("Execute")
+                                .scaledFont(size: 10, weight: .semibold)
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.18))
+                        .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Spawn an agent to handle this")
+                }
+
+                Button {
+                    FloatingControlBarManager.shared.dismissCurrentNotification()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.white.opacity(0.62))
+                        .frame(width: 18, height: 18)
+                        .background(Color.white.opacity(0.08))
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+        }
+        .floatingBackground(cornerRadius: 18)
+    }
+
+    private func openFloatingBarSettings() {
+        activateMainAppWindow()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
+        }
+    }
+
+    private func activateMainAppWindow() {
+        NSApp.activate()
+
+        if !revealMainAppWindow() {
+            AppDelegate.openMainWindow?()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                NSApp.activate()
+                _ = revealMainAppWindow()
+            }
+        }
+    }
+
+    @discardableResult
+    private func revealMainAppWindow() -> Bool {
+        guard let window = NSApp.windows.first(where: { window in
+            let isRealAppWindow = !(window is NSPanel)
+                && window.frame.width > 300
+                && window.frame.height > 200
+            let isMenuBarPopover = window.title.hasPrefix("Item-")
+            return isRealAppWindow && !isMenuBarPopover && !window.isMiniaturized
+        }) ?? NSApp.windows.first(where: { window in
+            let isRealAppWindow = !(window is NSPanel)
+                && window.frame.width > 300
+                && window.frame.height > 200
+            let isMenuBarPopover = window.title.hasPrefix("Item-")
+            return isRealAppWindow && !isMenuBarPopover
+        }) else {
+            return false
+        }
+
+        window.deminiaturize(nil)
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless()
+        return true
+    }
+
+    private var controlBarView: some View {
+        let allowsHoverExpansion = isHovering && !state.isVoiceResponseActive
+        return Group {
+            if state.isVoiceListening && !state.isVoiceFollowUp {
+                voiceListeningView
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .frame(height: 42)
+                    .transition(.opacity)
+            } else if allowsHoverExpansion || state.showingAIConversation {
+                VStack(spacing: 1) {
+                    compactButton(title: "Ask omi / Collapse", keys: shortcutSettings.askOmiShortcut.displayTokens) {
+                        onAskAI()
+                    }
+
+                    HStack(spacing: 6) {
+                        compactLabel("Push to talk", keys: shortcutSettings.pttShortcut.displayTokens)
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .frame(height: 50)
+                .transition(.opacity)
+            } else {
+                compactCircleView
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    /// Minimal thin bar shown when not hovering
+    private var compactCircleView: some View {
+        RoundedRectangle(cornerRadius: 3)
+            .fill(compactPillFill)
+            .frame(width: 28, height: 6)
+            .shadow(
+                color: state.isVoiceResponseActive ? Color.white.opacity(0.85) : .clear,
+                radius: state.isVoiceResponseActive ? 16 : 0,
+                x: 0,
+                y: 0
+            )
+            .shadow(
+                color: state.isVoiceResponseActive ? Color.white.opacity(0.45) : .clear,
+                radius: state.isVoiceResponseActive ? 28 : 0,
+                x: 0,
+                y: 0
+            )
+            .overlay {
+                if state.isVoiceResponseActive {
+                    RoundedRectangle(cornerRadius: 3)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(0.9),
+                                    Color(red: 0.25, green: 0.75, blue: 1.0),
+                                    Color.white.opacity(0.7)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ),
+                            lineWidth: 1.4
+                        )
+                        .padding(-2.2)
+                        .blur(radius: 0.25)
+                }
+            }
+            .animation(.easeInOut(duration: 0.18), value: state.isVoiceResponseActive)
+    }
+
+    private var compactPillFill: LinearGradient {
+        if state.isVoiceResponseActive {
+            return LinearGradient(
+                colors: [
+                    Color.white.opacity(0.9),
+                    Color(red: 0.50, green: 0.75, blue: 1.0),
+                    Color.white.opacity(0.7)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+        }
+        return LinearGradient(
+            colors: [Color.white.opacity(0.5), Color.white.opacity(0.5)],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
+
+    private func compactToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        Button(action: { isOn.wrappedValue.toggle() }) {
+            HStack(spacing: 3) {
+                Text(title)
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isOn.wrappedValue ? Color.white.opacity(0.3) : Color.white.opacity(0.1))
+                    .frame(width: 26, height: 15)
+                    .overlay(alignment: isOn.wrappedValue ? .trailing : .leading) {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 11, height: 11)
+                            .padding(2)
+                    }
+                    .animation(.easeInOut(duration: 0.15), value: isOn.wrappedValue)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func compactButton(title: String, keys: [String], action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            compactLabel(title, keys: keys)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func compactLabel(_ title: String, keys: [String]) -> some View {
+        HStack(spacing: 3) {
+            Text(title)
+                .scaledFont(size: 11, weight: .medium)
+                .foregroundColor(.white)
+            ForEach(keys, id: \.self) { key in
+                Text(key)
+                    .scaledFont(size: 9)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, key.count > 1 ? 4 : 0)
+                    .frame(minWidth: 15, minHeight: 15)
+                    .background(Color.white.opacity(0.1))
+                    .cornerRadius(3)
+            }
+        }
+    }
+
+    private var voiceListeningView: some View {
+        HStack(spacing: 7) {
+            // Playful realtime mic waveform (replaces the old pulsing red dot)
+            VoiceWaveformBars(isActive: state.isVoiceListening)
+
+            Image(systemName: "mic.fill")
+                .scaledFont(size: 12, weight: .semibold)
+                .foregroundColor(.white)
+
+            if state.isVoiceLocked {
+                Image(systemName: "lock.fill")
+                    .scaledFont(size: 10, weight: .bold)
+                    .foregroundColor(.orange)
+                    .frame(width: 18, height: 18)
+                    .background(Color.orange.opacity(0.2))
+                    .cornerRadius(4)
+            }
+        }
+    }
+
+    private var aiInputView: some View {
+        AskAIInputView(
+            userInput: Binding(
+                get: { state.aiInputText },
+                set: { state.aiInputText = $0 }
+            ),
+            canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
+            onSend: { message in
+                (window as? FloatingControlBarWindow)?
+                    .beginVisibleMainQuery(message, fromVoice: false, animated: true)
+                onSendQuery(message)
+            },
+            onClearVisibleConversation: onClearVisibleConversation,
+            onEscape: onEscape,
+            onHeightChange: { [self] height in
+                lastInputEditorHeight = height
+                if state.usesNotchIsland {
+                    recomputeNotchInputHeight()
+                } else {
+                    state.inputViewHeight = 50 + height + 24
+                }
+            }
+        )
+        .onChange(of: agentPills.pills.count) { _ in
+            // The agent-pills header budget depends on whether pills exist, so
+            // recompute the input height when the pill list changes while the
+            // input/chat view is open. Without this the budget goes stale and
+            // causes clipping or extra empty space. (Cubic P2.)
+            recomputeNotchInputHeight()
+        }
+        .transition(
+            .asymmetric(
+                insertion: .move(edge: .top).combined(with: .opacity),
+                removal: .move(edge: .top).combined(with: .opacity)
+            ))
+    }
+
+    /// Recompute inputViewHeight from the last known editor height and the
+    /// current agent-pills presence. Called on editor height change and on
+    /// pill-list change so the header height budget never goes stale.
+    private func recomputeNotchInputHeight() {
+        guard state.usesNotchIsland else { return }
+        // Guard against stale zero editor height: the editor has not reported
+        // its size yet (or was just re-created after a surface switch), so
+        // recomputing now would shrink the window and clip input/send
+        // controls. Fall back to the minimum content height so the panel
+        // keeps a usable size until a real height arrives. (Cubic P2.)
+        let height = lastInputEditorHeight > 0
+            ? lastInputEditorHeight
+            : FloatingControlBarWindow.notchInputPanelMinimumContentHeight
+        let baseHeight = notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
+        let headerBudget = !agentPills.pills.isEmpty
+            ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
+            : 0
+        state.inputViewHeight = baseHeight + headerBudget
+    }
+
+    private var aiResponseView: some View {
+        AIResponseView(
+            isLoading: Binding(
+                get: { state.isAILoading },
+                set: { state.isAILoading = $0 }
+            ),
+            currentMessage: state.currentAIMessage,
+            userInput: state.displayedQuery,
+            chatHistory: state.chatHistory,
+            isVoiceFollowUp: Binding(
+                get: { state.isVoiceFollowUp },
+                set: { state.isVoiceFollowUp = $0 }
+            ),
+            voiceFollowUpTranscript: Binding(
+                get: { state.voiceFollowUpTranscript },
+                set: { state.voiceFollowUpTranscript = $0 }
+            ),
+            canClearVisibleConversation: state.usesNotchIsland ? false : state.hasVisibleConversation,
+            showsHeader: !state.usesNotchIsland,
+            onClearVisibleConversation: onClearVisibleConversation,
+            onEscape: onEscape,
+            onSendFollowUp: { message in
+                archiveCurrentExchange()
+
+                (window as? FloatingControlBarWindow)?
+                    .beginVisibleMainQuery(message, fromVoice: false, animated: true)
+                state.displayedQuery = message
+                state.currentQuestionMessageId = nil
+                state.markConversationActivity()
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                    state.isAILoading = true
+                    state.currentAIMessage = nil
+                }
+                onSendQuery(message)
+            },
+            onRate: onRate,
+            onShareLink: onShareLink
+        )
+        .transition(
+            .asymmetric(
+                insertion: .move(edge: .bottom).combined(with: .opacity),
+                removal: .move(edge: .bottom).combined(with: .opacity)
+            ))
+    }
+
+    private func archiveCurrentExchange() {
+        guard let currentMessage = state.currentAIMessage else { return }
+        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
+
+        let currentQuery = state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        state.chatHistory.append(
+            FloatingChatExchange(
+                question: currentQuery.isEmpty ? nil : currentQuery,
+                questionMessageId: state.currentQuestionMessageId,
+                aiMessage: currentMessage
+            )
+        )
+    }
+
+}
+
+private struct NotchDockShape: Shape {
+    let bottomRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(bottomRadius, rect.height / 2)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct NotchLowerEdgeShape: Shape {
+    let bottomRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let radius = min(bottomRadius, rect.height / 2)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY + 1))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - radius))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.minX + radius, y: rect.maxY),
+            control: CGPoint(x: rect.minX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX - radius, y: rect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: rect.maxX, y: rect.maxY - radius),
+            control: CGPoint(x: rect.maxX, y: rect.maxY)
+        )
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + 1))
+        return path
+    }
+}
+
+private struct NotchResponseGlowView: View {
+    let bottomRadius: CGFloat
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1.0 / 24.0)) { timeline in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+            let phase = time.truncatingRemainder(dividingBy: 2.4) / 2.4
+            let sweepStart = UnitPoint(x: -0.35 + phase * 1.7, y: 0.0)
+            let sweepEnd = UnitPoint(x: 0.35 + phase * 1.7, y: 1.0)
+            let edge = NotchLowerEdgeShape(bottomRadius: bottomRadius)
+
+            ZStack {
+                edge
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(1.0),
+                                Color(red: 0.72, green: 0.88, blue: 1.0).opacity(1.0),
+                                Color(red: 0.88, green: 0.95, blue: 1.0).opacity(1.0),
+                                Color.white.opacity(1.0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        style: StrokeStyle(lineWidth: 3.2, lineCap: .round, lineJoin: .round)
+                    )
+
+                edge
+                    .stroke(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: 0.0),
+                                .init(color: Color.white.opacity(0.55), location: 0.28),
+                                .init(color: Color(red: 0.22, green: 0.88, blue: 1.0).opacity(1.0), location: 0.45),
+                                .init(color: Color.white.opacity(1.0), location: 0.53),
+                                .init(color: Color(red: 1.0, green: 0.96, blue: 0.92).opacity(0.95), location: 0.70),
+                                .init(color: .clear, location: 1.0)
+                            ],
+                            startPoint: sweepStart,
+                            endPoint: sweepEnd
+                        ),
+                        style: StrokeStyle(lineWidth: 4.8, lineCap: .round, lineJoin: .round)
+                    )
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct NotchOmiMark: View {
+    var dotColors: [Color] = []
+
+    private static let dotCount = 8
+    private static let dotDiameterRatio: CGFloat = 0.18
+    private static let ringRadiusRatio: CGFloat = 0.33
+
+    var body: some View {
+        GeometryReader { geometry in
+            let size = min(geometry.size.width, geometry.size.height)
+            let center = CGPoint(
+                x: geometry.size.width / 2,
+                y: geometry.size.height / 2
+            )
+            let dotDiameter = size * Self.dotDiameterRatio
+            let ringRadius = size * Self.ringRadiusRatio
+
+            ZStack {
+                ForEach(0..<Self.dotCount, id: \.self) { index in
+                    let angle = Double(index) / Double(Self.dotCount) * Double.pi * 2 - Double.pi
+                    Circle()
+                        .fill(dotColors.indices.contains(index) ? dotColors[index] : Color.white.opacity(0.96))
+                        .frame(width: dotDiameter, height: dotDiameter)
+                        .position(
+                            x: center.x + CGFloat(cos(angle)) * ringRadius,
+                            y: center.y + CGFloat(sin(angle)) * ringRadius
+                        )
+                }
+            }
+        }
+        .drawingGroup(opaque: false, colorMode: .linear)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct SubagentChatPointer: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct AgentMainChatView: View {
+    @EnvironmentObject var state: FloatingControlBarState
+    @ObservedObject var pill: AgentPill
+    @ObservedObject var manager: AgentPillsManager
+    let onBackToOmi: () -> Void
+    let onEscape: () -> Void
+    let onSpawnSibling: (UUID) -> Void
+
+    @State private var followUpText = ""
+    @FocusState private var isFollowUpFocused: Bool
+
+    private var isRecording: Bool {
+        manager.recordingPillID == pill.id
+    }
+
+    private var isRunning: Bool {
+        switch pill.status {
+        case .queued, .starting, .running:
+            return true
+        case .done, .failed:
+            return false
+        }
+    }
+
+    private var outputText: String {
+        if let message = pill.aiMessage {
+            let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                return text
+            }
+        }
+        return ""
+    }
+
+    private var activityText: String {
+        pill.latestActivity.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            header
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        questionBubble
+
+                        responseContent
+                            .id(pill.contentRevision)
+
+                        if isRecording {
+                            voiceFollowUpView
+                                .id("agentVoiceFollowUp")
+                        }
+
+                        Color.clear.frame(height: 1).id("agentBottom")
+                    }
+                    .padding(.trailing, 30)
+                    .background(
+                        GeometryReader { geometry -> Color in
+                            let height = geometry.size.height
+                            DispatchQueue.main.async {
+                                state.reportContentHeight(height, for: .agent(pill.id))
+                            }
+                            return Color.clear
+                        }
+                    )
+                }
+                .onChange(of: pill.latestActivity) {
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: pill.aiMessage?.text) {
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: pill.contentRevision) {
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: isRecording) {
+                    scrollToBottom(proxy)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            followUpInput
+        }
+        .padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            manager.markViewed(pillID: pill.id)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                isFollowUpFocused = true
+            }
+        }
+        .onExitCommand {
+            onEscape()
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Button(action: onBackToOmi) {
+                Image(systemName: "chevron.left")
+                    .scaledFont(size: 13, weight: .semibold)
+                    .foregroundColor(.white.opacity(0.82))
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Back to Omi chat")
+
+            Text(pill.title)
+                .scaledFont(size: 13, weight: .bold)
+                .foregroundColor(.white)
+                .lineLimit(1)
+
+            Spacer(minLength: 8)
+
+            statusBadge
+        }
+    }
+
+    private var statusBadge: some View {
+        Group {
+            if pill.status == .done {
+                Button {
+                    manager.dismiss(pillID: pill.id)
+                    onBackToOmi()
+                } label: {
+                    statusBadgeLabel
+                }
+                .buttonStyle(.plain)
+                .help("Dismiss completed agent")
+            } else {
+                statusBadgeLabel
+            }
+        }
+    }
+
+    private var statusBadgeLabel: some View {
+        Text(pill.status.displayLabel)
+            .scaledFont(size: 9, weight: .bold)
+            .foregroundColor(statusForeground)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(pill.status.tintColor.opacity(statusBackgroundOpacity))
+            .clipShape(Capsule())
+    }
+
+    private var statusForeground: Color {
+        switch pill.status {
+        case .queued, .starting, .running, .done:
+            return .black.opacity(0.86)
+        case .failed:
+            return .white
+        }
+    }
+
+    private var statusBackgroundOpacity: Double {
+        switch pill.status {
+        case .queued, .starting, .running, .done:
+            return 1
+        case .failed:
+            return 0.75
+        }
+    }
+
+    private var questionBubble: some View {
+        Text(pill.query)
+            .scaledFont(size: 13, weight: .semibold)
+            .foregroundColor(.white)
+            .textSelection(.enabled)
+            .lineLimit(4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 9)
+            .background(Color.white.opacity(0.10))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .contextMenu {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(pill.query, forType: .string)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var responseContent: some View {
+        if isRunning && outputText.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                TypingIndicator()
+                    .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                if !activityText.isEmpty {
+                    Text(activityText)
+                        .scaledFont(size: 12, weight: .semibold)
+                        .foregroundColor(.white.opacity(0.62))
+                        .textSelection(.enabled)
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                if outputText.isEmpty {
+                    EmptyView()
+                } else {
+                    Markdown(outputText)
+                        .markdownTheme(.aiMessage(scale: 0.88))
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 4)
+            .contextMenu {
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(outputText, forType: .string)
+                }
+            }
+        }
+    }
+
+    private var voiceFollowUpView: some View {
+        HStack(spacing: 8) {
+            VoiceWaveformBars(isActive: true)
+            Image(systemName: "mic.fill")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundColor(.white)
+            Text("Listening...")
+                .scaledFont(size: 13)
+                .foregroundColor(.white.opacity(0.62))
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color.white.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var followUpInput: some View {
+        HStack(spacing: 6) {
+            Button {
+                manager.toggleFollowUpVoice(for: pill)
+            } label: {
+                Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
+                    .scaledFont(size: 17, weight: .semibold)
+                    .foregroundColor(isRecording ? Color.white : .secondary)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .help(isRecording ? "Stop voice follow-up" : "Voice follow-up")
+
+            TextField("Ask this agent...", text: $followUpText)
+                .textFieldStyle(.plain)
+                .scaledFont(size: 13)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(Color.white.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .focused($isFollowUpFocused)
+                .onSubmit {
+                    sendFollowUp()
+                }
+
+            Button(action: sendFollowUp) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .scaledFont(size: 20)
+                    .foregroundColor(canSend ? .white : .secondary)
+            }
+            .disabled(!canSend)
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var canSend: Bool {
+        !followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func sendFollowUp() {
+        let trimmed = followUpText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        followUpText = ""
+        if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
+            let sibling = manager.spawnFromHandoff(handoff, model: pill.model)
+            state.present(.agent(sibling.id))
+            // Route through the window resize/observer setup so the new
+            // sibling's reportContentHeight(.agent(sibling.id)) updates are
+            // observed. Without this the height observer stays keyed to the
+            // previous agent and the sibling's chat stays clipped.
+            onSpawnSibling(sibling.id)
+            return
+        }
+        manager.continueAgent(from: pill, text: trimmed)
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        withAnimation(.easeOut(duration: 0.15)) {
+            proxy.scrollTo("agentBottom", anchor: .bottom)
+        }
+    }
+}
+
+private struct NotchAgentPillsRowView: View {
+    @ObservedObject var manager: AgentPillsManager
+    weak var barWindow: NSWindow?
+    @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
+    @State private var pillStatusChangeToken = 0
+
+    private var stackedPills: [AgentPill] {
+        NotchAgentStackMetrics.sortedPills(manager.pills)
+    }
+
+    var body: some View {
+        let _ = pillStatusChangeToken
+        NotchAgentOmiIndicatorView(pills: stackedPills)
+            .frame(width: 21, height: 21)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+            .accessibilityLabel("Subagent status")
+            .accessibilityHint("Hover to fan out subagents, click to keep them open")
+            .onAppear { syncPillStatusObservers() }
+            .onChange(of: manager.pills.map(\.id)) { _, _ in
+                syncPillStatusObservers()
+            }
+    }
+
+    private func syncPillStatusObservers() {
+        let currentIDs = Set(manager.pills.map(\.id))
+        pillStatusCancellables = pillStatusCancellables.filter { currentIDs.contains($0.key) }
+        for pill in manager.pills where pillStatusCancellables[pill.id] == nil {
+            pillStatusCancellables[pill.id] = pill.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { _ in
+                    pillStatusChangeToken &+= 1
+                }
+        }
+    }
+}
+
+@MainActor
+private enum NotchAgentStackMetrics {
+    static let maxAgents = FloatingControlBarWindow.notchAgentListMaxVisibleAgents
+    static let listOrbSize: CGFloat = 11
+    static let listHorizontalInset: CGFloat = 12
+    static let listRowLeadingPadding: CGFloat = 12
+    static let listOrbSlotWidth: CGFloat = 24
+    static let logoFrameSize: CGFloat = 21
+    static let logoTrailingInset: CGFloat = 2
+    static let logoDotDiameterRatio: CGFloat = 0.18
+    static let logoRingRadiusRatio: CGFloat = 0.33
+
+    static func sortedPills(_ pills: [AgentPill]) -> [AgentPill] {
+        let newestIndex = Dictionary(uniqueKeysWithValues: pills.reversed().enumerated().map { ($0.element.id, $0.offset) })
+        return pills.sorted { lhs, rhs in
+            let lhsGroup = NotchAgentStatusGroup(status: lhs.status)
+            let rhsGroup = NotchAgentStatusGroup(status: rhs.status)
+            if lhsGroup.sortRank != rhsGroup.sortRank {
+                return lhsGroup.sortRank < rhsGroup.sortRank
+            }
+            return (newestIndex[lhs.id] ?? 0) < (newestIndex[rhs.id] ?? 0)
+        }
+    }
+
+    static func logoCenterX(
+        rowWidth: CGFloat,
+        notchHiddenCenterWidth: CGFloat,
+        notchSideWidth: CGFloat
+    ) -> CGFloat {
+        let chromeWidth = notchHiddenCenterWidth + notchSideWidth * 2
+        let chromeMinX = (rowWidth - chromeWidth) / 2
+        return chromeMinX + notchSideWidth - logoTrailingInset - logoFrameSize / 2
+    }
+
+    static func logoDotSourceOffset(for index: Int) -> CGSize {
+        let angle = Double(index) / Double(maxAgents) * Double.pi * 2 - Double.pi
+        let ringRadius = logoFrameSize * logoRingRadiusRatio
+        return CGSize(
+            width: CGFloat(cos(angle)) * ringRadius,
+            height: CGFloat(sin(angle)) * ringRadius
+        )
+    }
+
+    static func smoothStep(_ value: CGFloat) -> CGFloat {
+        let t = min(1, max(0, value))
+        return t * t * (3 - 2 * t)
+    }
+
+    static func quadraticBezier(from start: CGPoint, control: CGPoint, to end: CGPoint, progress: CGFloat) -> CGPoint {
+        let t = smoothStep(progress)
+        let inverse = 1 - t
+        return CGPoint(
+            x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+            y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y
+        )
+    }
+
+    /// Scale that shrinks a fan-out orb down to a logo-ring dot, so the same dot view
+    /// reads as the small logo dot at progress 0 and the full orb at progress 1.
+    static let logoDotScale: CGFloat = (logoFrameSize * logoDotDiameterRatio) / listOrbSize
+}
+
+private struct NotchAgentOmiIndicatorView: View {
+    let pills: [AgentPill]
+
+    private var visiblePills: [AgentPill] {
+        Array(pills.prefix(NotchAgentStackMetrics.maxAgents))
+    }
+
+    var body: some View {
+        NotchOmiMark(dotColors: visiblePills.map { NotchAgentStatusGroup(status: $0.status).color })
+            .contentShape(Rectangle())
+    }
+}
+
+/// One field of dots that morphs between the logo ring (collapsed) and the fanned
+/// row (expanded). The *same* dots travel the whole way — driven by `progress` — so
+/// the logo literally unfurls into the row and furls back, with object permanence.
+/// No separate logo view fading out while a different row fades in.
+private struct NotchAgentMorphField: View {
+    @ObservedObject var manager: AgentPillsManager
+    let activePillID: UUID?
+    let progress: CGFloat
+    let notchHiddenCenterWidth: CGFloat
+    let notchSideWidth: CGFloat
+    let rowTopOffset: CGFloat
+    let onSelect: (AgentPill) -> Void
+    @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
+    @State private var pillStatusChangeToken = 0
+
+    private var sortedPills: [AgentPill] {
+        let _ = pillStatusChangeToken
+        return Array(NotchAgentStackMetrics.sortedPills(manager.pills).prefix(NotchAgentStackMetrics.maxAgents))
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let chromeHeight = FloatingControlBarWindow.notchChromeHeight
+            let rowHeight = FloatingControlBarWindow.notchAgentListRowHeight
+            let rowSpacing = FloatingControlBarWindow.notchAgentListRowSpacing
+            let verticalPadding = FloatingControlBarWindow.notchAgentListVerticalPadding
+            let rowWidth = max(0, min(width - NotchAgentStackMetrics.listHorizontalInset * 2, FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))
+            let rowMinX = (width - rowWidth) / 2
+            let dotTravelProgress = NotchAgentStackMetrics.smoothStep(progress)
+            let rowRevealProgress = NotchAgentStackMetrics.smoothStep((progress - 0.38) / 0.62)
+            let logoPlaceholderProgress = NotchAgentStackMetrics.smoothStep(progress / 0.42)
+            let logoCenter = CGPoint(
+                x: NotchAgentStackMetrics.logoCenterX(
+                    rowWidth: width,
+                    notchHiddenCenterWidth: notchHiddenCenterWidth,
+                    notchSideWidth: notchSideWidth
+                ),
+                y: chromeHeight / 2
+            )
+            let pills = sortedPills
+
+            ZStack {
+                ForEach(0..<NotchAgentStackMetrics.maxAgents, id: \.self) { index in
+                    let ringOffset = NotchAgentStackMetrics.logoDotSourceOffset(for: index)
+                    let ringPoint = CGPoint(x: logoCenter.x + ringOffset.width, y: logoCenter.y + ringOffset.height)
+                    let rowMinY = chromeHeight + rowTopOffset + verticalPadding + CGFloat(index) * (rowHeight + rowSpacing)
+                    let rowCenter = CGPoint(x: width / 2, y: rowMinY + rowHeight / 2)
+                    let orbCenter = CGPoint(
+                        x: rowMinX + NotchAgentStackMetrics.listRowLeadingPadding + NotchAgentStackMetrics.listOrbSize / 2,
+                        y: rowCenter.y
+                    )
+                    let controlPoint = CGPoint(
+                        x: logoCenter.x + (orbCenter.x - logoCenter.x) * 0.58,
+                        y: chromeHeight + rowTopOffset * 0.45 + verticalPadding + CGFloat(index) * 2
+                    )
+                    let dotPoint = NotchAgentStackMetrics.quadraticBezier(
+                        from: ringPoint,
+                        control: controlPoint,
+                        to: orbCenter,
+                        progress: dotTravelProgress
+                    )
+                    if pills.indices.contains(index) {
+                        let pill = pills[index]
+                        let group = NotchAgentStatusGroup(status: pill.status)
+
+                        Button {
+                            onSelect(pill)
+                        } label: {
+                            NotchAgentListRow(
+                                title: pill.title,
+                                status: pill.status,
+                                activity: pill.latestActivity,
+                                isSelected: pill.id == activePillID,
+                                progress: rowRevealProgress
+                            )
+                                .frame(width: rowWidth, height: rowHeight)
+                        }
+                        .buttonStyle(.plain)
+                        .frame(width: rowWidth, height: rowHeight)
+                        .allowsHitTesting(progress > 0.6)
+                        .position(rowCenter)
+                        .help(pill.title)
+
+                        NotchMorphDot(
+                            color: group.color,
+                            isActive: pill.id == activePillID,
+                            progress: progress
+                        )
+                        .position(dotPoint)
+                        .allowsHitTesting(false)
+                    } else {
+                        NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)
+                            .position(ringPoint)
+                            .allowsHitTesting(false)
+                    }
+                }
+            }
+            .frame(width: width, height: geometry.size.height, alignment: .top)
+        }
+        .onAppear { syncPillStatusObservers() }
+        .onChange(of: manager.pills.map(\.id)) { _, _ in syncPillStatusObservers() }
+    }
+
+    private func syncPillStatusObservers() {
+        let currentIDs = Set(manager.pills.map(\.id))
+        pillStatusCancellables = pillStatusCancellables.filter { currentIDs.contains($0.key) }
+        for pill in manager.pills where pillStatusCancellables[pill.id] == nil {
+            pillStatusCancellables[pill.id] = pill.objectWillChange
+                .receive(on: DispatchQueue.main)
+                .sink { _ in
+                    pillStatusChangeToken &+= 1
+                }
+        }
+    }
+}
+
+/// A single dot that looks like a logo-ring dot at progress 0 (small, no stroke)
+/// and a fanned status orb at progress 1 (full size, ringed).
+private struct NotchMorphDot: View {
+    let color: Color
+    let isActive: Bool
+    let progress: CGFloat
+
+    var body: some View {
+        let scale = NotchAgentStackMetrics.logoDotScale + (1 - NotchAgentStackMetrics.logoDotScale) * progress
+        Circle()
+            .fill(color)
+            .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
+            .overlay(
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.42 * Double(progress)), lineWidth: 0.8)
+            )
+            .shadow(color: color.opacity(0.6), radius: isActive ? 9 : 5)
+            .scaleEffect(scale)
+            .frame(width: 18, height: 22)
+            .contentShape(Circle())
+    }
+}
+
+private struct NotchLogoPlaceholderDot: View {
+    let progress: CGFloat
+
+    var body: some View {
+        Circle()
+            .fill(Color.white.opacity(0.96 * Double(1 - progress)))
+            .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
+            .scaleEffect(NotchAgentStackMetrics.logoDotScale)
+            .frame(width: 18, height: 22)
+    }
+}
+
+private struct NotchAgentListRow: View {
+    let title: String
+    let status: AgentPill.Status
+    let activity: String
+    let isSelected: Bool
+    let progress: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Color.clear
+                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 1)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundStyle(.white.opacity(0.94))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                HStack(spacing: 4) {
+                    Image(systemName: activityIcon)
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(statusColor.opacity(0.95))
+                        .frame(width: 9, height: 9)
+
+                    Text(progressSummary)
+                        .scaledFont(size: 9, weight: .medium)
+                        .foregroundStyle(.white.opacity(0.52))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+            .opacity(progress)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, NotchAgentStackMetrics.listRowLeadingPadding)
+        .padding(.trailing, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? Color.white.opacity(0.12 * Double(progress)) : .clear)
+        )
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.white.opacity(0.11 * Double(progress)))
+                .frame(height: 0.6)
+        }
+        .contentShape(Rectangle())
+    }
+
+    private var progressSummary: String {
+        let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty || trimmed == status.displayLabel {
+            return status.displayLabel
+        }
+        if trimmed.lowercased().hasPrefix(status.displayLabel.lowercased()) {
+            return trimmed
+        }
+        return "\(status.displayLabel) — \(trimmed)"
+    }
+
+    private var statusColor: Color {
+        status.tintColor
+    }
+
+    private var activityIcon: String {
+        switch status {
+        case .queued:
+            return "clock"
+        case .starting, .running:
+            return "sparkles"
+        case .done:
+            return "checkmark"
+        case .failed:
+            return "exclamationmark"
+        }
+    }
+}
+
+private enum NotchAgentStatusGroup: String, Identifiable {
+    case running
+    case queued
+    case failed
+    case done
+
+    var id: String { rawValue }
+
+    init(status: AgentPill.Status) {
+        switch status {
+        case .starting, .running:
+            self = .running
+        case .queued:
+            self = .queued
+        case .failed:
+            self = .failed
+        case .done:
+            self = .done
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .running: return "Running"
+        case .queued: return "Queued"
+        case .failed: return "Failed"
+        case .done: return "Done"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .running: return Color(red: 1.0, green: 0.80, blue: 0.40)
+        case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
+        case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
+        case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
+        }
+    }
+
+    var highlightColor: Color {
+        switch self {
+        case .running: return Color(red: 1.0, green: 0.62, blue: 0.20)
+        case .queued: return Color(red: 0.08, green: 0.52, blue: 1.0)
+        case .failed: return Color(red: 1.0, green: 0.46, blue: 0.12)
+        case .done: return Color(red: 0.08, green: 0.78, blue: 0.62)
+        }
+    }
+
+    var shadowColor: Color {
+        switch self {
+        case .running: return Color(red: 0.72, green: 0.36, blue: 0.04)
+        case .queued: return Color(red: 0.00, green: 0.44, blue: 0.95)
+        case .failed: return Color(red: 0.78, green: 0.08, blue: 0.18)
+        case .done: return Color(red: 0.02, green: 0.50, blue: 0.24)
+        }
+    }
+
+    var sortRank: Int {
+        switch self {
+        case .running: return 0
+        case .queued: return 1
+        case .failed: return 2
+        case .done: return 3
+        }
+    }
+
+}
+
+private struct NotchAgentStatusOrb: View {
+    let group: NotchAgentStatusGroup
+    let isActive: Bool
+    var size: CGFloat = 16
+
+    var body: some View {
+        Circle()
+            .fill(group.color)
+            .overlay(
+                Circle()
+                    .stroke(Color.white.opacity(isActive ? 0.34 : 0.20), lineWidth: 1)
+            )
+        .frame(width: size, height: size)
+        .frame(width: size + 6, height: size + 6)
+    }
+}

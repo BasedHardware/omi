@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -9,18 +10,17 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/home/firmware_update.dart';
+import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/widgets/dialog.dart';
 
 class DeviceSettings extends StatefulWidget {
@@ -39,11 +39,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   bool _isMicGainLoaded = false;
   bool? _hasMicGainFeature;
 
-  // WiFi sync state
-  bool _isWifiSupported = false;
-
   Timer? _debounce;
   Timer? _micGainDebounce;
+
+  bool _autoSyncOfflineRecordings = SharedPreferencesUtil().autoSyncOfflineRecordings;
 
   // TODO: thinh, use connection directly
   Future _bleDisconnectDevice(BtDevice btDevice) async {
@@ -130,13 +129,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             });
           }
         }
-
-        final wifiSupported = await connection.isWifiSyncSupported();
-        if (mounted) {
-          setState(() {
-            _isWifiSupported = wifiSupported;
-          });
-        }
       }
     }
   }
@@ -179,11 +171,16 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Widget _buildProfileStyleItem({
     required IconData icon,
     required String title,
+    String? subtitle,
     String? chipValue,
     String? copyValue,
     VoidCallback? onTap,
+    Widget? trailing,
     bool showChevron = true,
   }) {
+    // A trailing widget (e.g. a toggle) owns the row's right edge and the
+    // interaction, so suppress the chevron in that case.
+    final bool showChevronResolved = showChevron && trailing == null;
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       child: Row(
@@ -191,9 +188,22 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
           const SizedBox(width: 16),
           Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
+                ),
+                if (subtitle != null) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w400),
+                  ),
+                ],
+              ],
             ),
           ),
           if (chipValue != null) ...[
@@ -205,9 +215,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
               ),
             ),
-            if (showChevron) const SizedBox(width: 8),
+            if (showChevronResolved) const SizedBox(width: 8),
           ],
-          if (showChevron) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
+          if (trailing != null) trailing,
+          if (showChevronResolved) const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
         ],
       ),
     );
@@ -270,7 +281,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.sdCard,
-            title: context.l10n.sdCardSync,
+            title: 'Offline Sync',
             onTap: () {
               if (!provider.isDeviceStorageSupport) {
                 showDialog(
@@ -289,6 +300,32 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 routeToPage(context, page);
               }
             },
+          ),
+          // Auto-sync toggle — Omi devices only. Lets users opt out of having
+          // offline recordings automatically synced to Omi on connect.
+          if (device?.type == DeviceType.omi) ...[
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.arrowsRotate,
+              title: context.l10n.autoSync,
+              subtitle: context.l10n.autoSyncDescription,
+              showChevron: false,
+              trailing: Switch(
+                value: _autoSyncOfflineRecordings,
+                activeThumbColor: Colors.white,
+                activeTrackColor: const Color(0xFF8B5CF6),
+                onChanged: (value) {
+                  setState(() => _autoSyncOfflineRecordings = value);
+                  SharedPreferencesUtil().autoSyncOfflineRecordings = value;
+                },
+              ),
+            ),
+          ],
+          const Divider(height: 1, color: Color(0xFF3C3C43)),
+          _buildProfileStyleItem(
+            icon: FontAwesomeIcons.stethoscope,
+            title: context.l10n.diagnostics,
+            onTap: () => routeToPage(context, DeviceDiagnostics(deviceId: deviceId)),
           ),
         ],
       ),
@@ -699,16 +736,6 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               onTap: _showMicGainSheet,
             ),
           ],
-          // WiFi Sync
-          if (_isWifiSupported) ...[
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
-            _buildProfileStyleItem(
-              icon: FontAwesomeIcons.wifi,
-              title: context.l10n.wifiSync,
-              chipValue: context.l10n.available,
-              showChevron: false,
-            ),
-          ],
         ],
       ),
     );
@@ -719,63 +746,26 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
-          // Charging Help
-          GestureDetector(
-            onTap: () async {
-              if (PlatformService.isIntercomSupported) {
-                await IntercomManager().displayChargingArticle(provider.pairedDevice?.name ?? 'DevKit1');
-              } else {
-                // Fallback to web URL for desktop platforms
-                final deviceName = provider.pairedDevice?.name ?? 'DevKit1';
-                String url;
-                if (deviceName == 'Omi DevKit 2') {
-                  url = 'https://www.omi.me/pages/charging-devkit2';
-                } else if (deviceName == 'Omi') {
-                  url = 'https://www.omi.me/pages/charging-omi';
-                } else {
-                  url = 'https://www.omi.me/pages/charging';
-                }
-                final uri = Uri.parse(url);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                }
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-              child: Row(
-                children: [
-                  const SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: FaIcon(FontAwesomeIcons.circleQuestion, color: Color(0xFF8E8E93), size: 20),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Text(
-                      context.l10n.chargingIssues,
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, color: Color(0xFF3C3C43), size: 20),
-                ],
-              ),
-            ),
-          ),
           if (provider.isConnected) ...[
-            const Divider(height: 1, color: Color(0xFF3C3C43)),
             // Disconnect
             GestureDetector(
               onTap: () async {
+                final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+
                 await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
                 SharedPreferencesUtil().deviceName = '';
-                if (provider.connectedDevice != null) {
-                  await _bleDisconnectDevice(provider.connectedDevice!);
+
+                if (deviceId.isNotEmpty) {
+                  await ServiceManager.instance().device.forgetDevice(deviceId);
+                  try {
+                    BleHostApi().unmanageDevice(deviceId);
+                  } catch (_) {}
                 }
+
                 provider.setIsConnected(false);
-                provider.setConnectedDevice(null);
+                await provider.setConnectedDevice(null);
                 provider.updateConnectingStatus(false);
-                MixpanelManager().disconnectFriendClicked();
+                PlatformManager.instance.analytics.disconnectFriendClicked();
                 if (context.mounted) {
                   Navigator.of(context).pop();
                   ScaffoldMessenger.of(

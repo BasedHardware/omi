@@ -21,9 +21,12 @@ from models.conversation import SearchRequest
 from models.app import App
 from routers.conversations import process_conversation, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
+from utils.conversations.render import redact_conversation_for_integration
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.search import search_conversations
 from utils.app_integrations import send_app_notification
+from utils.other.endpoints import check_rate_limit_inline
+from utils.executors import run_blocking, db_executor, postprocess_executor, critical_executor
 import logging
 
 logger = logging.getLogger(__name__)
@@ -84,16 +87,19 @@ async def create_conversation_via_integration(
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
 
     api_key = authorization.replace('Bearer ', '')
-    if not verify_api_key(app_id, api_key):
+    if not await run_blocking(critical_executor, verify_api_key, app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integration API key")
 
+    # Rate limit per app+user
+    await run_blocking(critical_executor, check_rate_limit_inline, f"{app_id}:{uid}", "integration:conversations")
+
     # Verify if the app exists
-    app = apps_db.get_app_by_id_db(app_id)
+    app = await run_blocking(db_executor, apps_db.get_app_by_id_db, app_id)
     if not app:
         raise HTTPException(status_code=404, detail="App not found")
 
     # Verify if the uid has enabled the app
-    enabled_plugins = redis_db.get_enabled_apps(uid)
+    enabled_plugins = await run_blocking(db_executor, redis_db.get_enabled_apps, uid)
     if app_id not in enabled_plugins:
         raise HTTPException(status_code=403, detail="App is not enabled for this user")
 
@@ -116,7 +122,9 @@ async def create_conversation_via_integration(
     # Geo
     geolocation = create_conversation.geolocation
     if geolocation and not geolocation.google_place_id:
-        create_conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+        create_conversation.geolocation = await run_blocking(
+            db_executor, get_google_maps_location, geolocation.latitude, geolocation.longitude
+        )
     create_conversation.geolocation = geolocation
 
     # Language
@@ -132,10 +140,12 @@ async def create_conversation_via_integration(
     create_conversation.app_id = app_id
 
     # Process
-    conversation = process_conversation(uid, language_code, create_conversation)
+    conversation = await run_blocking(
+        postprocess_executor, process_conversation, uid, language_code, create_conversation
+    )
 
     # Always trigger integration
-    trigger_external_integrations(uid, conversation)
+    await trigger_external_integrations(uid, conversation)
 
     # TODO: Empty for now, replace with ConversationCreateResponse once we don't have to wait for process_conversation
     # to finish for the conversation id
@@ -147,7 +157,7 @@ async def create_conversation_via_integration(
     response_model=integration_models.EmptyResponse,
     tags=['integration', 'memories'],
 )
-async def create_memories_via_integration(
+def create_memories_via_integration(
     request: Request,
     app_id: str,
     fact_data: integration_models.ExternalIntegrationCreateMemory,
@@ -161,6 +171,9 @@ async def create_memories_via_integration(
     api_key = authorization.replace('Bearer ', '')
     if not verify_api_key(app_id, api_key):
         raise HTTPException(status_code=403, detail="Invalid integrationAPI key")
+
+    # Rate limit per app+user
+    check_rate_limit_inline(f"{app_id}:{uid}", "integration:memories")
 
     # Verify if the app exists
     app = apps_db.get_app_by_id_db(app_id)
@@ -197,7 +210,7 @@ async def create_memories_via_integration(
     response_model_exclude_none=True,
     tags=['integration', 'memories'],
 )
-async def get_memories_via_integration(
+def get_memories_via_integration(
     request: Request,
     app_id: str,
     uid: str,
@@ -236,7 +249,15 @@ async def get_memories_via_integration(
         if memory.get('is_locked', False):
             content = memory.get('content', '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
-    memory_items = [integration_models.MemoryItem(**fact) for fact in memories]
+    memory_items = []
+    for fact in memories:
+        try:
+            memory_items.append(integration_models.MemoryItem(**fact))
+        except Exception as e:  # noqa: BLE001 - intentional broad catch: skip any malformed record
+            # One malformed/legacy record must not 500 the whole page; skip it (mirrors the
+            # conversation conversion guard in get_conversations_via_integration).
+            logger.error(f"Error parsing memory {fact.get('id')}: {str(e)}")
+            continue
 
     return {"memories": memory_items}
 
@@ -247,7 +268,7 @@ async def get_memories_via_integration(
     response_model_exclude_none=True,
     tags=['integration', 'conversations'],
 )
-async def get_conversations_via_integration(
+def get_conversations_via_integration(
     request: Request,
     app_id: str,
     uid: str,
@@ -340,16 +361,7 @@ async def get_conversations_via_integration(
     conversation_items = []
     for conv in conversations_data:
         try:
-            if conv.get('is_locked', False):
-                conv['structured']['title'] = ''
-                conv['structured']['overview'] = ''
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-                conv['transcript_segments'] = []
-                conv['apps_results'] = []
-                conv['plugins_results'] = []
-                conv['suggested_summarization_apps'] = []
-
+            redact_conversation_for_integration(conv)
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments
@@ -377,7 +389,7 @@ async def get_conversations_via_integration(
     response_model_exclude_none=True,
     tags=['integration', 'conversations'],
 )
-async def search_conversations_via_integration(
+def search_conversations_via_integration(
     request: Request,
     app_id: str,
     uid: str,
@@ -473,16 +485,7 @@ async def search_conversations_via_integration(
     conversation_items = []
     for conv in full_conversations:
         try:
-            if conv.get('is_locked', False):
-                conv['structured']['title'] = ''
-                conv['structured']['overview'] = ''
-                conv['structured']['action_items'] = []
-                conv['structured']['events'] = []
-                conv['transcript_segments'] = []
-                conv['apps_results'] = []
-                conv['plugins_results'] = []
-                conv['suggested_summarization_apps'] = []
-
+            redact_conversation_for_integration(conv)
             item = integration_models.ConversationItem.parse_obj(conv)
 
             # Limit transcript segments
@@ -514,7 +517,7 @@ async def search_conversations_via_integration(
     response_model=integration_models.EmptyResponse,
     tags=['integration', 'notifications'],
 )
-async def send_notification_via_integration(
+def send_notification_via_integration(
     request: Request, app_id: str, message: str, uid: str, authorization: Optional[str] = Header(None)
 ):
     # Verify API key from Authorization header
@@ -565,7 +568,7 @@ async def send_notification_via_integration(
     response_model_exclude_none=True,
     tags=['integration', 'tasks'],
 )
-async def get_tasks_via_integration(
+def get_tasks_via_integration(
     request: Request,
     app_id: str,
     uid: str,
@@ -687,8 +690,13 @@ async def get_tasks_via_integration(
         if task_data.get('is_locked', False):
             description = task_data.get('description', '')
             task_data['description'] = (description[:70] + '...') if len(description) > 70 else description
-        item = integration_models.TaskItem(**task_data)
-        task_items.append(item)
+        try:
+            task_items.append(integration_models.TaskItem(**task_data))
+        except Exception as e:  # noqa: BLE001 - intentional broad catch: skip any malformed record
+            # One malformed/legacy record must not 500 the whole page; skip it (mirrors the
+            # conversation conversion guard in get_conversations_via_integration).
+            logger.error(f"Error parsing task {task_data.get('id')}: {str(e)}")
+            continue
 
     response = integration_models.TasksResponse(tasks=task_items)
     return response.dict(exclude_none=True)

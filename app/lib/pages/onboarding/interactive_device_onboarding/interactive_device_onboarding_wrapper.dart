@@ -10,7 +10,7 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/transcr
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/power_cycle_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
   const InteractiveDeviceOnboardingWrapper({super.key});
@@ -34,7 +34,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
       _captureProvider = context.read<CaptureProvider>();
       _captureProvider!.deviceOnboardingProvider = _onboardingProvider;
       _onboardingProvider.startOnboarding();
-      MixpanelManager().deviceOnboardingStarted();
+      AnalyticsManager().deviceOnboardingStarted();
     });
   }
 
@@ -47,7 +47,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   }
 
   void _onStepComplete(String stepName) {
-    MixpanelManager().deviceOnboardingStepCompleted(stepName);
+    AnalyticsManager().deviceOnboardingStepCompleted(stepName);
 
     if (_onboardingProvider.currentStep < DeviceOnboardingProvider.totalSteps - 1) {
       _onboardingProvider.advanceStep();
@@ -58,8 +58,8 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
   }
 
   void _completeOnboarding() {
-    MixpanelManager().deviceOnboardingCompleted();
-    MixpanelManager().deviceOnboardingDoubleTapConfigured(_onboardingProvider.selectedDoubleTapAction);
+    AnalyticsManager().deviceOnboardingCompleted();
+    AnalyticsManager().deviceOnboardingDoubleTapConfigured(_onboardingProvider.selectedDoubleTapAction);
     _onboardingProvider.completeOnboarding();
     SharedPreferencesUtil().deviceOnboardingCompleted = true;
     updateUserOnboardingState(deviceOnboardingCompleted: true);

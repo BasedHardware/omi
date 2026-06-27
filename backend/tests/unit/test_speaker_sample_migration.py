@@ -374,6 +374,98 @@ def test_migrate_v2_to_v3_no_samples_just_updates_version(monkeypatch):
     assert result["speech_samples_version"] == 3
 
 
+def test_migrate_v2_to_v3_no_samples_clears_stale_embedding(monkeypatch):
+    """Bug fix #6238: when no samples exist, old 512-dim embedding must be cleared."""
+    person = {
+        "id": "person-1",
+        "speech_samples_version": 2,
+        "speech_samples": [],
+        "speech_sample_transcripts": [],
+        "speaker_embedding": [0.1] * 512,  # stale v1/v2 embedding
+    }
+    version_updates = []
+    cleared_embeddings = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_update_version(_uid, _person_id, version):
+        version_updates.append(version)
+
+    def fake_clear_embedding(_uid, _person_id):
+        cleared_embeddings.append(_person_id)
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_version", fake_update_version)
+    monkeypatch.setattr(migration.users_db, "clear_person_speaker_embedding", fake_clear_embedding)
+
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert version_updates == [3]
+    assert result["speech_samples_version"] == 3
+    assert result["speaker_embedding"] is None
+    assert cleared_embeddings == ["person-1"]
+
+
+def test_migrate_v2_to_v3_no_samples_no_embedding_skips_clear(monkeypatch):
+    """No-op when no samples and no existing embedding."""
+    person = {
+        "id": "person-1",
+        "speech_samples_version": 2,
+        "speech_samples": [],
+        "speech_sample_transcripts": [],
+    }
+    cleared_embeddings = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_update_version(_uid, _person_id, version):
+        pass
+
+    def fake_clear_embedding(_uid, _person_id):
+        cleared_embeddings.append(_person_id)
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_version", fake_update_version)
+    monkeypatch.setattr(migration.users_db, "clear_person_speaker_embedding", fake_clear_embedding)
+
+    result = _run(migration.migrate_person_samples_v2_to_v3("uid-1", person))
+
+    assert result["speech_samples_version"] == 3
+    assert cleared_embeddings == []  # no clear called
+
+
+def test_migrate_v1_to_v2_no_samples_clears_stale_embedding(monkeypatch):
+    """Same bug fix for v1→v2 path: clear stale embedding when no samples."""
+    person = {
+        "id": "person-1",
+        "speech_samples_version": 1,
+        "speech_samples": [],
+        "speaker_embedding": [0.2] * 512,  # stale v1 embedding
+    }
+    cleared_embeddings = []
+
+    def fake_get_person(_uid, _person_id):
+        return person
+
+    def fake_update_version(_uid, _person_id, version):
+        pass
+
+    def fake_clear_embedding(_uid, _person_id):
+        cleared_embeddings.append(_person_id)
+
+    monkeypatch.setattr(migration.users_db, "get_person", fake_get_person)
+    monkeypatch.setattr(migration.users_db, "update_person_speech_samples_version", fake_update_version)
+    monkeypatch.setattr(migration.users_db, "clear_person_speaker_embedding", fake_clear_embedding)
+
+    result = _run(migration.migrate_person_samples_v1_to_v2("uid-1", person))
+
+    assert result["speech_samples_version"] == 2
+    assert result["speaker_embedding"] is None
+    assert cleared_embeddings == ["person-1"]
+
+
 def test_migrate_v2_to_v3_transient_failure_skips_update(monkeypatch):
     person = {
         "id": "person-1",

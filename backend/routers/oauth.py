@@ -4,9 +4,11 @@ from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import firebase_admin.auth
-import requests
+import httpx
 
 from database.apps import get_app_by_id_db
+from utils.executors import db_executor, run_blocking
+from utils.http_client import get_auth_client
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
 from models.app import App as AppModel, ActionType
@@ -21,7 +23,7 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 
 @router.get("/v1/oauth/authorize", response_class=HTMLResponse)
-async def oauth_authorize(
+def oauth_authorize(
     request: Request,
     app_id: str,
     state: Optional[str] = None,
@@ -119,7 +121,7 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Error verifying Firebase ID token: {e}")
 
-    app_data = get_app_by_id_db(app_id)
+    app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
         raise HTTPException(status_code=404, detail="App not found")
 
@@ -139,14 +141,15 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
         # Check Setup completes
         if app.works_externally() and app.external_integration.setup_completed_url:
             try:
-                res = requests.get(app.external_integration.setup_completed_url + f'?uid={uid}')
+                client = get_auth_client()
+                res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
                 res.raise_for_status()
                 if not res.json().get('is_setup_completed', False):
                     raise HTTPException(
                         status_code=400,
                         detail='App setup is not completed. Please complete app setup before authorizing.',
                     )
-            except requests.RequestException as e:
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
                 raise HTTPException(
                     status_code=503,
                     detail=f'Failed to verify app setup completion. Please try again later or contact support.',
@@ -164,9 +167,9 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
             )
 
         try:
-            enable_app(uid, app_id)
+            await run_blocking(db_executor, enable_app, uid, app_id)
             if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
-                increase_app_installs_count(app_id)
+                await run_blocking(db_executor, increase_app_installs_count, app_id)
         except Exception as e:
             raise HTTPException(
                 status_code=500,

@@ -11,6 +11,7 @@ class ActionItemWithMetadata {
   final bool exported;
   final DateTime? exportDate;
   final String? exportPlatform;
+  final String? appleReminderId;
   final int sortOrder;
   final int indentLevel;
 
@@ -27,6 +28,7 @@ class ActionItemWithMetadata {
     this.exported = false,
     this.exportDate,
     this.exportPlatform,
+    this.appleReminderId,
     this.sortOrder = 0,
     this.indentLevel = 0,
   });
@@ -45,6 +47,7 @@ class ActionItemWithMetadata {
       exported: json['exported'] ?? false,
       exportDate: json['export_date'] != null ? DateTime.parse(json['export_date']).toLocal() : null,
       exportPlatform: json['export_platform'],
+      appleReminderId: json['apple_reminder_id'],
       sortOrder: json['sort_order'] as int? ?? 0,
       indentLevel: json['indent_level'] as int? ?? 0,
     );
@@ -64,6 +67,7 @@ class ActionItemWithMetadata {
       'exported': exported,
       'export_date': exportDate?.toUtc().toIso8601String(),
       'export_platform': exportPlatform,
+      'apple_reminder_id': appleReminderId,
       'sort_order': sortOrder,
       'indent_level': indentLevel,
     };
@@ -82,6 +86,7 @@ class ActionItemWithMetadata {
     bool? exported,
     DateTime? exportDate,
     String? exportPlatform,
+    String? appleReminderId,
     int? sortOrder,
     int? indentLevel,
   }) {
@@ -98,6 +103,7 @@ class ActionItemWithMetadata {
       exported: exported ?? this.exported,
       exportDate: exportDate ?? this.exportDate,
       exportPlatform: exportPlatform ?? this.exportPlatform,
+      appleReminderId: appleReminderId ?? this.appleReminderId,
       sortOrder: sortOrder ?? this.sortOrder,
       indentLevel: indentLevel ?? this.indentLevel,
     );
@@ -116,6 +122,24 @@ class ActionItemsResponse {
           .map((item) => ActionItemWithMetadata.fromJson(item))
           .toList(),
       hasMore: json['has_more'],
+    );
+  }
+}
+
+class PendingSyncResponse {
+  final List<ActionItemWithMetadata> pendingExport;
+  final List<ActionItemWithMetadata> syncedItems;
+
+  PendingSyncResponse({required this.pendingExport, required this.syncedItems});
+
+  factory PendingSyncResponse.fromJson(Map<String, dynamic> json) {
+    return PendingSyncResponse(
+      pendingExport: (json['pending_export'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
+      syncedItems: (json['synced_items'] as List<dynamic>)
+          .map((item) => ActionItemWithMetadata.fromJson(item))
+          .toList(),
     );
   }
 }

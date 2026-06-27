@@ -1,12 +1,6 @@
-import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:collection/collection.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/services/devices/errors.dart';
-import 'package:omi/utils/logger.dart';
 
 class OrientedImage {
   final Uint8List imageBytes;
@@ -29,7 +23,6 @@ const String imageCaptureControlCharacteristicUuid = '19b10006-e8f2-537e-4f6c-d1
 const String storageDataStreamServiceUuid = '30295780-4301-eabd-2904-2849adfeae43';
 const String storageDataStreamCharacteristicUuid = '30295781-4301-eabd-2904-2849adfeae43';
 const String storageReadControlCharacteristicUuid = '30295782-4301-eabd-2904-2849adfeae43';
-const String storageWifiCharacteristicUuid = '30295783-4301-eabd-2904-2849adfeae43';
 
 const String timeSyncServiceUuid = '19b10030-e8f2-537e-4f6c-d104768a1214';
 const String timeSyncWriteCharacteristicUuid = '19b10031-e8f2-537e-4f6c-d104768a1214';
@@ -93,37 +86,3 @@ const int otaStatusInstallComplete = 0x31;
 const int otaStatusInstallFailed = 0x32;
 const int otaStatusRebooting = 0x40;
 const int otaStatusError = 0xFF;
-
-Future<List<BluetoothService>> getBleServices(String deviceId) async {
-  final device = BluetoothDevice.fromId(deviceId);
-  try {
-    // Check if the device is connected before discovering services
-    if (device.isDisconnected) {
-      Logger.handle(
-        Exception('Device is not connected'),
-        StackTrace.current,
-        message: 'Looks like the device is not connected. Please make sure the device is connected and try again.',
-      );
-      return [];
-    } else {
-      // TODO: need to be fixed for open glass
-      // if (Platform.isAndroid && device.servicesList.isNotEmpty) return device.servicesList;
-      if (device.servicesList.isNotEmpty) return device.servicesList;
-      return await device.discoverServices();
-    }
-  } catch (e, stackTrace) {
-    logCrashMessage('Get BLE services', deviceId, e, stackTrace);
-    return [];
-  }
-}
-
-Future<BluetoothService?> getServiceByUuid(String deviceId, String uuid) async {
-  final services = await getBleServices(deviceId);
-  return services.firstWhereOrNull((service) => service.uuid.str128.toLowerCase() == uuid);
-}
-
-BluetoothCharacteristic? getCharacteristicByUuid(BluetoothService service, String uuid) {
-  return service.characteristics.firstWhereOrNull(
-    (characteristic) => characteristic.uuid.str128.toLowerCase() == uuid.toLowerCase(),
-  );
-}

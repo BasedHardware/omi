@@ -1,0 +1,175 @@
+---
+title: "Troubleshooting"
+icon: "wrench"
+description: "Common failure modes and how to fix them."
+---
+
+## "Not authenticated" (exit 2)
+
+```text
+✗ Not authenticated
+  Run `omi auth login` and paste your dev API key. (See `omi auth login --help`.)
+```
+
+The active profile has no credentials. Either:
+
+- Run `omi auth login` and paste a dev key, or
+- `export OMI_API_KEY=omi_dev_...` in the current shell.
+
+Confirm with `omi auth status`.
+
+## "That doesn't look like an Omi developer key" (exit 1)
+
+The CLI validates the key's prefix client-side before ever calling the API.
+Real dev keys start with `omi_dev_` and are at least ~24 characters long.
+
+If you see this from `OMI_API_KEY`, double-check that you pasted the whole
+token and didn't accidentally include `Bearer ` or wrap it in quotes that
+made it into the env value.
+
+## "Insufficient permissions" (exit 2)
+
+```text
+✗ Insufficient permissions
+  Your API key does not have the required scope for this operation.
+```
+
+The dev key was minted without the scope you're trying to exercise. For
+example, `omi memory create` requires `memories:write` but a read-only key
+only has `memories:read`.
+
+Generate a new key in the Omi web app under **Developer → API Keys** with the
+scope you need, then `omi auth login` to swap it in.
+
+## "Rate limited" (exit 4)
+
+```text
+✗ Rate limited: dev:conversations (25/hr)
+  Retry in 12s. Slow down and retry shortly.
+```
+
+The dev API enforces hourly limits per policy:
+
+| Policy                | Limit      |
+| --------------------- | ---------- |
+| `dev:conversations`   | 25 / hour  |
+| `dev:memories`        | 120 / hour |
+| `dev:memories_batch`  | 15 / hour  |
+
+The CLI retries automatically up to 4 attempts with backoff before raising. If
+you're seeing the error code from a script, sleep for the `Retry in Ns` value
+and try again — see [For agents](/doc/developer/cli/agents) for a worked
+backoff example.
+
+## "Server error" (exit 3)
+
+```text
+✗ Server error (502)
+  The Omi API returned an error. Try again, then check status.omi.me.
+```
+
+A `5xx` response from the API after retries exhausted. The CLI already retried
+4 times with backoff, so the issue is server-side. Try again in a minute; if
+the problem persists, check the Omi status page or report it.
+
+## "No such option: --json" with the flag after the verb
+
+```bash
+omi memory list --json   # ❌ wrong
+omi --json memory list   # ✅ right
+```
+
+Global flags must come **before** the subcommand. This is a Click framework
+constraint.
+
+## Token rolled back after a failed login verification
+
+If `omi auth login` succeeds but the verification round-trip returns 401, the
+CLI clears the just-stored credential — better to be unauthenticated than
+silently broken. The fix: regenerate the key in the Omi web app and try
+again. Network errors don't trigger the rollback (the credential is kept and
+the CLI just warns).
+
+## OAuth: "OAuth flow timed out"
+
+```text
+✗ OAuth flow timed out
+  No callback received within 5 minutes. Try again, or use `omi auth login --api-key` instead.
+```
+
+The CLI started a localhost server, opened your browser, and waited 5
+minutes for the callback. Possible causes:
+
+- Browser didn't open. Visit the URL the CLI printed manually.
+- A firewall blocked the loopback redirect. Try `--api-key` instead.
+- You closed the browser tab before the redirect fired.
+
+The CLI cleans up after itself; just rerun `omi auth login --browser`.
+
+## OAuth: "OAuth state mismatch"
+
+```text
+✗ OAuth state mismatch
+  The browser callback did not match the original session token. Possible CSRF — aborting.
+```
+
+The CSRF protection caught a mismatch — the `state` token in the callback
+URL didn't match what the CLI generated. This shouldn't happen in practice;
+if it does, run `omi auth login --browser` again. Don't paste random URLs.
+
+## OAuth: "Firebase refresh failed"
+
+```text
+✗ Firebase refresh failed (401)
+  Re-run `omi auth login --browser` to get fresh credentials.
+```
+
+The stored refresh token is no longer valid (revoked, signed out elsewhere,
+or rotated and the rotation didn't persist). Run `omi auth login --browser`
+to mint a fresh pair. Your data is safe; only the local credentials are
+stale.
+
+## OAuth: which provider?
+
+By default, `omi auth login --browser` uses Google. To use Apple Sign-In:
+
+```bash
+omi auth login --browser --provider apple
+```
+
+## Where state lives
+
+```bash
+omi config path
+# /Users/you/.omi/config.toml
+```
+
+Permissions are owner-only (`0600` for the file, `0700` for the parent dir).
+If you ever see permissions other than these, something modified the file
+outside of `omi-cli` — fix with `chmod 600 ~/.omi/config.toml`.
+
+To wipe everything:
+
+```bash
+omi auth logout
+# or, nuclear option:
+rm -rf ~/.omi/
+```
+
+## Verbose mode for debugging
+
+```bash
+omi -v memory list
+# [debug] GET /v1/dev/user/memories → 200 (0.42s)
+```
+
+Debug output goes to stderr; stdout stays clean for piping. Combine with
+`--json` if your script expects JSON.
+
+## Still stuck?
+
+- Check the [Command reference](/doc/developer/cli/commands) for the exact
+  expected flags.
+- File an issue at
+  [github.com/BasedHardware/omi](https://github.com/BasedHardware/omi/issues)
+  with the failing command, the full stderr, and the `omi --version` output.

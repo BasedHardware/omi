@@ -1,4 +1,4 @@
-FROM python:3.11 AS builder
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
 
 ENV PATH="/opt/venv/bin:$PATH"
 RUN python -m venv /opt/venv
@@ -6,7 +6,7 @@ RUN python -m venv /opt/venv
 COPY plugins/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt
 
-FROM python:3.11-slim
+FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
 
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"

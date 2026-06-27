@@ -11,13 +11,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-async def auto_sync_action_item(uid: str, action_item: dict) -> dict:
+async def auto_sync_action_item(uid: str, action_item: dict, skip_apple_reminders: bool = False) -> dict:
     """
     Auto-sync a single action item to user's default integration.
 
     Args:
         uid: User ID
         action_item: Dict containing at minimum 'id' and 'description'
+        skip_apple_reminders: If True, skip Apple Reminders sync (app handles it directly)
 
     Returns:
         dict: {"synced": bool, "platform": str, "external_task_id": str, "error": str}
@@ -36,6 +37,8 @@ async def auto_sync_action_item(uid: str, action_item: dict) -> dict:
 
         # Route to appropriate handler
         if default_app == "apple_reminders":
+            if skip_apple_reminders:
+                return {"synced": False, "reason": "client_handles_sync"}
             return _sync_to_apple_reminders(uid, [action_item])
         else:
             return await _sync_to_cloud_service(uid, default_app, integration, action_item)
@@ -76,7 +79,9 @@ async def _sync_to_cloud_service(uid: str, app_key: str, integration: dict, acti
 
 
 def _sync_to_apple_reminders(uid: str, action_items: list) -> dict:
-    """Send a single silent push with all action items for Apple Reminders."""
+    """Mark items as sync_requested and send a single silent push for Apple Reminders."""
+    item_ids = [item['id'] for item in action_items]
+    action_items_db.batch_set_sync_requested(uid, item_ids)
     success = send_apple_reminders_sync_push(user_id=uid, action_items=action_items)
     return {"synced": success, "platform": "apple_reminders", "pending_device": True}
 

@@ -4,7 +4,7 @@
 
 LOG_MODULE_REGISTER(wdog_facade, CONFIG_LOG_DEFAULT_LEVEL);
 
-#define WATCHDOG_TIMEOUT_MS 30000U  // 30 seconds
+#define WATCHDOG_TIMEOUT_MS CONFIG_OMI_WATCHDOG_TIMEOUT_MS
 
 static const struct device *wdt_dev;
 static int wdt_channel_id;
@@ -31,7 +31,7 @@ int watchdog_init(void)
     // Configure watchdog timeout
     wdt_config.flags = WDT_FLAG_RESET_SOC;         // Reset entire SoC on timeout
     wdt_config.window.min = 0U;                    // No minimum window
-    wdt_config.window.max = WATCHDOG_TIMEOUT_MS;   // 30 seconds timeout
+    wdt_config.window.max = WATCHDOG_TIMEOUT_MS;
     wdt_config.callback = NULL;                    // No callback, just reset
 
     // Install watchdog timeout
@@ -48,7 +48,7 @@ int watchdog_init(void)
         return ret;
     }
 
-    LOG_INF("Watchdog initialized (timeout: 30s, channel: %d)", wdt_channel_id);
+    LOG_INF("Watchdog initialized (timeout: %u ms, channel: %d)", WATCHDOG_TIMEOUT_MS, wdt_channel_id);
     return 0;
 }
 

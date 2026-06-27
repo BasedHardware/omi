@@ -13,12 +13,15 @@ from typing import Optional
 
 import database.conversations as conversations_db
 from langchain_openai import ChatOpenAI
+from utils.executors import db_executor, run_blocking
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
 
 CLASSIFIER_MODEL = os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1')
-_classifier_llm = ChatOpenAI(model=CLASSIFIER_MODEL, callbacks=[get_usage_callback()])
+_classifier_llm = ChatOpenAI(
+    model=CLASSIFIER_MODEL, callbacks=[get_usage_callback()], request_timeout=120, max_retries=1
+)
 CLASSIFIER_LOOKBACK_DAYS = int(os.getenv('FAIR_USE_CLASSIFIER_LOOKBACK_DAYS', '7'))
 CLASSIFIER_MAX_CONVERSATIONS = 30
 
@@ -209,7 +212,7 @@ async def classify_user_purpose(uid: str) -> dict:
     }
 
     try:
-        summaries = _prepare_conversation_summaries(uid)
+        summaries = await run_blocking(db_executor, _prepare_conversation_summaries, uid)
         if not summaries:
             logger.info(f'fair_use: no conversations to classify for {uid}')
             return default_result

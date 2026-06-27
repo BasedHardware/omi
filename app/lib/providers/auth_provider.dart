@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,7 +13,6 @@ import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -119,7 +120,7 @@ class AuthenticationProvider extends BaseProvider {
       setLoadingState(true);
       try {
         UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth) {
+        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
           credential = await AuthService.instance.signInWithAppleMobile();
         } else {
           credential = await AuthService.instance.authenticateWithProvider('apple');
@@ -178,7 +179,7 @@ class AuthenticationProvider extends BaseProvider {
       }
       String newUid = user.uid;
       SharedPreferencesUtil().uid = newUid;
-      MixpanelManager().identify();
+      PlatformManager.instance.analytics.identify();
       onSignIn();
     } else {
       AppSnackbar.showSnackbarError(

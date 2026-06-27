@@ -1,9 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -39,6 +42,33 @@ Future<List<ServerConversation>> getConversations({
   String? folderId,
   bool? starred,
 }) async {
+  final result = await getConversationsResult(
+    limit: limit,
+    offset: offset,
+    statuses: statuses,
+    includeDiscarded: includeDiscarded,
+    startDate: startDate,
+    endDate: endDate,
+    folderId: folderId,
+    starred: starred,
+  );
+  return result.items;
+}
+
+// Same as [getConversations] but reports whether the request actually
+// succeeded. An empty `items` with `ok == false` means the fetch failed
+// (no response / non-200, e.g. auth token not ready right after a cold
+// start) — which callers must NOT treat as "the user has no conversations".
+Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
+  int limit = 50,
+  int offset = 0,
+  List<ConversationStatus> statuses = const [],
+  bool includeDiscarded = true,
+  DateTime? startDate,
+  DateTime? endDate,
+  String? folderId,
+  bool? starred,
+}) async {
   String url =
       '${Env.apiBaseUrl}v1/conversations?include_discarded=$includeDiscarded&limit=$limit&offset=$offset&statuses=${statuses.map((val) => val.toString().split(".").last).join(",")}';
 
@@ -57,18 +87,17 @@ Future<List<ServerConversation>> getConversations({
   }
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
-  if (response == null) return [];
+  if (response == null) return (items: <ServerConversation>[], ok: false);
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
     var memories =
         (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
-    return memories;
-  } else {
-    Logger.debug('getConversations error ${response.statusCode}');
+    return (items: memories, ok: true);
   }
-  return [];
+  Logger.debug('getConversations error ${response.statusCode}');
+  return (items: <ServerConversation>[], ok: false);
 }
 
 Future<ServerConversation?> reProcessConversationServer(String conversationId, {String? appId}) async {
@@ -96,6 +125,91 @@ Future<bool> deleteConversationServer(String conversationId) async {
   if (response == null) return false;
   Logger.debug('deleteConversation: ${response.statusCode}');
   return response.statusCode == 204;
+}
+
+Future<bool> unlinkCalendarEvent(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event',
+    headers: {},
+    method: 'DELETE',
+    body: '',
+  );
+  if (response == null) return false;
+  return response.statusCode == 200;
+}
+
+/// Link a specific Google Calendar event to a conversation.
+/// Returns the linked CalendarEventLink if successful, null otherwise.
+Future<CalendarEventLink?> linkCalendarEvent(String conversationId, String eventId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({'event_id': eventId}),
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return CalendarEventLink.fromJson(jsonDecode(response.body));
+  }
+  debugPrint('linkCalendarEvent error: ${response.statusCode} - ${response.body}');
+  return null;
+}
+
+/// Auto-link a conversation to the best overlapping Google Calendar event.
+/// Returns the linked CalendarEventLink if found, null otherwise.
+Future<CalendarEventLink?> autoLinkCalendarEvent(String conversationId) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/calendar-event/auto-link',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return null;
+  if (response.statusCode == 200) {
+    return CalendarEventLink.fromJson(jsonDecode(response.body));
+  }
+  // 404 means no overlapping event found - not an error, just no match
+  if (response.statusCode == 404) {
+    debugPrint('autoLinkCalendarEvent: No overlapping calendar event found');
+    return null;
+  }
+  debugPrint('autoLinkCalendarEvent error: ${response.statusCode} - ${response.body}');
+  return null;
+}
+
+/// List Google Calendar events within a time range for the event picker.
+/// Returns a list of CalendarEventLink objects, or empty list on error.
+Future<List<CalendarEventLink>> listGoogleCalendarEvents({
+  DateTime? timeMin,
+  DateTime? timeMax,
+  String? query,
+  int maxResults = 20,
+}) async {
+  String url = '${Env.apiBaseUrl}v1/calendar/google/events?max_results=$maxResults';
+
+  if (timeMin != null) {
+    url += '&time_min=${timeMin.toUtc().toIso8601String()}';
+  }
+  if (timeMax != null) {
+    url += '&time_max=${timeMax.toUtc().toIso8601String()}';
+  }
+  if (query != null && query.isNotEmpty) {
+    url += '&q=${Uri.encodeComponent(query)}';
+  }
+
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) return [];
+  if (response.statusCode == 200) {
+    var body = utf8.decode(response.bodyBytes);
+    return (jsonDecode(body) as List<dynamic>).map((event) => CalendarEventLink.fromJson(event)).toList();
+  }
+  debugPrint('listGoogleCalendarEvents error: ${response.statusCode} - ${response.body}');
+  return [];
 }
 
 Future<ServerConversation?> getConversationById(String conversationId) async {
@@ -138,19 +252,15 @@ Future<bool> updateConversationSegmentText(String conversationId, String segment
   return response.statusCode == 200;
 }
 
-Future<List<ConversationPhoto>> getConversationPhotos(String conversationId) async {
+Future<bool> updateConversationSummary(String conversationId, String? appId, String content) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/photos',
-    headers: {},
-    method: 'GET',
-    body: '',
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/summary',
+    headers: {'Content-Type': 'application/json'},
+    method: 'PATCH',
+    body: jsonEncode({'app_id': appId, 'content': content}),
   );
-  if (response == null) return [];
-  Logger.debug('getConversationPhotos: ${response.body}');
-  if (response.statusCode == 200) {
-    return (jsonDecode(response.body) as List<dynamic>).map((photo) => ConversationPhoto.fromJson(photo)).toList();
-  }
-  return [];
+  if (response == null) return false;
+  return response.statusCode == 200;
 }
 
 class TranscriptsResponse {
@@ -191,21 +301,6 @@ Future<TranscriptsResponse> getConversationTranscripts(String conversationId) as
     return TranscriptsResponse.fromJson(transcripts);
   }
   return TranscriptsResponse();
-}
-
-Future<bool> hasConversationRecording(String conversationId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/recording',
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('hasConversationRecording: ${response.body}');
-  if (response.statusCode == 200) {
-    return jsonDecode(response.body)['has_recording'] ?? false;
-  }
-  return false;
 }
 
 Future<bool> assignBulkConversationTranscriptSegments(
@@ -259,19 +354,6 @@ Future<bool> setConversationStarred(String conversationId, bool starred) async {
   return response.statusCode == 200;
 }
 
-Future<bool> setConversationEventsState(String conversationId, List<int> eventsIdx, List<bool> values) async {
-  print(jsonEncode({'events_idx': eventsIdx, 'values': values}));
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/events',
-    headers: {},
-    method: 'PATCH',
-    body: jsonEncode({'events_idx': eventsIdx, 'values': values}),
-  );
-  if (response == null) return false;
-  Logger.debug('setConversationEventsState: ${response.body}');
-  return response.statusCode == 200;
-}
-
 Future<bool> setConversationActionItemState(String conversationId, List<int> actionItemsIdx, List<bool> values) async {
   print(jsonEncode({'items_idx': actionItemsIdx, 'values': values, 'conversation_id': conversationId}));
   var response = await makeApiCall(
@@ -315,62 +397,121 @@ Future<bool> deleteConversationActionItem(String conversationId, ActionItem item
   return response.statusCode == 204;
 }
 
-//this is expected to return complete memories
-Future<List<ServerConversation>> sendStorageToBackend(File file, String sdCardDateTimeString) async {
-  try {
-    var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}sdcard_memory?date_time=$sdCardDateTimeString',
-      files: [file],
-      fileFieldName: 'file',
-    );
+/// Outcome of an upload-only POST to /v2/sync-local-files.
+/// Exactly one of [jobId] (HTTP 202 — audio received, processing in the
+/// background; reconcile later) or [completed] (HTTP 200 fast-path — server
+/// already returned the result synchronously) is non-null.
+class UploadFilesResult {
+  final String? jobId;
+  final SyncLocalFilesResponse? completed;
 
-    if (response.statusCode == 200) {
-      Logger.debug('storageSend Response body: ${jsonDecode(response.body)}');
-    } else {
-      Logger.debug('Failed to storageSend. Status code: ${response.statusCode}');
-      return [];
-    }
+  const UploadFilesResult._(this.jobId, this.completed);
+  factory UploadFilesResult.queued(String jobId) => UploadFilesResult._(jobId, null);
+  factory UploadFilesResult.done(SyncLocalFilesResponse result) => UploadFilesResult._(null, result);
 
-    var memories = (jsonDecode(response.body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation))
-        .toList();
-    Logger.debug('getMemories length: ${memories.length}');
-
-    return memories;
-  } catch (e) {
-    Logger.debug('An error occurred storageSend: $e');
-    return [];
-  }
+  bool get isQueued => jobId != null;
 }
 
-Future<SyncLocalFilesResponse> syncLocalFiles(List<File> files, {UploadProgressCallback? onUploadProgress}) async {
-  try {
-    var response = await makeMultipartApiCall(
-        url: '${Env.apiBaseUrl}v1/sync-local-files', files: files, onUploadProgress: onUploadProgress);
+/// Thrown when an upload is rejected by fair-use throttling (HTTP 429).
+/// [retryAfterSeconds] is the server's Retry-After when provided.
+class SyncRateLimitedException implements Exception {
+  final int? retryAfterSeconds;
+  SyncRateLimitedException([this.retryAfterSeconds]);
 
-    if (response.statusCode == 200 || response.statusCode == 207) {
-      var result = SyncLocalFilesResponse.fromJson(jsonDecode(response.body));
-      if (response.statusCode == 207) {
-        Logger.debug(
-          'syncLocalFiles partial failure: ${result.failedSegments}/${result.totalSegments} segments failed, '
-          'errors: ${result.errors}',
-        );
-      } else {
-        Logger.debug('syncLocalFile Response body: ${jsonDecode(response.body)}');
-      }
-      return result;
-    } else if (response.statusCode == 400) {
-      throw Exception('Audio file could not be processed by server');
-    } else if (response.statusCode == 413) {
-      throw Exception('Audio file is too large to upload');
-    } else if (response.statusCode >= 500) {
-      throw Exception('Server is temporarily unavailable');
-    } else {
-      throw Exception('Upload failed unexpectedly');
+  @override
+  String toString() => 'SyncRateLimitedException(retryAfter=$retryAfterSeconds)';
+}
+
+/// Parse a Retry-After header expressed in delta-seconds. Returns null for an
+/// absent or non-integer (HTTP-date) value; the caller falls back to a default.
+int? _parseRetryAfterSeconds(http.Response response) {
+  final raw = response.headers['retry-after'];
+  if (raw == null) return null;
+  return int.tryParse(raw.trim());
+}
+
+/// Upload-only: POST files and return as soon as the server acknowledges
+/// (HTTP 202 with a job_id, or the 200 fast-path with a finished result).
+/// Does NOT wait for server-side processing — the caller marks the WAL
+/// `uploaded` and a reconciler resolves [jobId] later via [fetchSyncJobStatus].
+/// Error-status mapping matches the old polling path so callers' retry logic
+/// is unchanged.
+Future<UploadFilesResult> uploadLocalFilesV2(
+  List<File> files, {
+  UploadProgressCallback? onUploadProgress,
+  String? conversationId,
+}) async {
+  var url = '${Env.apiBaseUrl}v2/sync-local-files';
+  if (conversationId != null) {
+    url += '?conversation_id=${Uri.encodeQueryComponent(conversationId)}';
+  }
+  var response = await makeMultipartApiCall(url: url, files: files, onUploadProgress: onUploadProgress);
+
+  if (response.statusCode == 200) {
+    // Fast-path: server processed synchronously and returned the result.
+    return UploadFilesResult.done(SyncLocalFilesResponse.fromJson(jsonDecode(response.body)));
+  }
+  if (response.statusCode == 202) {
+    final start = SyncJobStartResponse.fromJson(jsonDecode(response.body));
+    if (start.jobId.isEmpty) {
+      throw Exception('Upload accepted but no job id returned');
     }
+    return UploadFilesResult.queued(start.jobId);
+  }
+  if (response.statusCode == 400) {
+    throw Exception('Audio file could not be processed by server');
+  } else if (response.statusCode == 413) {
+    throw Exception('Audio file is too large to upload');
+  } else if (response.statusCode == 429) {
+    // Fair-use throttle, not a content failure. Surface it typed so callers
+    // can back off (honoring Retry-After) instead of burning the retry budget.
+    throw SyncRateLimitedException(_parseRetryAfterSeconds(response));
+  } else if (response.statusCode >= 500) {
+    throw Exception('Server is temporarily unavailable');
+  }
+  throw Exception('Upload failed unexpectedly');
+}
+
+/// Why a single job-status fetch did not yield a usable status.
+/// - [notFound]  : 404/403 — job expired, unknown, or not ours. Unrecoverable
+///                 for this job_id; the caller must fall back to re-upload.
+/// - [transient] : network/5xx/null — retry later, job may still be alive.
+enum SyncJobFetchOutcome { ok, notFound, transient }
+
+class SyncJobFetch {
+  final SyncJobFetchOutcome outcome;
+  final SyncJobStatusResponse? status;
+  const SyncJobFetch(this.outcome, [this.status]);
+}
+
+/// Single GET of a sync job's status — no polling loop. The reconciler owns
+/// the polling cadence and decides what to do per [SyncJobFetchOutcome].
+Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v2/sync-local-files/$jobId',
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
+  if (response == null) {
+    DebugLogManager.logEvent('fetch_sync_job_status', {'jobId': jobId, 'httpStatus': null, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
+  if (response.statusCode == 404 || response.statusCode == 403) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'notFound'});
+    return const SyncJobFetch(SyncJobFetchOutcome.notFound);
+  }
+  if (response.statusCode != 200) {
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'transient'});
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
+  }
+  try {
+    return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse.fromJson(jsonDecode(response.body)));
   } catch (e) {
-    Logger.debug('syncLocalFiles error: $e');
-    rethrow;
+    Logger.debug('fetchSyncJobStatus parse error: $e');
+    return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
 }
 
@@ -466,10 +607,6 @@ Future<List<App>> getConversationSuggestedApps(String conversationId) async {
     return (data['suggested_apps'] as List<dynamic>).map((appData) => App.fromJson(appData)).toList();
   }
   return [];
-}
-
-Future<bool> updateActionItemStateByMetadata(String conversationId, int itemIndex, bool newState) async {
-  return await setConversationActionItemState(conversationId, [itemIndex], [newState]);
 }
 
 // *********************************

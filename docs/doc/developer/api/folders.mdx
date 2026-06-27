@@ -1,0 +1,198 @@
+---
+title: "Folders"
+icon: "folder"
+description: "Retrieve user-defined folders for organizing conversations via the Developer API"
+---
+
+## Endpoints
+
+<CardGroup cols={1}>
+  <Card title="GET" icon="download" color="#22c55e">
+    List all folders
+  </Card>
+</CardGroup>
+
+---
+
+## List Folders
+
+<Card title="GET /v1/dev/user/folders" icon="download" color="#22c55e" horizontal>
+  Retrieve all folders for the authenticated user
+</Card>
+
+<Note>
+This endpoint is strictly read-only. If the user has not yet had folders initialized, an empty array is returned. System folders (Work, Personal, Social) are created lazily through other paths — when the mobile app opens the conversations screen or when a new conversation is created. In normal usage, any user who can issue a Developer API key has already gone through one of those paths.
+</Note>
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    curl -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/user/folders"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    response = requests.get(
+        "https://api.omi.me/v1/dev/user/folders",
+        headers={"Authorization": f"Bearer {API_KEY}"}
+    )
+    folders = response.json()
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const response = await fetch(
+      "https://api.omi.me/v1/dev/user/folders",
+      { headers: { Authorization: `Bearer ${API_KEY}` } }
+    );
+    const folders = await response.json();
+    ```
+  </Tab>
+</Tabs>
+
+<AccordionGroup>
+  <Accordion title="Response Example" icon="code" defaultOpen={true}>
+    ```json
+    [
+      {
+        "id": "folder_uuid_work",
+        "name": "Work",
+        "description": "Work, business, professional, and career-related conversations",
+        "color": "#3B82F6",
+        "icon": "💼",
+        "created_at": "2025-01-15T10:00:00Z",
+        "updated_at": "2025-01-20T13:50:00Z",
+        "order": 0,
+        "is_default": false,
+        "is_system": true,
+        "category_mapping": "work",
+        "conversation_count": 12
+      },
+      {
+        "id": "folder_uuid_personal",
+        "name": "Personal",
+        "description": "Personal life, family, health, hobbies, and self-improvement",
+        "color": "#10B981",
+        "icon": "👤",
+        "created_at": "2025-01-15T10:00:00Z",
+        "updated_at": "2025-01-18T09:00:00Z",
+        "order": 1,
+        "is_default": false,
+        "is_system": true,
+        "category_mapping": "personal",
+        "conversation_count": 7
+      },
+      {
+        "id": "folder_uuid_social",
+        "name": "Social",
+        "description": "Friends, social gatherings, entertainment, and casual conversations",
+        "color": "#8B5CF6",
+        "icon": "👥",
+        "created_at": "2025-01-15T10:00:00Z",
+        "updated_at": "2025-01-19T11:30:00Z",
+        "order": 2,
+        "is_default": false,
+        "is_system": true,
+        "category_mapping": "social",
+        "conversation_count": 4
+      }
+    ]
+    ```
+  </Accordion>
+  <Accordion title="Response Fields" icon="list">
+    | Field | Type | Description |
+    |-------|------|-------------|
+    | `id` | string | Unique folder identifier |
+    | `name` | string | Display name of the folder |
+    | `description` | string \| null | Natural language description of what belongs in this folder |
+    | `color` | string | Hex color code for the folder (e.g. `#3B82F6`) |
+    | `icon` | string | Emoji or icon identifier |
+    | `created_at` | datetime | When the folder was created |
+    | `updated_at` | datetime | When the folder was last updated |
+    | `order` | integer | Display order index (lower = earlier) |
+    | `is_default` | boolean | Whether this is the default folder for unassigned conversations |
+    | `is_system` | boolean | `true` for category-based system folders (Work, Personal, Social) |
+    | `category_mapping` | string \| null | Maps to a conversation category for backwards compatibility |
+    | `conversation_count` | integer | Number of non-discarded conversations in this folder |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Using Folder IDs to Filter Conversations
+
+Once you have folder IDs, you can filter conversations by folder using the `folder_id` query parameter on the conversations endpoint:
+
+<Tabs>
+  <Tab title="cURL">
+    ```bash
+    # Step 1: Get folder list
+    FOLDERS=$(curl -s -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/user/folders")
+
+    # Step 2: Extract the Work folder ID (using jq)
+    WORK_FOLDER_ID=$(echo "$FOLDERS" | jq -r '.[] | select(.name=="Work") | .id')
+
+    # Step 3: Fetch conversations in Work folder
+    curl -H "Authorization: Bearer $API_KEY" \
+      "https://api.omi.me/v1/dev/user/conversations?folder_id=$WORK_FOLDER_ID"
+    ```
+  </Tab>
+  <Tab title="Python">
+    ```python
+    import requests
+
+    headers = {"Authorization": f"Bearer {API_KEY}"}
+
+    # Step 1: Get folder list
+    folders = requests.get(
+        "https://api.omi.me/v1/dev/user/folders",
+        headers=headers
+    ).json()
+
+    # Step 2: Find the Work folder
+    work_folder = next((f for f in folders if f["name"] == "Work"), None)
+
+    # Step 3: Fetch conversations in Work folder
+    if work_folder:
+        conversations = requests.get(
+            "https://api.omi.me/v1/dev/user/conversations",
+            headers=headers,
+            params={"folder_id": work_folder["id"], "limit": 50}
+        ).json()
+        print(f"Found {len(conversations)} work conversations")
+    ```
+  </Tab>
+  <Tab title="JavaScript">
+    ```javascript
+    const headers = { Authorization: `Bearer ${API_KEY}` };
+
+    // Step 1: Get folder list
+    const foldersRes = await fetch(
+      "https://api.omi.me/v1/dev/user/folders",
+      { headers }
+    );
+    const folders = await foldersRes.json();
+
+    // Step 2: Find the Work folder
+    const workFolder = folders.find(f => f.name === "Work");
+
+    // Step 3: Fetch conversations in Work folder
+    if (workFolder) {
+      const convsRes = await fetch(
+        `https://api.omi.me/v1/dev/user/conversations?folder_id=${workFolder.id}&limit=50`,
+        { headers }
+      );
+      const conversations = await convsRes.json();
+      console.log(`Found ${conversations.length} work conversations`);
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+You can also filter by `starred=true` to get only starred conversations, or combine both `folder_id` and `starred` to get starred conversations within a specific folder.
+</Tip>

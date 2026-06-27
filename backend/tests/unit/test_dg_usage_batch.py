@@ -12,7 +12,7 @@ import pytest
 
 def _read_transcribe_source():
     path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8') as f:
         return f.read()
 
 
@@ -27,11 +27,11 @@ class TestDgUsageBatchingStructure:
         assert len(calls) == 2, f'Expected 2 record_dg_usage_ms calls (flush only), found {len(calls)}'
 
     def test_accumulation_covers_all_stt_providers(self):
-        """All 4 STT provider paths accumulate locally via dg_usage_ms_pending +=."""
+        """All STT provider paths accumulate locally via dg_usage_ms_pending +=."""
         source = _read_transcribe_source()
         accum = re.findall(r'^\s+dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
-        # DG, Soniox, Speechmatics, multi-channel
-        assert len(accum) == 4, f'Expected 4 accumulation points, found {len(accum)}'
+        # DG single-channel + multi-channel
+        assert len(accum) == 2, f'Expected 2 accumulation points, found {len(accum)}'
 
     def test_nonlocal_declarations_complete(self):
         """All nested functions that touch dg_usage_ms_pending declare nonlocal."""
@@ -76,11 +76,13 @@ class TestDgUsageBatchingBehavior:
             'database.user_usage',
             'database.conversations',
             'firebase_admin',
+            'firebase_admin.auth',
             'firebase_admin.messaging',
         ]:
             if mod_name not in sys.modules:
                 sys.modules[mod_name] = ModuleType(mod_name)
 
+        sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
         sys.modules['database._client'].db = MagicMock()
         sys.modules['database.redis_db'].r = MagicMock()
 

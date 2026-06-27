@@ -13,14 +13,21 @@ Before getting started, make sure your device is connected and unlocked. If you'
    cd app
    ```
 
-2. Run setup script:
+2. Run the setup script for your platform:
    ```bash
-   # For iOS
+   # macOS/Linux: iOS
    bash setup.sh ios
 
-   # For Android
+   # macOS/Linux: Android
    bash setup.sh android
    ```
+
+   ```powershell
+   # Windows PowerShell: Android
+   .\setup\scripts\setup.ps1 android
+   ```
+
+   iOS setup requires macOS/Xcode, so Windows developers should use the Android setup path.
  
 3. Ensure GitHub SSH access is set up correctly for pulling certificates from repositories. After running the command below, if you're prompted for a passphrase, enter your SSH passphrase — or simply press Enter/Return if you haven't set one.
     ```bash

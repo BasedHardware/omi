@@ -95,6 +95,10 @@ Stream<ServerMessageChunk> sendMessageStreamServer(String text, {String? appId, 
   var messageId = "1000"; // Default new message
 
   await for (var line in makeStreamingApiCall(url: url, body: jsonEncode({'text': text, 'file_ids': filesId}))) {
+    if (line.startsWith('error:402:')) {
+      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
+      return;
+    }
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
       yield messageChunk;
@@ -129,6 +133,10 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files, {Strin
     files: files,
     fields: language != null ? {'language': language} : {},
   )) {
+    if (line.startsWith('error:402:')) {
+      yield ServerMessageChunk(messageId, line.substring('error:402:'.length), MessageChunkType.error);
+      return;
+    }
     var messageChunk = parseMessageChunk(line, messageId);
     if (messageChunk != null) {
       yield messageChunk;
@@ -174,23 +182,40 @@ Future reportMessageServer(String messageId) async {
   }
 }
 
-Future<String> transcribeVoiceMessage(File audioFile, {String? language}) async {
-  try {
-    var response = await makeMultipartApiCall(
-      url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
-      files: [audioFile],
-      fields: language != null ? {'language': language} : {},
-    );
+/// Transcribe audio files sequentially (one request per file) to stay under
+/// Cloud Run's 32 MB request-body limit.  Transcripts are concatenated
+/// client-side with a space separator — same behaviour as the backend's
+/// multi-file mode but without a single oversized upload.
+Future<String> transcribeVoiceMessage(List<File> audioFiles, {String? language}) async {
+  final transcripts = <String>[];
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data['transcript'] ?? '';
-    } else {
-      Logger.debug('Failed to transcribe voice message: ${response.statusCode} ${response.body}');
-      throw Exception('Failed to transcribe voice message');
+  for (final file in audioFiles) {
+    try {
+      var response = await makeMultipartApiCallUnpooled(
+        url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
+        files: [file],
+        fields: language != null ? {'language': language} : {},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final transcript = data['transcript'] ?? '';
+        if (transcript.isNotEmpty) {
+          transcripts.add(transcript);
+        }
+      } else {
+        Logger.debug('Failed to transcribe voice message chunk: ${response.statusCode} ${response.body}');
+        throw Exception('Failed to transcribe voice message');
+      }
+    } catch (e) {
+      Logger.debug('Error transcribing voice message chunk: $e');
+      throw Exception('Error transcribing voice message: $e');
     }
-  } catch (e) {
-    Logger.debug('Error transcribing voice message: $e');
-    throw Exception('Error transcribing voice message: $e');
   }
+
+  final transcript = transcripts.join(' ').trim();
+  if (transcript.isEmpty) {
+    throw Exception('Voice message transcription returned empty transcript');
+  }
+  return transcript;
 }

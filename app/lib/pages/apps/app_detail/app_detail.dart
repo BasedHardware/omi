@@ -1,11 +1,11 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
-import 'package:flutter_rating_bar/flutter_rating_bar.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -18,6 +18,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
+import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -25,7 +26,6 @@ import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
@@ -62,66 +62,6 @@ class _AppDetailPageState extends State<AppDetailPage> {
   late App app;
   final ScrollController _scrollController = ScrollController();
   final GlobalKey _reviewsSectionKey = GlobalKey();
-
-  String _getPricingText(App app) {
-    if (!app.isPaid || app.price == null || app.price == 0) {
-      return 'Free';
-    }
-    if (app.paymentPlan == 'monthly_recurring') {
-      return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)} / mo';
-    }
-    return '\$${app.price!.toStringAsFixed(app.price! % 1 == 0 ? 0 : 2)}';
-  }
-
-  IconData _getCategoryIcon(String category) {
-    switch (category) {
-      case 'conversation-analysis':
-        return FontAwesomeIcons.solidComments;
-      case 'personality-emulation':
-        return FontAwesomeIcons.solidUser;
-      case 'health-and-wellness':
-        return FontAwesomeIcons.solidHeart;
-      case 'education-and-learning':
-        return FontAwesomeIcons.graduationCap;
-      case 'communication-improvement':
-        return FontAwesomeIcons.solidMessage;
-      case 'emotional-and-mental-support':
-        return FontAwesomeIcons.brain;
-      case 'productivity-and-organization':
-        return FontAwesomeIcons.listCheck;
-      case 'entertainment-and-fun':
-        return FontAwesomeIcons.gamepad;
-      case 'financial':
-        return FontAwesomeIcons.solidCreditCard;
-      case 'travel-and-exploration':
-        return FontAwesomeIcons.plane;
-      case 'safety-and-security':
-        return FontAwesomeIcons.shieldHalved;
-      case 'shopping-and-commerce':
-        return FontAwesomeIcons.cartShopping;
-      case 'social-and-relationships':
-        return FontAwesomeIcons.userGroup;
-      case 'news-and-information':
-        return FontAwesomeIcons.solidNewspaper;
-      case 'utilities-and-tools':
-        return FontAwesomeIcons.toolbox;
-      case 'popular':
-        return FontAwesomeIcons.fire;
-      default:
-        return FontAwesomeIcons.solidCircleQuestion;
-    }
-  }
-
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final day = date.day;
-    final month = months[date.month - 1];
-    if (date.year == now.year) {
-      return '$day $month';
-    }
-    return '$day $month ${date.year}';
-  }
 
   /// Safely launches a URL with fallback from in-app browser to external browser.
   /// Returns true if the URL was launched successfully, false otherwise.
@@ -176,7 +116,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     if (enabled) {
       prefs.enableApp(app.id);
-      MixpanelManager().appEnabled(app.id);
+      PlatformManager.instance.analytics.appEnabled(app.id);
       context.read<AppProvider>().filterApps();
 
       setState(() {
@@ -220,7 +160,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       final result = await cancelAppSubscription(widget.app.id);
       if (result != null && result['status'] == 'success') {
         // Track subscription cancellation
-        MixpanelManager().appDetailSubscriptionCancelled(appId: widget.app.id, appName: widget.app.name);
+        PlatformManager.instance.analytics.appDetailSubscriptionCancelled(
+          appId: widget.app.id,
+          appName: widget.app.name,
+        );
 
         await _loadSubscriptionData();
 
@@ -262,7 +205,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     app = widget.app;
 
     // Track app detail page viewed
-    MixpanelManager().appDetailViewed(
+    PlatformManager.instance.analytics.appDetailViewed(
       appId: app.id,
       appName: app.name,
       category: app.category,
@@ -288,7 +231,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
               '](assets/',
               '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
             );
-            setState(() => instructionsMarkdown = value);
+            if (mounted) setState(() => instructionsMarkdown = value);
           });
         }
       }
@@ -350,7 +293,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Future _checkPaymentStatus(String appId) async {
-    MixpanelManager().appPurchaseStarted(appId);
+    PlatformManager.instance.analytics.appPurchaseStarted(appId);
     _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       var prefs = SharedPreferencesUtil();
       if (mounted) {
@@ -361,9 +304,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (details != null && details['is_user_paid']) {
         var enabled = await enableAppServer(appId);
         if (enabled) {
-          MixpanelManager().appPurchaseCompleted(appId);
+          PlatformManager.instance.analytics.appPurchaseCompleted(appId);
           prefs.enableApp(appId);
-          MixpanelManager().appEnabled(appId);
+          PlatformManager.instance.analytics.appEnabled(appId);
 
           if (!mounted) {
             timer.cancel();
@@ -675,7 +618,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               }
 
                               // Track chat button clicked
-                              MixpanelManager().appDetailChatClicked(appId: app.id, appName: app.name);
+                              PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
 
                               // Navigate directly to chat page
                               if (mounted) {
@@ -733,10 +676,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
-                              MixpanelManager().track('App Shared', properties: {'appId': app.id});
+                              PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id});
 
                               // Track share button clicked
-                              MixpanelManager().appDetailShared(appId: app.id, appName: app.name);
+                              PlatformManager.instance.analytics.appDetailShared(appId: app.id, appName: app.name);
 
                               // Get the position of the share button for iOS
                               final RenderBox? box = context.findRenderObject() as RenderBox?;
@@ -744,19 +687,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   ? box.localToGlobal(Offset.zero) & box.size
                                   : null;
 
-                              if (app.isNotPersona()) {
-                                await Share.share(
-                                  'https://h.omi.me/apps/${app.id}',
-                                  subject: app.name,
-                                  sharePositionOrigin: sharePositionOrigin,
-                                );
-                              } else {
-                                await Share.share(
-                                  'Check out this Persona on Omi AI: ${app.name} by ${app.author} \n\n${app.description.decodeString}\n\n\nhttps://personas.omi.me/u/${app.username}',
-                                  subject: app.name,
-                                  sharePositionOrigin: sharePositionOrigin,
-                                );
-                              }
+                              await Share.share(
+                                'https://h.omi.me/apps/${app.id}',
+                                subject: app.name,
+                                sharePositionOrigin: sharePositionOrigin,
+                              );
                             },
                           ),
                         );
@@ -862,6 +797,39 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       ],
                                     ],
                                   ),
+                                  // Rating + installs inline
+                                  const SizedBox(height: 6),
+                                  GestureDetector(
+                                    onTap: () {
+                                      if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
+                                        Scrollable.ensureVisible(
+                                          _reviewsSectionKey.currentContext!,
+                                          duration: const Duration(milliseconds: 300),
+                                          curve: Curves.easeInOut,
+                                        );
+                                      }
+                                    },
+                                    child: Row(
+                                      children: [
+                                        if (app.ratingCount > 0) ...[
+                                          const Icon(FontAwesomeIcons.solidStar, size: 11, color: Color(0xFF8B5CF6)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${app.getRatingAvg()} (${app.ratingCount})',
+                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                                          ),
+                                          if (app.installs > 0) ...[
+                                            Text('  ·  ', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                          ],
+                                        ],
+                                        if (app.installs > 0)
+                                          Text(
+                                            '${(app.installs / 10).round() * 10}+ users',
+                                            style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                               isLoading
@@ -874,11 +842,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     )
                                   : app.enabled
                                   ? AnimatedLoadingButton(
-                                      text: context.l10n.uninstall,
+                                      text: 'Disable',
                                       width: 90,
                                       height: 32,
                                       onPressed: () => _toggleApp(app.id, false),
-                                      color: Colors.red,
+                                      color: Colors.grey.shade700,
                                     )
                                   : (app.isPaid && !app.isUserPaid
                                         ? AnimatedLoadingButton(
@@ -887,7 +855,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                             text: "Subscribe",
                                             onPressed: () async {
                                               // Track subscribe button clicked
-                                              MixpanelManager().appDetailSubscribeClicked(
+                                              PlatformManager.instance.analytics.appDetailSubscribeClicked(
                                                 appId: app.id,
                                                 appName: app.name,
                                               );
@@ -906,12 +874,12 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                 await _toggleApp(app.id, true);
                                               }
                                             },
-                                            color: Colors.green,
+                                            color: const Color(0xFF8B5CF6),
                                           )
                                         : AnimatedLoadingButton(
                                             width: 75,
                                             height: 32,
-                                            text: context.l10n.install,
+                                            text: 'Enable',
                                             onPressed: () async {
                                               if (app.worksExternally()) {
                                                 showDialog(
@@ -938,7 +906,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                                 _toggleApp(app.id, true);
                                               }
                                             },
-                                            color: Colors.green,
+                                            color: const Color(0xFF8B5CF6),
                                           )),
                             ],
                           ),
@@ -947,197 +915,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       const SizedBox(width: 20),
                     ],
                   ),
-                  const SizedBox(height: 32),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            // Ratings section - App Store style
-                            GestureDetector(
-                              onTap: () {
-                                if ((app.ratingCount > 0 || app.reviews.isNotEmpty) &&
-                                    _reviewsSectionKey.currentContext != null) {
-                                  Scrollable.ensureVisible(
-                                    _reviewsSectionKey.currentContext!,
-                                    duration: const Duration(milliseconds: 300),
-                                    curve: Curves.easeInOut,
-                                  );
-                                }
-                              },
-                              child: Column(
-                                children: [
-                                  Text(
-                                    app.ratingCount == 0 ? 'NO RATINGS' : '${app.ratingCount}+ RATINGS',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    app.getRatingAvg() ?? '0.0',
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  RatingBar.builder(
-                                    initialRating: app.ratingAvg ?? 0,
-                                    minRating: 1,
-                                    ignoreGestures: true,
-                                    direction: Axis.horizontal,
-                                    allowHalfRating: true,
-                                    itemCount: 5,
-                                    itemSize: 12,
-                                    tapOnlyMode: false,
-                                    itemPadding: const EdgeInsets.symmetric(horizontal: 1),
-                                    itemBuilder: (context, _) =>
-                                        Icon(FontAwesomeIcons.solidStar, color: Colors.grey.shade500),
-                                    maxRating: 5.0,
-                                    onRatingUpdate: (rating) {},
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 20),
-                            VerticalDivider(color: Colors.grey.shade800, width: 4),
-                            const SizedBox(width: 20),
-                            // Installs
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  '${(app.installs / 10).round() * 10}+',
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'INSTALLS',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 20),
-                            VerticalDivider(color: Colors.grey.shade800, width: 4),
-                            const SizedBox(width: 20),
-                            // Pricing
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _getPricingText(app),
-                                  style: TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'PRICE',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(width: 20),
-                            VerticalDivider(color: Colors.grey.shade800, width: 4),
-                            const SizedBox(width: 20),
-                            // Category
-                            Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                FaIcon(_getCategoryIcon(app.category), size: 20, color: Colors.grey.shade400),
-                                const SizedBox(height: 12),
-                                Text(
-                                  app.getCategoryName().split(' ').first.toUpperCase(),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade500,
-                                    fontWeight: FontWeight.w600,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            if (app.getLastUpdatedDate() != null) ...[
-                              const SizedBox(width: 20),
-                              VerticalDivider(color: Colors.grey.shade800, width: 4),
-                              const SizedBox(width: 20),
-                              // Updated/Created
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    _formatDate(app.getLastUpdatedDate()!),
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    app.updatedAt != null ? 'UPDATED' : 'CREATED',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                            if (app.isPopular == true) ...[
-                              const SizedBox(width: 20),
-                              VerticalDivider(color: Colors.grey.shade800, width: 4),
-                              const SizedBox(width: 20),
-                              // Featured
-                              Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  FaIcon(FontAwesomeIcons.trophy, size: 20, color: Colors.grey.shade400),
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    'FEATURED',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade500,
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  const SizedBox(height: 16),
+
                   // Cancel Subscription
                   !isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner
                       ? Padding(
@@ -1417,7 +1196,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           return GestureDetector(
                             onTap: () {
                               // Track preview image viewed
-                              MixpanelManager().appDetailPreviewImageViewed(appId: app.id, imageIndex: index);
+                              PlatformManager.instance.analytics.appDetailPreviewImageViewed(
+                                appId: app.id,
+                                imageIndex: index,
+                              );
 
                               Navigator.push(
                                 context,
@@ -1480,14 +1262,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
                       if (app.description.decodeString.characters.length > 200) {
                         routeToPage(
                           context,
-                          MarkdownViewer(
-                            title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
-                            markdown: app.description.decodeString,
-                          ),
+                          MarkdownViewer(title: 'Description', markdown: app.description.decodeString),
                         );
                       }
                     },
-                    title: app.isNotPersona() ? context.l10n.aboutTheApp : context.l10n.aboutThePersona,
+                    title: 'Description',
                     description: app.description,
                     showChips: false,
                   ),
@@ -1569,7 +1348,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               onTap: () {
                                 if (app.reviews.isNotEmpty) {
                                   // Track reviews page opened
-                                  MixpanelManager().appDetailReviewsOpened(
+                                  PlatformManager.instance.analytics.appDetailReviewsOpened(
                                     appId: app.id,
                                     reviewCount: app.reviews.length,
                                   );
@@ -1598,7 +1377,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     Row(
                                       children: [
                                         Text(
-                                          context.l10n.ratingsAndReviews,
+                                          'Reviews',
                                           style: TextStyle(
                                             color: Colors.white,
                                             fontSize: 16,
@@ -1751,7 +1530,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
 
       prefs.enableApp(appId);
-      MixpanelManager().appEnabled(appId);
+      PlatformManager.instance.analytics.appEnabled(appId);
       context.read<AppProvider>().filterApps();
 
       setState(() {
@@ -1774,7 +1553,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       prefs.disableApp(appId);
       var res = await disableAppServer(appId);
       print(res);
-      MixpanelManager().appDisabled(appId);
+      PlatformManager.instance.analytics.appDisabled(appId);
 
       if (!mounted) return;
 
@@ -1807,31 +1586,19 @@ class RatingDistributionWidget extends StatelessWidget {
     required this.reviews,
   });
 
-  Map<int, int> _getRatingDistribution() {
-    final distribution = {5: 0, 4: 0, 3: 0, 2: 0, 1: 0};
-    for (final review in reviews) {
-      final score = review.score.round().clamp(1, 5);
-      distribution[score] = (distribution[score] ?? 0) + 1;
-    }
-    return distribution;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final distribution = _getRatingDistribution();
-
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // Left side - Large rating number with stars
+        Text(
+          ratingAvg.toStringAsFixed(1),
+          style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.grey.shade400, height: 1),
+        ),
+        const SizedBox(width: 16),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              ratingAvg.toStringAsFixed(1),
-              style: TextStyle(fontSize: 48, fontWeight: FontWeight.bold, color: Colors.grey.shade400, height: 1),
-            ),
-            const SizedBox(height: 8),
             Row(
               children: List.generate(5, (index) {
                 return Padding(
@@ -1844,59 +1611,12 @@ class RatingDistributionWidget extends StatelessWidget {
                 );
               }),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               ratingCount == 1 ? '1 rating' : '$ratingCount ratings',
               style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
             ),
           ],
-        ),
-        const SizedBox(width: 24),
-        // Right side - Rating distribution bars
-        Expanded(
-          child: Column(
-            children: [5, 4, 3, 2, 1].map((star) {
-              final count = distribution[star] ?? 0;
-              final percentage = ratingCount > 0 ? count / ratingCount : 0.0;
-
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 3),
-                child: Row(
-                  children: [
-                    Text(
-                      '$star',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(FontAwesomeIcons.solidStar, size: 10, color: Colors.deepPurple),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Container(
-                        height: 8,
-                        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(4)),
-                        child: FractionallySizedBox(
-                          alignment: Alignment.centerLeft,
-                          widthFactor: percentage,
-                          child: Container(
-                            decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(4)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 20,
-                      child: Text(
-                        '$count',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
-                        textAlign: TextAlign.right,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
         ),
       ],
     );
@@ -1938,16 +1658,6 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
   void dispose() {
     reviewController.dispose();
     super.dispose();
-  }
-
-  String _getAvatarUrl(String seed, String? username) {
-    // Using Avatar Placeholder API for random avatars
-    // If username is available, use username-based avatar for consistency
-    if (username != null && username.isNotEmpty) {
-      return 'https://avatar.iran.liara.run/username?username=${Uri.encodeComponent(username)}';
-    }
-    // Otherwise use a seeded random avatar
-    return 'https://avatar.iran.liara.run/public/${seed.hashCode % 100}';
   }
 
   Future<void> _submitReview() async {
@@ -2002,7 +1712,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           SharedPreferencesUtil().appsList = appsList;
         }
 
-        MixpanelManager().appRated(widget.app.id, editRating);
+        PlatformManager.instance.analytics.appRated(widget.app.id, editRating);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2194,40 +1904,13 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Random Avatar
-              ClipOval(
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  color: Colors.grey.shade800,
-                  child: Image.network(
-                    _getAvatarUrl(avatarSeed, review.username),
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      final initial = review.username.isNotEmpty ? review.username[0].toUpperCase() : 'A';
-                      return Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: isUserReview ? Colors.deepPurple.withOpacity(0.2) : Colors.grey.shade800,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            initial,
-                            style: TextStyle(
-                              color: isUserReview ? Colors.deepPurple : Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+              // Avatar
+              ReviewAvatar(
+                seed: avatarSeed,
+                username: review.username,
+                size: 36,
+                backgroundColor: isUserReview ? Colors.deepPurple.withOpacity(0.2) : null,
+                foregroundColor: isUserReview ? Colors.deepPurple : null,
               ),
               const SizedBox(width: 12),
               // Name, date, and stars

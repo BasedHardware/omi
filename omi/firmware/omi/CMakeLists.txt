@@ -18,6 +18,10 @@ file(GLOB app_sources
     src/rtc.c
     src/imu.c
 )
+
+if(CONFIG_OMI_ENABLE_T5838_AAD)
+    list(APPEND app_sources src/aad.c)
+endif()
 file(GLOB core_sources
     src/lib/core/config.h
     src/lib/core/codec.c
@@ -28,10 +32,6 @@ file(GLOB core_sources
 
 if(CONFIG_OMI_ENABLE_OFFLINE_STORAGE)
     list(APPEND core_sources src/lib/core/storage.c)
-endif()
-
-if(CONFIG_OMI_ENABLE_WIFI)
-    list(APPEND core_sources src/wifi.c)
 endif()
 
 target_sources(app PRIVATE ${core_sources} ${app_sources})

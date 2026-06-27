@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/api/conversations.dart';
@@ -9,7 +10,6 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/app_review_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 
 class ConversationProvider extends ChangeNotifier {
@@ -50,6 +50,25 @@ class ConversationProvider extends ChangeNotifier {
 
   bool isFetchingConversations = false;
 
+  // True when the last full conversations fetch failed (no response /
+  // non-200) rather than legitimately returning zero results. The UI uses
+  // this to keep showing a loading state and auto-retry instead of latching
+  // "No conversations yet" — e.g. on a cold start where the Firebase auth
+  // token wasn't ready yet for the very first request.
+  bool conversationsLoadFailed = false;
+  Timer? _initialFetchRetryTimer;
+  int _initialFetchRetryCount = 0;
+  static const int _maxInitialFetchRetries = 4;
+  // After the fast backoff budget is spent we keep retrying on a slow fixed
+  // interval rather than giving up — otherwise a prolonged outage latches the
+  // misleading get-started/"No conversations yet" hero for a user who really
+  // does have conversations (just an empty local cache + a slow auth/network).
+  static const int _slowFetchRetryIntervalSeconds = 15;
+
+  // The empty-state widget should defer to a pending auto-retry so the user
+  // doesn't see "No conversations yet" in the gap between backoff attempts.
+  bool get isAwaitingInitialFetchRetry => _initialFetchRetryTimer?.isActive ?? false;
+
   ConversationProvider() {
     _setupMergeListener();
     _loadSettings();
@@ -72,6 +91,37 @@ class ConversationProvider extends ChangeNotifier {
     groupConversationsByDate();
   }
 
+  void clearUserData() {
+    conversations = [];
+    searchedConversations = [];
+    groupedConversations = {};
+    processingConversations = [];
+    mergingConversationIds = {};
+    selectedConversationIds = {};
+    isSelectionModeActive = false;
+    showDailySummaries = false;
+    hasDailySummaries = false;
+    selectedDate = null;
+    selectedFolderId = null;
+    previousQuery = '';
+    totalSearchPages = 1;
+    currentSearchPage = 1;
+    isLoadingConversations = false;
+    isFetchingConversations = false;
+    conversationsLoadFailed = false;
+    _initialFetchRetryTimer?.cancel();
+    _initialFetchRetryTimer = null;
+    _initialFetchRetryCount = 0;
+    memoriesToDelete = {};
+    deleteTimestamps = {};
+    _processingConversationWatchTimer?.cancel();
+    _processingConversationWatchTimer = null;
+    _refreshDebounceTimer?.cancel();
+    _refreshDebounceTimer = null;
+    _lastRefreshTime = null;
+    notifyListeners();
+  }
+
   Future updateSearchedConvoDetails(String id, DateTime date, int idx) async {
     var convo = await getConversationById(id);
     if (convo != null) {
@@ -81,7 +131,9 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateSpecificGroupedConvo(ServerConversation convo, DateTime date, int idx) {
-    groupedConversations[date]![idx] = convo;
+    final group = groupedConversations[date];
+    if (group == null || idx < 0 || idx >= group.length) return;
+    group[idx] = convo;
     notifyListeners();
   }
 
@@ -179,7 +231,7 @@ class ConversationProvider extends ChangeNotifier {
       fetchConversations();
     }
 
-    MixpanelManager().showDiscardedMemoriesToggled(showDiscardedConversations);
+    PlatformManager.instance.analytics.showDiscardedMemoriesToggled(showDiscardedConversations);
   }
 
   void toggleShortConversations() {
@@ -296,8 +348,15 @@ class ConversationProvider extends ChangeNotifier {
 
   Future _fetchNewConversations() async {
     setLoadingConversations(true);
-    List<ServerConversation> newConversations = await _getConversationsFromServer();
+    final result = await _getConversationsFromServer();
     setLoadingConversations(false);
+
+    // A background/debounced refresh failed (transient network error, token
+    // expiry, etc.). Don't treat the empty result as "no new conversations" —
+    // keep the existing list untouched; the next refresh trigger will retry.
+    if (!result.ok) return;
+
+    List<ServerConversation> newConversations = result.items;
 
     List<ServerConversation> upsertConvos = [];
 
@@ -340,8 +399,32 @@ class ConversationProvider extends ChangeNotifier {
     searchedConversations = [];
 
     setLoadingConversations(true);
-    conversations = await _getConversationsFromServer();
+    final result = await _getConversationsFromServer();
     setLoadingConversations(false);
+
+    if (!result.ok) {
+      // The request failed (no response / non-200) — most commonly the auth
+      // token not being ready for the very first request after a cold start.
+      // Do NOT overwrite what we have with an empty list or latch the
+      // "No conversations yet" state: keep the cache (if any) and auto-retry
+      // so the list self-heals without the user having to pull-to-refresh.
+      conversationsLoadFailed = true;
+      if (conversations.isEmpty && selectedFolderId == null) {
+        conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations);
+      }
+      if (searchedConversations.isEmpty) {
+        searchedConversations = conversations;
+      }
+      _groupConversationsByDateWithoutNotify();
+      notifyListeners();
+      _scheduleInitialFetchRetry();
+      return;
+    }
+
+    conversationsLoadFailed = false;
+    _initialFetchRetryTimer?.cancel();
+    _initialFetchRetryCount = 0;
+    conversations = _filterPendingDeletes(result.items);
 
     // processing convos
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
@@ -351,7 +434,7 @@ class ConversationProvider extends ChangeNotifier {
 
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
-      conversations = SharedPreferencesUtil().cachedConversations;
+      conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations);
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
       SharedPreferencesUtil().cachedConversations = conversations;
@@ -364,7 +447,29 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _scheduleInitialFetchRetry() {
+    _initialFetchRetryTimer?.cancel();
+    final int delaySeconds;
+    if (_initialFetchRetryCount < _maxInitialFetchRetries) {
+      _initialFetchRetryCount++;
+      // Fast linear backoff for the first few attempts: 2s, 4s, 6s, 8s.
+      delaySeconds = 2 * _initialFetchRetryCount;
+    } else {
+      // Budget spent — keep self-healing on a slow interval so the UI stays
+      // on the shimmer (isAwaitingInitialFetchRetry stays true) instead of
+      // falling through to the misleading get-started/empty state.
+      delaySeconds = _slowFetchRetryIntervalSeconds;
+    }
+    _initialFetchRetryTimer = Timer(Duration(seconds: delaySeconds), () {
+      if (conversationsLoadFailed) fetchConversations();
+    });
+  }
+
   Future getInitialConversations() async {
+    // A manual/initial entry gets a fresh retry budget so pull-to-refresh
+    // can recover even after the auto-retries were exhausted.
+    _initialFetchRetryTimer?.cancel();
+    _initialFetchRetryCount = 0;
     await fetchConversations();
     await checkHasDailySummaries();
   }
@@ -447,37 +552,40 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void _groupSearchConvosByDateWithoutNotify() {
-    groupedConversations = {};
-    for (var conversation in _filterOutConvos(searchedConversations)) {
-      var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-      var date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
-      if (!groupedConversations.containsKey(date)) {
-        groupedConversations[date] = [];
-      }
-      groupedConversations[date]?.add(conversation);
-    }
-
-    // Sort
-    for (final date in groupedConversations.keys) {
-      groupedConversations[date]?.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    }
+    groupedConversations = _buildGroupedByDate(_filterOutConvos(searchedConversations));
   }
 
   void _groupConversationsByDateWithoutNotify() {
-    groupedConversations = {};
-    for (var conversation in _filterOutConvos(conversations)) {
-      var effectiveDate = conversation.startedAt ?? conversation.createdAt;
-      var date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
-      if (!groupedConversations.containsKey(date)) {
-        groupedConversations[date] = [];
-      }
-      groupedConversations[date]?.add(conversation);
+    groupedConversations = _buildGroupedByDate(_filterOutConvos(conversations));
+  }
+
+  /// Buckets conversations into day-keyed groups, sorted newest-first both
+  /// at the day-group level and within each day.
+  ///
+  /// Why the explicit re-ordering at the end matters: the backend returns
+  /// conversations ordered by `created_at` DESC, but we bucket by
+  /// `started_at` (falling back to `created_at`). For re-processed or
+  /// merged conversations these two timestamps diverge — a conversation
+  /// merged today with the original recording date of, say, May 9 lands
+  /// at the top of the API response (newest `created_at`) and creates
+  /// the `May 9` day-bucket first. Dart's default Map iterates in
+  /// insertion order, so without this sort step the UI would render
+  /// `May 9` above today/yesterday. Rebuilding the map in descending
+  /// key order fixes the day-group display order.
+  Map<DateTime, List<ServerConversation>> _buildGroupedByDate(Iterable<ServerConversation> source) {
+    final grouped = <DateTime, List<ServerConversation>>{};
+    for (final conversation in source) {
+      final effectiveDate = conversation.startedAt ?? conversation.createdAt;
+      final date = DateTime(effectiveDate.year, effectiveDate.month, effectiveDate.day);
+      grouped.putIfAbsent(date, () => []).add(conversation);
     }
 
-    // Sort
-    for (final date in groupedConversations.keys) {
-      groupedConversations[date]?.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
+    for (final list in grouped.values) {
+      list.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     }
+
+    final sortedKeys = grouped.keys.toList()..sort((a, b) => b.compareTo(a));
+    return {for (final k in sortedKeys) k: grouped[k]!};
   }
 
   void groupConversationsByDate() {
@@ -500,10 +608,10 @@ class ConversationProvider extends ChangeNotifier {
     return (DateTime(date.year, date.month, date.day, 0, 0, 0), DateTime(date.year, date.month, date.day, 23, 59, 59));
   }
 
-  Future _getConversationsFromServer() async {
+  Future<({List<ServerConversation> items, bool ok})> _getConversationsFromServer() async {
     final (startDate, endDate) = _getDateFilterRange();
 
-    return await getConversations(
+    return await getConversationsResult(
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
@@ -520,7 +628,12 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future getMoreConversationsFromServer() async {
-    if (conversations.length % 50 != 0) return;
+    // Use server-equivalent length so the load-more gate and offset stay aligned
+    // with what the server has — pending-delete IDs are still present server-side
+    // until the 3-second undo timer fires the actual DELETE. Without this, a
+    // delete leaves the local length non-multiple-of-50 and load-more never fires.
+    final serverEquivalentLength = conversations.length + memoriesToDelete.length;
+    if (serverEquivalentLength % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
 
@@ -528,14 +641,14 @@ class ConversationProvider extends ChangeNotifier {
     final (startDate, endDate) = _getDateFilterRange();
 
     var newConversations = await getConversations(
-      offset: conversations.length,
+      offset: serverEquivalentLength,
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
       starred: showStarredOnly ? true : null,
     );
-    conversations.addAll(newConversations);
+    conversations.addAll(_filterPendingDeletes(newConversations));
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
     setLoadingConversations(false);
@@ -655,7 +768,15 @@ class ConversationProvider extends ChangeNotifier {
   String? lastDeletedConversationId;
   Map<String, DateTime> deleteTimestamps = {};
 
-  void deleteConversationLocally(ServerConversation conversation, int index, DateTime date) {
+  // Hide conversations whose server-side DELETE is still pending (3s undo window
+  // or in-flight HTTP). Without this, a pull-to-refresh during that window
+  // re-surfaces the just-deleted conversation, which users read as "delete didn't work".
+  List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
+    if (memoriesToDelete.isEmpty) return items;
+    return items.where((c) => !memoriesToDelete.containsKey(c.id)).toList();
+  }
+
+  void deleteConversationLocally(ServerConversation conversation, DateTime date) {
     if (lastDeletedConversationId != null &&
         memoriesToDelete.containsKey(lastDeletedConversationId) &&
         DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
@@ -666,9 +787,12 @@ class ConversationProvider extends ChangeNotifier {
     lastDeletedConversationId = conversation.id;
     deleteTimestamps[conversation.id] = DateTime.now();
     conversations.removeWhere((element) => element.id == conversation.id);
-    groupedConversations[date]!.removeAt(index);
-    if (groupedConversations[date]!.isEmpty) {
-      groupedConversations.remove(date);
+    final group = groupedConversations[date];
+    if (group != null) {
+      group.removeWhere((e) => e.id == conversation.id);
+      if (group.isEmpty) {
+        groupedConversations.remove(date);
+      }
     }
     notifyListeners();
     Future.delayed(const Duration(seconds: 3), () {
@@ -714,6 +838,7 @@ class ConversationProvider extends ChangeNotifier {
   void dispose() {
     _processingConversationWatchTimer?.cancel();
     _refreshDebounceTimer?.cancel();
+    _initialFetchRetryTimer?.cancel();
     _mergeCompletedSubscription?.cancel();
     super.dispose();
   }
@@ -750,8 +875,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-        (item) => item.description == actionItemDescription,
-      );
+            (item) => item.description == actionItemDescription,
+          );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -764,8 +889,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-          (item) => item.description == actionItemDescription,
-        );
+              (item) => item.description == actionItemDescription,
+            );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }
@@ -934,7 +1059,7 @@ class ConversationProvider extends ChangeNotifier {
   void enterSelectionMode() {
     isSelectionModeActive = true;
     selectedConversationIds.clear();
-    MixpanelManager().conversationMergeSelectionModeEntered();
+    PlatformManager.instance.analytics.conversationMergeSelectionModeEntered();
     notifyListeners();
   }
 
@@ -942,7 +1067,7 @@ class ConversationProvider extends ChangeNotifier {
   void exitSelectionMode() {
     isSelectionModeActive = false;
     selectedConversationIds.clear();
-    MixpanelManager().conversationMergeSelectionModeExited();
+    PlatformManager.instance.analytics.conversationMergeSelectionModeExited();
     notifyListeners();
   }
 
@@ -969,7 +1094,7 @@ class ConversationProvider extends ChangeNotifier {
       }
     } else {
       selectedConversationIds.add(conversationId);
-      MixpanelManager().conversationSelectedForMerge(conversationId, selectedConversationIds.length);
+      PlatformManager.instance.analytics.conversationSelectedForMerge(conversationId, selectedConversationIds.length);
     }
     notifyListeners();
   }
@@ -1015,10 +1140,10 @@ class ConversationProvider extends ChangeNotifier {
 
     // Call merge API
     final response = await mergeConversations(idsToMerge);
-    MixpanelManager().conversationMergeInitiated(idsToMerge);
+    PlatformManager.instance.analytics.conversationMergeInitiated(idsToMerge);
 
     if (response == null) {
-      MixpanelManager().conversationMergeFailed(idsToMerge);
+      PlatformManager.instance.analytics.conversationMergeFailed(idsToMerge);
       if (conversationIds != null) {
         for (final id in conversationIds) {
           mergingConversationIds.remove(id);
@@ -1042,7 +1167,7 @@ class ConversationProvider extends ChangeNotifier {
       mergingConversationIds.remove(id);
     }
 
-    MixpanelManager().conversationMergeCompleted(mergedConversationId, removedConversationIds);
+    PlatformManager.instance.analytics.conversationMergeCompleted(mergedConversationId, removedConversationIds);
 
     // Remove deleted conversations from local state
     for (final id in removedConversationIds) {

@@ -49,7 +49,6 @@ extension NotificationScopeLocalization on NotificationScope {
 // Mapping from category IDs to localization getters
 final Map<String, String Function(AppLocalizations)> _categoryLocalizations = {
   'conversation-analysis': (l10n) => l10n.categoryConversationAnalysis,
-  'personality-emulation': (l10n) => l10n.categoryPersonalityClone,
   'health-and-wellness': (l10n) => l10n.categoryHealth,
   'education-and-learning': (l10n) => l10n.categoryEducation,
   'communication-improvement': (l10n) => l10n.categoryCommunication,
@@ -65,7 +64,6 @@ final Map<String, String Function(AppLocalizations)> _categoryLocalizations = {
   'utilities-and-tools': (l10n) => l10n.categoryUtilities,
   'other': (l10n) => l10n.categoryOther,
   // Master categories for grouped views
-  'personality-clone': (l10n) => l10n.categoryPersonalityClones,
   'productivity-lifestyle': (l10n) => l10n.categoryProductivityLifestyle,
   'social-entertainment': (l10n) => l10n.categorySocialEntertainment,
   'productivity-tools': (l10n) => l10n.categoryProductivityTools,

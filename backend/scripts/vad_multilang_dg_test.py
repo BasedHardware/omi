@@ -233,7 +233,7 @@ def dg_language_for(lang: str) -> str:
 def transcribe_with_dg(wav_data: bytes, dg_api_key: str, language: str) -> str:
     response = requests.post(
         DG_URL,
-        params={'model': 'nova-2', 'language': language},
+        params={'model': 'nova-3', 'language': language},
         headers={'Authorization': f'Token {dg_api_key}', 'Content-Type': 'audio/wav'},
         data=wav_data,
         timeout=120,

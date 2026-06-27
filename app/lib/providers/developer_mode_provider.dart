@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/agents.dart';
@@ -6,9 +7,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/agent_chat_service.dart';
-import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/validators.dart';
@@ -37,7 +36,7 @@ class DeveloperModeProvider extends BaseProvider {
   bool showGoalTrackerEnabled = true; // Default to true
   bool showDailyScoreEnabled = true;
   bool showTasksEnabled = true;
-  bool dailyReflectionEnabled = true;
+  bool showPhoneCallButton = true;
 
   // VAD Gate (experimental)
   bool vadGateEnabled = false;
@@ -119,7 +118,7 @@ class DeveloperModeProvider extends BaseProvider {
     showGoalTrackerEnabled = SharedPreferencesUtil().showGoalTrackerEnabled;
     showDailyScoreEnabled = SharedPreferencesUtil().showDailyScoreEnabled;
     showTasksEnabled = SharedPreferencesUtil().showTasksEnabled;
-    dailyReflectionEnabled = SharedPreferencesUtil().dailyReflectionEnabled;
+    showPhoneCallButton = SharedPreferencesUtil().showPhoneCallButton;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
     claudeAgentEnabled = SharedPreferencesUtil().claudeAgentEnabled;
     conversationEventsToggled = SharedPreferencesUtil().conversationEventsToggled;
@@ -230,7 +229,7 @@ class DeveloperModeProvider extends BaseProvider {
     prefs.showDailyScoreEnabled = showDailyScoreEnabled;
     prefs.showTasksEnabled = showTasksEnabled;
 
-    MixpanelManager().settingsSaved(
+    PlatformManager.instance.analytics.settingsSaved(
       hasWebhookConversationCreated: conversationEventsToggled,
       hasWebhookTranscriptReceived: transcriptsToggled,
     );
@@ -277,17 +276,9 @@ class DeveloperModeProvider extends BaseProvider {
     notifyListeners();
   }
 
-  void onDailyReflectionChanged(var value) {
-    dailyReflectionEnabled = value;
-    SharedPreferencesUtil().dailyReflectionEnabled = value; // Save immediately
-
-    // Schedule or cancel the notification based on the setting
-    if (value) {
-      DailyReflectionNotification.scheduleDailyNotification(channelKey: 'channel');
-    } else {
-      DailyReflectionNotification.cancelNotification();
-    }
-
+  void onShowPhoneCallButtonChanged(var value) {
+    showPhoneCallButton = value;
+    SharedPreferencesUtil().showPhoneCallButton = value;
     notifyListeners();
   }
 

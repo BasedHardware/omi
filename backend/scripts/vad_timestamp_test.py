@@ -172,7 +172,7 @@ def transcribe_with_words(wav_data: bytes, api_key: str, language: str = 'en') -
     response = requests.post(
         DG_URL,
         params={
-            'model': 'nova-2',
+            'model': 'nova-3',
             'language': language,
             'smart_format': 'true',
             'utterances': 'true',

@@ -422,7 +422,9 @@ async def handle_oauth_callback(
     if not state_data or state_data.get('app_key') != app_key:
         return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
 
-    uid = state_data['uid']
+    uid = state_data.get('uid')
+    if not uid:
+        return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
 
     try:
         client = get_http_client()

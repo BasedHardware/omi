@@ -7,7 +7,6 @@ import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:omi/services/notifications/daily_reflection_notification.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -75,15 +74,9 @@ class NotificationUtil {
       return;
     }
 
-    // Check if this is a daily reflection notification
-    String? autoMessage;
-    if (DailyReflectionNotification.isReflectionPayload(payload)) {
-      autoMessage = DailyReflectionNotification.reflectionMessage;
-    }
-
     globalNavigatorKey.currentState?.pushReplacement(
       MaterialPageRoute(
-        builder: (context) => HomePageWrapper(navigateToRoute: navigateTo, autoMessage: autoMessage),
+        builder: (context) => HomePageWrapper(navigateToRoute: navigateTo),
       ),
     );
   }

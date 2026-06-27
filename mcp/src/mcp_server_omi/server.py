@@ -2,7 +2,7 @@ import os
 from enum import Enum
 import json
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 import logging
 from mcp.server import Server
@@ -66,11 +66,13 @@ if not base_url or base_url == "":
 
 class OmiTools(str, Enum):
     GET_MEMORIES = "get_memories"
+    SEARCH_MEMORIES = "search_memories"
     CREATE_MEMORY = "create_memory"
     DELETE_MEMORY = "delete_memory"
     EDIT_MEMORY = "edit_memory"
     GET_CONVERSATIONS = "get_conversations"
     GET_CONVERSATION_BY_ID = "get_conversation_by_id"
+    SEARCH_CONVERSATIONS = "search_conversations"
 
 
 class GetMemories(BaseModel):
@@ -109,6 +111,15 @@ class EditMemory(BaseModel):
     content: str = Field(description="The new content for the memory.")
 
 
+class SearchMemories(BaseModel):
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
+    query: str = Field(description="Natural language search query to find relevant memories.")
+    limit: int = Field(description="Maximum number of results to return.", default=10)
+
+
 class GetConversations(BaseModel):
     api_key: Optional[str] = Field(
         description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
@@ -117,7 +128,7 @@ class GetConversations(BaseModel):
     start_date: Optional[str] = Field(description="Filter conversations after this date (yyyy-mm-dd)", default=None)
     end_date: Optional[str] = Field(description="Filter conversations before this date (yyyy-mm-dd)", default=None)
     categories: List[ConversationCategory] = Field(description="Filter by conversation categories.", default=[])
-    limit: int = Field(description="The number of conversations to retrieve.", default=20)
+    limit: int = Field(description="The number of conversations to retrieve.", default=100)
     offset: int = Field(description="The offset of the conversations to retrieve.", default=0)
 
 
@@ -127,6 +138,17 @@ class GetConversationById(BaseModel):
         default=None,
     )
     conversation_id: str = Field(description="The ID of the conversation to retrieve.")
+
+
+class SearchConversations(BaseModel):
+    api_key: Optional[str] = Field(
+        description="The user's MCP API key. If not provided, it will be read from the OMI_API_KEY environment variable. For more details, see https://docs.omi.me/doc/developer/MCP",
+        default=None,
+    )
+    query: str = Field(description="Natural language search query to find relevant conversations.")
+    limit: int = Field(description="Maximum number of results to return.", default=10)
+    start_date: Optional[str] = Field(description="Filter conversations after this date (yyyy-mm-dd).", default=None)
+    end_date: Optional[str] = Field(description="Filter conversations before this date (yyyy-mm-dd).", default=None)
 
 
 def get_memories(
@@ -180,13 +202,29 @@ def edit_memory(api_key: str, memory_id: str, content: str) -> dict:
     return response.json()
 
 
+def search_memories(
+    logger: logging.Logger,
+    api_key: str,
+    query: str,
+    limit: int = 10,
+) -> List:
+    logger.info(f"Searching memories with limit={limit}")
+    response = requests.get(
+        f"{base_url}memories/search",
+        params={"query": query, "limit": limit},
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 def get_conversations(
     logger: logging.Logger,
     api_key: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     categories: List[ConversationCategory] = [],
-    limit: int = 20,
+    limit: int = 100,
     offset: int = 0,
 ) -> List:
     params = {"limit": limit, "offset": offset}
@@ -197,7 +235,8 @@ def get_conversations(
             logger.warning(f"Could not parse start date: {start_date}")
     if end_date:
         try:
-            params["end_date"] = datetime.strptime(end_date, "%Y-%m-%d").isoformat()
+            # Set to end of day (23:59:59) so the entire day is included
+            params["end_date"] = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)).isoformat()
         except ValueError:
             logger.warning(f"Could not parse end date: {end_date}")
     if categories:
@@ -220,6 +259,30 @@ def get_conversation_by_id(api_key: str, conversation_id: str) -> dict:
     return response.json()
 
 
+def search_conversations(
+    logger: logging.Logger,
+    api_key: str,
+    query: str,
+    limit: int = 10,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+) -> List:
+    params = {"query": query, "limit": limit}
+    if start_date:
+        params["start_date"] = start_date
+    if end_date:
+        params["end_date"] = end_date
+
+    logger.info(f"Searching conversations with limit={limit}")
+    response = requests.get(
+        f"{base_url}conversations/search",
+        params=params,
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    response.raise_for_status()
+    return response.json()
+
+
 async def serve(uid: str | None) -> None:
     logger = logging.getLogger(__name__)
     # if uid is not None:
@@ -235,6 +298,11 @@ async def serve(uid: str | None) -> None:
                 name=OmiTools.GET_MEMORIES,
                 description="Retrieve a list of memories. A memory is a known fact about the user across multiple domains.",
                 inputSchema=GetMemories.model_json_schema(),
+            ),
+            Tool(
+                name=OmiTools.SEARCH_MEMORIES,
+                description="Semantic search across memories. Returns memories ranked by relevance to a natural language query.",
+                inputSchema=SearchMemories.model_json_schema(),
             ),
             Tool(
                 name=OmiTools.CREATE_MEMORY,
@@ -260,6 +328,11 @@ async def serve(uid: str | None) -> None:
                 name=OmiTools.GET_CONVERSATION_BY_ID,
                 description="Retrieve a conversation by ID including each segment of the transcript.",
                 inputSchema=GetConversationById.model_json_schema(),
+            ),
+            Tool(
+                name=OmiTools.SEARCH_CONVERSATIONS,
+                description="Semantic search across conversations. Returns conversations ranked by relevance to a natural language query.",
+                inputSchema=SearchConversations.model_json_schema(),
             ),
         ]
 
@@ -289,6 +362,18 @@ async def serve(uid: str | None) -> None:
                 offset=arguments.get("offset", 0),
                 limit=arguments.get("limit", 100),
                 categories=categories_enum,
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
+        elif name == OmiTools.SEARCH_MEMORIES:
+            query = arguments.get("query")
+            if not query:
+                raise ValueError("query is required for search_memories")
+            result = search_memories(
+                logger,
+                api_key,
+                query=query,
+                limit=arguments.get("limit", 10),
             )
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
@@ -329,6 +414,20 @@ async def serve(uid: str | None) -> None:
             result = get_conversation_by_id(api_key, conversation_id=arguments["conversation_id"])
             return [TextContent(type="text", text=json.dumps(result, indent=2))]
 
+        elif name == OmiTools.SEARCH_CONVERSATIONS:
+            query = arguments.get("query")
+            if not query:
+                raise ValueError("query is required for search_conversations")
+            result = search_conversations(
+                logger,
+                api_key,
+                query=query,
+                limit=arguments.get("limit", 10),
+                start_date=arguments.get("start_date"),
+                end_date=arguments.get("end_date"),
+            )
+            return [TextContent(type="text", text=json.dumps(result, indent=2))]
+
         raise ValueError(f"Unknown tool: {name}")
 
     options = server.create_initialization_options()
@@ -336,5 +435,3 @@ async def serve(uid: str | None) -> None:
         await server.run(read_stream, write_stream, options, raise_exceptions=True)
 
 
-# TODO:
-# - add get conversations by semantic search + reranking

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -15,7 +16,7 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -97,7 +98,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
             }
 
             if (widget.conversation.isLocked) {
-              MixpanelManager().paywallOpened('Conversation List Item');
+              if (!context.read<UsageProvider>().showSubscriptionUI) return;
+              PlatformManager.instance.analytics.paywallOpened('Conversation List Item');
               routeToPage(context, const UsagePage(showUpgradeDialog: true));
               return;
             }
@@ -108,14 +110,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
             String searchQuery = provider.previousQuery;
             if (searchQuery.isNotEmpty) {
               // Track conversation opened from search
-              MixpanelManager().conversationOpenedFromSearch(
+              PlatformManager.instance.analytics.conversationOpenedFromSearch(
                 conversation: widget.conversation,
                 searchQuery: searchQuery,
                 conversationIndexInResults: widget.conversationIdx,
               );
             } else {
               // Track normal conversation list item click with time difference
-              MixpanelManager().conversationListItemClickedWithTimeDifference(
+              PlatformManager.instance.analytics.conversationListItemClickedWithTimeDifference(
                 conversation: widget.conversation,
                 conversationIndex: widget.conversationIdx,
                 hoursSinceConversation: hoursSinceConversation,
@@ -169,14 +171,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       color: isSelected
                           ? Colors.deepPurple.withValues(alpha: 0.3)
                           : (isSelectionMode && !isEligible)
-                          ? Colors.grey.shade800
-                          : const Color(0xFF1F1F25),
+                              ? Colors.grey.shade800
+                              : const Color(0xFF1F1F25),
                       borderRadius: BorderRadius.circular(24.0),
                       border: isSelected
                           ? Border.all(color: Colors.deepPurple, width: 2)
                           : (isSelectionMode && !isEligible)
-                          ? Border.all(color: Colors.grey.shade600, width: 1)
-                          : null,
+                              ? Border.all(color: Colors.grey.shade600, width: 1)
+                              : null,
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(24.0),
@@ -289,9 +291,8 @@ class _ConversationListItemState extends State<ConversationListItem> {
                         },
                         onDismissed: (direction) async {
                           var conversation = widget.conversation;
-                          var conversationIdx = widget.conversationIdx;
-                          MixpanelManager().conversationSwipedToDelete(conversation);
-                          provider.deleteConversationLocally(conversation, conversationIdx, widget.date);
+                          PlatformManager.instance.analytics.conversationSwipedToDelete(conversation);
+                          provider.deleteConversationLocally(conversation, widget.date);
                         },
                         child: Padding(
                           padding: PlatformService.isMobile

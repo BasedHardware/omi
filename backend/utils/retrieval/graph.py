@@ -6,33 +6,28 @@ Claude decides implicitly whether to use tools, eliminating the need for
 the requires_context() LLM classification call.
 """
 
+from __future__ import annotations
+
 import uuid
 import asyncio
-from typing import List, Optional, AsyncGenerator, Tuple
+from typing import List, Optional, AsyncGenerator, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from models.conversation import Conversation
 
 from langchain_core.messages import SystemMessage, AIMessage, HumanMessage
-from langchain_openai import ChatOpenAI
 
 import database.notifications as notification_db
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
-from models.conversation import Conversation
 from utils.llm.chat import retrieve_is_file_question
+from utils.llm.clients import get_llm
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
 from utils.observability.langsmith import get_chat_tracer_callbacks
-from utils.llm.usage_tracker import get_usage_callback
 import logging
 
 logger = logging.getLogger(__name__)
-
-_usage_callback = get_usage_callback()
-llm_medium_stream = ChatOpenAI(
-    model='gpt-4.1',
-    streaming=True,
-    callbacks=[_usage_callback],
-    stream_options={"include_usage": True},
-)
 
 
 # ---------------------------------------------------------------------------
@@ -80,15 +75,21 @@ async def _execute_file_chat_stream(
     callback = AsyncStreamingCallback()
 
     try:
-        answer = fc_tool.process_chat_with_file_stream(question, file_ids, callback=callback)
+        # Run the producer as a concurrent task so chunks stream in real-time
+        async def _produce():
+            return await fc_tool.process_chat_with_file_stream(question, file_ids, callback=callback)
 
-        # Yield chunks from callback
+        task = asyncio.create_task(_produce())
+
+        # Drain the queue concurrently while the producer runs
         while True:
             chunk = await callback.queue.get()
             if chunk:
                 yield chunk
             else:
                 break
+
+        answer = await task
 
         if callback_data is not None:
             callback_data['answer'] = answer
@@ -163,7 +164,9 @@ async def execute_persona_chat_stream(
 
     try:
         task = asyncio.create_task(
-            llm_medium_stream.agenerate(messages=[formatted_messages], callbacks=all_callbacks, **run_metadata)
+            get_llm('chat_graph', streaming=True).agenerate(
+                messages=[formatted_messages], callbacks=all_callbacks, **run_metadata
+            )
         )
 
         while True:

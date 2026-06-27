@@ -59,7 +59,7 @@
     },
     "close": "Close",
     "@close": {
-        "description": "Close button label"
+        "description": "Close button text"
     },
     "clear": "Clear",
     "@clear": {
@@ -72,6 +72,14 @@
     "copySummary": "Copy Summary",
     "@copySummary": {
         "description": "Option to copy summary to clipboard"
+    },
+    "copyConversationId": "Copy Conversation ID",
+    "@copyConversationId": {
+        "description": "Menu item to copy conversation ID to clipboard"
+    },
+    "conversationIdCopied": "Conversation ID copied to clipboard",
+    "@conversationIdCopied": {
+        "description": "Snackbar message when conversation ID is copied"
     },
     "testPrompt": "Test Prompt",
     "@testPrompt": {
@@ -552,6 +560,14 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Offline Sync",
+    "autoSync": "Auto-Sync",
+    "@autoSync": {
+        "description": "Title of the toggle in device settings that controls automatic syncing of offline recordings"
+    },
+    "autoSyncDescription": "Automatically sync offline recordings when your device connects",
+    "@autoSyncDescription": {
+        "description": "Subtitle explaining the Auto-Sync toggle in device settings"
+    },
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -830,10 +846,6 @@
     "saving": "Saving...",
     "@saving": {
         "description": "Text shown while saving settings"
-    },
-    "personaConfig": "Configure your AI persona",
-    "@personaConfig": {
-        "description": "Persona configuration subtitle"
     },
     "beta": "BETA",
     "@beta": {
@@ -1153,17 +1165,6 @@
     },
     "insightsUsedThisMonth": "{used} of {limit} insights gained this month",
     "@insightsUsedThisMonth": {
-        "placeholders": {
-            "used": {
-                "type": "String"
-            },
-            "limit": {
-                "type": "String"
-            }
-        }
-    },
-    "memoriesUsedThisMonth": "{used} of {limit} memories created this month",
-    "@memoriesUsedThisMonth": {
         "placeholders": {
             "used": {
                 "type": "String"
@@ -1493,7 +1494,7 @@
     "exportConfiguration": "Export configuration",
     "bringYourOwn": "Bring your own",
     "payYourSttProvider": "Freely use omi. You only pay your STT provider directly.",
-    "freeMinutesMonth": "1,200 free minutes/month included. Unlimited with ",
+    "freeMinutesMonth": "600 free minutes/month included. Unlimited with ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host is required",
     "validPortRequired": "Valid port is required",
@@ -1582,7 +1583,7 @@
     "designingApp": "Designing app",
     "generatingIconStep": "Generating icon",
     "finalTouches": "Final touches",
-    "processing": "Processing...",
+    "processing": "Processing",
     "features": "Features",
     "creatingYourApp": "Creating your app...",
     "generatingIcon": "Generating icon...",
@@ -1751,7 +1752,7 @@
     },
     "skipForNow": "Skip for now",
     "@skipForNow": {
-        "description": "Button text to skip the entire process temporarily"
+        "description": "Link text to skip the permissions screen"
     },
     "connectionError": "Connection Error",
     "@connectionError": {
@@ -1807,7 +1808,7 @@
     },
     "permissionsRequired": "Permissions Required",
     "@permissionsRequired": {
-        "description": "Title for permissions required dialog"
+        "description": "Title for the permissions interstitial screen shown when permissions are missing"
     },
     "permissionsRequiredDesc": "This app needs Bluetooth and Location permissions to function properly. Please enable them in the settings.",
     "@permissionsRequiredDesc": {
@@ -2519,6 +2520,7 @@
     "@batteryLevel": {
         "description": "Battery level label"
     },
+    "charging": "Charging",
     "productUpdate": "Product Update",
     "@productUpdate": {
         "description": "Menu item for product/firmware update"
@@ -2591,14 +2593,6 @@
     "createKeyToGetStarted": "Create a key to get started",
     "@createKeyToGetStarted": {
         "description": "Hint to create first API key"
-    },
-    "persona": "Persona",
-    "@persona": {
-        "description": "Persona feature name"
-    },
-    "configureYourAiPersona": "Configure your AI persona",
-    "@configureYourAiPersona": {
-        "description": "Description for persona settings"
     },
     "configureSttProvider": "Configure STT provider",
     "@configureSttProvider": {
@@ -2791,14 +2785,6 @@
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
     },
-    "dailyReflection": "Daily Reflection",
-    "@dailyReflection": {
-        "description": "Section header for daily reflection settings"
-    },
-    "get9PmReminderToReflect": "Get a 9 PM reminder to reflect on your day",
-    "@get9PmReminderToReflect": {
-        "description": "Description for daily reflection"
-    },
     "actionItemDescriptionCannotBeEmpty": "Action item description cannot be empty",
     "@actionItemDescriptionCannotBeEmpty": {
         "description": "Error message when action item description is empty"
@@ -2903,7 +2889,7 @@
     },
     "back": "Back",
     "@back": {
-        "description": "Back button label"
+        "description": "Back button text"
     },
     "keyboardShortcuts": "Keyboard Shortcuts",
     "@keyboardShortcuts": {
@@ -3380,10 +3366,6 @@
     "aboutTheApp": "About the App",
     "@aboutTheApp": {
         "description": "Section title for app description"
-    },
-    "aboutThePersona": "About the Persona",
-    "@aboutThePersona": {
-        "description": "Section title for persona description"
     },
     "chatPersonality": "Chat Personality",
     "@chatPersonality": {
@@ -4037,7 +4019,6 @@
     "yourInformation": "Your Information",
     "setYourName": "Set Your Name",
     "changeYourName": "Change Your Name",
-    "manageYourOmiPersona": "Manage your Omi persona",
     "voiceAndPeople": "Voice & People",
     "teachOmiYourVoice": "Teach Omi your voice",
     "tellOmiWhoSaidIt": "Tell Omi who said it 🗣️",
@@ -4426,7 +4407,6 @@
     "checkingNext7Days": "Checking the next 7 days",
     "shortcuts": "Shortcuts",
     "shortcutChangeInstruction": "Click on a shortcut to change it. Press Escape to cancel.",
-    "configurePersonaDescription": "Configure your AI persona",
     "configureSTTProvider": "Configure STT provider",
     "setConversationEndDescription": "Set when conversations auto-end",
     "importDataDescription": "Import data from other sources",
@@ -4439,7 +4419,6 @@
     "noAPIKeys": "No API keys. Create one to get started.",
     "autoCreateWhenDetected": "Auto-create when name detected",
     "trackPersonalGoals": "Track personal goals on homepage",
-    "dailyReflectionDescription": "Get a reminder at 9 PM to reflect on your day and capture your thoughts.",
     "endpointURL": "Endpoint URL",
     "links": "Links",
     "discordMemberCount": "8000+ members on Discord",
@@ -4856,21 +4835,9 @@
     "@createAndShareYourApp": {
         "description": "Subtitle for create app option"
     },
-    "createMyClone": "Create my Clone",
-    "@createMyClone": {
-        "description": "Option to create digital clone"
-    },
-    "createYourDigitalClone": "Create your digital clone",
-    "@createYourDigitalClone": {
-        "description": "Subtitle for create clone option"
-    },
     "itemApp": "App",
     "@itemApp": {
         "description": "The word 'App' used as parameter in other strings"
-    },
-    "itemPersona": "Persona",
-    "@itemPersona": {
-        "description": "The word 'Persona' used as parameter in other strings"
     },
     "keepItemPublic": "Keep {item} Public",
     "@keepItemPublic": {
@@ -4920,10 +4887,6 @@
     "manageApp": "Manage App",
     "@manageApp": {
         "description": "Menu item to manage app settings"
-    },
-    "updatePersonaDetails": "Update Persona Details",
-    "@updatePersonaDetails": {
-        "description": "Menu item to update persona details"
     },
     "deleteItemTitle": "Delete {item}",
     "@deleteItemTitle": {
@@ -5297,7 +5260,7 @@
     "@yourOmiUnleashed": {
         "description": "Marketing text for unlimited plan"
     },
-    "planEndedOn": "Your plan ended on {date}.\\nResubscribe now - you'll be charged immediately for a new billing period.",
+    "planEndedOn": "Your plan ended on {date}.\nResubscribe now - you'll be charged immediately for a new billing period.",
     "@planEndedOn": {
         "description": "Message when plan has ended",
         "placeholders": {
@@ -5307,7 +5270,7 @@
             }
         }
     },
-    "planSetToCancelOn": "Your plan is set to cancel on {date}.\\nResubscribe now to keep your benefits - no charge until {date}.",
+    "planSetToCancelOn": "Your plan is set to cancel on {date}.\nResubscribe now to keep your benefits - no charge until {date}.",
     "@planSetToCancelOn": {
         "description": "Message when plan is set to cancel",
         "placeholders": {
@@ -5383,13 +5346,11 @@
     "@cancelSubscription": {
         "description": "Button text to cancel a subscription"
     },
-    "endsOnDate": "Ends on {date}",
+    "endsOnDate": "Ends {date}",
     "@endsOnDate": {
-        "description": "Shows end date",
         "placeholders": {
             "date": {
-                "type": "String",
-                "example": "January 15, 2026"
+                "type": "String"
             }
         }
     },
@@ -5441,33 +5402,9 @@
     "@thankYouText": {
         "description": "Privacy page - thankYouText"
     },
-    "wifiSyncSettings": "WiFi Sync Settings",
-    "@wifiSyncSettings": {
-        "description": "WiFi sync settings - wifiSyncSettings"
-    },
-    "enterHotspotCredentials": "Enter your phone's hotspot credentials",
-    "@enterHotspotCredentials": {
-        "description": "WiFi sync settings - enterHotspotCredentials"
-    },
-    "wifiSyncUsesHotspot": "WiFi sync uses your phone as a hotspot. Find your hotspot name and password in Settings > Personal Hotspot.",
-    "@wifiSyncUsesHotspot": {
-        "description": "WiFi sync settings - wifiSyncUsesHotspot"
-    },
-    "hotspotNameSsid": "Hotspot Name (SSID)",
-    "@hotspotNameSsid": {
-        "description": "WiFi sync settings - hotspotNameSsid"
-    },
-    "exampleIphoneHotspot": "e.g. iPhone Hotspot",
-    "@exampleIphoneHotspot": {
-        "description": "WiFi sync settings - exampleIphoneHotspot"
-    },
     "password": "Password",
     "@password": {
         "description": "WiFi sync settings - password"
-    },
-    "enterHotspotPassword": "Enter hotspot password",
-    "@enterHotspotPassword": {
-        "description": "WiFi sync settings - enterHotspotPassword"
     },
     "saveCredentials": "Save Credentials",
     "@saveCredentials": {
@@ -5476,18 +5413,6 @@
     "clearCredentials": "Clear Credentials",
     "@clearCredentials": {
         "description": "WiFi sync settings - clearCredentials"
-    },
-    "pleaseEnterHotspotName": "Please enter a hotspot name",
-    "@pleaseEnterHotspotName": {
-        "description": "WiFi sync settings - pleaseEnterHotspotName"
-    },
-    "wifiCredentialsSaved": "WiFi credentials saved",
-    "@wifiCredentialsSaved": {
-        "description": "WiFi sync settings - wifiCredentialsSaved"
-    },
-    "wifiCredentialsCleared": "WiFi credentials cleared",
-    "@wifiCredentialsCleared": {
-        "description": "WiFi sync settings - wifiCredentialsCleared"
     },
     "summaryGeneratedForDate": "Summary generated for {date}",
     "@summaryGeneratedForDate": {
@@ -5590,7 +5515,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "1,200 premium mins + unlimited on-device",
+    "basicPlanDescription": "600 premium mins + unlimited on-device",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -6076,7 +6001,7 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "By continuing, all data you share with this app (including your conversations, recordings, and personal information) will be securely stored on our servers to provide you with AI-powered insights and enable all app features.",
+    "consentDataMessage": "By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.",
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
@@ -6875,9 +6800,6 @@
     "@notificationFrequencyDescription": {
         "description": "Description text for notification frequency section"
     },
-    "@dailyReflectionDescription": {
-        "description": "Description text for daily reflection section"
-    },
     "sliderOff": "Off",
     "@sliderOff": {
         "description": "Label for slider minimum value"
@@ -7021,10 +6943,6 @@
     "@chooseFile": {
         "description": "Action sheet option to choose a file"
     },
-    "configureAiPersona": "Configure your AI persona",
-    "@configureAiPersona": {
-        "description": "Description for persona settings"
-    },
     "connectAiAssistantsToYourData": "Connect AI assistants to your data",
     "@connectAiAssistantsToYourData": {
         "description": "Description for MCP server feature"
@@ -7057,10 +6975,6 @@
     "@limitless": {
         "description": "Label for Limitless device storage"
     },
-    "fastTransfer": "Fast Transfer",
-    "@fastTransfer": {
-        "description": "Name of the fast transfer method"
-    },
     "syncingStatus": "Syncing",
     "@syncingStatus": {
         "description": "Status label when syncing is in progress"
@@ -7077,18 +6991,6 @@
                 "type": "String"
             }
         }
-    },
-    "transferMethod": "Transfer Method",
-    "@transferMethod": {
-        "description": "Page title for transfer method settings"
-    },
-    "fast": "Fast",
-    "@fast": {
-        "description": "Label for fast WiFi transfer method"
-    },
-    "ble": "BLE",
-    "@ble": {
-        "description": "Label for Bluetooth Low Energy transfer method"
     },
     "phone": "Phone",
     "@phone": {
@@ -7114,33 +7016,9 @@
     "@processedFilesDeleted": {
         "description": "Snackbar message when processed files are deleted"
     },
-    "wifiEnableFailed": "Failed to enable WiFi on device. Please try again.",
-    "@wifiEnableFailed": {
-        "description": "Error message when WiFi fails to enable on device"
-    },
-    "deviceNoFastTransfer": "Your device does not support Fast Transfer. Use Bluetooth instead.",
-    "@deviceNoFastTransfer": {
-        "description": "Error message when device does not support fast transfer"
-    },
-    "enableHotspotMessage": "Please enable your phone's hotspot and try again.",
-    "@enableHotspotMessage": {
-        "description": "Error message asking user to enable hotspot"
-    },
-    "transferStartFailed": "Failed to start transfer. Please try again.",
-    "@transferStartFailed": {
-        "description": "Error message when transfer fails to start"
-    },
     "deviceNotResponding": "Device did not respond. Please try again.",
     "@deviceNotResponding": {
         "description": "Error message when device times out"
-    },
-    "invalidWifiCredentials": "Invalid WiFi credentials. Check your hotspot settings.",
-    "@invalidWifiCredentials": {
-        "description": "Error message for invalid WiFi credentials"
-    },
-    "wifiConnectionFailed": "WiFi connection failed. Please try again.",
-    "@wifiConnectionFailed": {
-        "description": "Error message when WiFi connection fails"
     },
     "sdCardProcessing": "SD Card Processing",
     "@sdCardProcessing": {
@@ -7158,10 +7036,6 @@
     "process": "Process",
     "@process": {
         "description": "Button label to start processing"
-    },
-    "wifiSyncFailed": "WiFi Sync Failed",
-    "@wifiSyncFailed": {
-        "description": "Error title when WiFi sync fails"
     },
     "processingFailed": "Processing Failed",
     "@processingFailed": {
@@ -7416,7 +7290,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "1,200 premium minutes/month. On-Device tab offers unlimited free transcription.",
+    "premiumMinutesInfo": "600 premium minutes/month. On-Device tab offers unlimited free transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7527,7 +7401,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "1,200 premium minutes/month. On-Device tab offers unlimited free transcription. ",
+    "premiumMinutesMonth": "600 premium minutes/month. On-Device tab offers unlimited free transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -8031,14 +7905,8 @@
         }
     },
     "sharePublicLink": "Share Public Link",
-    "makePersonaPublic": "Make Persona Public",
     "connectedKnowledgeData": "Connected Knowledge Data",
     "enterName": "Enter name",
-    "disconnectTwitter": "Disconnect Twitter",
-    "disconnectTwitterConfirmation": "Are you sure you want to disconnect your Twitter account? Your persona will no longer have access to your Twitter data.",
-    "getOmiDeviceDescription": "Create a more accurate clone with your personal conversations",
-    "getOmi": "Get Omi",
-    "iHaveOmiDevice": "I have Omi device",
     "goal": "GOAL",
     "tapToTrackThisGoal": "Tap to track this goal",
     "tapToSetAGoal": "Tap to set a goal",
@@ -8053,7 +7921,7 @@
     "defaultLabel": "Default",
     "lastUsedLabel": "Last Used",
     "setDefaultApp": "Set Default App",
-    "setDefaultAppContent": "Set {appName} as your default summarization app?\\n\\nThis app will be automatically used for all future conversation summaries.",
+    "setDefaultAppContent": "Set {appName} as your default summarization app?\n\nThis app will be automatically used for all future conversation summaries.",
     "@setDefaultAppContent": {
         "placeholders": {
             "appName": {
@@ -8204,10 +8072,6 @@
             }
         }
     },
-    "wifiSync": "WiFi Sync",
-    "@wifiSync": {
-        "description": "WiFi sync feature label"
-    },
     "itemCopiedToClipboard": "{item} copied to clipboard",
     "@itemCopiedToClipboard": {
         "description": "Message when item is copied to clipboard",
@@ -8218,23 +8082,9 @@
             }
         }
     },
-    "wifiConnectionFailedTitle": "Connection Failed",
-    "@wifiConnectionFailedTitle": {
-        "description": "Title shown when WiFi connection to device fails"
-    },
     "connectingToDeviceName": "Connecting to {deviceName}",
     "@connectingToDeviceName": {
         "description": "Title shown while connecting to device WiFi",
-        "placeholders": {
-            "deviceName": {
-                "type": "String",
-                "example": "Omi"
-            }
-        }
-    },
-    "enableDeviceWifi": "Enable {deviceName}'s WiFi",
-    "@enableDeviceWifi": {
-        "description": "Step text for enabling device WiFi",
         "placeholders": {
             "deviceName": {
                 "type": "String",
@@ -8369,10 +8219,6 @@
     "@statusUnprocessed": {
         "description": "Status value for unprocessed recording"
     },
-    "switchedToFastTransfer": "Switched to Fast Transfer",
-    "@switchedToFastTransfer": {
-        "description": "Snackbar message when switching to fast transfer mode"
-    },
     "transferCompleteMessage": "Transfer complete! You can now play this recording.",
     "@transferCompleteMessage": {
         "description": "Success message when transfer completes"
@@ -8390,41 +8236,9 @@
     "@transferCancelled": {
         "description": "Snackbar message when transfer is cancelled"
     },
-    "fastTransferEnabled": "Fast Transfer enabled",
-    "@fastTransferEnabled": {
-        "description": "Snackbar message when fast transfer is enabled"
-    },
     "bluetoothSyncEnabled": "Bluetooth sync enabled",
     "@bluetoothSyncEnabled": {
         "description": "Snackbar message when bluetooth sync is enabled"
-    },
-    "enableFastTransfer": "Enable Fast Transfer",
-    "@enableFastTransfer": {
-        "description": "Dialog title for enabling fast transfer"
-    },
-    "fastTransferDescription": "Fast Transfer uses WiFi for ~5x faster speeds. Your phone will temporarily connect to your Omi device's WiFi network during transfer.",
-    "@fastTransferDescription": {
-        "description": "Description of fast transfer feature in dialog"
-    },
-    "internetAccessPausedDuringTransfer": "Internet access is paused during transfer",
-    "@internetAccessPausedDuringTransfer": {
-        "description": "Warning that internet is paused during transfer"
-    },
-    "chooseTransferMethodDescription": "Choose how recordings are transferred from your Omi device to your phone.",
-    "@chooseTransferMethodDescription": {
-        "description": "Description text on transfer method page"
-    },
-    "wifiSpeed": "~150 KB/s via WiFi",
-    "@wifiSpeed": {
-        "description": "Speed description for WiFi transfer"
-    },
-    "fiveTimesFaster": "5X FASTER",
-    "@fiveTimesFaster": {
-        "description": "Badge label for faster transfer method"
-    },
-    "fastTransferMethodDescription": "Creates a direct WiFi connection to your Omi device. Your phone temporarily disconnects from your regular WiFi during transfer.",
-    "@fastTransferMethodDescription": {
-        "description": "Description of fast transfer method card"
     },
     "bluetooth": "Bluetooth",
     "@bluetooth": {
@@ -8450,9 +8264,16 @@
     "@lowBatteryAlertTitle": {
         "description": "Title for low battery notification"
     },
-    "lowBatteryAlertBody": "Your device is running low on battery. Time for a recharge! 🔋",
+    "lowBatteryAlertBody": "Your battery is at {level}%. Time for a recharge! 🔋",
+    "batteryFullyChargedTitle": "Omi is fully charged",
+    "batteryFullyChargedBody": "Your Omi device is fully charged. Feel free to unplug!",
     "@lowBatteryAlertBody": {
-        "description": "Body text for low battery notification"
+        "description": "Body text for low battery notification",
+        "placeholders": {
+            "level": {
+                "type": "int"
+            }
+        }
     },
     "deviceDisconnectedNotificationTitle": "Your Omi Device Disconnected",
     "@deviceDisconnectedNotificationTitle": {
@@ -8754,68 +8575,6 @@
     "@addAppPersonaConflictWithCapabilities": {
         "description": "Error when trying to select Persona alongside other capabilities"
     },
-    "personaTwitterHandleNotFound": "Twitter handle not found",
-    "@personaTwitterHandleNotFound": {
-        "description": "Error shown when Twitter handle is not found"
-    },
-    "personaTwitterHandleSuspended": "Twitter handle is suspended",
-    "@personaTwitterHandleSuspended": {
-        "description": "Error shown when Twitter handle is suspended"
-    },
-    "personaFailedToVerifyTwitter": "Failed to verify Twitter handle",
-    "@personaFailedToVerifyTwitter": {
-        "description": "Error shown when Twitter handle verification fails"
-    },
-    "personaFailedToFetch": "Failed to fetch your persona",
-    "@personaFailedToFetch": {
-        "description": "Error shown when fetching persona fails"
-    },
-    "personaFailedToCreate": "Failed to create your persona",
-    "@personaFailedToCreate": {
-        "description": "Error shown when creating persona fails"
-    },
-    "personaConnectKnowledgeSource": "Please connect at least one knowledge data source (Omi or Twitter)",
-    "@personaConnectKnowledgeSource": {
-        "description": "Error shown when no knowledge source is connected"
-    },
-    "personaUpdatedSuccessfully": "Persona updated successfully",
-    "@personaUpdatedSuccessfully": {
-        "description": "Success message when persona is updated"
-    },
-    "personaFailedToUpdate": "Failed to update persona",
-    "@personaFailedToUpdate": {
-        "description": "Error shown when updating persona fails"
-    },
-    "personaPleaseSelectImage": "Please select an image",
-    "@personaPleaseSelectImage": {
-        "description": "Error shown when no image is selected for persona"
-    },
-    "personaFailedToCreateTryLater": "Failed to create your persona. Please try again later.",
-    "@personaFailedToCreateTryLater": {
-        "description": "Error shown when creating persona fails with retry suggestion"
-    },
-    "personaFailedToCreateWithError": "Failed to create persona: {error}",
-    "@personaFailedToCreateWithError": {
-        "description": "Error shown when creating persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
-    "personaFailedToEnable": "Failed to enable persona",
-    "@personaFailedToEnable": {
-        "description": "Error shown when enabling persona fails"
-    },
-    "personaErrorEnablingWithError": "Error enabling persona: {error}",
-    "@personaErrorEnablingWithError": {
-        "description": "Error shown when enabling persona fails with error details",
-        "placeholders": {
-            "error": {
-                "type": "String"
-            }
-        }
-    },
     "paymentFailedToFetchCountries": "Failed to fetch supported countries. Please try again later.",
     "@paymentFailedToFetchCountries": {
         "description": "Error message when fetching supported countries fails"
@@ -8918,26 +8677,6 @@
     "@aiGenPleaseGenerateAppFirst": {
         "description": "Validation error when trying to submit without generating app first"
     },
-    "xHandleTitle": "What's your X handle?",
-    "@xHandleTitle": {
-        "description": "Title asking user for their X (Twitter) handle"
-    },
-    "xHandleDescription": "We will pre-train your Omi clone\nbased on your account's activity",
-    "@xHandleDescription": {
-        "description": "Description explaining why X handle is needed"
-    },
-    "xHandleHint": "@nikshevchenko",
-    "@xHandleHint": {
-        "description": "Placeholder hint for X handle input field"
-    },
-    "xHandlePleaseEnter": "Please enter your X handle",
-    "@xHandlePleaseEnter": {
-        "description": "Validation error when X handle is empty"
-    },
-    "xHandlePleaseEnterValid": "Please enter a valid X handle",
-    "@xHandlePleaseEnterValid": {
-        "description": "Validation error when X handle is invalid"
-    },
     "nextButton": "Next",
     "@nextButton": {
         "description": "Button text to proceed to next step"
@@ -9024,14 +8763,6 @@
                 "example": "3"
             }
         }
-    },
-    "dailyReflectionNotificationTitle": "Time for Daily Reflection",
-    "@dailyReflectionNotificationTitle": {
-        "description": "Title for the daily reflection notification shown at 9 PM"
-    },
-    "dailyReflectionNotificationBody": "Tell me about your day",
-    "@dailyReflectionNotificationBody": {
-        "description": "Body text for the daily reflection notification"
     },
     "actionItemReminderTitle": "Omi Reminder",
     "@actionItemReminderTitle": {
@@ -9491,14 +9222,6 @@
     "@voiceFailedToTranscribe": {
         "description": "Error message when voice transcription fails"
     },
-    "locationPermissionRequired": "Location Permission Required",
-    "@locationPermissionRequired": {
-        "description": "Title for dialog requesting location permission"
-    },
-    "locationPermissionContent": "Fast Transfer requires location permission to verify WiFi connection. Please grant location permission to continue.",
-    "@locationPermissionContent": {
-        "description": "Explanation text for location permission dialog"
-    },
     "pdfTranscriptExport": "Transcript Export",
     "@pdfTranscriptExport": {
         "description": "Title for PDF transcript export document"
@@ -9737,14 +9460,6 @@
     },
     "noDailyRecapsYet": "No daily recaps yet",
     "dailyRecapsDescription": "Your daily recaps will appear here once generated",
-    "chooseTransferMethod": "Choose Transfer Method",
-    "@chooseTransferMethod": {
-        "description": "Title for transfer method selection dialog"
-    },
-    "fastTransferSpeed": "~150 KB/s via WiFi",
-    "@fastTransferSpeed": {
-        "description": "Speed description for fast transfer via WiFi"
-    },
     "largeTimeGapDetected": "Large time gap detected ({gap})",
     "@largeTimeGapDetected": {
         "placeholders": {
@@ -9763,10 +9478,6 @@
             }
         }
     },
-    "deviceDoesNotSupportWifiSwitchingToBle": "Device does not support WiFi sync, switching to Bluetooth",
-    "@deviceDoesNotSupportWifiSwitchingToBle": {
-        "description": "Message shown when WiFi sync fails because device hardware does not support WiFi, automatically falling back to Bluetooth transfer"
-    },
     "appleHealthNotAvailable": "Apple Health is not available on this device",
     "downloadAudio": "Download Audio",
     "audioDownloadSuccess": "Audio downloaded successfully",
@@ -9784,7 +9495,6 @@
     "dailyRecaps": "Daily Recaps",
     "removeFilter": "Remove Filter",
     "categoryConversationAnalysis": "Conversation Analysis",
-    "categoryPersonalityClone": "Personality Clone",
     "categoryHealth": "Health",
     "categoryEducation": "Education",
     "categoryCommunication": "Communication",
@@ -9802,7 +9512,7 @@
     "capabilityChat": "Chat",
     "capabilityConversations": "Conversations",
     "capabilityExternalIntegration": "External Integration",
-    "capabilityNotification": "Notification",
+    "capabilityNotification": "Smart Notifications",
     "triggerAudioBytes": "Audio Bytes",
     "triggerConversationCreation": "Conversation Creation",
     "triggerTranscriptProcessed": "Transcript Processed",
@@ -9819,7 +9529,6 @@
     "capabilityFeatured": "Featured",
     "capabilityTasks": "Tasks",
     "capabilityIntegrations": "Integrations",
-    "categoryPersonalityClones": "Personality Clones",
     "categoryProductivityLifestyle": "Productivity & Lifestyle",
     "categorySocialEntertainment": "Social & Entertainment",
     "categoryProductivityTools": "Productivity & Tools",
@@ -9963,6 +9672,18 @@
     "reconnectingToInternet": "Reconnecting to internet...",
     "uploadingToCloud": "Uploading {current} of {total}",
     "@uploadingToCloud": {
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "processingOnServer": "Processing on server...",
+    "processingOnServerProgress": "Processing... {current}/{total} segments",
+    "@processingOnServerProgress": {
         "placeholders": {
             "current": {
                 "type": "int"
@@ -10131,6 +9852,8 @@
     "phoneSpeaker": "Speaker",
     "phoneEndCall": "End",
     "phoneCallSettingsTitle": "Phone Call Settings",
+    "showPhoneCallButtonTitle": "Show Phone Call Button",
+    "showPhoneCallButtonDesc": "Display phone call button on home screen",
     "yourVerifiedNumbers": "Your Verified Numbers",
     "verifiedNumbersDescription": "When you call someone, they'll see this number on their phone",
     "noVerifiedNumbers": "No verified numbers",
@@ -10283,7 +10006,7 @@
     "@manageStorage": {
         "description": "Menu option and sheet title for managing recording storage"
     },
-    "safelyBackedUp": "Safely backed up to your phone",
+    "safelyBackedUp": "Conversations created",
     "@safelyBackedUp": {
         "description": "Description for synced files in manage storage sheet"
     },
@@ -10447,5 +10170,905 @@
     "storageSection": "STORAGE",
     "@storageSection": {
         "description": "Section header for storage settings"
+    },
+    "permissions": "Permissions",
+    "@permissions": {
+        "description": "Title for the permissions settings page"
+    },
+    "permissionEnabled": "Enabled",
+    "@permissionEnabled": {
+        "description": "Status text when a permission is enabled"
+    },
+    "permissionEnable": "Enable",
+    "@permissionEnable": {
+        "description": "Action text to enable a permission"
+    },
+    "permissionsPageDescription": "These permissions are core to how Omi works. They enable key features like notifications, location-based experiences, and audio capture.",
+    "@permissionsPageDescription": {
+        "description": "Description text shown at the bottom of the permissions page"
+    },
+    "permissionsRequiredDescription": "Omi needs a few permissions to work properly. Please grant them to continue.",
+    "@permissionsRequiredDescription": {
+        "description": "Description for the permissions interstitial screen"
+    },
+    "permissionsSetupTitle": "Get the best experience",
+    "@permissionsSetupTitle": {
+        "description": "Title for the permissions interstitial screen"
+    },
+    "permissionsSetupDescription": "Enable a few permissions so Omi can work its magic.",
+    "@permissionsSetupDescription": {
+        "description": "Subtitle for the permissions interstitial screen"
+    },
+    "permissionsChangeAnytime": "You can change these anytime in Settings > Permissions",
+    "@permissionsChangeAnytime": {
+        "description": "Reassurance note on the permissions interstitial"
+    },
+    "location": "Location",
+    "@location": {
+        "description": "Label for location permission"
+    },
+    "microphone": "Microphone",
+    "@microphone": {
+        "description": "Label for microphone permission"
+    },
+    "whyAreYouCanceling": "Why are you canceling?",
+    "@whyAreYouCanceling": {
+        "description": "Title for cancel subscription reason page"
+    },
+    "cancelReasonSubtitle": "Can you tell us why you're leaving?",
+    "@cancelReasonSubtitle": {
+        "description": "Subtitle for cancel reason page"
+    },
+    "cancelReasonTooExpensive": "Too expensive",
+    "@cancelReasonTooExpensive": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonNotUsing": "Not using it enough",
+    "@cancelReasonNotUsing": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonMissingFeatures": "Missing features",
+    "@cancelReasonMissingFeatures": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonAudioQuality": "Audio/transcription quality",
+    "@cancelReasonAudioQuality": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonBatteryDrain": "Battery drain concerns",
+    "@cancelReasonBatteryDrain": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonFoundAlternative": "Found an alternative",
+    "@cancelReasonFoundAlternative": {
+        "description": "Cancel reason option"
+    },
+    "cancelReasonOther": "Other",
+    "@cancelReasonOther": {
+        "description": "Cancel reason option"
+    },
+    "tellUsMore": "Tell us more (optional)",
+    "@tellUsMore": {
+        "description": "Label for optional details text field"
+    },
+    "cancelReasonDetailHint": "We appreciate any feedback...",
+    "@cancelReasonDetailHint": {
+        "description": "Hint for cancel reason detail text field"
+    },
+    "justAMoment": "Just a moment, please",
+    "@justAMoment": {
+        "description": "Title for cancel consequences page"
+    },
+    "cancelConsequencesSubtitle": "We highly recommend exploring your other options instead of canceling.",
+    "@cancelConsequencesSubtitle": {
+        "description": "Subtitle for cancel consequences page"
+    },
+    "cancelBillingPeriodInfo": "Your plan will remain active until {date}. After that, you'll be moved to the free version with limited features.",
+    "@cancelBillingPeriodInfo": {
+        "description": "Info about billing period end",
+        "placeholders": {
+            "date": {
+                "type": "String"
+            }
+        }
+    },
+    "ifYouCancel": "If you cancel:",
+    "@ifYouCancel": {
+        "description": "Header for consequences list"
+    },
+    "cancelConsequenceNoAccess": "No longer have unlimited access at the end of your billing period.",
+    "@cancelConsequenceNoAccess": {
+        "description": "Cancel consequence"
+    },
+    "cancelConsequenceBattery": "7x more battery usage (on-device processing)",
+    "@cancelConsequenceBattery": {
+        "description": "Cancel consequence"
+    },
+    "cancelConsequenceQuality": "30% lower transcription quality (on-device models)",
+    "@cancelConsequenceQuality": {
+        "description": "Cancel consequence"
+    },
+    "cancelConsequenceDelay": "5-7 second processing delay (on-device models)",
+    "@cancelConsequenceDelay": {
+        "description": "Cancel consequence"
+    },
+    "cancelConsequenceSpeakers": "Cannot identify speakers.",
+    "@cancelConsequenceSpeakers": {
+        "description": "Cancel consequence"
+    },
+    "confirmAndCancel": "Confirm & Cancel",
+    "@confirmAndCancel": {
+        "description": "Confirm cancellation button text"
+    },
+    "cancelConsequencePhoneCalls": "No real-time phone call transcription",
+    "@cancelConsequencePhoneCalls": {
+        "description": "Cancel consequence - phone calls"
+    },
+    "feedbackTitleTooExpensive": "What price would work for you?",
+    "@feedbackTitleTooExpensive": {
+        "description": "Feedback title when cancel reason is too expensive"
+    },
+    "feedbackTitleMissingFeatures": "What features are you missing?",
+    "@feedbackTitleMissingFeatures": {
+        "description": "Feedback title when cancel reason is missing features"
+    },
+    "feedbackTitleAudioQuality": "What issues did you experience?",
+    "@feedbackTitleAudioQuality": {
+        "description": "Feedback title when cancel reason is audio quality"
+    },
+    "feedbackTitleBatteryDrain": "Tell us about the battery issues",
+    "@feedbackTitleBatteryDrain": {
+        "description": "Feedback title when cancel reason is battery drain"
+    },
+    "feedbackTitleFoundAlternative": "What are you switching to?",
+    "@feedbackTitleFoundAlternative": {
+        "description": "Feedback title when cancel reason is found alternative"
+    },
+    "feedbackTitleNotUsing": "What would make you use Omi more?",
+    "@feedbackTitleNotUsing": {
+        "description": "Feedback title when cancel reason is not using enough"
+    },
+    "feedbackSubtitleTooExpensive": "Your feedback helps us find the right balance.",
+    "@feedbackSubtitleTooExpensive": {
+        "description": "Feedback subtitle for too expensive"
+    },
+    "feedbackSubtitleMissingFeatures": "We're always building — this helps us prioritize.",
+    "@feedbackSubtitleMissingFeatures": {
+        "description": "Feedback subtitle for missing features"
+    },
+    "feedbackSubtitleAudioQuality": "We'd love to understand what went wrong.",
+    "@feedbackSubtitleAudioQuality": {
+        "description": "Feedback subtitle for audio quality"
+    },
+    "feedbackSubtitleBatteryDrain": "This helps our hardware team improve.",
+    "@feedbackSubtitleBatteryDrain": {
+        "description": "Feedback subtitle for battery drain"
+    },
+    "feedbackSubtitleFoundAlternative": "We'd love to learn what caught your eye.",
+    "@feedbackSubtitleFoundAlternative": {
+        "description": "Feedback subtitle for found alternative"
+    },
+    "feedbackSubtitleNotUsing": "We want to make Omi more useful for you.",
+    "@feedbackSubtitleNotUsing": {
+        "description": "Feedback subtitle for not using enough"
+    },
+    "deviceDiagnostics": "Device Diagnostics",
+    "signalStrength": "Signal Strength",
+    "connectionUptime": "Uptime",
+    "reconnections": "Reconnections",
+    "disconnectHistory": "Disconnect History",
+    "noDisconnectsRecorded": "No disconnects recorded",
+    "diagnostics": "Diagnostics",
+    "waitingForData": "Waiting for data...",
+    "liveRssiOverTime": "Live RSSI over time",
+    "noRssiDataYet": "No RSSI data yet",
+    "collectingData": "Collecting data...",
+    "cleanDisconnect": "Clean disconnect",
+    "connectionTimeout": "Connection timeout",
+    "remoteDeviceTerminated": "Remote device terminated",
+    "pairedToAnotherPhone": "Paired to another phone",
+    "linkKeyMismatch": "Link key mismatch",
+    "connectionFailed": "Connection failed",
+    "appClosed": "App closed",
+    "manualDisconnect": "Manual disconnect",
+    "lastNEvents": "Last {count} events",
+    "@lastNEvents": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "signal": "Signal",
+    "battery": "Battery",
+    "excellent": "Excellent",
+    "good": "Good",
+    "fair": "Fair",
+    "weak": "Weak",
+    "gattError": "GATT error ({code})",
+    "@gattError": {
+        "placeholders": {
+            "code": {
+                "type": "String"
+            }
+        }
+    },
+    "batteryHistory": "Battery",
+    "noBatteryDataYet": "No battery data yet",
+    "day": "Day",
+    "week": "Week",
+    "rollbackToStableFirmware": "Roll Back to Stable Firmware",
+    "@rollbackToStableFirmware": {
+        "description": "Action item title for rolling back to the latest stable firmware version"
+    },
+    "rollbackConfirmTitle": "Roll Back Firmware?",
+    "@rollbackConfirmTitle": {
+        "description": "Confirmation dialog title for firmware rollback"
+    },
+    "rollbackConfirmMessage": "This will replace your current firmware with the latest stable version ({version}). Your device will restart after the update.",
+    "@rollbackConfirmMessage": {
+        "description": "Confirmation dialog message for firmware rollback",
+        "placeholders": {
+            "version": {
+                "type": "String"
+            }
+        }
+    },
+    "stableFirmware": "Stable Firmware",
+    "@stableFirmware": {
+        "description": "Title for the stable firmware rollback page"
+    },
+    "fetchingStableFirmware": "Fetching latest stable firmware...",
+    "@fetchingStableFirmware": {
+        "description": "Loading text while fetching stable firmware version"
+    },
+    "noStableFirmwareFound": "Could not find a stable firmware version for your device.",
+    "@noStableFirmwareFound": {
+        "description": "Error message when no stable firmware is available"
+    },
+    "installStableFirmware": "Install Stable Firmware",
+    "@installStableFirmware": {
+        "description": "Button text to install the stable firmware"
+    },
+    "alreadyOnStableFirmware": "You are already on the latest stable version.",
+    "@alreadyOnStableFirmware": {
+        "description": "Message when device is already on the latest stable firmware"
+    },
+    "audioSavedLocally": "{duration} audio saved locally",
+    "@audioSavedLocally": {
+        "placeholders": {
+            "duration": {
+                "type": "String"
+            }
+        }
+    },
+    "willSyncAutomatically": "will sync automatically",
+    "enableLocationTitle": "Enable Location",
+    "enableLocationDescription": "Location permission is needed to find nearby Bluetooth devices.",
+    "voiceRecordingFound": "Recording found",
+    "transcriptionConnecting": "Connecting transcription...",
+    "@transcriptionConnecting": {
+        "description": "Status when transcription WebSocket is connecting"
+    },
+    "transcriptionReconnecting": "Reconnecting transcription...",
+    "@transcriptionReconnecting": {
+        "description": "Status when transcription WebSocket is reconnecting"
+    },
+    "transcriptionUnavailable": "Transcription unavailable",
+    "@transcriptionUnavailable": {
+        "description": "Status when transcription WebSocket failed after max retries"
+    },
+    "audioOutput": "Audio Output",
+    "@audioOutput": {
+        "description": "Title for audio route picker bottom sheet"
+    },
+    "firmwareWarningTitle": "Important: Read Before Updating",
+    "firmwareFormatWarning": "This firmware will format the SD card. Please ensure all offline data is synced before upgrading.\n\nIf you see a flashing red light after flashing this version, do not worry. Simply connect the device to the app and it should turn blue. The red light means the device's clock hasn't been synced yet.",
+    "continueAnyway": "Continue",
+    "tasksClearCompleted": "Clear Completed",
+    "tasksSelectAll": "Select All",
+    "tasksDeleteSelected": "Delete {count} task(s)",
+    "@tasksDeleteSelected": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "tasksMarkComplete": "Marked as complete",
+    "appleHealthManageNote": "Omi accesses Apple Health through Apple's HealthKit framework. You can revoke access anytime in iOS Settings.",
+    "appleHealthConnectCta": "Connect to Apple Health",
+    "appleHealthDisconnectCta": "Disconnect Apple Health",
+    "appleHealthConnectedBadge": "Connected",
+    "appleHealthFeatureChatTitle": "Chat about your health",
+    "appleHealthFeatureChatDesc": "Ask Omi about your steps, sleep, heart rate, and workouts.",
+    "appleHealthFeatureReadOnlyTitle": "Read-only access",
+    "appleHealthFeatureReadOnlyDesc": "Omi never writes to Apple Health or modifies your data.",
+    "appleHealthFeatureSecureTitle": "Secure sync",
+    "appleHealthFeatureSecureDesc": "Your Apple Health data syncs privately to your Omi account.",
+    "appleHealthDeniedTitle": "Apple Health access denied",
+    "appleHealthDeniedBody": "Omi doesn't have permission to read your Apple Health data. Enable it in iOS Settings → Privacy & Security → Health → Omi.",
+    "deleteFlowReasonTitle": "Why are you leaving?",
+    "@deleteFlowReasonTitle": {
+        "description": "Title on delete-account flow reason step"
+    },
+    "deleteFlowReasonSubtitle": "Your feedback helps us improve Omi for everyone.",
+    "@deleteFlowReasonSubtitle": {
+        "description": "Subtitle on delete-account flow reason step"
+    },
+    "deleteReasonPrivacy": "Privacy concerns",
+    "@deleteReasonPrivacy": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonNotUsing": "Not using it enough",
+    "@deleteReasonNotUsing": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonMissingFeatures": "Missing features I need",
+    "@deleteReasonMissingFeatures": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonTechnicalIssues": "Too many technical issues",
+    "@deleteReasonTechnicalIssues": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonFoundAlternative": "Using something else",
+    "@deleteReasonFoundAlternative": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonTakingBreak": "Just taking a break",
+    "@deleteReasonTakingBreak": {
+        "description": "Delete reason option"
+    },
+    "deleteReasonOther": "Other",
+    "@deleteReasonOther": {
+        "description": "Delete reason option"
+    },
+    "deleteFlowFeedbackTitle": "Tell us more",
+    "@deleteFlowFeedbackTitle": {
+        "description": "Title on delete-account flow feedback step"
+    },
+    "deleteFlowFeedbackSubtitle": "What would have made Omi work for you?",
+    "@deleteFlowFeedbackSubtitle": {
+        "description": "Subtitle on delete-account flow feedback step"
+    },
+    "deleteFlowFeedbackHint": "Optional — your thoughts help us build a better product.",
+    "@deleteFlowFeedbackHint": {
+        "description": "TextField hint on delete feedback step"
+    },
+    "deleteFlowConfirmTitle": "This is permanent",
+    "@deleteFlowConfirmTitle": {
+        "description": "Title on final delete confirmation step"
+    },
+    "deleteFlowConfirmSubtitle": "Once you delete your account, there is no way to recover it.",
+    "@deleteFlowConfirmSubtitle": {
+        "description": "Subtitle on final delete confirmation step"
+    },
+    "deleteConsequenceSubscription": "Any active subscription will be cancelled.",
+    "@deleteConsequenceSubscription": {
+        "description": "Delete consequence bullet"
+    },
+    "deleteConsequenceNoRecovery": "Your account cannot be restored — not even by support.",
+    "@deleteConsequenceNoRecovery": {
+        "description": "Delete consequence bullet"
+    },
+    "deleteTypeToConfirm": "Type DELETE to confirm",
+    "@deleteTypeToConfirm": {
+        "description": "Instruction to type DELETE to confirm"
+    },
+    "deleteConfirmationWord": "DELETE",
+    "@deleteConfirmationWord": {
+        "description": "The literal word users type to confirm deletion. Keep uppercase."
+    },
+    "deleteAccountPermanently": "Delete account permanently",
+    "@deleteAccountPermanently": {
+        "description": "Primary destructive action label"
+    },
+    "keepMyAccount": "Keep my account",
+    "@keepMyAccount": {
+        "description": "Secondary action to back out of deletion"
+    },
+    "deleteAccountFailed": "Could not delete your account. Please try again.",
+    "@deleteAccountFailed": {
+        "description": "Error shown when deletion API fails"
+    },
+    "planUpdate": "Plan Update",
+    "@planUpdate": {
+        "description": "Header for plan deprecation notice"
+    },
+    "planDeprecationMessage": "Your Unlimited plan is being retired. Switch to the Operator plan — same great features at $49/mo. Your current plan will continue to work in the meantime.",
+    "@planDeprecationMessage": {
+        "description": "Deprecation notice for legacy Unlimited subscribers"
+    },
+    "upgradeYourPlan": "Upgrade Your Plan",
+    "@upgradeYourPlan": {
+        "description": "Header for plan upgrade screen for non-paid users"
+    },
+    "youAreOnAPaidPlan": "You are on a paid plan.",
+    "@youAreOnAPaidPlan": {
+        "description": "Subtitle for paid plan users on plans sheet"
+    },
+    "chatTitle": "Chat",
+    "chatMessages": "messages",
+    "unlimitedChatThisMonth": "Unlimited chat messages this month",
+    "chatUsedOfLimitCompute": "${used} of ${limit} compute budget used",
+    "@chatUsedOfLimitCompute": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsedOfLimitMessages": "{used} of {limit} messages used this month",
+    "@chatUsedOfLimitMessages": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageProgress": "{used} / {limit} used",
+    "@chatUsageProgress": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatLimitReachedUpgrade": "Chat limit reached. Upgrade for more messages.",
+    "chatLimitReachedTitle": "Chat Limit Reached",
+    "chatUsageDescription": "You've used {used} of your {limitDisplay} on the {plan} plan.",
+    "@chatUsageDescription": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limitDisplay": {
+                "type": "String"
+            },
+            "plan": {
+                "type": "String"
+            }
+        }
+    },
+    "resetsInDays": "Resets in {count} day(s)",
+    "@resetsInDays": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "resetsInHours": "Resets in {count} hour(s)",
+    "@resetsInHours": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "resetsSoon": "Resets soon",
+    "upgradePlan": "Upgrade Plan",
+    "billingMonthly": "Monthly",
+    "billingYearly": "Yearly",
+    "savePercent": "Save ~17%",
+    "popular": "Popular",
+    "currentPlan": "Current",
+    "neoSubtitle": "{count} questions per month",
+    "@neoSubtitle": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "operatorSubtitle": "{count} questions per month",
+    "@operatorSubtitle": {
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "architectSubtitle": "Power-user AI — thousands of chats + agentic automations",
+    "chatUsageCost": "Chat: ${used} / ${limit} used this month",
+    "@chatUsageCost": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageCostNoLimit": "Chat: ${used} used this month",
+    "@chatUsageCostNoLimit": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageMessages": "Chat: {used} / {limit} messages this month",
+    "@chatUsageMessages": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "limit": {
+                "type": "String"
+            }
+        }
+    },
+    "chatUsageMessagesNoLimit": "Chat: {used} messages this month",
+    "@chatUsageMessagesNoLimit": {
+        "placeholders": {
+            "used": {
+                "type": "String"
+            }
+        }
+    },
+    "chatQuotaSubtitle": "AI chat messages used with Omi this month.",
+    "chatQuotaExceededReply": "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.",
+    "@chatQuotaExceededReply": {
+        "description": "AI reply message shown when user exceeds chat quota"
+    },
+    "voiceResponseAudio": "Speak Omi responses aloud",
+    "@voiceResponseAudio": {
+        "description": "Voice response audio feature title"
+    },
+    "voiceResponseMode": "Voice response",
+    "@voiceResponseMode": {
+        "description": "Voice response mode setting row title"
+    },
+    "voiceResponseModeTitle": "When to speak responses",
+    "@voiceResponseModeTitle": {
+        "description": "Bottom sheet title for voice response mode selector"
+    },
+    "voiceResponseOff": "Off",
+    "@voiceResponseOff": {
+        "description": "Voice response mode: off"
+    },
+    "voiceResponseHeadphonesOnly": "Headphones only",
+    "@voiceResponseHeadphonesOnly": {
+        "description": "Voice response mode: only when headphones connected"
+    },
+    "voiceResponseAlways": "Always",
+    "@voiceResponseAlways": {
+        "description": "Voice response mode: always, including phone speaker"
+    },
+    "agreeAndContinue": "Agree & Continue",
+    "@agreeAndContinue": {
+        "description": "Button label on the data and AI consent screen — explicit consent action."
+    },
+    "startVoiceRecording": "Start voice recording",
+    "@startVoiceRecording": {},
+    "startCallRecording": "Start call recording",
+    "@startCallRecording": {},
+    "mindMap": "Mind Map",
+    "@mindMap": {
+        "description": "Section header for memory knowledge graph on home page"
+    },
+    "voiceMode": "Voice Mode",
+    "@voiceMode": {
+        "description": "iOS home screen quick action: opens chat in voice mode"
+    },
+    "quickActionAskOmi": "Ask Omi Anything",
+    "@quickActionAskOmi": {
+        "description": "iOS home screen quick action: opens chat page"
+    },
+    "record": "Record",
+    "@record": {
+        "description": "Label for the Record button on the home page app bar"
+    },
+    "stop": "Stop",
+    "@stop": {
+        "description": "Label shown on the Record button while a recording is in progress"
+    },
+    "recordWithPhoneMic": "Record with Phone Mic",
+    "@recordWithPhoneMic": {
+        "description": "Title of the phone-mic option in the record-options sheet"
+    },
+    "recordWithPhoneMicSubtitle": "Capture audio around you",
+    "@recordWithPhoneMicSubtitle": {
+        "description": "Subtitle for the phone-mic option in the record-options sheet"
+    },
+    "phoneCall": "Phone Call",
+    "@phoneCall": {
+        "description": "Title of the phone-call option in the record-options sheet"
+    },
+    "phoneCallSubtitle": "Record a call with live transcription",
+    "@phoneCallSubtitle": {
+        "description": "Subtitle for the phone-call option in the record-options sheet"
+    },
+    "searchActionItems": "Search action items",
+    "@searchActionItems": {
+        "description": "Hint text for the action items search field"
+    },
+    "selectActionItems": "Select multiple",
+    "@selectActionItems": {
+        "description": "Top-bar button to enter selection mode on the action items page"
+    },
+    "chooseExportDestination": "Export {count} item(s) to…",
+    "@chooseExportDestination": {
+        "description": "Title of the bottom sheet listing platforms to bulk-export selected action items to",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "bulkExportInProgress": "Exporting…",
+    "@bulkExportInProgress": {
+        "description": "Snackbar shown while a bulk export is running"
+    },
+    "bulkExportSuccess": "Exported {count} to {platform}",
+    "@bulkExportSuccess": {
+        "description": "Snackbar shown when a bulk export completes for all items",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            },
+            "platform": {
+                "type": "String"
+            }
+        }
+    },
+    "bulkExportPartial": "Exported {success} of {total} to {platform}",
+    "@bulkExportPartial": {
+        "description": "Snackbar shown when only some items in a bulk export succeeded",
+        "placeholders": {
+            "success": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            },
+            "platform": {
+                "type": "String"
+            }
+        }
+    },
+    "showCompletedTasks": "Show completed",
+    "@showCompletedTasks": {
+        "description": "Action menu entry to reveal completed tasks on the action items page"
+    },
+    "hideCompletedTasks": "Hide completed",
+    "@hideCompletedTasks": {
+        "description": "Action menu entry to hide completed tasks on the action items page"
+    },
+    "selectAllTasksMenu": "Select all",
+    "@selectAllTasksMenu": {
+        "description": "Action menu entry to select every task in the action items list"
+    },
+    "connectTaskAppToExport": "Connect a task app in Settings to export",
+    "@connectTaskAppToExport": {
+        "description": "Snackbar shown when the user taps Export but no third-party task integration is connected"
+    },
+    "connectAction": "Connect",
+    "@connectAction": {
+        "description": "Snackbar action label that opens the Task Integrations settings page"
+    },
+    "deselectAllTasksMenu": "Deselect all",
+    "@deselectAllTasksMenu": {
+        "description": "Action menu entry that clears any current task selection while staying in selection mode"
+    },
+    "bulkExportAlreadyExported": "All selected tasks already exported",
+    "@bulkExportAlreadyExported": {
+        "description": "Snackbar shown when every selected task is already exported and Export is tapped"
+    },
+    "bulkDeleteFailed": "Could not delete tasks. Please try again.",
+    "@bulkDeleteFailed": {
+        "description": "Snackbar shown when the bulk delete request fails and the local list is restored"
+    },
+    "deleteRecap": "Delete recap",
+    "@deleteRecap": {
+        "description": "Menu / button label to delete a daily recap. Used on the detail page action sheet and the swipe-to-delete background."
+    },
+    "deleteRecapConfirmTitle": "Delete this recap?",
+    "@deleteRecapConfirmTitle": {
+        "description": "Title of the confirm dialog when deleting a daily recap."
+    },
+    "deleteRecapConfirmBody": "This recap will be permanently removed. The original conversations from that day are not affected.",
+    "@deleteRecapConfirmBody": {
+        "description": "Body of the confirm dialog clarifying that conversations are not deleted with the recap."
+    },
+    "deleteRecapAction": "Delete",
+    "@deleteRecapAction": {
+        "description": "Confirm action button on the delete-recap dialog."
+    },
+    "recapDeletedSnackbar": "Recap deleted",
+    "@recapDeletedSnackbar": {
+        "description": "Snackbar shown after a recap was successfully deleted."
+    },
+    "recapDeleteFailed": "Couldn't delete the recap. Try again later.",
+    "@recapDeleteFailed": {
+        "description": "Snackbar shown when the recap delete API fails."
+    },
+    "syncStatusBackedUp": "Backed up",
+    "syncStatusBackingUp": "Syncing…",
+    "syncStatusWaiting": "Waiting to sync",
+    "syncStatusRetrying": "Couldn’t process — retrying",
+    "syncStatusFailed": "Failed — tap Retry",
+    "syncStatusFileUnavailable": "File unavailable",
+    "noRecordingsYet": "No recordings yet",
+    "syncInProgress": "Sync in progress",
+    "syncStatusUploaded": "Uploaded · processing on Omi",
+    "deleteWhileProcessingTitle": "Still processing",
+    "deleteWhileProcessingMessage": "This recording is uploaded but Omi is still creating the conversation. If you delete it now and processing fails, it can't be recovered. Delete anyway?",
+    "syncCardAllBackedUp": "All recordings synced",
+    "syncCardReadyCount": "{count, plural, =1{1 recording ready to sync} other{{count} recordings ready to sync}}",
+    "@syncCardReadyCount": {
+        "description": "Status card: pending recordings count",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "syncCardProcessing": "Processing on Omi…",
+    "syncCardWaitingInternet": "Waiting for internet",
+    "syncCardNeedsAttention": "{count} recording{count, plural, =1{} other{s}} need attention",
+    "@syncCardNeedsAttention": {
+        "description": "Status card: items that need user attention",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "syncFlowIntro": "Recordings are transferred from your device to this phone and stored locally, then uploaded to Omi's server where they're transcribed and turned into conversations.",
+    "syncStepUpload": "Sync",
+    "syncStepUploadDesc": "Your recording is sent to Omi's server",
+    "syncStepProcess": "Transcribe",
+    "syncStepProcessDesc": "Omi turns the audio into a conversation",
+    "syncStepBackedUp": "Conversation ready",
+    "syncStepBackedUpDesc": "Find it under Conversations",
+    "syncFailureFootnote": "If processing fails, your recording is retried automatically on the next sync.",
+    "syncStatusConversationCreated": "Conversation created",
+    "@syncStatusConversationCreated": {
+        "description": "Row subtitle on the sync page for a fully synced recording: emphasises that processing succeeded and a conversation now exists."
+    },
+    "syncCardUploadingTitle": "Uploading to Omi",
+    "@syncCardUploadingTitle": {
+        "description": "Top status card: phase title when uploading audio batches to Omi (sub-line shows X of Y)"
+    },
+    "syncCardDownloadingTitle": "Downloading from your device",
+    "@syncCardDownloadingTitle": {
+        "description": "Top status card: phase title when downloading recordings from the Omi device over BLE/Wi-Fi"
+    },
+    "syncCardProgressOf": "{current} of {total}",
+    "@syncCardProgressOf": {
+        "description": "Top status card: secondary progress line under the phase title.",
+        "placeholders": {
+            "current": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "syncStatusOnDevice": "On your device",
+    "@syncStatusOnDevice": {
+        "description": "Row subtitle for a recording still on the Omi device (SD-card or flash page) that has not been downloaded to the phone yet."
+    },
+    "syncStatusDownloadingFromDevice": "Downloading from your device",
+    "@syncStatusDownloadingFromDevice": {
+        "description": "Row subtitle for a recording currently being transferred from the Omi device to the phone."
+    },
+    "newestFirst": "Newest first",
+    "@newestFirst": {
+        "description": "Subtle sort-order indicator next to the recordings list header so the user knows the newest items are at the top."
+    },
+    "noSyncedRecordingsYet": "No synced recordings yet",
+    "@noSyncedRecordingsYet": {
+        "description": "Empty-state message when the Synced filter is active but no recording has finished backing up."
+    },
+    "morePaymentMethodsComingSoon": "More payment methods coming soon",
+    "@morePaymentMethodsComingSoon": {
+        "description": "Placeholder card text shown under available payment methods"
+    },
+    "syncProcessingBackgroundHint": "This continues in the background — you can leave this screen.",
+    "@syncProcessingBackgroundHint": {
+        "description": "Reassurance line on the manual sync status card during the cloud-processing phase, so users do not think sync is stuck when there is no visible progress."
+    },
+    "syncCardRateLimited": "Fair-use limit reached — syncing will resume automatically",
+    "@syncCardRateLimited": {
+        "description": "Status card line when uploads are paused due to a fair-use/rate-limit (HTTP 429) cooldown. Reassures the user this is not an error and will resume on its own."
+    },
+    "syncCardBackendBusy": "Omi servers are busy — your recordings will sync once capacity returns",
+    "@syncCardBackendBusy": {
+        "description": "Status card line when the backend stale-guard has flagged queued jobs (i.e. workers are saturated, not the user being rate-limited). Distinct from the 429 fair-use case."
+    },
+    "unableToDetermineFirmwareVersion": "Unable to determine current firmware version",
+    "@unableToDetermineFirmwareVersion": {
+        "description": "Shown when the device firmware revision cannot be read over BLE, so an OTA update offer would be unreliable."
+    },
+    "promoCode": "Promo code",
+    "enterPromoCode": "Enter promo code",
+    "invalidPromotionCode": "Invalid promotion code.",
+    "backgroundModeTitle": "Background Mode",
+    "@backgroundModeTitle": {
+        "description": "Title for the background connection mode toggle in device settings (Android only)"
+    },
+    "backgroundModeDescription": "Keep your Omi recording even when the app is fully closed.",
+    "@backgroundModeDescription": {
+        "description": "Subtitle explaining the background mode toggle"
+    },
+    "backgroundModeNote": "Works with Omi devices only for now, and is being improved continuously.",
+    "@backgroundModeNote": {
+        "description": "Caveat note shown in the Background Mode sheet"
+    },
+    "backgroundModeUnavailable": "Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.",
+    "@backgroundModeUnavailable": {
+        "description": "Warning shown in Background Mode sheet when no device with a native BLE audio route is connected"
+    },
+    "regenerateRecap": "Regenerate recap",
+    "recapRegeneratedSnackbar": "Recap regenerated",
+    "recapRegenerateFailed": "Couldn't regenerate the recap. Try again later.",
+    "recapRegenerateCooldown": "Please wait a few seconds before regenerating again.",
+    "recapRegenerateNoConversations": "No conversations to summarize for this day.",
+    "syncCustomSttWarningTitle": "Sync uses Omi transcription",
+    "@syncCustomSttWarningTitle": {
+        "description": "Title of the dialog shown when a third-party (custom) STT user manually syncs offline recordings"
+    },
+    "syncCustomSttWarningMessage": "You use your own transcription provider. Syncing these recordings transcribes them on Omi's servers instead, and they count toward your plan's transcription limit.",
+    "@syncCustomSttWarningMessage": {
+        "description": "Body warning that syncing transcribes on Omi servers and counts toward the plan limit"
+    },
+    "transcribeLaterTitle": "Transcribe Later",
+    "@transcribeLaterTitle": {
+        "description": "Title for the 'transcribe later' capture-mode toggle in device settings"
+    },
+    "transcribeLaterDescription": "Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.",
+    "@transcribeLaterDescription": {
+        "description": "Subtitle explaining the transcribe-later mode toggle"
+    },
+    "transcribeLaterNote": "Works with Omi devices for now. Audio stays on your phone until you choose to upload it.",
+    "@transcribeLaterNote": {
+        "description": "Caveat note shown in the Transcribe Later sheet"
+    },
+    "transcribeLaterStorageFull": "Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.",
+    "@transcribeLaterStorageFull": {
+        "description": "Warning shown when storage is too low to keep recording in Transcribe Later mode"
+    },
+    "recordingMode": "Recording mode",
+    "@recordingMode": {
+        "description": "Title of the bottom sheet for choosing between Live and Transcribe Later recording modes"
+    },
+    "captureModeLater": "Later",
+    "@captureModeLater": {
+        "description": "Short label for the Transcribe Later mode shown on the home app-bar mode chip"
+    },
+    "captureModeLiveDescription": "Transcribe in real time as you speak.",
+    "@captureModeLiveDescription": {
+        "description": "Subtitle for the Live option in the recording mode picker"
+    },
+    "captureModeLaterDescription": "Save audio now and transcribe whenever you want.",
+    "@captureModeLaterDescription": {
+        "description": "Subtitle for the Transcribe Later option in the recording mode picker"
+    },
+    "unmute": "Unmute",
+    "@unmute": {
+        "description": "Button to resume Transcribe Later capture after muting"
+    },
+    "newRecording": "New recording",
+    "@newRecording": {
+        "description": "Button to finalize the current recording and start a new one"
+    },
+    "transcribeLaterPaused": "Paused — audio isn't being recorded",
+    "@transcribeLaterPaused": {
+        "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
     }
 }

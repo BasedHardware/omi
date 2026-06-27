@@ -1,5 +1,7 @@
-from datetime import datetime, timezone
+from dataclasses import dataclass, field
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -11,6 +13,35 @@ logger = logging.getLogger(__name__)
 
 # Collection name
 action_items_collection = 'action_items'
+
+
+@dataclass
+class BatchMutationResult:
+    """Outcome for partial batch mutations where missing ids must be explicit."""
+
+    updated_ids: List[str] = field(default_factory=list)
+    missing_ids: List[str] = field(default_factory=list)
+    noop_ids: List[str] = field(default_factory=list)
+
+    @property
+    def updated_count(self) -> int:
+        return len(self.updated_ids)
+
+    def model(self) -> dict:
+        return {
+            'updated_count': len(self.updated_ids),
+            'updated_ids': self.updated_ids,
+            'missing_ids': self.missing_ids,
+            'noop_ids': self.noop_ids,
+        }
+
+
+def get_action_item_ids(uid: str) -> List[str]:
+    """Return all action item document IDs for a user (IDs-only projection, no field reads).
+
+    Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
+    coll = db.collection('users').document(uid).collection(action_items_collection)
+    return [doc.id for doc in coll.select([]).stream()]
 
 
 def _prepare_action_item_for_write(action_item_data: dict) -> dict:
@@ -55,21 +86,55 @@ def _prepare_action_item_for_read(action_item_data: dict) -> dict:
 # *****************************
 
 
-def create_action_item(uid: str, action_item_data: dict) -> str:
+def create_action_item(uid: str, action_item_data: dict, idempotency_key: Optional[str] = None) -> str:
     """
     Create a new action item for a user.
 
     Args:
         uid: User ID
         action_item_data: Action item data including description, dates, etc.
+        idempotency_key: Optional opaque key. When supplied, the function looks
+            for an existing action_item with the same key (any state) and returns
+            its id without creating a new document. This makes the call safe to
+            retry on flaky networks or duplicate event delivery — the previous
+            behaviour silently allocated a fresh Firestore id on every call,
+            producing user-visible duplicates. The key is stored on the
+            document so future calls can find it. Callers that want
+            content-based idempotency typically pass
+            ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
 
     Returns:
-        The ID of the created action item
+        The ID of the created (or pre-existing, when idempotency_key matches)
+        action item.
     """
     action_item_data = _prepare_action_item_for_write(action_item_data)
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
+
+    # Idempotency check: if the caller supplied a key and we already have an
+    # *active* (not completed, not soft-deleted) document with that key,
+    # return its id rather than creating a duplicate. Completed/deleted
+    # matches are treated as "the user is recreating the task" and we fall
+    # through to the normal create path — otherwise a permanent content hash
+    # would silently swallow legitimate re-creation of recurring tasks.
+    if idempotency_key:
+        existing_query = (
+            action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
+            .where(filter=FieldFilter('completed', '==', False))
+            .limit(5)
+        )
+        for doc in existing_query.stream():
+            data = doc.to_dict() or {}
+            if data.get('deleted'):
+                continue
+            logger.info(
+                "create_action_item: idempotency hit for uid=%s key=%s -> existing id=%s",
+                uid,
+                idempotency_key,
+                doc.id,
+            )
+            return doc.id
 
     if 'created_at' not in action_item_data:
         action_item_data['created_at'] = datetime.now(timezone.utc)
@@ -79,6 +144,9 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     # Set completed_at if the item is being created as completed
     if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
         action_item_data['completed_at'] = datetime.now(timezone.utc)
+
+    if idempotency_key:
+        action_item_data['idempotency_key'] = idempotency_key
 
     doc_ref = action_items_ref.add(action_item_data)[1]
 
@@ -246,6 +314,54 @@ def get_action_items(
     return action_items
 
 
+def _normalize_description(desc: Optional[str]) -> str:
+    """Normalize a task description for case-insensitive duplicate matching.
+
+    Strips whitespace + the legacy ``[screen]`` prefix/suffix marker that the
+    AI promotion pipeline used to add to AI-generated tasks (still appears in
+    historical data and on tasks that round-tripped through ``migrate_ai_tasks``).
+    """
+    if not desc:
+        return ''
+    s = desc.strip()
+    if s.startswith('[screen] '):
+        s = s[len('[screen] ') :]
+    if s.endswith(' [screen]'):
+        s = s[: -len(' [screen]')]
+    return s.strip().lower()
+
+
+def get_active_action_item_by_description(uid: str, description: str) -> Optional[dict]:
+    """Find an active (not completed, not deleted) action_item with a matching
+    description for the given user, or return None.
+
+    Match is case-insensitive and ignores ``[screen]`` markers and surrounding
+    whitespace, mirroring ``database.staged_tasks.create_staged_task``'s
+    dedup logic so that the staged → action_item promotion path can avoid
+    creating semantic duplicates.
+
+    Streams active items (typically a small bounded set per user) rather than
+    relying on a Firestore equality filter, because Firestore cannot do
+    case-insensitive matching natively without a normalized companion field.
+    """
+    target = _normalize_description(description)
+    if not target:
+        return None
+
+    user_ref = db.collection('users').document(uid)
+    query = user_ref.collection(action_items_collection).where(filter=FieldFilter('completed', '==', False))
+
+    for doc in query.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        if _normalize_description(data.get('description')) == target:
+            data['id'] = doc.id
+            return _prepare_action_item_for_read(data)
+
+    return None
+
+
 def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[dict]:
     """
     Get all action items for a specific conversation.
@@ -335,43 +451,42 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
     return True
 
 
-def batch_update_action_items(uid: str, items: list) -> None:
+def batch_update_action_items(uid: str, items: list) -> BatchMutationResult:
     """
     Batch update sort_order and/or indent_level for multiple action items.
 
-    Args:
-        uid: User ID
-        items: List of objects with id, sort_order (optional), indent_level (optional)
+    Missing IDs are returned explicitly. Each document update is applied
+    independently so a concurrent delete cannot make Firestore reject an entire
+    mutation after an earlier existence pre-read succeeded.
     """
+    result = BatchMutationResult()
     if not items:
-        return
+        return result
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
     now = datetime.now(timezone.utc)
 
-    batch = db.batch()
-    count = 0
-
     for item in items:
+        doc_ref = action_items_ref.document(item.id)
         update_data = {'updated_at': now}
         if item.sort_order is not None:
             update_data['sort_order'] = item.sort_order
         if item.indent_level is not None:
             update_data['indent_level'] = item.indent_level
 
-        if len(update_data) > 1:  # More than just updated_at
-            doc_ref = action_items_ref.document(item.id)
-            batch.update(doc_ref, update_data)
-            count += 1
+        if len(update_data) == 1:
+            result.noop_ids.append(item.id)
+            continue
 
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = db.batch()
-            count = 0
+        try:
+            doc_ref.update(update_data)
+        except NotFound:
+            result.missing_ids.append(item.id)
+            continue
+        result.updated_ids.append(item.id)
 
-    if count > 0:
-        batch.commit()
+    return result
 
 
 def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = True) -> bool:
@@ -419,6 +534,37 @@ def delete_action_item(uid: str, action_item_id: str) -> bool:
     return True
 
 
+def delete_action_items_batch(uid: str, action_item_ids: List[str]) -> List[str]:
+    """
+    Delete multiple action items by id, chunking into 500-op Firestore batches.
+
+    Skips per-id existence reads: batch.delete() is a no-op for missing
+    docs, and downstream vector + FCM cleanup are both idempotent for
+    unknown ids.
+    """
+    if not action_item_ids:
+        return []
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+
+    batch = db.batch()
+    count = 0
+
+    for item_id in action_item_ids:
+        batch.delete(action_items_ref.document(item_id))
+        count += 1
+        if count >= 499:  # Firestore batch limit is 500
+            batch.commit()
+            batch = db.batch()
+            count = 0
+
+    if count > 0:
+        batch.commit()
+
+    return list(action_item_ids)
+
+
 def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     """
     Delete all action items for a specific conversation.
@@ -449,6 +595,102 @@ def delete_action_items_for_conversation(uid: str, conversation_id: str) -> int:
     return count
 
 
+# *****************************
+# ****** REMINDERS SYNC *******
+# *****************************
+
+
+def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
+    """Mark multiple action items as sync_requested in a single batch write."""
+    if not item_ids:
+        return
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+    now = datetime.now(timezone.utc)
+
+    batch = db.batch()
+    for item_id in item_ids:
+        doc_ref = action_items_ref.document(item_id)
+        batch.update(doc_ref, {'sync_requested': True, 'updated_at': now})
+
+    batch.commit()
+
+
+def get_pending_apple_reminders_sync(uid: str) -> dict:
+    """
+    Get items needing Apple Reminders sync:
+    - pending_export: sync_requested=True but not yet exported (FCM missed items)
+    - synced_items: exported to apple_reminders with apple_reminder_id (for bidirectional sync)
+    """
+    user_ref = db.collection('users').document(uid)
+    items_ref = user_ref.collection(action_items_collection)
+
+    # Pending export: sync_requested=True, filter exported!=True in Python
+    # (avoids composite index + handles missing 'exported' field)
+    pending_query = items_ref.where(filter=FieldFilter('sync_requested', '==', True)).limit(50)
+    pending_docs = pending_query.stream()
+    pending_export = []
+    for doc in pending_docs:
+        data = doc.to_dict()
+        if data.get('exported') is True:
+            continue
+        data['id'] = doc.id
+        pending_export.append(_prepare_action_item_for_read(data))
+
+    # Synced items: exported to apple_reminders (for bidirectional sync)
+    # Uses only equality filters to avoid composite index requirement
+    synced_query = (
+        items_ref.where(filter=FieldFilter('export_platform', '==', 'apple_reminders'))
+        .where(filter=FieldFilter('exported', '==', True))
+        .limit(100)
+    )
+    synced_docs = synced_query.stream()
+    synced_items = []
+    for doc in synced_docs:
+        data = doc.to_dict()
+        data['id'] = doc.id
+        synced_items.append(_prepare_action_item_for_read(data))
+    # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
+    synced_items.sort(key=lambda x: x.get('updated_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+
+    return {"pending_export": pending_export, "synced_items": synced_items}
+
+
+def batch_sync_update_action_items(uid: str, updates: List[dict]) -> BatchMutationResult:
+    """
+    Batch update action items during reminders sync.
+
+    Missing IDs are returned explicitly; each document update is applied
+    independently so a concurrent delete cannot fail the whole request after an
+    existence pre-read. Callers should use only updated_ids for downstream
+    vector/cache work.
+    """
+    result = BatchMutationResult()
+    if not updates:
+        return result
+
+    user_ref = db.collection('users').document(uid)
+    action_items_ref = user_ref.collection(action_items_collection)
+    now = datetime.now(timezone.utc)
+
+    for entry in updates:
+        doc_ref = action_items_ref.document(entry['id'])
+        update_data = _prepare_action_item_for_write(entry['data'])
+        update_data['updated_at'] = now
+        # Clear sync_requested when item is successfully exported
+        if update_data.get('exported') is True:
+            update_data['sync_requested'] = False
+        try:
+            doc_ref.update(update_data)
+        except NotFound:
+            result.missing_ids.append(entry['id'])
+            continue
+        result.updated_ids.append(entry['id'])
+
+    return result
+
+
 def unlock_all_action_items(uid: str):
     """
     Finds all action items for a user with is_locked: True and updates them to is_locked = False.
@@ -469,3 +711,123 @@ def unlock_all_action_items(uid: str):
     if count > 0:
         batch.commit()
     logger.info(f"Unlocked all action items for user {uid}")
+
+
+# ============================================================================
+# DAILY SCORE — computed from action_items
+# ============================================================================
+
+
+def get_daily_score(uid: str, date: str = None) -> dict:
+    """Compute productivity score for a single day from action_items."""
+    if date:
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    day_end = day + timedelta(days=1)
+    col = db.collection('users').document(uid).collection(action_items_collection)
+
+    # Count tasks due today
+    due_query = col.where(filter=FieldFilter('due_at', '>=', day)).where(filter=FieldFilter('due_at', '<', day_end))
+    total = 0
+    completed = 0
+    for doc in due_query.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        total += 1
+        if data.get('completed'):
+            completed += 1
+
+    score = round((completed / total * 100) if total > 0 else 0)
+    return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
+
+
+def get_scores(uid: str, date: str = None) -> dict:
+    """Compute daily, weekly, and overall scores (matching Rust backend behavior).
+
+    Takes a single date (or defaults to today) and returns:
+      daily  — tasks due on that date
+      weekly — tasks due in the 7 days ending on that date
+      overall — all non-deleted tasks
+    """
+    if date:
+        day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+    else:
+        day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    day_start = day
+    day_end = day + timedelta(days=1)
+    week_start = day - timedelta(days=7)
+
+    col = db.collection('users').document(uid).collection(action_items_collection)
+
+    def _score(completed, total):
+        return round((completed / total * 100) if total > 0 else 0, 1)
+
+    # Daily: tasks due today
+    daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
+    daily_completed = daily_total = 0
+    for doc in daily_q.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        daily_total += 1
+        if data.get('completed'):
+            daily_completed += 1
+
+    # Weekly: tasks created in last 7 days (matches Rust backend which uses created_at)
+    weekly_q = col.where(filter=FieldFilter('created_at', '>=', week_start)).where(
+        filter=FieldFilter('created_at', '<', day_end)
+    )
+    weekly_completed = weekly_total = 0
+    for doc in weekly_q.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        weekly_total += 1
+        if data.get('completed'):
+            weekly_completed += 1
+
+    # Overall: all non-deleted tasks
+    overall_completed = overall_total = 0
+    for doc in col.stream():
+        data = doc.to_dict()
+        if data.get('deleted'):
+            continue
+        overall_total += 1
+        if data.get('completed'):
+            overall_completed += 1
+
+    daily = {
+        'score': _score(daily_completed, daily_total),
+        'completed_tasks': daily_completed,
+        'total_tasks': daily_total,
+    }
+    weekly = {
+        'score': _score(weekly_completed, weekly_total),
+        'completed_tasks': weekly_completed,
+        'total_tasks': weekly_total,
+    }
+    overall = {
+        'score': _score(overall_completed, overall_total),
+        'completed_tasks': overall_completed,
+        'total_tasks': overall_total,
+    }
+
+    # Determine default tab (highest score, prefer daily > weekly > overall)
+    if daily['total_tasks'] > 0 and daily['score'] >= weekly['score'] and daily['score'] >= overall['score']:
+        default_tab = 'daily'
+    elif weekly['score'] >= overall['score']:
+        default_tab = 'weekly'
+    else:
+        default_tab = 'overall'
+
+    return {
+        'daily': daily,
+        'weekly': weekly,
+        'overall': overall,
+        'default_tab': default_tab,
+        'date': day.strftime('%Y-%m-%d'),
+    }

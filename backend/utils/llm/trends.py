@@ -3,8 +3,8 @@ from pydantic import BaseModel, Field
 
 import database.users as users_db
 from database.auth import get_user_name
-from models.conversation import Conversation
 from models.other import Person
+from models.transcript_segment import TranscriptSegment
 from models.trend import (
     TrendEnum,
     ceo_options,
@@ -14,7 +14,7 @@ from models.trend import (
     ai_product_options,
     TrendType,
 )
-from utils.llm.clients import llm_mini
+from utils.llm.clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
@@ -30,15 +30,16 @@ class ExpectedOutput(BaseModel):
     items: List[Item] = Field(default=[], description="List of items.")
 
 
-def trends_extractor(uid: str, memory: Conversation) -> List[Item]:
-    person_ids = memory.get_person_ids()
+def trends_extractor(uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str]) -> List[Item]:
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
     user_name = get_user_name(uid, use_default=False)
-    transcript = memory.get_transcript(False, people=people, user_name=user_name)
+    transcript = TranscriptSegment.segments_as_string(
+        transcript_segments, include_timestamps=False, user_name=user_name, people=people
+    )
     if len(transcript) == 0:
         return []
 
@@ -64,7 +65,7 @@ def trends_extractor(uid: str, memory: Conversation) -> List[Item]:
     {transcript}
     '''.replace('    ', '').strip()
     try:
-        with_parser = llm_mini.with_structured_output(ExpectedOutput)
+        with_parser = get_llm('trends').with_structured_output(ExpectedOutput)
         response: ExpectedOutput = with_parser.invoke(prompt)
         filtered = []
         for item in response.items:

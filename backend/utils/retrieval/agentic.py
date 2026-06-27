@@ -19,7 +19,6 @@ agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('age
 
 from models.app import App
 from models.chat import Message, ChatSession, PageContext
-from models.conversation import Conversation
 from utils.retrieval.tools import (
     get_conversations_tool,
     search_conversations_tool,
@@ -29,7 +28,6 @@ from utils.retrieval.tools import (
     create_action_item_tool,
     update_action_item_tool,
     get_omi_product_info_tool,
-    perplexity_web_search_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
     update_calendar_event_tool,
@@ -46,6 +44,7 @@ from utils.retrieval.tools import (
     get_screen_activity_tool,
     search_screen_activity_tool,
     save_user_preference_tool,
+    fetch_url_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
@@ -82,7 +81,6 @@ CORE_TOOLS = [
     create_action_item_tool,
     update_action_item_tool,
     get_omi_product_info_tool,
-    perplexity_web_search_tool,
     get_calendar_events_tool,
     create_calendar_event_tool,
     update_calendar_event_tool,
@@ -99,6 +97,7 @@ CORE_TOOLS = [
     get_screen_activity_tool,
     search_screen_activity_tool,
     save_user_preference_tool,
+    fetch_url_tool,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -122,7 +121,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'update_calendar_event_tool': 'Updating calendar event',
         'delete_calendar_event_tool': 'Deleting calendar event',
         'get_gmail_messages_tool': 'Checking Gmail',
-        'perplexity_web_search_tool': 'Searching the web',
+        'web_search': 'Searching the web',
         'get_conversations_tool': 'Searching conversations',
         'search_conversations_tool': 'Searching conversations',
         'get_memories_tool': 'Searching memories',
@@ -136,6 +135,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'get_screen_activity_tool': 'Checking screen activity',
         'search_screen_activity_tool': 'Searching screen activity',
         'save_user_preference_tool': 'Saving preference',
+        'fetch_url_tool': 'Reading page',
     }
 
     if tool_name in tool_display_map:
@@ -143,7 +143,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
 
     if 'calendar' in tool_name.lower():
         return 'Checking calendar'
-    elif 'perplexity' in tool_name.lower() or 'search' in tool_name.lower():
+    elif 'web_search' in tool_name.lower():
         return 'Searching the web'
     elif 'memory' in tool_name.lower():
         return 'Searching memories'
@@ -223,6 +223,13 @@ TOOL_SEARCH_TOOL = {
     "name": "tool_search_tool_regex",
 }
 
+# Web search tool — Anthropic's built-in server-side web search (replaces Perplexity)
+WEB_SEARCH_TOOL = {
+    "type": "web_search_20260209",
+    "name": "web_search",
+    "max_uses": 5,
+}
+
 
 def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     """Convert all tools and build name->object registry.
@@ -236,6 +243,9 @@ def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
         tool definitions and tool_registry maps tool name -> LangChain tool object.
     """
     schemas = []
+
+    # Add built-in server tools
+    schemas.append(WEB_SEARCH_TOOL)
 
     # Add tool search tool if there are app tools to discover
     if app_tools:
@@ -352,7 +362,9 @@ async def _run_anthropic_agent_stream(
     and feeds results back until the model stops requesting tools.
     """
     # System prompt with cache_control for Anthropic prompt caching
-    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    # TTL=1h: Anthropic changed default from 1h→5m on 2026-03-06; interactive chat
+    # sessions have gaps >5min between turns, so the 5-min default kills cache hit rate.
+    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
 
     loop_iteration = 0
 
@@ -392,7 +404,12 @@ async def _run_anthropic_agent_stream(
 
                     # Emit status when tool call starts
                     elif event.type == "content_block_start":
-                        if hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
+                        if hasattr(event.content_block, 'type') and event.content_block.type == "server_tool_use":
+                            server_tool_name = getattr(event.content_block, 'name', '')
+                            if server_tool_name == 'web_search':
+                                await callback.put_thought('Searching the web')
+                            logger.info(f"Server tool invoked: {server_tool_name}")
+                        elif hasattr(event.content_block, 'type') and event.content_block.type == "tool_use":
                             tool_name = event.content_block.name
                             # Skip tool_search_tool — handled server-side by Anthropic
                             if 'tool_search' in tool_name:
@@ -531,6 +548,31 @@ async def execute_agentic_chat_stream(
             logger.info(f"Loaded {len(app_tools)} app tools (deferred via tool search)")
     except Exception as e:
         logger.error(f"Error loading app tools: {e}")
+
+    # Append app tool awareness to system prompt so Claude knows to search for them
+    if app_tools:
+        app_names = set()
+        for t in app_tools:
+            # Tool names are prefixed with app_id; extract the human-readable app name from description
+            app_names.add(t.name)
+        app_tool_names = ", ".join(sorted(app_names))
+        system_prompt += f"""
+
+<available_app_tools>
+You have access to additional tools from the user's connected apps. These tools are discoverable via the tool_search_tool_regex tool. When the user asks you to do something related to an external service (e.g. GitHub, Twitter, Slack, Google Calendar, Notion, Shopify, WhatsApp, Splitwise, etc.), search for the relevant tool using tool_search_tool_regex with a keyword like "github", "issue", "tweet", etc.
+
+Available app tool names: {app_tool_names}
+
+IMPORTANT: Always search for and use these tools when relevant. Never tell the user you don't have access to an integration if a matching tool exists above.
+</available_app_tools>"""
+
+    # Instruct Claude to use fetch_url_tool for any direct URL in the conversation.
+    # Without this, Claude's built-in "I can't browse links" behavior takes over.
+    system_prompt += """
+
+<url_fetching_instructions>
+You have fetch_url_tool available. When the user shares any URL (starting with http:// or https://), you MUST call fetch_url_tool to read its content before responding. Never say you cannot browse, visit, or read a URL. Always attempt to fetch it first.
+</url_fetching_instructions>"""
 
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)

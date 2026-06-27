@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -15,7 +16,7 @@ import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -81,7 +82,8 @@ class MemoryItem extends StatelessWidget {
                     filter: ImageFilter.blur(sigmaX: 2.0, sigmaY: 2.0),
                     child: GestureDetector(
                       onTap: () {
-                        MixpanelManager().paywallOpened('Action Item');
+                        if (!context.read<UsageProvider>().showSubscriptionUI) return;
+                        PlatformManager.instance.analytics.paywallOpened('Action Item');
                         routeToPage(context, const UsagePage(showUpgradeDialog: true));
                         return;
                       },
@@ -91,10 +93,12 @@ class MemoryItem extends StatelessWidget {
                           color: Colors.black.withValues(alpha: 0.01),
                           borderRadius: const BorderRadius.all(Radius.circular(8)),
                         ),
-                        child: const Text(
-                          'Upgrade to unlimited',
-                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                        ),
+                        child: context.watch<UsageProvider>().showSubscriptionUI
+                            ? const Text(
+                                'Upgrade to unlimited',
+                                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                              )
+                            : const SizedBox.shrink(),
                       ),
                     ),
                   ),
@@ -121,7 +125,7 @@ class MemoryItem extends StatelessWidget {
         final memoryContent = memory.content.decodeString;
 
         provider.deleteMemory(memory);
-        MixpanelManager().memoriesPageDeletedMemory(memory);
+        PlatformManager.instance.analytics.memoriesPageDeletedMemory(memory);
 
         if (context.findAncestorStateOfType<MemoriesPageState>() != null) {
           context.findAncestorStateOfType<MemoriesPageState>()!.showDeleteNotification(memoryContent, memory);
@@ -255,7 +259,7 @@ class MemoryItem extends StatelessWidget {
   //     ],
   //     onSelected: (visibility) {
   //       provider.updateMemoryVisibility(memory, visibility);
-  //       MixpanelManager().memoryVisibilityChanged(memory, visibility);
+  //       PlatformManager.instance.analytics.memoryVisibilityChanged(memory, visibility);
   //     },
   //   );
   // }

@@ -22,7 +22,7 @@ for mod in [
     if mod not in sys.modules:
         sys.modules[mod] = MagicMock()
 
-from models.conversation import ConversationSource
+from models.conversation_enums import ConversationSource
 
 
 class TestConversationSourceMissing:
@@ -38,11 +38,11 @@ class TestConversationSourceMissing:
         assert ConversationSource('workflow') == ConversationSource.workflow
         assert ConversationSource('external_integration') == ConversationSource.external_integration
 
-    def test_phone_call_resolves_to_unknown(self):
-        """The specific value that caused issue #5409."""
+    def test_phone_call_is_known_member(self):
+        """phone_call was added as a real enum member after issue #5409."""
         result = ConversationSource('phone_call')
-        assert result == ConversationSource.unknown
-        assert result.value == 'unknown'
+        assert result == ConversationSource.phone_call
+        assert result.value == 'phone_call'
 
     def test_arbitrary_unknown_resolves(self):
         """Any unrecognized string resolves to unknown."""
@@ -91,7 +91,8 @@ class TestConversationModelWithUnknownSource:
 
     def test_conversation_with_phone_call_source(self):
         """Conversation model accepts phone_call without ValidationError."""
-        from models.conversation import Conversation, Structured
+        from models.conversation import Conversation
+        from models.structured import Structured
 
         conv = Conversation(
             id='test-123',
@@ -101,11 +102,12 @@ class TestConversationModelWithUnknownSource:
             source='phone_call',
             structured=Structured(title='Test', overview='Test overview', emoji='🎤'),
         )
-        assert conv.source == ConversationSource.unknown
+        assert conv.source == ConversationSource.phone_call
 
     def test_conversation_with_known_source(self):
         """Known source values still work in the model."""
-        from models.conversation import Conversation, Structured
+        from models.conversation import Conversation
+        from models.structured import Structured
 
         conv = Conversation(
             id='test-456',
@@ -119,7 +121,8 @@ class TestConversationModelWithUnknownSource:
 
     def test_conversation_dict_serialization(self):
         """Conversation with unknown source serializes without error."""
-        from models.conversation import Conversation, Structured
+        from models.conversation import Conversation
+        from models.structured import Structured
 
         conv = Conversation(
             id='test-789',
@@ -130,4 +133,4 @@ class TestConversationModelWithUnknownSource:
             structured=Structured(title='Test', overview='Test overview', emoji='🎤'),
         )
         d = conv.dict()
-        assert d['source'] == ConversationSource.unknown
+        assert d['source'] == ConversationSource.phone_call

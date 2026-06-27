@@ -8,7 +8,9 @@ from unittest.mock import patch, MagicMock
 import os
 import pytest
 import sys
+from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType
+from zoneinfo import ZoneInfo
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -27,8 +29,80 @@ class _AutoMockModule(ModuleType):
         return mock
 
 
+class _ToolWrapper:
+    """Tiny LangChain tool stand-in for tests that call `.invoke(...)`."""
+
+    def __init__(self, fn):
+        self.fn = fn
+        self.name = fn.__name__
+
+    def __call__(self, *args, **kwargs):
+        return self.fn(*args, **kwargs)
+
+    def invoke(self, args=None, config=None):
+        if args is not None and not isinstance(args, dict):
+            if config is not None:
+                return self.fn(args, config=config)
+            return self.fn(args)
+
+        kwargs = dict(args or {})
+        if config is not None:
+            kwargs['config'] = config
+        return self.fn(**kwargs)
+
+
+class _PytzZoneInfo(tzinfo):
+    """Minimal pytz timezone stand-in with `.localize(...)` for summary tests."""
+
+    def __init__(self, key):
+        try:
+            self._zone = ZoneInfo(key)
+        except Exception:
+            if key == 'UTC':
+                self._zone = timezone.utc
+            elif key == 'Asia/Kolkata':
+                self._zone = timezone(timedelta(hours=5, minutes=30), key)
+            else:
+                raise
+
+    def localize(self, value):
+        if value.tzinfo is not None:
+            return value.astimezone(self)
+        return value.replace(tzinfo=self)
+
+    def _delegate_value(self, value):
+        if value is not None and value.tzinfo is self:
+            return value.replace(tzinfo=self._zone)
+        return value
+
+    def utcoffset(self, value):
+        return self._zone.utcoffset(self._delegate_value(value))
+
+    def dst(self, value):
+        return self._zone.dst(self._delegate_value(value))
+
+    def tzname(self, value):
+        return self._zone.tzname(self._delegate_value(value))
+
+    def fromutc(self, value):
+        localized = value.replace(tzinfo=timezone.utc).astimezone(self._zone)
+        return localized.replace(tzinfo=self)
+
+
+def _tool(func=None, *args, **kwargs):
+    def decorator(fn):
+        return _ToolWrapper(fn)
+
+    if callable(func):
+        return decorator(func)
+    return decorator
+
+
 _stubs = [
+    'anthropic',
+    'av',
     'database._client',
+    'database.cache',
     'database.redis_db',
     'database.conversations',
     'database.memories',
@@ -46,13 +120,44 @@ _stubs = [
     'database.daily_summaries',
     'database.fair_use',
     'database.auth',
+    'database.llm_usage',
+    'database.phone_calls',
+    'deepgram',
+    'deepgram.clients',
+    'deepgram.clients.live',
+    'deepgram.clients.live.v1',
     'firebase_admin',
     'firebase_admin.messaging',
     'firebase_admin.auth',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
     'google.cloud.firestore_v1.FieldFilter',
+    'langchain_core',
+    'langchain_core.callbacks',
+    'langchain_core.language_models',
+    'langchain_core.output_parsers',
+    'langchain_core.outputs',
+    'langchain_core.prompts',
+    'langchain_core.runnables',
+    'langchain_core.tools',
+    'langchain_google_genai',
+    'langchain_openai',
+    'openai',
+    'PIL',
+    'PIL.Image',
     'pinecone',
+    'pycountry',
+    'pytz',
+    'scipy',
+    'scipy.spatial',
+    'scipy.spatial.distance',
+    'tiktoken',
+    'twilio',
+    'twilio.jwt',
+    'twilio.jwt.access_token',
+    'twilio.jwt.access_token.grants',
+    'twilio.request_validator',
+    'twilio.rest',
     'typesense',
     'opuslib',
     'pydub',
@@ -67,12 +172,23 @@ _stubs = [
     'utils.conversations.process_conversation',
     'utils.notifications',
     'utils.apps',
+    'utils.llm.clients',
     'utils.llm.memories',
     'utils.llm.chat',
+    'utils.llm.usage_tracker',
+    'websockets',
 ]
 for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
+
+# Concrete attributes used by imported modules during lightweight tests.
+sys.modules['langchain_core.callbacks'].BaseCallbackHandler = object
+sys.modules['langchain_core.outputs'].LLMResult = object
+sys.modules['langchain_core.runnables'].RunnableConfig = dict
+sys.modules['langchain_core.tools'].tool = _tool
+sys.modules['pytz'].timezone = _PytzZoneInfo
+sys.modules['pytz'].utc = timezone.utc
 
 # Override specific attributes that need concrete values
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
@@ -80,6 +196,28 @@ sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenErr
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+
+class TestLightweightStubHelpers:
+    """Keep lightweight dependency stubs aligned with the real interfaces tests rely on."""
+
+    def test_tool_wrapper_invoke_accepts_string_input(self):
+        def echo(value):
+            return value
+
+        wrapped = _tool(echo)
+
+        assert wrapped.invoke('hello') == 'hello'
+
+    def test_pytz_stub_supports_localize_and_datetime_now(self):
+        import pytz
+
+        user_tz = pytz.timezone('UTC')
+        localized = user_tz.localize(datetime(2026, 6, 10, 12, 0, 0))
+
+        assert localized.tzinfo is user_tz
+        assert localized.astimezone(pytz.utc).hour == 12
+        assert datetime.now(user_tz).tzinfo is user_tz
 
 
 def _make_conversation(locked=False, conversation_id='conv-1'):
@@ -242,32 +380,6 @@ class TestFolderConversationRedaction:
 
 
 # =============================================================================
-# Test conversations.py — public conversations filtering
-# =============================================================================
-
-
-class TestPublicConversationFilter:
-    """L1: Public conversation listing must exclude locked conversations."""
-
-    def test_public_endpoint_filters_locked(self):
-        """get_public_conversations must exclude locked conversations."""
-        import database.redis_db as redis_db
-        import database.conversations as conversations_db
-
-        redis_db.get_public_conversations = MagicMock(return_value=['conv-1', 'conv-2'])
-        redis_db.get_conversation_uids = MagicMock(return_value={'conv-1': 'uid1', 'conv-2': 'uid2'})
-        conversations_db.get_public_conversations = MagicMock(
-            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        )
-
-        from routers.conversations import get_public_conversations
-
-        result = get_public_conversations(offset=0, limit=1000)
-        assert len(result) == 1
-        assert result[0]['id'] == 'conv-2'
-
-
-# =============================================================================
 # Test search redaction — call the real search_conversations function
 # =============================================================================
 
@@ -314,6 +426,68 @@ class TestSearchRedaction:
         assert len(unlocked_item['transcript_segments']) == 1
         # total_pages uses page-level signal, not global found count
         assert result['total_pages'] == 1
+
+    def test_search_skips_malformed_timestamp_hit(self):
+        """A single hit with a missing/null timestamp must be skipped, not 500 the whole page."""
+        mock_client = MagicMock()
+        mock_client.collections.__getitem__.return_value.documents.search.return_value = {
+            'hits': [
+                {
+                    'document': {
+                        **_make_conversation(locked=False, conversation_id='good'),
+                        'created_at': 1704067200,
+                        'started_at': 1704067200,
+                        'finished_at': 1704070800,
+                    }
+                },
+                {
+                    'document': {
+                        # null started_at -> utcfromtimestamp(None) raises; finished_at missing entirely
+                        **_make_conversation(locked=False, conversation_id='bad'),
+                        'created_at': 1704067200,
+                        'started_at': None,
+                    }
+                },
+            ],
+            'found': 2,
+        }
+
+        with patch('utils.conversations.search.client', mock_client):
+            from utils.conversations.search import search_conversations
+
+            result = search_conversations(uid='test-uid', query='test')
+
+        # Does not raise; only the well-formed hit survives, with ISO-string timestamps.
+        assert len(result['items']) == 1
+        kept = result['items'][0]
+        assert isinstance(kept['created_at'], str) and 'T' in kept['created_at']
+        assert isinstance(kept['started_at'], str)
+
+    def test_search_all_malformed_returns_empty_page_not_500(self):
+        """If every hit is malformed, return an empty page instead of 500ing the whole request."""
+        mock_client = MagicMock()
+        mock_client.collections.__getitem__.return_value.documents.search.return_value = {
+            'hits': [
+                {'document': {**_make_conversation(locked=False, conversation_id='bad1'), 'created_at': None}},
+                {
+                    'document': {
+                        **_make_conversation(locked=False, conversation_id='bad2'),
+                        'created_at': 1704067200,
+                        'started_at': None,
+                    }
+                },
+            ],
+            'found': 2,
+        }
+
+        with patch('utils.conversations.search.client', mock_client):
+            from utils.conversations.search import search_conversations
+
+            result = search_conversations(uid='test-uid', query='test', page=2)
+
+        assert result['items'] == []
+        assert result['total_pages'] == 2  # falls back to the page param, not inflated
+        assert result['current_page'] == 2
 
     def test_search_total_pages_does_not_leak_locked_count(self):
         """total_pages must not inflate from locked docs on other pages."""
@@ -487,6 +661,8 @@ class TestWebhookLockEnforcement:
 
     def test_external_integrations_skips_locked(self):
         """trigger_external_integrations must return [] for locked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=True)
@@ -494,11 +670,13 @@ class TestWebhookLockEnforcement:
 
         from utils.app_integrations import trigger_external_integrations
 
-        result = trigger_external_integrations('test-uid', conv)
+        result = asyncio.run(trigger_external_integrations('test-uid', conv))
         assert result == []
 
     def test_external_integrations_does_not_skip_unlocked(self):
         """trigger_external_integrations must call get_available_apps for unlocked."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=False)
@@ -508,13 +686,15 @@ class TestWebhookLockEnforcement:
         with patch('utils.app_integrations.get_available_apps', mock_get_apps):
             from utils.app_integrations import trigger_external_integrations
 
-            result = trigger_external_integrations('test-uid', conv)
+            result = asyncio.run(trigger_external_integrations('test-uid', conv))
         # Verify downstream work was attempted (not short-circuited by lock check)
         mock_get_apps.assert_called_once()
         assert result == []
 
     def test_developer_webhook_skips_locked(self):
         """conversation_created_webhook must return early for locked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=True)
@@ -524,12 +704,14 @@ class TestWebhookLockEnforcement:
         with patch('utils.webhooks.user_webhook_status_db', mock_status):
             from utils.webhooks import conversation_created_webhook
 
-            conversation_created_webhook('test-uid', conv)
+            asyncio.run(conversation_created_webhook('test-uid', conv))
         # If lock check works, user_webhook_status_db is never called
         mock_status.assert_not_called()
 
     def test_developer_webhook_proceeds_for_unlocked(self):
         """conversation_created_webhook must proceed for unlocked conversations."""
+        import asyncio
+
         from models.conversation import Conversation
 
         conv_data = _make_conversation(locked=False)
@@ -539,7 +721,7 @@ class TestWebhookLockEnforcement:
         with patch('utils.webhooks.user_webhook_status_db', mock_status):
             from utils.webhooks import conversation_created_webhook
 
-            conversation_created_webhook('test-uid', conv)
+            asyncio.run(conversation_created_webhook('test-uid', conv))
         # For unlocked, user_webhook_status_db IS called
         mock_status.assert_called_once()
 
@@ -618,6 +800,61 @@ class TestMcpSseLockRedaction:
         assert convs[0]['structured']['title'] == 'Test Conversation'
         assert len(convs[1]['structured']['action_items']) == 1
 
+    def test_mcp_sse_search_memories_filters_locked_and_backfills_limit(self):
+        """MCP SSE search_memories must match REST filtering before applying the requested limit."""
+        import database.memories as memories_db
+        import database.vector_db as vector_db
+
+        vector_db.find_similar_memories = MagicMock(
+            return_value=[
+                {'score': 1.0},
+                {'memory_id': 'locked', 'score': 0.99},
+                {'memory_id': 'rejected', 'score': 0.98},
+                {'memory_id': 'invalidated', 'score': 0.97},
+                {'memory_id': 'visible-1', 'score': 0.70},
+                {'memory_id': 'visible-2', 'score': 0.60},
+                {'memory_id': 'visible-3', 'score': 0.50},
+            ]
+        )
+        locked = _make_memory(locked=True, memory_id='locked')
+        locked['content'] = 'LOCKED_SECRET_MEMORY'
+        rejected = _make_memory(memory_id='rejected')
+        rejected['content'] = 'REJECTED_MEMORY'
+        rejected['user_review'] = False
+        invalidated = _make_memory(memory_id='invalidated')
+        invalidated['content'] = 'INVALIDATED_MEMORY'
+        invalidated['invalid_at'] = '2026-06-10T00:00:00+00:00'
+        memories_db.get_memories_by_ids = MagicMock(
+            return_value=[
+                locked,
+                rejected,
+                invalidated,
+                _make_memory(memory_id='visible-1'),
+                _make_memory(memory_id='visible-2'),
+                _make_memory(memory_id='visible-3'),
+            ]
+        )
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'search_memories', {'query': 'memory', 'limit': 2})
+
+        assert [memory['id'] for memory in result['memories']] == ['visible-1', 'visible-2']
+        assert 'LOCKED_SECRET_MEMORY' not in str(result)
+        assert 'REJECTED_MEMORY' not in str(result)
+        assert 'INVALIDATED_MEMORY' not in str(result)
+        vector_db.find_similar_memories.assert_called_once_with('test-uid', 'memory', threshold=0.0, limit=6)
+
+    def test_mcp_sse_search_memories_schema_documents_limit_bounds(self):
+        """MCP clients should see the same limit bounds enforced by execute_tool."""
+        from routers.mcp_sse import MCP_TOOLS
+
+        search_memories = next(tool for tool in MCP_TOOLS if tool['name'] == 'search_memories')
+        limit_schema = search_memories['inputSchema']['properties']['limit']
+
+        assert limit_schema['minimum'] == 1
+        assert limit_schema['maximum'] == 20
+
 
 # =============================================================================
 # Test users.py endpoints
@@ -675,8 +912,7 @@ class TestUsersLockEnforcement:
         assert len(conversations_passed) == 1
         assert conversations_passed[0].id == 'conv-2'
 
-    @pytest.mark.asyncio
-    async def test_gdpr_export_includes_locked(self):
+    def test_gdpr_export_includes_locked(self):
         """H6: GDPR export must include locked conversations (Art. 15)."""
         import database.conversations as conversations_db
         import database.memories as memories_db
@@ -685,25 +921,32 @@ class TestUsersLockEnforcement:
         locked_conv = _make_conversation(locked=True)
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
         conversations_db.iter_all_conversations = MagicMock(return_value=iter([locked_conv, unlocked_conv]))
-        memories_db.get_memories = MagicMock(return_value=[])
+        memories_db.get_non_filtered_memories = MagicMock(return_value=[])
         chat_db.iter_all_messages = MagicMock(return_value=iter([]))
 
-        # These functions are imported via 'from database.users import *' so they live
-        # in the routers.users namespace. Use create=True since the wildcard import
-        # may not have populated them in the stub environment.
-        # Patches must stay active during body consumption since generate() is lazy.
-        with patch('routers.users.get_user_profile', return_value={'name': 'Test'}, create=True):
-            with patch('routers.users.get_people', return_value=[], create=True):
-                with patch('routers.users.get_standalone_action_items', return_value=[], create=True):
+        # The export generator lives in services.users.data_export, which binds
+        # these helpers at module level. Patch the service-level symbols so the
+        # stub environment returns controlled data instead of MagicMock defaults.
+        # Patches must stay active during body consumption since the generator is lazy.
+        with patch('services.users.data_export.get_user_profile', return_value={'name': 'Test'}):
+            with patch('services.users.data_export.get_people', return_value=[]):
+                with patch('services.users.data_export.get_standalone_action_items', return_value=[]):
                     from routers.users import export_all_user_data
 
-                    response = await export_all_user_data(uid='test-uid')
+                    response = export_all_user_data(uid='test-uid')
 
-                    # Consume body inside patches — generate() is a lazy generator
-                    body_parts = []
-                    async for chunk in response.body_iterator:
-                        body_parts.append(chunk)
-                    body = ''.join(body_parts)
+                    # Consume body inside patches — the generator is lazy.
+                    # StreamingResponse wraps sync generators as async iterators,
+                    # so iterate the underlying generator directly.
+                    import asyncio
+
+                    async def _consume():
+                        parts = []
+                        async for chunk in response.body_iterator:
+                            parts.append(chunk)
+                        return ''.join(parts)
+
+                    body = asyncio.run(_consume())
 
         import json
 
@@ -758,16 +1001,18 @@ class TestScheduledDailySummaryLockFilter:
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
         conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
 
-        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
-            with patch(
-                'utils.other.notifications.generate_comprehensive_daily_summary',
-                return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
-            ) as mock_gen:
-                daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
-                with patch('utils.other.notifications.send_notification'):
-                    from utils.other.notifications import _send_summary_notification
+        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
+            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+                with patch(
+                    'utils.other.notifications.generate_comprehensive_daily_summary',
+                    return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
+                ) as mock_gen:
+                    daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
+                    daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
+                    with patch('utils.other.notifications.send_notification'):
+                        from utils.other.notifications import _send_summary_notification
 
-                    _send_summary_notification(('test-uid', 'token', 'UTC'))
+                        _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # generate_comprehensive_daily_summary must be called only with unlocked conversations
         mock_gen.assert_called_once()
@@ -778,14 +1023,17 @@ class TestScheduledDailySummaryLockFilter:
     def test_scheduled_summary_skips_when_all_locked(self):
         """_send_summary_notification returns early when all conversations are locked."""
         import database.conversations as conversations_db
+        import database.daily_summaries as daily_summaries_db
 
         conversations_db.get_conversations = MagicMock(return_value=[_make_conversation(locked=True)])
+        daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
 
-        with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
-            with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
-                from utils.other.notifications import _send_summary_notification
+        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
+            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+                with patch('utils.other.notifications.generate_comprehensive_daily_summary') as mock_gen:
+                    from utils.other.notifications import _send_summary_notification
 
-                _send_summary_notification(('test-uid', 'token', 'UTC'))
+                    _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # Should not call LLM when no unlocked conversations remain
         mock_gen.assert_not_called()
@@ -920,8 +1168,8 @@ class TestMentorProactiveLockFilter:
                                             )
                                             conversations_db.get_conversations = MagicMock(return_value=[])
 
-                                            with patch('utils.app_integrations.Conversation') as mock_conv_cls:
-                                                mock_conv_cls.conversations_to_string = MagicMock(return_value='')
+                                            with patch('utils.app_integrations.conversations_to_string') as mock_render:
+                                                mock_render.return_value = ''
 
                                                 draft = MagicMock()
                                                 draft.notification_text = ''
@@ -938,10 +1186,14 @@ class TestMentorProactiveLockFilter:
                                                     )
 
                                             # conversations_to_string called with only unlocked
-                                            mock_conv_cls.conversations_to_string.assert_called_once()
-                                            convos_passed = mock_conv_cls.conversations_to_string.call_args[0][0]
+                                            mock_render.assert_called_once()
+                                            convos_passed = mock_render.call_args[0][0]
                                             assert len(convos_passed) == 1
-                                            assert convos_passed[0].get('is_locked') is not True
+                                            conv = convos_passed[0]
+                                            is_locked = (
+                                                conv.get('is_locked') if isinstance(conv, dict) else conv.is_locked
+                                            )
+                                            assert is_locked is not True
 
 
 # =============================================================================
@@ -952,8 +1204,7 @@ class TestMentorProactiveLockFilter:
 class TestIntegrationSearchLockRedaction:
     """Integration search/list endpoints must redact title/overview for locked conversations."""
 
-    @pytest.mark.asyncio
-    async def test_integration_search_redacts_locked_title_overview(self):
+    def test_integration_search_redacts_locked_title_overview(self):
         """Integration search re-fetches full convos — must also blank title/overview."""
         import database.conversations as conversations_db
         import database.apps as apps_db
@@ -983,7 +1234,7 @@ class TestIntegrationSearchLockRedaction:
 
                     from routers.integration import search_conversations_via_integration
 
-                    result = await search_conversations_via_integration(
+                    result = search_conversations_via_integration(
                         request=MagicMock(),
                         app_id='app-1',
                         uid='test-uid',
@@ -1151,8 +1402,7 @@ class TestPersonaGenerationLockFilter:
 class TestIntegrationListLockRedaction:
     """get_conversations_via_integration must redact locked conversation content."""
 
-    @pytest.mark.asyncio
-    async def test_integration_list_redacts_locked_title_overview(self):
+    def test_integration_list_redacts_locked_title_overview(self):
         """Integration list must blank title/overview/action_items/events/transcript for locked."""
         import copy
         import database.conversations as conversations_db
@@ -1176,7 +1426,7 @@ class TestIntegrationListLockRedaction:
 
                 from routers.integration import get_conversations_via_integration
 
-                result = await get_conversations_via_integration(
+                result = get_conversations_via_integration(
                     request=MagicMock(),
                     app_id='app-1',
                     uid='test-uid',
@@ -1274,8 +1524,10 @@ class TestSuggestGoalLockFilter:
         mock_track.__exit__ = MagicMock(return_value=False)
 
         with patch('utils.llm.goals.track_usage', return_value=mock_track):
-            with patch('utils.llm.goals.llm_mini') as mock_llm:
+            with patch('utils.llm.goals.get_llm') as mock_get_llm:
+                mock_llm = MagicMock()
                 mock_llm.invoke.return_value = mock_llm_response
+                mock_get_llm.return_value = mock_llm
 
                 from utils.llm.goals import suggest_goal
 
@@ -1286,3 +1538,225 @@ class TestSuggestGoalLockFilter:
         prompt_text = str(call_args)
         assert 'LOCKED_SECRET' not in prompt_text
         assert 'visible goal-related memory' in prompt_text
+
+
+# =============================================================================
+# Test MCP memory delete/edit — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestMcpMemoryLockEnforcement:
+    """Gaps 6-7: MCP REST delete/edit must reject locked memories."""
+
+    def test_mcp_delete_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp import delete_memory
+
+        try:
+            delete_memory(memory_id='mem-1', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_mcp_delete_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.delete_memory = MagicMock()
+
+        from routers.mcp import delete_memory
+
+        result = delete_memory(memory_id='mem-1', uid='test-uid')
+        assert result == {"status": "ok"}
+        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+
+    def test_mcp_delete_memory_404_missing(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=None)
+
+        from routers.mcp import delete_memory
+
+        try:
+            delete_memory(memory_id='nonexistent', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 404
+
+    def test_mcp_edit_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp import edit_memory
+
+        try:
+            edit_memory(memory_id='mem-1', value='new content', uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_mcp_edit_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.edit_memory = MagicMock()
+
+        from routers.mcp import edit_memory
+
+        result = edit_memory(memory_id='mem-1', value='new content', uid='test-uid')
+        assert result == {"status": "ok"}
+        memories_db.edit_memory.assert_called_once_with('test-uid', 'mem-1', 'new content')
+
+
+# =============================================================================
+# Test MCP SSE memory delete/edit — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestMcpSseMemoryLockEnforcement:
+    """Gaps 8-9: MCP SSE delete/edit must reject locked memories."""
+
+    def test_mcp_sse_delete_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32002
+            assert 'paid plan' in e.message.lower()
+
+    def test_mcp_sse_delete_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.delete_memory = MagicMock()
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'delete_memory', {'memory_id': 'mem-1'})
+        assert result == {"success": True}
+        memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
+
+    def test_mcp_sse_delete_memory_404_missing(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=None)
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'delete_memory', {'memory_id': 'nonexistent'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32001
+
+    def test_mcp_sse_edit_memory_rejects_locked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=True))
+
+        from routers.mcp_sse import execute_tool, ToolExecutionError
+
+        try:
+            execute_tool('test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'})
+            assert False, "Should have raised ToolExecutionError"
+        except ToolExecutionError as e:
+            assert e.code == -32002
+
+    def test_mcp_sse_edit_memory_allows_unlocked(self):
+        import database.memories as memories_db
+
+        memories_db.get_memory = MagicMock(return_value=_make_memory(locked=False))
+        memories_db.edit_memory = MagicMock()
+
+        from routers.mcp_sse import execute_tool
+
+        result = execute_tool('test-uid', 'edit_memory', {'memory_id': 'mem-1', 'content': 'new'})
+        assert result == {"success": True}
+        memories_db.edit_memory.assert_called_once_with('test-uid', 'mem-1', 'new')
+
+
+# =============================================================================
+# Test folder move — is_locked enforcement (#6511)
+# =============================================================================
+
+
+class TestFolderMoveLockEnforcement:
+    """Gap 10 + bonus: Folder move must reject locked conversations."""
+
+    def test_move_conversation_rejects_locked(self):
+        import database.conversations as conversations_db
+
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
+
+        from routers.folders import move_conversation_to_folder, MoveConversationRequest
+
+        request = MoveConversationRequest(folder_id='folder-1')
+        try:
+            move_conversation_to_folder('conv-1', request, uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_move_conversation_allows_unlocked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+        folders_db.move_conversation_to_folder = MagicMock()
+
+        from routers.folders import move_conversation_to_folder, MoveConversationRequest
+
+        request = MoveConversationRequest(folder_id='folder-1')
+        result = move_conversation_to_folder('conv-1', request, uid='test-uid')
+        assert result == {"status": "ok"}
+
+    def test_bulk_move_rejects_if_any_locked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(
+            side_effect=[
+                _make_conversation(locked=False, conversation_id='conv-1'),
+                _make_conversation(locked=True, conversation_id='conv-2'),
+            ]
+        )
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+
+        from routers.folders import bulk_move_conversations, BulkMoveConversationsRequest
+
+        request = BulkMoveConversationsRequest(conversation_ids=['conv-1', 'conv-2'])
+        try:
+            bulk_move_conversations('folder-1', request, uid='test-uid')
+            assert False, "Should have raised HTTPException"
+        except Exception as e:
+            assert e.status_code == 402
+
+    def test_bulk_move_allows_all_unlocked(self):
+        import database.conversations as conversations_db
+        import database.folders as folders_db
+
+        conversations_db.get_conversation = MagicMock(
+            side_effect=[
+                _make_conversation(locked=False, conversation_id='conv-1'),
+                _make_conversation(locked=False, conversation_id='conv-2'),
+            ]
+        )
+        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+        folders_db.bulk_move_conversations_to_folder = MagicMock(return_value=2)
+
+        from routers.folders import bulk_move_conversations, BulkMoveConversationsRequest
+
+        request = BulkMoveConversationsRequest(conversation_ids=['conv-1', 'conv-2'])
+        result = bulk_move_conversations('folder-1', request, uid='test-uid')
+        assert result == {"status": "ok", "moved_count": 2}

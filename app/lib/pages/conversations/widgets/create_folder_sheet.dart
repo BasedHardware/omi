@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,7 +7,6 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/folder.dart';
 import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -93,7 +93,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
         success = result != null;
 
         if (success) {
-          MixpanelManager().folderUpdated(folderId: widget.folderToEdit!.id, folderName: name);
+          PlatformManager.instance.analytics.folderUpdated(folderId: widget.folderToEdit!.id, folderName: name);
         }
       } else {
         final result = await folderProvider.createFolder(
@@ -105,7 +105,12 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
         success = result != null;
 
         if (result != null) {
-          MixpanelManager().folderCreated(folderId: result.id, folderName: name, icon: _selectedIcon, color: colorHex);
+          PlatformManager.instance.analytics.folderCreated(
+            folderId: result.id,
+            folderName: name,
+            icon: _selectedIcon,
+            color: colorHex,
+          );
         }
       }
 

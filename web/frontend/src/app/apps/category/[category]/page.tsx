@@ -3,7 +3,7 @@ import { FeaturedPluginCard } from '../../components/plugin-card/featured';
 import { ScrollableCategoryNav } from '../../components/scrollable-category-nav';
 import { CategoryBreadcrumb } from '../../components/category-breadcrumb';
 import { CategoryHeader } from '../../components/category-header';
-import type { Plugin, PluginStat } from '../../components/types';
+import type { Plugin } from '../../components/types';
 import { Metadata } from 'next';
 import {
   getBaseMetadata,
@@ -17,28 +17,18 @@ import { ProductBanner } from '@/src/app/components/product-banner';
 import { getAppsByCategory } from '@/src/lib/api/apps';
 
 interface CategoryPageProps {
-  params: {
+  params: Promise<{
     category: string;
-  };
+  }>;
 }
 
 async function getCategoryData(category: string) {
-  const [categoryPlugins, statsResponse] = await Promise.all([
-    getAppsByCategory(category),
-    fetch(
-      'https://raw.githubusercontent.com/BasedHardware/omi/refs/heads/main/community-plugin-stats.json',
-      {
-        next: { revalidate: 3600 },
-      },
-    ),
-  ]);
-
-  const stats = (await statsResponse.json()) as PluginStat[];
-
-  return { categoryPlugins, stats };
+  const categoryPlugins = await getAppsByCategory(category);
+  return { categoryPlugins };
 }
 
-export async function generateMetadata({ params }: CategoryPageProps): Promise<Metadata> {
+export async function generateMetadata(props: CategoryPageProps): Promise<Metadata> {
+  const params = await props.params;
   const { category } = params;
   const { categoryPlugins } = await getCategoryData(category);
   const metadata = getCategoryMetadata(category);
@@ -100,8 +90,9 @@ function getNewOrRecentApps(plugins: Plugin[]): Plugin[] {
   }
 }
 
-export default async function CategoryPage({ params }: CategoryPageProps) {
-  const { categoryPlugins, stats } = await getCategoryData(params.category);
+export default async function CategoryPage(props: CategoryPageProps) {
+  const params = await props.params;
+  const { categoryPlugins } = await getCategoryData(params.category);
   const newOrRecentApps = getNewOrRecentApps(categoryPlugins);
   const mostPopular =
     categoryPlugins.length > 6
@@ -154,11 +145,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               </h3>
               <div className="grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 lg:gap-4">
                 {newOrRecentApps.map((plugin) => (
-                  <FeaturedPluginCard
-                    key={plugin.id}
-                    plugin={plugin}
-                    stat={stats.find((s) => s.id === plugin.id)}
-                  />
+                  <FeaturedPluginCard key={plugin.id} plugin={plugin} />
                 ))}
               </div>
             </section>
@@ -174,7 +161,6 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
                     <CompactPluginCard
                       key={plugin.id}
                       plugin={plugin}
-                      stat={stats.find((s) => s.id === plugin.id)}
                       index={index + 1}
                     />
                   ))}
@@ -189,12 +175,7 @@ export default async function CategoryPage({ params }: CategoryPageProps) {
               </h3>
               <div className="grid grid-cols-1 gap-y-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-3 lg:gap-4">
                 {allApps.map((plugin, index) => (
-                  <CompactPluginCard
-                    key={plugin.id}
-                    plugin={plugin}
-                    stat={stats.find((s) => s.id === plugin.id)}
-                    index={index + 1}
-                  />
+                  <CompactPluginCard key={plugin.id} plugin={plugin} index={index + 1} />
                 ))}
               </div>
             </section>

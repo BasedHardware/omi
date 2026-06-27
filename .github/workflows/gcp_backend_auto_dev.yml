@@ -32,6 +32,9 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
@@ -64,6 +67,18 @@ jobs:
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
+      # Mirror every secret declared in backend-secrets chart into Cloud Run
+      # (additive). The GKE pods get them via the helm chart's ExternalSecret;
+      # Cloud Run needs the matching --update-secrets bindings. Without this,
+      # a new chart key (e.g. X_OAUTH_CLIENT_ID) ships to GKE but stays
+      # undefined on the Cloud Run revisions that api.omi.me / api.omiapi.com
+      # actually serve, and the new code reads None.
+      - name: Sync Cloud Run secrets from backend-secrets chart
+        run: |
+          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          chmod +x /usr/local/bin/yq
+          bash backend/scripts/sync_cloudrun_secrets_from_chart.sh dev backend backend-sync backend-integration
+
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
         uses: google-github-actions/deploy-cloudrun@v2
@@ -77,12 +92,12 @@ jobs:
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
-      - name: Connect to GKE cluster
-        run: |
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
-          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Install Helm
         uses: azure/setup-helm@v3

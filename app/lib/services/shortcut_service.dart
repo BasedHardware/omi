@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/services.dart';
 
 class ShortcutInfo {
@@ -21,7 +19,7 @@ class ShortcutInfo {
 class ShortcutService {
   static const _channel = MethodChannel('com.omi/shortcuts');
 
-  static bool get isSupported => Platform.isMacOS;
+  static bool get isSupported => false;
 
   // Callback for when native requests to open keyboard shortcuts page
   static Function? onOpenKeyboardShortcutsPage;

@@ -108,15 +108,11 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                     },
                                   );
                                 } else {
-                                  // Update checkbox based on actual permission status
                                   bool wasGranted = permissionStatus.isGranted;
                                   provider.updateLocationPermission(wasGranted);
-
-                                  // Request "Always" permission (iOS may show this later)
-                                  // But keep checkbox checked if "When in use" was granted
+                                  // iOS-only: chain Always request so background
+                                  // location updates work in BGTask windows.
                                   await provider.alwaysAllowLocation();
-
-                                  // If "When in use" was granted, keep it checked even if "Always" was denied
                                   if (wasGranted) {
                                     provider.updateLocationPermission(true);
                                   }
@@ -167,32 +163,14 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                     provider.updateNotificationPermission(true);
                                   }
                                   if (await Permission.location.serviceStatus.isEnabled) {
-                                    await Permission.locationWhenInUse.request().then((value) async {
-                                      if (value.isGranted) {
-                                        await Permission.locationAlways.request().then((value) async {
-                                          if (value.isGranted) {
-                                            provider.updateLocationPermission(true);
-                                            widget.goNext();
-                                            provider.setLoading(false);
-                                          } else {
-                                            Future.delayed(const Duration(milliseconds: 2500), () async {
-                                              if (await Permission.locationAlways.status.isGranted) {
-                                                provider.updateLocationPermission(true);
-                                              }
-                                              widget.goNext();
-                                              provider.setLoading(false);
-                                            });
-                                          }
-                                        });
-                                      } else {
-                                        widget.goNext();
-                                        provider.setLoading(false);
-                                      }
-                                    });
-                                  } else {
-                                    widget.goNext();
-                                    provider.setLoading(false);
+                                    final res = await Permission.locationWhenInUse.request();
+                                    provider.updateLocationPermission(res.isGranted);
+                                    if (Platform.isIOS && res.isGranted) {
+                                      await provider.alwaysAllowLocation();
+                                    }
                                   }
+                                  widget.goNext();
+                                  provider.setLoading(false);
                                 });
                               },
                               style: ElevatedButton.styleFrom(

@@ -21,6 +21,11 @@ int storage_init();
  */
 void storage_stop_transfer();
 
+/**
+ * @brief Returns true when storage sync transfer is active.
+ */
+bool storage_transfer_active(void);
+
 #endif // CONFIG_OMI_ENABLE_OFFLINE_STORAGE
 
 #endif // STORAGE_H

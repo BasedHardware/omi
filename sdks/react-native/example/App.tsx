@@ -306,7 +306,7 @@ export default function App() {
         sample_rate: '16000',
         encoding: 'opus',
         channels: '1',
-        model: 'nova-2',
+        model: 'nova-3',
         language: 'en-US',
         smart_format: 'true',
         interim_results: 'false',

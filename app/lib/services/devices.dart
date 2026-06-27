@@ -1,7 +1,4 @@
 import 'dart:async';
-import 'dart:io';
-
-import 'package:flutter/foundation.dart';
 
 import 'package:collection/collection.dart';
 
@@ -9,7 +6,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
-import 'package:omi/services/devices/discovery/bluetooth_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
 import 'package:omi/services/devices/errors.dart';
@@ -29,14 +25,15 @@ abstract class IDeviceService {
 
   DateTime? getFirstConnectedAt();
 
-  // WiFi sync support - pause BLE reconnection during WiFi transfer
-  void setWifiSyncInProgress(bool value);
   Future<void> disconnectDevice();
+
+  /// Fully tear down connection + transport for a device being forgotten/unpaired.
+  Future<void> forgetDevice(String deviceId);
 }
 
 enum DeviceServiceStatus { init, ready, scanning, stop }
 
-enum DeviceConnectionState { connected, disconnected }
+enum DeviceConnectionState { connected, connecting, disconnected }
 
 /// Feature flags for Omi device capabilities
 /// Must match the firmware definitions in features.h
@@ -50,7 +47,6 @@ class OmiFeatures {
   static const int offlineStorage = 1 << 6;
   static const int ledDimming = 1 << 7;
   static const int micGain = 1 << 8;
-  static const int wifi = 1 << 9;
 }
 
 abstract class IDeviceServiceSubsciption {
@@ -63,10 +59,7 @@ class DeviceService implements IDeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
 
-  final List<DeviceDiscoverer> _discoverers = [
-    NativeBluetoothDiscoverer(),
-    AppleWatchDiscoverer(),
-  ];
+  final List<DeviceDiscoverer> _discoverers = [NativeBluetoothDiscoverer(), AppleWatchDiscoverer()];
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
@@ -214,7 +207,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  // Warn: Should use a better solution to prevent race conditions
   final Mutex _mutex = Mutex();
   @override
   Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
@@ -222,22 +214,21 @@ class DeviceService implements IDeviceService {
     try {
       Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
 
-      // Not force
-      if (!force && _connection != null) {
-        if (_connection?.device.id != deviceId || _connection?.status != DeviceConnectionState.connected) {
-          return null;
-        }
-
-        // Connected
+      // Connected to this device — return it
+      if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
         return _connection;
       }
 
-      // Force
-      if (deviceId == _connection?.device.id && _connection?.status == DeviceConnectionState.connected) {
-        return _connection;
+      // Transport exists for this device but disconnected — native handles reconnection.
+      // Don't dispose and recreate the transport; that would cancel native's auto-reconnect.
+      // But if force=true (user-initiated), reconnect explicitly.
+      if (!force && _connection?.device.id == deviceId) {
+        return null;
       }
 
-      // Connect
+      // No connection or different device — only connect on force (user-initiated)
+      if (!force) return null;
+
       try {
         await _connectToDevice(deviceId);
       } on DeviceConnectionException catch (e) {
@@ -270,15 +261,6 @@ class DeviceService implements IDeviceService {
     return null;
   }
 
-  bool _isWifiSyncInProgress = false;
-  bool get isWifiSyncInProgress => _isWifiSyncInProgress;
-
-  @override
-  void setWifiSyncInProgress(bool value) {
-    _isWifiSyncInProgress = value;
-    Logger.debug("DeviceService: WiFi sync in progress: $value");
-  }
-
   @override
   Future<void> disconnectDevice() async {
     if (_connection != null) {
@@ -286,5 +268,28 @@ class DeviceService implements IDeviceService {
       await _connection?.disconnect();
       _connection = null;
     }
+  }
+
+  @override
+  Future<void> forgetDevice(String deviceId) async {
+    Logger.debug("DeviceService: Forgetting device $deviceId");
+    if (_connection != null) {
+      if (_connection!.status == DeviceConnectionState.connected) {
+        try {
+          await _connection!.disconnect();
+        } catch (e) {
+          Logger.debug("DeviceService: disconnect during forget failed: $e");
+        }
+      }
+
+      try {
+        await _connection!.transport.dispose();
+      } catch (e) {
+        Logger.debug("DeviceService: transport dispose during forget failed: $e");
+      }
+      _connection = null;
+    }
+
+    _devices.removeWhere((d) => d.id == deviceId);
   }
 }

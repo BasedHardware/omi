@@ -29,7 +29,7 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
 logger = logging.getLogger(__name__)
 
-PAID_PLANS = {'unlimited', 'pro'}
+PAID_PLANS = {'unlimited', 'architect', 'pro'}
 
 
 def read_uids(filepath: str) -> list[str]:

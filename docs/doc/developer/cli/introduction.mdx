@@ -1,0 +1,94 @@
+---
+title: "Introduction"
+icon: "terminal"
+description: "Talk to Omi from your terminal. Designed for humans and agents alike."
+---
+
+`omi-cli` is the command-line interface to the Omi developer API. It exposes
+scoped, JSON-friendly verbs for the four primary nouns Omi maintains about you,
+so you can drive Omi from shell pipelines, CI jobs, AI agent harnesses, or your
+own personal scripts.
+
+* **PyPI:** [pypi.org/project/omi-cli](https://pypi.org/project/omi-cli/)
+* **Source:** [github.com/BasedHardware/omi/tree/main/sdks/python-cli](https://github.com/BasedHardware/omi/tree/main/sdks/python-cli)
+* **Install:** `pipx install omi-cli`
+
+<CardGroup cols={2}>
+  <Card title="Memories" icon="brain">
+    Facts and learnings the system knows about you.
+  </Card>
+  <Card title="Conversations" icon="comments">
+    Captured & processed audio/text exchanges.
+  </Card>
+  <Card title="Action items" icon="list-check">
+    Tasks and follow-ups extracted from your captures.
+  </Card>
+  <Card title="Goals" icon="bullseye">
+    Tracked progress metrics over time.
+  </Card>
+</CardGroup>
+
+---
+
+## Why a CLI?
+
+Omi already ships:
+
+- a **Python SDK** ([`omi-sdk`](/doc/developer/sdk/python)) for Bluetooth and audio capture,
+- a **Flutter mobile app**, **macOS desktop app**, and
+- an **MCP server** ([`MCP`](/doc/developer/mcp/introduction)) for Claude Desktop and similar tools.
+
+What was missing was a **terminal-native, scriptable, JSON-emitting** interface
+to the data plane — the thing every modern dev tool ships (`gh`, `stripe`,
+`vercel`, `linear`) and the thing AI agents reach for first.
+
+`omi-cli` fills that gap. The same binary works equally well for a human
+reading their inbox of action items at the terminal and for an LLM agent
+piping `--json` output through `jq`.
+
+## What you can do with it
+
+```bash
+# Read your memories with a category filter, just the IDs and content as JSON:
+omi --json memory list --categories work,skills | jq '.[] | {id, content}'
+
+# Pipe the transcript of a meeting into a new conversation:
+cat meeting_notes.md | omi conversation create --text - --text-source message
+
+# Mark every action item older than 30 days as complete:
+omi --json action-item list --open \
+  | jq -r '.[] | select(.created_at < (now - 30*86400 | todate)) | .id' \
+  | xargs -I{} omi action-item complete {}
+
+# Track progress on a daily goal in a cron job:
+omi goal progress g_xyz "$(get_today_progress)"
+```
+
+## How it relates to MCP
+
+The two are complementary, not competing:
+
+- **MCP** is the right surface for AI assistants embedded in apps that speak
+  the Model Context Protocol (Claude Desktop, Cursor). It's invisible to you —
+  the LLM calls tools directly.
+- **CLI** is the right surface when you want a stable command line your
+  scripts, agents, and shell pipelines can drive — anywhere a process can run.
+
+Both hit the same Omi API and respect the same scopes.
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Install" icon="download" href="/doc/developer/cli/install">
+    `pipx install omi-cli` and you're done.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/doc/developer/cli/quickstart">
+    Your first five commands, end to end.
+  </Card>
+  <Card title="Command reference" icon="book" href="/doc/developer/cli/commands">
+    Every verb, every flag.
+  </Card>
+  <Card title="For agents" icon="robot" href="/doc/developer/cli/agents">
+    Agent contract, exit codes, JSON shape.
+  </Card>
+</CardGroup>

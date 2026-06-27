@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -11,10 +14,12 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 
 enum ConversationBottomBarMode {
@@ -55,6 +60,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   AudioPlayer? _audioPlayer;
   bool _isAudioLoading = false;
   bool _isAudioInitialized = false;
+  Completer<void>? _initCompleter;
   Duration _totalDuration = Duration.zero;
   List<Duration> _trackStartOffsets = [];
 
@@ -185,7 +191,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Track transcript segment tap
     final conversationId = widget.conversation?.id ?? '';
-    MixpanelManager().transcriptSegmentTapped(
+    PlatformManager.instance.analytics.transcriptSegmentTapped(
       conversationId: conversationId,
       segmentStartSeconds: segmentStartSeconds,
       seekPositionSeconds: filePosition,
@@ -195,7 +201,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Auto-play after seeking to segment
     if (_audioPlayer != null && !_audioPlayer!.playing) {
-      MixpanelManager().audioPlaybackStarted(
+      PlatformManager.instance.analytics.audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
@@ -210,6 +216,16 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return;
     }
 
+    // If a concurrent init is already in flight, wait for it instead of starting
+    // a second one — otherwise both calls would create/init the same AudioPlayer
+    // and trigger PlatformException "Platform player already exists".
+    if (_initCompleter != null) {
+      await _initCompleter!.future;
+      return;
+    }
+
+    _initCompleter = Completer<void>();
+
     setState(() {
       _isAudioLoading = true;
     });
@@ -219,29 +235,44 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     try {
       _audioPlayer = AudioPlayer();
 
-      final signedUrlInfos = await getConversationAudioSignedUrls(widget.conversation!.id);
-      final sortedAudioFiles = _getSortedAudioFiles();
-
-      List<AudioSource> audioSources = [];
-      Map<String, String>? fallbackHeaders;
-
-      for (final audioFile in sortedAudioFiles) {
-        final fileId = audioFile.id;
-        // Find matching signed URL info
-        final urlInfo = signedUrlInfos.firstWhere(
-          (info) => info.id == fileId,
-          orElse: () => AudioFileUrlInfo(id: fileId, status: 'pending', duration: 0),
-        );
-
-        if (urlInfo.isCached && urlInfo.signedUrl != null) {
-          // Use signed URL directly
-          audioSources.add(AudioSource.uri(Uri.parse(urlInfo.signedUrl!)));
-        } else {
-          // Fall back to API URL
-          fallbackHeaders ??= await getAudioHeaders();
-          final apiUrl = getAudioStreamUrl(conversationId: widget.conversation!.id, audioFileId: fileId, format: 'wav');
-          audioSources.add(AudioSource.uri(Uri.parse(apiUrl), headers: fallbackHeaders));
+      // The backend builds playback artifacts asynchronously; poll while any
+      // file is pending instead of streaming through the merge-in-request
+      // endpoint that used to time out on long conversations.
+      final deadline = DateTime.now().add(const Duration(seconds: 90));
+      var urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      while (urlsResponse.files.isEmpty || urlsResponse.hasPending) {
+        if (!mounted) return;
+        if (DateTime.now().isAfter(deadline)) {
+          Logger.debug('Audio still pending after poll budget for ${widget.conversation!.id}');
+          AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'pending_timeout');
+          setState(() {
+            _isAudioLoading = false;
+          });
+          if (mounted) {
+            AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+          }
+          return;
         }
+        await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
+        if (!mounted) return;
+        urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      }
+
+      final sortedAudioFiles = _getSortedAudioFiles();
+      List<AudioSource> audioSources = [];
+      for (final audioFile in sortedAudioFiles) {
+        final urlInfo = urlsResponse.files.where((info) => info.id == audioFile.id && info.isCached).firstOrNull;
+        if (urlInfo?.signedUrl != null) {
+          audioSources.add(AudioSource.uri(Uri.parse(urlInfo!.signedUrl!)));
+        }
+      }
+      if (audioSources.isEmpty) {
+        Logger.debug('No cached audio sources for ${widget.conversation!.id}');
+        AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'no_matching_sources');
+        if (mounted) {
+          AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+        }
+        return;
       }
 
       final playlist = ConcatenatingAudioSource(useLazyPreparation: true, children: audioSources);
@@ -250,12 +281,16 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       _isAudioInitialized = true;
     } catch (e) {
       Logger.debug('Error initializing audio: $e');
+      AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation?.id ?? '', reason: e.toString());
     } finally {
+      final completer = _initCompleter;
+      _initCompleter = null;
       if (mounted) {
         setState(() {
           _isAudioLoading = false;
         });
       }
+      completer?.complete();
     }
   }
 
@@ -274,7 +309,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       final currentIndex = _audioPlayer!.currentIndex ?? 0;
       final combinedPosition = _getCombinedPosition(currentIndex, position);
 
-      MixpanelManager().audioPlaybackPaused(
+      PlatformManager.instance.analytics.audioPlaybackPaused(
         conversationId: conversationId,
         positionSeconds: combinedPosition.inSeconds,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
@@ -283,7 +318,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       await _audioPlayer!.pause();
     } else {
       // Track play
-      MixpanelManager().audioPlaybackStarted(
+      PlatformManager.instance.analytics.audioPlaybackStarted(
         conversationId: conversationId,
         durationSeconds: _totalDuration.inSeconds > 0 ? _totalDuration.inSeconds : null,
       );
@@ -727,7 +762,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     // Track seek
     final conversationId = widget.conversation?.id ?? '';
-    MixpanelManager().audioPlaybackSeeked(conversationId: conversationId, toPositionSeconds: targetPosition.inSeconds);
+    PlatformManager.instance.analytics.audioPlaybackSeeked(
+      conversationId: conversationId,
+      toPositionSeconds: targetPosition.inSeconds,
+    );
 
     await _audioPlayer!.seek(positionInTrack, index: targetIndex);
   }

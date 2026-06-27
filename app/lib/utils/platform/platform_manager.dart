@@ -7,7 +7,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debugging/crash_reporter.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -25,14 +25,14 @@ class PlatformManager {
   static PlatformManager get instance => _instance;
 
   // Service instances
-  MixpanelManager get mixpanel => MixpanelManager();
+  AnalyticsManager get analytics => AnalyticsManager();
   IntercomManager get intercom => IntercomManager.instance;
   CrashReporter get crashReporter => CrashlyticsManager.instance;
 
   static Future<void> initializeServices() async {
     _instance._packageInfo = await PackageInfo.fromPlatform();
     _instance._deviceIdHash = await _instance._getDeviceIdHash();
-    await MixpanelManager.init();
+    await AnalyticsManager.init();
     await IntercomManager.instance.initIntercom();
   }
 
@@ -54,9 +54,6 @@ class PlatformManager {
       } else if (Platform.isAndroid) {
         final androidInfo = await deviceInfo.androidInfo;
         deviceIdentifier = androidInfo.id;
-      } else if (Platform.isMacOS) {
-        final macInfo = await deviceInfo.macOsInfo;
-        deviceIdentifier = macInfo.systemGUID ?? '';
       }
     } catch (e) {
       // Fallback to timestamp if device info fails
@@ -75,6 +72,5 @@ class PlatformManager {
 
   bool get isAnalyticsSupported => PlatformService.isAnalyticsSupported;
   bool get isDebuggingSupported => PlatformService.isCrashlyticsSupported;
-  bool get isMacOS => PlatformService.isMacOS;
-  bool get isFCMSupported => Platform.isAndroid || Platform.isIOS || Platform.isMacOS;
+  bool get isFCMSupported => Platform.isAndroid || Platform.isIOS;
 }

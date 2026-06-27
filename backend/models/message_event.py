@@ -2,7 +2,9 @@ from typing import List, Optional, Any
 
 from pydantic import BaseModel
 
-from models.conversation import Conversation, Message, ConversationPhoto
+from models.chat import Message
+from models.conversation import Conversation
+from models.conversation_photo import ConversationPhoto
 
 # Freemium action constants
 FREEMIUM_ACTION_SETUP_ON_DEVICE_STT = "setup_on_device_stt"
@@ -81,6 +83,18 @@ class MessageServiceStatusEvent(MessageEvent):
     event_type: str = "service_status"
     status: str
     status_text: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
+class ConversationSessionEvent(MessageEvent):
+    event_type: str = "conversation_session"
+    conversation_id: str
+    status: str = "in_progress"
 
     def to_json(self):
         j = self.model_dump(mode="json")

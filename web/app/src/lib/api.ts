@@ -34,7 +34,6 @@ import type {
   GenerateDescriptionResponse,
   NotificationScope,
   PaymentPlan,
-  AppApiKey,
 } from '@/types/apps';
 
 // Always use proxy to avoid CORS (browser → proxy → api.omi.me)
@@ -43,10 +42,7 @@ const API_BASE_URL = '/api/proxy';
 /**
  * Make an authenticated API request
  */
-async function fetchWithAuth<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   let token: string | null = null;
 
   try {
@@ -66,8 +62,9 @@ async function fetchWithAuth<T>(
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
         ...options.headers,
       },
     });
@@ -94,7 +91,9 @@ async function fetchWithAuth<T>(
   } catch (fetchError) {
     if (fetchError instanceof TypeError && fetchError.message === 'Failed to fetch') {
       console.error('Network error - possible CORS issue or API unavailable');
-      throw new Error('Network error: Unable to reach the API. Please check your connection.');
+      throw new Error(
+        'Network error: Unable to reach the API. Please check your connection.',
+      );
     }
     throw fetchError;
   }
@@ -114,7 +113,7 @@ export interface GetConversationsParams {
 }
 
 export async function getConversations(
-  params: GetConversationsParams = {}
+  params: GetConversationsParams = {},
 ): Promise<Conversation[]> {
   const {
     limit = 50,
@@ -156,7 +155,7 @@ export async function getConversation(id: string): Promise<Conversation> {
   return fetchWithCache<Conversation>(
     cacheKeys.conversation(id),
     () => fetchWithAuth<Conversation>(`/v1/conversations/${id}`),
-    { ttl: CACHE_TTL.SHORT }
+    { ttl: CACHE_TTL.SHORT },
   );
 }
 
@@ -171,7 +170,7 @@ export interface SearchConversationsParams {
 }
 
 export async function searchConversations(
-  params: SearchConversationsParams
+  params: SearchConversationsParams,
 ): Promise<ConversationSearchResponse> {
   const { query, page = 1, perPage = 10, includeDiscarded = false } = params;
 
@@ -189,10 +188,7 @@ export async function searchConversations(
 /**
  * Toggle conversation starred status
  */
-export async function toggleStarred(
-  id: string,
-  starred: boolean
-): Promise<void> {
+export async function toggleStarred(id: string, starred: boolean): Promise<void> {
   await fetchWithAuth(`/v1/conversations/${id}/starred?starred=${starred}`, {
     method: 'PATCH',
   });
@@ -224,7 +220,7 @@ export interface MergeConversationsResponse {
 
 export async function mergeConversations(
   conversationIds: string[],
-  reprocess: boolean = true
+  reprocess: boolean = true,
 ): Promise<MergeConversationsResponse> {
   return fetchWithAuth<MergeConversationsResponse>('/v1/conversations/merge', {
     method: 'POST',
@@ -286,7 +282,7 @@ interface ActionItemsResponse {
 }
 
 export async function getActionItems(
-  params: GetActionItemsParams = {}
+  params: GetActionItemsParams = {},
 ): Promise<{ items: ActionItem[]; hasMore: boolean }> {
   const { limit = 100, offset = 0, completed } = params;
 
@@ -299,7 +295,9 @@ export async function getActionItems(
     queryParams.set('completed', completed.toString());
   }
 
-  const response = await fetchWithAuth<ActionItemsResponse>(`/v1/action-items?${queryParams}`);
+  const response = await fetchWithAuth<ActionItemsResponse>(
+    `/v1/action-items?${queryParams}`,
+  );
 
   return {
     items: response.action_items || [],
@@ -316,7 +314,7 @@ export interface CreateActionItemParams {
 }
 
 export async function createActionItem(
-  params: CreateActionItemParams
+  params: CreateActionItemParams,
 ): Promise<ActionItem> {
   return fetchWithAuth<ActionItem>('/v1/action-items', {
     method: 'POST',
@@ -329,7 +327,7 @@ export async function createActionItem(
  */
 export async function toggleActionItemCompleted(
   id: string,
-  completed: boolean
+  completed: boolean,
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}/completed?completed=${completed}`, {
     method: 'PATCH',
@@ -341,7 +339,7 @@ export async function toggleActionItemCompleted(
  */
 export async function updateActionItemDueDate(
   id: string,
-  due_at: string | null
+  due_at: string | null,
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
     method: 'PATCH',
@@ -354,7 +352,7 @@ export async function updateActionItemDueDate(
  */
 export async function updateActionItemDescription(
   id: string,
-  description: string
+  description: string,
 ): Promise<void> {
   await fetchWithAuth(`/v1/action-items/${id}`, {
     method: 'PATCH',
@@ -385,9 +383,7 @@ export interface GetMemoriesParams {
   categories?: MemoryCategory[];
 }
 
-export async function getMemories(
-  params: GetMemoriesParams = {}
-): Promise<Memory[]> {
+export async function getMemories(params: GetMemoriesParams = {}): Promise<Memory[]> {
   const { limit = 100, offset = 0, categories } = params;
 
   const queryParams = new URLSearchParams({
@@ -411,9 +407,7 @@ export interface CreateMemoryParams {
   category?: MemoryCategory;
 }
 
-export async function createMemory(
-  params: CreateMemoryParams
-): Promise<Memory> {
+export async function createMemory(params: CreateMemoryParams): Promise<Memory> {
   const memory = await fetchWithAuth<Memory>('/v3/memories', {
     method: 'POST',
     body: JSON.stringify({
@@ -429,10 +423,7 @@ export async function createMemory(
 /**
  * Update memory content
  */
-export async function updateMemoryContent(
-  id: string,
-  content: string
-): Promise<void> {
+export async function updateMemoryContent(id: string, content: string): Promise<void> {
   const encodedValue = encodeURIComponent(content);
   await fetchWithAuth(`/v3/memories/${id}?value=${encodedValue}`, {
     method: 'PATCH',
@@ -445,7 +436,7 @@ export async function updateMemoryContent(
  */
 export async function updateMemoryVisibility(
   id: string,
-  visibility: MemoryVisibility
+  visibility: MemoryVisibility,
 ): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/visibility?value=${visibility}`, {
     method: 'PATCH',
@@ -466,10 +457,7 @@ export async function deleteMemory(id: string): Promise<void> {
 /**
  * Review a memory (accept or reject)
  */
-export async function reviewMemory(
-  id: string,
-  accept: boolean
-): Promise<void> {
+export async function reviewMemory(id: string, accept: boolean): Promise<void> {
   await fetchWithAuth(`/v3/memories/${id}/review?value=${accept}`, {
     method: 'POST',
   });
@@ -606,7 +594,7 @@ export async function sendMessageStream(
       title?: string;
       summary?: string;
     } | null;
-  }
+  },
 ): Promise<void> {
   let token: string | null = null;
 
@@ -631,8 +619,9 @@ export async function sendMessageStream(
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
+      'X-App-Platform': 'web',
     },
     body: JSON.stringify({
       text,
@@ -703,20 +692,11 @@ export async function clearMessages(appId?: string): Promise<void> {
 }
 
 /**
- * Get initial greeting message from an app
- */
-export async function getInitialMessage(appId: string): Promise<ServerMessage> {
-  return fetchWithAuth<ServerMessage>(`/v2/initial-message?app_id=${appId}`, {
-    method: 'POST',
-  });
-}
-
-/**
  * Upload files for chat
  */
 export async function uploadChatFiles(
   files: File[],
-  appId?: string
+  appId?: string,
 ): Promise<MessageFile[]> {
   let token: string | null = null;
 
@@ -747,7 +727,7 @@ export async function uploadChatFiles(
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
@@ -787,7 +767,7 @@ export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
@@ -812,11 +792,13 @@ export type { App } from '@/types/apps';
 /**
  * Get apps grouped by capability (for explore page)
  */
-export async function getAppsGrouped(params: {
-  capability?: string;
-  offset?: number;
-  limit?: number;
-} = {}): Promise<AppsGroupedResponse> {
+export async function getAppsGrouped(
+  params: {
+    capability?: string;
+    offset?: number;
+    limit?: number;
+  } = {},
+): Promise<AppsGroupedResponse> {
   const { capability, offset = 0, limit = 20 } = params;
 
   const queryParams = new URLSearchParams({
@@ -834,7 +816,9 @@ export async function getAppsGrouped(params: {
 /**
  * Search apps with filters
  */
-export async function searchApps(params: AppsSearchParams = {}): Promise<AppsSearchResponse> {
+export async function searchApps(
+  params: AppsSearchParams = {},
+): Promise<AppsSearchResponse> {
   const queryParams = new URLSearchParams();
 
   if (params.q) queryParams.set('q', params.q);
@@ -908,8 +892,8 @@ export async function getInstalledApps(): Promise<AppsSearchResponse> {
  */
 export async function getChatApps(): Promise<App[]> {
   const response = await searchApps({ installed_apps: true, limit: 100 });
-  return response.data.filter(app =>
-    app.capabilities?.includes('chat') || app.capabilities?.includes('persona')
+  return response.data.filter(
+    (app) => app.capabilities?.includes('chat') || app.capabilities?.includes('persona'),
   );
 }
 
@@ -921,8 +905,13 @@ export async function getChatApps(): Promise<App[]> {
  * Create a new app
  */
 export async function createApp(
-  data: CreateAppRequest & { deleted?: boolean; price?: number; thumbnails?: string[]; uid?: string },
-  imageFile?: File
+  data: CreateAppRequest & {
+    deleted?: boolean;
+    price?: number;
+    thumbnails?: string[];
+    uid?: string;
+  },
+  imageFile?: File,
 ): Promise<{ app_id: string }> {
   let token: string | null = null;
 
@@ -948,7 +937,7 @@ export async function createApp(
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
@@ -968,7 +957,7 @@ export async function createApp(
 export async function updateApp(
   appId: string,
   data: Partial<CreateAppRequest>,
-  imageFile?: File
+  imageFile?: File,
 ): Promise<void> {
   let token: string | null = null;
 
@@ -997,7 +986,7 @@ export async function updateApp(
   const response = await fetch(url, {
     method: 'PATCH',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
@@ -1019,23 +1008,9 @@ export async function deleteApp(appId: string): Promise<void> {
 }
 
 /**
- * Change app visibility (public/private)
- */
-export async function changeAppVisibility(
-  appId: string,
-  isPrivate: boolean
-): Promise<void> {
-  await fetchWithAuth(`/v1/apps/${appId}/change-visibility?private=${isPrivate}`, {
-    method: 'PATCH',
-  });
-}
-
-/**
  * Upload app thumbnail
  */
-export async function uploadAppThumbnail(
-  file: File
-): Promise<ThumbnailUploadResponse> {
+export async function uploadAppThumbnail(file: File): Promise<ThumbnailUploadResponse> {
   let token: string | null = null;
 
   try {
@@ -1057,7 +1032,7 @@ export async function uploadAppThumbnail(
   const response = await fetch(url, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      Authorization: `Bearer ${token}`,
     },
     body: formData,
   });
@@ -1076,12 +1051,15 @@ export async function uploadAppThumbnail(
  */
 export async function generateAppDescription(
   name: string,
-  currentDescription: string
+  currentDescription: string,
 ): Promise<string> {
-  const response = await fetchWithAuth<GenerateDescriptionResponse>('/v1/app/generate-description', {
-    method: 'POST',
-    body: JSON.stringify({ name, description: currentDescription }),
-  });
+  const response = await fetchWithAuth<GenerateDescriptionResponse>(
+    '/v1/app/generate-description',
+    {
+      method: 'POST',
+      body: JSON.stringify({ name, description: currentDescription }),
+    },
+  );
   return response.description;
 }
 
@@ -1091,16 +1069,16 @@ export async function generateAppDescription(
  */
 export async function generateAppDescriptionAndEmoji(
   name: string,
-  prompt: string
+  prompt: string,
 ): Promise<{ description: string; emoji: string }> {
   try {
-    const response = await fetchWithAuth<{ description: string; emoji: string }>(
-      '/v1/app/generate-description-emoji',
-      {
-        method: 'POST',
-        body: JSON.stringify({ name, prompt }),
-      }
-    );
+    const response = await fetchWithAuth<{
+      description: string;
+      emoji: string;
+    }>('/v1/app/generate-description-emoji', {
+      method: 'POST',
+      body: JSON.stringify({ name, prompt }),
+    });
     return {
       description: response.description || '',
       emoji: response.emoji || '✨',
@@ -1121,12 +1099,16 @@ export async function getNotificationScopes(): Promise<NotificationScope[]> {
     const token = await getIdToken();
     if (!token) return [];
 
-    const response = await fetch(`${API_BASE_URL}/v1/apps/proactive-notification-scopes`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+    const response = await fetch(
+      `${API_BASE_URL}/v1/apps/proactive-notification-scopes`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'X-App-Platform': 'web',
+        },
       },
-    });
+    );
 
     if (!response.ok) return [];
     return response.json();
@@ -1146,8 +1128,9 @@ export async function getPaymentPlans(): Promise<PaymentPlan[]> {
 
     const response = await fetch(`${API_BASE_URL}/v1/app/plans`, {
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
+        'X-App-Platform': 'web',
       },
     });
 
@@ -1156,31 +1139,6 @@ export async function getPaymentPlans(): Promise<PaymentPlan[]> {
   } catch {
     return [];
   }
-}
-
-/**
- * Get API keys for an app
- */
-export async function getAppApiKeys(appId: string): Promise<AppApiKey[]> {
-  return fetchWithAuth<AppApiKey[]>(`/v1/apps/${appId}/api-keys`);
-}
-
-/**
- * Create new API key for an app
- */
-export async function createAppApiKey(appId: string): Promise<AppApiKey> {
-  return fetchWithAuth<AppApiKey>(`/v1/apps/${appId}/api-keys`, {
-    method: 'POST',
-  });
-}
-
-/**
- * Delete API key for an app
- */
-export async function deleteAppApiKey(appId: string, keyId: string): Promise<void> {
-  await fetchWithAuth(`/v1/apps/${appId}/api-keys/${keyId}`, {
-    method: 'DELETE',
-  });
 }
 
 // ============================================================================
@@ -1193,7 +1151,6 @@ import type {
   DeveloperWebhooks,
   WebhookSettings,
   RecordingPermission,
-  PrivateCloudSync,
   UserUsage,
   UserUsageResponse,
   UsageStats,
@@ -1231,7 +1188,9 @@ export async function getDailySummarySettings(): Promise<DailySummarySettings> {
 /**
  * Update daily summary settings
  */
-export async function updateDailySummarySettings(settings: DailySummarySettings): Promise<void> {
+export async function updateDailySummarySettings(
+  settings: DailySummarySettings,
+): Promise<void> {
   await fetchWithAuth('/v1/users/daily-summary-settings', {
     method: 'PATCH',
     body: JSON.stringify(settings),
@@ -1253,7 +1212,7 @@ export interface GetDailySummariesParams {
  * Get list of daily summaries with pagination
  */
 export async function getDailySummaries(
-  params: GetDailySummariesParams = {}
+  params: GetDailySummariesParams = {},
 ): Promise<DailySummary[]> {
   const { limit = 30, offset = 0 } = params;
   const queryParams = new URLSearchParams({
@@ -1296,37 +1255,24 @@ export async function getTranscriptionPreferences(): Promise<TranscriptionPrefer
   return fetchWithAuth<TranscriptionPreferences>('/v1/users/transcription-preferences');
 }
 
-/**
- * Update transcription preferences
- */
-export async function updateTranscriptionPreferences(
-  preferences: Partial<TranscriptionPreferences>
-): Promise<void> {
-  await fetchWithAuth('/v1/users/transcription-preferences', {
-    method: 'PATCH',
-    body: JSON.stringify(preferences),
-  });
-}
-
 // Webhook type enum matching backend API
-type WebhookType = 'memory_created' | 'realtime_transcript' | 'audio_bytes' | 'day_summary';
+type WebhookType =
+  | 'memory_created'
+  | 'realtime_transcript'
+  | 'audio_bytes'
+  | 'day_summary';
 
 /**
  * Get developer webhook URL
  */
-export async function getDeveloperWebhook(
-  type: WebhookType
-): Promise<WebhookSettings> {
+export async function getDeveloperWebhook(type: WebhookType): Promise<WebhookSettings> {
   return fetchWithAuth<WebhookSettings>(`/v1/users/developer/webhook/${type}`);
 }
 
 /**
  * Set developer webhook URL
  */
-export async function setDeveloperWebhook(
-  type: WebhookType,
-  url: string
-): Promise<void> {
+export async function setDeveloperWebhook(type: WebhookType, url: string): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}`, {
     method: 'POST',
     body: JSON.stringify({ url }),
@@ -1336,9 +1282,7 @@ export async function setDeveloperWebhook(
 /**
  * Enable developer webhook
  */
-export async function enableDeveloperWebhook(
-  type: WebhookType
-): Promise<void> {
+export async function enableDeveloperWebhook(type: WebhookType): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}/enable`, {
     method: 'POST',
   });
@@ -1347,9 +1291,7 @@ export async function enableDeveloperWebhook(
 /**
  * Disable developer webhook
  */
-export async function disableDeveloperWebhook(
-  type: WebhookType
-): Promise<void> {
+export async function disableDeveloperWebhook(type: WebhookType): Promise<void> {
   await fetchWithAuth(`/v1/users/developer/webhook/${type}/disable`, {
     method: 'POST',
   });
@@ -1379,36 +1321,15 @@ export async function setRecordingPermission(enabled: boolean): Promise<void> {
 }
 
 /**
- * Delete recording permission and all stored recordings
- */
-export async function deleteRecordingPermission(): Promise<void> {
-  await fetchWithAuth('/v1/users/store-recording-permission', {
-    method: 'DELETE',
-  });
-}
-
-/**
- * Get private cloud sync status
- */
-export async function getPrivateCloudSync(): Promise<PrivateCloudSync> {
-  return fetchWithAuth<PrivateCloudSync>('/v1/users/private-cloud-sync');
-}
-
-/**
- * Set private cloud sync
- */
-export async function setPrivateCloudSync(enabled: boolean): Promise<void> {
-  await fetchWithAuth(`/v1/users/private-cloud-sync?value=${enabled}`, {
-    method: 'POST',
-  });
-}
-
-/**
  * Get user usage stats for a specific period
  */
-export async function getUserUsage(period: 'today' | 'monthly' | 'yearly' | 'all_time' = 'monthly'): Promise<UserUsage | null> {
+export async function getUserUsage(
+  period: 'today' | 'monthly' | 'yearly' | 'all_time' = 'monthly',
+): Promise<UserUsage | null> {
   try {
-    const response = await fetchWithAuth<UserUsageResponse>(`/v1/users/me/usage?period=${period}`);
+    const response = await fetchWithAuth<UserUsageResponse>(
+      `/v1/users/me/usage?period=${period}`,
+    );
 
     // Extract the relevant period's stats
     let stats: UsageStats | undefined;
@@ -1462,7 +1383,9 @@ export async function getAllUsageData(): Promise<AllUsageData> {
  */
 export async function getUserSubscription(): Promise<UserSubscription | null> {
   try {
-    const response = await fetchWithAuth<UserSubscriptionResponse>('/v1/users/me/subscription');
+    const response = await fetchWithAuth<UserSubscriptionResponse>(
+      '/v1/users/me/subscription',
+    );
 
     const result: UserSubscription = {
       plan: response.subscription?.plan || 'basic',
@@ -1485,7 +1408,9 @@ export async function getUserSubscription(): Promise<UserSubscription | null> {
  */
 export async function getAvailablePlans(): Promise<AvailablePlansResponse | null> {
   try {
-    const response = await fetchWithAuth<AvailablePlansResponse>('/v1/payments/available-plans');
+    const response = await fetchWithAuth<AvailablePlansResponse>(
+      '/v1/payments/available-plans',
+    );
     return response;
   } catch (error) {
     console.error('getAvailablePlans error:', error);
@@ -1496,12 +1421,17 @@ export async function getAvailablePlans(): Promise<AvailablePlansResponse | null
 /**
  * Create a checkout session for subscription
  */
-export async function createCheckoutSession(priceId: string): Promise<CheckoutSessionResponse | null> {
+export async function createCheckoutSession(
+  priceId: string,
+): Promise<CheckoutSessionResponse | null> {
   try {
-    const response = await fetchWithAuth<CheckoutSessionResponse>('/v1/payments/checkout-session', {
-      method: 'POST',
-      body: JSON.stringify({ price_id: priceId }),
-    });
+    const response = await fetchWithAuth<CheckoutSessionResponse>(
+      '/v1/payments/checkout-session',
+      {
+        method: 'POST',
+        body: JSON.stringify({ price_id: priceId }),
+      },
+    );
     return response;
   } catch (error) {
     console.error('createCheckoutSession error:', error);
@@ -1512,12 +1442,17 @@ export async function createCheckoutSession(priceId: string): Promise<CheckoutSe
 /**
  * Upgrade subscription to a different plan
  */
-export async function upgradeSubscription(priceId: string): Promise<UpgradeSubscriptionResponse | null> {
+export async function upgradeSubscription(
+  priceId: string,
+): Promise<UpgradeSubscriptionResponse | null> {
   try {
-    const response = await fetchWithAuth<UpgradeSubscriptionResponse>('/v1/payments/upgrade-subscription', {
-      method: 'POST',
-      body: JSON.stringify({ price_id: priceId }),
-    });
+    const response = await fetchWithAuth<UpgradeSubscriptionResponse>(
+      '/v1/payments/upgrade-subscription',
+      {
+        method: 'POST',
+        body: JSON.stringify({ price_id: priceId }),
+      },
+    );
     return response;
   } catch (error) {
     console.error('upgradeSubscription error:', error);
@@ -1530,9 +1465,12 @@ export async function upgradeSubscription(priceId: string): Promise<UpgradeSubsc
  */
 export async function cancelSubscription(): Promise<CancelSubscriptionResponse | null> {
   try {
-    const response = await fetchWithAuth<CancelSubscriptionResponse>('/v1/payments/subscription', {
-      method: 'DELETE',
-    });
+    const response = await fetchWithAuth<CancelSubscriptionResponse>(
+      '/v1/payments/subscription',
+      {
+        method: 'DELETE',
+      },
+    );
     return response;
   } catch (error) {
     console.error('cancelSubscription error:', error);
@@ -1545,9 +1483,12 @@ export async function cancelSubscription(): Promise<CancelSubscriptionResponse |
  */
 export async function getCustomerPortal(): Promise<CustomerPortalResponse | null> {
   try {
-    const response = await fetchWithAuth<CustomerPortalResponse>('/v1/payments/customer-portal', {
-      method: 'POST',
-    });
+    const response = await fetchWithAuth<CustomerPortalResponse>(
+      '/v1/payments/customer-portal',
+      {
+        method: 'POST',
+      },
+    );
     return response;
   } catch (error) {
     console.error('getCustomerPortal error:', error);
@@ -1601,7 +1542,7 @@ export async function deletePerson(personId: string): Promise<void> {
 export async function assignBulkTranscriptSegments(
   conversationId: string,
   segmentIds: string[],
-  options: { isUser?: boolean; personId?: string | null }
+  options: { isUser?: boolean; personId?: string | null },
 ): Promise<void> {
   const { isUser, personId } = options;
 
@@ -1682,7 +1623,10 @@ export async function getDeveloperApiKeys(): Promise<DeveloperApiKey[]> {
 /**
  * Create a new developer API key with optional scopes
  */
-export async function createDeveloperApiKey(name: string, scopes?: string[]): Promise<DeveloperApiKey> {
+export async function createDeveloperApiKey(
+  name: string,
+  scopes?: string[],
+): Promise<DeveloperApiKey> {
   const body: { name: string; scopes?: string[] } = { name };
   if (scopes && scopes.length > 0) {
     body.scopes = scopes;
@@ -1775,7 +1719,9 @@ export async function deleteKnowledgeGraph(): Promise<void> {
  */
 export async function getCustomVocabulary(): Promise<string[]> {
   try {
-    const result = await fetchWithAuth<TranscriptionPreferences>('/v1/users/transcription-preferences');
+    const result = await fetchWithAuth<TranscriptionPreferences>(
+      '/v1/users/transcription-preferences',
+    );
     return result.vocabulary || [];
   } catch {
     return [];
@@ -1805,12 +1751,49 @@ const INTEGRATION_DEFINITIONS: Array<{
   logo: string;
   coming_soon?: boolean;
 }> = [
-  { id: 'google_calendar', appKey: 'google_calendar', name: 'Google Calendar', description: 'Sync with your calendar', logo: '/integrations/google-calendar.png' },
-  { id: 'whoop', appKey: 'whoop', name: 'Whoop', description: 'Health & fitness tracking', logo: '/integrations/whoop.png' },
-  { id: 'notion', appKey: 'notion', name: 'Notion', description: 'Sync notes to Notion', logo: '/integrations/notion-logo.png' },
-  { id: 'github', appKey: 'github', name: 'GitHub', description: 'Create issues and notes', logo: '/integrations/github-logo.png' },
-  { id: 'twitter', appKey: 'twitter', name: 'X (Twitter)', description: 'Share to Twitter', logo: '/integrations/x-logo.avif' },
-  { id: 'gmail', appKey: 'gmail', name: 'Gmail', description: 'Email integrations', logo: '/integrations/gmail-logo.jpeg', coming_soon: true },
+  {
+    id: 'google_calendar',
+    appKey: 'google_calendar',
+    name: 'Google Calendar',
+    description: 'Sync with your calendar',
+    logo: '/integrations/google-calendar.png',
+  },
+  {
+    id: 'whoop',
+    appKey: 'whoop',
+    name: 'Whoop',
+    description: 'Health & fitness tracking',
+    logo: '/integrations/whoop.png',
+  },
+  {
+    id: 'notion',
+    appKey: 'notion',
+    name: 'Notion',
+    description: 'Sync notes to Notion',
+    logo: '/integrations/notion-logo.png',
+  },
+  {
+    id: 'github',
+    appKey: 'github',
+    name: 'GitHub',
+    description: 'Create issues and notes',
+    logo: '/integrations/github-logo.png',
+  },
+  {
+    id: 'twitter',
+    appKey: 'twitter',
+    name: 'X (Twitter)',
+    description: 'Share to Twitter',
+    logo: '/integrations/x-logo.avif',
+  },
+  {
+    id: 'gmail',
+    appKey: 'gmail',
+    name: 'Gmail',
+    description: 'Email integrations',
+    logo: '/integrations/gmail-logo.jpeg',
+    coming_soon: true,
+  },
 ];
 
 /**
@@ -1818,7 +1801,10 @@ const INTEGRATION_DEFINITIONS: Array<{
  */
 async function getIntegrationStatus(appKey: string): Promise<{ connected: boolean }> {
   try {
-    const response = await fetchWithAuth<{ connected: boolean; app_key: string }>(`/v1/integrations/${appKey}`);
+    const response = await fetchWithAuth<{
+      connected: boolean;
+      app_key: string;
+    }>(`/v1/integrations/${appKey}`);
     return { connected: response.connected ?? false };
   } catch {
     return { connected: false };
@@ -1850,22 +1836,17 @@ export async function getIntegrations(): Promise<Integration[]> {
  * Get OAuth URL for an integration
  * Opens the OAuth flow for the user to authorize
  */
-export async function getIntegrationOAuthUrl(integrationId: string): Promise<string | null> {
+export async function getIntegrationOAuthUrl(
+  integrationId: string,
+): Promise<string | null> {
   try {
-    const response = await fetchWithAuth<{ auth_url: string }>(`/v1/integrations/${integrationId}/oauth-url`);
+    const response = await fetchWithAuth<{ auth_url: string }>(
+      `/v1/integrations/${integrationId}/oauth-url`,
+    );
     return response.auth_url || null;
   } catch {
     return null;
   }
-}
-
-/**
- * Connect an integration (alternative method)
- */
-export async function connectIntegration(integrationId: string): Promise<{ redirect_url: string }> {
-  return fetchWithAuth<{ redirect_url: string }>(`/v1/integrations/${integrationId}/connect`, {
-    method: 'POST',
-  });
 }
 
 /**
@@ -1889,7 +1870,7 @@ export async function disconnectIntegration(integrationId: string): Promise<void
  */
 export async function reprocessConversation(
   conversationId: string,
-  appId?: string
+  appId?: string,
 ): Promise<Conversation> {
   const queryParams = new URLSearchParams();
   if (appId) {
@@ -1909,11 +1890,14 @@ export async function reprocessConversation(
  */
 export async function updateConversationTitle(
   conversationId: string,
-  title: string
+  title: string,
 ): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${conversationId}/title?title=${encodeURIComponent(title)}`, {
-    method: 'PATCH',
-  });
+  await fetchWithAuth(
+    `/v1/conversations/${conversationId}/title?title=${encodeURIComponent(title)}`,
+    {
+      method: 'PATCH',
+    },
+  );
 }
 
 /**
@@ -1924,14 +1908,14 @@ export async function updateConversationTitle(
  */
 export async function testConversationPrompt(
   conversationId: string,
-  prompt: string
+  prompt: string,
 ): Promise<string> {
   const response = await fetchWithAuth<{ summary: string }>(
     `/v1/conversations/${conversationId}/test-prompt`,
     {
       method: 'POST',
       body: JSON.stringify({ prompt }),
-    }
+    },
   );
   return response.summary;
 }
@@ -1949,7 +1933,7 @@ export async function testConversationPrompt(
 export function getAudioStreamUrl(
   conversationId: string,
   audioFileId: string,
-  format: string = 'wav'
+  format: string = 'wav',
 ): string {
   return `${API_BASE_URL}/v1/sync/audio/${conversationId}/${audioFileId}?format=${format}`;
 }
@@ -1961,12 +1945,12 @@ export function getAudioStreamUrl(
  */
 export async function getConversationAudioUrls(
   conversationId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<AudioFileUrlInfo[]> {
   try {
     const response = await fetchWithAuth<{ audio_files: AudioFileUrlInfo[] }>(
       `/v1/sync/audio/${conversationId}/urls`,
-      { signal }
+      { signal },
     );
     return response.audio_files || [];
   } catch (error) {
@@ -1979,13 +1963,40 @@ export async function getConversationAudioUrls(
 }
 
 /**
+ * Get signed URLs plus the server's poll hint (poll_after_ms) while
+ * playback artifacts are still being built.
+ * @param conversationId - The conversation ID
+ */
+export async function getConversationAudioUrlsWithPoll(
+  conversationId: string,
+  signal?: AbortSignal,
+): Promise<{ files: AudioFileUrlInfo[]; pollAfterMs: number | null }> {
+  try {
+    const response = await fetchWithAuth<{
+      audio_files: AudioFileUrlInfo[];
+      poll_after_ms?: number | null;
+    }>(`/v1/sync/audio/${conversationId}/urls`, { signal });
+    return {
+      files: response.audio_files || [],
+      pollAfterMs: response.poll_after_ms ?? null,
+    };
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { files: [], pollAfterMs: null };
+    }
+    console.error('Error fetching audio URLs:', error);
+    return { files: [], pollAfterMs: null };
+  }
+}
+
+/**
  * Pre-cache audio files for a conversation
  * Triggers background caching of audio files for faster playback
  * @param conversationId - The conversation ID
  */
 export async function precacheConversationAudio(
   conversationId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<void> {
   try {
     await fetchWithAuth(`/v1/sync/audio/${conversationId}/precache`, {
@@ -2010,7 +2021,7 @@ export async function getAudioAuthHeaders(): Promise<Record<string, string>> {
     throw new Error('Not authenticated');
   }
   return {
-    'Authorization': `Bearer ${token}`,
+    Authorization: `Bearer ${token}`,
   };
 }
 
@@ -2023,7 +2034,7 @@ export async function getAudioAuthHeaders(): Promise<Record<string, string>> {
  */
 export async function fetchAudioBlob(
   conversationId: string,
-  audioFileId: string
+  audioFileId: string,
 ): Promise<string> {
   const headers = await getAudioAuthHeaders();
   const url = getAudioStreamUrl(conversationId, audioFileId);
@@ -2046,7 +2057,6 @@ import type {
   CreateFolderRequest,
   UpdateFolderRequest,
   BulkMoveConversationsRequest,
-  ReorderFoldersRequest,
 } from '@/types/folder';
 
 /**
@@ -2088,7 +2098,7 @@ export async function createFolder(data: CreateFolderRequest): Promise<Folder> {
  */
 export async function updateFolder(
   folderId: string,
-  data: UpdateFolderRequest
+  data: UpdateFolderRequest,
 ): Promise<Folder> {
   const folder = await fetchWithAuth<Folder>(`/v1/folders/${folderId}`, {
     method: 'PATCH',
@@ -2111,44 +2121,17 @@ export async function deleteFolder(folderId: string): Promise<void> {
 }
 
 /**
- * Move a single conversation to a folder
- * @param conversationId - The conversation to move
- * @param folderId - The target folder ID, or null to remove from folder
- */
-export async function moveConversationToFolder(
-  conversationId: string,
-  folderId: string | null
-): Promise<void> {
-  await fetchWithAuth(`/v1/conversations/${conversationId}/folder`, {
-    method: 'PATCH',
-    body: JSON.stringify({ folder_id: folderId }),
-  });
-  invalidateCache(invalidationPatterns.conversations);
-}
-
-/**
  * Bulk move multiple conversations to a folder
  * @param folderId - The target folder ID
  * @param conversationIds - Array of conversation IDs to move
  */
 export async function bulkMoveConversationsToFolder(
   folderId: string,
-  conversationIds: string[]
+  conversationIds: string[],
 ): Promise<void> {
   await fetchWithAuth(`/v1/folders/${folderId}/conversations/bulk-move`, {
     method: 'POST',
     body: JSON.stringify({ conversation_ids: conversationIds }),
-  });
-}
-
-/**
- * Reorder folders
- * @param folderIds - Array of folder IDs in the desired order
- */
-export async function reorderFolders(folderIds: string[]): Promise<void> {
-  await fetchWithAuth('/v1/folders/reorder', {
-    method: 'POST',
-    body: JSON.stringify({ folder_ids: folderIds }),
   });
 }
 
@@ -2176,7 +2159,7 @@ function getWebDeviceIdHash(): string {
   let hash = 0;
   for (let i = 0; i < deviceId.length; i++) {
     const char = deviceId.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
+    hash = (hash << 5) - hash + char;
     hash = hash & hash; // Convert to 32-bit integer
   }
   return Math.abs(hash).toString(16);

@@ -8,14 +8,15 @@ import { Metadata, ResolvingMetadata } from 'next';
 import { notFound } from 'next/navigation';
 
 interface MemoryPageProps {
-  params: ParamsTypes;
-  searchParams: SearchParamsTypes;
+  params: Promise<ParamsTypes>;
+  searchParams: Promise<SearchParamsTypes>;
 }
 
 export async function generateMetadata(
-  { params }: { params: ParamsTypes },
+  props: { params: Promise<ParamsTypes> },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
+  const params = await props.params;
   const prevData = (await parent) as Metadata;
   let memory: { structured?: { title?: string; overview?: string } } | null = null;
 
@@ -61,7 +62,9 @@ export async function generateMetadata(
   };
 }
 
-export default async function MemoryPage({ params, searchParams }: MemoryPageProps) {
+export default async function MemoryPage(props: MemoryPageProps) {
+  const searchParams = await props.searchParams;
+  const params = await props.params;
   const memoryId = params.id;
   const memory = await getSharedMemory(memoryId);
   if (!memory) {

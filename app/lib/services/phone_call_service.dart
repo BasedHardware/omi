@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/services.dart';
 import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/models/audio_route.dart';
 import 'package:omi/utils/logger.dart';
 
 /// Native method channel bridge for phone call operations.
@@ -14,6 +15,9 @@ class PhoneCallService {
   StreamSubscription? _eventSubscription;
   Function(PhoneCallState state)? onCallStateChanged;
   Function(Uint8List audioData, int channel)? onAudioData;
+  Function(PhoneCallError error)? onError;
+  Function(bool muted)? onMuteConfirmed;
+  Function(bool speakerOn)? onSpeakerConfirmed;
 
   PhoneCallService();
 
@@ -52,7 +56,7 @@ class PhoneCallService {
     }
   }
 
-  /// Toggle mute on the current call.
+  /// Toggle mute on the current call. State update comes via onMuteConfirmed callback.
   Future<void> toggleMute(bool muted) async {
     try {
       await _methodChannel.invokeMethod('toggleMute', {'muted': muted});
@@ -61,7 +65,7 @@ class PhoneCallService {
     }
   }
 
-  /// Toggle speaker on the current call.
+  /// Toggle speaker on the current call. State update comes via onSpeakerConfirmed callback.
   Future<void> toggleSpeaker(bool speakerOn) async {
     try {
       await _methodChannel.invokeMethod('toggleSpeaker', {'speakerOn': speakerOn});
@@ -97,6 +101,16 @@ class PhoneCallService {
             if (data != null && channel != null && onAudioData != null) {
               onAudioData!(data, channel);
             }
+          } else if (type == 'error') {
+            final error = PhoneCallError.fromEvent(event);
+            Logger.error('PhoneCallService: native error: $error');
+            onError?.call(error);
+          } else if (type == 'muteConfirmed') {
+            final muted = event['muted'] as bool? ?? false;
+            onMuteConfirmed?.call(muted);
+          } else if (type == 'speakerConfirmed') {
+            final speakerOn = event['speakerOn'] as bool? ?? false;
+            onSpeakerConfirmed?.call(speakerOn);
           }
         }
       },
@@ -126,6 +140,39 @@ class PhoneCallService {
         return PhoneCallState.failed;
       default:
         return PhoneCallState.idle;
+    }
+  }
+
+  /// Get available audio output routes (iPhone, Speaker, AirPods, Bluetooth, etc.)
+  Future<List<AudioRoute>> getAudioRoutes() async {
+    try {
+      final result = await _methodChannel.invokeMethod<List>('getAudioRoutes');
+      if (result == null) return [];
+      return result.map((r) => AudioRoute.fromMap(Map<String, dynamic>.from(r as Map))).toList();
+    } catch (e) {
+      Logger.error('PhoneCallService: getAudioRoutes error: $e');
+      return [];
+    }
+  }
+
+  /// Select a specific audio output route by ID.
+  Future<bool> selectAudioRoute(String routeId) async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>('selectAudioRoute', {'routeId': routeId});
+      return result ?? false;
+    } catch (e) {
+      Logger.error('PhoneCallService: selectAudioRoute error: $e');
+      return false;
+    }
+  }
+
+  /// Check if CallKit is available (false in China).
+  Future<bool> isCallKitAvailable() async {
+    try {
+      final result = await _methodChannel.invokeMethod<bool>('isCallKitAvailable');
+      return result ?? true;
+    } catch (e) {
+      return true; // Default to available
     }
   }
 

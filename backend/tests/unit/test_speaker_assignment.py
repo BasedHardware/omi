@@ -111,6 +111,31 @@ class TestProcessSpeakerAssignedSegments:
         assert segment.is_user is True
         assert segment.person_id is None
 
+    def test_handles_user_sentinel_from_speaker_map(self):
+        """Should set is_user=True when speaker_to_person_map maps speaker to 'user' sentinel.
+
+        Regression: the embedding-based user identification stores ('user', 'User') in
+        speaker_to_person_map. This must trigger the same is_user=True path as the
+        segment_person_assignment_map 'user' sentinel.
+        """
+        seg1 = self._make_segment(id="seg-trigger", speaker_id=0)
+        seg2 = self._make_segment(id="seg-later", speaker_id=0)
+        segment_person_assignment_map = {"seg-trigger": "user"}
+        speaker_to_person_map = {0: ("user", "User")}
+
+        process_speaker_assigned_segments(
+            [seg1, seg2],
+            segment_person_assignment_map,
+            speaker_to_person_map,
+        )
+
+        # Triggering segment: via segment_person_assignment_map
+        assert seg1.is_user is True
+        assert seg1.person_id is None
+        # Later segment: via speaker_to_person_map fallback
+        assert seg2.is_user is True
+        assert seg2.person_id is None
+
     def test_processes_multiple_segments(self):
         """Should process multiple segments correctly."""
         seg1 = self._make_segment(id="seg1", speaker_id=1)

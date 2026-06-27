@@ -3,7 +3,12 @@
  * Reference: /backend/routers/conversations.py
  */
 
-export type ConversationStatus = 'in_progress' | 'processing' | 'merging' | 'completed' | 'failed';
+export type ConversationStatus =
+  | 'in_progress'
+  | 'processing'
+  | 'merging'
+  | 'completed'
+  | 'failed';
 
 export interface Structured {
   title: string;
@@ -77,11 +82,12 @@ export interface AudioFile {
   chunk_end?: number;
   duration?: number;
   signed_url?: string | null;
+  status?: 'cached' | 'pending' | 'unavailable';
 }
 
 export interface AudioFileUrlInfo {
   id: string;
-  status: 'cached' | 'pending';
+  status: 'cached' | 'pending' | 'unavailable';
   signed_url: string | null;
   duration: number;
 }
@@ -101,7 +107,7 @@ export interface Conversation {
   geolocation: Geolocation | null;
   photos: ConversationPhoto[];
   audio_files: AudioFile[];
-  apps_results: AppResponse[];  // Note: backend uses 'apps_results' (with 's')
+  apps_results: AppResponse[]; // Note: backend uses 'apps_results' (with 's')
   suggested_summarization_apps: string[];
   source: string | null;
   language: string | null;
@@ -164,7 +170,12 @@ export interface Memory {
 // Knowledge Graph Types
 // =============================================================================
 
-export type KnowledgeGraphNodeType = 'person' | 'place' | 'organization' | 'thing' | 'concept';
+export type KnowledgeGraphNodeType =
+  | 'person'
+  | 'place'
+  | 'organization'
+  | 'thing'
+  | 'concept';
 
 export interface KnowledgeGraphNode {
   id: string;
@@ -219,7 +230,7 @@ export interface ServerMessage {
   text: string;
   sender: MessageSender;
   type: MessageType;
-  plugin_id?: string | null;  // app_id for routing
+  plugin_id?: string | null; // app_id for routing
   from_integration: boolean;
   files: MessageFile[];
   memories: MessageMemory[];

@@ -1,4 +1,4 @@
-from .clients import llm_mini, llm_mini_stream, llm_medium_stream, llm_medium
+from .clients import get_llm
 import json
 import re
 import os
@@ -15,7 +15,10 @@ from database.redis_db import add_filter_category_item
 from database.auth import get_user_name
 from models.app import App
 from models.chat import Message, MessageSender, PageContext
-from models.conversation import CategoryEnum, Conversation, ActionItem, Event, ConversationPhoto
+from models.conversation_enums import CategoryEnum
+from models.conversation_metadata import ConversationMetadata
+from models.conversation_photo import ConversationPhoto
+from models.structured import ActionItem, Event
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.llms.memory import get_prompt_memories
@@ -23,6 +26,27 @@ from utils.llm.usage_tracker import track_usage, Features
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_filter(value: str) -> str:
+    # Convert to lowercase and strip whitespace
+    value = value.lower().strip()
+
+    # Remove special characters and extra spaces
+    value = re.sub(r'[^\w\s-]', '', value)
+    value = re.sub(r'\s+', ' ', value)
+
+    # Remove common filler words
+    filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
+    value = ' '.join(word for word in value.split() if word not in filler_words)
+
+    # Standardize common variations
+    value = value.replace('artificial intelligence', 'ai')
+    value = value.replace('machine learning', 'ml')
+    value = value.replace('natural language processing', 'nlp')
+
+    return value.strip()
+
 
 # ****************************************
 # ************* CHAT BASICS **************
@@ -51,7 +75,7 @@ As {plugin.name}, fully embrace your personality and characteristics in your {"i
 """
     prompt = prompt.strip()
     with track_usage(uid, Features.CHAT):
-        return llm_medium.invoke(prompt).content
+        return get_llm('chat_responses').invoke(prompt).content
 
 
 # *********************************************
@@ -83,7 +107,7 @@ def requires_context(question: str) -> bool:
     User's Question:
     {question}
     '''
-    with_parser = llm_mini.with_structured_output(RequiresContext)
+    with_parser = get_llm('chat_extraction').with_structured_output(RequiresContext)
     response: RequiresContext = with_parser.invoke(prompt)
     try:
         return response.value
@@ -147,7 +171,7 @@ def retrieve_is_an_omi_question(question: str) -> bool:
     
     Is this asking about the Omi/Friend app product itself?
     '''.replace('    ', '').strip()
-    with_parser = llm_mini.with_structured_output(IsAnOmiQuestion)
+    with_parser = get_llm('chat_extraction').with_structured_output(IsAnOmiQuestion)
     response: IsAnOmiQuestion = with_parser.invoke(prompt)
     try:
         return response.value
@@ -177,7 +201,7 @@ def retrieve_is_file_question(question: str) -> bool:
     {question}
     '''
 
-    with_parser = llm_mini.with_structured_output(IsFileQuestion)
+    with_parser = get_llm('chat_extraction').with_structured_output(IsFileQuestion)
     response: IsFileQuestion = with_parser.invoke(prompt)
     try:
         return response.value
@@ -200,8 +224,8 @@ def retrieve_context_dates_by_question(question: str, tz: str) -> List[datetime]
     '''.replace('    ', '').strip()
 
     # print(prompt)
-    # print(llm_mini.invoke(prompt).content)
-    with_parser = llm_mini.with_structured_output(DatesContext)
+    # print(get_llm('chat_extraction').invoke(prompt).content)
+    with_parser = get_llm('chat_extraction').with_structured_output(DatesContext)
     response: DatesContext = with_parser.invoke(prompt)
     return response.dates_range
 
@@ -226,7 +250,7 @@ def chunk_extraction(
 
     Topics: {topics}
     '''
-    with_parser = llm_mini.with_structured_output(SummaryOutput)
+    with_parser = get_llm('chat_extraction').with_structured_output(SummaryOutput)
     response: SummaryOutput = with_parser.invoke(prompt)
     return response.summary
 
@@ -259,12 +283,12 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return llm_medium.invoke(prompt).content
+    return get_llm('chat_responses').invoke(prompt).content
 
 
 def answer_simple_message_stream(uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks=[]) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -290,12 +314,12 @@ def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> st
 
 def answer_omi_question(messages: List[Message], context: str) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return llm_mini.invoke(prompt).content
+    return get_llm('chat_extraction').invoke(prompt).content
 
 
 def answer_omi_question_stream(messages: List[Message], context: str, callbacks: []) -> str:
     prompt = _get_answer_omi_question_prompt(messages, context)
-    return llm_mini_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return get_llm('chat_extraction', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
 
 
 def _get_qa_rag_prompt(
@@ -316,7 +340,6 @@ def _get_qa_rag_prompt(
     if plugin:
         plugin_info = f"Your name is: {plugin.name}, and your personality/description is '{plugin.description}'.\nMake sure to reflect your personality in your response.\n"
 
-    # Ref: https://www.reddit.com/r/perplexity_ai/comments/1hi981d
     cited_instruction = """
     - You MUST cite the most relevant <memories> that answer the question. \
       - Only cite in <memories> not <user_facts>, not <previous_messages>.
@@ -824,7 +847,7 @@ def qa_rag(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return llm_medium.invoke(prompt).content
+    return get_llm('chat_responses').invoke(prompt).content
 
 
 def qa_rag_stream(
@@ -839,7 +862,7 @@ def qa_rag_stream(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return llm_medium_stream.invoke(prompt, {'callbacks': callbacks}).content
+    return get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}).content
 
 
 # **************************************************
@@ -847,15 +870,18 @@ def qa_rag_stream(
 # **************************************************
 
 
-def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
-    person_ids = memory.get_person_ids()
+def retrieve_memory_context_params(
+    uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str]
+) -> List[str]:
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
     user_name = get_user_name(uid, use_default=False)
-    transcript = memory.get_transcript(False, people=people, user_name=user_name)
+    transcript = TranscriptSegment.segments_as_string(
+        transcript_segments, include_timestamps=False, user_name=user_name, people=people
+    )
     if len(transcript) == 0:
         return []
 
@@ -870,7 +896,7 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
     '''.replace('    ', '').strip()
 
     try:
-        with_parser = llm_mini.with_structured_output(TopicsContext)
+        with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
         response: TopicsContext = with_parser.invoke(prompt)
         return response.topics
     except Exception as e:
@@ -878,16 +904,19 @@ def retrieve_memory_context_params(uid: str, memory: Conversation) -> List[str]:
         return []
 
 
-def obtain_emotional_message(uid: str, memory: Conversation, context: str, emotion: str) -> str:
+def obtain_emotional_message(
+    uid: str, transcript_segments: List[TranscriptSegment], person_ids: List[str], context: str, emotion: str
+) -> str:
     user_name, memories_str = get_prompt_memories(uid)
 
-    person_ids = memory.get_person_ids()
     people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, list(set(person_ids)))
         people = [Person(**p) for p in people_data]
 
-    transcript = memory.get_transcript(False, people=people, user_name=user_name)
+    transcript = TranscriptSegment.segments_as_string(
+        transcript_segments, include_timestamps=False, user_name=user_name, people=people
+    )
     prompt = f"""
     You are a thoughtful and encouraging Friend.
     Your best friend is {user_name}, {memories_str}
@@ -911,7 +940,7 @@ def obtain_emotional_message(uid: str, memory: Conversation, context: str, emoti
     ```
     """.replace('    ', '').strip()
     with track_usage(uid, Features.CHAT):
-        return llm_mini.invoke(prompt).content
+        return get_llm('chat_extraction').invoke(prompt).content
 
 
 # **********************************************
@@ -1027,7 +1056,7 @@ def extract_question_from_conversation(messages: List[Message]) -> str:
     </date_in_term>
     '''.replace('    ', '').strip()
     # print(prompt)
-    question = llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+    question = get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt).question
     # print(question)
     return question
 
@@ -1061,7 +1090,7 @@ def retrieve_metadata_fields_from_transcript(
 
     Make sure as a first step, you infer and fix any raw transcript errors and then proceed to extract the information from the entire content.
 
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). {tz} is the user's timezone, respond in user local timezone.
     If one says "today", it means the current day.
     If one says "tomorrow", it means the next day after today.
     If one says "yesterday", it means the day before today.
@@ -1075,36 +1104,19 @@ def retrieve_metadata_fields_from_transcript(
     '''.replace('    ', '')
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
-            result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+            result: ExtractedInformation = (
+                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt)
+            )
     except Exception as e:
         logger.error(f'e {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
-    def normalize_filter(value: str) -> str:
-        # Convert to lowercase and strip whitespace
-        value = value.lower().strip()
-
-        # Remove special characters and extra spaces
-        value = re.sub(r'[^\w\s-]', '', value)
-        value = re.sub(r'\s+', ' ', value)
-
-        # Remove common filler words
-        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
-        value = ' '.join(word for word in value.split() if word not in filler_words)
-
-        # Standardize common variations
-        value = value.replace('artificial intelligence', 'ai')
-        value = value.replace('machine learning', 'ml')
-        value = value.replace('natural language processing', 'nlp')
-
-        return value.strip()
-
-    metadata = {
-        'people': [normalize_filter(p) for p in result.people],
-        'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.topics],
-        'dates': [],
-    }
+    metadata = ConversationMetadata(
+        people=[normalize_filter(p) for p in result.people],
+        topics=[normalize_filter(t) for t in result.topics],
+        entities=[normalize_filter(e) for e in result.entities],
+        dates=[],
+    ).to_vector_metadata()
     # 'dates': [date.strftime('%Y-%m-%d') for date in result.dates],
     for date in result.dates:
         try:
@@ -1144,8 +1156,8 @@ def retrieve_metadata_from_message(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
-    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). 
+    {tz} is the user's timezone, respond in user local timezone.
     If the message mentions "today", it means the current day.
     If the message mentions "tomorrow", it means the next day after today.
     If the message mentions "yesterday", it means the day before today.
@@ -1178,8 +1190,8 @@ def retrieve_metadata_from_text(
     3. Organizations, products, locations, or other entities mentioned
     4. Any dates or time references
 
-    For context when extracting dates, today is {created_at.astimezone(timezone.utc).strftime('%Y-%m-%d')} in UTC. 
-    {tz} is the user's timezone, convert it to UTC and respond in UTC.
+    For context when extracting dates, today is {created_at.astimezone(ZoneInfo(tz)).strftime('%Y-%m-%d')} in {tz} (user's local timezone). 
+    {tz} is the user's timezone, respond in user local timezone.
     If the text mentions "today", it means the current day.
     If the text mentions "tomorrow", it means the next day after today.
     If the text mentions "yesterday", it means the day before today.
@@ -1198,36 +1210,19 @@ def retrieve_metadata_from_text(
 def _process_extracted_metadata(uid: str, prompt: str) -> dict:
     """Process the extracted metadata from any source"""
     try:
-        result: ExtractedInformation = llm_mini.with_structured_output(ExtractedInformation).invoke(prompt)
+        result: ExtractedInformation = (
+            get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt)
+        )
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
-    def normalize_filter(value: str) -> str:
-        # Convert to lowercase and strip whitespace
-        value = value.lower().strip()
-
-        # Remove special characters and extra spaces
-        value = re.sub(r'[^\w\s-]', '', value)
-        value = re.sub(r'\s+', ' ', value)
-
-        # Remove common filler words
-        filler_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to'}
-        value = ' '.join(word for word in value.split() if word not in filler_words)
-
-        # Standardize common variations
-        value = value.replace('artificial intelligence', 'ai')
-        value = value.replace('machine learning', 'ml')
-        value = value.replace('natural language processing', 'nlp')
-
-        return value.strip()
-
-    metadata = {
-        'people': [normalize_filter(p) for p in result.people],
-        'topics': [normalize_filter(t) for t in result.topics],
-        'entities': [normalize_filter(e) for e in result.entities],
-        'dates': [],
-    }
+    metadata = ConversationMetadata(
+        people=[normalize_filter(p) for p in result.people],
+        topics=[normalize_filter(t) for t in result.topics],
+        entities=[normalize_filter(e) for e in result.entities],
+        dates=[],
+    ).to_vector_metadata()
 
     for date in result.dates:
         try:
@@ -1265,7 +1260,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
     Question: {question}
     '''.replace('    ', '').strip()
     # print(prompt)
-    with_parser = llm_mini.with_structured_output(FiltersToUse)
+    with_parser = get_llm('chat_extraction').with_structured_output(FiltersToUse)
     try:
         response: FiltersToUse = with_parser.invoke(prompt)
         # print('select_structured_filters:', response.dict())
@@ -1313,7 +1308,7 @@ def extract_question_from_transcript(uid: str, segments: List[TranscriptSegment]
     ```
     '''.replace('    ', '').strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-        return llm_mini.with_structured_output(OutputQuestion).invoke(prompt).question
+        return get_llm('chat_extraction').with_structured_output(OutputQuestion).invoke(prompt).question
 
 
 class OutputMessage(BaseModel):
@@ -1363,4 +1358,4 @@ def provide_advice_message(uid: str, segments: List[TranscriptSegment], context:
     ```
     """.replace('    ', '').strip()
     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-        return llm_mini.with_structured_output(OutputMessage).invoke(prompt).message
+        return get_llm('chat_extraction').with_structured_output(OutputMessage).invoke(prompt).message

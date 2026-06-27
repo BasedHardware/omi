@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
 class ClockSkewEvent {
@@ -39,11 +40,17 @@ class ClockSkewDetector {
     final event = parseResponse(response);
     if (event == null) return;
 
-    Logger.warning(
-      'Clock skew detected: skew_seconds=${event.skewSeconds}, '
-      'server_time=${event.serverTime}, '
-      'client_time=${event.clientTime}',
-    );
+    final msg =
+        'Clock skew detected: skew_seconds=${event.skewSeconds}, '
+        'server_time=${event.serverTime}, '
+        'client_time=${event.clientTime}';
+    Logger.warning(msg);
+    DebugLogManager.logWarning(msg, {
+      'skew_seconds': event.skewSeconds,
+      'server_time': event.serverTime,
+      'client_time': event.clientTime,
+      'hint': event.hint,
+    });
 
     final now = DateTime.now();
     if (_lastEmittedAt != null && now.difference(_lastEmittedAt!) < cooldown) {

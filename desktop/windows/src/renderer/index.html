@@ -1,0 +1,40 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>omi</title>
+    <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://apis.google.com https://www.gstatic.com https://cdn.jsdelivr.net;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https: https://*.googleusercontent.com;
+        font-src 'self' data:;
+        media-src 'self' blob:;
+        connect-src 'self'
+          https://identitytoolkit.googleapis.com
+          https://securetoken.googleapis.com
+          https://www.googleapis.com
+          https://*.firebaseapp.com
+          https://*.firebaseio.com
+          https://firebase.googleapis.com
+          https://api.omi.me
+          wss://api.omi.me
+          https://desktop-backend-hhibjajaja-uc.a.run.app
+          https://api.deepgram.com
+          wss://api.deepgram.com
+          https://accounts.google.com
+          https://cdn.jsdelivr.net;
+        frame-src 'self' https://based-hardware.firebaseapp.com https://accounts.google.com;
+        worker-src 'self' blob:;
+      "
+    />
+  </head>
+
+  <body style="background: transparent">
+    <div id="root" style="background: transparent"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

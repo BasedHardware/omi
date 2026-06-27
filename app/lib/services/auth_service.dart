@@ -18,7 +18,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -153,17 +152,6 @@ class AuthService {
     }
   }
 
-  Future<void> signInAnonymously() async {
-    try {
-      await FirebaseAuth.instance.signInAnonymously();
-      var user = FirebaseAuth.instance.currentUser!;
-      SharedPreferencesUtil().uid = user.uid;
-      await getIdToken();
-    } catch (e) {
-      Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
-    }
-  }
-
   Future<void> signOut() async {
     _clearCachedAuth();
     await FirebaseAuth.instance.signOut();
@@ -274,7 +262,7 @@ class AuthService {
       });
 
       // Now launch the URL
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
 
       if (!launched) {
         linkSubscription.cancel();
@@ -504,35 +492,27 @@ class AuthService {
       }
 
       // Try to update Firebase profile with platform-specific handling
-      // Skip Firebase updateProfile on Windows due to known crashes and threading issues
-      // https://github.com/firebase/flutterfire/issues/13340
-      // https://github.com/firebase/flutterfire/issues/12725
-      if (PlatformService.isWindows) {
-        Logger.debug('Skipping Firebase updateProfile on Windows due to known platform issues');
-      } else {
-        try {
-          Logger.debug('Attempting to update Firebase user profile...');
+      try {
+        Logger.debug('Attempting to update Firebase user profile...');
 
-          // Web and other desktop platforms may still have issues, so use timeout
-          if (kIsWeb || PlatformService.isDesktop) {
-            Logger.debug('Desktop/Web platform detected - attempting updateProfile with caution');
+        if (kIsWeb) {
+          Logger.debug('Web platform detected - attempting updateProfile with caution');
 
-            // Try with a timeout to prevent hanging
-            await user.updateProfile(displayName: fullName).timeout(
-              const Duration(seconds: 5),
-              onTimeout: () {
-                Logger.debug('updateProfile timed out on desktop platform');
-                throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
-              },
-            );
-          } else {
-            await user.updateProfile(displayName: fullName);
-          }
-          await user.reload();
-          user = FirebaseAuth.instance.currentUser;
-        } catch (updateError) {
-          Logger.debug('Firebase updateProfile failed (this is expected on windows): $updateError');
+          // Try with a timeout to prevent hanging
+          await user.updateProfile(displayName: fullName).timeout(
+            const Duration(seconds: 5),
+            onTimeout: () {
+              Logger.debug('updateProfile timed out on web platform');
+              throw TimeoutException('updateProfile timed out', const Duration(seconds: 5));
+            },
+          );
+        } else {
+          await user.updateProfile(displayName: fullName);
         }
+        await user.reload();
+        user = FirebaseAuth.instance.currentUser;
+      } catch (updateError) {
+        Logger.debug('Firebase updateProfile failed: $updateError');
       }
     } catch (e) {
       Logger.debug('Error in updateGivenName: $e');
@@ -578,7 +558,7 @@ class AuthService {
 
       Logger.debug('Authorization URL: $authUrl');
 
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
 
       if (!launched) {
         throw Exception('Failed to launch authentication URL');

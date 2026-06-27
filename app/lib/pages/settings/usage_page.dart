@@ -20,6 +20,7 @@ import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class UsagePage extends StatefulWidget {
@@ -45,6 +46,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   Future<void> _loadFairUseStatus() async {
     try {
       final result = await getFairUseStatus();
+      // Reconcile the rate-limit cooldown regardless of widget mount state.
+      reconcileSyncRateLimitWithFairUseStatus(result);
       if (mounted && result != null) {
         setState(() => _fairUseStatus = result);
       }
@@ -64,9 +67,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final provider = context.read<UsageProvider>();
     final localeName = l10n.localeName;
 
-    final RenderRepaintBoundary boundary =
-        _screenshotKeys[_tabController.index].currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final captureContext = _screenshotKeys[_tabController.index].currentContext;
+    if (captureContext == null || !mounted) return;
+    final RenderRepaintBoundary boundary = captureContext.findRenderObject() as RenderRepaintBoundary;
     final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+    if (!mounted) return;
 
     // Load logo
     final ByteData logoData = await rootBundle.load('assets/images/herologo.png');
@@ -123,7 +128,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     // Convert the canvas to a new image and then to bytes
     final watermarkedImage = await recorder.endRecording().toImage(image.width, image.height);
     final ByteData? byteData = await watermarkedImage.toByteData(format: ui.ImageByteFormat.png);
-    final Uint8List pngBytes = byteData!.buffer.asUint8List();
+    if (byteData == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.wrappedFailedToShare)));
+      return;
+    }
+    final Uint8List pngBytes = byteData.buffer.asUint8List();
 
     final tempDir = await getTemporaryDirectory();
     final file = await File('${tempDir.path}/omi_usage.png').create();
@@ -194,7 +203,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: shareText));
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: periodTitle.isEmpty ? null : periodTitle,
+        text: shareText.isEmpty ? null : shareText,
+      ),
+    );
   }
 
   String _getPeriodForIndex(int index) {
@@ -261,7 +276,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       context.read<UsageProvider>().fetchSubscription();
       _loadAvailablePlans();
       _loadFairUseStatus();
-      if (widget.showUpgradeDialog) {
+      if (widget.showUpgradeDialog && context.read<UsageProvider>().showSubscriptionUI) {
         _showPlansSheet();
       }
     });
@@ -314,7 +329,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             return Column(
               children: [
                 _buildFairUseBanner(),
-                const Expanded(child: Center(child: CircularProgressIndicator(color: Colors.deepPurple))),
+                const Expanded(
+                  child: Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
+                ),
               ],
             );
           }
@@ -407,7 +424,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       return const SizedBox.shrink();
     }
 
-    final isUnlimited = provider.subscription!.subscription.plan == PlanType.unlimited;
+    final plan = provider.subscription!.subscription.plan;
+    final isUnlimited = plan == PlanType.unlimited || plan == PlanType.operator || plan == PlanType.architect;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
@@ -464,10 +482,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            context.l10n.upgradeToUnlimited,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                          ),
+                          Text(context.l10n.upgrade, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                           const SizedBox(width: 8),
                           const Icon(Icons.arrow_forward, size: 18),
                         ],
@@ -481,6 +496,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   void _showPlansSheet() {
+    if (!context.read<UsageProvider>().showSubscriptionUI) {
+      return;
+    }
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -533,17 +551,15 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: dotColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
         child: Row(
           children: [
             Container(
-                key: const Key('fair_use_dot'),
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle)),
+              key: const Key('fair_use_dot'),
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+            ),
             const SizedBox(width: 10),
             Text(
               context.l10n.fairUseBannerStatus(stageLabel),
@@ -668,6 +684,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 color: Colors.purple.shade300,
                 subscription: provider.subscription,
               ),
+              if (provider.chatQuotaUnit != null && period == 'monthly') ...[
+                const SizedBox(height: 12),
+                _buildChatQuotaLine(context, provider),
+              ],
             ],
           ),
         ),
@@ -992,6 +1012,93 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildChatQuotaLine(BuildContext context, UsageProvider provider) {
+    final sub = provider.subscription;
+    if (sub == null) return const SizedBox.shrink();
+
+    final numberFormatter = NumberFormat.decimalPattern('en_US');
+    final used = sub.chatQuotaUsed;
+    final unit = sub.chatQuotaUnit;
+    final limits = sub.subscription.limits;
+    final color = Colors.blue.shade300;
+
+    String value;
+    String usageText;
+    double percentage = 0.0;
+
+    if (unit == 'cost_usd') {
+      value = '\$${used.toStringAsFixed(2)}';
+      final limit = limits.chatCostUsdPerMonth;
+      if (limit != null && limit > 0) {
+        usageText = '\$${used.toStringAsFixed(2)} of \$${limit.toStringAsFixed(0)} used this month';
+        percentage = (used / limit).clamp(0.0, 1.0);
+      } else {
+        usageText = '\$${used.toStringAsFixed(2)} used this month';
+      }
+    } else {
+      value = '${numberFormatter.format(used.toInt())} ${context.l10n.chatTitle}';
+      final limit = limits.chatQuestionsPerMonth;
+      if (limit != null && limit > 0) {
+        usageText = '${numberFormatter.format(used.toInt())} of $limit messages used this month';
+        percentage = (used / limit).clamp(0.0, 1.0);
+      } else {
+        usageText = '${numberFormatter.format(used.toInt())} messages used this month';
+      }
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2A2A2E), Color(0xFF1F1F25)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        boxShadow: [
+          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 1, offset: const Offset(0, 2)),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                FaIcon(FontAwesomeIcons.solidMessage, color: color, size: 16),
+                const SizedBox(width: 8),
+                Text(context.l10n.chatTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              context.l10n.chatQuotaSubtitle,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4),
+            ),
+            if (percentage > 0) ...[
+              const SizedBox(height: 16),
+              Text(usageText, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: percentage,
+                backgroundColor: Colors.grey.shade700,
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+                minHeight: 4,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildUsageCard(
     BuildContext context, {
     required IconData icon,
@@ -1175,36 +1282,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     children: [
                       Text(
                         context.l10n.insightsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: percentage,
-                        backgroundColor: Colors.grey.shade700,
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-            if (icon == FontAwesomeIcons.brain &&
-                subscription != null &&
-                subscription.subscription.plan == PlanType.basic &&
-                subscription.memoriesCreatedLimit > 0) ...[
-              const SizedBox(height: 16),
-              Builder(
-                builder: (context) {
-                  final used = subscription.memoriesCreatedUsed;
-                  final limit = subscription.memoriesCreatedLimit;
-                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.memoriesUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                       ),
                       const SizedBox(height: 8),

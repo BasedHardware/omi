@@ -3,7 +3,7 @@ import json
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
-from typing import List, Tuple, Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 
 from google.api_core.exceptions import NotFound
 from google.cloud import firestore
@@ -11,13 +11,9 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
 from database import users as users_db
-from models.conversation import (
-    ConversationPhoto,
-    PostProcessingStatus,
-    PostProcessingModel,
-    ConversationStatus,
-    AudioFile,
-)
+from models.audio_file import AudioFile
+from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
+from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
 from ._client import db
@@ -28,6 +24,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
+
+
+def get_conversation_ids(uid: str) -> List[str]:
+    """Return all conversation document IDs for a user without decrypting any fields.
+
+    IDs-only projection (``select([])``) — used for bulk operations like account deletion where
+    only the IDs are needed (e.g. to purge derived Pinecone vectors).
+    """
+    coll = db.collection('users').document(uid).collection(conversations_collection)
+    return [doc.id for doc in coll.select([]).stream()]
 
 
 def _ensure_timezone_aware(dt: datetime) -> datetime:
@@ -188,6 +194,7 @@ def get_conversations(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
+    date_field: str = 'created_at',
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -206,18 +213,48 @@ def get_conversations(
 
     # Apply date range filters if provided
     if start_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter(date_field, '>=', start_date))
     if end_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter(date_field, '<=', end_date))
 
-    # Sort
-    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    # Sort — must match the range-filter field to satisfy Firestore index requirements
+    sort_field = date_field if (start_date or end_date) else 'created_at'
+    conversations_ref = conversations_ref.order_by(sort_field, direction=firestore.Query.DESCENDING)
 
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
     return conversations
+
+
+def get_conversations_count(
+    uid: str,
+    include_discarded: bool = False,
+    statuses: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
+):
+    conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
+    if not include_discarded:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if statuses:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+    result = conversations_ref.count().get()
+    return int(result[0][0].value)
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -403,6 +440,43 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     conversation_ref.update({'structured.title': title})
 
 
+def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional[str], content: str) -> str:
+    """
+    Update the conversation's displayed summary.
+
+    If app_id is None: writes to structured.overview (default backend overview).
+    If app_id is set: rewrites the matching apps_results entry's content.
+
+    Returns:
+        'ok' on success, 'not_found' if conversation missing,
+        'app_result_not_found' if app_id given but no matching apps_results entry.
+    """
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+
+    doc_snapshot = conversation_ref.get()
+    if not doc_snapshot.exists:
+        return 'not_found'
+
+    if app_id is None:
+        conversation_ref.update({'structured.overview': content})
+        return 'ok'
+
+    raw = doc_snapshot.to_dict() or {}
+    apps_results = list(raw.get('apps_results') or [])
+    found = False
+    for entry in apps_results:
+        if isinstance(entry, dict) and entry.get('app_id') == app_id:
+            entry['content'] = content
+            found = True
+            break
+    if not found:
+        return 'app_result_not_found'
+
+    conversation_ref.update({'apps_results': apps_results})
+    return 'ok'
+
+
 def update_conversation_segment_text(uid: str, conversation_id: str, segment_id: str, text: str) -> str:
     """
     Update a single segment's text in a conversation.
@@ -498,80 +572,6 @@ def delete_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.delete()
-
-
-def update_conversation_merged_data(uid: str, conversation_id: str, merged_data: dict):
-    """
-    Update a conversation with merged data from multiple conversations.
-
-    This function handles the bulk update of all merged fields and respects
-    the conversation's data protection level.
-
-    Args:
-        uid: User ID
-        conversation_id: Primary conversation ID to update
-        merged_data: Dictionary containing all merged fields
-    """
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    doc_snapshot = doc_ref.get()
-    if not doc_snapshot.exists:
-        return
-
-    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    prepared_data = _prepare_conversation_for_write(merged_data, uid, doc_level)
-    doc_ref.update(prepared_data)
-
-
-def delete_conversations_by_source(uid: str, source: str, batch_size: int = 450) -> int:
-    """
-    Delete all conversations with a specific source.
-
-    Args:
-        uid: User ID
-        source: Source type (e.g., 'limitless')
-        batch_size: Number of documents to delete per batch
-
-    Returns:
-        Number of deleted conversations
-    """
-    user_ref = db.collection('users').document(uid)
-    conversations_ref = user_ref.collection(conversations_collection)
-
-    total_deleted = 0
-
-    while True:
-        # Query for conversations with matching source
-        query = conversations_ref.where(filter=FieldFilter('source', '==', source)).limit(batch_size)
-        docs = list(query.stream())
-
-        if not docs:
-            break
-
-        batch = db.batch()
-        for doc in docs:
-            batch.delete(doc.reference)
-            total_deleted += 1
-        batch.commit()
-
-        if len(docs) < batch_size:
-            break
-
-    return total_deleted
-
-
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-@with_photos(get_conversation_photos)
-def filter_conversations_by_date(uid, start_date, end_date):
-    user_ref = db.collection('users').document(uid)
-    query = (
-        user_ref.collection(conversations_collection)
-        .where(filter=FieldFilter('created_at', '>=', start_date))
-        .where(filter=FieldFilter('created_at', '<=', end_date))
-        .where(filter=FieldFilter('discarded', '==', False))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-    )
-    conversations = [doc.to_dict() for doc in query.stream()]
-    return conversations
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -724,26 +724,16 @@ def get_in_progress_conversation(uid: str):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_in_progress_conversations(uid: str):
-    """Get all in-progress conversations for a user, ordered by created_at descending."""
-    user_ref = db.collection('users').document(uid)
-    conversations_ref = (
-        user_ref.collection(conversations_collection)
-        .where(filter=FieldFilter('status', '==', 'in_progress'))
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-    )
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
-    return conversations
-
-
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-@with_photos(get_conversation_photos)
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection).where(
         filter=FieldFilter('status', '==', 'processing')
     )
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    # Exclude lazy-deferred conversations: they intentionally sit in `processing` (no LLM summary
+    # yet) until the user opens them, where they're enriched on demand. They must NOT be swept
+    # back to pusher for background processing — that would defeat the freemium cost saving.
+    conversations = [c for c in conversations if not c.get('deferred')]
     return conversations
 
 
@@ -956,19 +946,6 @@ def unlock_all_conversations(uid: str):
     if count > 0:
         batch.commit()
     logger.info(f"Unlocked all conversations for user {uid}")
-
-
-def get_public_conversations(data: List[Tuple[str, str]]):
-    """
-    Fetches multiple public conversations sequentially.
-    """
-    conversations = []
-    for uid, conversation_id in data:
-        # get_conversation is already decorated to return a fully populated and decrypted conversation
-        conversation_data = get_conversation(uid=uid, conversation_id=conversation_id)
-        if conversation_data and conversation_data.get('visibility') == 'public':
-            conversations.append(conversation_data)
-    return conversations
 
 
 # ****************************************

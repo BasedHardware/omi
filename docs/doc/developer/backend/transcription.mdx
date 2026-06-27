@@ -21,15 +21,11 @@ flowchart LR
 
     subgraph STT["🎧 STT Providers"]
         DG[Deepgram Nova-3]
-        Soniox[Soniox]
-        SM[Speechmatics]
     end
 
     Audio -->|Binary stream| WS
     WS --> Decode
     Decode --> DG
-    Decode -.->|Fallback| Soniox
-    Decode -.->|Fallback| SM
     DG -->|Transcript| WS
     WS -->|JSON segments| Audio
 ```
@@ -75,7 +71,7 @@ wss://api.omi.me/v4/listen?uid={uid}&language={lang}&sample_rate={rate}&codec={c
 
     Language code for transcription. Supports:
     - Standard codes: `'en'`, `'es'`, `'fr'`, `'de'`, `'ja'`, `'zh'`, etc.
-    - Multi-language: `'multi'` for automatic language detection (uses Soniox)
+    - Multi-language: `'multi'` for automatic language detection
   </Accordion>
 
   <Accordion title="sample_rate" icon="wave-pulse">
@@ -106,7 +102,7 @@ wss://api.omi.me/v4/listen?uid={uid}&language={lang}&sample_rate={rate}&codec={c
   <Accordion title="include_speech_profile" icon="microphone-lines">
     **Type:** `boolean` | **Default:** `true`
 
-    Enable speaker identification using the user's stored speech profile. When enabled, the system uses a dual-socket architecture for improved speaker detection.
+    Enable speaker identification using the user's stored speech profile. When enabled, the system extracts a speaker embedding from the user's speech profile and uses it to identify the user's voice via biometric matching.
   </Accordion>
 
   <Accordion title="conversation_timeout" icon="clock">
@@ -118,7 +114,7 @@ wss://api.omi.me/v4/listen?uid={uid}&language={lang}&sample_rate={rate}&codec={c
   <Accordion title="stt_service" icon="server">
     **Type:** `string` | **Optional**
 
-    Explicitly specify STT service. Options: `deepgram`, `soniox`, `speechmatics`. If not specified, the system selects based on language.
+    Explicitly specify STT service. Options: `deepgram`. If not specified, Deepgram is used.
   </Accordion>
 
   <Accordion title="custom_stt" icon="code">
@@ -154,26 +150,20 @@ All audio is internally converted to 16-bit linear PCM before being sent to STT 
 
 ## STT Service Selection
 
-The system automatically selects the best STT provider based on language:
+The system uses Deepgram for all transcription:
 
 ```mermaid
 flowchart TD
     Start[Incoming Audio] --> Lang{Language?}
-    Lang -->|English| DG3[Deepgram Nova-3]
-    Lang -->|Multi/Auto| Soniox[Soniox<br/>95+ languages]
-    Lang -->|Unsupported by Nova-3| DG2[Deepgram Nova-2]
-    DG3 -->|Fallback on error| DG2
-    DG2 -->|Fallback on error| SM[Speechmatics]
+    Lang -->|Supported| DG3[Deepgram Nova-3]
+    Lang -->|Unsupported| Fallback[Fallback to English Nova-3]
 ```
 
 ### Provider Capabilities
 
 | Provider | Languages | Model | Best For |
 |----------|-----------|-------|----------|
-| **Deepgram Nova-3** | 30+ | `nova-3` | Primary English, major languages |
-| **Deepgram Nova-2** | 40+ | `nova-2-general` | Broader language support |
-| **Soniox** | 95+ | Real-time | Multi-language, auto-detection |
-| **Speechmatics** | 50+ | Real-time | Additional coverage |
+| **Deepgram Nova-3** | 50+ | `nova-3` | All supported languages |
 
 ## Deepgram Configuration
 
@@ -261,10 +251,10 @@ flowchart LR
 - Connection closes after **90 seconds** of inactivity.
 </Warning>
 
-## Speech Profile & Dual-Socket Architecture
+## Speech Profile & Speaker Embedding
 
 <Note>
-When a user has a speech profile, the system uses a sophisticated dual-socket architecture for improved speaker identification.
+When a user has a speech profile, the system uses speaker embedding comparison to identify the user's voice in real-time.
 </Note>
 
 ### How It Works
@@ -273,37 +263,32 @@ When a user has a speech profile, the system uses a sophisticated dual-socket ar
 sequenceDiagram
     participant App as 📱 Omi App
     participant Backend as 🖥️ Backend
-    participant Socket1 as 🎧 Deepgram Socket 1
-    participant Socket2 as 🎧 Deepgram Socket 2
+    participant DG as 🎧 Deepgram
+    participant Embed as 🧠 Embedding API
 
-    Note over Backend: User has speech profile<br/>(duration: 30 seconds)
+    Note over Backend: User has speech profile
 
     App->>Backend: Connect WebSocket
-    Backend->>Socket1: Create (for live audio)
-    Backend->>Socket2: Create (for profile training)
+    Backend->>DG: Create single socket
+    Backend->>Embed: Extract user embedding from profile WAV
 
-    loop First 30 seconds
+    loop Audio streaming
         App->>Backend: Audio chunk
-        Backend->>Socket2: Send to profile socket
-        Socket2-->>Backend: Transcript (training)
+        Backend->>DG: Forward to Deepgram
+        DG-->>Backend: Transcript with speaker IDs
     end
 
-    Note over Backend: Profile duration elapsed
-    Backend->>Socket2: Close socket
-
-    loop Remaining session
-        App->>Backend: Audio chunk
-        Backend->>Socket1: Send to live socket
-        Socket1-->>Backend: Transcript with speaker IDs
-        Backend-->>App: Segments (is_user: true/false)
-    end
+    Note over Backend: New speaker detected (2s+ audio)
+    Backend->>Embed: Extract speaker embedding from audio
+    Embed-->>Backend: Compare with user embedding
+    Backend-->>App: Segments (is_user: true/false)
 ```
 
 ### Speech Profile Benefits
 
-1. **User Identification**: Audio from the first ~30 seconds trains speaker recognition
-2. **Speaker Attribution**: System identifies which segments are from the device owner
-3. **Improved Accuracy**: Better speaker diarization in multi-person conversations
+1. **User Identification**: Speaker embedding comparison identifies the device owner by voice biometrics
+2. **No Startup Delay**: Transcription begins immediately (no profile audio prepending)
+3. **Single Socket**: One Deepgram connection per session (reduced API costs)
 
 ## Transcription Flow
 
@@ -315,7 +300,7 @@ sequenceDiagram
     App sends binary audio chunks. Backend decodes based on codec parameter.
   </Step>
   <Step title="STT Processing" icon="microphone">
-    Decoded audio sent to Deepgram/Soniox. Provider returns word-level transcripts with speaker IDs.
+    Decoded audio sent to Deepgram. Provider returns word-level transcripts with speaker IDs.
   </Step>
   <Step title="Segment Creation" icon="align-left">
     Words grouped into segments. Same-speaker consecutive words merged. Timing adjusted for speech profile offset.
@@ -577,12 +562,12 @@ The system includes robust error handling:
 | Error Type | Handling |
 |------------|----------|
 | **STT Connection Failed** | Exponential backoff retry (1s → 32s, 3 attempts) |
-| **Provider Error** | Automatic fallback to next provider |
+| **Provider Error** | Exponential backoff retry with Deepgram |
 | **Decode Error** | Log and skip corrupted audio chunk |
 | **WebSocket Error** | Clean close with appropriate code |
 
 <Warning>
-If all STT providers fail after retries, the connection will be closed with an error message. The app should handle reconnection.
+If the STT provider fails after retries, the connection will be closed with an error message. The app should handle reconnection.
 </Warning>
 
 ## Key File Locations
@@ -591,7 +576,6 @@ If all STT providers fail after retries, the connection will be closed with an e
 |-----------|------|
 | WebSocket Handler | `backend/routers/transcribe.py` |
 | Deepgram Integration | `backend/utils/stt/streaming.py` |
-| Soniox Integration | `backend/utils/stt/streaming.py` |
 | Audio Decoding | `backend/routers/transcribe.py` |
 | Speech Profile | `backend/utils/stt/speech_profile.py` |
 | VAD (Voice Activity) | `backend/utils/stt/vad.py` |

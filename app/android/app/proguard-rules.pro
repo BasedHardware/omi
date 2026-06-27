@@ -48,6 +48,11 @@
 
 # You might not be using firebase
 -keep class com.google.firebase.** { *; }
+# firebase-auth-ktx references com.google.firebase.ktx.Firebase, which was removed
+# from firebase-common in the BoM pulled by recent firebase_core. The KTX
+# Firebase.auth extension isn't invoked at runtime (the firebase_auth plugin uses
+# the Java API), so suppress R8's missing-class error for the transitional KTX pkg.
+-dontwarn com.google.firebase.ktx.**
 -keep class com.builttoroam.devicecalendar.** { *; }
 
 -keep class com.pravera.flutter_foreground_task.service.** { *; }

@@ -2,18 +2,71 @@
 
 import os
 import struct
+import sys
 import tempfile
 import threading
 import time
+import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package_path(name: str, path: Path):
+    module = sys.modules.get(name)
+    if module is None:
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    parent_name, _, child_name = name.rpartition(".")
+    if parent_name:
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, child_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path):
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    if module_file is not None and Path(module_file).resolve() == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+    parent_name, _, child_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.stt", BACKEND_DIR / "utils" / "stt")
+_drop_stale_module("utils.http_client", BACKEND_DIR / "utils" / "http_client.py")
+_drop_stale_module("utils.stt.vad", BACKEND_DIR / "utils" / "stt" / "vad.py")
+_drop_stale_module("utils.stt.vad_gate", BACKEND_DIR / "utils" / "stt" / "vad_gate.py")
+
+sys.modules.setdefault('database.redis_db', MagicMock())
+sys.modules.setdefault('onnxruntime', MagicMock())
+if 'pydub' not in sys.modules:
+    _pydub_mod = types.ModuleType('pydub')
+    _pydub_mod.AudioSegment = MagicMock()
+    sys.modules['pydub'] = _pydub_mod
 
 from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
 from utils.stt.vad_gate import (
     DgWallMapper,
     GateState,
     GatedDeepgramSocket,
+    GatedSTTSocket,
     VAD_GATE_KEEPALIVE_SEC,
     VADStreamingGate,
     is_gate_enabled,
@@ -23,37 +76,38 @@ from utils.stt.vad_gate import (
 _mock_is_speech = False
 _mock_vad_prob = None  # When set, overrides _mock_is_speech for exact probability control
 
+import numpy as np
 
-class _MockVADModel:
-    """Mock Silero VAD model that returns speech probability directly.
 
-    Returns 0.9 for speech, 0.1 for silence — matching how the raw model
-    works (continuous probability per window, NOT event-based like VADIterator).
+def _mock_run_vad_window(window, state, context):
+    """Mock run_vad_window that returns controlled probability.
+
+    Returns 0.9 for speech, 0.1 for silence — matching how the real ONNX model
+    works (continuous probability per window).
     When _mock_vad_prob is set, returns that exact value for boundary testing.
     """
+    if _mock_vad_prob is not None:
+        prob = float(_mock_vad_prob)
+    else:
+        prob = 0.9 if _mock_is_speech else 0.1
+    return prob, state, context
 
-    def __call__(self, tensor, sample_rate):
-        if _mock_vad_prob is not None:
-            return _mock_vad_prob
-        return 0.9 if _mock_is_speech else 0.1
 
-    def reset_states(self):
-        pass
+def _mock_make_fresh_state():
+    """Mock make_fresh_state returning zero arrays (matches real signature)."""
+    return np.zeros((2, 1, 128), dtype=np.float32), np.zeros((1, 64), dtype=np.float32)
 
 
 @pytest.fixture(autouse=True)
 def mock_silero():
-    """Mock Silero VAD model to avoid torch dependency in tests.
+    """Mock ONNX VAD functions to avoid onnxruntime dependency in tests.
 
-    Patches the raw model (not VADIterator) and sets _vad_torch=None
-    so _run_vad passes numpy arrays directly to the mock.
+    Patches run_vad_window and make_fresh_state at the vad_gate import site
+    so _run_vad uses the mock instead of real ONNX inference.
     """
-    mock_model = _MockVADModel()
     with (
-        patch('utils.stt.vad_gate._vad_model', mock_model),
-        patch('utils.stt.vad_gate._vad_torch', None),
-        patch('utils.stt.vad_gate._vad_model_pool', None),
-        patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 2),
+        patch('utils.stt.vad_gate.run_vad_window', side_effect=_mock_run_vad_window),
+        patch('utils.stt.vad_gate.make_fresh_state', side_effect=_mock_make_fresh_state),
     ):
         global _mock_is_speech, _mock_vad_prob
         _mock_is_speech = False
@@ -1056,7 +1110,7 @@ class TestActivateMode:
         assert gate._pre_roll_total_ms == 0.0
 
     def test_activate_syncs_mapper_cursor(self):
-        """activate() should advance DgWallMapper cursor to match shadow phase audio."""
+        """activate() should advance WallTimeMapper cursor to match shadow phase audio."""
         gate = self._make_gate(mode='shadow')
         t = 1000.0
 
@@ -1069,8 +1123,8 @@ class TestActivateMode:
 
         gate.activate()
 
-        # Mapper DG cursor should be 0.3s (not 0.0)
-        assert gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(0.3, abs=0.01)
+        # Mapper provider cursor should be 0.3s (not 0.0)
+        assert gate.dg_wall_mapper._provider_cursor_sec == pytest.approx(0.3, abs=0.01)
 
     def test_shadow_active_remap_continuous(self):
         """After shadow→active, remapped timestamps should be continuous, not over-shifted."""
@@ -1202,39 +1256,24 @@ class TestStructuredMetricsLog:
         assert payload['estimated_savings_pct'] == pytest.approx(payload['bytes_saved_ratio'] * 100.0, abs=0.001)
 
 
-class _StatefulMockModel:
-    def __init__(self):
-        self._state = 0
+class TestOnnxStateAndConcurrency:
+    """Tests for ONNX VAD state persistence and concurrent inference."""
 
-    def __call__(self, tensor, sample_rate):
-        self._state += 1
-        return 0.9 if self._state >= 2 else 0.1
-
-    def reset_states(self):
-        self._state = 0
-
-
-class _SlowMockModel:
-    def __init__(self, sleep_sec):
-        self.sleep_sec = sleep_sec
-
-    def __call__(self, tensor, sample_rate):
-        time.sleep(self.sleep_sec)
-        return 0.1
-
-    def reset_states(self):
-        pass
-
-
-class TestModelPoolAndState:
     def test_session_state_persists_across_chunks(self):
-        """Second chunk should see carried LSTM-like state and trigger speech."""
-        model = _StatefulMockModel()
+        """Second chunk should see carried LSTM-like state and trigger speech.
+
+        Uses a stateful mock that returns silence on first call, speech on second.
+        """
+        call_count = [0]
+
+        def _stateful_run_vad_window(window, state, context):
+            call_count[0] += 1
+            prob = 0.9 if call_count[0] >= 2 else 0.1
+            return prob, state, context
+
         with (
-            patch('utils.stt.vad_gate._vad_model', model),
-            patch('utils.stt.vad_gate._vad_torch', None),
-            patch('utils.stt.vad_gate._vad_model_pool', None),
-            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 1),
+            patch('utils.stt.vad_gate.run_vad_window', side_effect=_stateful_run_vad_window),
+            patch('utils.stt.vad_gate.make_fresh_state', side_effect=_mock_make_fresh_state),
         ):
             gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='test', session_id='test')
             out1 = gate.process_audio(_make_pcm(40), 1000.0)
@@ -1243,52 +1282,22 @@ class TestModelPoolAndState:
             assert not out1.is_speech
             assert out2.is_speech
 
-    def test_model_pool_allows_parallel_inference(self):
-        """Two sessions should infer concurrently when pool size > 1."""
-        sleep_sec = 0.2
-        model = _SlowMockModel(sleep_sec=sleep_sec)
-        with (
-            patch('utils.stt.vad_gate._vad_model', model),
-            patch('utils.stt.vad_gate._vad_torch', None),
-            patch('utils.stt.vad_gate._vad_model_pool', None),
-            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', 2),
-        ):
-            gate1 = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u1', session_id='s1')
-            gate2 = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='u2', session_id='s2')
-            barrier = threading.Barrier(3)
-            chunk = _make_pcm(40)  # >= 1 VAD window at 16kHz
+    def test_concurrent_sessions_no_deadlock(self):
+        """Multiple concurrent sessions should complete without deadlock.
 
-            def _run(gate, wall_time):
-                barrier.wait()
-                gate.process_audio(chunk, wall_time)
-
-            t1 = threading.Thread(target=_run, args=(gate1, 1000.0))
-            t2 = threading.Thread(target=_run, args=(gate2, 1000.0))
-            t1.start()
-            t2.start()
-            start = time.perf_counter()
-            barrier.wait()
-            t1.join()
-            t2.join()
-            elapsed = time.perf_counter() - start
-
-            assert elapsed < sleep_sec * 1.75
-
-
-class TestPoolExhaustionUnderContention:
-    """Tests for pool behavior when more callers than pool size."""
-
-    def test_callers_exceed_pool_size_no_deadlock(self):
-        """4 concurrent callers with pool_size=2 should all complete (no deadlock)."""
+        ONNX sessions are stateless and thread-safe — per-connection state
+        is stored on VADStreamingGate instances, not the model.
+        """
         sleep_sec = 0.05
-        model = _SlowMockModel(sleep_sec=sleep_sec)
-        pool_size = 2
+
+        def _slow_run_vad_window(window, state, context):
+            time.sleep(sleep_sec)
+            return 0.1, state, context
+
         num_callers = 4
         with (
-            patch('utils.stt.vad_gate._vad_model', model),
-            patch('utils.stt.vad_gate._vad_torch', None),
-            patch('utils.stt.vad_gate._vad_model_pool', None),
-            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', pool_size),
+            patch('utils.stt.vad_gate.run_vad_window', side_effect=_slow_run_vad_window),
+            patch('utils.stt.vad_gate.make_fresh_state', side_effect=_mock_make_fresh_state),
         ):
             gates = [
                 VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid=f'u{i}', session_id=f's{i}')
@@ -1315,51 +1324,12 @@ class TestPoolExhaustionUnderContention:
                 t.join(timeout=10)
             elapsed = time.perf_counter() - start
 
-            # All callers should complete (no deadlock)
             for i in range(num_callers):
                 assert errors[i] is None, f'Caller {i} got error: {errors[i]}'
                 assert results[i] is not None, f'Caller {i} got no result (deadlock?)'
 
-            # With pool_size=2, 4 callers should take ~2x the single-call time (2 batches)
-            # Allow generous margin for CI jitter
-            assert elapsed < sleep_sec * 6, f'Took {elapsed:.3f}s — possible starvation'
-
-    def test_pool_recovery_after_contention(self):
-        """After contention burst, pool models should be returned and reusable."""
-        model = _SlowMockModel(sleep_sec=0.01)
-        pool_size = 2
-        with (
-            patch('utils.stt.vad_gate._vad_model', model),
-            patch('utils.stt.vad_gate._vad_torch', None),
-            patch('utils.stt.vad_gate._vad_model_pool', None),
-            patch('utils.stt.vad_gate.VAD_GATE_MODEL_POOL_SIZE', pool_size),
-        ):
-            # First: burst of contention
-            gates = [
-                VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid=f'u{i}', session_id=f's{i}')
-                for i in range(4)
-            ]
-            chunk = _make_pcm(40)
-            threads = []
-            for g in gates:
-                t = threading.Thread(target=lambda gate: gate.process_audio(chunk, 1000.0), args=(g,))
-                threads.append(t)
-                t.start()
-            for t in threads:
-                t.join(timeout=10)
-
-            # After contention: pool should be fully returned (pool_size items available)
-            from utils.stt.vad_gate import _vad_model_pool
-
-            assert _vad_model_pool is not None
-            assert (
-                _vad_model_pool.qsize() == pool_size
-            ), f'Pool has {_vad_model_pool.qsize()} models, expected {pool_size}'
-
-            # New caller should work immediately
-            new_gate = VADStreamingGate(sample_rate=16000, channels=1, mode='active', uid='new', session_id='new')
-            out = new_gate.process_audio(chunk, 2000.0)
-            assert out is not None
+            # ONNX is truly concurrent (no pool), so all should complete in ~1x sleep time
+            assert elapsed < sleep_sec * 3, f'Took {elapsed:.3f}s — unexpected serialization'
 
 
 class TestLongSessionStress:
@@ -1645,11 +1615,9 @@ class TestFinishErrorPublicAPI:
 
 
 class TestGateCreationIntegration:
-    """Integration tests mirroring transcribe.py gate creation/activation wiring.
+    """Integration tests mirroring transcribe.py gate creation wiring.
 
-    These tests exercise the exact branching logic from:
-    - routers/transcribe.py:742 (gate creation with preseconds → shadow)
-    - routers/transcribe.py:1801 (activation in flush_stt_buffer)
+    Gate is always created in active mode (no presecond speech profile trick).
     """
 
     def test_gate_not_created_when_disabled(self):
@@ -1657,104 +1625,21 @@ class TestGateCreationIntegration:
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'off'):
             assert not is_gate_enabled()
 
-    def test_transcribe_gate_creation_with_preseconds(self):
-        """Mirror transcribe.py:742 — active mode + preseconds > 0 → shadow gate."""
+    def test_transcribe_gate_always_active(self):
+        """Gate is always created in active mode (no speech profile presecond trick)."""
         with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
-            # Mirror transcribe.py:742-752
-            uid = 'test-uid'
-            speech_profile_preseconds = 8.0  # Has speech profile
             assert is_gate_enabled()
 
             from utils.stt.vad_gate import VAD_GATE_MODE as _mode
 
             gate_mode = _mode
-            if speech_profile_preseconds > 0 and _mode == 'active':
-                gate_mode = 'shadow'
-
             vad_gate = VADStreamingGate(
                 sample_rate=16000,
                 channels=1,
                 mode=gate_mode,
-                uid=uid,
+                uid='test-uid',
                 session_id='sess',
             )
-            assert vad_gate.mode == 'shadow'
-
-    def test_transcribe_gate_creation_without_preseconds(self):
-        """Mirror transcribe.py:742 — active mode + no preseconds → active gate."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
-            uid = 'test-uid'
-            speech_profile_preseconds = 0.0  # No speech profile
-            assert is_gate_enabled()
-
-            from utils.stt.vad_gate import VAD_GATE_MODE as _mode
-
-            gate_mode = _mode
-            if speech_profile_preseconds > 0 and _mode == 'active':
-                gate_mode = 'shadow'
-
-            vad_gate = VADStreamingGate(
-                sample_rate=16000,
-                channels=1,
-                mode=gate_mode,
-                uid=uid,
-                session_id='sess',
-            )
-            assert vad_gate.mode == 'active'
-
-    def test_transcribe_flush_activation_path(self):
-        """Mirror transcribe.py:1801 — profile complete triggers shadow→active."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
-            from utils.stt.vad_gate import VAD_GATE_MODE as _mode
-
-            # Setup: gate in shadow mode (preseconds > 0)
-            vad_gate = VADStreamingGate(
-                sample_rate=16000,
-                channels=1,
-                mode='shadow',
-                uid='test',
-                session_id='sess',
-            )
-            t = 1000.0
-            # Simulate 8s of shadow mode audio (profile phase)
-            _set_vad_speech(False)
-            for i in range(267):
-                vad_gate.process_audio(_make_pcm(30), t + i * 0.03)
-
-            # Mirror transcribe.py:1795-1802 activation condition
-            deepgram_profile_socket = MagicMock()  # Non-None = profile was active
-            profile_complete = True
-            if profile_complete and deepgram_profile_socket:
-                deepgram_profile_socket = None
-                # transcribe.py:1801
-                if vad_gate is not None and _mode == 'active' and vad_gate.mode == 'shadow':
-                    vad_gate.activate()
-
-            assert vad_gate.mode == 'active'
-            assert vad_gate._state == GateState.SILENCE
-            assert vad_gate.dg_wall_mapper._dg_cursor_sec == pytest.approx(8.0, abs=0.1)
-
-    def test_transcribe_no_activation_without_profile_socket(self):
-        """No activation when there's no profile socket (preseconds == 0)."""
-        with patch('utils.stt.vad_gate.VAD_GATE_MODE', 'active'):
-            from utils.stt.vad_gate import VAD_GATE_MODE as _mode
-
-            vad_gate = VADStreamingGate(
-                sample_rate=16000,
-                channels=1,
-                mode='active',
-                uid='test',
-                session_id='sess',
-            )
-            deepgram_profile_socket = None  # No profile socket
-            profile_complete = True
-
-            # Mirror transcribe.py:1795-1802
-            if profile_complete and deepgram_profile_socket:
-                if vad_gate is not None and _mode == 'active' and vad_gate.mode == 'shadow':
-                    vad_gate.activate()
-
-            # Gate stays in active mode, never went through shadow
             assert vad_gate.mode == 'active'
 
     def test_gate_init_failure_results_in_none(self):
@@ -2231,3 +2116,70 @@ class TestDG1011KeepaliveGap:
             )
         finally:
             safe.finish()
+
+
+class TestGatedSTTSocketPassthroughMode:
+    """Verify passthrough_audio=True forwards raw audio regardless of VAD gate decision."""
+
+    SAMPLE_RATE = 16000
+    FRAME_SIZE = SAMPLE_RATE * 2
+
+    def _make_gate(self):
+        gate = MagicMock(spec=VADStreamingGate)
+        gate.uid = 'test-uid'
+        gate.session_id = 'test-session'
+        gate_output = MagicMock()
+        gate_output.audio_to_send = None
+        gate_output.should_finalize = False
+        gate.process_audio.return_value = gate_output
+        return gate, gate_output
+
+    def test_passthrough_sends_raw_audio_even_when_gate_suppresses(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_called_once_with(audio)
+
+    def test_non_passthrough_does_not_send_when_gate_suppresses(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=False)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_not_called()
+
+    def test_passthrough_still_processes_vad_for_metrics(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        gate.process_audio.assert_called_once()
+
+    def test_passthrough_finalize_still_triggers(self):
+        mock_conn = MagicMock()
+        mock_conn.is_connection_dead = False
+        gate, gate_output = self._make_gate()
+        gate_output.audio_to_send = None
+        gate_output.should_finalize = True
+
+        gated = GatedSTTSocket(mock_conn, gate=gate, passthrough_audio=True)
+        audio = b'\x01' * self.FRAME_SIZE
+        gated.send(audio)
+
+        mock_conn.send.assert_called_once_with(audio)
+        mock_conn.finalize.assert_called_once()

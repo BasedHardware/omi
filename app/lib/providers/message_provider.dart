@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,6 +19,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message.dart';
@@ -25,20 +28,11 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/services/agent_chat_service.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/file.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_service.dart';
 
 class MessageProvider extends ChangeNotifier {
-  static late MethodChannel _askAIChannel;
-
-  MessageProvider() {
-    if (PlatformService.isDesktop) {
-      _askAIChannel = const MethodChannel('com.omi/ask_ai');
-      _askAIChannel.setMethodCallHandler(_handleAskAIMethodCall);
-    }
-  }
+  MessageProvider();
 
   AppProvider? appProvider;
   List<ServerMessage> messages = [];
@@ -60,6 +54,10 @@ class MessageProvider extends ChangeNotifier {
 
   List<App> chatApps = [];
   bool isLoadingChatApps = false;
+
+  // Chat quota exceeded — set transiently when backend returns 402
+  bool _chatQuotaExceeded = false;
+  bool get isChatQuotaExceeded => _chatQuotaExceeded;
 
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
@@ -209,11 +207,6 @@ class MessageProvider extends ChangeNotifier {
 
   void captureImage() async {
     final l10n = globalNavigatorKey.currentContext?.l10n;
-    if (PlatformService.isDesktop) {
-      AppSnackbar.showSnackbarError(l10n?.msgCameraNotAvailable ?? 'Camera capture is not available on this platform');
-      return;
-    }
-
     try {
       var res = await ImagePicker().pickImage(source: ImageSource.camera);
       if (res != null) {
@@ -248,50 +241,18 @@ class MessageProvider extends ChangeNotifier {
     try {
       List<File> files = [];
 
-      if (PlatformService.isDesktop) {
-        try {
-          FilePickerResult? result = await FilePicker.platform.pickFiles(
-            type: FileType.custom,
-            allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'],
-            allowMultiple: true,
-            dialogTitle: 'Select image files',
-            withData: false,
-            withReadStream: false,
-          );
-
-          if (result != null && result.files.isNotEmpty) {
-            for (var file in result.files) {
-              if (file.path != null && files.length < (4 - selectedFiles.length)) {
-                files.add(File(file.path!));
-              }
-            }
-          } else {
-            return;
-          }
-        } on PlatformException catch (e) {
-          AppSnackbar.showSnackbarError(
-            l10n?.msgFilePickerError(e.message ?? '') ?? 'Error opening file picker: ${e.message}',
-          );
-          return;
-        } catch (e) {
-          Logger.debug('FilePicker general error: $e');
-          AppSnackbar.showSnackbarError(l10n?.msgSelectImagesError(e.toString()) ?? 'Error selecting images: $e');
-          return;
+      List res = [];
+      if (4 - selectedFiles.length == 1) {
+        var image = await ImagePicker().pickImage(source: ImageSource.gallery);
+        if (image != null) {
+          res = [image];
         }
       } else {
-        List res = [];
-        if (4 - selectedFiles.length == 1) {
-          var image = await ImagePicker().pickImage(source: ImageSource.gallery);
-          if (image != null) {
-            res = [image];
-          }
-        } else {
-          res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
-        }
+        res = await ImagePicker().pickMultiImage(limit: 4 - selectedFiles.length);
+      }
 
-        for (var r in res) {
-          files.add(File(r.path));
-        }
+      for (var r in res) {
+        files.add(File(r.path));
       }
 
       if (files.isNotEmpty) {
@@ -373,6 +334,16 @@ class MessageProvider extends ChangeNotifier {
 
   void clearUploadedFiles() {
     uploadedFiles.clear();
+    notifyListeners();
+  }
+
+  void clearUserData() {
+    messages = [];
+    chatApps = [];
+    selectedFiles = [];
+    selectedFileTypes = [];
+    uploadedFiles = [];
+    uploadingFiles = {};
     notifyListeners();
   }
 
@@ -502,11 +473,20 @@ class MessageProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool _voiceSendInFlight = false;
+
   Future sendVoiceMessageStreamToServer(
     List<List<int>> audioBytes, {
     Function? onFirstChunkRecived,
     BleAudioCodec? codec,
+    bool playResponseAudio = false,
   }) async {
+    // Re-entry guard so a duplicated end-of-session signal from the device
+    // button can't kick off two parallel voice replies.
+    if (_voiceSendInFlight) return;
+    if (audioBytes.isEmpty) return;
+    _voiceSendInFlight = true;
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     var file = await FileUtils.saveAudioBytesToTempFile(
       audioBytes,
       DateTime.now().millisecondsSinceEpoch ~/ 1000 - (audioBytes.length / 100).ceil(),
@@ -519,15 +499,23 @@ class MessageProvider extends ChangeNotifier {
     }
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
-    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+    bool isPersonaChat = false;
 
-    MixpanelManager().chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
+    PlatformManager.instance.analytics.chatVoiceInputUsed(chatTargetId: chatTargetId, isPersonaChat: isPersonaChat);
 
     setShowTypingIndicator(true);
     var message = ServerMessage.empty();
     messages.add(message);
     var aiIndex = messages.length - 1;
     notifyListeners();
+
+    // Voice response playback is triggered only from the Omi device-button
+    // path (capture_provider). The chat-screen mic input does not pass
+    // playResponseAudio=true.
+    final String playbackMessageId = message.id;
+    if (playResponseAudio) {
+      await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
+    }
 
     try {
       bool firstChunkRecieved = false;
@@ -553,6 +541,13 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.data) {
           message.text += chunk.text;
+          if (playResponseAudio) {
+            OmiVoicePlaybackService.instance.updateStreamingResponse(
+              messageId: playbackMessageId,
+              fullText: message.text,
+              isFinal: false,
+            );
+          }
           notifyListeners();
           continue;
         }
@@ -560,6 +555,13 @@ class MessageProvider extends ChangeNotifier {
         if (chunk.type == MessageChunkType.done) {
           message = chunk.message!;
           messages[aiIndex] = message;
+          if (playResponseAudio) {
+            OmiVoicePlaybackService.instance.updateStreamingResponse(
+              messageId: playbackMessageId,
+              fullText: message.text,
+              isFinal: true,
+            );
+          }
           notifyListeners();
           continue;
         }
@@ -572,6 +574,17 @@ class MessageProvider extends ChangeNotifier {
         }
 
         if (chunk.type == MessageChunkType.error) {
+          if (_tryParseQuotaError(chunk.text)) {
+            final l10n = globalNavigatorKey.currentContext?.l10n;
+            message.text = l10n?.chatQuotaExceededReply ??
+                "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            if (playResponseAudio) {
+              await OmiVoicePlaybackService.instance.interrupt();
+            }
+            notifyListeners();
+            setShowTypingIndicator(false);
+            return;
+          }
           message.text = chunk.text;
           notifyListeners();
           continue;
@@ -579,14 +592,25 @@ class MessageProvider extends ChangeNotifier {
       }
     } catch (e) {
       message.text = ServerMessageChunk.failedMessage().text;
+      if (playResponseAudio) {
+        await OmiVoicePlaybackService.instance.interrupt();
+      }
       notifyListeners();
+    } finally {
+      _voiceSendInFlight = false;
     }
 
     setShowTypingIndicator(false);
   }
 
   Future sendMessageStreamToServer(String text) async {
+    _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
+    // If Omi was still speaking a prior voice reply, stop it — the user's
+    // typed message takes precedence.
+    if (OmiVoicePlaybackService.instance.isSpeaking) {
+      await OmiVoicePlaybackService.instance.interrupt();
+    }
     setShowTypingIndicator(true);
     var currentAppId = appProvider?.selectedChatAppId;
     if (currentAppId == 'no_selected') {
@@ -595,9 +619,9 @@ class MessageProvider extends ChangeNotifier {
 
     String chatTargetId = currentAppId ?? 'omi';
     App? targetApp = currentAppId != null ? appProvider?.apps.firstWhereOrNull((app) => app.id == currentAppId) : null;
-    bool isPersonaChat = targetApp != null ? !targetApp.isNotPersona() : false;
+    bool isPersonaChat = false;
 
-    MixpanelManager().chatMessageSent(
+    PlatformManager.instance.analytics.chatMessageSent(
       message: text,
       includesFiles: uploadedFiles.isNotEmpty,
       numberOfFiles: uploadedFiles.length,
@@ -681,6 +705,14 @@ class MessageProvider extends ChangeNotifier {
 
         if (chunk.type == MessageChunkType.error) {
           agentLog('[MessageProvider] error: ${chunk.text}');
+          if (_tryParseQuotaError(chunk.text)) {
+            // Keep the user's message visible; replace AI placeholder with quota message
+            final l10n = globalNavigatorKey.currentContext?.l10n;
+            message.text = l10n?.chatQuotaExceededReply ??
+                "You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions.";
+            notifyListeners();
+            return;
+          }
           message.text = chunk.text;
           notifyListeners();
           continue;
@@ -698,6 +730,22 @@ class MessageProvider extends ChangeNotifier {
       setShowTypingIndicator(false);
       setSendingMessage(false);
     }
+  }
+
+  bool _tryParseQuotaError(String errorText) {
+    try {
+      var json = jsonDecode(errorText);
+      if (json is! Map) return false;
+      // FastAPI wraps HTTPException detail in {"detail": {...}}
+      var detail = json['detail'] is Map ? json['detail'] as Map<String, dynamic> : json;
+      if (detail['error'] == 'quota_exceeded') {
+        detail['allowed'] = false;
+        _chatQuotaExceeded = true;
+        notifyListeners();
+        return true;
+      }
+    } catch (_) {}
+    return false;
   }
 
   Future _sendMessageViaAgent(String text, String? appId) async {
@@ -938,58 +986,5 @@ class MessageProvider extends ChangeNotifier {
 
   App? messageSenderApp(String? appId) {
     return appProvider?.apps.firstWhereOrNull((p) => p.id == appId);
-  }
-
-  Future<void> _handleAskAIMethodCall(MethodCall call) async {
-    if (!PlatformService.isDesktop) {
-      return;
-    }
-    switch (call.method) {
-      case 'sendQuery':
-        final args = call.arguments as Map<dynamic, dynamic>;
-        final message = args['message'] as String;
-        final filePath = args['filePath'] as String?;
-
-        List<String>? fileIds;
-        if (filePath != null && filePath.isNotEmpty) {
-          final file = File(filePath);
-          final uploadedFilesResult = await uploadFiles([file], null);
-          if (uploadedFilesResult != null) {
-            fileIds = uploadedFilesResult.map((f) => f.id).toList();
-          } else {
-            final l10n = globalNavigatorKey.currentContext?.l10n;
-            _askAIChannel.invokeMethod('aiResponseChunk', {
-              'type': 'error',
-              'text': l10n?.msgUploadAttachedFileFailed ?? 'Failed to upload the attached file.',
-            });
-            return;
-          }
-        }
-
-        try {
-          await for (var chunk in sendMessageStreamServer(message, filesId: fileIds)) {
-            final chunkMap = {
-              'type': chunk.type.toString().split('.').last,
-              'text': chunk.text,
-              'messageId': chunk.messageId,
-            };
-            if (chunk.type == MessageChunkType.done && chunk.message != null) {
-              chunkMap['text'] = chunk.message!.text;
-            }
-            _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
-          }
-        } catch (e) {
-          final failedChunk = ServerMessageChunk.failedMessage();
-          final chunkMap = {
-            'type': failedChunk.type.toString().split('.').last,
-            'text': failedChunk.text,
-            'messageId': failedChunk.messageId,
-          };
-          _askAIChannel.invokeMethod('aiResponseChunk', chunkMap);
-        }
-        break;
-      default:
-        throw PlatformException(code: 'Unimplemented', details: 'Method ${call.method} not implemented.');
-    }
   }
 }

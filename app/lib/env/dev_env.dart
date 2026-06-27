@@ -13,16 +13,12 @@ final class DevEnv implements EnvFields {
   final String? openAIAPIKey = _DevEnv.openAIAPIKey;
 
   @override
-  @EnviedField(varName: 'MIXPANEL_PROJECT_TOKEN', obfuscate: true)
-  final String? mixpanelProjectToken = _DevEnv.mixpanelProjectToken;
+  @EnviedField(varName: 'POSTHOG_API_KEY', obfuscate: true)
+  final String? posthogApiKey = _DevEnv.posthogApiKey;
 
   @override
   @EnviedField(varName: 'API_BASE_URL', obfuscate: true)
   final String? apiBaseUrl = _DevEnv.apiBaseUrl;
-
-  @override
-  @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
-  final String? growthbookApiKey = _DevEnv.growthbookApiKey;
 
   @override
   @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
