@@ -121,6 +121,7 @@ while ! mkdir "$RUN_SH_LOCK_DIR" 2>/dev/null; do
         exit 1
     fi
 done
+trap '_release_run_sh_lock' EXIT INT TERM
 
 macos_copy_tree() {
     local src="$1"
