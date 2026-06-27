@@ -718,24 +718,19 @@ def install_memory_product_router_stubs(
 _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False
 
 
-def install_firestore_transactional_stub() -> None:
+def install_firestore_transactional_stub():
     """Install a fake-transaction-compatible ``transactional`` on ``firestore_v1``.
 
-    Load the real Firestore client modules first when available so ``FieldFilter`` and
-    related symbols remain importable (e.g. ``database.knowledge_graph`` in isolated apply
-    tests). ``setdefault`` below must not replace an already-loaded real module.
+    When the real ``google.cloud.firestore_v1`` is already imported, installs a wrapper
+    module in ``sys.modules`` instead of mutating the real module attribute.
+    Returns a restore callable when a wrapper was installed; otherwise ``None``.
     """
     try:
-        import google.cloud.firestore  # noqa: F401
-        import google.cloud.firestore_v1  # noqa: F401
+        import google.cloud.firestore_v1 as real_firestore_v1
     except ImportError:
-        pass
+        real_firestore_v1 = None
 
-    google_stub = sys.modules.setdefault("google", types.ModuleType("google"))
-    cloud_stub = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
-    firestore_v1_stub = sys.modules.setdefault(
-        "google.cloud.firestore_v1", types.ModuleType("google.cloud.firestore_v1")
-    )
+    is_real_module = real_firestore_v1 is not None and getattr(real_firestore_v1, "__file__", None) is not None
 
     def transactional(func):
         def wrapper(transaction, *args, **kwargs):
@@ -756,10 +751,25 @@ def install_firestore_transactional_stub() -> None:
 
         return wrapper
 
+    if is_real_module:
+        prior_module = sys.modules.get("google.cloud.firestore_v1")
+        wrapper_mod = types.ModuleType("google.cloud.firestore_v1")
+        wrapper_mod.__dict__.update(real_firestore_v1.__dict__)
+        wrapper_mod.transactional = transactional
+        sys.modules["google.cloud.firestore_v1"] = wrapper_mod
+        return lambda: sys.modules.__setitem__("google.cloud.firestore_v1", prior_module)
+
+    google_stub = sys.modules.setdefault("google", types.ModuleType("google"))
+    cloud_stub = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
+    firestore_v1_stub = sys.modules.setdefault(
+        "google.cloud.firestore_v1", types.ModuleType("google.cloud.firestore_v1")
+    )
+
     firestore_v1_stub.transactional = transactional
     google_stub.cloud = cloud_stub
     firestore_mod = sys.modules.setdefault("google.cloud.firestore", types.ModuleType("google.cloud.firestore"))
     cloud_stub.firestore = firestore_mod
+    return None
 
 
 def ensure_non_active_routes_firestore_transactional_stub() -> None:
