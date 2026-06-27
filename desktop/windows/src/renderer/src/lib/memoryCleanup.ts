@@ -44,10 +44,13 @@ function isFileIndexMemory(content: string): boolean {
 // it's the on-disk index restated as memories, which the local KG already holds.
 // The "Uses <App>" template is loose enough to also match a real sentence like
 // "Uses Figma for design work" (four connective-free-looking tokens). Reject a
-// match that contains a sentence connective an app-name list never has, so a
-// genuine "Uses X for/with/and …" memory is not swept up and deleted.
+// match that contains a clause connective (for/with/per) an app-name list never
+// has, so a genuine "Uses X for/with Y" memory is not swept up and deleted. Words
+// common inside proper-noun app names (of/and/the, e.g. "Bank of America") are
+// intentionally not treated as connectives, so those app-index memories are still
+// cleaned up.
 function isUsesTemplate(c: string): boolean {
-  return USES_TEMPLATE.test(c) && !/\b(for|and|with|of|the|per)\b/i.test(c)
+  return USES_TEMPLATE.test(c) && !/\b(for|with|per)\b/i.test(c)
 }
 
 export function isAppIndexMemory(m: Memory): boolean {
