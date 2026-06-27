@@ -85,6 +85,12 @@ class SharedPreferencesUtil {
 
   set batchCutRequested(bool value) => saveBool('batchCutRequested', value);
 
+  // Set while interactive device onboarding has temporarily suspended Transcribe Later so the
+  // realtime demo works. Persisted so an app-kill mid-onboarding is self-healed on next capture start.
+  bool get batchModeSuspendedForOnboarding => getBool('batchModeSuspendedForOnboarding');
+
+  set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
+
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
 
