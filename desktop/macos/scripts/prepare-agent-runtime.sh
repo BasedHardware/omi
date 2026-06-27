@@ -179,13 +179,18 @@ stage_universal_node() {
 
 stage_wacli() {
   local wacli_bin="${OMI_WACLI_BIN:-}"
+  local dev_wacli="$DESKTOP_DIR/local/whatsapp/bin/openclaw-v0.11.1/wacli"
   if [ -n "$wacli_bin" ] && [ ! -x "$wacli_bin" ]; then
     echo "ERROR: OMI_WACLI_BIN is not executable: $wacli_bin" >&2
     exit 1
   fi
 
   if [ -z "$wacli_bin" ]; then
-    wacli_bin="$(command -v wacli || true)"
+    if [ -x "$dev_wacli" ]; then
+      wacli_bin="$dev_wacli"
+    else
+      wacli_bin="$(command -v wacli || true)"
+    fi
   fi
 
   if [ -z "$wacli_bin" ]; then
@@ -195,6 +200,22 @@ stage_wacli() {
     fi
     log "wacli not found; skipping staged wacli resource for local dev"
     rm -f "$WACLI_RESOURCE"
+    return
+  fi
+
+  local auth_help
+  local global_help
+  auth_help="$("$wacli_bin" auth --help 2>&1 || true)"
+  global_help="$("$wacli_bin" --help 2>&1 || true)"
+  if [[ "$auth_help" != *"--qr-format"* || "$global_help" != *"--events"* ]]; then
+    if [ "$MODE" = "universal" ] || [ -n "${OMI_WACLI_BIN:-}" ]; then
+      echo "ERROR: wacli is too old for WhatsApp QR auth. Use openclaw/wacli >= 0.11.1: $wacli_bin" >&2
+      exit 1
+    fi
+    log "wacli at $wacli_bin is too old; skipping staged wacli resource for local dev"
+    if [ ! -x "$WACLI_RESOURCE" ]; then
+      rm -f "$WACLI_RESOURCE"
+    fi
     return
   fi
 

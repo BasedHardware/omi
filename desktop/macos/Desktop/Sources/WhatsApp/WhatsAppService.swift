@@ -316,11 +316,18 @@ actor WhatsAppService {
 
   private func handleAuthLine(_ line: String) async {
     log("WhatsAppService auth event: \(line.prefix(500))")
-    if await handleTerminalQRLine(line) {
+    let cleanLine = stripANSI(line)
+    if cleanLine.contains("unknown flag: --events") || cleanLine.contains("unknown flag: --qr-format") {
+      let message = "Bundled wacli is too old. Rebuild with openclaw/wacli 0.11.1 or newer."
+      await setState(.degraded(reason: message))
+      await MainActor.run { WhatsAppState.shared.update(lastEventSummary: message) }
       return
     }
 
-    let cleanLine = stripANSI(line)
+    if await handleTerminalQRLine(cleanLine) {
+      return
+    }
+
     if looksLikeRawQRPayload(cleanLine) {
       await setState(.pairing(qr: cleanLine))
       await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Waiting for scan") }
