@@ -25,6 +25,7 @@ type Session = {
   ownerId: number // webContents id for routing replies back
   source: 'mic' | 'system'
   closed: boolean
+  connected: boolean // track connection state for fatal flag classification
 }
 
 const sessions = new Map<string, Session>()
@@ -40,7 +41,11 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   const existing = sessions.get(args.sessionId)
   if (existing) {
     // Already running — caller bug. Tear the old one down to avoid leaks.
-    try { existing.ws.close() } catch { /* ignore */ }
+    try {
+      existing.ws.close()
+    } catch {
+      /* ignore */
+    }
     sessions.delete(args.sessionId)
   }
   // Decode (not verify) the JWT to derive the uid for the query param; the
@@ -63,10 +68,17 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
     headers: { Authorization: `Bearer ${args.token}` }
   })
   ws.binaryType = 'arraybuffer'
-  const session: Session = { ws, ownerId: owner.id, source: args.source, closed: false }
+  const session: Session = {
+    ws,
+    ownerId: owner.id,
+    source: args.source,
+    closed: false,
+    connected: false
+  }
   sessions.set(args.sessionId, session)
 
   ws.on('open', () => {
+    session.connected = true
     emit(session.ownerId, { sessionId: args.sessionId, kind: 'connected' })
   })
 
@@ -100,7 +112,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
       sessionId: args.sessionId,
       kind: 'error',
       message: err.message,
-      fatal: ws.readyState !== WebSocket.OPEN
+      fatal: !session.connected // fatal if error fires before connection completes
     })
   })
 
@@ -128,7 +140,11 @@ function stopSession(sessionId: string): void {
   if (!s) return
   s.closed = true
   sessions.delete(sessionId)
-  try { s.ws.close() } catch { /* ignore */ }
+  try {
+    s.ws.close()
+  } catch {
+    /* ignore */
+  }
 }
 
 export function registerOmiListenHandlers(): void {
