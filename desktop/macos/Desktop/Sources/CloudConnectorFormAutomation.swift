@@ -108,6 +108,13 @@ enum CloudConnectorFormAutomation {
     }
 
     guard let form = findBestForm(provider: provider, values: values) else {
+      if let result = await fillClaudeConnectorByKeyboard(
+        provider: provider,
+        values: values,
+        submit: submit)
+      {
+        return result
+      }
       return
         "Error: Could not find a visible \(provider) custom connector form. Open the add connector modal in the signed-in browser, then call this tool again."
     }
@@ -146,6 +153,15 @@ enum CloudConnectorFormAutomation {
       }
     }
 
+    if !missing.isEmpty,
+      let result = await fillClaudeConnectorByKeyboard(
+        provider: provider,
+        values: values,
+        submit: submit)
+    {
+      return result
+    }
+
     var pressedButton: String?
     if submit && missing.isEmpty {
       let submitNodes = collectNodes(from: form.root, maxDepth: 12, maxNodes: 700)
@@ -172,6 +188,52 @@ enum CloudConnectorFormAutomation {
     } else {
       lines.append(submit ? "Submit skipped: no enabled Add/Connect button found." : "Submit skipped by request.")
     }
+    return lines.joined(separator: "\n")
+  }
+
+  private static func fillClaudeConnectorByKeyboard(
+    provider: String,
+    values: [FieldValue],
+    submit: Bool
+  ) async -> String? {
+    guard provider == "claude" else { return nil }
+    guard let browser = findClaudeConnectorBrowserApp() else { return nil }
+    guard let name = values.first(where: { $0.label == "Name" })?.value,
+      let serverURL = values.first(where: { $0.label == "Remote MCP server URL" })?.value,
+      let clientID = values.first(where: { $0.label == "OAuth Client ID" })?.value,
+      let clientSecret = values.first(where: { $0.label == "OAuth Client Secret" })?.value
+    else { return nil }
+
+    browser.activate(options: [.activateIgnoringOtherApps])
+    try? await Task.sleep(nanoseconds: 450_000_000)
+
+    // Claude's modal currently focuses the close button when opened. Atlas does
+    // not expose the page fields through AX, so use the modal's stable tab order.
+    pressTab(count: 3)
+    pasteIntoFocusedField(name)
+    pressTab(count: 1)
+    pasteIntoFocusedField(serverURL)
+    pressTab(count: 2)
+    pasteIntoFocusedField(clientID)
+    pressTab(count: 1)
+    pasteIntoFocusedField(clientSecret)
+
+    var lines = [
+      "Native connector form filler result:",
+      "Provider: claude",
+      "Browser/app: \(browser.localizedName ?? browser.bundleIdentifier ?? "unknown")",
+      "Filled: Name, Remote MCP server URL, OAuth Client ID, OAuth Client Secret",
+      "Method: keyboard fallback",
+    ]
+
+    if submit {
+      pressTab(count: 2)
+      sendKey(49)
+      lines.append("Submitted with button: Add (keyboard fallback)")
+    } else {
+      lines.append("Submit skipped by request.")
+    }
+
     return lines.joined(separator: "\n")
   }
 
@@ -347,6 +409,38 @@ enum CloudConnectorFormAutomation {
     return available[index]
   }
 
+  private static func findClaudeConnectorBrowserApp() -> NSRunningApplication? {
+    let ownBundleID = Bundle.main.bundleIdentifier
+    let browserApps = NSWorkspace.shared.runningApplications.filter { app in
+      guard app.bundleIdentifier != ownBundleID else { return false }
+      let name = (app.localizedName ?? app.bundleIdentifier ?? "").lowercased()
+      return name.contains("chrome")
+        || name.contains("atlas")
+        || name.contains("brave")
+        || name.contains("edge")
+        || name.contains("arc")
+        || name.contains("opera")
+        || name.contains("vivaldi")
+        || name.contains("chromium")
+    }
+
+    let frontmost = NSWorkspace.shared.frontmostApplication
+    let candidates = ([frontmost].compactMap { $0 } + browserApps).uniquedByPID()
+    for app in candidates {
+      let appElement = AXUIElementCreateApplication(app.processIdentifier)
+      for root in focusedAndWindowRoots(for: appElement) {
+        let nodes = collectNodes(from: root, maxDepth: 10, maxNodes: 500)
+        let text = nodes.map(\.searchableText).joined(separator: " ")
+        if text.contains("claude.ai/customize/connectors")
+          || text.contains("add custom connector")
+        {
+          return app
+        }
+      }
+    }
+    return nil
+  }
+
   private static func setField(_ element: AXUIElement, to value: String) -> Bool {
     if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success {
       return true
@@ -358,6 +452,23 @@ enum CloudConnectorFormAutomation {
     sendKey(0, flags: .maskCommand)
     sendKey(9, flags: .maskCommand)
     return true
+  }
+
+  private static func pasteIntoFocusedField(_ value: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(value, forType: .string)
+    sendKey(0, flags: .maskCommand)
+    Thread.sleep(forTimeInterval: 0.08)
+    sendKey(9, flags: .maskCommand)
+    Thread.sleep(forTimeInterval: 0.12)
+  }
+
+  private static func pressTab(count: Int) {
+    guard count > 0 else { return }
+    for _ in 0..<count {
+      sendKey(48)
+      Thread.sleep(forTimeInterval: 0.12)
+    }
   }
 
   private static func findActionNode(
@@ -443,5 +554,17 @@ enum CloudConnectorFormAutomation {
       return nil
     }
     return raw
+  }
+}
+
+private extension Array where Element == NSRunningApplication {
+  func uniquedByPID() -> [NSRunningApplication] {
+    var seen = Set<pid_t>()
+    var output: [NSRunningApplication] = []
+    for app in self where !seen.contains(app.processIdentifier) {
+      seen.insert(app.processIdentifier)
+      output.append(app)
+    }
+    return output
   }
 }
