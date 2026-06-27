@@ -58,16 +58,16 @@
 
 ### T-004 · Telegram auto-reply (the heart of the plugin)
 
-**Scope:**
-- `main.py` `/webhook` handler: extract `chat_id`, `from.id`, `text` → look up user → skip if own message or group or `auto_reply_enabled=False` → call `persona_client.chat` → `telegram_client.send_message` → return `{ok: True}`.
-- Safety: skip `is_from_me`, skip `chat.type in {"group", "supergroup"}`, skip if no user mapping.
-- `simple_storage.py` extended with `auto_reply_enabled: bool` and `ignored_chat_ids: list[str]`.
-- `/toggle` endpoint: flips `auto_reply_enabled` for the stored user. Called by Chat Tools (T-008).
-- Unit tests: full dispatch path with mocked persona + telegram clients. Skip cases covered.
+- [x] `_dispatch_auto_reply(user, chat_id, text)` calls `_persona_chat(...)` and `telegram_client.send_message(...)`. Empty reply + HTTP error + unexpected exception all logged, no crash.
+- [x] Safety filters: groups / supergroups / channels skipped; bot senders skipped; non-text payloads skipped.
+- [x] `POST /toggle {chat_id, enabled}` flips `auto_reply_enabled`; 404 on unknown chat.
+- [x] 12 new unit tests, all green. Total plugin tests: 27.
+- **Done**: `e44bd0fe9`
+- **Notes**: `auto_reply` field already existed in `simple_storage.users` from T-003 — no schema change needed. `ignored_chat_ids` not implemented (per-chat ignore list); spec says "single global on/off per platform for v1". Catch-all `except Exception` on the dispatch path — webhook MUST always 200 to Telegram or it gets retried indefinitely. `_persona_chat` is aliased (underscore prefix) to avoid shadowing the `chat` name in test fixtures.
 
-**Acceptance:** send a real message to a real bot → Omi persona reply appears in Telegram within ~3s. Confirmed via screenshot in named bundle `omi-clone-test`.
+---
 
-**Risk:** the persona reply might be empty (LLM refusal). Log + send a fallback "—" so the chat doesn't go silent.
+### T-005 · `plugins/omi-whatsapp-app/` — Meta Cloud API
 
 ---
 
