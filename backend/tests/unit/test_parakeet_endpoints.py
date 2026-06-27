@@ -325,6 +325,38 @@ class TestDurationGuardHTTP413:
         resp = client.post("/v1/transcribe", files={"file": ("huge.wav", wav_data, "audio/wav")})
         assert resp.status_code == 200
 
+    def test_v2_passes_when_under_limit(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 60.0
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        with patch("main.transcribe_file_v2") as mock_v2:
+            mock_v2.return_value = {"text": "ok", "segments": [], "detected_language": "en"}
+            wav_data = _make_wav_bytes(duration_s=5.0, sample_rate=16000)
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post(
+                "/v2/transcribe", files={"file": ("short.wav", wav_data, "audio/wav")}, data={"diarize": "false"}
+            )
+        assert resp.status_code == 200
+        mod._max_file_duration_sec = 0.0
+
+    def test_v1_boundary_exact_limit_passes(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        wav_data = _make_wav_bytes(duration_s=5.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("exact.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 200
+        mod._max_file_duration_sec = 0.0
+
 
 class TestMetricsEndpoint:
 
