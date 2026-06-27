@@ -7,12 +7,25 @@ const MAX_BLOCKS = 100
 
 // One bulleted-list block per memory. Notion rich_text content is capped at
 // 2000 chars per item, so long memories are truncated to stay within the limit.
+// Notion caps a single rich_text item at 2000 chars and a block at 100 items.
+// Split a long memory into <=2000 code-point chunks (so a surrogate pair is never
+// cut) and emit one rich_text item per chunk, rather than dropping the tail.
+function richTextChunks(content: string): unknown[] {
+  const cps = Array.from(content)
+  const out: unknown[] = []
+  for (let i = 0; i < cps.length && out.length < 100; i += 2000) {
+    out.push({ type: 'text', text: { content: cps.slice(i, i + 2000).join('') } })
+  }
+  if (out.length === 0) out.push({ type: 'text', text: { content: '' } })
+  return out
+}
+
 function toBlocks(memories: ExportMemory[]): unknown[] {
   return memories.map((m) => ({
     object: 'block',
     type: 'bulleted_list_item',
     bulleted_list_item: {
-      rich_text: [{ type: 'text', text: { content: m.content.slice(0, 2000) } }]
+      rich_text: richTextChunks(m.content)
     }
   }))
 }
