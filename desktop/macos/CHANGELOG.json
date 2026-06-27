@@ -1,8 +1,13 @@
 {
-  "unreleased": [
-    "Fixed push-to-talk voice replies cutting off, restored Notch Mode chat row clicks, and aligned subagent back buttons with the chat row list"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.546",
+      "date": "2026-06-27",
+      "changes": [
+        "Fixed push-to-talk voice replies cutting off, restored Notch Mode chat row clicks, and aligned subagent back buttons with the chat row list"
+      ]
+    },
     {
       "version": "0.11.545",
       "date": "2026-06-27",
