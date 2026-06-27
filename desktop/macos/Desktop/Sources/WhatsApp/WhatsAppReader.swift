@@ -14,9 +14,18 @@ enum WhatsAppReader {
       "messages", "list",
       "--chat", chatJid,
       "--limit", String(boundedLimit),
-      "--asc",
     ])
     return parseMessages(raw)
+  }
+
+  static func backfillRecentMessages(chatJid: String, count: Int = 50) async {
+    let boundedCount = max(1, min(count, 100))
+    _ = await runWacli([
+      "history", "backfill",
+      "--chat", chatJid,
+      "--requests", "1",
+      "--count", String(boundedCount),
+    ], readOnly: false)
   }
 
   private static func runWacliJSON(_ arguments: [String]) async -> Any? {
@@ -97,23 +106,26 @@ enum WhatsAppReader {
     }
 
     let isGroup = (boolValue(object, keys: ["isGroup", "is_group", "group", "IsGroup"]) ?? false) || jid.contains("@g.us")
-    let fallbackTitle = isGroup ? "WhatsApp Group" : nil
-    let title = stringValue(object, keys: [
+    let rawTitle = stringValue(object, keys: [
       "title", "Title", "name", "Name", "contactName", "ContactName", "pushName", "PushName",
       "displayName", "DisplayName", "chatName", "ChatName",
-    ]) ?? WhatsAppContactResolver.shared.displayName(for: jid, fallback: fallbackTitle)
-    let subtitle = stringValue(object, keys: ["phone", "phoneNumber", "number", "Number"])
-      ?? (isGroup ? "Group" : WhatsAppContactResolver.shared.detailLabel(for: jid))
+    ])
+    if !isGroup {
+      WhatsAppContactResolver.shared.remember(jid: jid, contactName: rawTitle)
+    }
+    let title = displayTitle(for: jid, rawTitle: rawTitle, isGroup: isGroup)
+    let subtitle = subtitle(for: jid, object: object, isGroup: isGroup)
     let preview = stringValue(object, keys: [
       "lastMessagePreview", "last_message_preview", "lastMessageText", "last_message_text",
-      "lastText", "text", "body", "message", "Message",
+      "lastText", "last_message", "text", "body", "message", "Message", "DisplayText", "displayText",
     ]) ?? nestedStringValue(object, parentKeys: ["lastMessage", "LastMessage", "last_message"], childKeys: [
       "text", "body", "message", "caption", "Text", "DisplayText",
     ])
     let lastActivity = dateValue(object, keys: [
-      "lastActivity", "last_activity", "lastMessageAt", "last_message_at", "timestamp", "Timestamp", "updatedAt",
+      "lastActivity", "last_activity", "lastMessageAt", "last_message_at", "lastMessageTs", "last_message_ts",
+      "last_message_timestamp", "timestamp", "Timestamp", "updatedAt",
     ]) ?? nestedDateValue(object, parentKeys: ["lastMessage", "LastMessage", "last_message"], childKeys: [
-      "timestamp", "Timestamp", "time", "createdAt", "CreatedAt",
+      "timestamp", "Timestamp", "time", "createdAt", "CreatedAt", "last_message_ts",
     ])
     let unreadCount = intValue(object, keys: ["unreadCount", "unread_count", "unread", "UnreadCount"]) ?? 0
 
@@ -156,7 +168,9 @@ enum WhatsAppReader {
     }
 
     let senderJid = stringValue(object, keys: ["senderJid", "SenderJID", "sender_jid", "sender", "participant", "from"])
-    let timestamp = dateValue(object, keys: ["timestamp", "Timestamp", "time", "createdAt", "CreatedAt"])
+    let timestamp = dateValue(object, keys: [
+      "timestamp", "Timestamp", "time", "createdAt", "CreatedAt", "messageTimestamp", "message_timestamp",
+    ])
     let id = stringValue(object, keys: ["id", "ID", "messageId", "message_id", "MsgID"])
       ?? "\(senderJid ?? "unknown"):\(Int(timestamp?.timeIntervalSince1970 ?? 0)):\(text.hashValue)"
     let senderName = stringValue(object, keys: ["senderName", "SenderName", "pushName", "PushName", "name", "Name"])
@@ -188,6 +202,36 @@ enum WhatsAppReader {
       }
     }
     return nil
+  }
+
+  private static func displayTitle(for jid: String, rawTitle: String?, isGroup: Bool) -> String {
+    let cleanedTitle = rawTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let fallback = isGroup ? "WhatsApp Group" : nil
+    let resolved = WhatsAppContactResolver.shared.displayName(for: jid, fallback: cleanedTitle ?? fallback)
+    if isJidLike(resolved) {
+      return phoneNumber(from: jid) ?? (isGroup ? "WhatsApp Group" : jid)
+    }
+    return resolved
+  }
+
+  private static func subtitle(for jid: String, object: [String: Any], isGroup: Bool) -> String? {
+    if isGroup {
+      return "Group"
+    }
+    return stringValue(object, keys: ["phone", "phoneNumber", "number", "Number"])
+      ?? phoneNumber(from: jid)
+  }
+
+  private static func isJidLike(_ value: String) -> Bool {
+    let lowercased = value.lowercased()
+    return lowercased.contains("@s.whatsapp.net") || lowercased.contains("@g.us")
+  }
+
+  private static func phoneNumber(from jid: String) -> String? {
+    let user = jid.split(separator: "@", maxSplits: 1).first.map(String.init) ?? jid
+    let digits = user.filter(\.isNumber)
+    guard digits.count >= 7 else { return nil }
+    return "+\(digits)"
   }
 
   private static func stringValue(_ object: [String: Any], keys: [String]) -> String? {

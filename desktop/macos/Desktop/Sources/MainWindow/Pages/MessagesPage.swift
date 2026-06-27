@@ -14,8 +14,12 @@ struct MessagesPage: View {
   @State private var showConnect = false
   @State private var composeText = ""
   @State private var draftEdits: [String: String] = [:]
+  @State private var optimisticMessagesByThread: [String: [MessageItem]] = [:]
   @State private var sendError: String?
   @State private var isSending = false
+  @State private var hasCheckedProviderConnection = false
+  @State private var isCheckingProviderConnection = false
+  @State private var isWhatsAppAuthenticated = false
 
   private var provider: (any MessagingProvider)? {
     registry.selectedProvider
@@ -51,6 +55,29 @@ struct MessagesPage: View {
       .sorted { $0.createdAt < $1.createdAt }
   }
 
+  private var displayedMessages: [MessageItem] {
+    guard let selectedThreadId else { return messages }
+    let optimisticMessages = optimisticMessagesByThread[selectedThreadId] ?? []
+    guard !optimisticMessages.isEmpty else { return messages }
+    return (messages + optimisticMessages)
+      .reduce(into: [String: MessageItem]()) { partial, message in
+        partial[message.id] = message
+      }
+      .values
+      .sorted { ($0.timestamp ?? .distantPast) < ($1.timestamp ?? .distantPast) }
+  }
+
+  private var shouldShowConnectionLoading: Bool {
+    guard provider?.id == "whatsapp" else { return false }
+    if isCheckingProviderConnection || !hasCheckedProviderConnection || isWhatsAppAuthenticated {
+      return true
+    }
+    if case .connecting = waState.connectionState {
+      return true
+    }
+    return false
+  }
+
   var body: some View {
     VStack(spacing: 0) {
       header
@@ -60,6 +87,8 @@ struct MessagesPage: View {
       if let provider {
         if provider.isConnected {
           connectedBody
+        } else if shouldShowConnectionLoading {
+          connectionLoadingBody(provider)
         } else {
           disconnectedBody(provider)
         }
@@ -69,18 +98,28 @@ struct MessagesPage: View {
     }
     .background(OmiColors.backgroundPrimary)
     .task {
+      await prepareSelectedProvider()
       await refreshThreads()
+      await runRefreshLoop()
     }
     .onChange(of: registry.selectedProviderId) { _, _ in
       selectedThreadId = nil
       messages = []
-      Task { await refreshThreads() }
+      hasCheckedProviderConnection = false
+      isWhatsAppAuthenticated = false
+      Task {
+        await prepareSelectedProvider()
+        await refreshThreads()
+      }
     }
     .onChange(of: coordinator.pendingDrafts) { _, _ in
       Task { await refreshThreads(preserveSelection: true) }
     }
     .onChange(of: waState.connectionState) { _, _ in
       Task { await refreshThreads(preserveSelection: true) }
+    }
+    .onChange(of: waState.lastEventSummary) { _, _ in
+      Task { await refreshLiveData() }
     }
     .sheet(isPresented: $showSettings) {
       settingsSheet
@@ -160,6 +199,24 @@ struct MessagesPage: View {
         showConnect = true
       }
       .buttonStyle(OnboardingCardButtonStyle(isPrimary: true))
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private func connectionLoadingBody(_ provider: any MessagingProvider) -> some View {
+    VStack(spacing: 16) {
+      ProgressView()
+        .controlSize(.large)
+      VStack(spacing: 6) {
+        Text("Checking \(provider.displayName)")
+          .scaledFont(size: 20, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(waState.lastEventSummary ?? "Looking for an existing login and syncing recent chats.")
+          .scaledFont(size: 13)
+          .foregroundColor(OmiColors.textTertiary)
+          .multilineTextAlignment(.center)
+          .frame(maxWidth: 420)
+      }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
@@ -302,13 +359,13 @@ struct MessagesPage: View {
     ScrollViewReader { proxy in
       ScrollView {
         LazyVStack(spacing: 10) {
-          if messages.isEmpty, !isLoadingMessages {
+          if displayedMessages.isEmpty, !isLoadingMessages {
             Text("No messages found for this thread yet.")
               .scaledFont(size: 13)
               .foregroundColor(OmiColors.textTertiary)
               .padding(.top, 32)
           } else {
-            ForEach(messages) { message in
+            ForEach(displayedMessages) { message in
               MessageBubble(message: message)
                 .id(message.id)
             }
@@ -319,7 +376,7 @@ struct MessagesPage: View {
         }
         .padding(18)
       }
-      .onChange(of: messages.count) { _, _ in
+      .onChange(of: displayedMessages.count) { _, _ in
         scrollToBottom(proxy, threadId: threadId)
       }
       .onChange(of: selectedDrafts.count) { _, _ in
@@ -442,21 +499,40 @@ struct MessagesPage: View {
     !composeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
   }
 
-  private func refreshThreads(preserveSelection: Bool = false) async {
+  private func prepareSelectedProvider() async {
+    guard provider?.id == "whatsapp" else {
+      hasCheckedProviderConnection = true
+      return
+    }
+    isCheckingProviderConnection = true
+    let health = await WhatsAppService.shared.health()
+    isWhatsAppAuthenticated = health.isAuthenticated
+    if health.isAuthenticated {
+      await WhatsAppService.shared.resumeIfAuthenticated()
+    }
+    hasCheckedProviderConnection = true
+    isCheckingProviderConnection = false
+  }
+
+  private func refreshThreads(preserveSelection: Bool = false, showLoading: Bool = true) async {
     guard let provider, provider.isConnected else {
       threads = []
       return
     }
-    isLoadingThreads = true
+    if showLoading {
+      isLoadingThreads = true
+    }
     let loaded = await provider.loadThreads()
     threads = loaded.sorted { ($0.lastActivity ?? .distantPast) > ($1.lastActivity ?? .distantPast) }
-    isLoadingThreads = false
+    if showLoading {
+      isLoadingThreads = false
+    }
 
     if preserveSelection, let selectedThreadId, threads.contains(where: { $0.id == selectedThreadId }) {
       return
     }
     if selectedThreadId == nil {
-      selectedThreadId = displayedThreads.first?.id
+      selectedThreadId = displayedThreads.first { $0.hasPendingDraft }?.id ?? displayedThreads.first?.id
       await reloadSelectedMessages()
     }
   }
@@ -467,28 +543,82 @@ struct MessagesPage: View {
     Task { await reloadSelectedMessages() }
   }
 
-  private func reloadSelectedMessages() async {
+  private func reloadSelectedMessages(showLoading: Bool = true) async {
     guard let provider, let selectedThreadId else { return }
-    isLoadingMessages = true
-    messages = await provider.loadMessages(threadId: selectedThreadId)
-    isLoadingMessages = false
+    if showLoading {
+      isLoadingMessages = true
+    }
+    let loaded = await provider.loadMessages(threadId: selectedThreadId)
+    pruneOptimisticMessages(for: selectedThreadId, against: loaded)
+    messages = loaded
+    if showLoading {
+      isLoadingMessages = false
+    }
   }
 
   private func sendCompose(threadId: String) async {
     guard let provider else { return }
     let text = composeText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
+    let optimisticMessage = MessageItem(
+      id: "local-send:\(UUID().uuidString)",
+      text: text,
+      isFromMe: true,
+      senderName: nil,
+      timestamp: Date()
+    )
+    addOptimisticMessage(optimisticMessage, threadId: threadId)
+    composeText = ""
     isSending = true
     sendError = nil
     let result = await provider.sendMessage(threadId: threadId, text: text)
     isSending = false
     switch result {
     case .sent:
-      composeText = ""
-      await reloadSelectedMessages()
-      await refreshThreads(preserveSelection: true)
+      await refreshThreads(preserveSelection: true, showLoading: false)
     case .failed(let reason):
+      removeOptimisticMessage(optimisticMessage.id, threadId: threadId)
+      if composeText.isEmpty {
+        composeText = text
+      }
       sendError = reason
+    }
+  }
+
+  private func refreshLiveData() async {
+    guard provider?.isConnected == true else { return }
+    await refreshThreads(preserveSelection: true, showLoading: false)
+    await reloadSelectedMessages(showLoading: false)
+  }
+
+  private func runRefreshLoop() async {
+    while !Task.isCancelled {
+      try? await Task.sleep(nanoseconds: 8_000_000_000)
+      await refreshLiveData()
+    }
+  }
+
+  private func addOptimisticMessage(_ message: MessageItem, threadId: String) {
+    var existing = optimisticMessagesByThread[threadId] ?? []
+    existing.append(message)
+    optimisticMessagesByThread[threadId] = existing
+  }
+
+  private func removeOptimisticMessage(_ messageId: String, threadId: String) {
+    optimisticMessagesByThread[threadId]?.removeAll { $0.id == messageId }
+  }
+
+  private func pruneOptimisticMessages(for threadId: String, against loadedMessages: [MessageItem]) {
+    let now = Date()
+    optimisticMessagesByThread[threadId]?.removeAll { optimistic in
+      if let timestamp = optimistic.timestamp, now.timeIntervalSince(timestamp) > 300 {
+        return true
+      }
+      return loadedMessages.contains { loaded in
+        loaded.isFromMe
+          && loaded.text == optimistic.text
+          && abs((loaded.timestamp ?? now).timeIntervalSince(optimistic.timestamp ?? now)) < 300
+      }
     }
   }
 

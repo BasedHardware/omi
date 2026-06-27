@@ -213,6 +213,29 @@ final class WhatsAppReplyCoordinator: ObservableObject {
 
   private init() {}
 
+  nonisolated static func visibleReplyText(from rawText: String) -> String {
+    let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return trimmed }
+
+    let paragraphs = trimmed
+      .components(separatedBy: "\n\n")
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+    if paragraphs.count > 1, paragraphs.dropLast().contains(where: isExplanationParagraph) {
+      return stripReplyLabel(from: paragraphs.last ?? trimmed)
+    }
+
+    let lines = trimmed.components(separatedBy: .newlines)
+    let replyLines = lines
+      .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty && !isExplanationParagraph($0) }
+    if !replyLines.isEmpty, replyLines.count < lines.count {
+      return stripReplyLabel(from: replyLines.joined(separator: "\n"))
+    }
+
+    return stripReplyLabel(from: trimmed)
+  }
+
   func handle(_ message: WAIncomingMessage) async {
     guard shouldProcess(message), !queuedMessageIDs.contains(message.id) else { return }
     queuedMessageIDs.insert(message.id)
@@ -274,7 +297,9 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     guard let draft = pendingDrafts.first(where: { $0.id == id }) else {
       return "Error: WhatsApp draft not found"
     }
-    let text = editedText?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? draft.text
+    let text = Self.visibleReplyText(
+      from: editedText?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty ?? draft.text
+    )
     let result = await ChatToolExecutor.execute(ToolCall(
       name: "wa_send_message",
       arguments: [
@@ -313,6 +338,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
   }
 
   private func routeDraft(_ draft: WhatsAppDraft, for message: WAIncomingMessage) async {
+    let draft = draft.withText(Self.visibleReplyText(from: draft.text))
     let decision = WhatsAppReplySettings.shared.autoDecision(for: message, draftText: draft.text)
     switch decision {
     case .ignore(let reason):
@@ -393,7 +419,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
         contextSummary: "Incoming: \(draft.incomingText)",
         currentActivity: nil,
         reasoning: "Omi drafted a WhatsApp reply for approval.",
-        detail: "Open Settings -> WhatsApp to send, edit, dismiss, or always auto-reply to this sender."
+        detail: "Open Messages to send, edit, dismiss, or always auto-reply to this sender."
       )
     )
   }
@@ -424,6 +450,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
       }
     )
 
+    let replyText = Self.visibleReplyText(from: result.text)
     return WhatsAppDraft(
       id: UUID().uuidString,
       messageID: message.id,
@@ -431,7 +458,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
       senderJid: message.senderJid,
       senderName: senderName,
       incomingText: message.text,
-      text: result.text.trimmingCharacters(in: .whitespacesAndNewlines),
+      text: replyText,
       createdAt: Date(),
       mode: "draft"
     )
@@ -458,7 +485,8 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     Only call wa_read_thread if the reply needs older messages, more context, or exact prior details not visible above.
     Use Omi memory/conversation/task tools if the message asks about personal facts, plans, availability, or commitments.
     Check calendar availability before answering scheduling questions like whether the user is free at a specific time.
-    Draft the best reply as the user. Return only the reply text.
+    Draft the best reply as the user. Return exactly the WhatsApp message body and nothing else.
+    Do not include reasoning, context summaries, labels, or explanations.
     """
   }
 
@@ -505,6 +533,30 @@ struct WhatsAppDraft: Identifiable, Equatable, Sendable {
       mode: mode
     )
   }
+}
+
+private func isExplanationParagraph(_ value: String) -> Bool {
+  let lower = value.lowercased()
+  return lower.hasPrefix("no clear context")
+    || lower.hasPrefix("context:")
+    || lower.hasPrefix("reason:")
+    || lower.hasPrefix("reasoning:")
+    || lower.hasPrefix("explanation:")
+    || lower.contains("i'll draft")
+    || lower.contains("i’ll draft")
+    || lower.contains("likely a reply")
+    || lower.contains("reply to a prior conversation")
+    || lower.contains("based on the context")
+}
+
+private func stripReplyLabel(from value: String) -> String {
+  let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+  for prefix in ["Reply:", "Draft reply:", "Message:", "WhatsApp reply:"] {
+    if trimmed.lowercased().hasPrefix(prefix.lowercased()) {
+      return String(trimmed.dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+  }
+  return trimmed
 }
 
 private extension String {

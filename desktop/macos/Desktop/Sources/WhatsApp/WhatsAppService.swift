@@ -40,6 +40,7 @@ enum WAConnectionState: Equatable, Sendable {
 
 struct WAHealth: Equatable, Sendable {
   let isAvailable: Bool
+  let isAuthenticated: Bool
   let isConnected: Bool
   let summary: String
   let rawJSON: String?
@@ -78,6 +79,8 @@ actor WhatsAppService {
   private var authGeneration = 0
   private var followGeneration = 0
   private var followRestartAttempts = 0
+  private var isStartingFollow = false
+  private var followLastExitWasStoreLocked = false
   private var disconnectRequested = false
   private var isCapturingTerminalQR = false
   private var terminalQRLines: [String] = []
@@ -138,10 +141,11 @@ actor WhatsAppService {
     disconnectRequested = false
     await updateStorePath()
 
-    if followProcess?.isRunning == true {
+    let state = await currentState()
+    if followProcess?.isRunning == true || state.isConnected {
       await setState(.connected)
       await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Connected") }
-      log("WhatsAppService: pair skipped because sync is already running")
+      log("WhatsAppService: pair skipped because WhatsApp is already connected")
       return
     }
 
@@ -185,6 +189,20 @@ actor WhatsAppService {
   func startFollow() async {
     disconnectRequested = false
     await updateStorePath()
+
+    if isStartingFollow {
+      log("WhatsAppService: sync start skipped because another start is in progress")
+      return
+    }
+    if followProcess?.isRunning == true {
+      await setState(.connected)
+      await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Connected") }
+      log("WhatsAppService: sync start skipped because sync is already running")
+      return
+    }
+
+    isStartingFollow = true
+    defer { isStartingFollow = false }
     await stopFollowProcess()
 
     guard let binary = Self.findWacliBinary() else {
@@ -219,7 +237,7 @@ actor WhatsAppService {
       followReadTask = readLines(from: process, label: "sync") { [weak self] line in
         await self?.handleFollowLine(line)
       }
-      followRestartAttempts = 0
+      followLastExitWasStoreLocked = false
       await setState(.connected)
       await handleConnectedSyncSideEffects()
       log("WhatsAppService: started wacli --store <store> --json --events sync --follow --webhook <local>")
@@ -244,24 +262,33 @@ actor WhatsAppService {
 
   func health() async -> WAHealth {
     guard let binary = Self.findWacliBinary() else {
-      return WAHealth(isAvailable: false, isConnected: false, summary: "wacli not installed", rawJSON: nil)
+      return WAHealth(
+        isAvailable: false,
+        isAuthenticated: false,
+        isConnected: false,
+        summary: "wacli not installed",
+        rawJSON: nil
+      )
     }
 
     let result = await runOneShot(binary: binary, arguments: ["doctor"])
     guard result.exitCode == 0 else {
       return WAHealth(
         isAvailable: true,
+        isAuthenticated: false,
         isConnected: false,
         summary: result.output.isEmpty ? "doctor failed with exit \(result.exitCode)" : result.output,
         rawJSON: result.output
       )
     }
 
+    let authenticated = parseDoctorAuthenticated(result.output)
     let connected = parseDoctorConnected(result.output)
     return WAHealth(
       isAvailable: true,
+      isAuthenticated: authenticated,
       isConnected: connected,
-      summary: connected ? "Connected" : "Not connected",
+      summary: connected ? "Connected" : (authenticated ? "Authenticated, syncing" : "Not connected"),
       rawJSON: result.output
     )
   }
@@ -402,25 +429,42 @@ actor WhatsAppService {
     log("WhatsAppService sync event: \(line.prefix(500))")
     guard let event = parseEvent(line) else { return }
 
+    let eventName = normalizedEventName(event)
     if let error = extractError(from: event), !error.isEmpty {
+      if eventName == "warning" || eventName.contains("warning") {
+        let summary = warningSummary(from: event) ?? error
+        await setState(.connected)
+        await MainActor.run { WhatsAppState.shared.update(lastEventSummary: summary) }
+        log("WhatsAppService: sync warning: \(error.prefix(300))")
+        return
+      }
+      if isStoreLockError(error) {
+        followLastExitWasStoreLocked = true
+        await setState(.connected)
+        await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Waiting for WhatsApp store lock") }
+        log("WhatsAppService: sync store lock is transient; will retry after current wacli exits")
+        return
+      }
       await setState(.degraded(reason: error))
       await MainActor.run { WhatsAppState.shared.update(lastEventSummary: error) }
       return
     }
 
-    let eventName = normalizedEventName(event)
     if eventName.contains("message.received") || eventName == "message" || eventName.contains("received") {
+      followRestartAttempts = 0
       let summary = summarizeMessageEvent(event)
       await MainActor.run { WhatsAppState.shared.update(lastEventSummary: summary) }
       if let message = WAIncomingMessage(event: event) {
         await WhatsAppReplyCoordinator.shared.handle(message)
       }
     } else if isTransientSyncEvent(eventName) {
+      followRestartAttempts = 0
       await setState(.connected)
       await MainActor.run { WhatsAppState.shared.update(lastEventSummary: eventName == "reconnecting" ? "Reconnecting" : "Connected") }
     } else if isNeedsReauthEvent(eventName, event: event) {
       await setState(.needsReauth)
     } else if isConnectedEvent(eventName, event: event) {
+      followRestartAttempts = 0
       await setState(.connected)
       await handleConnectedSyncSideEffects()
     }
@@ -449,10 +493,17 @@ actor WhatsAppService {
     if exitCode != 0, (await currentState()) == .needsReauth {
       return
     }
-    await setState(.degraded(reason: "WhatsApp sync stopped"))
 
     followRestartAttempts += 1
     let delaySeconds = min(Double(followRestartAttempts * 2), 30)
+    if followLastExitWasStoreLocked {
+      followLastExitWasStoreLocked = false
+      await setState(.connected)
+      await MainActor.run { WhatsAppState.shared.update(lastEventSummary: "Waiting for WhatsApp store lock") }
+      log("WhatsAppService: sync store lock retry in \(delaySeconds)s")
+    } else {
+      await setState(.degraded(reason: "WhatsApp sync stopped"))
+    }
     try? await Task.sleep(nanoseconds: UInt64(delaySeconds * 1_000_000_000))
     guard !disconnectRequested else { return }
     await startFollow()
@@ -584,6 +635,26 @@ actor WhatsAppService {
       return message
     }
     return nil
+  }
+
+  private func isStoreLockError(_ error: String) -> Bool {
+    let normalized = error.lowercased()
+    return normalized.contains("store is locked") || normalized.contains("store locked")
+  }
+
+  private func warningSummary(from event: [String: Any]) -> String? {
+    if let data = event["data"] as? [String: Any] {
+      return nonEmptyString(data["message"])
+        ?? nonEmptyString(data["code"])
+    }
+    return nonEmptyString(event["message"])
+      ?? nonEmptyString(event["code"])
+  }
+
+  private func nonEmptyString(_ value: Any?) -> String? {
+    guard let string = value as? String else { return nil }
+    let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
   }
 
   private func parseAuthenticated(_ event: [String: Any]) -> Bool {

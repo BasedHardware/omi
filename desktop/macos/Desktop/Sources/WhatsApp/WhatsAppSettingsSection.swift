@@ -8,6 +8,12 @@ struct WhatsAppSettingsSection: View {
   @ObservedObject private var contactResolver = WhatsAppContactResolver.shared
   @ObservedObject private var memoryImport = WhatsAppMemoryImportService.shared
   @Binding var highlightedSettingId: String?
+  let includePendingDrafts: Bool
+
+  init(highlightedSettingId: Binding<String?>, includePendingDrafts: Bool = true) {
+    self._highlightedSettingId = highlightedSettingId
+    self.includePendingDrafts = includePendingDrafts
+  }
 
   @State private var showConnectSheet = false
   @State private var isDisconnecting = false
@@ -22,7 +28,9 @@ struct WhatsAppSettingsSection: View {
     VStack(spacing: 20) {
       connectionCard
       replyModeCard
-      pendingDraftsCard
+      if includePendingDrafts {
+        pendingDraftsCard
+      }
       allowlistCard
       guardrailsCard
       brainSyncCard

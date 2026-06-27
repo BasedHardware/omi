@@ -58,6 +58,9 @@ final class WhatsAppContactResolver: ObservableObject {
 
   func detailLabel(for jid: String) -> String {
     let normalized = normalizeJid(jid)
+    if normalized.contains("@lid") {
+      return contactsByJid[normalized] == nil ? normalized : "WhatsApp linked contact"
+    }
     if let phone = phoneNumber(from: normalized), phone != normalized {
       return "\(phone) - \(normalized)"
     }
@@ -257,6 +260,7 @@ final class WhatsAppContactResolver: ObservableObject {
   }
 
   private func phoneNumber(from jid: String) -> String? {
+    guard !jid.lowercased().contains("@lid") else { return nil }
     let user = jid.split(separator: "@", maxSplits: 1).first.map(String.init) ?? jid
     let digits = user.filter(\.isNumber)
     guard digits.count >= 7 else { return nil }
