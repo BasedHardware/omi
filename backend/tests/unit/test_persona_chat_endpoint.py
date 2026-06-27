@@ -327,7 +327,7 @@ class TestPersonaChatEndpoint:
         assert resp.status_code == 401
 
     def test_returns_403_on_invalid_api_key(self):
-        # verify_api_key returns False — run_blocking returns False -> 403
+        # verify_api_key_for_uid returns False — run_blocking returns False -> 403
         with patch("routers.integration.run_blocking", new=AsyncMock(return_value=False)):
             resp = self.client.post(
                 "/v2/integrations/app-1/user/persona-chat?uid=u-1",
@@ -335,6 +335,58 @@ class TestPersonaChatEndpoint:
                 headers={"Authorization": "Bearer bogus"},
             )
         assert resp.status_code == 403
+
+    def test_returns_403_when_key_uid_mismatches(self):
+        """Caller holds a valid app key but it's bound to a different uid —
+        they can't impersonate someone else's persona."""
+        from utils.apps import verify_api_key_for_uid
+
+        async def _route(executor, fn, *args, **kwargs):
+            if fn is verify_api_key_for_uid:
+                return False  # key is bound to u-other, not u-1
+            return True
+
+        with patch("routers.integration.run_blocking", new=_route):
+            resp = self.client.post(
+                "/v2/integrations/app-1/user/persona-chat?uid=u-1",
+                json={"text": "hi"},
+                headers={"Authorization": "Bearer good"},
+            )
+        assert resp.status_code == 403
+
+    def test_auth_uses_strict_verify_not_loose(self):
+        """Endpoint must call verify_api_key_for_uid (strict), never the loose
+        verify_api_key (which would re-introduce the auth bypass the maintainer
+        review flagged).
+        """
+        from utils.apps import verify_api_key, verify_api_key_for_uid
+
+        called = {"strict": 0, "loose": 0}
+
+        async def _route(executor, fn, *args, **kwargs):
+            if fn is verify_api_key_for_uid:
+                called["strict"] += 1
+                return True
+            if fn is verify_api_key:
+                called["loose"] += 1
+                return True
+            return True
+
+        with patch("routers.integration.run_blocking", new=_route):
+            # Send an invalid auth so we exit early at the strict check; we
+            # only care that the strict function got called (not loose).
+            resp = self.client.post(
+                "/v2/integrations/app-1/user/persona-chat?uid=u-1",
+                json={"text": "hi"},
+                headers={"Authorization": "Bearer x"},
+            )
+        # Both might be checked in cascade; we only assert strict was called
+        # AT LEAST once and loose was NEVER called.
+        assert called["strict"] >= 1
+        assert called["loose"] == 0, (
+            "endpoint called the loose verify_api_key on the persona-chat "
+            "path — that re-introduces the impersonation bypass"
+        )
 
     def test_returns_404_when_app_missing(self):
         # verify_api_key passes, apps_db.get_app_by_id_db returns None.
