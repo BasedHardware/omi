@@ -370,11 +370,11 @@ def _route_to_dict(route: Any) -> Optional[Dict[str, Any]]:
 def _is_route_payload_expired(route_payload: Mapping[str, Any]) -> bool:
     expires_at = route_payload.get('expires_at')
     if not expires_at:
-        return False
+        return True
     parsed = _parse_datetime(expires_at)
     if parsed is None:
-        return False
-    return parsed < datetime.now(timezone.utc)
+        return True
+    return parsed <= datetime.now(timezone.utc)
 
 
 def _prune_expired_dynamic_routes() -> None:

@@ -128,6 +128,31 @@ def _is_table_current(route_table: Optional[Dict[str, Any]]) -> bool:
     return parsed > datetime.now(timezone.utc)
 
 
+def _read_model_route_snapshot() -> Dict[str, Any]:
+    """Return the current route table without fetching benchmarks or writing Firestore."""
+
+    profile = model_config.get_active_profile_name()
+    cached = _route_cache.get("payload")
+    if _is_table_current(cached):
+        return cached
+
+    persisted = _load_persisted_route_table(profile)
+    if _is_table_current(persisted):
+        return persisted
+
+    return {
+        "profile": profile,
+        "source": "auto-router",
+        "routes": {},
+        "attribution": AUTO_ROUTER_ATTRIBUTION,
+        "summary": {
+            "dynamic_count": 0,
+            "static_count": 0,
+            "disabled_reason": "no_current_route_table",
+        },
+    }
+
+
 async def refresh_model_routes(force: bool = False, persist: bool = True) -> Dict[str, Any]:
     """Refresh or load the backend LLM auto-router table."""
 
@@ -236,8 +261,8 @@ async def auto_model_pick(uid: str = Depends(get_current_user_uid)):
 
 @router.get("/v1/auto/model-routes")
 async def auto_model_routes(uid: str = Depends(get_current_user_uid)):
-    """Current backend LLM feature route table, refreshed from cache when needed."""
-    return await refresh_model_routes(force=False, persist=True)
+    """Current backend LLM feature route table, without triggering refresh side effects."""
+    return _read_model_route_snapshot()
 
 
 @router.post("/v1/admin/auto/model-routes/refresh", tags=["admin"])

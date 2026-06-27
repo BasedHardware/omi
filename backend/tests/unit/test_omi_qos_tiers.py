@@ -106,6 +106,14 @@ _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticO
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
+_install_module('firebase_admin.auth', InvalidIdTokenError=Exception)
+_install_module(
+    'database.model_routes',
+    get_active_model_routes=lambda _profile: None,
+    set_active_model_routes=MagicMock(),
+    record_model_route_run=MagicMock(),
+)
+_install_module('utils.other.endpoints', get_current_user_uid=lambda: 'uid')
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -199,6 +207,8 @@ from utils.llm.clients import (
     get_qos_info,
 )
 from utils.llm import model_config as model_config_module
+
+FUTURE_ROUTE_EXPIRES_AT = '2999-01-01T00:00:00+00:00'
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -370,6 +380,7 @@ class TestDynamicAutoRoutes:
         model_config_module.set_dynamic_model_routes(
             {
                 'profile': _active_profile_name,
+                'expires_at': FUTURE_ROUTE_EXPIRES_AT,
                 'routes': {
                     'memories': {
                         'model': 'gemini-2.5-flash-lite',
@@ -388,6 +399,7 @@ class TestDynamicAutoRoutes:
         model_config_module.set_dynamic_model_routes(
             {
                 'profile': _active_profile_name,
+                'expires_at': FUTURE_ROUTE_EXPIRES_AT,
                 'routes': {'fair_use': {'model': 'gpt-4.1-mini', 'provider': 'openai', 'source': 'auto-router'}},
             }
         )
@@ -398,6 +410,7 @@ class TestDynamicAutoRoutes:
         model_config_module.set_dynamic_model_routes(
             {
                 'profile': _active_profile_name,
+                'expires_at': FUTURE_ROUTE_EXPIRES_AT,
                 'routes': {
                     'chat_responses': {
                         'model': 'claude-sonnet-4-6',
@@ -414,6 +427,7 @@ class TestDynamicAutoRoutes:
         model_config_module.set_dynamic_model_routes(
             {
                 'profile': _active_profile_name,
+                'expires_at': FUTURE_ROUTE_EXPIRES_AT,
                 'routes': {
                     'memories': {
                         'model': 'gemini-3-flash-preview',
@@ -443,11 +457,44 @@ class TestDynamicAutoRoutes:
 
         assert get_model('memories') == MODEL_QOS_PROFILES[_active_profile_name]['memories'][0]
 
+    def test_route_table_without_expiry_is_ignored(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'routes': {
+                    'memories': {
+                        'model': 'gemini-2.5-flash-lite',
+                        'provider': 'gemini',
+                        'source': 'auto-router',
+                    }
+                },
+            }
+        )
+
+        assert get_model('memories') == MODEL_QOS_PROFILES[_active_profile_name]['memories'][0]
+
+    def test_route_table_with_invalid_expiry_is_ignored(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'expires_at': 'not-a-date',
+                'routes': {
+                    'memories': {
+                        'model': 'gemini-2.5-flash-lite',
+                        'provider': 'gemini',
+                        'source': 'auto-router',
+                    }
+                },
+            }
+        )
+
+        assert get_model('memories') == MODEL_QOS_PROFILES[_active_profile_name]['memories'][0]
+
     def test_payload_expiry_is_propagated_to_loaded_routes(self):
         model_config_module.set_dynamic_model_routes(
             {
                 'profile': _active_profile_name,
-                'expires_at': '2999-01-01T00:00:00+00:00',
+                'expires_at': FUTURE_ROUTE_EXPIRES_AT,
                 'routes': {
                     'memories': {
                         'model': 'gemini-2.5-flash-lite',
@@ -459,12 +506,13 @@ class TestDynamicAutoRoutes:
         )
 
         route = model_config_module.get_dynamic_route_info('memories')
-        assert route['expires_at'] == '2999-01-01T00:00:00+00:00'
+        assert route['expires_at'] == FUTURE_ROUTE_EXPIRES_AT
 
     def test_anthropic_only_feature_allows_anthropic_route(self):
         model_config_module.set_dynamic_model_routes(
             {
                 'profile': _active_profile_name,
+                'expires_at': FUTURE_ROUTE_EXPIRES_AT,
                 'routes': {
                     'chat_agent': {
                         'model': 'claude-sonnet-4-6',
@@ -482,6 +530,7 @@ class TestDynamicAutoRoutes:
         model_config_module.set_dynamic_model_routes(
             {
                 'profile': _active_profile_name,
+                'expires_at': FUTURE_ROUTE_EXPIRES_AT,
                 'routes': {
                     'memories': {
                         'model': 'gemini-2.5-flash-lite',
@@ -498,6 +547,45 @@ class TestDynamicAutoRoutes:
         assert info['memories']['route_source'] == 'auto-router'
         assert info['memories']['reason'] == 'benchmark_value_pick'
         assert info['memories']['score'] == 0.91
+
+
+class TestAutoModelRouteEndpoint:
+    """Verify public model-route reads do not trigger benchmark refresh side effects."""
+
+    @pytest.mark.asyncio
+    async def test_public_model_routes_endpoint_uses_read_only_snapshot(self, monkeypatch):
+        from routers import auto_model
+
+        expected = {'profile': 'premium', 'routes': {}, 'summary': {'disabled_reason': 'not_ready'}}
+
+        async def fail_refresh(*_args, **_kwargs):
+            raise AssertionError('public route reads must not refresh or persist routes')
+
+        monkeypatch.setattr(auto_model, 'refresh_model_routes', fail_refresh)
+        monkeypatch.setattr(auto_model, '_read_model_route_snapshot', lambda: expected)
+
+        assert await auto_model.auto_model_routes(uid='uid') == expected
+
+    def test_route_snapshot_reads_current_persisted_table_without_refresh(self, monkeypatch):
+        from routers import auto_model
+
+        route_table = {
+            'profile': 'premium',
+            'source': 'auto-router',
+            'expires_at': FUTURE_ROUTE_EXPIRES_AT,
+            'routes': {'memories': {'model': 'gpt-4.1-mini', 'provider': 'openai'}},
+        }
+
+        auto_model._route_cache.update(payload=None, ts=0.0)
+        monkeypatch.setattr(auto_model.model_config, 'get_active_profile_name', lambda: 'premium')
+        monkeypatch.setattr(auto_model, '_load_persisted_route_table', lambda profile: route_table)
+        monkeypatch.setattr(
+            auto_model,
+            '_fetch_artificial_analysis_payload',
+            lambda: (_ for _ in ()).throw(AssertionError('snapshot must not fetch benchmarks')),
+        )
+
+        assert auto_model._read_model_route_snapshot() == route_table
 
 
 class TestGetLlm:
