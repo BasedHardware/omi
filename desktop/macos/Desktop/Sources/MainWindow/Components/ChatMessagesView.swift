@@ -4,7 +4,7 @@ import SwiftUI
 /// and fires a callback immediately — before the scroll position settles.
 /// This wins the race against throttled programmatic scrolls during streaming.
 private struct UserScrollDetector: NSViewRepresentable {
-    let onUserScrollUp: () -> Void
+    let onUserScroll: () -> Void
 
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
@@ -17,15 +17,15 @@ private struct UserScrollDetector: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onUserScrollUp: onUserScrollUp)
+        Coordinator(onUserScroll: onUserScroll)
     }
 
     class Coordinator: NSObject {
-        let onUserScrollUp: () -> Void
+        let onUserScroll: () -> Void
         private var monitor: Any?
 
-        init(onUserScrollUp: @escaping () -> Void) {
-            self.onUserScrollUp = onUserScrollUp
+        init(onUserScroll: @escaping () -> Void) {
+            self.onUserScroll = onUserScroll
         }
 
         func install(for view: NSView) {
@@ -41,7 +41,7 @@ private struct UserScrollDetector: NSViewRepresentable {
             }
             let targetScrollView = scrollView
 
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { [weak self] event in
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged]) { [weak self] event in
                 guard let self = self, let targetScrollView = targetScrollView else { return event }
                 // Only respond to events in our scroll view's window
                 guard event.window == targetScrollView.window else { return event }
@@ -49,9 +49,13 @@ private struct UserScrollDetector: NSViewRepresentable {
                 let locationInWindow = event.locationInWindow
                 let locationInScrollView = targetScrollView.convert(locationInWindow, from: nil)
                 guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
-                // deltaY > 0 means scrolling up (towards earlier content)
-                if event.scrollingDeltaY > 0 {
-                    self.onUserScrollUp()
+                // Any physical wheel/trackpad scroll or mouse drag/click inside the transcript is reader intent.
+                if event.type == .scrollWheel {
+                    if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
+                        self.onUserScroll()
+                    }
+                } else {
+                    self.onUserScroll()
                 }
                 return event
             }
@@ -63,6 +67,14 @@ private struct UserScrollDetector: NSViewRepresentable {
             }
         }
     }
+}
+
+/// Explicit scroll intent model for streaming follow behavior.
+/// `followingBottom` = the reader is at the live edge; streamed chunks may auto-scroll.
+/// `freeScrolling`  = the reader intentionally scrolled away; viewport must not move.
+private enum ChatScrollMode: Equatable {
+    case followingBottom
+    case freeScrolling
 }
 
 /// Reusable chat messages scroll view extracted from ChatPage.
@@ -100,17 +112,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
 
     @State private var isUserAtBottom = true
-    /// Tracks whether we should follow new content (survives the race between
-    /// content growth and scroll position detection). Only set to false when
-    /// the user actively scrolls up (not when content grows past the viewport).
-    @State private var shouldFollowContent = true
-    /// True while a programmatic scroll is in-flight, so we can distinguish
-    /// user-initiated scrolls from our own.
-    @State private var isProgrammaticScroll = false
-    /// True for ~1s after the view appears, suppressing shouldFollowContent=false
-    /// during the LazyVStack/Markdown layout settling period. Without this guard,
-    /// content height changes from lazy rendering are misinterpreted as user scrolling.
-    @State private var isSettlingAfterAppear = false
+    /// Source of truth for scroll intent. Geometry/layout changes alone must NOT
+    /// switch this to `.freeScrolling` — only physical wheel/trackpad user scroll.
+    @State private var scrollMode: ChatScrollMode = .followingBottom
     /// Throttle token for scrollToBottom — prevents the streaming + scroll
     /// detection feedback loop from saturating the main thread.
     @State private var scrollThrottleWorkItem: DispatchWorkItem?
@@ -119,6 +123,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// throttled programmatic scrolls during streaming.
     @State private var userIsScrolling = false
     @State private var userScrollEndWorkItem: DispatchWorkItem?
+    /// Tracks work items for delayed initial bottom scrolls so they can be
+    /// canceled on user scroll or disappear.
+    @State private var initialScrollWorkItems: [DispatchWorkItem] = []
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -153,44 +160,72 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         }
         .onChange(of: messages.count) { oldCount, newCount in
             if newCount > oldCount || oldCount == 0 {
-                if shouldFollowContent || oldCount == 0 {
+                if scrollMode == .followingBottom || oldCount == 0 {
                     scrollToBottom(proxy: proxy)
                     if oldCount == 0 {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            scrollToBottom(proxy: proxy)
-                        }
+                        scheduleInitialScroll(proxy: proxy, delay: 0.3)
                     }
                 }
             }
         }
         .onChange(of: messages.last?.text) { _, _ in
-            if shouldFollowContent {
+            if scrollMode == .followingBottom {
                 throttledScrollToBottom(proxy: proxy)
             }
         }
         .onChange(of: messages.last?.contentBlocks.count) { _, _ in
-            if shouldFollowContent {
+            if scrollMode == .followingBottom {
                 throttledScrollToBottom(proxy: proxy)
             }
         }
         .onChange(of: isSending) { oldValue, newValue in
-            if newValue && !oldValue && isUserAtBottom {
-                shouldFollowContent = true
+            if newValue && !oldValue {
+                cancelAllPendingScrolls()
+                userIsScrolling = false
+                scrollMode = .followingBottom
+                scrollToBottom(proxy: proxy)
             }
         }
         .onAppear {
-            isSettlingAfterAppear = true
-            scrollToBottom(proxy: proxy)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if scrollMode == .followingBottom {
                 scrollToBottom(proxy: proxy)
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-                scrollToBottom(proxy: proxy)
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                isSettlingAfterAppear = false
+                scheduleInitialScroll(proxy: proxy, delay: 0.3)
+                scheduleInitialScroll(proxy: proxy, delay: 0.7)
             }
         }
+        .onDisappear {
+            cancelAllPendingScrolls()
+        }
+    }
+
+    /// Schedules a delayed bottom scroll that is mode-aware and cancelable.
+    private func scheduleInitialScroll(proxy: ScrollViewProxy, delay: TimeInterval) {
+        var workItem: DispatchWorkItem?
+        workItem = DispatchWorkItem { [self] in
+            // Only fire if still following — user may have scrolled during settling
+            if scrollMode == .followingBottom {
+                scrollToBottom(proxy: proxy)
+            }
+            if let workItem {
+                initialScrollWorkItems.removeAll { $0 === workItem }
+            }
+        }
+        if let workItem {
+            initialScrollWorkItems.append(workItem)
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        }
+    }
+
+    /// Cancels all pending scheduled scrolls (throttle, initial, user-scroll-end).
+    private func cancelAllPendingScrolls() {
+        scrollThrottleWorkItem?.cancel()
+        scrollThrottleWorkItem = nil
+        userScrollEndWorkItem?.cancel()
+        userScrollEndWorkItem = nil
+        for item in initialScrollWorkItems {
+            item.cancel()
+        }
+        initialScrollWorkItems.removeAll()
     }
 
     @ViewBuilder
@@ -291,19 +326,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         ZStack {
             ScrollPositionDetector { atBottom in
                 isUserAtBottom = atBottom
-                if atBottom {
-                    shouldFollowContent = true
-                } else if !isProgrammaticScroll && !isSettlingAfterAppear {
-                    shouldFollowContent = false
-                }
+                // atBottom == false alone must NOT switch to freeScrolling.
+                // Geometry/layout changes (content growth, markdown layout,
+                // LazyVStack realization, citations, window resize) can make
+                // the viewport not-at-bottom without user intent.
+                // Only atBottom == true updates isUserAtBottom tracking.
             }
             UserScrollDetector {
-                guard !isSettlingAfterAppear else { return }
-                shouldFollowContent = false
+                scrollMode = .freeScrolling
                 userIsScrolling = true
-                scrollThrottleWorkItem?.cancel()
-                scrollThrottleWorkItem = nil
-                userScrollEndWorkItem?.cancel()
+                cancelAllPendingScrolls()
                 let endWork = DispatchWorkItem {
                     userIsScrolling = false
                 }
@@ -315,14 +347,16 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     @ViewBuilder
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
-        if !shouldFollowContent && !messages.isEmpty {
+        if scrollMode == .freeScrolling && !messages.isEmpty {
             Button {
-                shouldFollowContent = true
+                cancelAllPendingScrolls()
+                userIsScrolling = false
+                scrollMode = .followingBottom
                 scrollToBottom(proxy: proxy)
             } label: {
                 Image(systemName: "arrow.down.circle.fill")
                     .scaledFont(size: 32)
-                    .foregroundColor(OmiColors.purplePrimary)
+                    .foregroundColor(OmiColors.textSecondary)
                     .background(
                         Circle()
                             .fill(OmiColors.backgroundPrimary)
@@ -331,22 +365,19 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                     .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Jump to latest message")
             .padding(.bottom, 16)
             .transition(.scale.combined(with: .opacity))
-            .animation(.easeInOut(duration: 0.2), value: shouldFollowContent)
+            .animation(.easeInOut(duration: 0.2), value: scrollMode)
         }
     }
 
     private func scrollToBottom(proxy: ScrollViewProxy) {
-        // Don't fight the user — skip if they're actively scrolling up
+        guard scrollMode == .followingBottom else { return }
+        // Don't fight the user — skip if they're actively wheel/trackpad scrolling
         guard !userIsScrolling else { return }
         guard !messages.isEmpty else { return }
-        isProgrammaticScroll = true
         proxy.scrollTo("bottom-anchor", anchor: .bottom)
-        // Reset after a short delay to allow the scroll to settle
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            isProgrammaticScroll = false
-        }
     }
 
     /// Throttled version of scrollToBottom — coalesces rapid calls (e.g. during

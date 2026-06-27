@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Send } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { ArrowDown, Send } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/AppStateProvider'
@@ -23,6 +23,7 @@ function firstName(u: User | null): string {
 // Bubbles dissolve across the top ~190px of the thread (only once it overflows),
 // so they fade out before reaching the widgets above.
 const FADE_MASK = 'linear-gradient(to bottom, transparent 0px, #000 190px)'
+type ChatScrollMode = 'followingBottom' | 'freeScrolling'
 
 // 5 grid rows: [topSpacer][widgets][middle][bar][bottomSpacer]. Only the
 // SPACERS and the MIDDLE ever change, and they're all `fr` — the widgets and bar
@@ -70,6 +71,59 @@ export function Home(): React.JSX.Element {
   const chatScrollRef = useRef<HTMLDivElement>(null)
   const widgetsGridRef = useRef<HTMLDivElement>(null)
   const lastLenRef = useRef(0)
+  const [scrollMode, setScrollModeState] = useState<ChatScrollMode>('followingBottom')
+  const scrollModeRef = useRef<ChatScrollMode>('followingBottom')
+  const isProgrammaticScrollRef = useRef(false)
+  const pendingScrollFrameRef = useRef<number | null>(null)
+
+  const setScrollMode = useCallback((mode: ChatScrollMode): void => {
+    scrollModeRef.current = mode
+    setScrollModeState(mode)
+  }, [])
+
+  const cancelPendingScroll = useCallback((): void => {
+    if (pendingScrollFrameRef.current == null) return
+    window.cancelAnimationFrame(pendingScrollFrameRef.current)
+    pendingScrollFrameRef.current = null
+  }, [])
+
+  const scrollToLatest = useCallback(
+    (opts: { smooth?: boolean; force?: boolean } = {}): void => {
+      const { smooth = false, force = false } = opts
+      const el = chatScrollRef.current
+      if (!el) return
+      if (!force && scrollModeRef.current !== 'followingBottom') return
+
+      cancelPendingScroll()
+      pendingScrollFrameRef.current = window.requestAnimationFrame(() => {
+        pendingScrollFrameRef.current = null
+        const currentEl = chatScrollRef.current
+        if (!currentEl) return
+        if (!force && scrollModeRef.current !== 'followingBottom') return
+        isProgrammaticScrollRef.current = true
+        currentEl.style.scrollBehavior = smooth ? 'smooth' : 'auto'
+        currentEl.scrollTop = currentEl.scrollHeight
+        window.requestAnimationFrame(() => {
+          isProgrammaticScrollRef.current = false
+        })
+      })
+    },
+    [cancelPendingScroll]
+  )
+
+  const resumeFollowing = useCallback(
+    (smooth = true): void => {
+      setScrollMode('followingBottom')
+      scrollToLatest({ smooth, force: true })
+    },
+    [scrollToLatest, setScrollMode]
+  )
+
+  const releaseFollowing = useCallback((): void => {
+    cancelPendingScroll()
+    isProgrammaticScrollRef.current = false
+    setScrollMode('freeScrolling')
+  }, [cancelPendingScroll, setScrollMode])
 
   // Windowed history rendering: an infinite thread can hold thousands of
   // messages, so we only render the last `visibleCount` and reveal older ones a
@@ -81,12 +135,6 @@ export function Home(): React.JSX.Element {
   const PAGE_SIZE = 30
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE)
   const restoreFromBottom = useRef<number | null>(null)
-  // Whether the view is currently near the bottom. Used to decide if a streaming
-  // reply / cross-window update should keep the view pinned to the bottom, or
-  // leave it put because the user has scrolled up to read older history. Starts
-  // true so the initial load lands at the bottom.
-  const nearBottomRef = useRef(true)
-
   // Measured natural height of the widgets grid. The widget row animates its
   // height from 0 → this once BOTH widgets' data is ready, so they appear
   // together and slide the chat smoothly — no per-widget pop-in / reshuffle.
@@ -118,10 +166,13 @@ export function Home(): React.JSX.Element {
     const text = input
     if (!text.trim() || chat.sending) return
     setInput('')
+    resumeFollowing(true)
     void chat.send(text)
   }
 
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), [])
+
+  useEffect(() => () => cancelPendingScroll(), [cancelPendingScroll])
 
   // Lazily (re)build the local knowledge graph in the background — deferred past
   // the entrance animations so its DB/synthesis work can't stall them.
@@ -172,42 +223,28 @@ export function Home(): React.JSX.Element {
     }
   }, [started])
 
-  // Pin the thread to the bottom. Smooth-scroll on a NEW message (so existing
-  // bubbles glide up to make room); instant while a reply streams in.
-  // `showThread` is a dep so that on app startup — where infinite-mode history
-  // loads async and the thread only mounts after the split animation (showThread
-  // flips ~1150ms later) — this fires once the bubbles actually render and lands
-  // the view at the bottom instead of the top.
-  // `widgetsReady`/`widgetsH` are deps because the Tasks/Goals row pops from
-  // height 0 → full height instantly when both load (often a beat after the chat
-  // first paints), which shrinks the thread viewport from the top and would
-  // otherwise leave the view scrolled up. Re-pin (only if the reader is near the
-  // bottom) so the latest message stays in view when the widgets land.
+  // Follow live output only while the reader is following the live edge.
+  // Physical wheel/touch scroll releases following; geometry/layout changes
+  // (stream growth, widget height, Markdown rendering) do not count as intent.
   useEffect(() => {
     const el = chatScrollRef.current
     if (!el) return
-    const isNewMessage = chat.history.length !== lastLenRef.current
+    const previousLen = lastLenRef.current
+    const isNewMessage = chat.history.length !== previousLen
+    const isInitialReveal = previousLen === 0 && chat.history.length > 0
     lastLenRef.current = chat.history.length
-    // Pin to the bottom on a new message or the first reveal, but while a reply
-    // streams in (content grows without the count changing) only keep pinning if
-    // the user is already near the bottom — otherwise leave them where they
-    // scrolled to read older history instead of yanking them down.
-    if (isNewMessage || nearBottomRef.current) {
-      el.style.scrollBehavior = isNewMessage ? 'smooth' : 'auto'
-      el.scrollTop = el.scrollHeight
-      nearBottomRef.current = true
+
+    if (isInitialReveal || scrollModeRef.current === 'followingBottom') {
+      scrollToLatest({ smooth: isNewMessage && !isInitialReveal })
     }
     setOverflowing(el.scrollHeight > el.clientHeight + 4)
-  }, [chat.history, chat.sending, showThread, widgetsReady, widgetsH])
+  }, [chat.history, chat.sending, showThread, scrollToLatest, widgetsReady, widgetsH])
 
   // Reveal an older page when the user scrolls near the top, capturing the
   // current distance-from-bottom so the view can be pinned in place afterward.
   const onThreadScroll = (): void => {
     const el = chatScrollRef.current
     if (!el) return
-    // Track whether we're near the bottom so the pin effect knows whether a
-    // streaming reply should keep following or leave the reader in place.
-    nearBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120
     setOverflowing(el.scrollHeight > el.clientHeight + 4)
     if (el.scrollTop < 80 && visibleCount < chat.history.length) {
       restoreFromBottom.current = el.scrollHeight - el.scrollTop
@@ -266,7 +303,10 @@ export function Home(): React.JSX.Element {
       <div
         ref={chatScrollRef}
         onScroll={onThreadScroll}
-        className="min-h-0 overflow-y-auto"
+        onWheel={releaseFollowing}
+        onTouchMove={releaseFollowing}
+        onMouseDown={releaseFollowing}
+        className="relative min-h-0 overflow-y-auto"
         style={{ WebkitMaskImage: mask, maskImage: mask }}
       >
         <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
@@ -285,7 +325,10 @@ export function Home(): React.JSX.Element {
                         <img
                           src={photoURL ?? ''}
                           alt=""
-                          className={cn('h-full w-full object-cover', photoURL ? 'block' : 'hidden')}
+                          className={cn(
+                            'h-full w-full object-cover',
+                            photoURL ? 'block' : 'hidden'
+                          )}
                           referrerPolicy="no-referrer"
                           onError={(e) => {
                             const el = e.currentTarget
@@ -318,9 +361,7 @@ export function Home(): React.JSX.Element {
                       {isUser ? (
                         <div className="whitespace-pre-wrap">{m.content}</div>
                       ) : (
-                        <Markdown
-                          text={m.content || (chat.sending && isLast ? '…' : '')}
-                        />
+                        <Markdown text={m.content || (chat.sending && isLast ? '…' : '')} />
                       )}
                     </div>
                   </div>
@@ -333,6 +374,17 @@ export function Home(): React.JSX.Element {
             ) : null}
           </div>
         </div>
+        {scrollMode === 'freeScrolling' && started ? (
+          <button
+            type="button"
+            aria-label="Jump to latest message"
+            onClick={() => resumeFollowing(true)}
+            className="absolute bottom-4 left-1/2 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3 py-2 text-sm font-medium text-white shadow-lg transition-colors hover:bg-white/15"
+          >
+            <ArrowDown className="h-4 w-4" />
+            Latest
+          </button>
+        ) : null}
       </div>
 
       {/* Chat bar — rides to the bottom via the spacer collapse. */}
