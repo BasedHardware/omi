@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class PowerCycleStep extends StatefulWidget {
   final VoidCallback onComplete;
@@ -70,21 +71,21 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
     switch (state) {
       case PowerCycleSubState.waitingForOff:
       case PowerCycleSubState.deviceOff:
-        return 'Turn Off';
+        return context.l10n.deviceOnboardingTurnOffTitle;
       case PowerCycleSubState.waitingForReconnect:
       case PowerCycleSubState.reconnected:
-        return 'Turn On';
+        return context.l10n.deviceOnboardingTurnOnTitle;
     }
   }
 
   String _getSubtitle(PowerCycleSubState state) {
     switch (state) {
       case PowerCycleSubState.waitingForOff:
-        return 'Hold the button for 3 seconds';
+        return context.l10n.deviceOnboardingTurnOffSubtitle;
       case PowerCycleSubState.deviceOff:
         return '';
       case PowerCycleSubState.waitingForReconnect:
-        return 'Press the button to turn it back on';
+        return context.l10n.deviceOnboardingTurnOnSubtitle;
       case PowerCycleSubState.reconnected:
         return '';
     }
@@ -144,22 +145,22 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
     switch (state) {
       case PowerCycleSubState.waitingForOff:
         statusColor = const Color(0xFF4CAF50);
-        statusText = 'Connected';
+        statusText = context.l10n.deviceOnboardingStatusConnected;
         statusIcon = Icons.bluetooth_connected;
         break;
       case PowerCycleSubState.deviceOff:
         statusColor = const Color(0xFFEF5350);
-        statusText = 'Turning off...';
+        statusText = context.l10n.deviceOnboardingStatusTurningOff;
         statusIcon = Icons.power_off;
         break;
       case PowerCycleSubState.waitingForReconnect:
         statusColor = const Color(0xFFEF5350);
-        statusText = 'Disconnected';
+        statusText = context.l10n.deviceOnboardingStatusDisconnected;
         statusIcon = Icons.bluetooth_disabled;
         break;
       case PowerCycleSubState.reconnected:
         statusColor = const Color(0xFF4CAF50);
-        statusText = 'Connected!';
+        statusText = context.l10n.deviceOnboardingStatusConnectedDone;
         statusIcon = Icons.check_circle;
         break;
     }
@@ -192,14 +193,14 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
         color: const Color(0xFFFFA726).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          Icon(Icons.info_outline, color: Color(0xFFFFA726), size: 20),
-          SizedBox(width: 12),
+          const Icon(Icons.info_outline, color: Color(0xFFFFA726), size: 20),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
-              'Hold the button firmly until the light turns off',
-              style: TextStyle(color: Color(0xFFFFA726), fontSize: 14),
+              context.l10n.deviceOnboardingHoldButtonHint,
+              style: const TextStyle(color: Color(0xFFFFA726), fontSize: 14),
             ),
           ),
         ],
