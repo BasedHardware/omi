@@ -198,6 +198,15 @@ class FloatingControlBarState: NSObject, ObservableObject {
     }
 
     func hideConversationSurface() {
+        // Cancel in-flight work before resetting process flags so UI state and
+        // active response/follow-up workflows stay in sync. Without this, a
+        // streaming response or PTT follow-up keeps running after its UI flags
+        // are cleared, and late-arriving chunks update a surface nobody sees.
+        // (Cubic P2 — presentation/process desync.)
+        FloatingControlBarManager.shared.cancelChat()
+        if isVoiceFollowUp {
+            PushToTalkManager.shared.cancelListening()
+        }
         activeAgentChatPillID = nil
         conversationSurface = .closed
         showingAIConversation = false

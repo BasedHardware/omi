@@ -163,4 +163,30 @@ final class FloatingControlBarStateTests: XCTestCase {
         state.agentSwitcherHovering = true
         XCTAssertTrue(state.isAgentSwitcherExpanded)
     }
+
+    /// Thread 3 (Cubic P2): hideConversationSurface() must fully reset all
+    /// presentation and process flags so UI state and in-flight workflows
+    /// don't desync after the Back button hides the conversation.
+    func testHideConversationSurfaceResetsAllState() {
+        let state = FloatingControlBarState()
+        let agentID = UUID()
+        state.present(.agent(agentID))
+        state.isAILoading = true
+        state.isVoiceFollowUp = true
+        state.voiceFollowUpTranscript = "partial transcript"
+
+        // hideConversationSurface() now cancels in-flight work via singletons
+        // (cancelChat / cancelListening) before clearing flags. The singletons
+        // are safe to call when no actual generation/PTT session is active.
+        state.hideConversationSurface()
+
+        XCTAssertNil(state.activeAgentChatPillID)
+        XCTAssertEqual(state.conversationSurface, .closed)
+        XCTAssertFalse(state.showingAIConversation)
+        XCTAssertFalse(state.showingAIResponse)
+        XCTAssertFalse(state.isAILoading)
+        XCTAssertFalse(state.isVoiceFollowUp)
+        XCTAssertEqual(state.voiceFollowUpTranscript, "")
+        XCTAssertFalse(state.hasVisibleConversation)
+    }
 }

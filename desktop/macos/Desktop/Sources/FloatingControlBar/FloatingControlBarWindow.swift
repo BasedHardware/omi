@@ -42,6 +42,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let notchInputPanelMinimumContentHeight: CGFloat = 40
     static let notchInputPanelHeight: CGFloat =
         notchChromeHeight + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
+    /// Extra vertical budget added on top of the input editor when notch mode
+    /// renders the "Back / Omi Chat" header above the input (agent pills present).
+    /// Header row (32pt) + VStack top padding (8) + spacing (8) = 48pt.
+    static let notchChatHeaderVerticalBudget: CGFloat = 48
     static let notchAgentListMaxVisibleAgents = 8
     static let notchAgentListRowHeight: CGFloat = 44
     static let notchAgentListRowSpacing: CGFloat = 0
@@ -175,7 +179,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
     private var inputChromeHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight : 50 }
     private var inputPanelHeight: CGFloat {
-        notchModeEnabled ? Self.notchInputPanelHeight : 120
+        let base = notchModeEnabled ? Self.notchInputPanelHeight : 120
+        // When notch mode renders the "Back / Omi Chat" header (agent pills
+        // present), the input panel needs additional vertical room so the
+        // header + editor + padding all fit. (Codex P2 — input/send clipping.)
+        if notchModeEnabled, !AgentPillsManager.shared.pills.isEmpty {
+            return base + Self.notchChatHeaderVerticalBudget
+        }
+        return base
     }
 
     var onPlayPause: (() -> Void)?
@@ -1129,8 +1140,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             .map(NSSizeFromString)
         let defaultCap = defaultAutoResponseMaxHeight()
         if let savedSize {
-            let savedHeight = max(Self.minResponseHeight, savedSize.height)
-            return (savedHeight, max(savedHeight, defaultCap))
+            // Clamp the persisted height to the current screen's cap so a tall
+            // saved value from a larger display cannot be restored oversized on
+            // a smaller screen. (Cubic P2 — cross-monitor sizing consistency.)
+            let savedHeight = min(max(Self.minResponseHeight, savedSize.height), defaultCap)
+            return (savedHeight, defaultCap)
         }
         return (min(Self.defaultBaseResponseHeight, defaultCap), defaultCap)
     }

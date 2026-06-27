@@ -86,7 +86,11 @@ struct FloatingControlBarView: View {
     }
 
     private var shouldShowAgentSwitcher: Bool {
-        !agentPills.pills.isEmpty && (state.showingAIConversation || state.agentSwitcherPinned || state.agentSwitcherHovering)
+        // Do NOT include state.showingAIConversation here. When chat is open the
+        // agent-list overlay is hidden, so reserving its height only leaves a blank
+        // vertical gap and pushes/clips the chat content. The switcher expands only
+        // for explicit pinned/hover interaction. (Cubic P2 + Codex P2.)
+        !agentPills.pills.isEmpty && (state.agentSwitcherPinned || state.agentSwitcherHovering)
     }
 
     private var showingNotchWaveform: Bool {
@@ -905,10 +909,21 @@ struct FloatingControlBarView: View {
             onEscape: onEscape,
             onHeightChange: { [weak state] height in
                 guard let state = state else { return }
-                let totalHeight = state.usesNotchIsland
-                    ? notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
-                    : 50 + height + 24
-                state.inputViewHeight = totalHeight
+                let baseHeight: CGFloat
+                if state.usesNotchIsland {
+                    baseHeight = notchChromeHeight + height + FloatingControlBarWindow.notchInputPanelVerticalPadding
+                    // When the "Back / Omi Chat" header is rendered above the
+                    // input (notch mode + agent pills), budget its height too
+                    // so the window is tall enough for header + editor + padding.
+                    // (Codex P2 — input/send control clipping.)
+                    let headerBudget = state.usesNotchIsland && !agentPills.pills.isEmpty
+                        ? FloatingControlBarWindow.notchChatHeaderVerticalBudget
+                        : 0
+                    state.inputViewHeight = baseHeight + headerBudget
+                } else {
+                    baseHeight = 50 + height + 24
+                    state.inputViewHeight = baseHeight
+                }
             }
         )
         .transition(
