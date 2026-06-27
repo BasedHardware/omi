@@ -923,12 +923,27 @@ def generate_api_key() -> Tuple[str, str, str]:
     return f'sk_{raw_key}', hashed_key, formatted_label
 
 
-def verify_api_key(app_id: str, api_key: str) -> bool:
+def _lookup_api_key(app_id: str, api_key: str):
+    """Look up an API key doc by app + raw key. Returns the stored dict or None.
+
+    Single source of truth for key parsing (the optional 'sk_' prefix) and
+    hashing. Both verify_api_key and verify_api_key_for_uid use this.
+    """
     if api_key.startswith("sk_"):
         api_key = api_key[3:]
     hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
-    stored_key = get_api_key_by_hash_db(app_id, hashed_key)
-    return stored_key is not None
+    return get_api_key_by_hash_db(app_id, hashed_key)
+
+
+def verify_api_key(app_id: str, api_key: str) -> bool:
+    """Lightweight check: does this raw key exist for the app?
+
+    Used by integration endpoints where the caller holds an app-level key
+    and the uid comes from the URL (existing pattern across the 7+
+    integration routes). For endpoints that impersonate the user (e.g.
+    persona-chat), use verify_api_key_for_uid instead.
+    """
+    return _lookup_api_key(app_id, api_key) is not None
 
 
 def verify_api_key_for_uid(app_id: str, uid: str, api_key: str) -> bool:
@@ -940,20 +955,24 @@ def verify_api_key_for_uid(app_id: str, uid: str, api_key: str) -> bool:
     a developer holding a valid app-level key can't act on behalf of any
     enabled user — only the user they actually own the key for.
 
-    Returns False if the key doesn't exist, or if the key was issued for a
-    different uid (legacy keys without a uid field are also rejected —
-    sensitive endpoints should require the new key shape).
+    Legacy keys (created before this check existed) don't have a 'uid' field.
+    We fall back to the parent app's owner uid, which is the same as the
+    developer's uid — the same security model as before, just looked up via
+    a different path. New keys stamped with 'uid' (by create_api_key_for_app)
+    bypass this fallback.
     """
-    if api_key.startswith("sk_"):
-        api_key = api_key[3:]
-    hashed_key = hashlib.sha256(api_key.encode()).hexdigest()
-    stored_key = get_api_key_by_hash_db(app_id, hashed_key)
-    if not stored_key:
+    stored = _lookup_api_key(app_id, api_key)
+    if not stored:
         return False
-    # Legacy keys (created before this function existed) don't have a uid
-    # field. Reject them for sensitive endpoints — they should be regenerated.
-    key_uid = stored_key.get("uid")
-    return key_uid == uid
+    key_uid = stored.get("uid")
+    if key_uid is not None:
+        return key_uid == uid
+    # Legacy key: fall back to the parent app's owner uid (set when the app
+    # was created). Same security model as before the check was added.
+    app = get_app_by_id_db(app_id)
+    if not app:
+        return False
+    return app.get("uid") == uid
 
 
 def app_has_action(app: dict, action_name: str) -> bool:
