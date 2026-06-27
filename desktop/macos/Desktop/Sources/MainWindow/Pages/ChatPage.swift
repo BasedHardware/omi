@@ -1129,41 +1129,70 @@ struct ToolCallsGroup: View {
   }
 
   private var compactBody: some View {
-    HStack(spacing: 7) {
-      if hasRunningTool {
-        ProgressView()
-          .controlSize(.mini)
-          .frame(width: 12, height: 12)
-      } else {
-        Image(systemName: "checkmark.circle.fill")
-          .scaledFont(size: 12)
-          .foregroundColor(.green)
+    VStack(alignment: .leading, spacing: 0) {
+      Button(action: {
+        withAnimation(.easeInOut(duration: 0.2)) {
+          isExpanded.toggle()
+        }
+      }) {
+        HStack(spacing: 7) {
+          if hasRunningTool {
+            ProgressView()
+              .controlSize(.mini)
+              .frame(width: 12, height: 12)
+          } else {
+            Image(systemName: "checkmark.circle.fill")
+              .scaledFont(size: 12)
+              .foregroundColor(.green)
+          }
+
+          Text(currentToolName)
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+            .lineLimit(1)
+
+          if let summary = currentToolSummary, !summary.isEmpty {
+            Text(summary)
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(1)
+              .truncationMode(.middle)
+          }
+
+          if calls.count > 1 {
+            Text("· \(calls.count) steps")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(1)
+          }
+
+          Spacer(minLength: 0)
+
+          Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            .scaledFont(size: 9)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .frame(maxWidth: .infinity, alignment: .leading)
       }
+      .buttonStyle(.plain)
 
-      Text(currentToolName)
-        .scaledFont(size: 12, weight: .semibold)
-        .foregroundColor(OmiColors.textSecondary)
-        .lineLimit(1)
+      if isExpanded {
+        Divider()
+          .padding(.horizontal, 8)
 
-      if let summary = currentToolSummary, !summary.isEmpty {
-        Text(summary)
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
-          .lineLimit(1)
-          .truncationMode(.middle)
+        VStack(alignment: .leading, spacing: 4) {
+          ForEach(calls) { block in
+            if case .toolCall(_, let name, let status, _, let input, let output) = block {
+              ToolCallCard(name: name, status: status, input: input, output: output)
+            }
+          }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
       }
-
-      if calls.count > 1 {
-        Text("· \(calls.count) steps")
-          .scaledFont(size: 11)
-          .foregroundColor(OmiColors.textTertiary)
-          .lineLimit(1)
-      }
-
-      Spacer(minLength: 0)
     }
-    .padding(.horizontal, 10)
-    .frame(height: 34)
     .frame(maxWidth: .infinity, alignment: .leading)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: 14)
   }

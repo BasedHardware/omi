@@ -601,6 +601,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(chatPageSource.contains("var compact: Bool = false"))
     XCTAssertTrue(chatPageSource.contains("if compact {\n      compactBody\n    } else {\n      standardBody\n    }"))
     XCTAssertTrue(chatPageSource.contains(".frame(height: 34)"))
+    XCTAssertTrue(chatPageSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
+    XCTAssertTrue(chatPageSource.contains("ToolCallCard(name: name, status: status, input: input, output: output)"))
     XCTAssertTrue(chatPageSource.contains("summaryEmbeddedInToolName"))
     XCTAssertTrue(providerSource.contains("cleanName.lowercased().hasPrefix(\"read:\")"))
     XCTAssertTrue(providerSource.contains("return \"Reading file\""))
