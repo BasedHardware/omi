@@ -114,3 +114,32 @@ def test_anthropic_provider_does_not_dispatch_to_openai_path():
     asyncio.run(_collect())
 
     assert 'uid' not in invoked, 'OpenAI path must not run for the anthropic provider'
+
+
+def _load_agentic_function(name):
+    """Extract a single pure function from agentic.py and exec it in isolation
+    (avoids importing the module's heavy LLM/agent dependencies)."""
+    source = (Path(__file__).resolve().parents[2] / 'utils/retrieval/agentic.py').read_text()
+    tree = ast.parse(source)
+    func_node = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == name
+    )
+    namespace = {'Any': typing.Any}
+    exec(ast.get_source_segment(source, func_node), namespace)
+    return namespace[name]
+
+
+def test_chunk_text_handles_string_and_list_content():
+    """The stream handler must not silently drop non-string chunk content
+    (some providers emit content as a list of parts)."""
+    chunk_text = _load_agentic_function('_chunk_text')
+
+    assert chunk_text('hello') == 'hello'
+    assert chunk_text(None) == ''
+    assert chunk_text(42) == ''
+    assert chunk_text(['a', 'b']) == 'ab'
+    # List of content-part dicts: emit text parts, skip non-text blocks.
+    assert chunk_text([{'type': 'text', 'text': 'hi '}, {'type': 'tool_use', 'name': 'x'}]) == 'hi '
+    assert chunk_text([{'text': 'defaults-to-text'}]) == 'defaults-to-text'

@@ -80,6 +80,10 @@ if CHAT_PROVIDER not in {'anthropic', 'openai'}:
     logger.warning("Unsupported CHAT_PROVIDER=%s; falling back to anthropic", CHAT_PROVIDER)
     CHAT_PROVIDER = 'anthropic'
 logger.info("Chat provider: %s", CHAT_PROVIDER)
+if CHAT_PROVIDER == 'openai':
+    # The Anthropic-native server tools (web_search, tool_search) have no LangGraph
+    # equivalent, so live web search is unavailable when running on this provider.
+    logger.warning("CHAT_PROVIDER=openai: live web search (web_search/tool_search) is unavailable on this provider")
 
 # PROMPT CACHE OPTIMIZATION: This list MUST stay fixed and in this exact order.
 # Anthropic caches the tools array as part of the request prefix.  If the tool
@@ -571,6 +575,44 @@ def _coerce_tool_input_to_params(tool_input: Any) -> dict:
     return {'input': tool_input}
 
 
+def _chunk_text(content: Any) -> str:
+    """Extract text from a LangChain message chunk's content.
+
+    Content is usually a plain string, but some providers emit a list of content
+    parts (strings, or dicts like {'type': 'text', 'text': ...}). Concatenate the
+    textual parts so streamed output isn't silently dropped on those providers.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict) and part.get('type', 'text') == 'text':
+                text = part.get('text')
+                if isinstance(text, str):
+                    parts.append(text)
+        return ''.join(parts)
+    return ''
+
+
+_core_openai_agent = None
+
+
+def _get_core_openai_agent():
+    """Return a cached LangGraph agent for the core tool set.
+
+    The graph is expensive to construct, so reuse it across requests. Requests
+    that add user-specific app tools build a fresh agent (handled by the caller),
+    since those tools vary per user and must not be shared.
+    """
+    global _core_openai_agent
+    if _core_openai_agent is None:
+        _core_openai_agent = create_react_agent(model=get_openai_agent_llm(streaming=True), tools=list(CORE_TOOLS))
+    return _core_openai_agent
+
+
 async def _run_openai_agent_stream(
     agent,
     messages: List,
@@ -587,8 +629,8 @@ async def _run_openai_agent_stream(
 
             if kind == "on_chat_model_stream":
                 chunk = event.get("data", {}).get("chunk")
-                token = getattr(chunk, "content", None)
-                if isinstance(token, str) and token:
+                token = _chunk_text(getattr(chunk, "content", None))
+                if token:
                     full_response.append(token)
                     await callback.put_data(token)
 
@@ -740,7 +782,11 @@ async def _execute_agentic_chat_stream_openai(
     callback = AsyncStreamingCallback()
     full_response = []
     tool_usage_count = 0
-    agent = create_react_agent(model=get_openai_agent_llm(streaming=True), tools=tools)
+    # Reuse the cached core-tools agent unless this request added user-specific app tools.
+    if len(tools) > len(CORE_TOOLS):
+        agent = create_react_agent(model=get_openai_agent_llm(streaming=True), tools=tools)
+    else:
+        agent = _get_core_openai_agent()
     task = asyncio.create_task(_run_openai_agent_stream(agent, langchain_messages, config, callback, full_response))
 
     try:
