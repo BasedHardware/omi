@@ -31,7 +31,12 @@ from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, m
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
-from dependencies import get_uid_from_mcp_api_key, get_current_user_id, get_mcp_memory_default_memory_read_context
+from dependencies import (
+    get_uid_from_mcp_api_key,
+    get_current_user_id,
+    get_mcp_memory_default_memory_read_context,
+    get_mcp_memory_default_memory_write_context,
+)
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.default_read_rollout import (
@@ -42,6 +47,7 @@ from utils.memory.default_read_rollout import (
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
     authorize_memory_external_default_memory_read,
+    authorize_memory_external_default_memory_write,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
@@ -83,7 +89,19 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 
 
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
-def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
+def create_memory(
+    memory: Memory,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_write_context),
+):
+    # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
+    # must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
     memory_system = pin_memory_system(uid, db_client=db)
     memory.category = identify_category_for_memory(memory.content)
     memory_db = MemoryDB.from_memory(memory, uid, None, True)
@@ -104,7 +122,19 @@ def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
 
 
 @router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def delete_memory(
+    memory_id: str,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_write_context),
+):
+    # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
+    # must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
     memory_system = pin_memory_system(uid, db_client=db)
     if memory_system != MemorySystem.CANONICAL:
         _validate_mcp_memory(uid, memory_id)
@@ -119,7 +149,20 @@ def delete_memory(memory_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
 
 
 @router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
-def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def edit_memory(
+    memory_id: str,
+    value: str,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_write_context),
+):
+    # Fail closed: a legacy/read-only MCP key (no persisted memories.write grant)
+    # must not mutate canonical memories.
+    write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
+    if not write_grant.allowed:
+        raise HTTPException(
+            status_code=write_grant.status_code,
+            detail=write_grant.observability,
+        )
+    uid = auth_context.uid
     memory_system = pin_memory_system(uid, db_client=db)
     _validate_mcp_memory(uid, memory_id)
     MemoryService(db_client=db).update_external_memory_content(
@@ -267,6 +310,12 @@ def get_memories(
             status_code=400,
             detail="Invalid sort. Expected one of: scoring_desc, created_desc, updated_desc, manual_first.",
         )
+    category_list = []
+    if categories:
+        try:
+            category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
 
     memory_system = pin_memory_system(uid, db_client=db)
 
@@ -281,22 +330,32 @@ def get_memories(
         )
 
     if memory_system == MemorySystem.CANONICAL:
-        memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
-        return [
-            {
-                "id": memory.id,
-                "content": memory.content,
-                "category": memory.category.value if hasattr(memory.category, "value") else memory.category,
-            }
-            for memory in memories
-        ]
-
-    category_list = []
-    if categories:
-        try:
-            category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+        # Over-fetch then apply the same filters the legacy path applies, so
+        # canonical callers honoring categories/reviewed/sensitive/sort never
+        # receive memories they explicitly excluded.
+        filtered = collect_filtered_memories(
+            lambda batch_offset, batch_limit: [
+                m.model_dump(mode='json')
+                for m in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+                if not category_list
+                or (m.category.value if hasattr(m.category, 'value') else m.category)
+                in {c.value for c in category_list}
+            ],
+            limit=limit,
+            offset=offset,
+            reviewed=reviewed,
+            manually_added=manually_added,
+            include_activity=include_activity,
+            include_sensitive=include_sensitive,
+            updated_after=parsed_updated_after,
+            sort=sort,
+        )
+        memories = filtered['memories']
+        for memory in memories:
+            if memory.get('is_locked', False):
+                content = memory.get('content', '')
+                memory['content'] = (content[:70] + '...') if len(content) > 70 else content
+        return memories
 
     memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='mcp')
     memory_list_results = list_default_mcp_memories(

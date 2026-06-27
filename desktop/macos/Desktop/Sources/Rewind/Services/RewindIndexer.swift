@@ -159,22 +159,23 @@ actor RewindIndexer {
             var ocrDataJson: String?
             var isIndexed = false
 
-            let secretScanResult: OCRResult
-            do {
-                guard let result = try await scanJPEGForHardSecret(
-                    data: frame.jpegData,
-                    appName: frame.appName,
-                    windowTitle: frame.windowTitle,
-                    timestamp: frame.captureTime
-                ) else {
-                    return
-                }
-                secretScanResult = result
-            } catch {
-                await dropUnscannedOCRArtifact(appName: frame.appName, windowTitle: frame.windowTitle, timestamp: frame.captureTime, error: error)
-                return
-            }
+            // Add frame to the video encoder first so raw frame/history capture
+            // never blocks on OCR. Vision OCR can be slow or transiently fail on
+            // some machines; previously the secret scan ran before these gates
+            // and its catch path returned before encoding, stopping Rewind video
+            // capture entirely. Frame storage must be independent of OCR outcome.
+            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
+                image: cgImage,
+                timestamp: frame.captureTime
+            )
 
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip
+            // OCR and DB insert since there's no video chunk to load later.
+            guard let encodedFrame = encodedFrame else { return }
+
+            // OCR secret scan is gated by frequency and dedup so it only runs
+            // when OCR would have run anyway. Failures drop the OCR artifact
+            // but never the already-stored raw frame.
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
                 recordOCROutcome(.skippedFrequency)
@@ -184,24 +185,35 @@ actor RewindIndexer {
                 isIndexed = true
             } else {
                 framesSinceLastOCR = 0
-                recordOCROutcome(.ran)
-                ocrText = secretScanResult.fullText
-                if let data = try? JSONEncoder().encode(secretScanResult) {
-                    ocrDataJson = String(data: data, encoding: .utf8)
+                let secretScanResult: OCRResult?
+                do {
+                    secretScanResult = try await scanJPEGForHardSecret(
+                        data: frame.jpegData,
+                        appName: frame.appName,
+                        windowTitle: frame.windowTitle,
+                        timestamp: frame.captureTime
+                    )
+                } catch {
+                    await dropUnscannedOCRArtifact(appName: frame.appName, windowTitle: frame.windowTitle, timestamp: frame.captureTime, error: error)
+                    recordOCROutcome(.ran)
+                    isIndexed = true
+                    secretScanResult = nil
                 }
-                isIndexed = true
+
+                if let result = secretScanResult {
+                    recordOCROutcome(.ran)
+                    ocrText = result.fullText
+                    if let data = try? JSONEncoder().encode(result) {
+                        ocrDataJson = String(data: data, encoding: .utf8)
+                    }
+                    isIndexed = true
+                } else {
+                    // scanJPEGForHardSecret returned nil = secret detected and
+                    // tombstoned, or an error was already logged above. Either
+                    // way the raw frame is already stored; skip OCR enrichment.
+                    isIndexed = true
+                }
             }
-
-            // Add frame to video encoder after OCR secret gating so secret-bearing frames
-            // are tombstoned before raw frame storage.
-            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
-                image: cgImage,
-                timestamp: frame.captureTime
-            )
-
-            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
-            // since there's no video chunk to load later
-            guard let encodedFrame = encodedFrame else { return }
 
             // Create database record with video reference and OCR results
             let screenshot = Screenshot(

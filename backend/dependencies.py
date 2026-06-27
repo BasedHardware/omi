@@ -8,7 +8,11 @@ import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.scopes import Scopes, has_scope
 from utils.memory.product_authorization import ProductAuthorizationContext
-from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
+from utils.mcp_memories import (
+    McpVerifiedAuth,
+    build_mcp_default_memory_read_context,
+    build_mcp_default_memory_write_context,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -81,6 +85,29 @@ async def get_mcp_memory_default_memory_read_context(
     if not auth.app_id or not auth.key_id:
         raise HTTPException(status_code=403, detail="Missing MCP API app/key identity for memory memory authorization")
     return build_mcp_default_memory_read_context(
+        McpVerifiedAuth(
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            scopes=tuple(auth.scopes or ()),
+        )
+    )
+
+
+async def get_mcp_memory_default_memory_write_context(
+    auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth),
+) -> ProductAuthorizationContext:
+    """Authenticate an MCP key and build the memory write authorization context.
+
+    Requires a persisted ``memories.write`` scope so legacy/read-only MCP keys
+    cannot mutate canonical memories. Missing app/key identity fails closed; the
+    shared grant seam enforces the persisted ``write`` capability separately.
+    """
+    if not has_scope(auth.scopes, 'memories.write'):
+        raise HTTPException(status_code=403, detail="Insufficient permissions. Required scope: memories.write")
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(status_code=403, detail="Missing MCP API app/key identity for memory memory authorization")
+    return build_mcp_default_memory_write_context(
         McpVerifiedAuth(
             uid=auth.uid,
             app_id=auth.app_id,

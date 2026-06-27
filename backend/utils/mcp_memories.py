@@ -53,6 +53,7 @@ class McpVerifiedAuth:
 
 
 MCP_MEMORY_DEFAULT_MEMORY_READ_SURFACE = 'mcp_default_memory_read'
+MCP_MEMORY_DEFAULT_MEMORY_WRITE_SURFACE = 'mcp_default_memory_write'
 
 
 def build_mcp_default_memory_read_context(auth: McpVerifiedAuth) -> ProductAuthorizationContext:
@@ -68,6 +69,25 @@ def build_mcp_default_memory_read_context(auth: McpVerifiedAuth) -> ProductAutho
         uid=auth.uid,
         consumer='mcp',
         surface=MCP_MEMORY_DEFAULT_MEMORY_READ_SURFACE,
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        scopes=tuple(scope for scope in auth.scopes if scope in {'memories.read', 'memories.write'}),
+    )
+
+
+def build_mcp_default_memory_write_context(auth: McpVerifiedAuth) -> ProductAuthorizationContext:
+    """Build the MCP memory write authorization context.
+
+    Mirrors the read context but carries a distinct surface for observability so
+    write mutations can be attributed separately. Missing app/key identity or a
+    missing `memories.write` scope is carried into the shared app/key/scope grant
+    seam, which fails closed with deterministic reasons.
+    """
+
+    return ProductAuthorizationContext(
+        uid=auth.uid,
+        consumer='mcp',
+        surface=MCP_MEMORY_DEFAULT_MEMORY_WRITE_SURFACE,
         app_id=auth.app_id,
         key_id=auth.key_id,
         scopes=tuple(scope for scope in auth.scopes if scope in {'memories.read', 'memories.write'}),

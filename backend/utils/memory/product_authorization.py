@@ -407,6 +407,32 @@ def authorize_memory_external_default_memory_read(
     return decision
 
 
+def authorize_memory_external_default_memory_write(
+    context: ProductAuthorizationContext,
+    *,
+    db_client,
+    read_app_key_grants_state: ReadAppKeyGrantsState = read_app_key_memory_grants_state,
+) -> AppKeyScopeGrantDecision:
+    """Authorize an external memory write mutation (create/edit/delete).
+
+    Mirrors the read seam but delegates to the WRITE operation so the shared
+    app/key/scope grant contract enforces a persisted ``memories.write`` scope and
+    matching ``write`` capability flag. Legacy/read-only keys (``scopes=None`` or
+    no persisted ``write`` grant) fail closed, preventing mutations to canonical
+    memories before any external-memory service call.
+    """
+
+    grant_state_read = read_app_key_grants_state(uid=context.uid, db_client=db_client)
+    decision = authorize_app_key_scope_memory_grant(
+        context,
+        persisted_grant_state=getattr(grant_state_read, 'state', {}),
+        operation=MemoryGrantOperation.WRITE,
+    )
+    decision.observability['grant_state_reason'] = getattr(grant_state_read, 'reason', 'unknown_grant_state')
+    decision.observability['grant_state_source_path'] = getattr(grant_state_read, 'source_path', None)
+    return decision
+
+
 def authorize_memory_product_memory_route(
     context: ProductAuthorizationContext,
     *,

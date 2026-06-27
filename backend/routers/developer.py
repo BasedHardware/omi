@@ -295,7 +295,16 @@ def get_memories(
 
     memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
+        # Apply category filtering so canonical Developer clients requesting a
+        # category subset don't receive every canonical category.
         memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
+        if category_list:
+            allowed_categories = {c.value for c in category_list}
+            memories = [
+                m
+                for m in memories
+                if (m.category.value if hasattr(m.category, 'value') else m.category) in allowed_categories
+            ]
         return [CleanerMemory.model_validate(memory.model_dump()) for memory in memories]
     memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
     memory_result = search_memory_default_developer_memories(
