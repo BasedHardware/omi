@@ -331,16 +331,18 @@ class ToggleResponse(BaseModel):
 async def toggle(req: ToggleRequest):
     """Enable or disable auto-reply for the given chat_id.
 
-    Returns 404 if the chat_id is not registered. Returns 403 if bot_token
-    doesn't match the stored token. Called by the Chat Tools manifest entry
-    `toggle_auto_reply` (T-008).
+    Returns 403 with a generic message for both unknown chat_id AND wrong
+    bot_token, so callers can't enumerate which chat_ids are registered by
+    distinguishing 404 (unknown) from 403 (wrong token).
+
+    Called by the Chat Tools manifest entry `toggle_auto_reply` (T-008).
     """
     user = simple_storage.get_user_by_chat_id(req.chat_id)
-    if user is None:
-        raise HTTPException(status_code=404, detail=f"Unknown chat_id: {req.chat_id}")
-    # Constant-time compare to avoid leaking which token prefix is wrong.
-    if not secrets.compare_digest(req.bot_token, user["bot_token"]):
-        raise HTTPException(status_code=403, detail="bot_token does not match this chat_id")
+    # Same response for both 'unknown chat_id' and 'wrong bot_token' so the
+    # endpoint doesn't leak which chat_ids exist (chat_ids are exposed in
+    # Telegram update payloads and could be enumerated otherwise).
+    if user is None or not secrets.compare_digest(req.bot_token, user["bot_token"]):
+        raise HTTPException(status_code=403, detail="Invalid chat_id or bot_token")
     simple_storage.update_auto_reply(req.chat_id, req.enabled)
     return ToggleResponse(chat_id=req.chat_id, auto_reply_enabled=req.enabled)
 

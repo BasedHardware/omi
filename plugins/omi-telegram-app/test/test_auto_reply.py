@@ -307,7 +307,7 @@ class TestToggle:
 
         client = TestClient(app)
         resp = client.post("/toggle", json={"chat_id": "no-such-chat", "enabled": True, "bot_token": "123:abc"})
-        assert resp.status_code == 404
+        assert resp.status_code == 403  # unknown chat_id -> 403 (enumeration-safe)
 
     def test_toggle_wrong_bot_token_returns_403(self, telegram_api, persona_mock):
         from fastapi.testclient import TestClient
