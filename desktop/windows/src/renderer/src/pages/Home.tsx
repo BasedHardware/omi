@@ -273,11 +273,20 @@ export function Home(): React.JSX.Element {
     const el = chatScrollRef.current
     if (!el) return
     setOverflowing(el.scrollHeight > el.clientHeight + 4)
-    // Resume live following when the reader scrolls back to the live edge.
-    if (el.scrollHeight - el.scrollTop - el.clientHeight <= 8) {
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distFromBottom <= 8) {
+      // Resume live following when the reader scrolls back to the live edge.
       if (scrollModeRef.current !== 'followingBottom') {
         setScrollMode('followingBottom')
       }
+    } else if (
+      scrollModeRef.current === 'followingBottom' &&
+      !isProgrammaticScrollRef.current
+    ) {
+      // Release following when the viewport moves away from the live edge via
+      // a non-programmatic scroll (scrollbar thumb drag, keyboard arrows, etc).
+      // onWheel/onTouchMove already cover wheel/touch; this covers the rest.
+      setScrollMode('freeScrolling')
     }
     if (el.scrollTop < 80 && visibleCount < chat.history.length) {
       restoreFromBottom.current = el.scrollHeight - el.scrollTop
