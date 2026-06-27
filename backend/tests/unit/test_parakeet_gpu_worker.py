@@ -586,6 +586,37 @@ class TestAttentionModeConfig:
         assert worker._attn_is_local is True
         worker.stop()
 
+    def test_local_mode_recasts_bf16_after_change_attention(self):
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        mock_model.to.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        torch_mod = sys.modules["torch"]
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = True
+        torch_mod.cuda.is_bf16_supported.return_value = True
+
+        with patch.dict(
+            os.environ,
+            {
+                "PARAKEET_ATTENTION_MODE": "local",
+                "PARAKEET_LOCAL_ATTN_CONTEXT": "128,128",
+                "PARAKEET_TORCH_COMPILE": "false",
+                "PARAKEET_BF16": "1",
+            },
+        ):
+            worker = GPUWorker()
+            worker._load_model()
+
+        to_calls = mock_model.to.call_args_list
+        assert len(to_calls) >= 2
+        assert to_calls[0] == ((torch_mod.bfloat16,),)
+        assert to_calls[-1] == ((torch_mod.bfloat16,),)
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
     def test_auto_mode_skips_torch_compile(self):
         import gpu_worker as gw_mod
 
