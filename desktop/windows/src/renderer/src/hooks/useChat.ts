@@ -258,6 +258,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
+      const prefs = getPreferences()
       const byokStatus = await window.omi.byokStatus().catch(() => null)
       if (
         byokStatus?.activeChatProvider &&
