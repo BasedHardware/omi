@@ -909,13 +909,44 @@ def test_is_developer_detection():
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
     assert app_int._is_developer("u") is False
 
+    app_int._DEV_STATUS_CACHE.clear()
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[MagicMock()])
     assert app_int._is_developer("u") is True
 
+    app_int._DEV_STATUS_CACHE.clear()
     dev_mod.get_dev_keys_for_user = MagicMock(side_effect=Exception("firestore down"))
     assert app_int._is_developer("u") is False  # fail closed: still apply the cap
 
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
+
+
+def test_is_developer_is_cached():
+    """The developer lookup is cached, so a second cap check does not re-hit the DB."""
+    app_int = _fresh_app_integrations()
+    dev_mod = sys.modules["database.dev_api_key"]
+    app_int._DEV_STATUS_CACHE.clear()
+    dev_mod.get_dev_keys_for_user = MagicMock(return_value=[])
+
+    assert app_int._is_developer("cached-uid") is False
+    assert app_int._is_developer("cached-uid") is False
+    dev_mod.get_dev_keys_for_user.assert_called_once()  # second call served from cache
+
+
+def test_resolve_daily_cap_bounds():
+    """The env override is clamped: invalid falls back to the default, and 0/huge are bounded."""
+    import utils.llm.proactive_notification as pn
+
+    assert pn._resolve_daily_cap(default=9) == 9  # env unset in tests
+    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "0"}):
+        assert pn._resolve_daily_cap(default=9, minimum=1) == 1  # cannot silently disable
+    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "-5"}):
+        assert pn._resolve_daily_cap(default=9, minimum=1) == 1
+    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "999999"}):
+        assert pn._resolve_daily_cap(default=9, maximum=1000) == 1000  # cannot remove throttling
+    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "not-an-int"}):
+        assert pn._resolve_daily_cap(default=9) == 9  # falls back
+    with patch.dict(os.environ, {"MAX_DAILY_NOTIFICATIONS": "6"}):
+        assert pn._resolve_daily_cap(default=9) == 6  # valid override honored
 
 
 def test_proactive_daily_cap_helper():
@@ -931,6 +962,7 @@ def test_proactive_daily_cap_helper():
     assert app_int._proactive_daily_cap_reached("u") is True
 
     # Developer: exempt even far over the cap.
+    app_int._DEV_STATUS_CACHE.clear()
     dev_mod.get_dev_keys_for_user = MagicMock(return_value=[MagicMock()])
     redis_mod.get_daily_notification_count.return_value = 100
     assert app_int._proactive_daily_cap_reached("u") is False
