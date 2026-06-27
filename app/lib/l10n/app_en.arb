@@ -11070,5 +11070,121 @@
     "transcribeLaterPaused": "Paused — audio isn't being recorded",
     "@transcribeLaterPaused": {
         "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
+    },
+    "deviceTutorial": "Device Tutorial",
+    "@deviceTutorial": {
+        "description": "Interactive device onboarding tutorial: deviceTutorial"
+    },
+    "deviceOnboardingTranscriptionTitle": "Speak Into Your Omi",
+    "@deviceOnboardingTranscriptionTitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingTranscriptionTitle"
+    },
+    "deviceOnboardingTranscriptionSubtitle": "Say a few words and watch them appear in real-time",
+    "@deviceOnboardingTranscriptionSubtitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingTranscriptionSubtitle"
+    },
+    "deviceOnboardingGoodJob": "Good job!",
+    "@deviceOnboardingGoodJob": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingGoodJob"
+    },
+    "deviceOnboardingStartSpeaking": "Start speaking...",
+    "@deviceOnboardingStartSpeaking": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingStartSpeaking"
+    },
+    "deviceOnboardingAskQuestionTitle": "Ask Omi a Question",
+    "@deviceOnboardingAskQuestionTitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingAskQuestionTitle"
+    },
+    "deviceOnboardingAskQuestionSubtitle": "Press the button once, speak your question, then press again when done",
+    "@deviceOnboardingAskQuestionSubtitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingAskQuestionSubtitle"
+    },
+    "deviceOnboardingProcessingQuestion": "Processing your question...",
+    "@deviceOnboardingProcessingQuestion": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingProcessingQuestion"
+    },
+    "deviceOnboardingListening": "Listening...",
+    "@deviceOnboardingListening": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingListening"
+    },
+    "deviceOnboardingTurnOffTitle": "Turn Off",
+    "@deviceOnboardingTurnOffTitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingTurnOffTitle"
+    },
+    "deviceOnboardingTurnOnTitle": "Turn On",
+    "@deviceOnboardingTurnOnTitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingTurnOnTitle"
+    },
+    "deviceOnboardingTurnOffSubtitle": "Hold the button for 3 seconds",
+    "@deviceOnboardingTurnOffSubtitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingTurnOffSubtitle"
+    },
+    "deviceOnboardingTurnOnSubtitle": "Press the button to turn it back on",
+    "@deviceOnboardingTurnOnSubtitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingTurnOnSubtitle"
+    },
+    "deviceOnboardingHoldButtonHint": "Hold the button firmly until the light turns off",
+    "@deviceOnboardingHoldButtonHint": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingHoldButtonHint"
+    },
+    "deviceOnboardingStatusConnected": "Connected",
+    "@deviceOnboardingStatusConnected": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingStatusConnected"
+    },
+    "deviceOnboardingStatusConnectedDone": "Connected!",
+    "@deviceOnboardingStatusConnectedDone": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingStatusConnectedDone"
+    },
+    "deviceOnboardingStatusDisconnected": "Disconnected",
+    "@deviceOnboardingStatusDisconnected": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingStatusDisconnected"
+    },
+    "deviceOnboardingStatusTurningOff": "Turning off...",
+    "@deviceOnboardingStatusTurningOff": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingStatusTurningOff"
+    },
+    "deviceOnboardingDoubleTapTitle": "Customize Double Tap",
+    "@deviceOnboardingDoubleTapTitle": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingDoubleTapTitle"
+    },
+    "deviceOnboardingEndConversation": "End Conversation",
+    "@deviceOnboardingEndConversation": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingEndConversation"
+    },
+    "deviceOnboardingEndConversationDesc": "Save and end current conversation",
+    "@deviceOnboardingEndConversationDesc": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingEndConversationDesc"
+    },
+    "deviceOnboardingMuteUnmute": "Mute / Unmute",
+    "@deviceOnboardingMuteUnmute": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingMuteUnmute"
+    },
+    "deviceOnboardingMuteUnmuteDesc": "Toggle microphone on or off",
+    "@deviceOnboardingMuteUnmuteDesc": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingMuteUnmuteDesc"
+    },
+    "deviceOnboardingStarConversation": "Star Ongoing Conversation",
+    "@deviceOnboardingStarConversation": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingStarConversation"
+    },
+    "deviceOnboardingStarConversationDesc": "Mark conversation as important",
+    "@deviceOnboardingStarConversationDesc": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingStarConversationDesc"
+    },
+    "deviceOnboardingSingleTapHint": "That was a single tap — try tapping twice quickly!",
+    "@deviceOnboardingSingleTapHint": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingSingleTapHint"
+    },
+    "deviceOnboardingTryDoubleTap": "Try it now! Double tap your Omi",
+    "@deviceOnboardingTryDoubleTap": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingTryDoubleTap"
+    },
+    "deviceOnboardingContinue": "Continue",
+    "@deviceOnboardingContinue": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingContinue"
+    },
+    "deviceOnboardingFinish": "Finish",
+    "@deviceOnboardingFinish": {
+        "description": "Interactive device onboarding tutorial: deviceOnboardingFinish"
     }
 }
