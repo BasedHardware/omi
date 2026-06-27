@@ -60,12 +60,12 @@ private struct UserScrollDetector: NSViewRepresentable {
 
                 if event.type == .keyDown {
                     // Keyboard scroll-navigation (Page Up/Down, arrows, Home/End)
-                    // is reader intent — but only when a text-editing control
-                    // does NOT have keyboard focus. Otherwise arrow keys and
-                    // Page Up/Down go to the chat input or a selected text view,
-                    // not the scroll view.
+                    // is reader intent — but only when the scroll view (or a
+                    // descendant view like the document content) is the keyboard
+                    // target. This prevents sidebar tables, buttons, or other
+                    // controls in the same window from falsely breaking live-follow.
                     guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
-                    if Self.isFirstResponderEditingText(in: event.window) { return event }
+                    guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
                     self.onUserScroll()
                 } else {
                     // Mouse/wheel events: check if inside the scroll view
@@ -87,14 +87,16 @@ private struct UserScrollDetector: NSViewRepresentable {
             }
         }
 
-        /// Returns true if the window's first responder is a text-editing
-        /// control (NSTextView backs both NSTextField via field editor and
-        /// SwiftUI text inputs). Used to distinguish typing in the chat input
-        /// from keyboard-driven scroll navigation.
-        private static func isFirstResponderEditingText(in window: NSWindow?) -> Bool {
+        /// Returns true if the window's first responder is the scroll view or a
+        /// descendant of it — meaning keyboard events go to the scroll view and
+        /// should be treated as scroll navigation. This is more precise than
+        /// checking "not a text view": it excludes sidebar tables, buttons, and
+        /// other controls that happen to have keyboard focus in the same window.
+        private static func isScrollViewKeyboardTarget(in window: NSWindow?, scrollView: NSScrollView) -> Bool {
             guard let window = window else { return false }
             let fr = window.firstResponder
-            return fr is NSTextView
+            guard let frView = fr as? NSView else { return false }
+            return frView === scrollView || frView.isDescendant(of: scrollView)
         }
 
         deinit {
@@ -210,6 +212,12 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// jump-to-bottom affordance should be shown.
     @State private var hasActivityBelow = false
 
+    // MARK: - Conversation Identity
+
+    /// The first message ID of the conversation this view is currently tracking.
+    /// Used to detect conversation switches so session-scoped @State can be reset.
+    @State private var trackedConversationId: String?
+
     var body: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
@@ -279,6 +287,25 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             } else {
                 // Load finished — restore prepend anchor if user hasn't scrolled
                 restorePrependAnchor(proxy: proxy)
+            }
+        }
+        // MARK: - Reset session state on conversation switch
+        .onChange(of: messages.first?.id) { oldId, newId in
+            // When the first message ID changes, the user switched to a
+            // different conversation (or a new one was loaded). Reset all
+            // session-scoped @State so stale tracking doesn't leak across.
+            guard newId != trackedConversationId, newId != nil else { return }
+            trackedConversationId = newId
+            if oldId != nil {
+                // Reset conversation-scoped state. Only do this on an actual
+                // switch (oldId != nil), not the initial population.
+                initialRestoreHandled = false
+                lastSeenSendGeneration = localSendToken?.generation ?? 0
+                prependAnchorId = nil
+                hasActivityBelow = false
+                scrollMode = .followingBottom
+                userIsScrolling = false
+                isUserAtBottom = true
             }
         }
         .onAppear {
