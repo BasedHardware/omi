@@ -14,6 +14,7 @@ export type ConversationRow = {
   // client-side, dropped once the backend's real conversation arrives).
   pending?: boolean
   sortAt: number
+  starred?: boolean
 }
 
 export const conversationsCache = {

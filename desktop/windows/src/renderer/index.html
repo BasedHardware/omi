@@ -9,9 +9,9 @@
       content="
         default-src 'self';
         script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval' blob: https://apis.google.com https://www.gstatic.com https://cdn.jsdelivr.net;
-        style-src 'self' 'unsafe-inline';
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
         img-src 'self' data: blob: https: https://*.googleusercontent.com;
-        font-src 'self' data:;
+        font-src 'self' data: https://fonts.gstatic.com;
         media-src 'self' blob:;
         connect-src 'self'
           https://identitytoolkit.googleapis.com
@@ -30,6 +30,12 @@
         frame-src 'self' https://based-hardware.firebaseapp.com https://accounts.google.com;
         worker-src 'self' blob:;
       "
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap"
+      rel="stylesheet"
     />
   </head>
 

@@ -7,11 +7,19 @@ import {
   startForegroundMonitor,
   stopForegroundMonitor
 } from '../usage/foregroundMonitor'
+import { getForegroundWindowInfo } from '../usage/nativeForeground'
 import { seedUserAssistOnce } from '../usage/userAssistSeed'
 import type { UsageSettings } from '../../shared/types'
 
 export function registerUsageHandlers(): void {
   ipcMain.handle('usage:list', async () => listAppUsage())
+  ipcMain.handle('usage:foregroundNow', () => {
+    try {
+      return getForegroundWindowInfo()
+    } catch {
+      return null
+    }
+  })
   // Force an immediate flush of the in-memory tally, then return the fresh rows.
   ipcMain.handle('usage:flush', async () => {
     flushForegroundMonitor()

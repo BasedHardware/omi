@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Brain, Plus, Loader2, CheckSquare, Trash2, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Check, Download, Copy } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -8,13 +8,14 @@ import { useMemoryGraph } from '../hooks/useMemoryGraph'
 import { toast } from '../lib/toast'
 import { fetchAllMemories, deleteMemoriesPaced } from '../lib/memoriesBulk'
 import { isAppIndexMemory } from '../lib/memoryCleanup'
+import { MemoryExportModal } from '../components/memories/MemoryExportModal'
 
 // Cap how many cards render at once so a multi-thousand list stays responsive;
 // selection still operates on the full (filtered) set, not just what's rendered.
 const RENDER_CAP = 400
 
 export function Memories(): React.JSX.Element {
-  const { memories, loading, error, createMemory, refresh } = useMemories()
+  const { memories, loading, error, createMemory, editMemory, refresh } = useMemories()
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
@@ -28,10 +29,22 @@ export function Memories(): React.JSX.Element {
   const [all, setAll] = useState<Memory[] | null>(null) // full set, owned locally so deletes can drop rows
   const [loadingAll, setLoadingAll] = useState(false)
   const [filter, setFilter] = useState('')
+  const [catFilter, setCatFilter] = useState<string>('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
   const stopRef = useState({ stop: false })[0]
+  const [editingMemId, setEditingMemId] = useState<string | null>(null)
+  const [editMemText, setEditMemText] = useState('')
+  const [savingMem, setSavingMem] = useState(false)
+  const [showExport, setShowExport] = useState(false)
+
+  // Collect unique category labels from the loaded set for the filter tabs.
+  const categories = useMemo(() => {
+    const seen = new Set<string>()
+    for (const m of memories) if (m.category) seen.add(m.category)
+    return [...seen].sort()
+  }, [memories])
 
   const closeCompose = (): void => {
     setComposing(false)
@@ -73,9 +86,45 @@ export function Memories(): React.JSX.Element {
     setFilter('')
   }
 
+  const startMemEdit = (m: { id: string; content: string }): void => {
+    setEditingMemId(m.id)
+    setEditMemText(m.content)
+  }
+
+  const cancelMemEdit = (): void => {
+    setEditingMemId(null)
+    setEditMemText('')
+  }
+
+  const commitMemEdit = async (): Promise<void> => {
+    const text = editMemText.trim()
+    if (!text || !editingMemId) { cancelMemEdit(); return }
+    setSavingMem(true)
+    try {
+      await editMemory(editingMemId, text)
+      toast('Memory updated', { tone: 'info' })
+    } catch (e) {
+      toast('Could not update memory', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setSavingMem(false)
+      cancelMemEdit()
+    }
+  }
+
+  const copyMemory = async (content: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(content)
+      toast('Copied to clipboard', { tone: 'info' })
+    } catch {
+      toast('Could not copy', { tone: 'error' })
+    }
+  }
+
   const source = manage ? (all ?? []) : memories
   const q = filter.trim().toLowerCase()
-  const filtered = q ? source.filter((m) => m.content?.toLowerCase().includes(q)) : source
+  const filtered = source
+    .filter((m) => !catFilter || m.category === catFilter)
+    .filter((m) => !q || m.content?.toLowerCase().includes(q))
   const rendered = filtered.slice(0, RENDER_CAP)
 
   const toggle = (id: string): void =>
@@ -149,6 +198,10 @@ export function Memories(): React.JSX.Element {
                 <CheckSquare className="h-4 w-4" />
                 Select
               </button>
+              <button onClick={() => setShowExport(true)} className="btn-ghost px-3 py-2" title="Export memories">
+                <Download className="h-4 w-4" />
+                Export
+              </button>
               <button onClick={() => setComposing((c) => !c)} className="btn-primary px-3 py-2" title="Create a memory">
                 <Plus className="h-4 w-4" />
                 New
@@ -157,6 +210,25 @@ export function Memories(): React.JSX.Element {
           )
         }
       />
+
+      {/* Category filter tabs — only shown when the server actually returns categories */}
+      {!manage && categories.length > 0 && (
+        <div className="flex gap-1 overflow-x-auto border-b border-white/5 px-6 pb-2 pt-2 lg:px-10">
+          {['', ...categories].map((cat) => (
+            <button
+              key={cat || 'all'}
+              onClick={() => setCatFilter(cat)}
+              className={`shrink-0 rounded-full px-3 py-1 text-sm transition-colors ${
+                catFilter === cat
+                  ? 'bg-white/15 text-text-primary'
+                  : 'text-text-tertiary hover:bg-white/8 hover:text-text-secondary'
+              }`}
+            >
+              {cat || 'All'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {manage && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-6 py-3 lg:px-10">
@@ -206,7 +278,7 @@ export function Memories(): React.JSX.Element {
         {!manage && brainGraph.nodes.length > 0 && (
           <div className="mx-auto mb-6 max-w-4xl">
             <div className="surface-card relative h-80 overflow-hidden p-0">
-              <BrainGraph graph={brainGraph} centerNodeId={centerNodeId} interactive={false} pauseWhenHidden />
+              <BrainGraph graph={brainGraph} centerNodeId={centerNodeId} interactive pauseWhenHidden />
             </div>
           </div>
         )}
@@ -231,7 +303,7 @@ export function Memories(): React.JSX.Element {
                 className="input-field resize-none"
               />
               <div className="mt-3 flex items-center justify-end gap-2">
-                <span className="mr-auto text-xs text-white/35">⌘/Ctrl + Enter to save</span>
+                <span className="mr-auto text-xs text-white/35">Ctrl+Enter to save</span>
                 <button onClick={closeCompose} className="btn-ghost px-3 py-2" disabled={saving}>
                   Cancel
                 </button>
@@ -254,14 +326,34 @@ export function Memories(): React.JSX.Element {
         <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 lg:grid-cols-2">
           {rendered.map((m) => {
             const isSel = selected.has(m.id)
+            const isEditing = editingMemId === m.id
             return (
               <li
                 key={m.id}
-                onClick={manage ? () => toggle(m.id) : undefined}
-                className={`surface-card-interactive p-5 ${manage ? 'cursor-pointer' : ''} ${
+                onClick={manage && !isEditing ? () => toggle(m.id) : undefined}
+                className={`surface-card-interactive group/card relative p-5 ${manage ? 'cursor-pointer' : ''} ${
                   isSel ? 'ring-2 ring-white/40' : ''
                 }`}
               >
+                {/* Share + Edit buttons — only in non-manage mode */}
+                {!manage && !isEditing && (
+                  <div className="absolute right-3 top-3 flex items-center gap-0.5 text-white/0 transition-colors group-hover/card:text-white/30">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); void copyMemory(m.content) }}
+                      title="Copy memory to clipboard"
+                      className="rounded-md p-1 hover:text-white/80"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); startMemEdit(m) }}
+                      title="Edit memory"
+                      className="rounded-md p-1 hover:text-white/80"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-start gap-3">
                   {manage && (
                     <input
@@ -273,19 +365,56 @@ export function Memories(): React.JSX.Element {
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="font-display text-lg font-bold leading-snug text-text-primary">
-                      {m.headline || m.content.slice(0, 80)}
-                    </div>
-                    {m.headline && (
-                      <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-text-tertiary">{m.content}</p>
+                    {isEditing ? (
+                      <div>
+                        <textarea
+                          autoFocus
+                          value={editMemText}
+                          onChange={(e) => setEditMemText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                              e.preventDefault()
+                              void commitMemEdit()
+                            } else if (e.key === 'Escape') {
+                              cancelMemEdit()
+                            }
+                          }}
+                          rows={3}
+                          className="input-field w-full resize-none text-sm"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                        <div className="mt-2 flex items-center justify-end gap-2">
+                          <span className="mr-auto text-xs text-white/35">Ctrl+Enter to save</span>
+                          <button onClick={cancelMemEdit} className="btn-ghost px-2 py-1 text-xs" disabled={savingMem}>
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => void commitMemEdit()}
+                            disabled={savingMem || !editMemText.trim()}
+                            className="btn-primary px-3 py-1 text-xs disabled:opacity-40"
+                          >
+                            {savingMem ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="font-display text-lg font-bold leading-snug text-text-primary">
+                          {m.headline || m.content.slice(0, 80)}
+                        </div>
+                        {m.headline && (
+                          <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-text-tertiary">{m.content}</p>
+                        )}
+                        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
+                          <time>{new Date(m.created_at).toLocaleString()}</time>
+                          {m.category && <span className="badge text-text-tertiary">{m.category}</span>}
+                          {m.tags && m.tags.length > 0 && (
+                            <span className="truncate text-text-quaternary">{m.tags.join(' · ')}</span>
+                          )}
+                        </div>
+                      </>
                     )}
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
-                      <time>{new Date(m.created_at).toLocaleString()}</time>
-                      {m.category && <span className="badge text-text-tertiary">{m.category}</span>}
-                      {m.tags && m.tags.length > 0 && (
-                        <span className="truncate text-text-quaternary">{m.tags.join(' · ')}</span>
-                      )}
-                    </div>
                   </div>
                 </div>
               </li>
@@ -299,6 +428,9 @@ export function Memories(): React.JSX.Element {
           </p>
         )}
       </div>
+      {showExport && (
+        <MemoryExportModal memories={memories} onClose={() => setShowExport(false)} />
+      )}
     </div>
   )
 }

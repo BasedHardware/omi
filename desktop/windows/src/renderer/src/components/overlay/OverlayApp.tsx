@@ -8,12 +8,148 @@ import { Waveform } from './Waveform'
 import { ChatMessages } from '../chat/ChatMessages'
 import './overlay.css'
 
+// ── TTS helper ────────────────────────────────────────────────────────────────
+function speak(text: string): void {
+  if (!window.speechSynthesis) return
+  window.speechSynthesis.cancel()
+  const utt = new SpeechSynthesisUtterance(text)
+  utt.rate = 1.1
+  utt.pitch = 1
+  window.speechSynthesis.speak(utt)
+}
+
+// ── Proactive notification card ───────────────────────────────────────────────
+type Notification = { title: string; body: string }
+
+function ProactiveCard({
+  notification,
+  onExecute,
+  onDismiss
+}: {
+  notification: Notification
+  onExecute: () => void
+  onDismiss: () => void
+}): React.JSX.Element {
+  return (
+    <div className="overlay-no-drag mb-2 rounded-xl border border-white/[0.10] bg-white/[0.07] px-3 py-2.5 shadow-md animate-fade-in">
+      <div className="mb-1.5 flex items-start gap-2">
+        <span className="mt-0.5 text-[13px]">🔔</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] font-semibold text-neutral-200 leading-tight">{notification.title}</p>
+          <p className="mt-0.5 text-[10px] text-neutral-400 leading-snug">{notification.body}</p>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <button
+          onClick={onExecute}
+          className="flex-1 rounded-lg bg-white/[0.12] py-1 text-[10px] font-medium text-neutral-200 hover:bg-white/[0.20] transition-colors"
+        >
+          Execute
+        </button>
+        <button
+          onClick={onDismiss}
+          className="rounded-lg px-2.5 py-1 text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
+        >
+          Dismiss
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Settings gear for the overlay header row — mirrors macOS floating bar.
+// Opens Settings in the main window. Shows on hover over the close button area.
+function SettingsGear(): React.JSX.Element {
+  return (
+    <button
+      onClick={() => window.omiOverlay.openMainRoute('/settings')}
+      aria-label="Settings"
+      title="Open Settings"
+      className="overlay-no-drag absolute left-2 top-1.5 z-10 flex h-5 w-5 items-center justify-center rounded-md text-xs leading-none text-neutral-600 transition-colors hover:bg-neutral-700/50 hover:text-neutral-300"
+    >
+      ⚙
+    </button>
+  )
+}
+
 /** Slim draggable strip with a centered grab handle. The whole strip is a drag
  *  region (-webkit-app-region: drag); the handle just signals that it's movable. */
 function DragHandle(): React.JSX.Element {
   return (
-    <div className="overlay-drag flex h-6 items-center justify-center">
-      <div className="h-1 w-8 rounded-full bg-neutral-600/60" />
+    <div className="overlay-drag flex h-7 items-center justify-center">
+      <div className="h-[3px] w-10 rounded-full bg-neutral-500/60" />
+    </div>
+  )
+}
+
+type PillState = 'idle' | 'recording' | 'finalizing' | 'sending'
+
+/** Single agent pill — used in the agent pills row below. */
+function AgentPill({
+  label,
+  dotClass,
+  active
+}: {
+  label: string
+  dotClass?: string
+  active?: boolean
+}): React.JSX.Element {
+  return (
+    <div
+      className={`flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-all duration-200 ${
+        active
+          ? 'border-white/[0.12] bg-white/[0.08]'
+          : 'border-white/[0.06] bg-white/[0.03]'
+      }`}
+    >
+      {dotClass && <span className={`h-1.5 w-1.5 rounded-full transition-colors duration-200 ${dotClass}`} />}
+      <span className="text-[10px] font-medium leading-none text-neutral-400">{label}</span>
+    </div>
+  )
+}
+
+/** Agent pills row — mirrors macOS FloatingBarAgentPillsView.
+ *  Shows Omi pill with live state + always-on capability pills (Memory, Screen). */
+function OmiPill({ state }: { state: PillState }): React.JSX.Element {
+  const dotClass =
+    state === 'idle'
+      ? 'bg-[#4ade80]'
+      : state === 'recording'
+        ? 'animate-pulse bg-red-400'
+        : state === 'finalizing'
+          ? 'animate-pulse bg-yellow-400'
+          : 'animate-pulse bg-blue-400'
+  const label =
+    state === 'idle'
+      ? 'Omi'
+      : state === 'recording'
+        ? 'Listening…'
+        : state === 'finalizing'
+          ? 'Transcribing…'
+          : 'Thinking…'
+  return (
+    <div className="overlay-no-drag flex items-center gap-1.5 pb-0.5">
+      <AgentPill label={label} dotClass={dotClass} active={state !== 'idle'} />
+      <AgentPill label="Memory" active={false} />
+      <AgentPill label="Screen" active={false} />
+    </div>
+  )
+}
+
+/** Bottom-right resize grip — mirrors macOS FloatingControlBarView's
+ *  ResizeHandleView. Visual affordance only; actual resize is native (the window
+ *  is resizable with width locked to OVERLAY_WIDTH). */
+function ResizeGrip(): React.JSX.Element {
+  return (
+    <div
+      aria-hidden
+      className="overlay-no-drag pointer-events-none absolute bottom-1 right-1.5 opacity-50"
+    >
+      <svg viewBox="0 0 10 10" width="12" height="12" fill="white">
+        <circle cx="9" cy="9" r="1.2" />
+        <circle cx="5.5" cy="9" r="1.2" />
+        <circle cx="9" cy="5.5" r="1.2" />
+      </svg>
     </div>
   )
 }
@@ -28,6 +164,26 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
+
+  // TTS: speak each new assistant reply
+  const lastSpokenRef = useRef<string>('')
+  useEffect(() => {
+    if (!history.length) return
+    const last = history[history.length - 1]
+    if (last.role !== 'assistant' || !last.content || sending) return
+    if (last.content === lastSpokenRef.current) return
+    lastSpokenRef.current = last.content
+    speak(last.content)
+  }, [history, sending])
+
+  // Proactive notifications from main
+  const [activeNotification, setActiveNotification] = useState<Notification | null>(null)
+  useEffect(() => {
+    return window.omiOverlay.onNotification((n) => {
+      setActiveNotification(n)
+      speak(n.title + '. ' + n.body)
+    })
+  }, [])
 
   // Serialize sends so a back-to-back voice message isn't fired while the previous
   // reply is still streaming (which `useChat.send` would no-op). Each send is
@@ -147,6 +303,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
       className={`overlay-panel relative ${leaving ? 'overlay-leave' : ''} flex flex-col text-neutral-100`}
     >
       <DragHandle />
+      <SettingsGear />
       <button
         onClick={dismiss}
         aria-label="Close"
@@ -157,6 +314,18 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
       </button>
 
       <div className="flex min-h-0 flex-col gap-3 px-4 pb-4">
+        {activeNotification && (
+          <ProactiveCard
+            notification={activeNotification}
+            onExecute={() => {
+              // Send the notification body as a message so Omi acts on it
+              setActiveNotification(null)
+              setDraft('')
+              enqueueSend(activeNotification.body)
+            }}
+            onDismiss={() => setActiveNotification(null)}
+          />
+        )}
         {history.length > 0 && (
           <div
             ref={scrollRef}
@@ -180,6 +349,9 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
             last flex child) gets shrunk/clipped and looks like it disappears after a
             send. Pinning it means the history above shrinks/scrolls instead. */}
         <div className="overlay-no-drag flex shrink-0 flex-col gap-2">
+          <OmiPill
+            state={ptt.recording ? 'recording' : ptt.finalizing ? 'finalizing' : sending ? 'sending' : 'idle'}
+          />
           <div className="flex items-end gap-2">
             <textarea
               ref={inputRef}
@@ -197,7 +369,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
               }}
               onKeyUp={(e) => ptt.onKeyUp(e)}
               placeholder="Ask Omi…  ·  hold Space to talk"
-              className="max-h-32 flex-1 resize-none rounded-xl bg-neutral-800/70 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:ring-1 focus:ring-neutral-500"
+              className={`max-h-32 flex-1 resize-none rounded-xl bg-neutral-800/70 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:ring-1 focus:ring-neutral-500 transition-shadow duration-150${ptt.recording ? ' ring-1 ring-red-500/50' : ''}`}
             />
             <button
               onClick={submit}
@@ -213,12 +385,18 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
             // waveform animates and the recognized transcript renders into the
             // textarea above. On release the strip disappears (no "Transcribing…");
             // the transcript keeps filling the box and auto-sends when settled.
-            <div className="flex items-center gap-3 rounded-xl bg-neutral-800/50 px-3 py-1.5">
-              <span className="shrink-0 text-xs font-medium text-neutral-300">Listening…</span>
+            <div className="flex items-center gap-3 rounded-xl bg-red-950/40 border border-red-500/20 px-3 py-1.5">
+              <span className="shrink-0 text-xs font-medium text-red-300">Listening…</span>
               <Waveform analyserRef={ptt.analyserRef} />
               <span className="shrink-0 text-[10px] text-neutral-500">
                 release to send · Esc cancels
               </span>
+            </div>
+          )}
+          {ptt.finalizing && !ptt.recording && (
+            <div className="flex items-center gap-2.5 rounded-xl bg-neutral-800/50 px-3 py-1.5">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-yellow-400" />
+              <span className="text-xs font-medium text-neutral-400">Transcribing…</span>
             </div>
           )}
         </div>
@@ -227,6 +405,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
           <div className="px-1 text-[11px] text-red-400">Voice: {ptt.error}</div>
         )}
       </div>
+      <ResizeGrip />
     </div>
   )
 }

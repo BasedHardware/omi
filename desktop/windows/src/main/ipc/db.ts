@@ -68,12 +68,12 @@ function get(): Database.Database {
   // never reads or writes the user's real omi.db.
   const file = process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
   db = new Database(file)
-  // For the throwaway bench DB only, relax durability so seeding ~7k rows isn't
-  // dominated by a per-insert fsync (otherwise it swamps the startup measurement).
-  if (process.env.OMI_DB_PATH) {
-    db.pragma('journal_mode = WAL')
-    db.pragma('synchronous = NORMAL')
-  }
+  // WAL mode: allows reads on the main thread to proceed concurrently while the
+  // KG write worker holds the write lock. NORMAL sync is crash-safe in WAL mode
+  // (may lose the last committed transaction on OS power-loss; acceptable for
+  // this derived cache). Previously bench-only; now unconditional.
+  db.pragma('journal_mode = WAL')
+  db.pragma('synchronous = NORMAL')
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
@@ -531,7 +531,9 @@ export function queryKgNodes(q: string, limit = 12): LocalKnowledgeGraph {
     aliases: parseJsonArray(r.aliasesJson),
     sourceRefs: parseJsonArray(r.sourceRefs)
   }))
-  if (nodes.length === 0) return { nodes: [], edges: [] }
+  if (nodes.length === 0) {
+    return { nodes: [], edges: [] }
+  }
   const ids = nodes.map((n) => n.id)
   const placeholders = ids.map(() => '?').join(',')
   const edges = d

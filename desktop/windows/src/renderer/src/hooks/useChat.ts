@@ -3,13 +3,20 @@ import { auth } from '../lib/firebase'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { gatherLocalContext } from '../lib/localAgent'
 import { readCurrentScreen } from '../lib/screenContext'
-import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
+import { looksLikeAction, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
 import type { AutomationPlan } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
+import { parseDonePayload, parseSseLine } from '../lib/chatSse'
 
-export type ChatMsg = { id?: string; role: 'user' | 'assistant'; content: string }
+export type { ChatCitation } from '../lib/chatSse'
+export type ChatMsg = {
+  id?: string
+  role: 'user' | 'assistant'
+  content: string
+  citations?: import('../lib/chatSse').ChatCitation[]
+}
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 
@@ -26,6 +33,8 @@ export type UseChat = {
   // plan, approval + execution happen via a NATIVE Windows dialog (main process),
   // so it works identically from the main window and the floating overlay.
   send: (text: string) => Promise<void>
+  /** Upload an audio file to /v2/voice-messages and stream the response. */
+  sendAudio: (file: File) => Promise<void>
   /** Clear the thread to a fresh conversation (used by the overlay's Esc). */
   reset: () => void
 }
@@ -241,47 +250,24 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
 
     let assistantText = ''
     try {
-      const token = await auth.currentUser?.getIdToken()
-      // Hybrid pre-step: gather context to PREPEND to the text we send (not what we
-      // persist). Both are best-effort ('' on failure) and run concurrently so the
-      // send isn't serialized behind them:
-      //   • current screen — the current screen's OCR text, attached as ambient
-      //     context to EVERY message. It's framed so the model ignores it unless the
-      //     message is actually about the screen, so it doesn't bloat answers. This
-      //     is an instant hot-cache read, so normal messages don't pay a capture cost;
-      //   • local KG/file context — apps/projects/tech the chat is grounded in.
-      const [screenContext, localContext] = await Promise.all([
+      const [token, screenContext, localContext] = await Promise.all([
+        auth.currentUser?.getIdToken() ?? Promise.resolve(''),
         readCurrentScreen(),
         gatherLocalContext(userMsg.content)
       ])
-      const contextParts = [screenContext, localContext].filter(Boolean)
+
+      const contextParts = [localContext, screenContext].filter(Boolean)
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
       const res = await fetch(`${OMI_BASE}/v2/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ text: textToSend })
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
 
-      // Each SSE line arrives as `data: <chunk>` (with `done:` marking the end).
-      // Strip the field prefix before appending, otherwise the literal "data:"
-      // leaks into the rendered reply. The backend also (a) emits ephemeral
-      // "thinking" status events whose payload starts with `think:` ("Checking
-      // action items", "Searching memories") — those aren't part of the reply,
-      // so drop them — and (b) encodes reply newlines as the literal token
-      // `__CRLF__` so they survive single-line SSE framing; restore those.
-      const parseChunk = (line: string): string | null => {
-        if (!line || line.startsWith('done:')) return null
-        const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
-        if (content.startsWith('think:')) return null
-        return content.replace(/__CRLF__/g, '\n')
-      }
-
+      let citationsFromDone: import('../lib/chatSse').ChatCitation[] = []
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
@@ -292,40 +278,18 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         const lines = buffer.split('\n')
         buffer = lines.pop() ?? ''
         for (const line of lines) {
-          const chunk = parseChunk(line)
+          if (line.startsWith('done:')) { citationsFromDone = parseDonePayload(line); continue }
+          const chunk = parseSseLine(line)
           if (chunk === null) continue
           assistantText += chunk
-          setHistory((h) => {
-            const next = [...h]
-            next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-            return next
-          })
+          setHistory((h) => { const next = [...h]; next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }; return next })
         }
-        if (Date.now() - lastPersist > 1500) {
-          lastPersist = Date.now()
-          void persistChat(buildThread(assistantText))
-        }
+        if (Date.now() - lastPersist > 1500) { lastPersist = Date.now(); void persistChat(buildThread(assistantText)) }
       }
-      const tail = parseChunk(buffer)
-      if (tail !== null) {
-        assistantText += tail
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
-      }
-      // The conversational backend sometimes answers an action-intent message
-      // with raw plan JSON (when it reached chat WITHOUT our planner — e.g. a
-      // keyword-less follow-up like "again"). Don't render that raw in the thread.
-      if (looksLikeRawPlan(assistantText)) {
-        assistantText =
-          "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
-        setHistory((h) => {
-          const next = [...h]
-          next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
-          return next
-        })
+      // Tail flush — done: sometimes arrives without a trailing newline.
+      if (buffer.startsWith('done:')) citationsFromDone = parseDonePayload(buffer)
+      if (citationsFromDone.length > 0) {
+        setHistory((h) => { const next = [...h]; next[next.length - 1] = { ...next[next.length - 1], citations: citationsFromDone }; return next })
       }
     } catch (e) {
       assistantText = `Error: ${(e as Error).message}`
@@ -338,6 +302,92 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       sendingRef.current = false
       setSending(false)
       await persistChat(buildThread(assistantText))
+    }
+  }
+
+  // Upload an audio file to /v2/voice-messages, stream the SSE response.
+  // The endpoint first yields `message: <base64_json>` with the transcript,
+  // then streams the AI reply as `data: <chunk>` lines.
+  const sendAudio = async (file: File): Promise<void> => {
+    if (sendingRef.current) return
+    sendingRef.current = true
+    const userMsgId = crypto.randomUUID()
+    const assistantId = crypto.randomUUID()
+    const baseHistory = history
+    // Show filename initially; updated to the transcript when the message: line arrives.
+    setHistory((h) => [
+      ...h,
+      { id: userMsgId, role: 'user', content: `[Audio: ${file.name}]` },
+      { id: assistantId, role: 'assistant', content: '' }
+    ])
+    setSending(true)
+    let userText = `[Audio: ${file.name}]`
+    let assistantText = ''
+    try {
+      const token = await auth.currentUser?.getIdToken()
+      const form = new FormData()
+      form.append('files', file)
+      const res = await fetch(`${OMI_BASE}/v2/voice-messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token ?? ''}` },
+        body: form
+      })
+      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (!line) continue
+          if (line.startsWith('message:')) {
+            try {
+              const raw = atob(line.slice('message:'.length).trim())
+              const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(raw, (c) => c.charCodeAt(0)))) as { text?: string }
+              if (payload.text) {
+                userText = payload.text
+                setHistory((h) => {
+                  const next = [...h]
+                  const ui = next.findIndex((m) => m.id === userMsgId)
+                  if (ui >= 0) next[ui] = { ...next[ui], content: userText }
+                  return next
+                })
+              }
+            } catch { /* ignore malformed */ }
+            continue
+          }
+          if (line.startsWith('done:')) continue
+          const content = line.startsWith('data:') ? line.slice(5).replace(/^ /, '') : line
+          if (content.startsWith('think:')) continue
+          const chunk = content.replace(/__CRLF__/g, '\n')
+          assistantText += chunk
+          setHistory((h) => {
+            const next = [...h]
+            next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+            return next
+          })
+        }
+      }
+    } catch (e) {
+      assistantText = `Error: ${(e as Error).message}`
+      setHistory((h) => {
+        const next = [...h]
+        next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
+        return next
+      })
+    } finally {
+      sendingRef.current = false
+      setSending(false)
+      const thread: ChatMsg[] = [
+        ...baseHistory,
+        { id: userMsgId, role: 'user', content: userText },
+        { id: assistantId, role: 'assistant', content: assistantText }
+      ]
+      await persistChat(thread)
     }
   }
 
@@ -358,5 +408,5 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
-  return { history, sending, send, reset }
+  return { history, sending, send, sendAudio, reset }
 }

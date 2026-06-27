@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useRecording } from './useRecording'
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
 import { invalidateConversationsCache, refreshCloudConversations } from '../lib/pageCache'
+import { getPreferences } from '../lib/preferences'
 import type { CaptureSource, TranscriptLine } from '../../../shared/types'
 
 function linesToString(lines: TranscriptLine[], interim: string): string {
@@ -204,6 +205,18 @@ export function useRecorder(): UseRecorder {
         transcript,
         createdAt: Date.now()
       })
+      // Show a Windows notification when the recording finishes (unless the user
+      // opted out in Settings → Notifications). Electron renderers support the
+      // Web Notification API, which routes through the OS notification system.
+      if (getPreferences().notifyOnRecordingSaved ?? true) {
+        try {
+          new window.Notification('Recording saved', {
+            body: 'Your conversation is ready in the Conversations tab.'
+          })
+        } catch {
+          // Notifications may be blocked — best-effort only.
+        }
+      }
       // Saved locally only (the dev API key 401s on Omi's read/reprocess
       // endpoints, so a pushed copy dead-ends). Cloud conversations are still
       // read from Omi elsewhere.

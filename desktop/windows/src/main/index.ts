@@ -1,5 +1,6 @@
-import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, session, nativeImage, desktopCapturer, Tray, Menu, dialog } from 'electron'
 import { join } from 'path'
+import { readFileSync, writeFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
@@ -37,6 +38,7 @@ import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
+import { getPersistedRewindSettings, persistRewindSettings } from './rewind/rewindSettings'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 
 // Default the perf log to the user data dir so marks double as lightweight prod
@@ -84,6 +86,93 @@ if (sandbox && process.env.OMI_BENCH !== '1') {
 }
 
 const icon = nativeImage.createFromPath(iconPath)
+
+// Keep a module-level reference so the tray isn't GC'd.
+let tray: Tray | null = null
+// Set to true when we're actually quitting so the close-to-tray intercept
+// doesn't prevent shutdown.
+let isQuitting = false
+// Pending BLE device-selection callback from the `select-bluetooth-device` event.
+// Stored at module level so the ipcMain handler (registered once in whenReady)
+// can call it after the renderer returns the chosen device id.
+let bluetoothCallback: ((deviceId: string) => void) | null = null
+let bluetoothDeviceList: Array<{ deviceId: string; deviceName: string }> = []
+let bluetoothDialogOpen = false
+
+// Build (or rebuild) the tray context menu, reading live settings each time
+// so the checked state reflects the current toggle value.
+function navigateMain(mainWindow: BrowserWindow, route: string): void {
+  mainWindow.show()
+  mainWindow.focus()
+  void mainWindow.webContents.executeJavaScript(`window.location.hash = "#${route}"`)
+}
+
+function buildTrayMenu(mainWindow: BrowserWindow): Electron.Menu {
+  const settings = getPersistedRewindSettings()
+  return Menu.buildFromTemplate([
+    {
+      label: 'Open Omi',
+      click: () => {
+        mainWindow.show()
+        mainWindow.focus()
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Screen Capture',
+      type: 'checkbox',
+      checked: settings.captureEnabled,
+      click: () => {
+        const current = getPersistedRewindSettings()
+        const updated = persistRewindSettings({ ...current, captureEnabled: !current.captureEnabled })
+        for (const w of BrowserWindow.getAllWindows()) {
+          if (!w.isDestroyed()) w.webContents.send('rewind:settings', updated)
+        }
+        tray?.setContextMenu(buildTrayMenu(mainWindow))
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Open Chat',
+      click: () => navigateMain(mainWindow, '/chat')
+    },
+    {
+      label: 'Open Rewind',
+      click: () => navigateMain(mainWindow, '/rewind')
+    },
+    {
+      label: 'Open Focus',
+      click: () => navigateMain(mainWindow, '/focus')
+    },
+    { type: 'separator' },
+    {
+      label: 'Settings',
+      click: () => navigateMain(mainWindow, '/settings')
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit Omi',
+      click: () => {
+        isQuitting = true
+        app.quit()
+      }
+    }
+  ])
+}
+
+function setupTray(mainWindow: BrowserWindow): void {
+  tray = new Tray(icon)
+  tray.setToolTip('Omi')
+  tray.setContextMenu(buildTrayMenu(mainWindow))
+
+  // Left-click on the tray icon shows / focuses the main window (matches macOS
+  // behavior where clicking the menu bar icon opens the app).
+  tray.on('click', () => {
+    mainWindow.show()
+    mainWindow.focus()
+  })
+}
+
 import {
   remapConversationId,
   insertLocalConversation,
@@ -93,19 +182,54 @@ import {
   updateLocalConversationTitle
 } from './ipc/db'
 
+// ── Window bounds persistence ────────────────────────────────────────────────
+// Save/restore window position and size across restarts so the app reopens
+// where the user left it — matches macOS NSWindow frame autosave behavior.
+type WindowBounds = { x?: number; y?: number; width: number; height: number }
+
+function loadWindowBounds(): WindowBounds | null {
+  try {
+    return JSON.parse(readFileSync(join(app.getPath('userData'), 'main-window-bounds.json'), 'utf8')) as WindowBounds
+  } catch {
+    return null
+  }
+}
+
+function saveWindowBounds(win: BrowserWindow): void {
+  if (win.isMaximized() || win.isMinimized() || win.isFullScreen()) return
+  try {
+    writeFileSync(
+      join(app.getPath('userData'), 'main-window-bounds.json'),
+      JSON.stringify(win.getBounds())
+    )
+  } catch { /* ignore write errors */ }
+}
+
 function createWindow(): BrowserWindow {
   // Create the browser window. 1280x820 gives the two-column Record layout
   // (transcript + screen sidebar) room without overflow; min-size prevents the
   // sidebar from clipping below a usable threshold.
+  const savedBounds = loadWindowBounds()
   const mainWindow = new BrowserWindow({
     title: 'omi',
-    width: 1280,
-    height: 820,
+    width: savedBounds?.width ?? 1280,
+    height: savedBounds?.height ?? 820,
+    x: savedBounds?.x,
+    y: savedBounds?.y,
     minWidth: 1024,
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    frame: true,
+    titleBarStyle: 'hidden',
+    // Win11 Snap Layouts: native caption buttons rendered by the OS so hovering
+    // the maximize button shows the snap-grid. Transparent background lets the
+    // DWM Acrylic material show behind the buttons; symbolColor matches our
+    // text-white/45 design token.
+    titleBarOverlay: {
+      color: 'rgba(0,0,0,0)',
+      symbolColor: 'rgba(255,255,255,0.45)',
+      height: 32
+    },
     transparent: false,
     backgroundColor: '#121212',
     icon,
@@ -116,7 +240,8 @@ function createWindow(): BrowserWindow {
       // Keep renderer timers running at full rate when the window is minimized/
       // hidden, so Rewind's background screen capture keeps sampling instead of
       // being throttled to ~once/minute by Chromium's background policy.
-      backgroundThrottling: false
+      backgroundThrottling: false,
+      spellcheck: true
     }
   })
 
@@ -129,6 +254,9 @@ function createWindow(): BrowserWindow {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
+  // Persist size+position on user resize/move so next launch restores them.
+  mainWindow.on('resize', () => saveWindowBounds(mainWindow))
+  mainWindow.on('move', () => saveWindowBounds(mainWindow))
   perfMark('window:created')
 
   // Allow Firebase + Google OAuth popups to open as real Electron windows so
@@ -152,13 +280,13 @@ function createWindow(): BrowserWindow {
         }
       }
     }
-    // Hand only web/mail links to the OS. A prompt-injected chat reply could emit
-    // a file://, UNC, or custom-protocol URL; passing those to shell.openExternal
-    // enables NTLM-hash leak / protocol-handler abuse. Defense-in-depth alongside
-    // the renderer's Markdown scheme allow-list.
+    // Hand safe links to the OS. Block file://, UNC, and unknown protocols to
+    // prevent prompt-injection NTLM-hash-leak / protocol-handler abuse.
+    // obsidian: is allowed for the memory-export vault deep-link.
     try {
       const scheme = new URL(url).protocol
-      if (scheme === 'http:' || scheme === 'https:' || scheme === 'mailto:') {
+      const allowed = ['http:', 'https:', 'mailto:', 'obsidian:']
+      if (allowed.includes(scheme)) {
         shell.openExternal(url)
       } else {
         console.warn('[main] blocked external open of non-web URL scheme:', scheme)
@@ -168,6 +296,73 @@ function createWindow(): BrowserWindow {
     }
     return { action: 'deny' }
   })
+
+  // Bluetooth: handle device picker for Web Bluetooth requestDevice() calls.
+  // Collects nearby devices for 2 s (debounce), shows one filtered picker.
+  // Guard stays true through the dialog so a second event can never open a
+  // second dialog while the user is already looking at the first one.
+  mainWindow.webContents.on(
+    'select-bluetooth-device',
+    async (event, deviceList, callback) => {
+      event.preventDefault()
+      // Accumulate devices as scanning finds them
+      for (const d of deviceList) {
+        if (!bluetoothDeviceList.some((x) => x.deviceId === d.deviceId)) {
+          bluetoothDeviceList.push({ deviceId: d.deviceId, deviceName: d.deviceName ?? '' })
+        }
+      }
+      bluetoothCallback = callback
+
+      // One dialog at a time — guard stays true until cb() is called below.
+      if (bluetoothDialogOpen) return
+      bluetoothDialogOpen = true
+
+      // Debounce: wait 2 s so scanning can collect a richer device list.
+      await new Promise<void>((r) => setTimeout(r, 2000))
+
+      const devs = bluetoothDeviceList
+      const cb = bluetoothCallback
+      bluetoothDeviceList = []
+      bluetoothCallback = null
+
+      const done = (id: string): void => {
+        bluetoothDialogOpen = false
+        if (cb) cb(id)
+      }
+
+      if (!cb) { bluetoothDialogOpen = false; return }
+
+      if (devs.length === 0) {
+        // Notify renderer so it can distinguish "no devices nearby" from "user cancelled".
+        mainWindow.webContents.send('bluetooth:noDevicesFound')
+        done('')
+        return
+      }
+
+      // Named first; hide unnamed rows when at least one named device exists.
+      const named = devs.filter((d) => d.deviceName?.trim())
+      const displayDevs = named.length > 0 ? named : devs
+      const hiddenCount = devs.length - displayDevs.length
+
+      const buttons = [
+        ...displayDevs.map((d) => d.deviceName || `Device (${d.deviceId.slice(0, 8)})`),
+        'Cancel'
+      ]
+      const detail = hiddenCount > 0
+        ? `${hiddenCount} unnamed device${hiddenCount !== 1 ? 's' : ''} not shown.`
+        : undefined
+      const { response } = await dialog.showMessageBox(mainWindow, {
+        title: 'Select a Bluetooth device',
+        message: `${displayDevs.length} device${displayDevs.length !== 1 ? 's' : ''} found. Choose your Omi or compatible device, or Cancel.`,
+        detail,
+        type: 'question',
+        buttons,
+        cancelId: displayDevs.length,
+        defaultId: 0
+      })
+      done(response < displayDevs.length ? displayDevs[response].deviceId : '')
+    }
+  )
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development, or the loopback renderer server in
@@ -211,6 +406,19 @@ app.whenReady().then(async () => {
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
+  })
+
+  // Gate API access to only the permissions this app actively uses.
+  // `setPermissionCheckHandler` controls whether the browser API is exposed at all;
+  // `setDevicePermissionHandler` below auto-grants previously-seen BLE devices.
+  // Cast to unknown: Electron's TS defs don't include 'bluetooth' yet (added
+  // in Electron 22 / Chromium 100).
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const p = permission as string
+    return p === 'bluetooth' || p === 'media' || p === 'display-capture' || p === 'notifications' || p === 'clipboard-sanitized-write'
+  })
+  session.defaultSession.setDevicePermissionHandler((details) => {
+    return (details.deviceType as unknown as string) === 'bluetooth'
   })
 
   // Omi's API doesn't advertise http://localhost:5173 as a CORS-allowed origin.
@@ -315,7 +523,81 @@ app.whenReady().then(async () => {
   // cadence). Rewind handlers/services are already registered/deferred above + below.
   registerScreenSynthHandlers()
 
+  // Shell / app-info / dialog convenience handlers for the renderer.
+  ipcMain.on('shell:openExternal', (_e, url: string) => {
+    try {
+      const scheme = new URL(url).protocol
+      // Allow safe schemes: web links, mail, and the Obsidian vault deep-link
+      // used by the memory export panel. file://, UNC, and unknown protocols
+      // are blocked to prevent prompt-injection path abuse.
+      const allowed = ['http:', 'https:', 'mailto:', 'obsidian:']
+      if (allowed.includes(scheme)) {
+        void shell.openExternal(url)
+      }
+    } catch {
+      console.warn('[main] blocked external open of unparseable URL')
+    }
+  })
+  ipcMain.handle('app:getVersion', () => app.getVersion())
+  ipcMain.handle('app:checkForUpdates', async () => {
+    // No auto-updater wired yet — resolve immediately.
+  })
+  ipcMain.handle('dialog:pickDirectory', async () => {
+    const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+    return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]
+  })
+  ipcMain.handle('app:getLoginItem', () => app.getLoginItemSettings().openAtLogin)
+  ipcMain.handle('app:setLoginItem', (_e, enabled: boolean) => {
+    app.setLoginItemSettings({ openAtLogin: enabled })
+  })
+
   const mainWindow = createWindow()
+
+  // Apply Win11 Mica/Acrylic DWM backdrop to the main window — same technique as
+  // the overlay (applyOverlayMaterial). The renderer body uses a semi-transparent
+  // background so the material peeks through, giving native-vibrancy depth.
+  // Wrapped in try/catch: setBackgroundMaterial throws on Win10 / old Electron.
+  if (process.platform === 'win32') {
+    const tryMaterial = (m: 'acrylic' | 'mica'): boolean => {
+      try {
+        const w = mainWindow as BrowserWindow & { setBackgroundMaterial?: (m: string) => void }
+        if (typeof w.setBackgroundMaterial !== 'function') return false
+        w.setBackgroundMaterial(m)
+        return true
+      } catch { return false }
+    }
+    if (!tryMaterial('acrylic')) tryMaterial('mica')
+  }
+
+  // Window-specific IPC — needs mainWindow reference.
+  ipcMain.handle('window:getAlwaysOnTop', () => mainWindow.isAlwaysOnTop())
+  ipcMain.handle('window:setAlwaysOnTop', (_e, enabled: boolean) => {
+    mainWindow.setAlwaysOnTop(enabled, 'floating')
+  })
+  ipcMain.on('win:minimize', () => mainWindow.minimize())
+  ipcMain.on('win:maximize', () => {
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+  })
+  ipcMain.on('win:close', () => mainWindow.close())
+
+  // System tray — mirrors macOS menu bar icon. Created immediately so the tray
+  // appears as soon as the app launches. Left-click and "Open Omi" show the window.
+  setupTray(mainWindow)
+
+  // Close-to-tray: intercept the window's close event and hide it instead of
+  // destroying it, so Omi keeps running in the system tray just like the macOS
+  // menu-bar app. The tray "Quit Omi" item sets isQuitting=true so the actual
+  // quit path still works.
+  app.on('before-quit', () => {
+    isQuitting = true
+  })
+  mainWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault()
+      mainWindow.hide()
+    }
+  })
 
   // Defer non-essential background services until the window is ready to show, so
   // their synchronous setup (foreground-monitor koffi/user32 init ~60ms, rewind

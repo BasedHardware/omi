@@ -4,6 +4,7 @@ import { useAuth } from './hooks/useAuth'
 import { Login } from './pages/Login'
 import { Sidebar } from './components/layout/Sidebar'
 import { MainViews } from './components/layout/MainViews'
+import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider, useAppState } from './state/AppStateProvider'
@@ -13,9 +14,8 @@ import { SourcePicker } from './components/SourcePicker'
 // brain map — wrapping the page in Suspense breaks the BrainGraph render. The
 // direct import keeps the map reliable; the bundle-size win is not worth it.
 import { Onboarding } from './pages/Onboarding'
-import { consumePendingRoute } from './lib/preferences'
+import { consumePendingRoute, getPreferences, setPreferences, onPreferencesChange } from './lib/preferences'
 import { useOnboardingComplete } from './hooks/useOnboardingComplete'
-import { getPreferences } from './lib/preferences'
 import { SandboxBadge } from './components/SandboxBadge'
 import { OverlayApp } from './components/overlay/OverlayApp'
 import { RewindCaptureHost } from './components/rewind/RewindCaptureHost'
@@ -23,6 +23,10 @@ import { ContinuousRecordingHost } from './components/recording/ContinuousRecord
 import { invalidateConversationsCache } from './lib/pageCache'
 import { runAnimBench } from './lib/animBench'
 import { InsightToast } from './components/insight/InsightToast'
+import { GoalCelebration } from './components/ui/GoalCelebration'
+import { LiveTranscriptPanel } from './components/recording/LiveTranscriptPanel'
+import { LiveNotesPanel } from './components/recording/LiveNotesPanel'
+import { ToastHost } from './components/ui/ToastHost'
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
@@ -32,12 +36,26 @@ function AppShellInner(): React.JSX.Element {
   const navigate = useNavigate()
   const hideSidebar = pathname === '/settings'
 
+  // Persist the active route to localStorage so the app restores the last page
+  // on relaunch — matches macOS which remembers the selected sidebar item.
+  // Skip /settings (ephemeral full-screen view) and /home (the implicit default).
+  useEffect(() => {
+    if (pathname !== '/settings' && pathname !== '/home') {
+      localStorage.setItem('omi.lastRoute', pathname)
+    }
+  }, [pathname])
+
   // Honor a one-shot destination requested by onboarding (e.g. the final
   // "Take me to my tasks" button). The shell mounts at /home after the
   // onboarding gate redirects; we consume the pending route here and jump to it.
+  // Fall through to the persisted last-route if no pending route.
   useEffect(() => {
     const dest = consumePendingRoute()
-    if (dest) navigate(dest, { replace: true })
+    if (dest) { navigate(dest, { replace: true }); return }
+    const saved = localStorage.getItem('omi.lastRoute')
+    if (saved && saved.startsWith('/') && saved !== '/home') {
+      navigate(saved, { replace: true })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -60,8 +78,50 @@ function AppShellInner(): React.JSX.Element {
   // here so this window's Conversations tab refreshes without a relaunch.
   useEffect(() => window.omi.onConversationsChanged(() => invalidateConversationsCache()), [])
 
+  // Overlay citation cards call openMainRoute() → main sends 'overlay:mainRoute' here.
+  // Navigate the main window to the target route (e.g. /conversations/:id).
+  useEffect(() => window.omi.onOverlayRoute((route) => navigate(route)), [navigate])
+
+  // Font scale — applies the persisted scale to the root element so all
+  // rem-based Tailwind text utilities scale uniformly. Matches macOS Cmd++/−.
+  // Only runs in the main app shell (not the overlay window, which bypasses
+  // AppShellInner and uses its own zoom transform).
+  useEffect(() => {
+    const apply = (scale: number): void => {
+      document.documentElement.style.fontSize = `${scale * 100}%`
+    }
+    apply(getPreferences().fontScale ?? 1.0)
+    return onPreferencesChange((p) => apply(p.fontScale ?? 1.0))
+  }, [])
+
+  // Ctrl+= / Ctrl++ — increase font scale (5% per step, max 125%)
+  // Ctrl+-          — decrease font scale (5% per step, min 85%)
+  // Ctrl+0          — reset to 100%
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (!e.ctrlKey || e.altKey || e.metaKey) return
+      const tag = (document.activeElement as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+      const step = 0.05
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault()
+        const next = Math.min(1.25, Math.round(((getPreferences().fontScale ?? 1.0) + step) * 100) / 100)
+        setPreferences({ fontScale: next })
+      } else if (e.key === '-') {
+        e.preventDefault()
+        const next = Math.max(0.85, Math.round(((getPreferences().fontScale ?? 1.0) - step) * 100) / 100)
+        setPreferences({ fontScale: next })
+      } else if (e.key === '0') {
+        e.preventDefault()
+        setPreferences({ fontScale: 1.0 })
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   return (
-    <div className="app-canvas flex h-full min-h-0">
+    <div className="app-canvas flex h-full min-h-0 pt-8">
       {!hideSidebar && <Sidebar />}
       <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
         <MainViews />
@@ -83,6 +143,12 @@ function AppShellInner(): React.JSX.Element {
       <RewindCaptureHost />
       {/* Always-on mic capture for continuous recording mode. */}
       <ContinuousRecordingHost />
+      {/* Goal completion celebration — fullscreen confetti + text overlay. */}
+      <GoalCelebration />
+      {/* Floating live transcript panel — mirrors macOS LiveTranscriptPanel. */}
+      <LiveTranscriptPanel />
+      {/* Floating live notes panel — mirrors macOS LiveNotesView. */}
+      <LiveNotesPanel />
     </div>
   )
 }
@@ -100,6 +166,14 @@ function AppShell(): React.JSX.Element {
       <AppShellInner />
     </AppStateProvider>
   )
+}
+
+// Renders the custom title bar on all routes except the overlay/insight windows,
+// which run in their own BrowserWindow with titleBarStyle:'hidden' + no caption buttons.
+function ConditionalTitleBar(): React.JSX.Element | null {
+  const { pathname } = useLocation()
+  if (pathname === '/overlay' || pathname === '/insight-toast') return null
+  return <TitleBar />
 }
 
 function App(): React.JSX.Element {
@@ -128,17 +202,24 @@ function App(): React.JSX.Element {
   }, [])
 
   if (loading) {
+    const isSpecialWindow =
+      window.location.hash.includes('overlay') || window.location.hash.includes('insight-toast')
     return (
-      <div className="app-canvas flex h-full items-center justify-center">
-        <SandboxBadge />
-        <Spinner label="Loading Omi…" />
+      <div className="flex h-full flex-col">
+        {!isSpecialWindow && <TitleBar />}
+        <div className="app-canvas flex flex-1 items-center justify-center">
+          <SandboxBadge />
+          <Spinner label="Loading Omi…" />
+        </div>
       </div>
     )
   }
 
   return (
     <HashRouter>
+      <ConditionalTitleBar />
       <SandboxBadge />
+      <ToastHost />
       <Routes>
         <Route path="/insight-toast" element={<InsightToast />} />
         <Route path="/overlay" element={<OverlayApp />} />

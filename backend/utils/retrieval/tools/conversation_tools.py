@@ -242,8 +242,15 @@ def get_conversations_tool(
 
         logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
 
-        # Store conversations in config for citation tracking (as lightweight dicts)
-        conversations_collected = config['configurable'].get('conversations_collected', [])
+        # Store conversations in config for citation tracking (as lightweight dicts).
+        # Prefer agent_config_context (guaranteed to be the original shared list from
+        # execute_agentic_chat_stream) over config['configurable'] (LangChain may pass
+        # a copy of the configurable dict, silently breaking the shared-list reference).
+        ctx = agent_config_context.get(None)
+        if ctx:
+            conversations_collected = ctx['configurable'].get('conversations_collected', [])
+        else:
+            conversations_collected = config['configurable'].get('conversations_collected', [])
         for conv in conversations:
             conv_dict = conv.dict()
             # Remove heavy fields to reduce memory usage
@@ -477,8 +484,15 @@ def search_conversations_tool(
 
         logger.info(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
 
-        # Store conversations in config for citation tracking (as lightweight dicts)
-        conversations_collected = config['configurable'].get('conversations_collected', [])
+        # Store conversations in config for citation tracking (as lightweight dicts).
+        # Prefer agent_config_context (guaranteed to be the original shared list from
+        # execute_agentic_chat_stream) over config['configurable'] (LangChain may pass
+        # a copy of the configurable dict, silently breaking the shared-list reference).
+        ctx = agent_config_context.get(None)
+        if ctx:
+            conversations_collected = ctx['configurable'].get('conversations_collected', [])
+        else:
+            conversations_collected = config['configurable'].get('conversations_collected', [])
         for conv in conversations:
             conv_dict = conv.dict()
             # Remove heavy fields to reduce memory usage

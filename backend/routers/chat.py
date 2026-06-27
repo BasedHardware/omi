@@ -274,9 +274,14 @@ def send_message(
 
         # cited extraction
         cited_conversation_idxs = {int(i) for i in re.findall(r'\[(\d+)\]', response)}
+        logger.info(
+            f"[chat] citation extraction: {len(memories)} memories_found, "
+            f"cited_idxs={sorted(cited_conversation_idxs)}"
+        )
         if len(cited_conversation_idxs) > 0:
             response = re.sub(r'\[\d+\]', '', response)
         memories = [memories[i - 1] for i in cited_conversation_idxs if 0 < i and i <= len(memories)]
+        logger.info(f"[chat] resolved {len(memories)} citation(s) for done: payload")
 
         memories_id = extract_memory_ids(memories) if memories else []
 
@@ -324,7 +329,25 @@ def send_message(
                 else:
                     response = callback_data.get('answer')
                     if response:
-                        ai_message, ask_for_nps = process_message(response, callback_data)
+                        try:
+                            ai_message, ask_for_nps = process_message(response, callback_data)
+                        except Exception as pm_err:
+                            logger.error(
+                                f"[chat] process_message failed; emitting done: without citations. Error: {pm_err}"
+                            )
+                            # Build a minimal message so the done: line is always emitted.
+                            # Strip [N] markers best-effort so the frontend shows clean text.
+                            ai_message = Message(
+                                id=str(uuid.uuid4()),
+                                text=re.sub(r'\[\d+\]', '', response),
+                                created_at=datetime.now(timezone.utc),
+                                sender='ai',
+                                app_id=app_id_from_app,
+                                type='text',
+                            )
+                            if chat_session:
+                                ai_message.chat_session_id = chat_session.id
+                            ask_for_nps = False
                         ai_message_dict = ai_message.dict()
                         response_message = ResponseMessage(**ai_message_dict)
                         response_message.ask_for_nps = ask_for_nps

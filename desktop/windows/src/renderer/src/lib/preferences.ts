@@ -39,6 +39,50 @@ export type Preferences = {
   // disables the sweep. Read with `?? 'dry-run'`.
   retentionMode?: 'off' | 'dry-run' | 'live'
   onboardingCompletedAt?: number
+  // BYOK (Bring Your Own Keys) — stored locally; SHA-256 fingerprints are sent to
+  // the backend on activation, but actual keys only leave this device as request headers.
+  byokKeys?: {
+    openai?: string
+    anthropic?: string
+    gemini?: string
+    deepgram?: string
+  }
+  // Notification preferences — whether to show a Windows notification when a
+  // recording session ends and is saved (default on).
+  notifyOnRecordingSaved?: boolean
+  // Focus analysis — proactive classification of focused/distracted/neutral.
+  // Powered by Rewind frames + Gemini proxy (same path as insightEngine).
+  focusAnalysisEnabled?: boolean
+  focusAnalysisIntervalMin?: 5 | 10 | 15 | 20
+  // Alert via Windows notification when sustained distraction is detected.
+  focusDistractionAlert?: boolean
+  // When true, analysis sends 1-2 sampled Rewind screenshots to Gemini Vision
+  // instead of text-only OCR. Falls back to text if vision fails.
+  focusVisionEnabled?: boolean
+  // Global font scale applied to the root element so all rem-based Tailwind
+  // text utilities scale uniformly. Range: 0.85–1.25. Default (undefined) = 1.0.
+  // Changed via Ctrl+= / Ctrl+- / Ctrl+0 keyboard shortcuts.
+  fontScale?: number
+  // Transcription settings
+  vadEnabled?: boolean
+  // AI Chat settings
+  chatScreenContext?: boolean
+  chatMemoryContext?: boolean
+  chatWorkspaceDir?: string
+  // Push-to-Talk shortcut (Electron accelerator string, e.g. "CommandOrControl+Shift+Space")
+  pttShortcut?: string
+  pttEnabled?: boolean
+  pttSounds?: boolean
+  pttLockedMode?: boolean
+  // Rewind battery optimization — reduce capture interval on battery power
+  rewindBatteryOpt?: boolean
+  // Play a sound when a Windows notification fires (default on)
+  notificationSounds?: boolean
+  // Per-type notification toggles (mirrors macOS per-category notification prefs)
+  notifyDailySummary?: boolean
+  notifyTaskDue?: boolean
+  notifyNewMemory?: boolean
+  notifyConversationStarted?: boolean
 }
 
 const defaults: Preferences = {

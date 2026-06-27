@@ -49,4 +49,19 @@ export function registerOverlayHandlers(focusMain: () => void): void {
       if (!w.isDestroyed()) w.webContents.send('overlay:asked')
     }
   })
+
+  // Overlay citation click: hide the overlay, focus the main window, and tell
+  // the main window's renderer to navigate to the given route.
+  ipcMain.on('overlay:openMainRoute', (e, route: string) => {
+    if (typeof route !== 'string' || !route.startsWith('/')) return
+    hideOverlay()
+    focusMain()
+    // Send the route to every window except the overlay (identified as the sender).
+    // The main window renderer listens for 'overlay:mainRoute' via window.omi.onOverlayRoute.
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed() && w.webContents !== e.sender) {
+        w.webContents.send('overlay:mainRoute', route)
+      }
+    }
+  })
 }

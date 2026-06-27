@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { Send } from 'lucide-react'
+import { Send, Paperclip } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { auth, onAuthStateChanged } from '../lib/firebase'
 import { useAppState } from '../state/AppStateProvider'
 import { QuickTaskWidget } from '../components/home/QuickTaskWidget'
 import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
+import { QuickConversationsWidget } from '../components/home/QuickConversationsWidget'
 import { Markdown } from '../components/Markdown'
 import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
@@ -37,12 +38,34 @@ function ChatBar(props: {
   value: string
   onChange: (v: string) => void
   onSend: () => void
+  onAudio: (file: File) => void
   sending: boolean
 }): React.JSX.Element {
+  const fileRef = useRef<HTMLInputElement>(null)
   // Solid (no backdrop-blur): a blurred bar re-rasterizes every frame during the
   // bar's slide, which made that transition feel laggy.
   return (
     <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-[color:var(--surface)] px-3 py-1.5">
+      <input
+        ref={fileRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) props.onAudio(f)
+          e.target.value = ''
+        }}
+      />
+      <button
+        disabled={props.sending}
+        onClick={() => fileRef.current?.click()}
+        aria-label="Attach audio"
+        title="Attach audio file"
+        className="shrink-0 rounded-xl p-2 text-white/40 transition-colors hover:bg-white/[0.06] hover:text-white/80 disabled:opacity-40"
+      >
+        <Paperclip className="h-4 w-4" />
+      </button>
       <input
         value={props.value}
         onChange={(e) => props.onChange(e.target.value)}
@@ -93,7 +116,8 @@ export function Home(): React.JSX.Element {
   const [widgetsH, setWidgetsH] = useState(0)
   const [tasksReady, setTasksReady] = useState(false)
   const [goalsReady, setGoalsReady] = useState(false)
-  const widgetsReady = tasksReady && goalsReady
+  const [convsReady, setConvsReady] = useState(false)
+  const widgetsReady = tasksReady && goalsReady && convsReady
 
   // Only fade the thread's top once it actually overflows — otherwise a short
   // thread would sit entirely inside the fade and look washed out.
@@ -121,6 +145,11 @@ export function Home(): React.JSX.Element {
     void chat.send(text)
   }
 
+  const handleAudio = (file: File): void => {
+    if (chat.sending) return
+    void chat.sendAudio(file)
+  }
+
   useEffect(() => onAuthStateChanged(auth, (u) => setUser(u)), [])
 
   // Lazily (re)build the local knowledge graph in the background — deferred past
@@ -139,6 +168,7 @@ export function Home(): React.JSX.Element {
     const t = setTimeout(() => {
       setTasksReady(true)
       setGoalsReady(true)
+      setConvsReady(true)
     }, 6000)
     return () => clearTimeout(t)
   }, [])
@@ -257,6 +287,10 @@ export function Home(): React.JSX.Element {
           >
             <QuickTaskWidget onReady={() => setTasksReady(true)} />
             <QuickGoalsWidget onReady={() => setGoalsReady(true)} />
+            <QuickConversationsWidget
+              onReady={() => setConvsReady(true)}
+              className="sm:col-span-2"
+            />
           </div>
           <div className="h-12" />
         </div>
@@ -266,11 +300,11 @@ export function Home(): React.JSX.Element {
       <div
         ref={chatScrollRef}
         onScroll={onThreadScroll}
-        className="min-h-0 overflow-y-auto"
+        className="min-h-0 overflow-y-auto select-text"
         style={{ WebkitMaskImage: mask, maskImage: mask }}
       >
         <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
-          <div className="mt-auto space-y-2 pb-2">
+          <div className="mt-auto space-y-3 pb-2">
             {started && showThread ? (
               windowed.map((m, i) => {
                 const isUser = m.role === 'user'
@@ -278,7 +312,7 @@ export function Home(): React.JSX.Element {
                 return (
                   <div
                     key={m.id ?? `${windowStart}-${i}`}
-                    className={cn('flex items-end gap-2.5', isUser && 'flex-row-reverse')}
+                    className={cn('flex items-start gap-2.5', isUser && 'flex-row-reverse')}
                   >
                     {isUser ? (
                       <div className="relative h-7 w-7 shrink-0 overflow-hidden rounded-full border border-white/10">
@@ -338,7 +372,7 @@ export function Home(): React.JSX.Element {
       {/* Chat bar — rides to the bottom via the spacer collapse. */}
       <div className="py-3">
         <div className="fade-in-slow mx-auto max-w-4xl">
-          <ChatBar value={input} onChange={setInput} onSend={handleSend} sending={chat.sending} />
+          <ChatBar value={input} onChange={setInput} onSend={handleSend} onAudio={handleAudio} sending={chat.sending} />
         </div>
       </div>
 

@@ -60,7 +60,10 @@ body {
     'Fira Sans',
     'Droid Sans',
     'Helvetica Neue',
-    sans-serif;
+    sans-serif,
+    'Segoe UI Emoji',
+    'Apple Color Emoji',
+    'Noto Color Emoji';
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

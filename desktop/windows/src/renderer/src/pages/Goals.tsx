@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Target, Check, RefreshCw, Plus, Trash2, Loader2, Trophy, Sparkles, X } from 'lucide-react'
+import { Target, Check, RefreshCw, Plus, Trash2, Loader2, Trophy, Sparkles, X, History } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
@@ -108,6 +108,96 @@ function progressLabel(g: Goal): string {
   return `${progressPct(g)}%`
 }
 
+function GoalsHistoryModal({
+  goals,
+  onClose
+}: {
+  goals: Goal[]
+  onClose: () => void
+}): React.JSX.Element {
+  type MonthGroup = { label: string; items: Goal[] }
+  const grouped = goals.reduce<MonthGroup[]>((acc, g) => {
+    const date = new Date(g.updated_at ?? g.created_at ?? Date.now())
+    const label = date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+    const existing = acc.find((m) => m.label === label)
+    if (existing) existing.items.push(g)
+    else acc.push({ label, items: [g] })
+    return acc
+  }, [])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-6 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[70vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0e0e0e] shadow-2xl animate-fade-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between border-b border-white/[0.06] px-6 py-4">
+          <div className="flex items-center gap-3">
+            <History className="h-4 w-4 text-white/40" />
+            <h2 className="font-display text-lg font-bold text-white">Goals History</h2>
+            <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-white/50">
+              {goals.length} completed
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-white/40 hover:bg-white/[0.06] hover:text-white/70"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+          {goals.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Trophy className="mb-3 h-10 w-10 text-white/15" />
+              <p className="text-sm text-white/40">No completed goals yet.</p>
+              <p className="mt-1 text-xs text-white/25">
+                Complete a goal to see it here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {grouped.map((group) => (
+                <div key={group.label}>
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-white/30">
+                    {group.label}
+                  </p>
+                  <div className="relative ml-2 space-y-0 before:absolute before:bottom-0 before:left-0 before:top-0 before:w-px before:bg-white/[0.08]">
+                    {group.items.map((g) => (
+                      <div key={g.id} className="flex items-start gap-4 pb-4 pl-6">
+                        <div className="absolute -left-[3px] mt-[5px] h-[7px] w-[7px] rounded-full bg-emerald-400/80 ring-2 ring-[#0e0e0e]" />
+                        <div className="min-w-0 flex-1 rounded-xl bg-white/[0.03] px-4 py-3">
+                          <p className="text-sm font-medium text-white/60 line-through decoration-white/20">
+                            {g.title}
+                          </p>
+                          {(g.target_value ?? 0) > 0 && (
+                            <p className="mt-0.5 text-xs text-white/30">
+                              {g.current_value ?? g.target_value} / {g.target_value}
+                              {g.unit ? ` ${g.unit}` : ''}
+                            </p>
+                          )}
+                        </div>
+                        {g.updated_at && (
+                          <span className="mt-1 shrink-0 text-[11px] text-white/25">
+                            {new Date(g.updated_at).toLocaleDateString()}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Goals(): React.JSX.Element {
   const [goals, setGoals] = useState<Goal[]>(cache.goals ?? [])
   const [loading, setLoading] = useState(!cache.loaded)
@@ -120,6 +210,8 @@ export function Goals(): React.JSX.Element {
   const [draftTarget, setDraftTarget] = useState('')
   const [draftUnit, setDraftUnit] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const [showHistory, setShowHistory] = useState(false)
 
   const [suggesting, setSuggesting] = useState(false)
   const [suggestion, setSuggestion] = useState<GoalSuggestion | null>(null)
@@ -205,7 +297,10 @@ export function Goals(): React.JSX.Element {
     markBusy(g.id, true)
     try {
       await omiApi.patch(`/v1/goals/${g.id}/progress`, null, { params: { current_value: value } })
-      if (reachedTarget) toast('Goal complete 🎉', { tone: 'success', body: g.title })
+      if (reachedTarget) {
+        toast('Goal complete 🎉', { tone: 'success', body: g.title })
+        window.dispatchEvent(new CustomEvent('goal-completed', { detail: { title: g.title } }))
+      }
     } catch (e) {
       setGoals(prev)
       writeCache(prev)
@@ -464,9 +559,22 @@ export function Goals(): React.JSX.Element {
     )
   }
 
+  const allCompletedGoals = useMemo(
+    () =>
+      goals
+        .filter(isCompleted)
+        .sort(
+          (a, b) =>
+            (new Date(b.updated_at ?? 0).getTime() || 0) -
+            (new Date(a.updated_at ?? 0).getTime() || 0)
+        ),
+    [goals]
+  )
+
   const visibleCount = activeGoals.length + completedGoals.length
 
   return (
+    <>
     <div className="flex h-full flex-col">
       <PageHeader
         title="Goals"
@@ -489,6 +597,14 @@ export function Goals(): React.JSX.Element {
                 </button>
               ))}
             </div>
+            <button
+              onClick={() => setShowHistory(true)}
+              className="btn-ghost px-3 py-2"
+              title="View completed goals history"
+            >
+              <History className="h-4 w-4" />
+              History
+            </button>
             <GenerateGoalsButton onClick={getSuggestion} loading={suggesting} label="Suggest" />
             <button
               onClick={() => setComposing((c) => !c)}
@@ -692,5 +808,9 @@ export function Goals(): React.JSX.Element {
         )}
       </div>
     </div>
+    {showHistory && (
+      <GoalsHistoryModal goals={allCompletedGoals} onClose={() => setShowHistory(false)} />
+    )}
+    </>
   )
 }

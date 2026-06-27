@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Copy, Maximize2 } from 'lucide-react'
 import type { RewindFrame } from '../../../../shared/types'
 import {
   frameIndexAtCursor,
@@ -10,10 +11,12 @@ import { parseWindowTitle } from '../../lib/windowTitle'
 
 export function RewindPlayer({
   frames,
-  cursorTs
+  cursorTs,
+  showOcr
 }: {
   frames: RewindFrame[]
   cursorTs: number
+  showOcr?: boolean
 }): React.JSX.Element {
   const [src, setSrc] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -44,12 +47,21 @@ export function RewindPlayer({
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-lg bg-black/40">
         {frame ? (
           src ? (
-            <img
-              src={src}
-              alt="screen frame"
-              onClick={() => setExpanded(true)}
-              className="max-h-full max-w-full cursor-pointer object-contain"
-            />
+            <>
+              <img
+                src={src}
+                alt="screen frame"
+                onClick={() => setExpanded(true)}
+                className="max-h-full max-w-full cursor-pointer object-contain"
+              />
+              <button
+                onClick={() => setExpanded(true)}
+                className="absolute right-2 top-2 rounded bg-black/50 p-1.5 text-white/40 transition-colors hover:bg-black/70 hover:text-white"
+                title="View fullscreen"
+              >
+                <Maximize2 className="h-3.5 w-3.5" strokeWidth={1.75} />
+              </button>
+            </>
           ) : (
             <div className="text-white/40 text-sm">Loading…</div>
           )
@@ -62,14 +74,70 @@ export function RewindPlayer({
         )}
       </div>
       {frame && <FrameMeta frame={frame} />}
+      {showOcr && frame && <OcrPanel ocrText={frame.ocrText} />}
       {expanded && src && (
-        <div
-          onClick={() => setExpanded(false)}
-          className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center bg-black/90 p-6"
-        >
-          <img src={src} alt="screen frame" className="max-h-full max-w-full object-contain" />
-        </div>
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        <FullscreenOverlay src={src} onClose={() => setExpanded(false)} />
       )}
+    </div>
+  )
+}
+
+/** Fullscreen overlay with Escape-to-close keyboard support. */
+function FullscreenOverlay({ src, onClose }: { src: string; onClose: () => void }): React.JSX.Element {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') { e.preventDefault(); onClose() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onClose])
+  return (
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex cursor-pointer items-center justify-center bg-black/90 p-6"
+      title="Click or press Escape to close"
+    >
+      <img src={src} alt="screen frame" className="max-h-full max-w-full object-contain" />
+    </div>
+  )
+}
+
+function OcrPanel({ ocrText }: { ocrText: string }): React.JSX.Element {
+  const text = ocrText?.trim()
+  const [copied, setCopied] = useState(false)
+  const handleCopy = (): void => {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    })
+  }
+  return (
+    <div className="mt-2 shrink-0 rounded-lg border border-white/[0.08] bg-white/[0.04]">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-1.5">
+        <span className="text-[10px] font-medium uppercase tracking-wide text-white/40">
+          OCR Text
+        </span>
+        {text && (
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-white/40 transition-colors hover:bg-white/10 hover:text-white/70"
+            title="Copy OCR text"
+          >
+            <Copy className="h-2.5 w-2.5" strokeWidth={1.75} />
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+        )}
+      </div>
+      <div className="max-h-40 overflow-y-auto px-3 py-2">
+        {text ? (
+          <p className="select-text whitespace-pre-wrap text-xs leading-relaxed text-white/70">
+            {text}
+          </p>
+        ) : (
+          <p className="text-xs italic text-white/30">No text captured for this frame.</p>
+        )}
+      </div>
     </div>
   )
 }

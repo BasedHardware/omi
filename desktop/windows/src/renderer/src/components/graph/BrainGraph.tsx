@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls, Billboard, Text, Line } from '@react-three/drei'
 import * as THREE from 'three'
 import type { KnowledgeGraph } from '../../../../shared/types'
@@ -46,7 +46,9 @@ function GraphNodeMesh({
   node,
   centerNodeId,
   reduced,
-  posMap
+  posMap,
+  isSelected,
+  onSelect
 }: {
   sim: GraphSimulation
   node: NodePosition
@@ -55,7 +57,10 @@ function GraphNodeMesh({
   // Shared map (owned by GraphScene, recreated on mount) where each node writes
   // its eased on-screen position so the edges can connect to it.
   posMap: Map<string, THREE.Vector3>
+  isSelected: boolean
+  onSelect?: (id: string) => void
 }): React.JSX.Element {
+  const { gl } = useThree()
   const groupRef = useRef<THREE.Group>(null)
   const coreMat = useRef<THREE.MeshStandardMaterial>(null)
   const glowMat = useRef<THREE.MeshBasicMaterial>(null)
@@ -67,6 +72,14 @@ function GraphNodeMesh({
   // The center ("you") label gets a bit bigger than the proportional size.
   const labelSize = labelFontSize(node.sizeScale) * (isFixed ? 1.35 : 1)
   const phase = useMemo(() => hashPhase(node.id), [node.id])
+
+  const handleClick = onSelect
+    ? (e: ThreeEvent<MouseEvent>) => { e.stopPropagation(); onSelect(node.id) }
+    : undefined
+  const handlePointerOver = onSelect
+    ? (e: ThreeEvent<PointerEvent>) => { e.stopPropagation(); gl.domElement.style.cursor = 'pointer' }
+    : undefined
+  const handlePointerOut = onSelect ? () => { gl.domElement.style.cursor = 'default' } : undefined
 
   // Read the live simulation position each frame (no React state in the loop)
   // and ease toward it so motion stays smooth. New nodes fly out from the
@@ -98,19 +111,25 @@ function GraphNodeMesh({
 
     // Shine: pulse the emissive core + halo so the modules glow and feel alive.
     // While a node is still growing in it flares brighter, giving the reveal a
-    // satisfying "pop" before it settles to its idle twinkle.
+    // satisfying "pop" before it settles to its idle twinkle. Selected nodes get
+    // an extra brightness boost so they stand out clearly.
     const entering = !reduced && g.scale.x < 1
     const t = state.clock.elapsedTime
     const pulse = reduced ? 0.6 : 0.5 + 0.5 * Math.sin(t * 2 + phase)
     const flare = entering ? 1.8 : 1
-    if (coreMat.current) coreMat.current.emissiveIntensity = (0.85 + 0.45 * pulse) * flare
-    if (glowMat.current) glowMat.current.opacity = (0.12 + 0.14 * pulse) * flare
-    if (glowMesh.current) glowMesh.current.scale.setScalar(1 + 0.18 * pulse)
+    const selBoost = isSelected ? 2.2 : 1
+    if (coreMat.current) coreMat.current.emissiveIntensity = (0.85 + 0.45 * pulse) * flare * selBoost
+    if (glowMat.current) glowMat.current.opacity = (0.12 + 0.14 * pulse) * flare * (isSelected ? 2 : 1)
+    if (glowMesh.current) glowMesh.current.scale.setScalar((1 + 0.18 * pulse) * (isSelected ? 1.35 : 1))
   })
 
   return (
     <group ref={groupRef} position={[node.x, node.y, node.z]} scale={reduced ? [1, 1, 1] : [0, 0, 0]}>
-      <mesh>
+      <mesh
+        onClick={handleClick}
+        onPointerOver={handlePointerOver}
+        onPointerOut={handlePointerOut}
+      >
         <sphereGeometry args={[radius, 32, 32]} />
         <meshStandardMaterial
           ref={coreMat}
@@ -266,6 +285,7 @@ function GraphScene({
   shuffleKey
 }: BrainGraphProps): React.JSX.Element {
   const { sim, nodes, reduced } = useGraphSimulation(graph, centerNodeId)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
 
   // Eased on-screen position of each node, written by the meshes and read by the
   // edges so the lines stay glued to the spheres. Owned here (not on the sim) and
@@ -306,6 +326,8 @@ function GraphScene({
           centerNodeId={centerNodeId}
           reduced={reduced}
           posMap={posMap}
+          isSelected={n.id === selectedId}
+          onSelect={interactive ? setSelectedId : undefined}
         />
       ))}
       {interactive ? (
