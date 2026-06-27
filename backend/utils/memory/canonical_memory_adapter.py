@@ -58,9 +58,12 @@ def neutral_vector_id_for_memory(memory_id: str) -> str:
     return memory_id
 
 
-def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str]) -> None:
+def invalidate_kg_for_memory_retraction(uid: str, memory_ids: List[str], *, db_client=None) -> None:
     """Prune retracted/superseded memory citations from the user's KG."""
     if not memory_ids:
+        return
+    client = db_client if db_client is not None else default_db_client
+    if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         return
     pruned = kg_db.prune_memory_citations_from_kg(uid, memory_ids)
     logger.info(
