@@ -8,7 +8,8 @@
     "Improved OpenClaw multi-turn continuity in desktop agent chats",
     "Fixed push-to-talk voice replies cutting off, restored Notch Mode chat row clicks, and aligned subagent back buttons with the chat row list",
     "Fixed duplicated/doubled Hermes and OpenClaw agent logos in the menu-bar agent list",
-    "Added a flat status-colored robot mark for agent providers without a dedicated logo"
+    "Added a flat status-colored robot mark for agent providers without a dedicated logo",
+    "Improved Omi agent tool registration reliability across desktop chat, pi-mono, and local agent APIs"
   ],
   "releases": [
     {
