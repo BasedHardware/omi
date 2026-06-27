@@ -81,7 +81,7 @@ export type LocalConversation = {
 export type ListenSource = 'mic' | 'system'
 export type TranscriptionBackend = 'omi' | 'local-parakeet'
 export type SttMode = 'auto' | 'cloud' | 'local-parakeet'
-export type RealtimeVoiceProvider = 'omi-relay' | 'openai-byok' | 'local-kokoro'
+export type RealtimeVoiceProvider = 'omi-relay' | 'local-kokoro'
 
 export type LocalSttStatus = {
   backend: 'parakeet'

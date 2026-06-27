@@ -1,4 +1,3 @@
-import type { ByokStatus } from '../../../shared/types'
 import type { Preferences } from './preferences'
 
 export type RealtimeVoiceProvider = NonNullable<Preferences['realtimeVoiceProvider']>
@@ -14,21 +13,19 @@ export type RealtimeVoiceReadiness = {
 }
 
 export function realtimeVoiceReadiness(
-  preferences: Preferences,
-  byokStatus: ByokStatus | null
+  preferences: Preferences
 ): RealtimeVoiceReadiness {
   const provider = preferences.realtimeVoiceProvider ?? 'omi-relay'
   const enabled = !!preferences.realtimeVoiceEnabled
-  if (provider === 'openai-byok') {
-    const configured = !!byokStatus?.providers.openai.configured
+  if (provider === 'local-kokoro') {
     return {
       enabled,
       provider,
-      ready: enabled && configured,
-      label: 'OpenAI Realtime',
-      keyPath: 'OpenAI BYOK key',
+      ready: enabled,
+      label: 'Local Kokoro',
+      keyPath: 'Local model runtime',
       transcriptionPath: 'Omi /v4/listen remains active for transcription',
-      reason: configured ? undefined : 'OpenAI key is not saved'
+      reason: undefined
     }
   }
   const relayConfigured = !!import.meta.env.VITE_OMI_REALTIME_VOICE_URL

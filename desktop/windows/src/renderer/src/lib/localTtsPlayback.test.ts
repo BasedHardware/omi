@@ -9,7 +9,6 @@ const enabledPrefs: Preferences = {
   reduceMotion: false,
   language: 'en',
   chatHistoryMode: 'infinite',
-  chatRuntimeMode: 'auto',
   realtimeVoiceEnabled: true,
   realtimeVoiceProvider: 'local-kokoro',
   localTtsVoice: 'af_heart'
