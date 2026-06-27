@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+os.environ.setdefault('ENCRYPTION_SECRET', 'omi_test-fake-encryption-secret-for-unit-tests')
 
 sys.modules.setdefault('database._client', MagicMock())
 llm_usage_stub = types.ModuleType('database.llm_usage')
