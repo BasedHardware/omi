@@ -1,5 +1,6 @@
 {
   "unreleased": [
+    "Claude cloud setup now stops with the native automation result instead of falling back to the generic Playwright-capable browser agent.",
     "Claude cloud setup now uses a guarded page-state machine before filling the connector modal or pressing Connect, with an OCR fallback for the final Connect button that refuses blind browser clicks.",
     "Claude cloud setup can now fill the Atlas connector modal with a native keyboard fallback when the browser hides web fields from Accessibility.",
     "Claude cloud setup now waits for Accessibility approval instead of falling back to the agent when Omi cannot inspect or drive the browser.",

@@ -95,9 +95,6 @@ enum MemoryExportExecutor {
     openURL: URL,
     key: String
   ) async throws -> Outcome {
-    let taskTitle = "Connect my Omi memory to Claude over MCP"
-    let browserName =
-      BrowserAutomationTargetResolver.defaultTarget(for: openURL)?.name ?? "your default browser"
     let args: [String: Any] = [
       "provider": "claude",
       "name": "Omi Memory",
@@ -115,12 +112,14 @@ enum MemoryExportExecutor {
     // For cloud setup, use the user's system default browser. Do not reuse the
     // Playwright/extension browser preference: that can point at Chrome even
     // when the user is signed into Claude in Atlas/Arc/another default browser.
+    log("Claude cloud setup: opening connector page in default browser for native automation")
     NSWorkspace.shared.open(openURL)
 
     var lastResult = ""
     for attempt in 1...12 {
       try? await Task.sleep(nanoseconds: attempt == 1 ? 1_500_000_000 : 750_000_000)
       lastResult = await CloudConnectorFormAutomation.fill(args)
+      log("Claude cloud setup: native automation attempt \(attempt) result=\(cloudFormFillResultSummary(lastResult))")
       if cloudFormFillSucceeded(lastResult) {
         return Outcome(
           taskTitle: "Claude connector form submitted. If Claude shows a final consent prompt, approve Omi Memory.",
@@ -139,21 +138,8 @@ enum MemoryExportExecutor {
       }
     }
 
-    guard let task = MemoryExportDestination.claude.guidedBrowserSetupTask(key: key, browserName: browserName) else {
-      throw ExecutorError.unsupported("Claude")
-    }
-    let fallbackBody = """
-      The app opened Claude in \(browserName) and tried native macOS form fill first, but did not complete setup.
-
-      Native form-fill result:
-      \(lastResult)
-
-      Continue from the already-open Claude tab. Do not open Chrome unless the currently open/default browser is unusable. If you cannot finish without sign-in, CAPTCHA, or a user confirmation, report that exact blocker.
-
-      \(task.body)
-      """
-    await spawnSetupAgent(task: (task.title, fallbackBody))
-    return Outcome(taskTitle: taskTitle, mode: .autonomous)
+    log("Claude cloud setup: stopping without agent fallback result=\(cloudFormFillResultSummary(lastResult))")
+    throw ExecutorError.browserSetupRequired(cloudSetupNativeAutomationBlockedMessage(lastResult))
   }
 
   private static func cloudFormFillSucceeded(_ result: String) -> Bool {
@@ -176,6 +162,25 @@ enum MemoryExportExecutor {
     result.contains("Could not find a visible")
       || result.contains("Submit skipped: no enabled")
       || result.contains("set failed")
+  }
+
+  private static func cloudFormFillResultSummary(_ result: String) -> String {
+    let sanitized = result
+      .split(separator: "\n")
+      .filter { !$0.lowercased().contains("oauth client secret") }
+      .joined(separator: " | ")
+    return String(sanitized.prefix(500))
+  }
+
+  private static func cloudSetupNativeAutomationBlockedMessage(_ result: String) -> String {
+    """
+    Omi opened Claude in your default browser and tried the native setup path first, but stopped before using the generic browser agent.
+
+    Native setup result:
+    \(cloudFormFillResultSummary(result))
+
+    I did not start the Playwright/browser-agent fallback because Claude setup should stay in your signed-in default browser. If this looks like a permissions issue, approve the requested macOS permission and click "Do it for me" again.
+    """
   }
 
   private static var cloudSetupAccessibilityPermissionMessage: String {

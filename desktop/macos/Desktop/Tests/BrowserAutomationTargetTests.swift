@@ -163,6 +163,22 @@ final class BrowserAutomationTargetTests: XCTestCase {
     )
   }
 
+  func testClaudeCloudSetupDoesNotSpawnGenericBrowserAgentFallback() throws {
+    let repoRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let executor = repoRoot
+      .appendingPathComponent("Sources/MemoryExportExecutor.swift")
+    let source = try String(contentsOf: executor)
+
+    XCTAssertTrue(source.contains("runClaudeNativeCloudSetup"))
+    XCTAssertTrue(source.contains("stopping without agent fallback"))
+    XCTAssertFalse(
+      source.contains("MemoryExportDestination.claude.guidedBrowserSetupTask"),
+      "Claude Cloud should stop with the deterministic native result instead of spawning the Playwright-capable generic browser agent."
+    )
+  }
+
   @MainActor
   func testClaudeNativeSetupWaitsForAccessibilityApprovalInsteadOfAgentFallback() {
     XCTAssertTrue(
