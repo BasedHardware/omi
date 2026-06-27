@@ -53,11 +53,52 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
 
     let projection = store.projection(for: surface)
     XCTAssertEqual(projection?.status, .succeeded)
-    XCTAssertNil(projection?.statusText)
+    // Terminal result text "done" is preserved; the late updateActivity is
+    // correctly ignored because the projection is already terminal.
+    XCTAssertEqual(projection?.statusText, "done")
     XCTAssertNotNil(projection?.completedAt)
   }
 
-  func testTerminalResultClearsStaleStatusText() {
+  func testLateRuntimeDeltaDoesNotReviveTerminalProjection() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    let result = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"result","protocolVersion":2,"requestId":"req","sessionId":"ses-terminal","runId":"run-terminal","attemptId":"attempt-terminal","terminalStatus":"succeeded","text":"done"}"#
+    )!
+    let lateDelta = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"text_delta","protocolVersion":2,"requestId":"req","sessionId":"ses-terminal","runId":"run-terminal","attemptId":"attempt-terminal","delta":"late"}"#
+    )!
+
+    store.ingest(message: result, surface: surface)
+    store.ingest(message: lateDelta, surface: surface)
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.status, .succeeded)
+    // Terminal result text "done" is preserved; the late text_delta is
+    // correctly ignored because the projection is already terminal.
+    XCTAssertEqual(projection?.statusText, "done")
+    XCTAssertNotNil(projection?.completedAt)
+  }
+
+  func testBeginRequestStartsNewLifecycleAfterTerminalProjection() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    let result = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"result","protocolVersion":2,"requestId":"req","sessionId":"ses-terminal","runId":"run-terminal","attemptId":"attempt-terminal","terminalStatus":"succeeded","text":"done"}"#
+    )!
+
+    store.ingest(message: result, surface: surface)
+    store.beginRequest(surface: surface, statusText: "Working on follow-up...")
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.status, .starting)
+    XCTAssertEqual(projection?.statusText, "Working on follow-up...")
+    XCTAssertNil(projection?.completedAt)
+    XCTAssertNil(projection?.runId)
+    XCTAssertEqual(store.knownSessionId(for: surface), "ses-terminal")
+  }
+
+  func testTerminalResultPreservesResultStatusText() {
     let store = AgentRuntimeStatusStore()
     let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
     store.beginRequest(surface: surface)
@@ -70,7 +111,8 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
 
     let projection = store.projection(for: surface)
     XCTAssertEqual(projection?.status, .succeeded)
-    XCTAssertNil(projection?.statusText)
+    // Terminal result text "done" replaces the stale running text "Working...".
+    XCTAssertEqual(projection?.statusText, "done")
     XCTAssertNotNil(projection?.completedAt)
   }
 

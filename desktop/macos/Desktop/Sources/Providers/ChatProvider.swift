@@ -1821,13 +1821,27 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// `SYSTEM_CACHE_SPLIT` in `Backend-Rust/src/routes/chat_completions.rs`.
     static let cacheSplitSentinel = "<<<OMI_CACHE_SPLIT_V1>>>"
 
-    private func buildFloatingBarSystemPrompt(contextString: String) -> String {
+    private func buildFloatingBarSystemPrompt(
+        contextString: String,
+        excludingToolNames excludedToolNames: Set<String> = []
+    ) -> String {
         // Cache-friendly split: the static prefix is byte-identical across
         // conversations (so the proxy can cache it); volatile data — datetime,
         // memories, screen — goes in the live tail after the sentinel, which the
         // proxy leaves uncached. See SYSTEM_CACHE_SPLIT in chat_completions.rs.
+        var staticBody = buildSystemPrompt(contextString: "", style: .floating, staticBody: true)
+        if !excludedToolNames.isEmpty {
+            let fullToolPrompt = DesktopCapabilityRegistry.desktopToolPrompt
+                .replacingOccurrences(of: "{user_name}", with: promptUserName)
+            let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)
+                .replacingOccurrences(of: "{user_name}", with: promptUserName)
+            staticBody = staticBody.replacingOccurrences(
+                of: fullToolPrompt,
+                with: scopedToolPrompt
+            )
+        }
         let staticPrefix = Self.floatingBarSystemPromptPrefix + "\n\n"
-            + buildSystemPrompt(contextString: "", style: .floating, staticBody: true)
+            + staticBody
 
         let tz = TimeZone.current.identifier
         var live = "<live_context>\nCurrent date/time in \(promptUserName)'s timezone (\(tz)): "
@@ -2539,20 +2553,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return aiMessage
     }
 
-    /// Record a completed voice turn (realtime-hub / PTT) into chat history.
-    ///
-    /// The realtime hub plays its spoken reply itself and never routes through the
-    /// normal query path, so without this the turn would never appear in chat history
-    /// or sync to the backend. Appends both messages to the in-memory `messages`
-    /// immediately (so the home-page chat shows them live if open), then persists them
-    /// on a single background task — user message first, so the backend `created_at`
-    /// ordering (and therefore reload order) is stable. Fire-and-forget: the realtime
-    /// hub must never await this on the voice hot path. Empty sides are skipped (a
-    /// tool-only turn with no spoken reply still records the user's request).
-    func recordVoiceTurn(userText: String, assistantText: String) {
+    /// Record a completed turn that did not stream through `sendMessage`.
+    /// Appends both messages to the in-memory provider session immediately, then
+    /// persists them sequentially in the background so later follow-ups retain context.
+    @discardableResult
+    func recordCompletedTurn(userText: String, assistantText: String, logLabel: String = "completed") -> (
+        user: ChatMessage?, assistant: ChatMessage?
+    ) {
         let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !user.isEmpty || !assistant.isEmpty else { return }
+        guard !user.isEmpty || !assistant.isEmpty else { return (nil, nil) }
 
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -2576,24 +2586,36 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         pendingSaves.begin()
         Task { [weak self] in
             if let userMessage {
-                await self?.persistVoiceMessage(
+                await self?.persistRecordedTurnMessage(
                     userMessage, text: user, sender: "human",
-                    appId: capturedAppId, sessionId: capturedSessionId)
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel)
             }
             if let aiMessage {
-                await self?.persistVoiceMessage(
+                await self?.persistRecordedTurnMessage(
                     aiMessage, text: assistant, sender: "ai",
-                    appId: capturedAppId, sessionId: capturedSessionId)
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel)
             }
             await MainActor.run { self?.pendingSaves.end() }
         }
+
+        return (userMessage, aiMessage)
     }
 
-    /// Persist one voice-turn message and sync its server ID back into `messages` so a
+    /// Record a completed voice turn (realtime-hub / PTT) into chat history.
+    ///
+    /// The realtime hub plays its spoken reply itself and never routes through the
+    /// normal query path, so without this the turn would never appear in chat history
+    /// or sync to the backend. Empty sides are skipped (a tool-only turn with no
+    /// spoken reply still records the user's request).
+    func recordVoiceTurn(userText: String, assistantText: String) {
+        recordCompletedTurn(userText: userText, assistantText: assistantText, logLabel: "voice")
+    }
+
+    /// Persist one recorded-turn message and sync its server ID back into `messages` so a
     /// subsequent poll doesn't duplicate it. Failures leave the in-memory copy unsynced
     /// (matches the existing saveMessage sites — no retry).
-    private func persistVoiceMessage(
-        _ message: ChatMessage, text: String, sender: String, appId: String?, sessionId: String?
+    private func persistRecordedTurnMessage(
+        _ message: ChatMessage, text: String, sender: String, appId: String?, sessionId: String?, logLabel: String
     ) async {
         do {
             let response = try await APIClient.shared.saveMessage(
@@ -2604,9 +2626,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     self.messages[index].isSynced = true
                 }
             }
-            log("Saved voice \(sender) message to backend: \(response.id)")
+            log("Saved \(logLabel) \(sender) message to backend: \(response.id)")
         } catch {
-            logError("Failed to persist voice \(sender) message", error: error)
+            logError("Failed to persist \(logLabel) \(sender) message", error: error)
         }
     }
 
@@ -2730,6 +2752,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
+    @discardableResult
     func sendMessage(
         _ text: String,
         model: String? = nil,
@@ -2743,16 +2766,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         legacyClientScope: String? = nil,
         resume: String? = nil,
         imageData: Data? = nil
-    ) async {
+    ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
+        guard !trimmedText.isEmpty else { return nil }
 
         // Guard against concurrent sendMessage calls.
         // The bridge uses a single message continuation, so concurrent queries
         // would cause responses to be consumed by the wrong caller.
         guard !isSending else {
             log("ChatProvider: sendMessage called while already sending, ignoring")
-            return
+            return nil
         }
 
         // Monthly free-tier limit shared with the floating bar (30 messages/month).
@@ -2767,7 +2790,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     object: nil,
                     userInfo: ["reason": "chat"]
                 )
-                return
+                return nil
             }
             usageLimiter.recordQuery()
         }
@@ -2784,7 +2807,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
-            return
+            return nil
         }
         tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
@@ -2807,7 +2830,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             guard let sid = currentSessionId else {
                 errorMessage = "Failed to create chat session"
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-                return
+                return nil
             }
             sessionId = sid
         }
@@ -2846,7 +2869,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 isSending = false
                 errorMessage = "Some attachments failed to upload. Remove them and try again."
                 tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-                return
+                return nil
             }
             attachmentsForMessage = pendingAttachments
             pendingAttachments.removeAll()
@@ -2937,6 +2960,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var toolStartTimes: [String: Date] = [:]
         var sqlRowsReturned = 0
         var sqlQueryCount = 0
+        var completedResponseText: String?
 
         do {
             // Use the system prompt built at warmup. The agent bridge applies it only
@@ -2951,10 +2975,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 systemPrompt = prefix
             } else {
                 if systemPromptStyle == .floating {
-                    if cachedFloatingSystemPrompt.isEmpty {
+                    if legacyClientScope == AgentLegacyClientScope.floatingPill {
+                        systemPrompt = buildFloatingBarSystemPrompt(
+                            contextString: formatMemoriesSection(),
+                            excludingToolNames: ["spawn_agent", "delegate_agent"]
+                        )
+                    } else if cachedFloatingSystemPrompt.isEmpty {
                         cachedFloatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: formatMemoriesSection())
+                        systemPrompt = cachedFloatingSystemPrompt
+                    } else {
+                        systemPrompt = cachedFloatingSystemPrompt
                     }
-                    systemPrompt = cachedFloatingSystemPrompt
                 } else {
                     systemPrompt = cachedMainSystemPrompt
                 }
@@ -2996,6 +3027,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             var isFirstResponse = true
             var isGenerating = false
             let currentChatMode = chatMode
+            let currentLegacyClientScope = legacyClientScope
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
                 if isFirstResponse {
                     isFirstResponse = false
@@ -3015,7 +3047,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // QueryTracer: time the actual tool execution (client-side run of the
                 // tool, distinct from the model-visible tool span in toolActivity).
                 let toolStart = ContinuousClock.now
-                let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
+                let result = await ChatToolExecutor.execute(
+                    toolCall,
+                    originatingChatMode: currentChatMode,
+                    originatingClientScope: currentLegacyClientScope)
                 if let tracer {
                     let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
                     let inputJson =
@@ -3347,6 +3382,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             Task.detached(priority: .background) {
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
+            completedResponseText = messageText
         } catch {
             // QueryTracer: error path — close spans and write the (partial) trace
             // so failed/timed-out queries still show up in benchmarks.
@@ -3443,6 +3479,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             log("ChatProvider: chaining follow-up query")
             await sendMessage(followUp, isFollowUp: true)
         }
+        return completedResponseText
     }
 
     /// Generate a title for the session using LLM

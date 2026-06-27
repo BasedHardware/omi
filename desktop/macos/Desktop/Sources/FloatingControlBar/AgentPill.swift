@@ -23,6 +23,15 @@ final class AgentPill: ObservableObject, Identifiable {
             }
         }
 
+        var tintColor: Color {
+            switch self {
+            case .queued: return Color(red: 0.20, green: 0.86, blue: 1.0)
+            case .starting, .running: return Color(red: 1.0, green: 0.80, blue: 0.40)
+            case .done: return Color(red: 0.27, green: 0.92, blue: 0.46)
+            case .failed: return Color(red: 1.0, green: 0.42, blue: 0.42)
+            }
+        }
+
         var machineLabel: String {
             switch self {
             case .queued: return "queued"
@@ -39,6 +48,7 @@ final class AgentPill: ObservableObject, Identifiable {
             default: return false
             }
         }
+
     }
 
     let id = UUID()
@@ -52,7 +62,9 @@ final class AgentPill: ObservableObject, Identifiable {
     @Published var transcript: [String] = []
     @Published var aiMessage: ChatMessage?
     @Published var completedAt: Date?
+    @Published var viewedAt: Date?
     @Published var suggestedFollowUps: [String] = []
+    @Published var contentRevision: Int = 0
 
     /// Convenience: how long the agent has been running (or ran).
     var elapsed: TimeInterval {
@@ -64,6 +76,10 @@ final class AgentPill: ObservableObject, Identifiable {
         self.model = model
         self.title = AgentPill.deriveTitle(from: query)
         self.createdAt = Date()
+    }
+
+    func markContentChanged() {
+        contentRevision &+= 1
     }
 
     /// Pull a short uppercase title out of the query for the pill popover header.
@@ -106,6 +122,7 @@ final class AgentPillsManager: ObservableObject {
     private var projectionStreamsByPill: [UUID: AnyCancellable] = [:]
     private var messageCountByPill: [UUID: Int] = [:]
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
+    private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
     private var bootChain: Task<Void, Never> = Task {}
 
     private static let backgroundAgentSystemPromptSuffix = """
@@ -114,15 +131,32 @@ final class AgentPillsManager: ObservableObject {
     This is already the spawned background agent. Do not call spawn_agent or delegate_agent just to hand off this same task.
     """
 
+    /// Shared agent-noun pattern used by negation guard, intent detection, and
+    /// task extraction. Kept word-boundary-free so callers can embed it inside
+    /// larger patterns and add `\b` anchors themselves. (Cubic P2 — single
+    /// source of truth for agent-noun regex.)
+    private nonisolated static let agentNounPattern = #"(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)"#
+
     /// Which pill (if any) is currently capturing a voice follow-up — drives the
     /// pill popover's mic button state.
     @Published var recordingPillID: UUID?
+
+    private let viewedFinishedTTL: TimeInterval = 10 * 60
 
     private init() {}
 
     /// Routing decision for an Ask Omi message — does it stay inline in the
     /// floating bar, or get hoisted into a background agent pill?
     enum Route: String { case chat, agent }
+
+    /// Explicit UI/control-plane handoff: the parent turn is the user's request
+    /// to create a background agent, while `agentTask` is the work the child
+    /// agent should actually perform. Keeping these separate prevents the child
+    /// prompt from inheriting control words like "spawn a subagent".
+    struct FloatingAgentHandoff: Equatable {
+        let originalRequest: String
+        let agentTask: String
+    }
 
     /// Combined router result. Title/ack are pre-computed alongside the route
     /// so we don't need a second Haiku call when the answer is "agent".
@@ -285,6 +319,97 @@ final class AgentPillsManager: ObservableObject {
         return 1
     }
 
+    /// User control-plane request from the floating bar UI: create a visible sibling
+    /// background agent. This is intentionally separate from an agent's own tool use;
+    /// existing floating agents still cannot self-spawn nested pills.
+    nonisolated static func floatingAgentHandoff(for text: String) -> FloatingAgentHandoff? {
+        let original = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else { return nil }
+        let lower = text.lowercased()
+        // Exclude question-style starters — informational queries like
+        // "how do I start a background agent?" or "can you explain how to run
+        // agents?" should answer inline, not spawn a pill.
+        let questionStarters = [
+            "how do i", "how do you", "how to", "what is", "what are", "what does",
+            "what can", "whats", "can you explain", "could you explain",
+            "explain how", "tell me about", "tell me how", "why", "is it",
+            "are agents", "do agents", "does the agent",
+            // Modal question starters — queries like "can I run agents in the
+            // background?", "will agents run while I work?", or "should I start
+            // an agent?" contain an agent noun + an action verb but are questions,
+            // not imperatives, so they should answer inline, not spawn a pill.
+            "can i", "could i", "should i", "would i", "will agents",
+            "will the agent", "may i", "do i need", "do i have",
+        ]
+        let trimmedLower = lower.trimmingCharacters(in: .whitespacesAndNewlines)
+        if questionStarters.contains(where: { trimmedLower.hasPrefix($0) }) {
+            return nil
+        }
+        // Negation guard (fully scoped): only suppress spawn when a negation
+        // word appears in direct construction with BOTH a spawn action AND an
+        // agent noun — e.g. "don't spawn an agent", "no agent", "without a
+        // pill". Every pattern requires agent-noun proximity so unrelated
+        // negation words (e.g. "don't make me laugh, spawn an agent") do not
+        // false-suppress legitimate spawns. (Cubic P1 — tightens prior scoped
+        // guard.)
+        let agentNoun = Self.agentNounPattern
+        let article = #"(?:a|an|any)\s+"#
+        let negationOptOuts = [
+            // "don't spawn an agent", "do not create a pill", "don't run agents"
+            #"\b(?:don'?t|do not|never)\s+(?:spawn|start|launch|kick\s+off|create|make|run)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
+            // "no agent", "not an agent", "no pills", "not a subagent"
+            #"\b(?:no|not)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
+            // "without spawning an agent", "without a pill",
+            // "without creating subagents"
+            #"\bwithout\s+(?:(?:spawning|creating|making|starting|launching|running)\s+(?:"# + article + #")?|"# + article + #")?"# + agentNoun + #"\b"#,
+            // "not spawning an agent", "never creating pills"
+            #"\b(?:not|never)\s+(?:spawning|creating|making|starting|launching|running)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
+        ]
+        if negationOptOuts.contains(where: { lower.range(of: $0, options: .regularExpression) != nil }) {
+            return nil
+        }
+        let agentPattern = #"\b"# + Self.agentNounPattern + #"\b"#
+        let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run)\b"#
+        guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
+        guard lower.range(of: actionPattern, options: .regularExpression) != nil else { return nil }
+
+        return FloatingAgentHandoff(
+            originalRequest: original,
+            agentTask: extractFloatingAgentTask(from: original) ?? original
+        )
+    }
+
+    nonisolated static func explicitlyRequestsFloatingAgent(_ text: String) -> Bool {
+        floatingAgentHandoff(for: text) != nil
+    }
+
+    private nonisolated static func extractFloatingAgentTask(from text: String) -> String? {
+        let nounPattern = #"\b"# + Self.agentNounPattern + #"\b"#
+        guard let regex = try? NSRegularExpression(pattern: nounPattern, options: [.caseInsensitive]) else {
+            return nil
+        }
+        let range = NSRange(text.startIndex..., in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let matchRange = Range(match.range, in: text)
+        else {
+            return nil
+        }
+
+        var task = String(text[matchRange.upperBound...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let connectorPattern = #"^(?:to|for|that\s+can|that\s+will|which\s+can|which\s+will|and)\s+"#
+        if let connectorRegex = try? NSRegularExpression(pattern: connectorPattern, options: [.caseInsensitive]) {
+            task = connectorRegex.stringByReplacingMatches(
+                in: task,
+                range: NSRange(task.startIndex..., in: task),
+                withTemplate: ""
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard task.split(whereSeparator: \.isWhitespace).count >= 2 else { return nil }
+        return task
+    }
+
     /// Spawn one or more pills for a user query. If the query says "spawn 3
     /// agents" we create 3 pills (each runs the same task on the shared
     /// queue). Returns the first pill so callers can inspect it.
@@ -326,6 +451,39 @@ final class AgentPillsManager: ObservableObject {
         return first ?? spawn(query: query, model: model, fromVoice: fromVoice)
     }
 
+    @discardableResult
+    func spawnFromHandoff(
+        _ handoff: FloatingAgentHandoff,
+        model: String,
+        fromVoice: Bool = false,
+        preFetchedTitle: String? = nil,
+        preFetchedAck: String? = nil
+    ) -> AgentPill {
+        let count = AgentPillsManager.parseAgentCount(from: handoff.originalRequest)
+        if count <= 1 {
+            return spawn(
+                query: handoff.agentTask,
+                model: model,
+                fromVoice: fromVoice,
+                preFetchedTitle: preFetchedTitle,
+                preFetchedAck: preFetchedAck
+            )
+        }
+        var first: AgentPill?
+        for i in 1...count {
+            let labelled = "[\(i)/\(count)] \(handoff.agentTask)"
+            let pill = spawn(
+                query: labelled,
+                model: model,
+                fromVoice: fromVoice && first == nil,
+                preFetchedTitle: first == nil ? preFetchedTitle : nil,
+                preFetchedAck: first == nil ? preFetchedAck : nil
+            )
+            if first == nil { first = pill }
+        }
+        return first ?? spawn(query: handoff.agentTask, model: model, fromVoice: fromVoice)
+    }
+
     /// Spawn a new agent pill. Each pill gets its own ChatProvider so the
     /// pills truly run in parallel. Bridge boots are staggered through
     /// `bootChain` so we never race ACP startup; once a pill's bridge is
@@ -344,12 +502,14 @@ final class AgentPillsManager: ObservableObject {
             pill.title = preFetchedTitle
         }
 
-        // Trim if we're at the cap — drop the oldest finished pill first.
+        trimForNewPillIfNeeded()
         if pills.count >= maxPills {
-            if let idx = pills.firstIndex(where: { isFinished($0.status) }) {
-                cleanup(pillID: pills[idx].id)
-            } else {
-                cleanup(pillID: pills[0].id)
+            // Last-resort trim: drop the oldest non-active pill. Never clean up
+            // the pill the user is actively viewing in the agent chat surface —
+            // doing so would drop the window state to stale/blank content.
+            let activeChatPillID = FloatingControlBarManager.shared.activeAgentChatPillID
+            if let victimID = pills.first(where: { $0.id != activeChatPillID })?.id {
+                cleanup(pillID: victimID)
             }
         }
 
@@ -375,6 +535,7 @@ final class AgentPillsManager: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak pill] projections in
                 guard let pill, let projection = projections[surfaceRef.key] else { return }
+                guard !pill.status.isFinished || projection.status.isTerminal else { return }
                 AgentPillsManager.apply(projection: projection, to: pill)
             }
 
@@ -428,17 +589,17 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .running
             pill.completedAt = nil
             pill.suggestedFollowUps = []
-            await provider.sendMessage(
+            let finalText = await provider.sendMessage(
                 pill.query,
                 model: pill.model,
                 systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
-                legacyClientScope: "floating-pill"
+                legacyClientScope: AgentLegacyClientScope.floatingPill
             )
             guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider)
+            self.complete(pill: pill, provider: provider, finalText: finalText)
         }
         runTasksByPill[pill.id] = runTask
 
@@ -478,31 +639,156 @@ final class AgentPillsManager: ObservableObject {
         runTasksByPill[pill.id]?.cancel()
         let runTask = Task { @MainActor [weak self, weak pill, weak provider] in
             guard let self, let pill, let provider else { return }
+            // If the provider is still streaming the previous turn, interrupt
+            // it first and wait for the guard to clear before starting the next
+            // agent turn. Otherwise the isSending guard returns nil and
+            // complete() marks the pill as failed. (Codex P2.)
+            if provider.isSending {
+                provider.stopAgent()
+                // stopAgent() has a 3s watchdog that force-releases isSending;
+                // poll until the guard clears (bounded to ~4s total). Check
+                // Task.isCancelled on every iteration so a cancelled follow-up
+                // does not proceed to sendMessage. (Cubic P1.)
+                for _ in 0..<80 {
+                    if Task.isCancelled { return }
+                    if !provider.isSending { break }
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                }
+            }
+            guard !Task.isCancelled else { return }
             let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
-            await provider.sendMessage(
+            let finalText = await provider.sendMessage(
                 text, model: pill.model,
                 systemPromptSuffix: Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
-                legacyClientScope: "floating-pill")
+                legacyClientScope: AgentLegacyClientScope.floatingPill)
             guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider)
+            self.complete(pill: pill, provider: provider, finalText: finalText)
         }
         runTasksByPill[pill.id] = runTask
     }
 
     /// Force-dismiss a pill.
     func dismiss(pillID: UUID) {
+        // If the pill being dismissed is the one currently shown in the Ask Omi
+        // surface, leave the agent surface first so conversationSurface does
+        // not stay as .agent(id) pointing to a removed pill — which would leave
+        // the view falling through to blank/stale Omi content. (Codex P2.)
+        if FloatingControlBarManager.shared.activeAgentChatPillID == pillID {
+            FloatingControlBarManager.shared.leaveActiveAgentSurfaceFromPillDismiss()
+        }
         cleanup(pillID: pillID)
         if hoveredPillID == pillID { hoveredPillID = nil }
         if pinnedPillID == pillID { pinnedPillID = nil }
+    }
+
+    func markViewed(pillID: UUID) {
+        guard let pill = pills.first(where: { $0.id == pillID }) else { return }
+        pill.viewedAt = Date()
+        scheduleViewedExpiration(for: pill)
+        expireViewedFinishedPills(now: Date())
+    }
+
+    private func scheduleViewedExpiration(for pill: AgentPill) {
+        viewedExpirationWorkItemsByPill[pill.id]?.cancel()
+        guard pill.status.isFinished else { return }
+
+        let pillID = pill.id
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                // If the pill is the one the user is actively viewing when the
+                // timer fires, the expiration is skipped this round but the
+                // timer must be re-armed — otherwise the one-shot DispatchWorkItem
+                // is consumed and auto-expiration is permanently disabled for a
+                // viewed finished pill even after the user navigates away.
+                if FloatingControlBarManager.shared.activeAgentChatPillID == pillID {
+                    if let pill = self.pills.first(where: { $0.id == pillID }) {
+                        self.scheduleViewedExpiration(for: pill)
+                    }
+                    return
+                }
+                self.expireViewedFinishedPills(now: Date())
+                self.viewedExpirationWorkItemsByPill[pillID] = nil
+            }
+        }
+        viewedExpirationWorkItemsByPill[pillID] = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + viewedFinishedTTL, execute: workItem)
+    }
+
+    private func expireViewedFinishedPills(now: Date = Date()) {
+        let activeChatPillID = FloatingControlBarManager.shared.activeAgentChatPillID
+        let expiredIDs = pills
+            .filter { pill in
+                guard pill.status.isFinished, let viewedAt = pill.viewedAt else { return false }
+                // Never expire the pill the user is actively viewing in the
+                // floating bar's agent chat — otherwise the active chat
+                // disappears/reverts while they are still reading it.
+                guard pill.id != activeChatPillID else { return false }
+                return now.timeIntervalSince(viewedAt) >= viewedFinishedTTL
+            }
+            .map(\.id)
+        for id in expiredIDs {
+            cleanup(pillID: id)
+        }
+    }
+
+    private func trimForNewPillIfNeeded() {
+        expireViewedFinishedPills()
+        guard pills.count >= maxPills else { return }
+
+        let activeChatPillID = FloatingControlBarManager.shared.activeAgentChatPillID
+
+        if let oldestDoneID = pills
+            .filter({ $0.status == .done && $0.id != activeChatPillID })
+            .sorted(by: { ($0.completedAt ?? $0.createdAt) < ($1.completedAt ?? $1.createdAt) })
+            .first?.id {
+            cleanup(pillID: oldestDoneID)
+            return
+        }
+
+        if let oldestFinishedID = pills
+            .filter({ $0.status.isFinished && $0.id != activeChatPillID })
+            .sorted(by: { ($0.completedAt ?? $0.createdAt) < ($1.completedAt ?? $1.createdAt) })
+            .first?.id {
+            cleanup(pillID: oldestFinishedID)
+        }
     }
 
     func dismiss(pillIdString: String) -> Bool {
         guard let id = findPillId(from: pillIdString) else { return false }
         dismiss(pillID: id)
         return true
+    }
+
+    func replaceWithAutomationPills(count requestedCount: Int) -> [AgentPill] {
+        let ids = pills.map(\.id)
+        for id in ids {
+            cleanup(pillID: id)
+        }
+
+        let count = min(max(requestedCount, 1), maxPills)
+        let seeded = (0..<count).map { index -> AgentPill in
+            let pill = AgentPill(query: "Automation subagent \(index + 1)", model: ModelQoS.Claude.defaultSelection)
+            pill.title = index == 0 ? "SLEEP FOR 5" : "Sleep Subagent"
+            if index == 0 {
+                pill.status = .done
+                pill.latestActivity = "Done — automation output."
+                pill.aiMessage = ChatMessage(text: "Automation output for subagent \(index + 1).", sender: .ai)
+                pill.completedAt = Date()
+            } else {
+                pill.status = .running
+                pill.latestActivity = "Working…"
+                pill.aiMessage = nil
+                pill.completedAt = nil
+            }
+            pill.markContentChanged()
+            return pill
+        }
+        pills = seeded
+        return seeded
     }
 
     private func cleanup(pillID: UUID) {
@@ -512,6 +798,8 @@ final class AgentPillsManager: ObservableObject {
         }
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
+        viewedExpirationWorkItemsByPill[pillID]?.cancel()
+        viewedExpirationWorkItemsByPill[pillID] = nil
         providersByPill[pillID]?.stopAgent()
         streamsByPill[pillID]?.cancel()
         streamsByPill[pillID] = nil
@@ -610,6 +898,7 @@ final class AgentPillsManager: ObservableObject {
         let recent = Array(messages.suffix(from: since))
         guard let aiMessage = recent.last(where: { $0.sender == .ai }) else { return }
         pill.aiMessage = aiMessage
+        pill.markContentChanged()
 
         if pill.status.isFinished {
             return
@@ -623,6 +912,7 @@ final class AgentPillsManager: ObservableObject {
         if !activity.isEmpty && activity != pill.latestActivity {
             pill.latestActivity = activity
             pill.transcript.append(activity)
+            pill.markContentChanged()
         }
     }
 
@@ -656,24 +946,48 @@ final class AgentPillsManager: ObservableObject {
         return "Working…"
     }
 
-    private func complete(pill: AgentPill, provider: ChatProvider) {
+    private func complete(pill: AgentPill, provider: ChatProvider, finalText: String?) {
+        let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedFinalText, !trimmedFinalText.isEmpty {
+            if pill.aiMessage?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                pill.aiMessage = ChatMessage(text: trimmedFinalText, sender: .ai)
+            }
+            pill.latestActivity = String(trimmedFinalText.prefix(140))
+            pill.markContentChanged()
+        }
         if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
             Self.apply(projection: projection, to: pill)
             if projection.status.isTerminal {
                 pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+                if pill.viewedAt != nil {
+                    scheduleViewedExpiration(for: pill)
+                }
                 return
             }
         }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
             pill.status = .failed(errorText)
-            pill.completedAt = Date()
             pill.latestActivity = errorText
+            pill.completedAt = Date()
+            pill.markContentChanged()
+        } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
+            pill.status = .done
+            pill.completedAt = Date()
+            pill.markContentChanged()
+            AgentRuntimeStatusStore.shared.recordLocalSuccess(
+                surface: .floatingPill(pillId: pill.id),
+                statusText: trimmedFinalText
+            )
         } else {
             pill.status = .failed("Agent ended before reporting a final result")
             pill.completedAt = Date()
             pill.latestActivity = "Agent ended before reporting a final result"
+            pill.markContentChanged()
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        if pill.viewedAt != nil {
+            scheduleViewedExpiration(for: pill)
+        }
         // Keep the provider + stream alive after completion so a voice/text follow-up
         // can continue THIS agent's session with full context. They're torn down on
         // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
@@ -689,26 +1003,34 @@ final class AgentPillsManager: ObservableObject {
         case .succeeded:
             pill.status = .done
             pill.completedAt = projection.completedAt ?? Date()
-            if let last = pill.aiMessage, !last.text.isEmpty {
+            if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !statusText.isEmpty {
+                pill.latestActivity = String(statusText.prefix(140))
+                pill.markContentChanged()
+            } else if let last = pill.aiMessage {
                 let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                pill.latestActivity = String(trimmed.prefix(140))
-            } else {
-                pill.latestActivity = "Done"
+                if !trimmed.isEmpty {
+                    pill.latestActivity = String(trimmed.prefix(140))
+                    pill.markContentChanged()
+                }
             }
         case .failed, .timedOut, .orphaned:
             let message = projection.errorMessage ?? "Agent failed"
             pill.status = .failed(message)
             pill.latestActivity = message
             pill.completedAt = projection.completedAt ?? Date()
+            pill.markContentChanged()
         case .cancelled:
             pill.status = .failed("Stopped by user")
             pill.latestActivity = "Stopped by user"
             pill.completedAt = projection.completedAt ?? Date()
+            pill.markContentChanged()
         case .idle:
             break
         }
         if !projection.status.isTerminal, let statusText = projection.statusText, !statusText.isEmpty {
             pill.latestActivity = statusText
+            pill.markContentChanged()
         }
     }
 
