@@ -54,6 +54,7 @@ from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, m
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
+from utils.mcp_memories import collect_filtered_memories
 from utils.memory.developer_memory_adapter import (
     search_memory_default_developer_memories,
     search_memory_default_developer_memories_vector,
@@ -296,17 +297,23 @@ def get_memories(
 
     memory_system = pin_memory_system(uid, db_client=db)
     if memory_system == MemorySystem.CANONICAL:
-        # Apply category filtering so canonical Developer clients requesting a
-        # category subset don't receive every canonical category.
-        memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
-        if category_list:
-            allowed_categories = {c.value for c in category_list}
-            memories = [
-                m
-                for m in memories
-                if (m.category.value if hasattr(m.category, 'value') else m.category) in allowed_categories
-            ]
-        return [CleanerMemory.model_validate(memory.model_dump()) for memory in memories]
+        # Over-fetch raw pages and let collect_filtered_memories apply category
+        # filtering during the scan, so categories=manual&limit=25 always returns
+        # up to 25 matching rows instead of filtering a single unfiltered page.
+        filtered = collect_filtered_memories(
+            lambda batch_offset, batch_limit: [
+                m.model_dump(mode='json')
+                for m in memorydb_list_with_locked_preview(
+                    MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
+                )
+            ],
+            limit=limit,
+            offset=offset,
+            categories=[c.value for c in category_list] if category_list else None,
+            sort='scoring_desc',
+        )
+        memories = filtered['memories']
+        return [CleanerMemory.model_validate(memory) for memory in memories]
     memory_rollout = read_default_read_rollout(uid=uid, db_client=db, consumer='developer_api')
     memory_result = search_memory_default_developer_memories(
         uid=uid,
@@ -661,9 +668,7 @@ def delete_memory(
         operation='delete_memory',
         delete_vector=False,
     )
-    if memory_system != MemorySystem.CANONICAL:
-        return {"success": True}
-    return
+    return {"success": True}
 
 
 @router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])

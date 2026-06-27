@@ -263,10 +263,18 @@ def filter_and_sort_memories(
     include_sensitive: bool = True,
     updated_after: Optional[datetime] = None,
     sort: str = 'scoring_desc',
+    categories: Optional[list[str]] = None,
 ) -> list[dict]:
+    category_set = {c for c in categories} if categories else None
     filtered = []
     updated_after_ts = _datetime_timestamp(updated_after) if updated_after else None
     for memory in memories:
+        if category_set is not None:
+            mem_category = memory.get('category')
+            if hasattr(mem_category, 'value'):
+                mem_category = mem_category.value
+            if mem_category not in category_set:
+                continue
         if reviewed is not None and bool(memory.get('reviewed')) != reviewed:
             continue
         if manually_added is not None and bool(memory.get('manually_added')) != manually_added:
@@ -310,6 +318,7 @@ def collect_filtered_memories(
     include_sensitive: bool = True,
     updated_after: Optional[datetime] = None,
     sort: str = 'scoring_desc',
+    categories: Optional[list[str]] = None,
     max_scan: int = 5000,
 ) -> dict:
     target_count = offset + limit + 1
@@ -320,6 +329,7 @@ def collect_filtered_memories(
         or manually_added is not None
         or updated_after is not None
         or not include_sensitive
+        or categories is not None
     )
     batch_size = min(500, max(100, limit * 3))
     scanned_count = 0
@@ -344,6 +354,7 @@ def collect_filtered_memories(
                     include_sensitive=include_sensitive,
                     updated_after=updated_after,
                     sort=sort,
+                    categories=categories,
                 )
             )
             if len(candidates) >= target_count:
@@ -361,6 +372,7 @@ def collect_filtered_memories(
             include_sensitive=include_sensitive,
             updated_after=updated_after,
             sort=sort,
+            categories=categories,
         )
 
     paged = candidates[offset : offset + limit]

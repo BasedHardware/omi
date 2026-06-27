@@ -332,14 +332,14 @@ def get_memories(
     if memory_system == MemorySystem.CANONICAL:
         # Over-fetch then apply the same filters the legacy path applies, so
         # canonical callers honoring categories/reviewed/sensitive/sort never
-        # receive memories they explicitly excluded.
+        # receive memories they explicitly excluded. The fetch lambda returns
+        # raw (unfiltered) batches so collect_filtered_memories can advance by
+        # raw page size — filtering inside the lambda would make short batches
+        # look like end-of-source.
         filtered = collect_filtered_memories(
             lambda batch_offset, batch_limit: [
                 m.model_dump(mode='json')
                 for m in MemoryService(db_client=db).read(uid, limit=batch_limit, offset=batch_offset)
-                if not category_list
-                or (m.category.value if hasattr(m.category, 'value') else m.category)
-                in {c.value for c in category_list}
             ],
             limit=limit,
             offset=offset,
@@ -349,6 +349,7 @@ def get_memories(
             include_sensitive=include_sensitive,
             updated_after=parsed_updated_after,
             sort=sort,
+            categories=[c.value for c in category_list] if category_list else None,
         )
         memories = filtered['memories']
         for memory in memories:
