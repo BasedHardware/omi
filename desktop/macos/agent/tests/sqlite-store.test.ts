@@ -252,6 +252,56 @@ describe("SqliteAgentStore", () => {
     store.close();
   });
 
+  it("nests withTransaction safely when the runtime never reports isTransaction", () => {
+    // Reproduces the production failure: in the bundled agent runtime,
+    // DatabaseSync.isTransaction does not flip to true inside an open
+    // transaction, so a guard that trusts it cannot detect nesting. A real
+    // SQLite connection throws "cannot start a transaction within a
+    // transaction" on a nested BEGIN, so a nested withTransaction must reuse
+    // the outer transaction rather than issue a second BEGIN.
+    const execLog: string[] = [];
+    let open = false;
+    class NoIsTransactionDatabase {
+      readonly isTransaction = false; // never flips, like the bundled runtime
+      constructor(_path: string) {}
+      exec(sql: string): void {
+        const head = sql.trimStart().toUpperCase();
+        if (head.startsWith("BEGIN")) {
+          if (open) {
+            throw new Error("cannot start a transaction within a transaction");
+          }
+          open = true;
+          execLog.push("BEGIN");
+        } else if (head.startsWith("COMMIT")) {
+          open = false;
+          execLog.push("COMMIT");
+        } else if (head.startsWith("ROLLBACK")) {
+          open = false;
+          execLog.push("ROLLBACK");
+        }
+      }
+      prepare(_sql: string) {
+        return { run: () => {}, get: () => undefined, all: () => [] };
+      }
+      close(): void {}
+    }
+
+    const store = new SqliteAgentStore({
+      databasePath: ":memory:",
+      reconcileOnOpen: false,
+      databaseFactory: NoIsTransactionDatabase,
+    });
+
+    execLog.length = 0; // ignore BEGIN/COMMIT from constructor migrations
+
+    const result = store.withTransaction(() => store.withTransaction(() => "inner-result"));
+
+    expect(result).toBe("inner-result");
+    // Exactly one real transaction was opened — the nested call reused it.
+    expect(execLog).toEqual(["BEGIN", "COMMIT"]);
+    store.close();
+  });
+
   it("rolls back artifact and lifecycle event writes atomically", () => {
     const store = newStore({ reconcileOnOpen: false });
     const session = store.insertSession({
