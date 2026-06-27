@@ -14,12 +14,14 @@ validated against enrolled fingerprints so that:
 """
 
 import hashlib
+import ipaddress
 import logging
 import threading
 import time
 from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Dict, Optional, Tuple
+from urllib.parse import urlparse
 
 from cachetools import TTLCache
 from fastapi import HTTPException, Request
@@ -68,6 +70,20 @@ BYOK_HEADERS = {
     'anthropic': 'x-byok-anthropic',
     'gemini': 'x-byok-gemini',
     'deepgram': 'x-byok-deepgram',
+    # User-hosted OpenAI-compatible provider (OpenRouter, Together, Groq, a local
+    # server, ...). The value is the API key; the base URL and model name travel
+    # alongside it in the companion config headers below (#6878).
+    'custom': 'x-byok-custom',
+}
+
+# Non-secret config for the custom provider. Carried per-request (like the keys)
+# and stashed in the same contextvar under reserved names so it never collides
+# with a provider key and is never fingerprint-validated.
+_CUSTOM_BASE_URL_FIELD = '__custom_base_url'
+_CUSTOM_MODEL_FIELD = '__custom_model'
+BYOK_CUSTOM_CONFIG_HEADERS = {
+    _CUSTOM_BASE_URL_FIELD: 'x-byok-custom-base-url',
+    _CUSTOM_MODEL_FIELD: 'x-byok-custom-model',
 }
 
 # Keys for the current request, if the client supplied them.
@@ -90,7 +106,63 @@ def get_byok_key(provider: str) -> Optional[str]:
 def has_byok_keys() -> bool:
     """True if the current request carries at least one BYOK header."""
     keys = _byok_ctx.get()
-    return bool(keys)
+    if not keys:
+        return False
+    # Custom-provider config alone (base URL / model with no key) is not a usable
+    # BYOK request, so don't let it flip quota bypass on its own.
+    return any(not k.startswith('__') for k in keys)
+
+
+def validate_custom_base_url(base_url: str) -> str:
+    """Validate a user-supplied custom provider base URL and return it normalized.
+
+    The backend makes outbound LLM calls to this URL with the user's key, so this
+    is a best-effort SSRF guard: require HTTPS and reject hosts that point back at
+    internal/loopback/link-local/private addresses (e.g. the cloud metadata
+    endpoint). Raises ValueError on anything that does not pass.
+    """
+    if not base_url or not isinstance(base_url, str):
+        raise ValueError('custom base URL is required')
+    url = base_url.strip()
+    parsed = urlparse(url)
+    if parsed.scheme != 'https':
+        raise ValueError('custom base URL must use https')
+    host = parsed.hostname
+    if not host:
+        raise ValueError('custom base URL must include a host')
+    lowered = host.lower()
+    if lowered == 'localhost' or lowered.endswith('.localhost') or lowered.endswith('.local'):
+        raise ValueError('custom base URL host is not allowed')
+    try:
+        ip = ipaddress.ip_address(lowered)
+    except ValueError:
+        ip = None
+    if ip is not None and (
+        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+    ):
+        raise ValueError('custom base URL host is not allowed')
+    return url
+
+
+def get_byok_custom_provider() -> Optional[Dict[str, str]]:
+    """The fully configured custom OpenAI-compatible provider for this request, or
+    None. Requires the key, base URL, and model to all be present, and the base
+    URL to pass validation (an invalid URL yields None rather than raising, so a
+    bad header degrades to the default provider instead of failing the request)."""
+    keys = _byok_ctx.get()
+    if not keys:
+        return None
+    api_key = keys.get('custom')
+    base_url = keys.get(_CUSTOM_BASE_URL_FIELD)
+    model = keys.get(_CUSTOM_MODEL_FIELD)
+    if not (api_key and base_url and model):
+        return None
+    try:
+        base_url = validate_custom_base_url(base_url)
+    except ValueError as e:
+        logger.warning('BYOK custom provider: rejecting base URL: %s', e)
+        return None
+    return {'api_key': api_key, 'base_url': base_url, 'model': model}
 
 
 def set_byok_keys(keys: Dict[str, str]):
@@ -109,6 +181,10 @@ def extract_byok_from_websocket(websocket: WebSocket) -> Dict[str, str]:
         value = websocket.headers.get(header)
         if value:
             keys[provider] = value
+    for field, header in BYOK_CUSTOM_CONFIG_HEADERS.items():
+        value = websocket.headers.get(header)
+        if value:
+            keys[field] = value
     return keys
 
 
@@ -126,6 +202,10 @@ class BYOKMiddleware(BaseHTTPMiddleware):
             value = request.headers.get(header)
             if value:
                 keys[provider] = value
+        for field, header in BYOK_CUSTOM_CONFIG_HEADERS.items():
+            value = request.headers.get(header)
+            if value:
+                keys[field] = value
         token = _byok_ctx.set(keys)
         try:
             return await call_next(request)
@@ -189,6 +269,14 @@ def _check_byok_validity(uid: str) -> Optional[str]:
         request_fp = hashlib.sha256(raw_key.encode()).hexdigest()
         if request_fp != stored_fp:
             return f"BYOK key fingerprint mismatch for provider: {provider}"
+
+    # Honor the custom provider only when it is actually enrolled. Otherwise drop
+    # its key + config so an un-enrolled `x-byok-custom` header can never route a
+    # user's traffic to an unvalidated endpoint.
+    if 'custom' not in stored_fingerprints:
+        _custom_fields = ('custom', _CUSTOM_BASE_URL_FIELD, _CUSTOM_MODEL_FIELD)
+        if any(f in request_keys for f in _custom_fields):
+            _byok_ctx.set({k: v for k, v in request_keys.items() if k not in _custom_fields})
 
     return None
 
