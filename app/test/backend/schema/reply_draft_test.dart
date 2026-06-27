@@ -14,6 +14,17 @@ void main() {
       throwsFormatException,
     );
 
+    expect(
+      () => ReplyDraftResponse.fromJson({
+        'draft': '   ',
+        'alternatives': [],
+        'needs_review': true,
+        'safety_notes': [],
+        'used_context': {'memories_used': 0, 'recent_chat_messages_used': 0},
+      }),
+      throwsFormatException,
+    );
+
     final response = ReplyDraftResponse.fromJson({
       'draft': '  sounds good  ',
       'alternatives': [],
