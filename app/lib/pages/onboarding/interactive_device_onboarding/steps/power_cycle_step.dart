@@ -45,7 +45,6 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
         return OnboardingStepScaffold(
           title: _getTitle(provider.powerCycleState),
           subtitle: _getSubtitle(provider.powerCycleState),
-          currentStep: 2,
           content: Column(
             children: [
               const SizedBox(height: 16),
