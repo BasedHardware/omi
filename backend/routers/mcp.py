@@ -241,6 +241,7 @@ def search_memories(
 @router.get("/v1/mcp/memories", tags=["mcp"], response_model=List[CleanerMemory])
 def get_memories(
     uid: str = Depends(get_uid_from_mcp_api_key),
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
@@ -268,6 +269,17 @@ def get_memories(
         )
 
     memory_system = pin_memory_system(uid, db_client=db)
+
+    # Fail closed: authorize memory read before any system branch, matching
+    # the search route. Legacy keys without persisted memories.read scope
+    # cannot list canonical memories.
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(
+            status_code=app_key_grant.status_code,
+            detail=app_key_grant.observability,
+        )
+
     if memory_system == MemorySystem.CANONICAL:
         memories = memorydb_list_with_locked_preview(MemoryService(db_client=db).read(uid, limit=limit, offset=offset))
         return [

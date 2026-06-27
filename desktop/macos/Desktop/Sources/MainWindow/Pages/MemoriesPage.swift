@@ -348,7 +348,6 @@ class MemoriesViewModel: ObservableObject {
     let token = currentScopeToken
     var offset = 0
     let batchSize = 500
-    var backendIds = Set<String>()
     var allFetched: [ServerMemory] = []
 
     do {
@@ -356,19 +355,19 @@ class MemoriesViewModel: ObservableObject {
         let batch = try await APIClient.shared.getMemories(limit: batchSize, offset: offset)
         if batch.isEmpty { break }
         allFetched.append(contentsOf: batch)
-        for memory in batch { backendIds.insert(memory.id) }
         offset += batch.count
         if batch.count < batchSize { break }
       }
 
-      if !backendIds.isEmpty {
-        let pruned = try await MemoryStorage.shared.syncServerMemoriesAndPruneAbsent(
-          allFetched,
-          within: .defaultAccess
-        )
-        if pruned > 0 {
-          log("MemoriesViewModel: Pruned \(pruned) server-backed orphans after conversation delete")
-        }
+      // A successful fetch (even if empty) is an authoritative keep-set for
+      // pruning. Without this, stale SQLite rows remain visible after a
+      // conversation cascade delete retracts all backend memories.
+      let pruned = try await MemoryStorage.shared.syncServerMemoriesAndPruneAbsent(
+        allFetched,
+        within: .defaultAccess
+      )
+      if pruned > 0 {
+        log("MemoriesViewModel: Pruned \(pruned) server-backed orphans after conversation delete")
       }
 
       let reloadLimit = max(pageSize, memories.count)

@@ -2228,13 +2228,6 @@ actor RewindDatabase {
             }
         }
 
-        migrator.registerMigration("addMemoryTier") { db in
-            try db.alter(table: "memories") { t in
-                t.add(column: "tier", .text).notNull().defaults(to: "long_term")
-            }
-            try db.create(index: "idx_memories_tier", on: "memories", columns: ["tier"])
-        }
-
         migrator.registerMigration("createLocalKnowledgeGraph") { db in
             try db.create(table: "local_kg_nodes") { t in
                 t.autoIncrementedPrimaryKey("id")
@@ -2276,6 +2269,13 @@ actor RewindDatabase {
                 t.column("createdAt", .datetime).notNull()
             }
             try db.create(index: "idx_dropped_artifacts_timestamp", on: "dropped_artifacts", columns: ["timestamp"])
+        }
+
+        migrator.registerMigration("addMemoryTier") { db in
+            try db.alter(table: "memories") { t in
+                t.add(column: "tier", .text).notNull().defaults(to: "long_term")
+            }
+            try db.create(index: "idx_memories_tier", on: "memories", columns: ["tier"])
         }
 
         // Records cached before tiering shipped were all defaulted to "long_term".
