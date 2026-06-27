@@ -35,6 +35,7 @@ export default {
       },
       fontFamily: {
         display: [
+          'Oxanium',
           '"SF Pro Display"',
           '"SF Pro Text"',
           '-apple-system',
@@ -44,6 +45,7 @@ export default {
           'sans-serif'
         ],
         body: [
+          'Oxanium',
           '"SF Pro Display"',
           '"SF Pro Text"',
           '-apple-system',
