@@ -11070,5 +11070,121 @@
     "transcribeLaterPaused": "Paused — audio isn't being recorded",
     "@transcribeLaterPaused": {
         "description": "Capture-card subtitle shown while Transcribe Later capture is muted/paused"
+    },
+    "deviceTutorial": "Device Tutorial",
+    "@deviceTutorial": {
+        "description": "Settings row that launches the interactive device tutorial (shown only when a device is connected)"
+    },
+    "deviceOnboardingTranscriptionTitle": "Speak Into Your Omi",
+    "@deviceOnboardingTranscriptionTitle": {
+        "description": "Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo"
+    },
+    "deviceOnboardingTranscriptionSubtitle": "Say a few words and watch them appear in real-time",
+    "@deviceOnboardingTranscriptionSubtitle": {
+        "description": "Tutorial step 1 subtitle — explains that spoken words appear in real time"
+    },
+    "deviceOnboardingGoodJob": "Good job!",
+    "@deviceOnboardingGoodJob": {
+        "description": "Tutorial step 1 success message after the user speaks enough words"
+    },
+    "deviceOnboardingStartSpeaking": "Start speaking...",
+    "@deviceOnboardingStartSpeaking": {
+        "description": "Tutorial step 1 placeholder in the live transcript area before any speech is detected"
+    },
+    "deviceOnboardingAskQuestionTitle": "Ask Omi a Question",
+    "@deviceOnboardingAskQuestionTitle": {
+        "description": "Tutorial step 2 title — prompts the user to ask Omi a voice question with a single button press"
+    },
+    "deviceOnboardingAskQuestionSubtitle": "Press the button once, speak your question, then press again when done",
+    "@deviceOnboardingAskQuestionSubtitle": {
+        "description": "Tutorial step 2 subtitle — instructions for the single-press ask-a-question flow"
+    },
+    "deviceOnboardingProcessingQuestion": "Processing your question...",
+    "@deviceOnboardingProcessingQuestion": {
+        "description": "Tutorial step 2 status while the spoken question is processed by the AI"
+    },
+    "deviceOnboardingListening": "Listening...",
+    "@deviceOnboardingListening": {
+        "description": "Tutorial step 2 status chip while Omi is actively listening to the question"
+    },
+    "deviceOnboardingTurnOffTitle": "Turn Off",
+    "@deviceOnboardingTurnOffTitle": {
+        "description": "Tutorial step 3 title while waiting for the user to power the device off"
+    },
+    "deviceOnboardingTurnOnTitle": "Turn On",
+    "@deviceOnboardingTurnOnTitle": {
+        "description": "Tutorial step 3 title while waiting for the user to power the device back on"
+    },
+    "deviceOnboardingTurnOffSubtitle": "Hold the button for 3 seconds",
+    "@deviceOnboardingTurnOffSubtitle": {
+        "description": "Tutorial step 3 instruction to long-press the button to turn the device off"
+    },
+    "deviceOnboardingTurnOnSubtitle": "Press the button to turn it back on",
+    "@deviceOnboardingTurnOnSubtitle": {
+        "description": "Tutorial step 3 instruction to press the button to turn the device back on"
+    },
+    "deviceOnboardingHoldButtonHint": "Hold the button firmly until the light turns off",
+    "@deviceOnboardingHoldButtonHint": {
+        "description": "Tutorial step 3 hint shown if the device has not turned off after a while"
+    },
+    "deviceOnboardingStatusConnected": "Connected",
+    "@deviceOnboardingStatusConnected": {
+        "description": "Tutorial step 3 status chip — device connected (before power-off)"
+    },
+    "deviceOnboardingStatusConnectedDone": "Connected!",
+    "@deviceOnboardingStatusConnectedDone": {
+        "description": "Tutorial step 3 status chip — device reconnected after the power cycle"
+    },
+    "deviceOnboardingStatusDisconnected": "Disconnected",
+    "@deviceOnboardingStatusDisconnected": {
+        "description": "Tutorial step 3 status chip — device disconnected/off"
+    },
+    "deviceOnboardingStatusTurningOff": "Turning off...",
+    "@deviceOnboardingStatusTurningOff": {
+        "description": "Tutorial step 3 status chip while the device is powering off"
+    },
+    "deviceOnboardingDoubleTapTitle": "Customize Double Tap",
+    "@deviceOnboardingDoubleTapTitle": {
+        "description": "Tutorial step 4 title — configure the device double-tap action"
+    },
+    "deviceOnboardingEndConversation": "End Conversation",
+    "@deviceOnboardingEndConversation": {
+        "description": "Tutorial step 4 double-tap option title — end the current conversation"
+    },
+    "deviceOnboardingEndConversationDesc": "Save and end current conversation",
+    "@deviceOnboardingEndConversationDesc": {
+        "description": "Tutorial step 4 double-tap option description for End Conversation"
+    },
+    "deviceOnboardingMuteUnmute": "Mute / Unmute",
+    "@deviceOnboardingMuteUnmute": {
+        "description": "Tutorial step 4 double-tap option title — mute or unmute the microphone"
+    },
+    "deviceOnboardingMuteUnmuteDesc": "Toggle microphone on or off",
+    "@deviceOnboardingMuteUnmuteDesc": {
+        "description": "Tutorial step 4 double-tap option description for Mute/Unmute"
+    },
+    "deviceOnboardingStarConversation": "Star Ongoing Conversation",
+    "@deviceOnboardingStarConversation": {
+        "description": "Tutorial step 4 double-tap option title — star the ongoing conversation"
+    },
+    "deviceOnboardingStarConversationDesc": "Mark conversation as important",
+    "@deviceOnboardingStarConversationDesc": {
+        "description": "Tutorial step 4 double-tap option description for Star Conversation"
+    },
+    "deviceOnboardingSingleTapHint": "That was a single tap — try tapping twice quickly!",
+    "@deviceOnboardingSingleTapHint": {
+        "description": "Tutorial step 4 hint shown when the user single-taps instead of double-tapping"
+    },
+    "deviceOnboardingTryDoubleTap": "Try it now! Double tap your Omi",
+    "@deviceOnboardingTryDoubleTap": {
+        "description": "Tutorial step 4 prompt encouraging the user to double-tap the device"
+    },
+    "deviceOnboardingContinue": "Continue",
+    "@deviceOnboardingContinue": {
+        "description": "Onboarding tutorial primary button label to advance to the next step"
+    },
+    "deviceOnboardingFinish": "Finish",
+    "@deviceOnboardingFinish": {
+        "description": "Onboarding tutorial final button label to complete the tutorial"
     }
 }

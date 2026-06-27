@@ -9371,4 +9371,93 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Dijeda — audio tidak sedang direkam';
+
+  @override
+  String get deviceTutorial => 'Tutorial Perangkat';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Bicara ke Omi Anda';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Ucapkan beberapa kata dan lihat kata-katanya muncul secara langsung';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Bagus sekali!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Mulai bicara...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Ajukan Pertanyaan ke Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Tekan tombol sekali, ucapkan pertanyaan Anda, lalu tekan lagi setelah selesai';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Memproses pertanyaan Anda...';
+
+  @override
+  String get deviceOnboardingListening => 'Mendengarkan...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Matikan';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Nyalakan';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tahan tombol selama 3 detik';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tekan tombol untuk menyalakannya kembali';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tahan tombol dengan kuat hingga lampu mati';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Terhubung';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Terhubung!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Terputus';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Mematikan...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Sesuaikan Ketuk Dua Kali';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Akhiri Percakapan';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Simpan dan akhiri percakapan saat ini';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Bisukan / Aktifkan';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Aktifkan atau nonaktifkan mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Bintangi Percakapan Berlangsung';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Tandai percakapan sebagai penting';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Itu hanya satu ketukan — coba ketuk dua kali dengan cepat!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Coba sekarang! Ketuk Omi Anda dua kali';
+
+  @override
+  String get deviceOnboardingContinue => 'Lanjutkan';
+
+  @override
+  String get deviceOnboardingFinish => 'Selesai';
 }

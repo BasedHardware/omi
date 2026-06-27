@@ -110,6 +110,21 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains("harness changed"))
   }
 
+  func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("handle.readabilityHandler = { [weak self] handle in"))
+    // The implementation now uses a generation-guarded signature; match the current
+    // function name without coupling the test to the exact parameter list.
+    XCTAssertTrue(source.contains("func processStdoutData("))
+    XCTAssertFalse(source.contains("Task.detached { [weak self] in"))
+    XCTAssertFalse(source.contains("while !Task.isCancelled"))
+  }
+
   func testFailedRuntimeStartCleansUpLatchedRunningState() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -137,19 +152,33 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
   }
 
-  func testControlToolRequestsAreRequestScopedAndOwnerGuarded() throws {
+  func testAppSurfacesUseDirectControlToolOnly() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains(#""type": "control_tool""#))
+    XCTAssertFalse(source.contains("func requestScopedControlTool("))
+    XCTAssertFalse(source.contains(#""type": "control_tool""#))
+    XCTAssertTrue(source.contains("func directControlTool("))
     XCTAssertTrue(source.contains("activeControlRequests[requestKey]"))
-    XCTAssertTrue(source.contains(#"dict["ownerId"] = ownerId"#))
     XCTAssertTrue(source.contains("completeControlRequest(message)"))
     XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestKey)"))
     XCTAssertTrue(source.contains("controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))"))
+  }
+
+  func testDirectControlToolRequestsUseDedicatedSignedInOwnerEnvelope() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("func directControlTool("))
+    XCTAssertTrue(source.contains("Agent control requires a signed-in owner"))
+    XCTAssertTrue(source.contains(#""type": "direct_control_tool""#))
+    XCTAssertTrue(source.contains(#""ownerId": ownerId"#))
   }
 
   func testToolResultsEchoRequestScope() throws {

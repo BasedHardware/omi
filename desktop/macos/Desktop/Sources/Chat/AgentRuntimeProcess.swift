@@ -109,7 +109,7 @@ actor AgentRuntimeProcess {
   private var stdinPipe: Pipe?
   private var stdoutPipe: Pipe?
   private var stderrPipe: Pipe?
-  private var readTask: Task<Void, Never>?
+  private var stdoutLineBuffer = Data()
   private var isRunning = false
   private var processGeneration: UInt64 = 0
   private var lastExitWasOOM = false
@@ -234,12 +234,15 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func controlTool(
+  func directControlTool(
     clientId: String,
     harnessMode: String,
     name: String,
     input: [String: Any]
   ) async throws -> String {
+    guard let ownerId = currentOwnerId() else {
+      throw BridgeError.agentError("Agent control requires a signed-in owner")
+    }
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
 
     let requestId = UUID().uuidString
@@ -250,20 +253,18 @@ actor AgentRuntimeProcess {
         requestId: requestId,
         continuation: continuation
       )
-      var dict: [String: Any] = [
-        "type": "control_tool",
+      let dict: [String: Any] = [
+        "type": "direct_control_tool",
         "protocolVersion": 2,
         "requestId": requestId,
         "clientId": clientId,
         "name": name,
         "input": input,
+        "ownerId": ownerId,
       ]
-      if let ownerId = currentOwnerId() {
-        dict["ownerId"] = ownerId
-      }
       let sent = sendJson(dict)
       if !sent, let request = activeControlRequests.removeValue(forKey: requestKey) {
-        request.continuation.resume(throwing: BridgeError.agentError("Failed to send control tool request"))
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send direct control tool request"))
       }
     }
   }
@@ -392,8 +393,6 @@ actor AgentRuntimeProcess {
   private func startProcess(preferredHarnessMode: String) async throws {
     guard !isRunning else { return }
 
-    readTask?.cancel()
-    readTask = nil
     process = nil
     closePipes()
     lastExitWasOOM = false
@@ -537,8 +536,6 @@ actor AgentRuntimeProcess {
     if let currentProcess = process, currentProcess === failedProcess {
       process = nil
     }
-    readTask?.cancel()
-    readTask = nil
     closePipes()
     isRunning = false
     receivedInit = false
@@ -599,8 +596,6 @@ actor AgentRuntimeProcess {
       }
     }
 
-    readTask?.cancel()
-    readTask = nil
     process = nil
     closePipes()
     isRunning = false
@@ -611,32 +606,47 @@ actor AgentRuntimeProcess {
 
   private func startReadingStdout() {
     guard let stdoutPipe else { return }
+    let expectedGeneration = processGeneration
 
-    readTask = Task.detached { [weak self] in
-      let handle = stdoutPipe.fileHandleForReading
-      var buffer = Data()
+    let handle = stdoutPipe.fileHandleForReading
+    handle.readabilityHandler = { [weak self] handle in
+      let data = handle.availableData
+      guard !data.isEmpty else {
+        handle.readabilityHandler = nil
+        return
+      }
+      Task { [weak self] in
+        await self?.processStdoutData(data, generation: expectedGeneration)
+      }
+    }
+  }
 
-      while !Task.isCancelled {
-        let chunk = handle.availableData
-        if chunk.isEmpty { break }
-        buffer.append(chunk)
+  private func processStdoutData(_ data: Data, generation: UInt64) {
+    // Drop stdout chunks from a previous process generation. When the bridge is
+    // restarted or startup cleanup closes the pipe, a readability callback that
+    // already captured the old data can still fire after the new process has
+    // begun. Without this guard, stale init/result lines from the old Node
+    // process could mutate the new process state or resume the wrong continuation.
+    if generation != processGeneration {
+      log("AgentRuntimeProcess: dropping stale stdout chunk (gen=\(generation), current=\(processGeneration))")
+      return
+    }
+    stdoutLineBuffer.append(data)
 
-        while let newlineIndex = buffer.firstIndex(of: UInt8(ascii: "\n")) {
-          let lineData = buffer[buffer.startIndex..<newlineIndex]
-          buffer = Data(buffer[buffer.index(after: newlineIndex)...])
+    while let newlineIndex = stdoutLineBuffer.firstIndex(of: UInt8(ascii: "\n")) {
+      let lineData = stdoutLineBuffer[stdoutLineBuffer.startIndex..<newlineIndex]
+      stdoutLineBuffer = Data(stdoutLineBuffer[stdoutLineBuffer.index(after: newlineIndex)...])
 
-          guard let line = String(data: lineData, encoding: .utf8),
-            !line.trimmingCharacters(in: .whitespaces).isEmpty
-          else {
-            continue
-          }
+      guard let line = String(data: lineData, encoding: .utf8),
+        !line.trimmingCharacters(in: .whitespaces).isEmpty
+      else {
+        continue
+      }
 
-          if let message = RuntimeMessage.parse(line) {
-            await self?.handleMessage(message)
-          } else {
-            log("AgentRuntimeProcess: failed to parse message: \(line.prefix(200))")
-          }
-        }
+      if let message = RuntimeMessage.parse(line) {
+        handleMessage(message)
+      } else {
+        log("AgentRuntimeProcess: failed to parse message: \(line.prefix(200))")
       }
     }
   }
@@ -927,6 +937,13 @@ actor AgentRuntimeProcess {
     stdinPipe = nil
     stdoutPipe = nil
     stderrPipe = nil
+    stdoutLineBuffer.removeAll(keepingCapacity: false)
+    // Advance the generation so that any readability callback that already
+    // captured the old generation is rejected by the generation guard in
+    // processStdoutData(_:generation:) the moment it fires. Without this, a
+    // callback that read an old init/result line can run during the awaits in
+    // startProcess with the still-current generation and mutate stale state.
+    processGeneration &+= 1
   }
 
   static func defaultStateDirectory(

@@ -1022,6 +1022,14 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
   }
 });
 
+test("OMI_TOOLS: top-level schemas keep the object contract", () => {
+  for (const tool of OMI_TOOLS) {
+    const parameters = tool.parameters as any;
+    assert.equal(parameters.type, "object", `${tool.name} parameters must be object-shaped`);
+    assert.ok(parameters.properties, `${tool.name} parameters must declare properties`);
+  }
+});
+
 test("OMI_TOOLS: agent control schemas avoid top-level composite preconditions", () => {
   const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
   assert.equal((inspectArtifacts?.parameters as any).anyOf, undefined);

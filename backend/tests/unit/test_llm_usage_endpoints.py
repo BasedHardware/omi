@@ -164,6 +164,10 @@ cache_mod.get_memory_cache = MagicMock(return_value=None)
 users_mod = sys.modules["database.users"]
 users_mod.get_user_transcription_preferences = MagicMock()
 users_mod.set_user_transcription_preferences = MagicMock()
+# Export-service helpers are imported at module level by services.users.data_export,
+# which is eagerly loaded when routers.users imports services.users.
+users_mod.get_people = MagicMock(return_value=[])
+users_mod.get_user_profile = MagicMock(return_value={})
 users_mod.__all__ = []
 
 llm_usage_mod = _install_stub("database.llm_usage")

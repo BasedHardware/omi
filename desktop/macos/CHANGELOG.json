@@ -1,8 +1,72 @@
 {
   "unreleased": [
-    "Connect your AI: ChatGPT and Claude cloud setup now uses your selected/default browser instead of hard-coded Chrome, with guided macOS UI automation for one-click setup and broader Chromium browser recognition."
+    "Connect your AI: ChatGPT and Claude cloud setup now uses your selected/default browser instead of hard-coded Chrome, with guided macOS UI automation for one-click setup and broader Chromium browser recognition.",
+    "Fixed push-to-talk voice replies cutting off, restored Notch Mode chat row clicks, and aligned subagent back buttons with the chat row list"
   ],
   "releases": [
+    {
+      "version": "0.11.545",
+      "date": "2026-06-27",
+      "changes": [
+        "AI chat now shows actionable recovery cards for sign-in, timeouts, missing runtimes, interrupted replies, and empty results"
+      ]
+    },
+    {
+      "version": "0.11.544",
+      "date": "2026-06-27",
+      "changes": [
+        "Fixed agent chat and task execution failing with a \"cannot start a transaction within a transaction\" database error"
+      ]
+    },
+    {
+      "version": "0.11.543",
+      "date": "2026-06-27",
+      "changes": [
+        "Added Notch Mode for a MacBook notch-integrated floating bar with compact voice, chat, and agent controls",
+        "Fixed Notch Mode voice response audio and glow stability during streamed playback",
+        "Improved Notch Mode Ask Omi responsiveness by reducing main-thread animation work",
+        "Refined Notch Mode subagent indicators into direct and grouped glowing status orbs",
+        "Improved Notch Mode notch-safe layout measurement and subagent status refresh",
+        "Improved desktop agent session continuity across bridge restarts and control-tool ownership changes.",
+        "Improves update release safety checks",
+        "Smoothed the notch logo-to-dots animation so the Omi logo unfurls into the agent dots when chat opens and furls back when it closes",
+        "Made Notch Mode subagent chat independent from main chat content and reduced idle animation work",
+        "Added an Ask Omi chat power benchmark harness for repeatable CPU and memory sampling",
+        "Added compact status summaries to Notch Mode subagent rows",
+        "Made Notch Mode switch between subagent list and chat instead of stacking both",
+        "Made the Notch Mode Omi logo morph into settings on hover while revealing subagents, and added bottom spacing to the subagent list"
+      ]
+    },
+    {
+      "version": "0.11.542",
+      "date": "2026-06-26",
+      "changes": [
+        "Improved desktop startup stability by staging non-critical warmup work after the first usable window"
+      ]
+    },
+    {
+      "version": "0.11.541",
+      "date": "2026-06-26",
+      "changes": [
+        "Added PTT access to inspect and stop canonical Omi agent runs created from chat or other Omi surfaces"
+      ]
+    },
+    {
+      "version": "0.11.540",
+      "date": "2026-06-26",
+      "changes": [
+        "Improved desktop chat history persistence so session updates preserve existing metadata and large session deletes clean up all messages",
+        "Hermes connect now also adds a 'search Omi first' note to its system prompt, like OpenClaw",
+        "Cleaner Apps page (removed list borders, renamed Featured to Other) and dashboard polish (white + icons, subtle Connected labels, no purple)"
+      ]
+    },
+    {
+      "version": "0.11.539",
+      "date": "2026-06-26",
+      "changes": [
+        "Developer named bundles now start quiet \u2014 lazy permissions, no auto screen/audio capture \u2014 unless explicitly seeded eager"
+      ]
+    },
     {
       "version": "0.11.538",
       "date": "2026-06-26",

@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from utils.executors import db_executor, postprocess_executor
 from enum import Enum
 from typing import List, Optional
 
@@ -42,7 +41,6 @@ from dependencies import (
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
-from utils.apps import update_personas_async
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
@@ -311,10 +309,6 @@ def create_memory(
     # Save to database
     memories_db.create_memory(uid, memory_db.dict())
 
-    # Update personas asynchronously if visibility is public
-    if memory.visibility == 'public':
-        postprocess_executor.submit(update_personas_async, uid)
-
     return MemoryResponse(
         id=memory_db.id,
         content=memory_db.content,
@@ -387,10 +381,6 @@ def create_memories_batch(
             for mem in memory_dbs
         ],
     )
-
-    # Update personas if any memory is public
-    if has_public:
-        postprocess_executor.submit(update_personas_async, uid)
 
     # Prepare response
     created_memories = [

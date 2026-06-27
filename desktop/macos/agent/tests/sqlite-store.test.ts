@@ -166,7 +166,48 @@ describe("SqliteAgentStore", () => {
       surfaceKind: "main",
       defaultAdapterId: "acp",
     });
+    const replacementBinding = store.insertAdapterBinding({
+      sessionId: secondSession.sessionId,
+      adapterId: "acp",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "native-1",
+      resumeFidelity: "native",
+      status: "stale",
+    });
+    expect(replacementBinding.sessionId).toBe(secondSession.sessionId);
+    const nativeRows = store.allRows(
+      "SELECT session_id, status FROM adapter_bindings WHERE adapter_id = ? AND adapter_native_session_id = ? ORDER BY created_at_ms ASC",
+      ["acp", "native-1"],
+    );
+    expect(nativeRows.map((row) => row.status)).toEqual(["closed", "stale"]);
+
+    store.close();
+  });
+
+  it("keeps native binding replacement atomic when insert fails", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+    const existingBinding = store.insertAdapterBinding({
+      sessionId: session.sessionId,
+      adapterId: "acp",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "native-1",
+      adapterInstanceId: "worker-1",
+      resumeFidelity: "native",
+      status: "active",
+    });
+    const secondSession = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main",
+      defaultAdapterId: "acp",
+    });
+
     expect(() => store.insertAdapterBinding({
+      bindingId: existingBinding.bindingId,
       sessionId: secondSession.sessionId,
       adapterId: "acp",
       bindingGeneration: 1,
@@ -175,6 +216,10 @@ describe("SqliteAgentStore", () => {
       status: "stale",
     })).toThrow();
 
+    expect(store.getRow("SELECT status, adapter_instance_id FROM adapter_bindings WHERE binding_id = ?", [existingBinding.bindingId])).toMatchObject({
+      status: "active",
+      adapter_instance_id: "worker-1",
+    });
     store.close();
   });
 
@@ -204,6 +249,56 @@ describe("SqliteAgentStore", () => {
 
     expect(store.getRow("SELECT COUNT(*) AS count FROM runs").count).toBe(0);
     expect(store.getRow("SELECT COUNT(*) AS count FROM events").count).toBe(0);
+    store.close();
+  });
+
+  it("nests withTransaction safely when the runtime never reports isTransaction", () => {
+    // Reproduces the production failure: in the bundled agent runtime,
+    // DatabaseSync.isTransaction does not flip to true inside an open
+    // transaction, so a guard that trusts it cannot detect nesting. A real
+    // SQLite connection throws "cannot start a transaction within a
+    // transaction" on a nested BEGIN, so a nested withTransaction must reuse
+    // the outer transaction rather than issue a second BEGIN.
+    const execLog: string[] = [];
+    let open = false;
+    class NoIsTransactionDatabase {
+      readonly isTransaction = false; // never flips, like the bundled runtime
+      constructor(_path: string) {}
+      exec(sql: string): void {
+        const head = sql.trimStart().toUpperCase();
+        if (head.startsWith("BEGIN")) {
+          if (open) {
+            throw new Error("cannot start a transaction within a transaction");
+          }
+          open = true;
+          execLog.push("BEGIN");
+        } else if (head.startsWith("COMMIT")) {
+          open = false;
+          execLog.push("COMMIT");
+        } else if (head.startsWith("ROLLBACK")) {
+          open = false;
+          execLog.push("ROLLBACK");
+        }
+      }
+      prepare(_sql: string) {
+        return { run: () => {}, get: () => undefined, all: () => [] };
+      }
+      close(): void {}
+    }
+
+    const store = new SqliteAgentStore({
+      databasePath: ":memory:",
+      reconcileOnOpen: false,
+      databaseFactory: NoIsTransactionDatabase,
+    });
+
+    execLog.length = 0; // ignore BEGIN/COMMIT from constructor migrations
+
+    const result = store.withTransaction(() => store.withTransaction(() => "inner-result"));
+
+    expect(result).toBe("inner-result");
+    // Exactly one real transaction was opened — the nested call reused it.
+    expect(execLog).toEqual(["BEGIN", "COMMIT"]);
     store.close();
   });
 
