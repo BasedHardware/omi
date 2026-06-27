@@ -1015,6 +1015,22 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     }
 
+    func showAgentRowsFromConversation() {
+        guard !AgentPillsManager.shared.pills.isEmpty else {
+            closeAIConversation()
+            return
+        }
+
+        responseHeightCancellable?.cancel()
+        responseHeightCancellable = nil
+        cancelInputHeightObserver()
+
+        withAnimation(.spring(response: 0.22, dampingFraction: 0.9)) {
+            state.hideConversationSurface()
+        }
+        openNotchHoverMenuUntilExit()
+    }
+
     private func animateNotchReveal(from sourceSize: NSSize, to targetSize: NSSize, duration: TimeInterval) {
         let startWidth = max(Self.notchCompactSize.width, min(sourceSize.width, targetSize.width))
         let startHeight = max(Self.notchChromeHeight, min(sourceSize.height, targetSize.height))
@@ -1040,22 +1056,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard state.showingAIConversation else { return }
 
         if state.activeAgentChatPillID != nil {
-            // Use the same leaveAgentSurface() + observer reset path used by the
-            // Back button. Only nil-ing activeAgentChatPillID leaves
-            // conversationSurface as .agent(id) with the response-height observer
-            // still keyed to that agent, so the view falls through to the main
-            // response UI and subsequent height reports are ignored.
-            state.leaveAgentSurface()
-            // Mirror the Back button path: when leaveAgentSurface() lands on
-            // .mainInput (no prior Omi conversation), use the input-height resize
-            // so the panel shrinks to the normal Ask Omi size instead of staying
-            // at the oversized response height with a response-height observer.
-            if state.conversationSurface == .mainInput {
-                resizeForMainInputAfterAgentExit()
-            } else {
-                resizeForActiveAgentChatPublic(pillID: nil, animated: true)
-            }
-            focusInputField()
+            showAgentRowsFromConversation()
             return
         }
 
@@ -1732,12 +1733,7 @@ class FloatingControlBarManager {
     /// chat when dismissing a pill.)
     func leaveActiveAgentSurfaceFromPillDismiss() {
         guard let window else { return }
-        window.state.leaveAgentSurface()
-        if window.state.conversationSurface == .mainInput {
-            window.resizeForMainInputAfterAgentExit()
-        } else {
-            window.resizeForActiveAgentChatPublic(pillID: nil, animated: true)
-        }
+        window.showAgentRowsFromConversation()
     }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
@@ -2142,16 +2138,23 @@ class FloatingControlBarManager {
             return ["error": "floating_bar_window_unavailable"]
         }
         let start = ContinuousClock.now
-        window.state.leaveAgentSurface()
+        window.showAgentRowsFromConversation()
         guard wait else {
-            return ["triggered": "true", "active": window.state.activeAgentChatPillID?.uuidString ?? ""]
+            return [
+                "triggered": "true",
+                "active": window.state.activeAgentChatPillID?.uuidString ?? "",
+                "rowsOpen": window.state.isNotchHoverMenuVisible ? "true" : "false",
+            ]
         }
         let backMs = await waitForAutomationCondition {
             window.state.activeAgentChatPillID == nil
+                && !window.state.showingAIConversation
+                && window.state.isNotchHoverMenuVisible
         }
         return [
             "backMs": backMs ?? "timeout",
             "elapsedMs": start.duration(to: .now).millisecondsString,
+            "rowsOpen": window.state.isNotchHoverMenuVisible ? "true" : "false",
             "frame": NSStringFromRect(window.frame),
         ]
     }
@@ -3353,20 +3356,6 @@ extension FloatingControlBarWindow {
         state.resetMeasuredContentHeight(for: .mainResponse)
         beginMainResponseHeight(animated: animated)
         orderFrontRegardless()
-    }
-
-    /// Resize the window to the normal Ask Omi input height after exiting an
-    /// agent surface to `.mainInput`. Cancels the response-height observer and
-    /// installs the input-height observer so the panel sizes to the input view
-    /// instead of staying at the oversized response height.
-    func resizeForMainInputAfterAgentExit() {
-        responseHeightCancellable?.cancel()
-        responseHeightCancellable = nil
-        state.responseContentHeight = 0
-        state.inputViewHeight = inputPanelHeight
-        let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
-        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
-        setupInputHeightObserver()
     }
 
     /// Save the current center point so closeAIConversation can restore position.

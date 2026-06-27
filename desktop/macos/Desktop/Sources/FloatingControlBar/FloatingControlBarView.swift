@@ -169,7 +169,7 @@ struct FloatingControlBarView: View {
                         .allowsHitTesting(notchSwitcherProgress > 0.6)
 
                         notchAgentLogoHitTarget
-                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight)
                     }
                 }
                 .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
@@ -523,8 +523,8 @@ struct FloatingControlBarView: View {
                 AgentMainChatView(
                     pill: activeAgentChatPill,
                     manager: agentPills,
-                    onBackToOmi: {
-                        exitAgentSurface()
+                    onBackToAgentRows: {
+                        showAgentListFromConversation()
                     },
                     onEscape: onEscape,
                     onSpawnSibling: { siblingID in
@@ -633,21 +633,6 @@ struct FloatingControlBarView: View {
         state.agentSwitcherHovering = state.agentSwitcherPinned
     }
 
-    private func exitAgentSurface() {
-        state.leaveAgentSurface()
-        let barWindow = window as? FloatingControlBarWindow
-        // When backing out of an agent chat with no main Omi conversation,
-        // leaveAgentSurface() lands on .mainInput. The response-sizing helper
-        // would force at least response height and install a response-height
-        // observer, leaving an oversized blank input panel. Route to the input
-        // height path instead so the panel shrinks to the normal Ask Omi size.
-        if state.conversationSurface == .mainInput {
-            barWindow?.resizeForMainInputAfterAgentExit()
-        } else {
-            barWindow?.resizeForActiveAgentChatPublic(pillID: nil, animated: true)
-        }
-    }
-
     private func setNotchLogoHovering(_ hovering: Bool) {
         withAnimation(.spring(response: 0.18, dampingFraction: 0.74)) {
             notchLogoHovering = hovering
@@ -658,7 +643,7 @@ struct FloatingControlBarView: View {
     private func openAgentInChat(_ pill: AgentPill) {
         guard agentPills.pills.contains(where: { $0.id == pill.id }) else { return }
         if state.conversationSurface == .agent(pill.id) {
-            exitAgentSurface()
+            showAgentListFromConversation()
             return
         }
         agentPills.markViewed(pillID: pill.id)
@@ -676,16 +661,7 @@ struct FloatingControlBarView: View {
     }
 
     private func showAgentListFromConversation() {
-        guard !agentPills.pills.isEmpty else {
-            onCloseAI()
-            return
-        }
-        withAnimation(agentChatSwitchTransition) {
-            state.hideConversationSurface()
-        }
-        DispatchQueue.main.async {
-            (window as? FloatingControlBarWindow)?.openNotchHoverMenuUntilExit()
-        }
+        (window as? FloatingControlBarWindow)?.showAgentRowsFromConversation() ?? onCloseAI()
     }
 
     private func handleBarHover(_ hovering: Bool) {
@@ -1294,7 +1270,7 @@ private struct AgentMainChatView: View {
     @EnvironmentObject var state: FloatingControlBarState
     @ObservedObject var pill: AgentPill
     @ObservedObject var manager: AgentPillsManager
-    let onBackToOmi: () -> Void
+    let onBackToAgentRows: () -> Void
     let onEscape: () -> Void
     let onSpawnSibling: (UUID) -> Void
 
@@ -1390,7 +1366,7 @@ private struct AgentMainChatView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Button(action: onBackToOmi) {
+            Button(action: onBackToAgentRows) {
                 Image(systemName: "chevron.left")
                     .scaledFont(size: 13, weight: .semibold)
                     .foregroundColor(.white.opacity(0.82))
@@ -1398,7 +1374,7 @@ private struct AgentMainChatView: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help("Back to Omi chat")
+            .help("Back to chats")
 
             Text(pill.title)
                 .scaledFont(size: 13, weight: .bold)
@@ -1416,7 +1392,7 @@ private struct AgentMainChatView: View {
             if pill.status == .done {
                 Button {
                     manager.dismiss(pillID: pill.id)
-                    onBackToOmi()
+                    onBackToAgentRows()
                 } label: {
                     statusBadgeLabel
                 }

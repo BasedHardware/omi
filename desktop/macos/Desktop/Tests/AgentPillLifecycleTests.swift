@@ -38,6 +38,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
+    XCTAssertTrue(source.contains("let onBackToAgentRows: () -> Void"))
+    XCTAssertTrue(source.contains(".help(\"Back to chats\")"))
     XCTAssertTrue(source.contains("barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)"))
   }
 
@@ -96,6 +98,13 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(rowSource.contains("notchShortcutHint(\"Ask\""))
     XCTAssertTrue(rowSource.contains("notchShortcutHint(systemImage: \"mic.fill\""))
     XCTAssertFalse(rowSource.contains("notchShortcutHint(\"PTT\""))
+  }
+
+  func testNotchSettingsHitTargetDoesNotCoverChatRows() throws {
+    let source = try floatingControlBarViewSource()
+
+    XCTAssertTrue(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight)"))
+    XCTAssertFalse(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)"))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -171,7 +180,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("setAgentSwitcherHovering(hovering)"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherPinned"))
     XCTAssertFalse(source.contains("@State private var agentSwitcherHovering"))
-    XCTAssertTrue(source.contains("state.hideConversationSurface()"))
+    XCTAssertTrue(source.contains("showAgentRowsFromConversation()"))
     XCTAssertTrue(source.contains("Text(\"Omi Chat\")"))
     XCTAssertTrue(source.contains("barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
@@ -356,7 +365,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(playerSource.contains("@discardableResult\n  func enqueue(_ data: Data) -> Bool"))
     XCTAssertTrue(hubSource.contains("guard pcmPlayer?.enqueue(pcm24k) == true else"))
     XCTAssertTrue(hubSource.contains("keeping text fallback armed"))
-    XCTAssertTrue(hubSource.contains("audioReceivedThisTurn = true\n    responseGlowGate.markPlaybackActive()"))
+    XCTAssertTrue(hubSource.contains("audioReceivedThisTurn = true\n    realtimePlaybackActive = true\n    responseGlowGate.markPlaybackActive()"))
     XCTAssertFalse(hubSource.contains("audioReceivedThisTurn = true\n    // If PTT muted music/system output"))
   }
 
@@ -370,6 +379,21 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("if localSpeechActive || speech.isSpeaking {"))
     XCTAssertTrue(source.contains("speech.stopSpeaking(at: .immediate)\n      localSpeechActive = false\n    }"))
     XCTAssertFalse(source.contains("audioReceivedThisTurn = false\n    localSpeechActive = false\n    suppressAssistantOutputForCurrentTurn = false"))
+  }
+
+  func testRealtimeBargeInTracksLocalPlaybackNotOnlyServerTurn() throws {
+    let source = try realtimeHubControllerSource()
+
+    // Provider turn completion only means the server finished sending audio; the
+    // local AVAudioPlayerNode may still be draining queued PCM. Keep playback as
+    // an explicit owner so the next PTT is classified correctly and non-barge-in
+    // starts do not blindly stop the player.
+    XCTAssertTrue(source.contains("private var realtimePlaybackActive = false"))
+    XCTAssertTrue(source.contains("let bargeIn = responding || realtimePlaybackActive || localSpeechActive || speech.isSpeaking"))
+    XCTAssertTrue(source.contains("if bargeIn {\n      pcmPlayer?.stop()"))
+    XCTAssertTrue(source.contains("audioReceivedThisTurn = true\n    realtimePlaybackActive = true"))
+    XCTAssertTrue(source.contains("self?.realtimePlaybackActive = false"))
+    XCTAssertTrue(source.contains("server turn done; waiting for local playback to drain"))
   }
 
   func testSpeechSynthesizerDidCancelClearsGlow() throws {
@@ -391,12 +415,19 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)"))
   }
 
-  func testEscapeFromAgentUsesInputResizeWhenMainInput() throws {
-    let source = try floatingControlBarWindowSource()
+  func testBackFromAgentUsesSharedRowsPath() throws {
+    let viewSource = try floatingControlBarViewSource()
+    let windowSource = try floatingControlBarWindowSource()
 
-    // The Escape path must mirror the Back button: use input-height resize
-    // when leaveAgentSurface() lands on .mainInput, not the response-size helper.
-    XCTAssertTrue(source.contains("if state.conversationSurface == .mainInput {\n                resizeForMainInputAfterAgentExit()"))
+    // Both the Omi Chat header and subagent header should use the same window
+    // transition: close the conversation surface and reopen the Notch row list.
+    XCTAssertTrue(viewSource.contains("onBackToAgentRows: {\n                        showAgentListFromConversation()"))
+    XCTAssertTrue(viewSource.contains("private func showAgentListFromConversation() {\n        (window as? FloatingControlBarWindow)?.showAgentRowsFromConversation() ?? onCloseAI()\n    }"))
+    XCTAssertTrue(windowSource.contains("func showAgentRowsFromConversation()"))
+    XCTAssertTrue(windowSource.contains("state.hideConversationSurface()"))
+    XCTAssertTrue(windowSource.contains("openNotchHoverMenuUntilExit()"))
+    XCTAssertTrue(windowSource.contains("window.showAgentRowsFromConversation()"))
+    XCTAssertFalse(viewSource.contains("let onBackToOmi: () -> Void"))
   }
 
   func testPTTCollapsePreservesGlowPaddingOnLegacyDisplays() throws {
