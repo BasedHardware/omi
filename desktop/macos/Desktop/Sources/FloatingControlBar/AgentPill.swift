@@ -339,20 +339,25 @@ final class AgentPillsManager: ObservableObject {
         if questionStarters.contains(where: { trimmedLower.hasPrefix($0) }) {
             return nil
         }
-        // Negation guard (scoped): only treat as an explicit opt-out when the
-        // negation word directly governs an agent noun or spawn action — e.g.
-        // "don't run an agent", "no agent, just answer here", "without spawning
-        // a subagent". This avoids false suppression when "no"/"not"/"without"
-        // appear for unrelated reasons (e.g. "spawn an agent to run without
-        // errors"). (Cubic P1; supersedes the earlier unscoped Codex P2 guard.)
+        // Negation guard (fully scoped): only suppress spawn when a negation
+        // word appears in direct construction with BOTH a spawn action AND an
+        // agent noun — e.g. "don't spawn an agent", "no agent", "without a
+        // pill". Every pattern requires agent-noun proximity so unrelated
+        // negation words (e.g. "don't make me laugh, spawn an agent") do not
+        // false-suppress legitimate spawns. (Cubic P1 — tightens prior scoped
+        // guard.)
+        let agentNoun = #"(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)"#
+        let article = #"(?:a|an|any)\s+"#
         let negationOptOuts = [
-            // "don't spawn …", "do not create a pill", "don't run agents"
-            #"\b(?:don'?t|do not)\s+(?:spawn|start|launch|kick\s+off|create|make|run)\b"#,
+            // "don't spawn an agent", "do not create a pill", "don't run agents"
+            #"\b(?:don'?t|do not|never)\s+(?:spawn|start|launch|kick\s+off|create|make|run)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
             // "no agent", "not an agent", "no pills", "not a subagent"
-            #"\b(?:no|not)\s+(?:an?\s+)?(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#,
+            #"\b(?:no|not)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
             // "without spawning an agent", "without a pill",
             // "without creating subagents"
-            #"\bwithout\s+(?:(?:spawning|creating|making|starting|launching|running)\s+(?:an?\s+)?|an?\s+)?(?:sub\s*agents?|subagents?|background\s+agents?|floating\s+agents?|agents?|pills?)\b"#,
+            #"\bwithout\s+(?:(?:spawning|creating|making|starting|launching|running)\s+(?:"# + article + #")?|"# + article + #")?"# + agentNoun + #"\b"#,
+            // "not spawning an agent", "never creating pills"
+            #"\b(?:not|never)\s+(?:spawning|creating|making|starting|launching|running)\s+(?:"# + article + #")?"# + agentNoun + #"\b"#,
         ]
         if negationOptOuts.contains(where: { lower.range(of: $0, options: .regularExpression) != nil }) {
             return nil
@@ -628,6 +633,19 @@ final class AgentPillsManager: ObservableObject {
         runTasksByPill[pill.id]?.cancel()
         let runTask = Task { @MainActor [weak self, weak pill, weak provider] in
             guard let self, let pill, let provider else { return }
+            // If the provider is still streaming the previous turn, interrupt
+            // it first and wait for the guard to clear before starting the next
+            // agent turn. Otherwise the isSending guard returns nil and
+            // complete() marks the pill as failed. (Codex P2.)
+            if provider.isSending {
+                provider.stopAgent()
+                // stopAgent() has a 3s watchdog that force-releases isSending;
+                // poll until the guard clears (bounded to ~4s total).
+                for _ in 0..<80 {
+                    if !provider.isSending { break }
+                    try? await Task.sleep(nanoseconds: 50_000_000)
+                }
+            }
             let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
             let finalText = await provider.sendMessage(
                 text, model: pill.model,

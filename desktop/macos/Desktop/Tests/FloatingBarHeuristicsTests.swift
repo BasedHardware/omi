@@ -82,7 +82,7 @@ final class FloatingBarHeuristicsTests: XCTestCase {
     // MARK: - scoped negation guard (Cubic P1)
 
     func testNegationGuardDoesNotSuppressLegitimateSpawnRequests() {
-        // These contain "no"/"not"/"without" for unrelated reasons but are
+        // These contain "no"/"not"/"without"/"don't" for unrelated reasons but are
         // legitimate spawn requests — must NOT be suppressed by the negation guard.
         let legitimateSpawns = [
             "spawn an agent to run without errors",
@@ -90,6 +90,10 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             "launch a subagent to fix the not-found bug",
             "create a pill to clean up notes with no duplicates",
             "run an agent to remove items that are not pinned",
+            // Action verb after negation but NOT followed by an agent noun
+            "don't make me laugh, spawn an agent",
+            "not sure how to start a background agent",
+            "never mind, launch an agent anyway",
         ]
         for q in legitimateSpawns {
             XCTAssertTrue(
@@ -108,6 +112,10 @@ final class FloatingBarHeuristicsTests: XCTestCase {
             "without spawning a subagent",
             "without a pill",
             "don't run any agents",
+            // Gerund-based opt-outs
+            "not spawning an agent",
+            "never creating pills",
+            "without creating any agents",
         ]
         for q in optOuts {
             XCTAssertFalse(

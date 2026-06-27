@@ -2126,7 +2126,12 @@ class FloatingControlBarManager {
         // streaming subscription (chatCancellable) is still cancelled above so
         // late-arriving chunks cannot re-present the surface after the user
         // closed it. (Codex P2 — streaming reopens surface during playback.)
-        activeFloatingProvider()?.stopAgent()
+        // Only interrupt the provider when we are NOT preserving voice; stopping
+        // mid-stream would truncate the spoken answer before remaining chunks
+        // reach TTS. (Codex P2 — do not stop streaming when preserving voice.)
+        if !keepVoiceAlive {
+            activeFloatingProvider()?.stopAgent()
+        }
         if !keepVoiceAlive {
             FloatingBarVoicePlaybackService.shared.stop()
         }
