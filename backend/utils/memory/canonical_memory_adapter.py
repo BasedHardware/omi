@@ -43,6 +43,7 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
+from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
@@ -606,7 +607,18 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
         raise ValueError("canonical update requires non-empty content")
     now = datetime.now(timezone.utc)
     updated = item.model_copy(update={"content": trimmed, "updated_at": now, "user_asserted": True})
-    client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").set(updated.model_dump(mode="json"))
+    item_path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
+    client.document(item_path).set(updated.model_dump(mode="json"))
+    if (
+        updated.tier == MemoryLayer.long_term
+        and getattr(updated, "kg_extracted", False)
+        and resolve_memory_system(uid, db_client=client) == MemorySystem.CANONICAL
+    ):
+        invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
+        updated = updated.model_copy(update={"kg_extracted": False})
+        client.document(item_path).set({"kg_extracted": False, "updated_at": now}, merge=True)
+        if extract_kg_for_promoted_memory(uid, updated, db_client=client):
+            updated = updated.model_copy(update={"kg_extracted": True})
     sync_atom_keyword_index_for_item(updated, db_client=client)
     sync_canonical_memory_vector(updated)
     return updated
@@ -753,14 +765,19 @@ def delete_canonical_memory(uid: str, memory_id: str, *, db_client=None) -> None
     item = MemoryItem.model_validate(snapshot.to_dict() or {})
     if item.status == MemoryItemStatus.active:
         _tombstone_memory_item(uid, item, db_client=client, reason="canonical_memory_delete")
+        invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
 
 
 def delete_all_canonical_memories(uid: str, *, db_client=None) -> None:
     client = db_client if db_client is not None else default_db_client
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=client)
+    deleted_ids: List[str] = []
     for item in items:
         if item.status == MemoryItemStatus.active:
             _tombstone_memory_item(uid, item, db_client=client, reason="canonical_memory_delete_all")
+            deleted_ids.append(item.memory_id)
+    if deleted_ids:
+        invalidate_kg_for_memory_retraction(uid, deleted_ids, db_client=client)
 
 
 def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, Any]:
@@ -783,6 +800,7 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
         delete_pinecone_memory_vectors_by_id(vector_ids)
 
     keyword_deleted = purge_user_atom_keyword_index(uid)
+    kg_db.delete_knowledge_graph(uid)
 
     trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)
     account_generation = trusted.account_generation if trusted.read_error_reason is None else 1
