@@ -110,6 +110,15 @@ def consolidation_batch_cap() -> int:
         return consolidation_batch_threshold()
 
 
+def max_consolidation_batches_per_pass() -> int:
+    """Upper bound on LLM consolidation calls per maintenance pass (cost guard)."""
+    raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_MAX_BATCHES_PER_PASS", "10")
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return 10
+
+
 def candidates_per_item_limit() -> int:
     raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_CANDIDATES_PER_ITEM", str(DEFAULT_CANDIDATES_PER_ITEM))
     try:
@@ -384,7 +393,15 @@ def _consolidation_apply_decision(decision: ConsolidationAgentDecision) -> str:
 
 
 class ConsolidationApplySkipped(Exception):
-    """Agent decision referenced a missing or inactive memory/evidence doc."""
+    """Agent decision referenced a missing or inactive memory/evidence doc before any mutation."""
+
+    def __init__(self, reason: str):
+        self.reason = reason
+        super().__init__(reason)
+
+
+class ConsolidationPartialApply(Exception):
+    """Survivor patch committed but a supersede sub-step failed — must retry without advancing."""
 
     def __init__(self, reason: str):
         self.reason = reason
@@ -394,15 +411,17 @@ class ConsolidationApplySkipped(Exception):
 def _should_advance_consolidation_watermark(
     agent_batch: ConsolidationAgentBatch,
     *,
-    decisions_applied: int,
+    watermark_blocked: bool = False,
 ) -> bool:
-    """Advance on any clean agent completion; fail-closed only on parse/invoke failures.
+    """Advance on clean agent completion; fail-closed on parse/invoke or partial apply.
 
     Clean runs include zero-action batches (``no_changes``) and passes that skipped
-    hallucinated references — advancing prevents hourly re-fire on the daily-elapsed path.
-    ``parse_failed:*`` means unusable agent output and must retry without advancing.
+    hallucinated references before mutation — advancing prevents hourly re-fire on the
+    daily-elapsed path. ``parse_failed:*`` means unusable agent output and must retry.
+    ``watermark_blocked`` covers partial survivor+supersede applies that need retry.
     """
-    del decisions_applied  # retained for call-site clarity; semantics are batch-level
+    if watermark_blocked:
+        return False
     if agent_batch.reasoning.startswith("parse_failed:"):
         return False
     return True
@@ -524,66 +543,6 @@ def _apply_superseded_item(
     purge_stale_review_conflicts_for_memories(uid, [memory_id], reason="memory_superseded")
 
 
-def _apply_corroboration_bump(
-    uid: str,
-    *,
-    item: MemoryItem,
-    control: MemoryControlState,
-    run_id: str,
-    now: datetime,
-    db_client,
-) -> None:
-    current_count = getattr(item, "corroboration_count", 0) or 0
-    idempotency_key = deterministic_contract_id(
-        "canonical-consolidation-corroborate",
-        {"uid": uid, "memory_id": item.memory_id, "count": current_count + 1},
-    )
-    evidence_ids = [ev.evidence_id for ev in item.evidence]
-    operation = MemoryOperation.new(
-        uid=uid,
-        operation_type=MemoryOperationType.long_term_apply,
-        source_packet_id=f"consolidation_corroborate_{run_id}",
-        target_memory_id=item.memory_id,
-        evidence_ids=evidence_ids,
-        logical_payload={
-            "decision": DurablePatchDecision.update.value,
-            "target_memory_id": item.memory_id,
-            "result_status": LifecycleState.active.value,
-            "supersedes": [],
-        },
-        account_generation=control.account_generation,
-        source_generation=control.source_generation,
-        observed_head_commit_id=control.head_commit_id,
-    )
-    op_path = f"{MemoryCollections(uid=uid).memory_operations}/{operation.operation_id}"
-    op_ref = db_client.document(op_path)
-    if not op_ref.get().exists:
-        op_ref.set(operation.model_dump(mode="json"))
-
-    patch_payload = {
-        "patch_id": f"patch_corr_{idempotency_key[:24]}",
-        "packet_id": f"consolidation_{run_id}",
-        "run_id": run_id,
-        "observed_head_commit_id": control.head_commit_id,
-        "idempotency_key": idempotency_key,
-        "decision": DurablePatchDecision.update.value,
-        "result_status": LifecycleState.active.value,
-        "target_memory_id": item.memory_id,
-        "memory_text": item.content,
-        "evidence_ids": evidence_ids,
-        "corroboration_count": current_count + 1,
-        "last_corroborated_at": now.isoformat(),
-    }
-    result = apply_long_term_patch_firestore(
-        uid=uid,
-        operation_id=operation.operation_id,
-        patch_payload=patch_payload,
-        db_client=db_client,
-    )
-    if result.status not in {ApplyStatus.committed, ApplyStatus.idempotent_skip}:
-        raise RuntimeError(f"corroboration bump failed for {item.memory_id}: {result.status}")
-
-
 def _escalate_to_review_queue(
     uid: str,
     *,
@@ -640,6 +599,22 @@ def _validate_consolidation_survivor(survivor: Optional[MemoryItem], *, memory_i
         raise ConsolidationApplySkipped(f"survivor memory is not processed: {memory_id}")
 
 
+def _validate_supersede_targets(
+    uid: str,
+    *,
+    supersedes: List[str],
+    survivor_memory_id: str,
+    pending_by_id: Dict[str, MemoryItem],
+    db_client,
+) -> None:
+    """Fail-closed before survivor mutation when any supersede target is missing/inactive."""
+    for memory_id in supersedes:
+        if memory_id == survivor_memory_id:
+            continue
+        item = _load_survivor_item(uid, memory_id, pending_by_id=pending_by_id, db_client=db_client)
+        _validate_consolidation_survivor(item, memory_id=memory_id)
+
+
 def apply_consolidation_decision(
     uid: str,
     *,
@@ -651,6 +626,8 @@ def apply_consolidation_decision(
     db_client,
 ) -> List[str]:
     """Apply one agent decision via durable patch apply + supersede side effects."""
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+        raise ConsolidationApplySkipped("not_canonical_cohort")
     if decision.decision == "review" or decision.review_required:
         survivor = pending_by_id.get(decision.survivor_memory_id)
         if survivor is not None:
@@ -669,6 +646,13 @@ def apply_consolidation_decision(
         db_client=db_client,
     )
     _validate_consolidation_survivor(survivor, memory_id=decision.survivor_memory_id)
+    _validate_supersede_targets(
+        uid,
+        supersedes=decision.supersedes,
+        survivor_memory_id=decision.survivor_memory_id,
+        pending_by_id=pending_by_id,
+        db_client=db_client,
+    )
     evidence_ids = _dedupe_evidence_ids(
         *(decision.evidence_ids or []),
         *([ev.evidence_id for ev in survivor.evidence] if survivor else []),
@@ -743,14 +727,26 @@ def apply_consolidation_decision(
     for superseded_id in decision.supersedes:
         if superseded_id == decision.survivor_memory_id:
             continue
-        _apply_superseded_item(
-            uid,
-            memory_id=superseded_id,
-            superseded_by=decision.survivor_memory_id,
-            control=control,
-            run_id=run_id,
-            db_client=db_client,
-        )
+        try:
+            _apply_superseded_item(
+                uid,
+                memory_id=superseded_id,
+                superseded_by=decision.survivor_memory_id,
+                control=control,
+                run_id=run_id,
+                db_client=db_client,
+            )
+        except ConsolidationApplySkipped as exc:
+            # Survivor already committed — partial apply must retry; do not advance watermark.
+            raise ConsolidationPartialApply(
+                f"partial apply: survivor {decision.survivor_memory_id} committed; "
+                f"supersede {superseded_id} skipped: {exc}"
+            ) from exc
+        except RuntimeError as exc:
+            raise ConsolidationPartialApply(
+                f"partial apply: survivor {decision.survivor_memory_id} committed; "
+                f"supersede {superseded_id} failed: {exc}"
+            ) from exc
         applied.append(superseded_id)
         control = _read_control_state(uid, db_client=db_client)
     return applied
@@ -764,9 +760,12 @@ class ConsolidationReport:
     pending_count: int = 0
     decisions_applied: int = 0
     decisions_skipped: int = 0
+    decisions_partial: int = 0
+    batched_memory_ids: List[str] = field(default_factory=list)
     superseded_memory_ids: List[str] = field(default_factory=list)
     review_escalations: int = 0
     last_consolidation_run_at: Optional[datetime] = None
+    watermark_blocked: bool = False
 
 
 def run_canonical_consolidation(
@@ -813,48 +812,82 @@ def run_canonical_consolidation(
         return report
 
     batch_cap = consolidation_batch_cap()
-    pending_batch = pending[:batch_cap]
+    max_batches = max_consolidation_batches_per_pass()
+    batched_ids: List[str] = []
+    watermark_blocked = False
+    last_agent_batch: Optional[ConsolidationAgentBatch] = None
+    offset = 0
+    batches_run = 0
 
-    context = gather_consolidation_candidates(uid, pending_batch, db_client=client)
-    agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
-    pending_by_id = {item.memory_id: item for item in pending_batch}
+    while offset < len(pending) and batches_run < max_batches:
+        pending_batch = pending[offset : offset + batch_cap]
+        if not pending_batch:
+            break
 
-    for decision in agent_batch.decisions:
-        if decision.decision == "review" or decision.review_required:
-            survivor = pending_by_id.get(decision.survivor_memory_id)
-            if survivor is not None:
-                _escalate_to_review_queue(uid, decision=decision, survivor=survivor, db_client=client)
-                report.review_escalations += 1
-            continue
-        control = _read_control_state(uid, db_client=client)
-        try:
-            applied_ids = apply_consolidation_decision(
-                uid,
-                decision=decision,
-                pending_by_id=pending_by_id,
-                control=control,
-                run_id=run_id,
-                now=current_time,
-                db_client=client,
-            )
-        except (ConsolidationApplySkipped, MissingMemoryDocument) as exc:
-            report.decisions_skipped += 1
-            logger.warning(
-                "consolidation_decision_skipped uid=%s survivor=%s reason=%s",
-                uid,
-                sanitize_pii(decision.survivor_memory_id),
-                sanitize_pii(str(exc)),
-            )
-            continue
-        if applied_ids:
-            report.decisions_applied += 1
-            for memory_id in applied_ids:
-                if memory_id in decision.supersedes:
-                    report.superseded_memory_ids.append(memory_id)
+        context = gather_consolidation_candidates(uid, pending_batch, db_client=client)
+        agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
+        last_agent_batch = agent_batch
+        pending_by_id = {item.memory_id: item for item in pending_batch}
 
-    # Skipped hallucinated refs still advance: agent output was usable; retrying the same
-    # batch would reproduce the same bad decision. Only parse_failed blocks advancement.
-    if _should_advance_consolidation_watermark(agent_batch, decisions_applied=report.decisions_applied):
+        if agent_batch.reasoning.startswith("parse_failed:"):
+            watermark_blocked = True
+            break
+
+        for decision in agent_batch.decisions:
+            if decision.decision == "review" or decision.review_required:
+                survivor = pending_by_id.get(decision.survivor_memory_id)
+                if survivor is not None:
+                    _escalate_to_review_queue(uid, decision=decision, survivor=survivor, db_client=client)
+                    report.review_escalations += 1
+                continue
+            control = _read_control_state(uid, db_client=client)
+            try:
+                applied_ids = apply_consolidation_decision(
+                    uid,
+                    decision=decision,
+                    pending_by_id=pending_by_id,
+                    control=control,
+                    run_id=run_id,
+                    now=current_time,
+                    db_client=client,
+                )
+            except ConsolidationPartialApply as exc:
+                report.decisions_partial += 1
+                watermark_blocked = True
+                logger.warning(
+                    "consolidation_decision_partial uid=%s survivor=%s reason=%s",
+                    uid,
+                    sanitize_pii(decision.survivor_memory_id),
+                    sanitize_pii(str(exc)),
+                )
+                continue
+            except (ConsolidationApplySkipped, MissingMemoryDocument) as exc:
+                report.decisions_skipped += 1
+                logger.warning(
+                    "consolidation_decision_skipped uid=%s survivor=%s reason=%s",
+                    uid,
+                    sanitize_pii(decision.survivor_memory_id),
+                    sanitize_pii(str(exc)),
+                )
+                continue
+            if applied_ids:
+                report.decisions_applied += 1
+                for memory_id in applied_ids:
+                    if memory_id in decision.supersedes:
+                        report.superseded_memory_ids.append(memory_id)
+
+        batched_ids.extend(item.memory_id for item in pending_batch)
+        offset += batch_cap
+        batches_run += 1
+
+    report.batched_memory_ids = list(dict.fromkeys(batched_ids))
+    report.watermark_blocked = watermark_blocked
+
+    # Skipped hallucinated refs still advance when no partial/parse failure: agent output was usable;
+    # retrying the same batch would reproduce the same bad decision. parse_failed and partial apply block.
+    if last_agent_batch is not None and _should_advance_consolidation_watermark(
+        last_agent_batch, watermark_blocked=watermark_blocked
+    ):
         updated_control = _read_control_state(uid, db_client=client).model_copy(
             update={"last_consolidation_run_at": current_time, "updated_at": current_time}
         )
