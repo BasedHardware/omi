@@ -38,8 +38,10 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert body['model'] == LANE_ID
     assert 'selected_provider' not in body
     assert 'selected_route_artifact_id' not in body
-    assert provider.calls[0].model == 'gpt-4.1-mini'
-    assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
+    # The checked-in active route is in shadow rollout (percent 0), so live
+    # traffic is served by the last-known-good route (gpt-4o-mini).
+    assert provider.calls[0].model == 'gpt-4o-mini'
+    assert provider.calls[0].request['model'] == 'gpt-4o-mini'
     assert provider.calls[0].request['temperature'] == 0
     assert provider.calls[0].request['max_completion_tokens'] == 64
 

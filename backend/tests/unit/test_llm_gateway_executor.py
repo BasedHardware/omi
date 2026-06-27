@@ -14,7 +14,7 @@ from llm_gateway.gateway.errors import (
 from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
-from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
+from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutPolicy, RolloutStage
 
 LANE_ID = 'omi:auto:chat-structured'
 ACTIVE_ROUTE = 'route.chat_structured.2026_06_27.001'
@@ -47,8 +47,6 @@ async def test_executor_success_uses_active_primary_and_exposes_lane_model():
 
 @pytest.mark.asyncio
 async def test_executor_retries_provider_up_to_max_attempts_before_fallback():
-    """retry.max_attempts is honored: transient failures are retried before
-    falling through to the next provider."""
     fallback_ref = ProviderRef(provider='openai', model='gpt-4o-mini')
     config = config_with_active_route(active_route_with_fallbacks([fallback_ref]))
     # Override retry to 3 attempts on the active route
@@ -279,6 +277,83 @@ async def test_raw_byok_key_is_not_in_provider_error_repr_or_dump():
     assert raw_key not in str(provider.calls[0].request)
 
 
+@pytest.mark.asyncio
+async def test_shadow_active_route_serves_lkg_not_active():
+    """When the active route is in shadow rollout (percent 0), traffic should
+    be served by the last-known-good route, not the shadow candidate."""
+    # Keep the checked-in shadow rollout on the active route
+    shadow_route = active_route_with_fallbacks([]).model_copy(
+        update={'rollout': RolloutPolicy(stage=RolloutStage.SHADOW, percent=0)}
+    )
+    config = config_with_active_route(shadow_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+
+    # Provider should be called with the LKG model (gpt-4o-mini), not the
+    # active route's primary (gpt-4.1-mini).
+    provider = FakeChatCompletionProvider(
+        [fake_success_response(resolved.last_known_good_route.primary, content='{"answer":"lkg"}')]
+    )
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert result.selected_route_artifact_id == LKG_ROUTE
+    assert result.selected_model == 'gpt-4o-mini'
+    assert result.used_lkg
+    assert provider.calls[0].request['model'] == 'gpt-4o-mini'
+
+
+@pytest.mark.asyncio
+async def test_disabled_active_route_serves_lkg_not_active():
+    """When the active route is disabled rollout, traffic should fall back to
+    the last-known-good route."""
+    disabled_route = active_route_with_fallbacks([]).model_copy(
+        update={'rollout': RolloutPolicy(stage=RolloutStage.DISABLED, percent=0)}
+    )
+    config = config_with_active_route(disabled_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+
+    provider = FakeChatCompletionProvider(
+        [fake_success_response(resolved.last_known_good_route.primary, content='{"answer":"lkg"}')]
+    )
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert result.selected_route_artifact_id == LKG_ROUTE
+    assert result.selected_model == 'gpt-4o-mini'
+    assert result.used_lkg
+
+
+@pytest.mark.asyncio
+async def test_canary_active_route_with_percent_zero_serves_lkg():
+    """A canary route with percent 0 should not serve live traffic."""
+    canary_route = active_route_with_fallbacks([]).model_copy(
+        update={'rollout': RolloutPolicy(stage=RolloutStage.CANARY, percent=0)}
+    )
+    config = config_with_active_route(canary_route)
+    resolved = resolve_chat_completion_route(config, valid_request())
+
+    provider = FakeChatCompletionProvider(
+        [fake_success_response(resolved.last_known_good_route.primary, content='{"answer":"lkg"}')]
+    )
+
+    result = await execute_chat_completion(
+        resolved,
+        omi_credentials(),
+        ProviderRegistry({'openai': provider}),
+    )
+
+    assert result.selected_route_artifact_id == LKG_ROUTE
+    assert result.used_lkg
+
+
 def valid_request(**overrides):
     request = {
         'model': LANE_ID,
@@ -306,7 +381,12 @@ def omi_credentials():
 
 def active_route_with_fallbacks(fallbacks: list[ProviderRef]):
     active_route = load_gateway_config(prod_mode=True).route_artifacts[ACTIVE_ROUTE]
-    return active_route.model_copy(update={'fallbacks': fallbacks})
+    return active_route.model_copy(update={'fallbacks': fallbacks, **_active_rollout_kwargs(active_route)})
+
+
+def _active_rollout_kwargs(active_route):
+    """Return model_copy update dict to promote a route to serving rollout."""
+    return {'rollout': RolloutPolicy(stage=RolloutStage.ACTIVE, percent=100)}
 
 
 def config_with_active_route(active_route):

@@ -14,7 +14,7 @@ from llm_gateway.gateway.errors import (
 )
 from llm_gateway.gateway.providers import ChatCompletionProvider, ProviderFailure
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
-from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RouteArtifact
+from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutStage, RouteArtifact
 
 
 @dataclass(frozen=True)
@@ -48,22 +48,34 @@ async def execute_chat_completion(
     credential_context: CredentialContext,
     provider_registry: ProviderRegistry,
 ) -> ExecutorResult:
-    _validate_credential_mode(resolved_route.active_route, credential_context)
+    serving_route = _select_serving_route(resolved_route)
+    serving_is_lkg = serving_route is resolved_route.last_known_good_route
+    _validate_credential_mode(serving_route, credential_context)
 
     first_failure: FailureClass | None = None
     last_error: GatewayError | None = None
     try:
         return await _execute_route(
             resolved_route,
-            resolved_route.active_route,
+            serving_route,
             credential_context,
             provider_registry,
-            is_lkg=False,
+            is_lkg=serving_is_lkg,
             fallback_reason=None,
         )
     except GatewayError as exc:
         first_failure = exc.failure_class
         last_error = exc
+
+    # When the active route is in shadow/disabled rollout the LKG is already
+    # the serving route — there is no separate LKG fallback to try.
+    if serving_is_lkg:
+        if last_error is not None:
+            raise last_error
+        raise GatewayProviderFailureError(
+            'provider request failed',
+            failure_class=FailureClass.INVALID_CONFIG,
+        )
 
     if first_failure is not None and select_lkg_route_for_failure(resolved_route, first_failure) is not None:
         try:
@@ -84,6 +96,24 @@ async def execute_chat_completion(
         'provider request failed',
         failure_class=FailureClass.INVALID_CONFIG,
     )
+
+
+def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
+    """Return the route that should receive live traffic.
+
+    When the active route is in shadow or disabled rollout, traffic falls
+    back to the last-known-good route until the active route is promoted.
+    """
+    if _is_route_eligible_to_serve(resolved_route.active_route):
+        return resolved_route.active_route
+    return resolved_route.last_known_good_route
+
+
+def _is_route_eligible_to_serve(route: RouteArtifact) -> bool:
+    """Whether a route should receive live traffic based on rollout stage."""
+    if route.rollout.stage in (RolloutStage.SHADOW, RolloutStage.DISABLED):
+        return False
+    return route.rollout.percent > 0
 
 
 async def _execute_route(
