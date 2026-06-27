@@ -967,6 +967,16 @@ def app_can_create_conversation(app: dict) -> bool:
     return app_has_action(app, 'create_conversation')
 
 
+def app_can_persona_chat(app: dict) -> bool:
+    """Check if an app can invoke persona chat on behalf of the user.
+
+    Used by /v2/integrations/{app_id}/user/persona-chat — gates the
+    endpoint so only apps that opt in (via external_integration.actions
+    containing {'action': 'persona_chat'}) can drive the user's persona.
+    """
+    return app_has_action(app, 'persona_chat')
+
+
 def is_user_app_enabled(uid: str, app_id: str) -> bool:
     """Check if a specific app is enabled for the user based on Redis cache."""
     user_enabled_apps = set(get_enabled_apps(uid))

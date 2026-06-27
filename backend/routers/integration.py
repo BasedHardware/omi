@@ -5,6 +5,7 @@ from typing import Optional, List, Tuple, Union
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
 
 import database.apps as apps_db
 import database.conversations as conversations_db
@@ -31,6 +32,7 @@ from utils.conversations.process_conversation import process_conversation
 from utils.conversations.search import search_conversations
 from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import run_blocking, db_executor, postprocess_executor, critical_executor
+from utils.retrieval.graph import execute_chat_stream
 import logging
 
 logger = logging.getLogger(__name__)
@@ -718,3 +720,72 @@ def get_tasks_via_integration(
 
     response = integration_models.TasksResponse(tasks=task_items)
     return response.dict(exclude_none=True)
+
+
+# ---------------------------------------------------------------------------
+# Persona chat (T-001): single-turn persona chat driven by a 3rd-party
+# integration (e.g. the AI clone plugins — Telegram/WhatsApp/iMessage).
+# Auth is by app API key (`omi_dev_...`), NOT Firebase JWT — the bridge
+# plugin stores the key on the user's machine during setup.
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    '/v2/integrations/{app_id}/user/persona-chat',
+    tags=['integration', 'persona'],
+)
+async def persona_chat_via_integration(
+    request: Request,
+    app_id: str,
+    body: integration_models.PersonaChatRequest,
+    uid: str,
+    authorization: Optional[str] = Header(None),
+):
+    # Auth — app API key in Authorization: Bearer header.
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'")
+
+    api_key = authorization.replace('Bearer ', '')
+    if not await run_blocking(critical_executor, verify_api_key, app_id, api_key):
+        raise HTTPException(status_code=403, detail="Invalid integration API key")
+
+    # Rate limit — same per-(app, user) ceiling as conversations endpoint.
+    await run_blocking(critical_executor, check_rate_limit_inline, f"{app_id}:{uid}:persona", "integration:persona")
+
+    # App lookup + enabled-for-user check.
+    app = await run_blocking(db_executor, apps_db.get_app_by_id_db, app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="App not found")
+
+    enabled_plugins = await run_blocking(db_executor, redis_db.get_enabled_apps, uid)
+    if app_id not in enabled_plugins:
+        raise HTTPException(status_code=403, detail="App is not enabled for this user")
+
+    # Capability gate — only apps that opt in (external_integration.actions
+    # contains {"action": "persona_chat"}) can drive the user's persona.
+    if not apps_utils.app_can_persona_chat(app):
+        raise HTTPException(status_code=403, detail="App does not have persona_chat capability")
+
+    # Build a single HumanMessage and stream the persona reply via the
+    # existing execute_chat_stream (which dispatches to the persona handler
+    # when app.is_a_persona()). The same generator the chat UI uses.
+    from models.chat import Message, MessageSender, MessageType
+
+    messages = [
+        Message(
+            id="integration-persona-chat",
+            created_at=datetime.now(timezone.utc),
+            sender=MessageSender.human,
+            text=body.text,
+            type=MessageType.text,
+            app_id=app_id,
+        )
+    ]
+
+    async def _stream():
+        async for chunk in execute_chat_stream(uid, messages, app=app):
+            if chunk is None:
+                continue
+            yield chunk
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
