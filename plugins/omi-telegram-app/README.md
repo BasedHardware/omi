@@ -35,6 +35,12 @@ Self-hosted FastAPI service. Receives Telegram webhook updates, calls the Omi pe
 
 ## Tests
 
+The async tests in this plugin require `pytest-asyncio`. Install both production and dev deps first:
+
 ```bash
-cd plugins/omi-telegram-app && python -m pytest test/ -v
+cd plugins/omi-telegram-app
+pip install -r requirements.txt -r requirements-dev.txt
+python -m pytest test/ -v
 ```
+
+The shared client tests (`plugins/_shared/test/`) are separate; see `plugins/_shared/README.md` for their test instructions.

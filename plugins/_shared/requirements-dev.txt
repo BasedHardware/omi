@@ -1,0 +1,23 @@
+# Test/dev dependencies for the shared AI-clone client code.
+#
+# Used by test_persona_client.py and test_contract.py. The async tests in
+# test_persona_client.py require pytest-asyncio (configured with explicit
+# `@pytest.mark.asyncio` decorators on each test; no global `asyncio_mode`
+# config is required).
+#
+# Install for development:
+#   pip install -r requirements-dev.txt
+#   pytest plugins/_shared/test/ -v
+#
+# Note: this file lists BOTH the runtime deps (httpx, httpx-sse) used by the
+# module under test AND the test framework (pytest, pytest-asyncio). The
+# runtime deps are duplicated from the consuming plugin's requirements.txt
+# so the shared test command is self-contained. If you also want to run
+# the shared tests from inside a consuming plugin (e.g.
+# plugins/omi-telegram-app), that plugin's own requirements-dev.txt covers
+# the same ground.
+
+httpx>=0.27
+httpx-sse>=0.4
+pytest>=8.0
+pytest-asyncio>=0.23

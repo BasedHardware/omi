@@ -26,6 +26,17 @@ Code shared by the AI Clone plugins (Telegram, WhatsApp, iMessage).
 - `test/test_persona_client.py` — 13 unit tests (success, SSE parsing, errors, uid-param contract).
 - `test/test_contract.py` — 4 tests pinning the URL and query-param contract with the backend route.
 
+## Running the tests
+
+The async tests (`test_persona_client.py`, `test_contract.py`) require `pytest-asyncio` and the module's runtime deps (`httpx`, `httpx-sse`). Install the dev requirements (which list both) and run:
+
+```bash
+pip install -r requirements-dev.txt
+pytest plugins/_shared/test/ -v
+```
+
+The plugin that consumes this client (`plugins/omi-telegram-app/`) has its own `requirements-dev.txt` — run its tests from the plugin dir.
+
 ## Usage from a plugin
 
 ```python
