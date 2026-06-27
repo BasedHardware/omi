@@ -29,11 +29,17 @@ export async function fetchGmail(): Promise<GmailItem[]> {
   const ids = (list.messages ?? []).map((m) => m.id)
   const items: GmailItem[] = []
   for (const id of ids) {
-    const msg = await authedJson<GmailMessageJson>(
-      `${GMAIL_BASE}/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`
-    )
-    const item = mapGmailMessage(msg)
-    if (item) items.push(item)
+    try {
+      const msg = await authedJson<GmailMessageJson>(
+        `${GMAIL_BASE}/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`
+      )
+      const item = mapGmailMessage(msg)
+      if (item) items.push(item)
+    } catch {
+      // One message failing (rate limit, or deleted between the list and the get)
+      // should not discard the whole batch — skip it and keep the rest.
+      continue
+    }
   }
   return items
 }
