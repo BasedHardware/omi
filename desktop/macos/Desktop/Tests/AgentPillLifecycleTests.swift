@@ -283,13 +283,37 @@ final class AgentPillLifecycleTests: XCTestCase {
   }
 
   func testFloatingAgentHandoffExcludesQuestionStarters() throws {
-    let source = try agentPillSource()
-
     // Informational questions that mention agents + action words must not be
-    // treated as explicit spawn requests.
-    XCTAssertTrue(source.contains("questionStarters"))
-    XCTAssertTrue(source.contains("\"how do i\""))
-    XCTAssertTrue(source.contains("trimmedLower.hasPrefix"))
+    // treated as explicit spawn requests.  Call the real handoff matcher so the
+    // test verifies behavior, not just source-string presence.
+    let questionsThatContainAgentAndActionWords = [
+      "How do I start a background agent?",
+      "How do you spawn a subagent?",
+      "What is the floating agent feature?",
+      "Can you explain how to launch agents?",
+      "Why does the agent run?",
+      "Are agents able to start tasks?",
+      "Do agents create pills automatically?",
+      "Tell me about starting a subagent",
+    ]
+    for question in questionsThatContainAgentAndActionWords {
+      XCTAssertNil(
+        AgentPillsManager.floatingAgentHandoff(for: question),
+        "Expected nil handoff for informational question: \(question)")
+    }
+
+    // Genuine spawn requests must still produce a handoff.
+    let genuineRequests = [
+      "Spawn a background agent to summarize my notes",
+      "Start a subagent that tracks my calendar",
+      "Launch a floating agent to research X",
+      "Run an agent to clean up my inbox",
+    ]
+    for request in genuineRequests {
+      XCTAssertNotNil(
+        AgentPillsManager.floatingAgentHandoff(for: request),
+        "Expected non-nil handoff for genuine request: \(request)")
+    }
   }
 
   func testFloatingPillDoesNotTreatMissingTerminalProjectionAsSuccess() throws {
