@@ -19,7 +19,15 @@ export async function exportToObsidian(
   // Write to a temp file then rename onto the target so a failed or partial write
   // (disk full, crash) never truncates the user's previous export.
   const tmp = join(dir, `Memories.md.${process.pid}.${tmpSeq++}.tmp`)
-  await fs.writeFile(tmp, formatMemoriesMarkdown(memories), 'utf8')
-  await fs.rename(tmp, file)
+  try {
+    await fs.writeFile(tmp, formatMemoriesMarkdown(memories), 'utf8')
+    await fs.rename(tmp, file)
+  } catch (err) {
+    // Best-effort cleanup so a failed write or rename does not leave the temp
+    // file behind. Swallow any unlink failure (the temp may never have been
+    // created); the original error is what the caller needs to see.
+    await fs.rm(tmp, { force: true }).catch(() => {})
+    throw err
+  }
   return file
 }
