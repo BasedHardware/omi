@@ -174,7 +174,13 @@ def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch
     assert db.docs[f"users/{CANONICAL_A}/memory_items/{memory_id}"]["tier"] == MemoryTier.short_term.value
 
 
-def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch):
+@pytest.fixture
+def _consolidation_disabled_for_promotion_cron(monkeypatch):
+    """Promotion cron tests target batch-or-daily promotion, not the consolidation LLM path."""
+    monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_ENABLED", "false")
+
+
+def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation_disabled_for_promotion_cron):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
@@ -194,7 +200,7 @@ def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch):
     assert summary.skipped_users == 0
 
 
-def test_daily_cadence_after_first_promotion_run(monkeypatch):
+def test_daily_cadence_after_first_promotion_run(monkeypatch, _consolidation_disabled_for_promotion_cron):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
