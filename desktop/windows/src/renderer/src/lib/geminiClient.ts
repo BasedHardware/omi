@@ -12,6 +12,9 @@ export type GenerateArgs = {
 
 const DEFAULT_MODEL = (import.meta.env.VITE_GEMINI_MODEL as string) || 'gemini-2.5-flash'
 const MAX_RETRIES = 2
+// A hung proxy must not stall every Gemini-backed feature forever (the macOS
+// client relied on URLSession's request timeout, which this port had dropped).
+const GENERATE_TIMEOUT_MS = 30_000
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
@@ -47,17 +50,40 @@ export async function generate(args: GenerateArgs): Promise<string> {
 
   let lastError = ''
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify(body)
-    })
-    if (res.ok) {
-      const json = (await res.json()) as {
-        candidates?: { content?: { parts?: { text?: string }[] } }[]
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS)
+      })
+    } catch (e) {
+      // Transport error or timeout — retry like a 503 instead of letting a raw
+      // error (which may carry connection details) escape.
+      lastError = (e as Error).name === 'TimeoutError' ? 'timeout' : 'network error'
+      if (attempt < MAX_RETRIES) {
+        await sleep(400 * (attempt + 1))
+        continue
       }
-      const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
-      return text.trim()
+      break
+    }
+    if (res.ok) {
+      try {
+        const json = (await res.json()) as {
+          candidates?: { content?: { parts?: { text?: string }[] } }[]
+        }
+        const text = json.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
+        return text.trim()
+      } catch {
+        // 200 with a truncated/non-JSON body (gateway page, cut connection).
+        lastError = 'invalid response body'
+        if (attempt < MAX_RETRIES) {
+          await sleep(400 * (attempt + 1))
+          continue
+        }
+        break
+      }
     }
     if (res.status === 429 || res.status === 503) {
       lastError = `status ${res.status}`
