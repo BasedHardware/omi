@@ -33,6 +33,7 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.memory_search_gateway import SearchMode
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
+from utils.executors import llm_executor, submit_with_context
 from utils.llm.clients import get_llm
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc
@@ -97,6 +98,16 @@ def consolidation_batch_threshold() -> int:
         return max(1, int(raw))
     except ValueError:
         return DEFAULT_CONSOLIDATION_BATCH_THRESHOLD
+
+
+def consolidation_batch_cap() -> int:
+    """Max pending items per consolidation LLM call (defaults to batch threshold)."""
+    default = str(consolidation_batch_threshold())
+    raw = os.getenv("MEMORY_CANONICAL_CONSOLIDATION_BATCH_CAP", default)
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        return consolidation_batch_threshold()
 
 
 def candidates_per_item_limit() -> int:
@@ -332,6 +343,11 @@ Batch JSON:
 """
 
 
+def _invoke_consolidation_llm(prompt: str) -> str:
+    response = get_llm("memory_conflict").invoke(prompt)
+    return getattr(response, "content", str(response))
+
+
 def invoke_consolidation_agent(
     context: ConsolidationContext,
     *,
@@ -346,8 +362,7 @@ def invoke_consolidation_agent(
     if llm_invoke is not None:
         raw = llm_invoke(prompt)
     else:
-        response = get_llm("memory_conflict").invoke(prompt)
-        raw = getattr(response, "content", str(response))
+        raw = submit_with_context(llm_executor, _invoke_consolidation_llm, prompt).result()
     try:
         return parser.parse(raw)
     except Exception as exc:
@@ -357,6 +372,27 @@ def invoke_consolidation_agent(
             type(exc).__name__,
         )
         return ConsolidationAgentBatch(decisions=[], reasoning=f"parse_failed:{type(exc).__name__}")
+
+
+def _consolidation_apply_decision(decision: ConsolidationAgentDecision) -> str:
+    """Map agent decisions to durable apply decision (in-place survivor updates use ``update``)."""
+    if decision.decision in {"merge", "add_evidence"}:
+        return DurablePatchDecision.update.value
+    if decision.decision == "skip_duplicate" and decision.corroboration_increment:
+        return DurablePatchDecision.update.value
+    return decision.decision
+
+
+def _should_advance_consolidation_watermark(
+    agent_batch: ConsolidationAgentBatch,
+    *,
+    decisions_applied: int,
+) -> bool:
+    if agent_batch.reasoning.startswith("parse_failed:"):
+        return False
+    if decisions_applied > 0:
+        return True
+    return bool(agent_batch.decisions)
 
 
 def _dedupe_evidence_ids(*ids: str) -> List[str]:
@@ -375,10 +411,12 @@ def _ensure_consolidation_operation(
     decision: ConsolidationAgentDecision,
     control: MemoryControlState,
     run_id: str,
+    evidence_ids: List[str],
     db_client,
 ) -> MemoryOperation:
+    apply_decision = _consolidation_apply_decision(decision)
     logical_payload = {
-        "decision": decision.decision,
+        "decision": apply_decision,
         "target_memory_id": decision.survivor_memory_id,
         "memory_text": decision.memory_text,
         "result_status": LifecycleState.active.value,
@@ -389,7 +427,7 @@ def _ensure_consolidation_operation(
         operation_type=MemoryOperationType.long_term_apply,
         source_packet_id=f"consolidation_{run_id}",
         target_memory_id=decision.survivor_memory_id,
-        evidence_ids=decision.evidence_ids,
+        evidence_ids=evidence_ids,
         logical_payload=logical_payload,
         account_generation=control.account_generation,
         source_generation=control.source_generation,
@@ -562,6 +600,22 @@ def _escalate_to_review_queue(
     )
 
 
+def _load_survivor_item(
+    uid: str,
+    memory_id: str,
+    *,
+    pending_by_id: Dict[str, MemoryItem],
+    db_client,
+) -> Optional[MemoryItem]:
+    if memory_id in pending_by_id:
+        return pending_by_id[memory_id]
+    path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
+    snapshot = db_client.document(path).get()
+    if not getattr(snapshot, "exists", False):
+        return None
+    return MemoryItem(**(snapshot.to_dict() or {}))
+
+
 def apply_consolidation_decision(
     uid: str,
     *,
@@ -583,7 +637,13 @@ def apply_consolidation_decision(
     if durable_decision == DurablePatchDecision.keep_both:
         return []
 
-    survivor = pending_by_id.get(decision.survivor_memory_id)
+    apply_decision = _consolidation_apply_decision(decision)
+    survivor = _load_survivor_item(
+        uid,
+        decision.survivor_memory_id,
+        pending_by_id=pending_by_id,
+        db_client=db_client,
+    )
     evidence_ids = _dedupe_evidence_ids(
         *(decision.evidence_ids or []),
         *([ev.evidence_id for ev in survivor.evidence] if survivor else []),
@@ -606,6 +666,7 @@ def apply_consolidation_decision(
         decision=decision,
         control=control,
         run_id=run_id,
+        evidence_ids=evidence_ids,
         db_client=db_client,
     )
     idempotency_key = deterministic_contract_id(
@@ -624,7 +685,7 @@ def apply_consolidation_decision(
         "run_id": run_id,
         "observed_head_commit_id": control.head_commit_id,
         "idempotency_key": idempotency_key,
-        "decision": durable_decision.value,
+        "decision": apply_decision,
         "result_status": LifecycleState.active.value,
         "target_memory_id": decision.survivor_memory_id,
         "memory_text": decision.memory_text,
@@ -721,9 +782,12 @@ def run_canonical_consolidation(
     if not pending:
         return report
 
-    context = gather_consolidation_candidates(uid, pending, db_client=client)
+    batch_cap = consolidation_batch_cap()
+    pending_batch = pending[:batch_cap]
+
+    context = gather_consolidation_candidates(uid, pending_batch, db_client=client)
     agent_batch = invoke_consolidation_agent(context, llm_invoke=llm_invoke)
-    pending_by_id = {item.memory_id: item for item in pending}
+    pending_by_id = {item.memory_id: item for item in pending_batch}
 
     for decision in agent_batch.decisions:
         if decision.decision == "review" or decision.review_required:
@@ -748,9 +812,12 @@ def run_canonical_consolidation(
                 if memory_id in decision.supersedes:
                     report.superseded_memory_ids.append(memory_id)
 
-    updated_control = _read_control_state(uid, db_client=client).model_copy(
-        update={"last_consolidation_run_at": current_time, "updated_at": current_time}
-    )
-    _persist_control_state(updated_control, db_client=client)
-    report.last_consolidation_run_at = current_time
+    if _should_advance_consolidation_watermark(agent_batch, decisions_applied=report.decisions_applied):
+        updated_control = _read_control_state(uid, db_client=client).model_copy(
+            update={"last_consolidation_run_at": current_time, "updated_at": current_time}
+        )
+        _persist_control_state(updated_control, db_client=client)
+        report.last_consolidation_run_at = current_time
+    else:
+        report.last_consolidation_run_at = control.last_consolidation_run_at
     return report
