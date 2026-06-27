@@ -1,7 +1,7 @@
 import CryptoKit
 import XCTest
 
-@testable import Desktop
+@testable import Omi_Computer
 
 final class ClientDeviceServiceTests: XCTestCase {
   func testDeviceIdHashIsStableEightHexChars() {

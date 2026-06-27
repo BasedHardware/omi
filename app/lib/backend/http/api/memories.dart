@@ -32,29 +32,43 @@ Future<bool> updateMemoryVisibilityServer(String memoryId, String visibility) as
   return response.statusCode == 200;
 }
 
-Future<List<Memory>> getMemories({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+/// Result of [getMemories], carrying whether server-side device_scope was supported.
+class GetMemoriesResult {
+  final List<Memory> memories;
+  final bool deviceScopeSupported;
+
+  const GetMemoriesResult(this.memories, this.deviceScopeSupported);
+}
+
+Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
   var url = '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset';
   if (thisDeviceOnly) {
     url += '&device_scope=current';
   }
-  var response = await makeApiCall(
-    url: url,
-    headers: {},
-    method: 'GET',
-    body: '',
-  );
-  if (response == null) return [];
+  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  if (response == null) {
+    return GetMemoriesResult([], !thisDeviceOnly);
+  }
   if (response.statusCode == 200) {
     var decoded = json.decode(response.body);
     if (decoded is List) {
-      return decoded.map((e) => Memory.fromJson(e)).toList();
+      return GetMemoriesResult(decoded.map((e) => Memory.fromJson(e)).toList(), true);
     }
   }
-  // Legacy memory users cannot use server-side device_scope; fetch all and filter locally.
+  // Legacy memory users cannot use server-side device_scope; fetch all and
+  // signal that local device filtering should be skipped to avoid hiding
+  // legacy rows that have no primary_capture_device/capture_device_ids.
   if (thisDeviceOnly && response.statusCode == 400) {
-    return getMemories(limit: limit, offset: offset);
+    final fallback = await getMemoriesResult(limit: limit, offset: offset);
+    return GetMemoriesResult(fallback.memories, false);
   }
-  return [];
+  return GetMemoriesResult([], !thisDeviceOnly);
+}
+
+/// Convenience wrapper for callers that do not need the device_scope support flag.
+Future<List<Memory>> getMemories({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
+  final result = await getMemoriesResult(limit: limit, offset: offset, thisDeviceOnly: thisDeviceOnly);
+  return result.memories;
 }
 
 Future<bool> deleteMemoryServer(String memoryId) async {

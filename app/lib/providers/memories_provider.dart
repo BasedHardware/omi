@@ -23,6 +23,7 @@ class MemoriesProvider extends ChangeNotifier {
   Set<MemoryCategory> _selectedCategories = {};
   bool _showOnlyManual = false;
   bool _filterThisDeviceOnly = false;
+  bool _deviceScopeSupported = true;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
 
@@ -58,15 +59,19 @@ class MemoriesProvider extends ChangeNotifier {
         categoryMatch = true;
       }
 
-      final deviceMatch = !_filterThisDeviceOnly ||
+      // When the server does not support device_scope, legacy memories have no
+      // primary_capture_device/capture_device_ids. Skip the local device filter
+      // in that case to avoid hiding all legacy rows on the "This device" view.
+      final deviceMatch =
+          !_filterThisDeviceOnly ||
+          !_deviceScopeSupported ||
           ClientDeviceService.instance.memoryMatchesThisDevice(
             primaryCaptureDevice: memory.primaryCaptureDevice,
             captureDeviceIds: memory.captureDeviceIds,
           );
 
       return matchesSearch && categoryMatch && deviceMatch;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
   void setFilterThisDeviceOnly(bool enabled) {
@@ -185,7 +190,9 @@ class MemoriesProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
 
-    _memories = await getMemories(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
+    final result = await getMemoriesResult(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
+    _memories = result.memories;
+    _deviceScopeSupported = result.deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
