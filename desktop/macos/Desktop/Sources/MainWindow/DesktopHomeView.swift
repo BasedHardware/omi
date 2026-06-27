@@ -630,6 +630,8 @@ struct DesktopHomeView: View {
       return .settings
     case "permissions":
       return .permissions
+    case "messages":
+      return .messages
     case "help":
       return .help
     default:
@@ -1030,6 +1032,8 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
+      case 11:
+        MessagesPage()
       case 12:
         HelpPage()
       default:
