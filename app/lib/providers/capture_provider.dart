@@ -561,6 +561,31 @@ class CaptureProvider extends ChangeNotifier
     } catch (_) {}
   }
 
+  // Interactive device onboarding needs the realtime transcript + voice paths, which Transcribe
+  // Later (batch mode) disables. Flipping batchModeEnabled off also re-opens the native->Dart audio
+  // forward — the native BatchAudioWriter gate reads this same pref — so BLE audio reaches Dart again.
+  // Skips the transcribeLaterToggled analytic on purpose; the persisted flag drives a crash-safe restore.
+  Future<void> suspendBatchModeForOnboarding() async {
+    if (SharedPreferencesUtil().batchModeSuspendedForOnboarding) return;
+    if (!SharedPreferencesUtil().batchModeEnabled) return;
+    SharedPreferencesUtil().batchModeSuspendedForOnboarding = true;
+    SharedPreferencesUtil().batchModeEnabled = false;
+    notifyListeners();
+    try {
+      await onRecordProfileSettingChanged();
+    } catch (_) {}
+  }
+
+  Future<void> restoreBatchModeAfterOnboarding() async {
+    if (!SharedPreferencesUtil().batchModeSuspendedForOnboarding) return;
+    SharedPreferencesUtil().batchModeSuspendedForOnboarding = false;
+    SharedPreferencesUtil().batchModeEnabled = true;
+    notifyListeners();
+    try {
+      await onRecordProfileSettingChanged();
+    } catch (_) {}
+  }
+
   /// Called when transcription settings are changed (e.g., custom STT provider)
   /// This resets the socket connection to use the new configuration
   Future<void> onTranscriptionSettingsChanged() async {
@@ -1439,6 +1464,9 @@ class CaptureProvider extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
+    if (deviceOnboardingProvider == null && SharedPreferencesUtil().batchModeSuspendedForOnboarding) {
+      await restoreBatchModeAfterOnboarding();
+    }
     if (device != null) _updateRecordingDevice(device);
 
     bool wasPaused = _isPaused;
