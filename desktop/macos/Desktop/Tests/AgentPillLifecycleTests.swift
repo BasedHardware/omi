@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -16,17 +17,44 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try chatProviderSource()
 
     XCTAssertTrue(source.contains("legacyClientScope == AgentLegacyClientScope.floatingPill"))
+    XCTAssertTrue(source.contains("private var cachedFloatingPillSystemPrompt: String = \"\""))
+    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = floatingPillSystemPrompt"))
+    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
+    XCTAssertTrue(source.contains("if cachedFloatingPillSystemPrompt.isEmpty"))
+    XCTAssertTrue(source.contains("systemPrompt = cachedFloatingPillSystemPrompt"))
     XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "delegate_agent"]"#))
     XCTAssertTrue(source.contains("let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)"))
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
   }
 
+  func testProviderCorrectionUsesPreviousFloatingRequestObjective() throws {
+    let directive = AgentPillsManager.providerDirective(
+      from: "I meant ask OpenClaw",
+      contextualPreviousRequest: "ask grok to search for david zhang on X and tell me who the top 3 are")
+
+    XCTAssertEqual(directive?.provider, .openclaw)
+    XCTAssertEqual(directive?.rewrittenQuery, "search for david zhang on X and tell me who the top 3 are")
+  }
+
+  func testFloatingRouterProvidesRecentVisibleRequestToProviderDirective() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)"))
+    XCTAssertTrue(source.contains("private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String?"))
+    XCTAssertTrue(source.contains("barWindow.state.chatHistory.reversed().compactMap"))
+  }
+
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
     let source = try floatingControlBarViewSource()
+    let agentPillSource = try agentPillSource()
 
     XCTAssertTrue(source.contains("if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
-    XCTAssertTrue(source.contains("let sibling = manager.spawnFromHandoff(handoff, model: pill.model)"))
+    XCTAssertTrue(source.contains("bridgeHarnessOverride: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("state.present(.agent(sibling.id))"))
+    XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
+    XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
+    XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
+    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -34,7 +62,13 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("import MarkdownUI"))
     XCTAssertFalse(source.contains("Markdown(outputText.isEmpty ? \"Working...\" : outputText)"))
-    XCTAssertTrue(source.contains("Markdown(outputText)"))
+    XCTAssertTrue(source.contains("ForEach(displayedMessages) { message in"))
+    XCTAssertTrue(source.contains("agentMessageBubble(message)"))
+    XCTAssertTrue(source.contains("agentAssistantContent(message)"))
+    XCTAssertTrue(source.contains("ForEach(ContentBlockGroup.group(message.contentBlocks))"))
+    XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
+    XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
+    XCTAssertTrue(source.contains("Markdown(trimmed)"))
     XCTAssertTrue(source.contains(".markdownTheme(.aiMessage(scale: 0.88))"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
@@ -148,6 +182,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentMorphField("))
     XCTAssertTrue(source.contains("NotchAgentListRow(\n                                title: pill.title,\n                                status: pill.status,\n                                activity: pill.latestActivity,\n                                isSelected: pill.id == activePillID,\n                                progress: rowRevealProgress"))
+    // The provider logo must be drawn exactly once per row — only by the traveling
+    // `notchAgentIdentityMark` that morphs from the logo ring onto the orb slot. The
+    // row itself must NOT draw its own `AgentProviderLogoMark`, or it would double up
+    // under the morph mark (the "two caduceus / two mascots" bug).
+    XCTAssertFalse(source.contains("AgentProviderLogoMark(provider: provider, statusColor: statusColor, size: 16)"))
+    XCTAssertTrue(source.contains("Color.clear\n                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 18)"))
+    XCTAssertEqual(
+        source.components(separatedBy: "AgentProviderLogoMark(provider: provider").count - 1,
+        1,
+        "Notch row path must construct the provider logo mark exactly once (only in notchAgentIdentityMark)"
+    )
+    XCTAssertTrue(source.contains("notchAgentIdentityMark(\n                            provider: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("let rowWidth = max(0, min(width - NotchAgentStackMetrics.listHorizontalInset * 2, FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))"))
     XCTAssertTrue(source.contains("static let listHorizontalInset: CGFloat = 12"))
@@ -289,11 +335,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     let agentSource = try agentPillSource()
     let viewSource = try floatingControlBarViewSource()
 
+    XCTAssertTrue(agentSource.contains("@Published var conversationMessages: [ChatMessage] = []"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages = displayMessages"))
+    XCTAssertTrue(agentSource.contains("message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty"))
+    XCTAssertTrue(viewSource.contains("private var displayedMessages: [ChatMessage]"))
+    XCTAssertTrue(viewSource.contains("ChatMessage(id: \"\\(pill.id.uuidString)-query\", text: pill.query, sender: .user)"))
+    XCTAssertTrue(viewSource.contains("Text(trimmed)"))
     XCTAssertTrue(agentSource.contains("@Published var contentRevision: Int = 0"))
     XCTAssertTrue(agentSource.contains("func markContentChanged()"))
     XCTAssertTrue(agentSource.contains("pill.markContentChanged()"))
     XCTAssertTrue(viewSource.contains(".id(pill.contentRevision)"))
     XCTAssertTrue(viewSource.contains(".onChange(of: pill.contentRevision)"))
+    XCTAssertTrue(viewSource.contains(".onChange(of: pill.conversationMessages.map(\\.text).joined(separator: \"\\n\"))"))
     XCTAssertTrue(viewSource.contains("state.reportContentHeight(height, for: .agent(pill.id))"))
   }
 
@@ -567,6 +620,109 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(statusStoreSource.contains("if !terminal, projectionsBySurface[surface.key]?.status.isTerminal == true {\n      return\n    }"))
   }
 
+  func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
+    let source = try agentPillSource()
+    let pillViewSource = try agentPillsViewSource()
+
+    XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = bridgeHarnessOverride != nil"))
+    XCTAssertTrue(source.contains("if !hasBridgeHarnessOverride {\n                provider.modelOverride = floating.modelOverride\n            }"))
+    XCTAssertTrue(source.contains("model: Self.modelForSend(pill: pill, provider: provider)"))
+    XCTAssertTrue(source.contains("provider.hasBridgeHarnessOverride ? nil : pill.model"))
+    XCTAssertTrue(pillViewSource.contains("AgentProviderLogoMark("))
+    XCTAssertTrue(pillViewSource.contains("provider: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(pillViewSource.contains("private var providerPill: some View"))
+    XCTAssertTrue(pillViewSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))
+    XCTAssertTrue(pillViewSource.contains("private static let openClawLogo = load(\"openclaw_logo_flat\")"))
+    XCTAssertTrue(pillViewSource.contains("return hermesLogo"))
+    XCTAssertTrue(pillViewSource.contains("return openClawLogo"))
+    XCTAssertTrue(pillViewSource.contains(".renderingMode(.template)"))
+    XCTAssertTrue(pillViewSource.contains(".foregroundStyle(statusColor)"))
+    XCTAssertFalse(pillViewSource.contains("return load(\"hermes_logo\")"))
+    XCTAssertFalse(pillViewSource.contains("return load(\"openclaw_logo\")"))
+    XCTAssertTrue(pillViewSource.contains("if pill.bridgeHarnessOverride.rendersProviderMark {\n            return false\n        }"))
+    // Provider agents without a dedicated logo fall back to a flat, status-tinted
+    // robot mark — not the Omi round dot. Omi-native agents (nil override) keep
+    // the dot via the `provider != nil` guard.
+    XCTAssertTrue(pillViewSource.contains("} else if provider != nil {"))
+    XCTAssertTrue(pillViewSource.contains("Text(\"🤖\")"))
+    XCTAssertTrue(pillViewSource.contains("statusColor\n                    .mask("))
+  }
+
+  func testProviderMarkRoutingIsCentralized() throws {
+    let routingSource = try agentRuntimeRoutingSource()
+    XCTAssertTrue(routingSource.contains("var rendersProviderMark: Bool { self != nil }"))
+
+    let pillViewSource = try agentPillsViewSource()
+    XCTAssertTrue(pillViewSource.contains("pill.bridgeHarnessOverride.rendersProviderMark"))
+
+    let windowSource = try floatingControlBarViewSource()
+    XCTAssertTrue(windowSource.contains("if provider.rendersProviderMark {"))
+  }
+
+  func testDirectedProviderLogoAssetsUseSingleTemplateMasks() throws {
+    let hermes = try logoMaskStats("hermes_logo_flat")
+    XCTAssertEqual(hermes.width, 256)
+    XCTAssertEqual(hermes.height, 256)
+    XCTAssertEqual(hermes.transparentCorners, 4)
+    XCTAssertGreaterThan(hermes.boundsWidth, 180, "Hermes must keep the winged caduceus, not a narrow replacement glyph.")
+    XCTAssertGreaterThan(hermes.boundsHeight, 170)
+    XCTAssertEqual(hermes.coloredPixels, 0, "Hermes row mark must be a template mask so status color owns identity.")
+
+    let openClaw = try logoMaskStats("openclaw_logo_flat")
+    XCTAssertEqual(openClaw.width, 180)
+    XCTAssertEqual(openClaw.height, 180)
+    XCTAssertEqual(openClaw.transparentCorners, 4)
+    XCTAssertGreaterThan(openClaw.boundsWidth, 150, "OpenClaw must keep the round mascot silhouette, not an arrow glyph.")
+    XCTAssertGreaterThan(openClaw.boundsHeight, 130)
+    XCTAssertGreaterThan(openClaw.transparentPixelsInsideBounds, 500, "Eye holes must remain transparent in the provider mark.")
+    XCTAssertEqual(openClaw.coloredPixels, 0, "OpenClaw row mark must be a template mask so status color owns identity.")
+  }
+
+  func testFloatingAgentToolCallsUseCompactOneLinePresentation() throws {
+    let chatPageSource = try chatPageSource()
+    let providerSource = try chatProviderSource()
+
+    XCTAssertTrue(chatPageSource.contains("var compact: Bool = false"))
+    XCTAssertTrue(chatPageSource.contains("var expandRunning: Bool = true"))
+    XCTAssertTrue(chatPageSource.contains("State(initialValue: expandRunning && Self.hasRunningTool(in: calls))"))
+    XCTAssertTrue(chatPageSource.contains(".onChange(of: hasRunningTool)"))
+    XCTAssertTrue(chatPageSource.contains("private var header: some View"))
+    XCTAssertTrue(chatPageSource.contains("private var expandedToolCalls: some View"))
+    XCTAssertTrue(chatPageSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
+    XCTAssertTrue(chatPageSource.contains(".frame(height: compact ? 34 : nil)"))
+    XCTAssertTrue(chatPageSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
+    XCTAssertTrue(chatPageSource.contains("ToolCallCard(name: name, status: status, input: input, output: output)"))
+    XCTAssertTrue(chatPageSource.contains("summaryEmbeddedInToolName"))
+    XCTAssertTrue(providerSource.contains("cleanName.lowercased().hasPrefix(\"read:\")"))
+    XCTAssertTrue(providerSource.contains("return \"Reading file\""))
+  }
+
+  func testSelectableMarkdownRoutesGFMTablesThroughMarkdownUI() throws {
+    let selectableSource = try selectableMarkdownSource()
+    let chatPageSource = try chatPageSource()
+    let table = """
+    | Rank | Skill | Loads |
+    |---:|---|---:|
+    | 1 | omi | 39 |
+    """
+    let tableWithoutOuterPipes = """
+    Rank | Skill | Loads
+    ---:|---|---:
+    1 | omi | 39
+    """
+
+    XCTAssertTrue(SelectableMarkdown.containsGFMTable(table))
+    XCTAssertTrue(SelectableMarkdown.containsGFMTable(tableWithoutOuterPipes))
+    XCTAssertFalse(SelectableMarkdown.containsGFMTable("Rank | Skill | Loads"))
+    XCTAssertTrue(selectableSource.contains("markdownTableCells"))
+    XCTAssertTrue(selectableSource.contains("Markdown(content)"))
+    XCTAssertTrue(selectableSource.contains(".scaledMarkdownTheme(sender)"))
+    XCTAssertTrue(selectableSource.contains(".inlineOnlyPreservingWhitespace"))
+    XCTAssertTrue(chatPageSource.contains(".table { configuration in"))
+    XCTAssertTrue(chatPageSource.contains(".markdownTableBorderStyle"))
+    XCTAssertTrue(chatPageSource.contains(".markdownTableBackgroundStyle"))
+  }
+
   private func agentPillSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -580,6 +736,22 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Providers/ChatProvider.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func chatPageSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func selectableMarkdownSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Components/SelectableMarkdown.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -605,6 +777,97 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/AgentPillsView.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func agentRuntimeRoutingSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Providers/AgentRuntimeRouting.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private struct LogoMaskStats {
+    let width: Int
+    let height: Int
+    let boundsWidth: Int
+    let boundsHeight: Int
+    let nonTransparentPixels: Int
+    let coloredPixels: Int
+    let transparentPixelsInsideBounds: Int
+    let transparentCorners: Int
+  }
+
+  private func logoMaskStats(_ name: String) throws -> LogoMaskStats {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Resources/\(name).png")
+    let data = try Data(contentsOf: url)
+    guard let rep = NSBitmapImageRep(data: data) else {
+      throw NSError(
+        domain: "AgentPillLifecycleTests",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Could not load \(name).png"])
+    }
+
+    var minX = rep.pixelsWide
+    var minY = rep.pixelsHigh
+    var maxX = -1
+    var maxY = -1
+    var nonTransparentPixels = 0
+    var coloredPixels = 0
+
+    for y in 0..<rep.pixelsHigh {
+      for x in 0..<rep.pixelsWide {
+        let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB)
+        let alpha = color?.alphaComponent ?? 0
+        if alpha > 0.01 {
+          nonTransparentPixels += 1
+          minX = min(minX, x)
+          minY = min(minY, y)
+          maxX = max(maxX, x)
+          maxY = max(maxY, y)
+          if let color,
+            max(color.redComponent, color.greenComponent, color.blueComponent)
+              - min(color.redComponent, color.greenComponent, color.blueComponent) > 0.08 {
+            coloredPixels += 1
+          }
+        }
+      }
+    }
+
+    var transparentPixelsInsideBounds = 0
+    if maxX >= minX, maxY >= minY {
+      for y in minY...maxY {
+        for x in minX...maxX {
+          let alpha = rep.colorAt(x: x, y: y)?.alphaComponent ?? 0
+          if alpha <= 0.01 {
+            transparentPixelsInsideBounds += 1
+          }
+        }
+      }
+    }
+
+    let cornerPoints = [
+      (0, 0),
+      (rep.pixelsWide - 1, 0),
+      (0, rep.pixelsHigh - 1),
+      (rep.pixelsWide - 1, rep.pixelsHigh - 1),
+    ]
+    let transparentCorners = cornerPoints.filter { point in
+      (rep.colorAt(x: point.0, y: point.1)?.alphaComponent ?? 0) <= 0.01
+    }.count
+
+    return LogoMaskStats(
+      width: rep.pixelsWide,
+      height: rep.pixelsHigh,
+      boundsWidth: maxX >= minX ? maxX - minX + 1 : 0,
+      boundsHeight: maxY >= minY ? maxY - minY + 1 : 0,
+      nonTransparentPixels: nonTransparentPixels,
+      coloredPixels: coloredPixels,
+      transparentPixelsInsideBounds: transparentPixelsInsideBounds,
+      transparentCorners: transparentCorners)
   }
 
   private func resizeHandleSource() throws -> String {

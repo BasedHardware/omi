@@ -1,6 +1,6 @@
 # Memory `/v3` production activation runbook
 
-**Purpose:** Define the production-only gate after dev-cloud functional proof passes.  
+**Purpose:** Define the production-only gate after dev-cloud functional proof passes.
 **Policy:** Production activation is **NO-GO** until `docs/rollout/memory-v3-proof-order.md` Gate 2 is GO for the exact candidate artifact and independently reviewed.
 
 ## Current state

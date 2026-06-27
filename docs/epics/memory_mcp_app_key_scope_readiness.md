@@ -1,6 +1,6 @@
 # memory MCP app/key/scope authorization readiness
 
-**Date:** 2026-06-19  
+**Date:** 2026-06-19
 **Scope:** Oracle P0-1/P0-6 first MCP REST/SSE memory memory authorization context/readiness slice.
 
 ## Current MCP REST routes and dependencies

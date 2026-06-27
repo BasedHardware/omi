@@ -3101,5 +3101,7 @@
     "deviceOnboardingFinish": "Voltooien",
     "deviceOnboardingIntroTitle": "Maak kennis met je Omi",
     "deviceOnboardingIntroSubtitle": "Een snelle, praktische rondleiding langs alles wat je Omi kan.",
-    "deviceOnboardingIntroDuration": "Ongeveer 1 minuut"
+    "deviceOnboardingIntroDuration": "Ongeveer 1 minuut",
+    "jumpToLatestMessage": "Naar nieuwste bericht springen",
+    "latest": "Nieuwste"
 }

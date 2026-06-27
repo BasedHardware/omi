@@ -9488,4 +9488,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Близько 1 хвилини';
+  @override
+  String get jumpToLatestMessage => 'Перейти до останнього повідомлення';
+
+  @override
+  String get latest => 'Останнє';
 }

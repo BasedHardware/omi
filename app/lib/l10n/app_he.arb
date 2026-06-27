@@ -10679,5 +10679,7 @@
     "deviceOnboardingFinish": "סיום",
     "deviceOnboardingIntroTitle": "הכירו את ה-Omi שלכם",
     "deviceOnboardingIntroSubtitle": "סיור מהיר ומעשי בכל מה שה-Omi שלכם יכול לעשות.",
-    "deviceOnboardingIntroDuration": "כדקה אחת"
+    "deviceOnboardingIntroDuration": "כדקה אחת",
+    "jumpToLatestMessage": "קפוץ להודעה האחרונה",
+    "latest": "האחרון"
 }

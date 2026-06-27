@@ -9470,4 +9470,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Sekitar 1 menit';
+  @override
+  String get jumpToLatestMessage => 'Lompat ke pesan terbaru';
+
+  @override
+  String get latest => 'Terbaru';
 }

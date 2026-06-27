@@ -1,6 +1,6 @@
 # Memory `/v3` dev-cloud proof runbook
 
-**Purpose:** Prove enabled canonical `GET /v3/memories` behavior in a dedicated non-production Firebase/GCP project before any production activation.  
+**Purpose:** Prove enabled canonical `GET /v3/memories` behavior in a dedicated non-production Firebase/GCP project before any production activation.
 **Policy:** See `docs/rollout/memory-v3-proof-order.md`.
 
 ## Non-negotiable boundary

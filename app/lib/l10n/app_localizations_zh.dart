@@ -9290,4 +9290,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => '大约 1 分钟';
+  @override
+  String get jumpToLatestMessage => '跳转到最新消息';
+
+  @override
+  String get latest => '最新';
 }

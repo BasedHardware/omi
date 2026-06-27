@@ -9554,4 +9554,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Environ 1 minute';
+  @override
+  String get jumpToLatestMessage => 'Aller au dernier message';
+
+  @override
+  String get latest => 'Récent';
 }

@@ -10679,5 +10679,7 @@
     "deviceOnboardingFinish": "पूर्ण करा",
     "deviceOnboardingIntroTitle": "तुमच्या Omi ला जाणून घ्या",
     "deviceOnboardingIntroSubtitle": "तुमचा Omi जे काही करू शकतो त्याची झटपट, प्रत्यक्ष ओळख.",
-    "deviceOnboardingIntroDuration": "सुमारे 1 मिनिट"
+    "deviceOnboardingIntroDuration": "सुमारे 1 मिनिट",
+    "jumpToLatestMessage": "नवीनतम संदेशावर जा",
+    "latest": "नवीनतम"
 }

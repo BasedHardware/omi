@@ -10679,5 +10679,7 @@
     "deviceOnboardingFinish": "Заврши",
     "deviceOnboardingIntroTitle": "Запознајте се со вашиот Omi",
     "deviceOnboardingIntroSubtitle": "Брза, практична прошетка низ сè што може да направи вашиот Omi.",
-    "deviceOnboardingIntroDuration": "Околу 1 минута"
+    "deviceOnboardingIntroDuration": "Околу 1 минута",
+    "jumpToLatestMessage": "Оди до последната порака",
+    "latest": "Најново"
 }

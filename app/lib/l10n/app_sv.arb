@@ -3101,5 +3101,7 @@
     "deviceOnboardingFinish": "Slutför",
     "deviceOnboardingIntroTitle": "Lär känna din Omi",
     "deviceOnboardingIntroSubtitle": "En snabb, praktisk rundtur i allt din Omi kan.",
-    "deviceOnboardingIntroDuration": "Cirka 1 minut"
+    "deviceOnboardingIntroDuration": "Cirka 1 minut",
+    "jumpToLatestMessage": "Hoppa till senaste meddelandet",
+    "latest": "Senaste"
 }

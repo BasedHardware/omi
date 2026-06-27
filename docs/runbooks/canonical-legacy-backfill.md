@@ -2,7 +2,7 @@
 
 **Purpose:** Copy a whitelisted user's active legacy `memories` rows into canonical `memory_items` (`layer=long_term`) without mutating or deleting legacy data.
 
-**Library:** `utils.memory.legacy_backfill.backfill_user`  
+**Library:** `utils.memory.legacy_backfill.backfill_user`
 **CLI:** `backend/scripts/backfill_legacy_memories.py`
 
 ## Safety contract

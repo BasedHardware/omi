@@ -49,6 +49,8 @@ class SettingsSyncManager {
             if let v = shared.cooldownInterval { AssistantSettings.shared.cooldownInterval = v }
             if let v = shared.glowOverlayEnabled { AssistantSettings.shared.glowOverlayEnabled = v }
             if let v = shared.analysisDelay { AssistantSettings.shared.analysisDelay = v }
+            // Lazy-dev bundles keep the local seed (false) and ignore the remote value
+            // so the named bundle cannot start screen analysis until the user opts in.
             if let v = shared.screenAnalysisEnabled, !shouldKeepLocalScreenAnalysisDefault {
                 AssistantSettings.shared.screenAnalysisEnabled = v
             }
@@ -118,7 +120,7 @@ class SettingsSyncManager {
             cooldownInterval: AssistantSettings.shared.cooldownInterval,
             glowOverlayEnabled: AssistantSettings.shared.glowOverlayEnabled,
             analysisDelay: AssistantSettings.shared.analysisDelay,
-            screenAnalysisEnabled: AssistantSettings.shared.screenAnalysisEnabled
+            screenAnalysisEnabled: shouldKeepLocalScreenAnalysisDefault ? nil : AssistantSettings.shared.screenAnalysisEnabled
         )
 
         let focus = FocusSettingsResponse(

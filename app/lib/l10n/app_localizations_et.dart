@@ -9466,4 +9466,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Umbes 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Hüppa uusima sõnumi juurde';
+
+  @override
+  String get latest => 'Uusim';
 }

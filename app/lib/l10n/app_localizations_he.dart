@@ -9392,4 +9392,9 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'כדקה אחת';
+  @override
+  String get jumpToLatestMessage => 'קפוץ להודעה האחרונה';
+
+  @override
+  String get latest => 'האחרון';
 }

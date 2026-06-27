@@ -3197,5 +3197,7 @@
     "deviceOnboardingFinish": "Befejezés",
     "deviceOnboardingIntroTitle": "Ismerd meg az Omidat",
     "deviceOnboardingIntroSubtitle": "Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.",
-    "deviceOnboardingIntroDuration": "Körülbelül 1 perc"
+    "deviceOnboardingIntroDuration": "Körülbelül 1 perc",
+    "jumpToLatestMessage": "Ugrás a legújabb üzenethez",
+    "latest": "Legújabb"
 }

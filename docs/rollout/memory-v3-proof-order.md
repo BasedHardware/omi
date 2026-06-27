@@ -1,7 +1,7 @@
 # Memory `/v3` proof-order policy
 
-**Status:** Normative rollout gate for canonical `GET /v3/memories` activation.  
-**Current candidate:** `1294773c8 feat(memory): wire default-off v3 rollout runtime`  
+**Status:** Normative rollout gate for canonical `GET /v3/memories` activation.
+**Current candidate:** `1294773c8 feat(memory): wire default-off v3 rollout runtime`
 **Oracle review:** Strategy change reviewed; decision was **GO to adopt non-production-first strategy**, **GO to begin dev-cloud environment/tooling work**, **NO-GO for dev-cloud functional proof until P0 artifacts pass**, and **NO-GO for production activation**.
 
 Production **must not** be the first environment in which the enabled `GET /v3/memories` path is exercised against a real cloud Firestore database.

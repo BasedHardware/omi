@@ -65,9 +65,7 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
                       height: 240,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        gradient: RadialGradient(
-                          colors: [Colors.white.withValues(alpha: 0.10), Colors.transparent],
-                        ),
+                        gradient: RadialGradient(colors: [Colors.white.withValues(alpha: 0.10), Colors.transparent]),
                       ),
                     ),
                     Image.asset(
@@ -141,7 +139,10 @@ class _OnboardingIntroScreenState extends State<OnboardingIntroScreen> with Sing
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: RadialGradient(
-            colors: [Colors.white.withValues(alpha: alpha), Colors.transparent],
+            colors: [
+              Colors.white.withValues(alpha: alpha),
+              Colors.transparent,
+            ],
           ),
         ),
       ),

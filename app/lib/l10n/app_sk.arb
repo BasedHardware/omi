@@ -3106,5 +3106,7 @@
     "deviceOnboardingFinish": "Dokončiť",
     "deviceOnboardingIntroTitle": "Spoznajte svoj Omi",
     "deviceOnboardingIntroSubtitle": "Rýchla praktická prehliadka všetkého, čo váš Omi dokáže.",
-    "deviceOnboardingIntroDuration": "Približne 1 minúta"
+    "deviceOnboardingIntroDuration": "Približne 1 minúta",
+    "jumpToLatestMessage": "Prejsť na najnovšiu správu",
+    "latest": "Najnovšia"
 }

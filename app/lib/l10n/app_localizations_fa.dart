@@ -9466,4 +9466,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'حدود ۱ دقیقه';
+  @override
+  String get jumpToLatestMessage => 'پرش به آخرین پیام';
+
+  @override
+  String get latest => 'آخرین';
 }

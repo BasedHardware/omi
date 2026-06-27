@@ -460,13 +460,26 @@ class ChatToolExecutor {
       return "Error: Missing brief. Pass a clear, self-contained task brief."
     }
     let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let providerName = ((args["provider"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: " ", with: "")
+    let directedProvider: AgentPillsManager.DirectedProvider?
+    switch providerName {
+    case "openclaw": directedProvider = .openclaw
+    case "hermes": directedProvider = .hermes
+    case "": directedProvider = nil
+    default:
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes."
+    }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
     let pill = AgentPillsManager.shared.spawnFromUserQuery(
       brief,
       model: model,
       fromVoice: false,
-      preFetchedTitle: (title?.isEmpty == false) ? title : nil
+      preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
+      bridgeHarnessOverride: directedProvider?.harnessMode
     )
     return """
     Agent started as a floating agent pill.

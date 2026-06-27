@@ -9497,4 +9497,9 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Otprilike 1 minuta';
+  @override
+  String get jumpToLatestMessage => 'Idi na najnoviju poruku';
+
+  @override
+  String get latest => 'Najnovije';
 }

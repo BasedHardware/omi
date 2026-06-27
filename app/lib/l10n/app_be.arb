@@ -10679,5 +10679,7 @@
     "deviceOnboardingFinish": "Гатова",
     "deviceOnboardingIntroTitle": "Пазнаёмцеся з Omi",
     "deviceOnboardingIntroSubtitle": "Хуткі практычны агляд усяго, што ўмее ваш Omi.",
-    "deviceOnboardingIntroDuration": "Каля 1 хвіліны"
+    "deviceOnboardingIntroDuration": "Каля 1 хвіліны",
+    "jumpToLatestMessage": "Перайсці да апошняга паведамлення",
+    "latest": "Апошні"
 }

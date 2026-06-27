@@ -9469,4 +9469,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Noin 1 minuutti';
+  @override
+  String get jumpToLatestMessage => 'Siirry uusimpaan viestiin';
+
+  @override
+  String get latest => 'Uusin';
 }

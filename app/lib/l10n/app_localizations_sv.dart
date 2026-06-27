@@ -9474,4 +9474,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Hoppa till senaste meddelandet';
+
+  @override
+  String get latest => 'Senaste';
 }

@@ -48,13 +48,18 @@ import type {
 } from "./protocol.js";
 import { requestIdFor } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
-import type { PromptBlock } from "./adapters/interface.js";
+import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
 import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
+import {
+  adapterActivationError,
+  adapterIdForHarnessMode,
+  ensureRegisteredAdapter,
+} from "./runtime/adapter-selection.js";
 import {
   activeControlToolOwnerId,
   controlRequestKey,
@@ -605,7 +610,7 @@ function buildMcpServers(
     const omiToolsEnv: Array<{ name: string; value: string }> = [
       { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
       { name: "OMI_QUERY_MODE", value: mode },
-      { name: "OMI_ADAPTER_ID", value: "acp" },
+      { name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" },
     ];
     if (context) {
       omiToolsEnv.push(
@@ -805,7 +810,7 @@ async function main(): Promise<void> {
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
 
   const defaultHarnessMode = process.env.HARNESS_MODE || "acp";
-  const defaultAdapterId = defaultHarnessMode === "piMono" ? "pi-mono" : "acp";
+  const defaultAdapterId = adapterIdForHarnessMode(defaultHarnessMode);
   logErr(`Default harness mode: ${defaultHarnessMode}`);
 
   // 1. Start Unix socket for omi-tools relay
@@ -813,9 +818,11 @@ async function main(): Promise<void> {
   logErr("omi-tools relay started");
   process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
 
-  // 2. Start the ACP subprocess
-  await startAcpProcess();
-  logErr("ACP subprocess spawned");
+  // 2. Start ACP only when selected or lazily needed by an ACP query.
+  if (defaultAdapterId === "acp") {
+    await startAcpProcess();
+    logErr("ACP subprocess spawned");
+  }
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
@@ -876,6 +883,10 @@ async function main(): Promise<void> {
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
+  const localAcpAdapters = new Set<RuntimeAdapter>();
+  const stopLocalAcpAdapters = async (): Promise<void> => {
+    await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
+  };
   let currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
     if (!authToken) return false;
@@ -896,8 +907,36 @@ async function main(): Promise<void> {
   };
 
   const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  const ensureHermesAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "hermes", {
+      log: logErr,
+      maxWorkers: 1,
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
+  const ensureOpenClawAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "openclaw", {
+      log: logErr,
+      maxWorkers: configuredPiMonoMaxWorkers(),
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
+  const hermesAvailable = await ensureHermesAdapter();
+  const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!hermesAvailable && defaultAdapterId === "hermes") {
+    const msg = adapterActivationError("hermes") ?? "Hermes adapter is unavailable.";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!openClawAvailable && defaultAdapterId === "openclaw") {
+    const msg = adapterActivationError("openclaw") ?? "OpenClaw adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -962,6 +1001,7 @@ async function main(): Promise<void> {
             throw new Error("protocol v2 query requires requestId");
           }
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
+          query.ownerId = queryOwnerId;
           query.requestId = query.protocolVersion === 2 ? query.requestId!.trim() : requestIdFor(query)?.trim() || randomUUID();
           const queryRequestId = requestIdFor(query);
           const queryOwnerKey =
@@ -971,7 +1011,18 @@ async function main(): Promise<void> {
           currentOwnerId = queryOwnerId;
           try {
             if (adapterId === "acp") {
+              await startAcpProcess();
               await initializeAcp();
+            } else if (adapterId === "pi-mono") {
+              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+            } else if (adapterId === "hermes") {
+              if (!(await ensureHermesAdapter())) {
+                throw new Error(adapterActivationError("hermes"));
+              }
+            } else if (adapterId === "openclaw") {
+              if (!(await ensureOpenClawAdapter())) {
+                throw new Error(adapterActivationError("openclaw"));
+              }
             }
             await facade.handleQuery(query);
           } finally {
@@ -1330,6 +1381,7 @@ async function main(): Promise<void> {
         store.close();
         await acpAdapter.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
+        await stopLocalAcpAdapters();
         process.exit(0);
         break;
 
@@ -1344,6 +1396,7 @@ async function main(): Promise<void> {
     store.close();
     void acpAdapter.stop();
     void Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
+    void stopLocalAcpAdapters();
     process.exit(0);
   });
 }

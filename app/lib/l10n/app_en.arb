@@ -11226,5 +11226,13 @@
     "deviceOnboardingIntroDuration": "About 1 minute",
     "@deviceOnboardingIntroDuration": {
         "description": "Onboarding intro screen estimated duration hint"
+    },
+    "jumpToLatestMessage": "Jump to latest message",
+    "@jumpToLatestMessage": {
+        "description": "Accessibility label and tooltip for the jump-to-latest button in chat"
+    },
+    "latest": "Latest",
+    "@latest": {
+        "description": "Visible label for the jump-to-latest button in chat"
     }
 }

@@ -1,6 +1,6 @@
 # memory app/key memory grant storage readiness
 
-**Date:** 2026-06-19  
+**Date:** 2026-06-19
 **Scope:** Oracle P0-1/P0-6 server-owned per-app/per-key memory grants for external memory memory consumers.
 
 ## Server-owned Firestore path

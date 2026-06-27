@@ -349,6 +349,7 @@ struct DashboardPage: View {
                 },
                 sessionsLoadError: chatProvider.sessionsLoadError,
                 onRetry: { Task { await chatProvider.retryLoad() } },
+                localSendToken: chatProvider.localSendToken,
                 welcomeContent: { dashboardChatWelcome }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)

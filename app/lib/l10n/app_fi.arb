@@ -3101,5 +3101,7 @@
     "deviceOnboardingFinish": "Valmis",
     "deviceOnboardingIntroTitle": "Tutustu Omiisi",
     "deviceOnboardingIntroSubtitle": "Nopea ja käytännönläheinen kierros kaikkeen, mitä Omisi osaa.",
-    "deviceOnboardingIntroDuration": "Noin 1 minuutti"
+    "deviceOnboardingIntroDuration": "Noin 1 minuutti",
+    "jumpToLatestMessage": "Siirry uusimpaan viestiin",
+    "latest": "Uusin"
 }

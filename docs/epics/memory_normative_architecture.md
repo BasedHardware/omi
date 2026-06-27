@@ -1,7 +1,7 @@
 # memory Memory Product Integration — Normative Architecture
 
-**Status:** Locked product/architecture decisions after Oracle prescription + David decisions  
-**Date:** 2026-06-18  
+**Status:** Locked product/architecture decisions after Oracle prescription + David decisions
+**Date:** 2026-06-18
 **Supersedes:** Historical Wave 1/2/3 planning language in `memory_product_integration_epic.md` where it conflicts with this document.
 
 ---

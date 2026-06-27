@@ -156,10 +156,7 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
                                 switchOutCurve: Curves.easeInCubic,
                                 layoutBuilder: (currentChild, previousChildren) => Stack(
                                   alignment: Alignment.topCenter,
-                                  children: [
-                                    ...previousChildren,
-                                    if (currentChild != null) currentChild,
-                                  ],
+                                  children: [...previousChildren, if (currentChild != null) currentChild],
                                 ),
                                 transitionBuilder: (child, animation) {
                                   final slide = Tween<Offset>(

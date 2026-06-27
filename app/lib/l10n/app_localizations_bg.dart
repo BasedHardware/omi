@@ -9504,4 +9504,9 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Около 1 минута';
+  @override
+  String get jumpToLatestMessage => 'Отиди до последното съобщение';
+
+  @override
+  String get latest => 'Последно';
 }

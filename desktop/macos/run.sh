@@ -553,7 +553,9 @@ if [ -d "$AGENT_DIR/dist" ]; then
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
     macos_copy_tree "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
+    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.js" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+    cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
 fi
 
 substep "Copying pi-mono-extension (for piMono harness)"

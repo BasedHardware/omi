@@ -3106,5 +3106,7 @@
     "deviceOnboardingFinish": "Hoàn tất",
     "deviceOnboardingIntroTitle": "Tìm hiểu về Omi của bạn",
     "deviceOnboardingIntroSubtitle": "Một chuyến tham quan nhanh, thực tế về mọi điều Omi của bạn có thể làm.",
-    "deviceOnboardingIntroDuration": "Khoảng 1 phút"
+    "deviceOnboardingIntroDuration": "Khoảng 1 phút",
+    "jumpToLatestMessage": "Đi đến tin nhắn mới nhất",
+    "latest": "Mới nhất"
 }

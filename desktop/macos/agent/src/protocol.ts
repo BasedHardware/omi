@@ -85,7 +85,7 @@ export interface AuthenticateMessage {
 
 export interface WarmupSessionConfig {
   key: string;
-  model: string;
+  model?: string;
   systemPrompt?: string;
 }
 
