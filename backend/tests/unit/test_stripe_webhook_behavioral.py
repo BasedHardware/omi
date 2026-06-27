@@ -254,6 +254,32 @@ class TestStripeSubscriptionEventPrecedence:
 
         assert self.fn(current, "sub_old_inactive", now=1_700_000_000) is False
 
+    def test_missing_period_end_does_not_preserve_paid_access(self):
+        """A paid subscription with a missing/zero current_period_end is not
+        provably valid, so it must not shield a downgrade from a stale inactive
+        event (Codex P2). Without the guard, the truthiness check would skip the
+        expiration test and the helper would incorrectly return True."""
+        current = Subscription(
+            plan=PlanType.operator,
+            status=SubscriptionStatus.active,
+            stripe_subscription_id="sub_no_period_end",
+            current_period_end=None,
+        )
+
+        assert self.fn(current, "sub_old_inactive", now=1_700_000_000) is False
+
+    def test_zero_period_end_does_not_preserve_paid_access(self):
+        """A zero current_period_end is equivalent to missing and must not be
+        treated as a valid unexpired period."""
+        current = Subscription(
+            plan=PlanType.operator,
+            status=SubscriptionStatus.active,
+            stripe_subscription_id="sub_zero_period_end",
+            current_period_end=0,
+        )
+
+        assert self.fn(current, "sub_old_inactive", now=1_700_000_000) is False
+
     def test_webhook_uses_non_creating_subscription_read_for_stale_downgrade_guard(self):
         source = self.PAYMENT_SOURCE_FILE.read_text(encoding="utf-8")
         sub_idx = source.find("'customer.subscription.updated'")

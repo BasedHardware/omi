@@ -140,7 +140,15 @@ def _has_current_paid_subscription_for_different_stripe_sub(
         return False
     if current_subscription.status != SubscriptionStatus.active or not is_paid_plan(current_subscription.plan):
         return False
-    if current_subscription.current_period_end and current_subscription.current_period_end < (now or int(time.time())):
+    # Require a valid, unexpired period end before preserving paid access.
+    # A missing or zero current_period_end means the stored paid row is not
+    # provably valid, so we do NOT let it shield a downgrade from a stale
+    # inactive event. This mirrors reconcile_basic_plan_with_stripe, which
+    # only treats a paid subscription as usable when current_period_end is
+    # present and still in the future.
+    if not current_subscription.current_period_end:
+        return False
+    if current_subscription.current_period_end < (now or int(time.time())):
         return False
     return True
 
@@ -1163,8 +1171,7 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
 @router.get("/v1/payments/success", response_class=HTMLResponse)
 def stripe_success(session_id: str = Query(...)):
     # The subscription is updated via webhook. This page is just for user feedback.
-    return HTMLResponse(
-        content="""
+    return HTMLResponse(content="""
         <html>
             <head><title>Success</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1172,14 +1179,12 @@ def stripe_success(session_id: str = Query(...)):
                 <p>Your subscription is now active. You can close this window and return to the app.</p>
             </body>
         </html>
-    """
-    )
+    """)
 
 
 @router.get("/v1/payments/cancel", response_class=HTMLResponse)
 def stripe_cancel():
-    return HTMLResponse(
-        content="""
+    return HTMLResponse(content="""
         <html>
             <head><title>Cancelled</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1187,8 +1192,7 @@ def stripe_cancel():
                 <p>Your payment process was cancelled. You can return to the app.</p>
             </body>
         </html>
-    """
-    )
+    """)
 
 
 @router.post('/v1/payments/customer-portal')
@@ -1221,8 +1225,7 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
 @router.get("/v1/payments/portal-return", response_class=HTMLResponse)
 def portal_return():
-    return HTMLResponse(
-        content="""
+    return HTMLResponse(content="""
         <html>
             <head><title>Portal Complete</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1230,8 +1233,7 @@ def portal_return():
                 <p>Your payment settings have been updated. You can close this window and return to the app.</p>
             </body>
         </html>
-    """
-    )
+    """)
 
 
 @router.get("/v1/payment-methods/status")
