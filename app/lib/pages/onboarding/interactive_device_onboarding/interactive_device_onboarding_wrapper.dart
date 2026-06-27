@@ -35,11 +35,12 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
     super.initState();
     _onboardingProvider = DeviceOnboardingProvider();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       _captureProvider = context.read<CaptureProvider>();
       _captureProvider!.deviceOnboardingProvider = _onboardingProvider;
-      _captureProvider!.suspendBatchModeForOnboarding();
+      await _captureProvider!.suspendBatchModeForOnboarding();
+      if (!mounted) return;
       _onboardingProvider.startOnboarding();
       AnalyticsManager().deviceOnboardingStarted();
     });
