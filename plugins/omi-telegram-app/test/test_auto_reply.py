@@ -12,6 +12,7 @@ Also covers:
 - /toggle endpoint rejects unknown chat_id with 404.
 """
 
+import logging
 import os
 import sys
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -343,3 +344,66 @@ class TestToggle:
             json={"chat_id": "777", "enabled": False},
         )
         assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Defense-in-depth: persona dispatch error path must not leak the omi_dev_api_key
+# or uid in logs. (Cubic flagged the setup path; this guards the dispatch path.)
+# ---------------------------------------------------------------------------
+class TestDispatchErrorPathDoesNotLeakSecrets:
+    @pytest.mark.asyncio
+    async def test_dispatch_logs_status_code_not_url_on_http_status_error(self, caplog):
+        from main import _dispatch_auto_reply
+        import httpx
+
+        request = httpx.Request("POST", "https://api.omi.me/v2/integrations/p-1/user/persona-chat?uid=u-secret")
+        response = httpx.Response(503, request=request)
+        err = httpx.HTTPStatusError("503", request=request, response=response)
+
+        with patch("main._persona_chat", new=AsyncMock(side_effect=err)):
+            with caplog.at_level(logging.ERROR, logger="omi-telegram-clone"):
+                await _dispatch_auto_reply(
+                    user={
+                        "persona_id": "p-1",
+                        "omi_dev_api_key": "SECRET_API_KEY_DO_NOT_LOG",
+                        "bot_token": "bt",
+                        "omi_uid": "u-secret",
+                    },
+                    chat_id="42",
+                    text="hello",
+                )
+
+        # The API key must not appear in any log record.
+        leaked = [r for r in caplog.records if "SECRET_API_KEY_DO_NOT_LOG" in r.getMessage()]
+        assert not leaked, f"api_key leaked into logs: {[r.getMessage() for r in leaked]}"
+        # The uid IS allowed (it's the caller's own uid, not a secret) but the
+        # status code should be there.
+        assert any(
+            "HTTP 503" in r.getMessage() for r in caplog.records
+        ), "expected log message to include 'HTTP 503' (status code)"
+
+    @pytest.mark.asyncio
+    async def test_dispatch_logs_type_name_not_str_for_connect_error(self, caplog):
+        from main import _dispatch_auto_reply
+        import httpx
+
+        request = httpx.Request("POST", "https://api.omi.me/v2/integrations/p-1/user/persona-chat?uid=u-secret")
+        err = httpx.ConnectError("boom", request=request)
+
+        with patch("main._persona_chat", new=AsyncMock(side_effect=err)):
+            with caplog.at_level(logging.ERROR, logger="omi-telegram-clone"):
+                await _dispatch_auto_reply(
+                    user={
+                        "persona_id": "p-1",
+                        "omi_dev_api_key": "SECRET_API_KEY_DO_NOT_LOG",
+                        "bot_token": "bt",
+                        "omi_uid": "u-secret",
+                    },
+                    chat_id="42",
+                    text="hello",
+                )
+
+        leaked = [r for r in caplog.records if "SECRET_API_KEY_DO_NOT_LOG" in r.getMessage()]
+        assert not leaked
+        # Should log the type name, not str(e)
+        assert any("ConnectError" in r.getMessage() for r in caplog.records)
