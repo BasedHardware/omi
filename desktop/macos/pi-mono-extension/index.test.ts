@@ -34,6 +34,7 @@ import {
 } from "./index.ts";
 import type { ToolCallEvent } from "@mariozechner/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
+import { toolNamesForAdapter } from "../agent/src/runtime/omi-tool-manifest.ts";
 
 // ---------------------------------------------------------------------------
 // classifyBash — allow-by-default for normal dev commands
@@ -936,6 +937,13 @@ function createMockBridge(): { server: Server; sockPath: string } {
 
 test("OMI_TOOLS: exactly 26 tools defined via defineTool()", () => {
   assert.equal(OMI_TOOLS.length, 26);
+});
+
+test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
+  assert.deepEqual(
+    OMI_TOOLS.map((tool) => tool.name),
+    toolNamesForAdapter("pi-mono"),
+  );
 });
 
 test("OMI_TOOLS: all tools have name, label, description, parameters, execute", () => {
