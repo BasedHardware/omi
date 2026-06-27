@@ -761,7 +761,14 @@ class MemoriesViewModel: ObservableObject {
         }
         memories = mergedMemories
         currentOffset = mergedMemories.count
-        hasMoreMemories = mergedMemories.count >= pageSize
+        // Use the raw backend page count for pagination, not the tier-filtered
+        // count. The API fetch is an unscoped/default-scope page, so a full raw
+        // page may contain fewer tier-matching items than pageSize while later
+        // backend pages still hold matches for the selected layer. Deriving
+        // hasMoreMemories from the filtered count would disable scrolling and
+        // permanently hide those memories. This matches the error-fallback path
+        // below and the loadMore() API path.
+        hasMoreMemories = fetchedMemories.count >= pageSize
         log("MemoriesViewModel: Showing \(mergedMemories.count) memories from merged local cache")
       } catch {
         logError("MemoriesViewModel: Failed to sync/reload from local cache", error: error)
