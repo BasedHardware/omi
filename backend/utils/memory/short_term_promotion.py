@@ -349,9 +349,11 @@ def run_canonical_short_term_promotion(
 ) -> ShortTermPromotionReport:
     """Batch-or-daily promotion entry point for one canonical user.
 
-    When ``consolidation_batched_ids`` is set (consolidation ran this maintenance pass),
-    only memories included in a consolidation batch this pass are eligible to promote.
-    That enforces consolidate-before-promote when both stages fire in one pass.
+    ``consolidation_batched_ids`` gate semantics (maintenance pass only):
+
+    - ``None``: consolidation did not fire this pass (not due / disabled) — no batch gate.
+    - empty set: consolidation fired but failed or was watermark-blocked — defer all promotion.
+    - non-empty set: consolidation completed cleanly — only batched survivors may promote.
     """
     client = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
@@ -361,6 +363,13 @@ def run_canonical_short_term_promotion(
 
     promotable = list_promotable_short_term_items(uid, db_client=client, now=current_time)
     if consolidation_batched_ids is not None:
+        if not consolidation_batched_ids:
+            return ShortTermPromotionReport(
+                uid=uid,
+                skipped_reason="consolidation_watermark_blocked",
+                promotable_count=len(promotable),
+                last_promotion_run_at=_read_control_state(uid, db_client=client).last_promotion_run_at,
+            )
         allowed = set(consolidation_batched_ids)
         promotable = [item for item in promotable if item.memory_id in allowed]
     fast_track = list_fast_track_promotable_items(uid, db_client=client, now=current_time)
@@ -482,16 +491,21 @@ def run_canonical_short_term_maintenance(
         run_id=run_id,
         llm_invoke=llm_invoke,
     )
+    # Promotion gate: None = consolidation did not fire; empty set = fired but blocked (defer all);
+    # non-empty set = fired cleanly — only items batched this pass may promote.
+    if consolidation.trigger_reason and consolidation.watermark_blocked:
+        promotion_batched_ids: Optional[Set[str]] = set()
+    elif consolidation.trigger_reason and consolidation.batched_memory_ids:
+        promotion_batched_ids = set(consolidation.batched_memory_ids)
+    else:
+        promotion_batched_ids = None
+
     promotion = run_canonical_short_term_promotion(
         uid,
         db_client=client,
         now=current_time,
         run_id=run_id,
-        consolidation_batched_ids=(
-            set(consolidation.batched_memory_ids)
-            if consolidation.trigger_reason and not consolidation.watermark_blocked
-            else None
-        ),
+        consolidation_batched_ids=promotion_batched_ids,
     )
     return CanonicalShortTermMaintenanceReport(
         uid=uid,
