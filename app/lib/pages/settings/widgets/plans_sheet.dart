@@ -30,6 +30,7 @@ class PlansSheet extends StatefulWidget {
   final AnimationController arrowController;
   final Animation<double> arrowAnimation;
   final VoidCallback? onCancelSubscription;
+  final VoidCallback? onPlanUpgraded;
 
   const PlansSheet({
     super.key,
@@ -38,6 +39,7 @@ class PlansSheet extends StatefulWidget {
     required this.arrowController,
     required this.arrowAnimation,
     this.onCancelSubscription,
+    this.onPlanUpgraded,
   });
 
   @override
@@ -374,13 +376,13 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic>? selectedPlanData;
     if (tierId != null) {
       selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-          );
+        (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+      );
     }
     // Fallback to old behavior (first plan matching interval) for backwards compat
     selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-        );
+      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+    );
 
     if (selectedPlanData == null) {
       AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
@@ -396,7 +398,8 @@ class _PlansSheetState extends State<PlansSheet> {
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
     final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
     final isSameTier = currentTierName == tierId;
-    final isUpgradingFromMonthlyToAnnual = isSameTier &&
+    final isUpgradingFromMonthlyToAnnual =
+        isSameTier &&
         (currentSub?.plan == PlanType.unlimited ||
             currentSub?.plan == PlanType.operator ||
             currentSub?.plan == PlanType.architect) &&
@@ -572,6 +575,7 @@ class _PlansSheetState extends State<PlansSheet> {
             AppSnackbar.showSnackbar(message);
             PlatformManager.instance.analytics.upgradeSucceeded();
             await provider.fetchSubscription();
+            widget.onPlanUpgraded?.call();
           }
           // Otherwise, this is a new subscription requiring checkout
           else if (sessionData.containsKey('url') && sessionData['url'] != null) {
@@ -582,6 +586,7 @@ class _PlansSheetState extends State<PlansSheet> {
             if (checkoutResult == true) {
               AppSnackbar.showSnackbar(context.l10n.subscriptionSuccessfulCharged);
               PlatformManager.instance.analytics.upgradeSucceeded();
+              widget.onPlanUpgraded?.call();
             } else {
               PlatformManager.instance.analytics.upgradeCancelled();
             }
@@ -964,7 +969,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded = sub?.currentPeriodEnd != null &&
+                              final periodEnded =
+                                  sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1033,7 +1039,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption =
+                                _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1196,7 +1203,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
+                            final shouldShowContinueButton =
+                                !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1444,10 +1452,7 @@ class _PlansSheetState extends State<PlansSheet> {
             children: [
               Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 18),
               const SizedBox(width: 8),
-              Text(
-                context.l10n.promoCode,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              ),
+              Text(context.l10n.promoCode, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
               const SizedBox(width: 4),
               Icon(
                 _showPromoCodeField ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
@@ -2088,11 +2093,7 @@ class _PlansSheetState extends State<PlansSheet> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            granted ? Icons.check : Icons.close,
-            color: granted ? Colors.green[400] : Colors.red[400],
-            size: 14,
-          ),
+          Icon(granted ? Icons.check : Icons.close, color: granted ? Colors.green[400] : Colors.red[400], size: 14),
           const SizedBox(width: 6),
           Expanded(
             child: Text(
