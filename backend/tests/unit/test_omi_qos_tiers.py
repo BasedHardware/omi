@@ -198,6 +198,7 @@ from utils.llm.clients import (
     get_provider,
     get_qos_info,
 )
+from utils.llm import model_config as model_config_module
 
 # ---------------------------------------------------------------------------
 # Tests
@@ -352,6 +353,128 @@ class TestGetModel:
     def test_perplexity_feature_returns_model_string(self):
         model = get_model('web_search')
         assert 'sonar' in model
+
+
+class TestDynamicAutoRoutes:
+    """Verify benchmark route tables are guarded before affecting model resolution."""
+
+    def teardown_method(self):
+        model_config_module.clear_dynamic_model_routes()
+
+    def test_dynamic_route_overrides_profile_for_regular_feature(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'routes': {
+                    'memories': {
+                        'model': 'gemini-2.5-flash-lite',
+                        'provider': 'gemini',
+                        'source': 'auto-router',
+                        'score': 0.91,
+                    }
+                },
+            }
+        )
+
+        assert get_model('memories') == 'gemini-2.5-flash-lite'
+        assert get_provider('memories') == 'gemini'
+
+    def test_pinned_feature_ignores_dynamic_route(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'routes': {'fair_use': {'model': 'gpt-4.1-mini', 'provider': 'openai', 'source': 'auto-router'}},
+            }
+        )
+
+        assert get_model('fair_use') == 'gpt-5.1'
+
+    def test_regular_feature_rejects_anthropic_route(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'routes': {
+                    'chat_responses': {
+                        'model': 'claude-sonnet-4-6',
+                        'provider': 'anthropic',
+                        'source': 'auto-router',
+                    }
+                },
+            }
+        )
+
+        assert get_provider('chat_responses') == MODEL_QOS_PROFILES[_active_profile_name]['chat_responses'][1]
+
+    def test_regular_feature_rejects_openrouter_route(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'routes': {
+                    'memories': {
+                        'model': 'gemini-3-flash-preview',
+                        'provider': 'openrouter',
+                        'source': 'auto-router',
+                    }
+                },
+            }
+        )
+
+        assert get_model('memories') == MODEL_QOS_PROFILES[_active_profile_name]['memories'][0]
+
+    def test_expired_route_table_is_ignored(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'expires_at': '2000-01-01T00:00:00+00:00',
+                'routes': {
+                    'memories': {
+                        'model': 'gemini-2.5-flash-lite',
+                        'provider': 'gemini',
+                        'source': 'auto-router',
+                    }
+                },
+            }
+        )
+
+        assert get_model('memories') == MODEL_QOS_PROFILES[_active_profile_name]['memories'][0]
+
+    def test_anthropic_only_feature_allows_anthropic_route(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'routes': {
+                    'chat_agent': {
+                        'model': 'claude-sonnet-4-6',
+                        'provider': 'anthropic',
+                        'source': 'auto-router',
+                    }
+                },
+            }
+        )
+
+        assert get_provider('chat_agent') == 'anthropic'
+        assert get_model('chat_agent') == 'claude-sonnet-4-6'
+
+    def test_qos_info_exposes_auto_route_metadata(self):
+        model_config_module.set_dynamic_model_routes(
+            {
+                'profile': _active_profile_name,
+                'routes': {
+                    'memories': {
+                        'model': 'gemini-2.5-flash-lite',
+                        'provider': 'gemini',
+                        'source': 'auto-router',
+                        'reason': 'benchmark_value_pick',
+                        'score': 0.91,
+                    }
+                },
+            }
+        )
+
+        info = get_qos_info()
+        assert info['memories']['route_source'] == 'auto-router'
+        assert info['memories']['reason'] == 'benchmark_value_pick'
+        assert info['memories']['score'] == 0.91
 
 
 class TestGetLlm:
