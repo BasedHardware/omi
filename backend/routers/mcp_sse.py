@@ -596,6 +596,16 @@ def execute_tool(
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
+        # Fail closed: authorize the memory read scope before any system branch.
+        # The REST list route checks this first; the SSE path must match so a
+        # legacy MCP key without a persisted memories.read grant cannot list
+        # canonical memories.
+        if auth_context is None:
+            raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+        if not app_key_grant.allowed:
+            raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
+
         if memory_system == MemorySystem.CANONICAL:
             memories = memorydb_list_with_locked_preview(
                 MemoryService(db_client=db).read(user_id, limit=limit, offset=offset)

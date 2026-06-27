@@ -707,7 +707,12 @@ class MemoriesViewModel: ObservableObject {
         offset: 0,
         deviceScope: filterThisDeviceOnly ? "current" : nil
       )
-      guard isCurrentScope(token) else { return }
+      guard isCurrentScope(token) else {
+        // Scope changed mid-load; reset loading state so the replacement load
+        // (gated by `guard !isLoading`) is not permanently blocked.
+        isLoading = false
+        return
+      }
       hasLoadedInitially = true
       log("MemoriesViewModel: Fetched \(fetchedMemories.count) memories from API")
 
@@ -724,7 +729,12 @@ class MemoriesViewModel: ObservableObject {
           offset: 0,
           tiers: layers(for: token)
         )
-        guard isCurrentScope(token) else { return }
+        guard isCurrentScope(token) else {
+          // Scope changed mid-merge; reset loading state so the replacement
+          // load is not permanently blocked.
+          isLoading = false
+          return
+        }
         memories = mergedMemories
         currentOffset = mergedMemories.count
         hasMoreMemories = mergedMemories.count >= pageSize

@@ -97,6 +97,28 @@ def test_mcp_sse_search_tool_wires_app_key_scope_grant_before_memory_vector_adap
     assert search_tool.index(rollout_call) < search_tool.index(vector_adapter_call) < search_tool.index(legacy_call)
 
 
+def test_mcp_sse_get_memories_tool_wires_app_key_scope_grant_before_canonical_memory_branch():
+    mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    contents = mcp_sse_py.read_text(encoding='utf-8')
+    get_tool = contents[
+        contents.index('elif tool_name == "get_memories":') : contents.index('elif tool_name == "create_memory":')
+    ]
+    grant_call = 'authorize_memory_external_default_memory_read(auth_context, db_client=db)'
+    canonical_branch = 'if memory_system == MemorySystem.CANONICAL:'
+    legacy_rollout = "read_default_read_rollout(uid=user_id, db_client=db, consumer='mcp')"
+    assert grant_call in get_tool
+    assert canonical_branch in get_tool
+    assert legacy_rollout in get_tool
+    # Grant must be checked before the canonical early-return so a legacy key
+    # without a persisted memories.read grant cannot list canonical memories.
+    assert get_tool.index(grant_call) < get_tool.index(canonical_branch)
+    assert get_tool.index(grant_call) < get_tool.index(legacy_rollout)
+    # Fail-closed: missing auth context and denied grant must raise before any
+    # memory-system access.
+    assert 'auth_context is None' in get_tool
+    assert 'app_key_grant.allowed' in get_tool
+
+
 def test_mcp_sse_transport_authenticates_full_mcp_api_key_context_without_inferred_scopes():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
