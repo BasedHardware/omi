@@ -231,6 +231,61 @@ enum ToolCallStatus: CaseIterable {
     }
 }
 
+extension ChatContentBlock {
+    static func applyToolActivity(
+        to blocks: inout [ChatContentBlock],
+        toolName: String,
+        status: ToolCallStatus,
+        toolUseId: String? = nil,
+        input: [String: Any]? = nil
+    ) {
+        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
+
+        // Detector-promoted .slow / .stalled arrive through the stall
+        // status-update path, not here.
+        if status == .running {
+            // If we have a toolUseId and input, try to update an existing
+            // running block (input arrived after start).
+            if let toolUseId = toolUseId, toolInput != nil {
+                for i in stride(from: blocks.count - 1, through: 0, by: -1) {
+                    if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = blocks[i],
+                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st.isInFlight)) {
+                        blocks[i] = .toolCall(
+                            id: id, name: name, status: st,
+                            toolUseId: toolUseId, input: toolInput, output: output
+                        )
+                        return
+                    }
+                }
+            }
+            // No existing block to update — create a new one.
+            blocks.append(
+                .toolCall(id: UUID().uuidString, name: toolName, status: .running,
+                          toolUseId: toolUseId, input: toolInput)
+            )
+        } else {
+            // Mark as terminal — find by toolUseId first, fall back to name.
+            // Match any in-flight state so detector-promoted .slow / .stalled
+            // also resolve cleanly when the tool actually finishes.
+            for i in stride(from: blocks.count - 1, through: 0, by: -1) {
+                if case .toolCall(let id, let name, let existingStatus, let existingTuid, let existingInput, let output) = blocks[i],
+                   existingStatus.isInFlight {
+                    let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
+                    if matches {
+                        blocks[i] = .toolCall(
+                            id: id, name: name, status: status,
+                            toolUseId: toolUseId ?? existingTuid,
+                            input: toolInput ?? existingInput,
+                            output: output
+                        )
+                        break
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Chat Message Model
 
 /// Metadata about the context and resources used to generate an AI response
@@ -3742,50 +3797,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-
-        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
-
-        // Detector-promoted .slow / .stalled arrive through the stall
-        // status-update path, not here.
-        if status == .running {
-            // If we have a toolUseId and input, try to update an existing running block (input arrived after start)
-            if let toolUseId = toolUseId, toolInput != nil {
-                for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                    if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
-                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st == .running)) {
-                        messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: st,
-                            toolUseId: toolUseId, input: toolInput, output: output
-                        )
-                        return
-                    }
-                }
-            }
-            // No existing block to update — create a new one
-            messages[index].contentBlocks.append(
-                .toolCall(id: UUID().uuidString, name: toolName, status: .running,
-                          toolUseId: toolUseId, input: toolInput)
-            )
-        } else {
-            // Mark as terminal — find by toolUseId first, fall back to name.
-            // Match any in-flight state so detector-promoted .slow / .stalled
-            // also resolve cleanly when the tool actually finishes.
-            for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, let existingStatus, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
-                   existingStatus.isInFlight {
-                    let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
-                    if matches {
-                        messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: status,
-                            toolUseId: toolUseId ?? existingTuid,
-                            input: toolInput ?? existingInput,
-                            output: output
-                        )
-                        break
-                    }
-                }
-            }
-        }
+        ChatContentBlock.applyToolActivity(
+            to: &messages[index].contentBlocks,
+            toolName: toolName,
+            status: status,
+            toolUseId: toolUseId,
+            input: input
+        )
     }
 
     /// Add tool result output to an existing tool call block
