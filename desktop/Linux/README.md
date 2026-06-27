@@ -5,10 +5,11 @@ codebase as the Windows port (`desktop/Windows`). It looks like the Swift app, t
 to the same production backends, and brings over the same features, with the
 platform-specific pieces reimplemented for Linux.
 
-> Stack: Electron 38 + TypeScript + React 18 (electron-vite). No backend changes. It
-> uses the same `api.omi.me` Python backend and the same Cloud Run desktop backend the
-> Mac and Windows apps use, with the same Firebase auth. The renderer is identical to
-> the Windows app, so the UI matches screen for screen.
+> Stack: Electron 38 + TypeScript + React 18 (electron-vite). It uses the same
+> `api.omi.me` Python backend and the same Cloud Run desktop backend the Mac and
+> Windows apps use, with the same Firebase auth. Backend changes are limited to
+> recognizing `X-App-Platform: linux` as desktop activity. The renderer is
+> identical to the Windows app, so the UI matches screen for screen.
 
 ## What works
 
@@ -50,7 +51,7 @@ Windows-coupled main-process modules were reimplemented:
 | Launch at login | setLoginItemSettings | `~/.config/autostart/omi.desktop` |
 | Tray | Electron Tray | Electron Tray via AppIndicator |
 | Protocol callback | registry scheme | `.desktop` MimeType + argv |
-| Auto-update | NSIS / electron-updater | AppImage / electron-updater |
+| Auto-update | NSIS / electron-updater | Disabled until the official Linux release channel is configured |
 | Packaging | NSIS + portable exe | AppImage + .deb |
 
 ## Architecture
@@ -107,7 +108,7 @@ tesseract at runtime and disables OCR cleanly if it is missing.
 - **System-audio loopback** depends on a PulseAudio or PipeWire monitor source. Where
   there is none, live conversation falls back to microphone-only. Screenshots and
   push-to-talk are unaffected.
-- **Auto-update** works from the AppImage build; the `.deb` updates through your
-  package manager.
+- **Auto-update** is intentionally disabled in this PR until maintainers choose
+  the official Linux release channel. The `.deb` updates through your package
+  manager.
 - **Code signing** is not configured; the AppImage is unsigned.
-```

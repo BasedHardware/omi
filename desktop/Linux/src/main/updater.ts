@@ -1,9 +1,9 @@
 import { app, dialog, BrowserWindow } from 'electron'
 import updaterPkg from 'electron-updater'
 
-// Linux counterpart of the Mac app's Sparkle auto-update. electron-updater pulls
-// from the GitHub releases feed configured in electron-builder.yml (publish:). On
-// macOS Sparkle checks every 10 min; we check on launch + on demand.
+// Linux auto-update is disabled until maintainers choose the official release
+// channel. Keep the electron-updater wiring here, but gate it off so preview
+// packages never check a contributor fork's release feed.
 //
 // On Linux, electron-updater's in-app auto-update only works from a packaged
 // AppImage: it reads the running AppImage path from process.env.APPIMAGE, and its
@@ -13,10 +13,11 @@ import updaterPkg from 'electron-updater'
 // and degrade to a safe no-op so the tray/menu check still resolves cleanly.
 
 const { autoUpdater } = updaterPkg
+const LINUX_AUTO_UPDATE_ENABLED = false
 
-// True only when running from a packaged AppImage, where electron-updater can
-// actually self-update. Dev and .deb builds leave APPIMAGE unset.
-const canAutoUpdate = (): boolean => app.isPackaged && !!process.env.APPIMAGE
+// True only when maintainers enable the official Linux update feed and the app
+// is running from a packaged AppImage. Dev and .deb builds leave APPIMAGE unset.
+const canAutoUpdate = (): boolean => LINUX_AUTO_UPDATE_ENABLED && app.isPackaged && !!process.env.APPIMAGE
 
 let wired = false
 let manualNotificationPending = false
@@ -99,16 +100,15 @@ function wire(): void {
 
 export async function checkForUpdates(manual = false): Promise<UpdateState> {
   if (!canAutoUpdate()) {
-    // No in-app updater here: dev builds, or a .deb install where APPIMAGE is
-    // unset (autoUpdater would throw "APPIMAGE env is not defined"). Report a
-    // friendly idle state so the tray/menu call resolves instead of throwing.
+    // No in-app updater here yet: the Linux release feed is not configured, dev
+    // builds are unpackaged, and .deb installs should use the package manager.
     if (manual) {
       await dialog.showMessageBox({
         type: 'info',
         message: 'Updates',
         detail: app.isPackaged
-          ? 'Auto-update is available in the AppImage build. Update this package with your system package manager.'
-          : 'Auto-update runs in installed builds. This is a dev build.'
+          ? 'Linux auto-update is disabled until the official release channel is configured. Install updates from the project release page or your package manager.'
+          : 'Linux auto-update is disabled in dev builds.'
       })
     }
     return { status: 'idle' }
@@ -127,7 +127,7 @@ export async function checkForUpdates(manual = false): Promise<UpdateState> {
   manualNotificationPending = manual
   checkInFlight = (async () => {
     try {
-    await autoUpdater.checkForUpdates()
+      await autoUpdater.checkForUpdates()
     } catch (e) {
       state = { status: 'error', error: String(e) }
       broadcast()
@@ -152,8 +152,7 @@ let startupTimer: NodeJS.Timeout | null = null
 
 /** Check shortly after launch (non-blocking), like Sparkle's auto-check. */
 export function scheduleStartupCheck(): void {
-  // Only the AppImage build can self-update; skip in dev and .deb so we never
-  // fire a check that electron-updater would reject for a missing APPIMAGE.
+  // Skip until maintainers enable the official Linux update feed.
   if (!canAutoUpdate()) return
   startupTimer = setTimeout(() => {
     startupTimer = null

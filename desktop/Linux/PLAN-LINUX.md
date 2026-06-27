@@ -35,13 +35,14 @@ touch Windows-only APIs, plus the packaging config.
 | Tray | Electron Tray | Electron Tray via AppIndicator; right-click context menu, icon from `resources/tray_icon.png` |
 | Floating bar / glow overlay | frameless always-on-top, click-through | same, X11 always-on-top and click-through; positioning is X11-first, Wayland-limited |
 | Protocol (`omi-computer://`) | registry scheme | `setAsDefaultProtocolClient` plus a `.desktop` `MimeType x-scheme-handler/omi-computer`; the callback URL arrives on the second-instance argv |
-| Auto-update | electron-updater (NSIS) | electron-updater (AppImage) |
+| Auto-update | electron-updater (NSIS) | Disabled until the official Linux release channel is configured |
 | Packaging | NSIS installer + portable exe | electron-builder AppImage (portable analog) plus `.deb` |
 
 ## Backends (same as Windows and Mac)
 
-No backend changes. Same `api.omi.me` Python backend, the same Cloud Run Rust
-desktop backend, the same Firebase auth. `OMI_PYTHON_API_URL` and
+Same `api.omi.me` Python backend, the same Cloud Run Rust desktop backend, the
+same Firebase auth. Backend changes are limited to recognizing
+`X-App-Platform: linux` as desktop activity. `OMI_PYTHON_API_URL` and
 `OMI_DESKTOP_API_URL` overrides still apply.
 
 ## Build and run
@@ -70,3 +71,5 @@ AppImage checks for tesseract at runtime and disables OCR cleanly if it is missi
   through the portal, with the floating bar and hotkey degraded.
 - better-sqlite3 needs a Linux prebuild or a rebuild against the Electron ABI;
   `electron-builder install-app-deps` handles that.
+- Auto-update should stay disabled until maintainers choose the official GitHub
+  release source for Linux packages.

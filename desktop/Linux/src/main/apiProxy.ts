@@ -44,7 +44,7 @@ function resolveUrl(req: ApiRequest): string {
 async function buildHeaders(req: ApiRequest, token: string | null): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Content-Type': req.contentType || 'application/json',
-    'X-App-Platform': 'windows',
+    'X-App-Platform': 'linux',
     'X-Request-Start-Time': String(Math.floor(Date.now() / 1000))
   }
   if (token && !req.anonymous) headers['Authorization'] = `Bearer ${token}`

@@ -230,6 +230,7 @@ class TestPlatformFiltering:
         assert '_TRIAL_PAYWALL_DESKTOP_TOKENS' in src, "must use desktop token set for platform filtering"
         assert 'macos' in src, "desktop tokens must include 'macos'"
         assert 'desktop' in src, "desktop tokens must include 'desktop'"
+        assert 'linux' in src, "desktop tokens must include 'linux'"
 
     def test_is_trial_paywalled_filters_before_expiry_lookup(self):
         src = _read_source(SUBSCRIPTION_SRC_PATH)
@@ -281,9 +282,9 @@ class TestIsTrialPaywalledBehavioral:
         import types
 
         def _stub(name):
-            if name not in sys.modules:
-                sys.modules[name] = types.ModuleType(name)
-            return sys.modules[name]
+            mod = types.ModuleType(name)
+            sys.modules[name] = mod
+            return mod
 
         saved = {}
         stubs = [
@@ -320,7 +321,8 @@ class TestIsTrialPaywalledBehavioral:
                 mock_user.user_metadata.creation_timestamp = 0
                 mod.get_user = MagicMock(return_value=mock_user)
 
-        if 'utils.subscription' in sys.modules:
+        saved_subscription = sys.modules.get('utils.subscription')
+        if saved_subscription is not None:
             del sys.modules['utils.subscription']
 
         import utils.subscription as sub
@@ -337,6 +339,10 @@ class TestIsTrialPaywalledBehavioral:
         yield
 
         sub._is_trial_expired_cached = self._orig_expired
+        if saved_subscription is None:
+            sys.modules.pop('utils.subscription', None)
+        else:
+            sys.modules['utils.subscription'] = saved_subscription
         for name in stubs:
             if saved[name] is None:
                 sys.modules.pop(name, None)
@@ -348,6 +354,9 @@ class TestIsTrialPaywalledBehavioral:
 
     def test_macos_expired_returns_true(self):
         assert self._sub.is_trial_paywalled('uid1', 'macos') is True
+
+    def test_linux_expired_returns_true(self):
+        assert self._sub.is_trial_paywalled('uid1', 'linux') is True
 
     def test_ios_returns_false(self):
         assert self._sub.is_trial_paywalled('uid1', 'ios') is False
@@ -368,6 +377,7 @@ class TestIsTrialPaywalledBehavioral:
     def test_mixed_case_desktop(self):
         assert self._sub.is_trial_paywalled('uid1', 'Desktop') is True
         assert self._sub.is_trial_paywalled('uid1', 'MACOS') is True
+        assert self._sub.is_trial_paywalled('uid1', 'LINUX') is True
 
     def test_desktop_cache_false_returns_false(self):
         self._mock_expired.return_value = False
@@ -402,9 +412,9 @@ class TestByokRequestEscapeHatch:
         import types
 
         def _stub(name):
-            if name not in sys.modules:
-                sys.modules[name] = types.ModuleType(name)
-            return sys.modules[name]
+            mod = types.ModuleType(name)
+            sys.modules[name] = mod
+            return mod
 
         saved = {}
         stubs = [
@@ -443,7 +453,8 @@ class TestByokRequestEscapeHatch:
                 mock_user.user_metadata.creation_timestamp = 0
                 mod.get_user = MagicMock(return_value=mock_user)
 
-        if 'utils.subscription' in sys.modules:
+        saved_subscription = sys.modules.get('utils.subscription')
+        if saved_subscription is not None:
             del sys.modules['utils.subscription']
 
         import utils.subscription as sub
@@ -459,6 +470,10 @@ class TestByokRequestEscapeHatch:
 
         # Reset BYOK contextvar between tests so leftover keys don't bleed.
         byok._byok_ctx.set(None)
+        if saved_subscription is None:
+            sys.modules.pop('utils.subscription', None)
+        else:
+            sys.modules['utils.subscription'] = saved_subscription
         for name in stubs:
             if saved[name] is None:
                 sys.modules.pop(name, None)

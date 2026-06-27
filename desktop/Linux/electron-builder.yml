@@ -21,6 +21,7 @@ linux:
   category: Utility
   synopsis: AI that sees your screen, listens, and remembers
   description: Omi for Linux, a port of the macOS desktop app.
+  syncDesktopName: true
   desktop:
     entry:
       Name: Omi
@@ -42,10 +43,8 @@ deb:
 protocols:
   - name: Omi Computer
     schemes: [omi-computer]
-publish:
-  - provider: github
-    owner: ZachL111
-    repo: omi
+# Auto-update/publish is intentionally omitted until maintainers choose the
+# official Linux release channel.
 electronDownload:
   cache: .electron-cache
 npmRebuild: true

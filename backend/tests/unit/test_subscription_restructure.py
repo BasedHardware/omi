@@ -191,11 +191,13 @@ def test_legacy_client_adaptation():
 
 
 def test_version_gating_macos_always_new():
-    """macOS always gets new plans (no version header = True)."""
+    """Desktop platforms get new plans (no version header = True)."""
     from utils.subscription import should_show_new_plans
 
     assert should_show_new_plans('macos', None) is True
     assert should_show_new_plans('macos', '99.99.999') is True
+    assert should_show_new_plans('linux', None) is True
+    assert should_show_new_plans('linux', '99.99.999') is True
 
 
 def test_version_gating_mobile_requires_version():
@@ -224,6 +226,7 @@ def test_version_gating_exact_threshold():
     assert should_show_new_plans('android', '1.0.530') is True
     assert should_show_new_plans('ios', '1.0.530') is True
     assert should_show_new_plans('macos', '0.11.324') is True
+    assert should_show_new_plans('linux', '0.11.324') is True
 
 
 def test_version_gating_just_below_threshold():
@@ -233,6 +236,7 @@ def test_version_gating_just_below_threshold():
     assert should_show_new_plans('android', '1.0.529') is False
     assert should_show_new_plans('ios', '1.0.529') is False
     assert should_show_new_plans('macos', '0.11.323') is False
+    assert should_show_new_plans('linux', '0.11.323') is False
 
 
 def test_version_gating_malformed_version():
@@ -240,6 +244,7 @@ def test_version_gating_malformed_version():
     from utils.subscription import should_show_new_plans
 
     assert should_show_new_plans('macos', 'not.a.version') is True
+    assert should_show_new_plans('linux', 'not.a.version') is True
     assert should_show_new_plans('android', 'not.a.version') is False
     assert should_show_new_plans('ios', 'not.a.version') is False
 

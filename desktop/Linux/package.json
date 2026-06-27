@@ -4,6 +4,7 @@
   "description": "Omi desktop app for Linux: port of the macOS app (desktop/Desktop)",
   "main": "out/main/index.js",
   "author": "Based Hardware",
+  "desktopName": "Omi",
   "license": "MIT",
   "private": true,
   "scripts": {

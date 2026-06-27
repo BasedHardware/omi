@@ -15,7 +15,7 @@ export function AppsPage() {
     setCreating(true)
     setError(null)
     try {
-      const res = await api.createMcpKey('windows-desktop')
+      const res = await api.createMcpKey('linux-desktop')
       setMcpKey(res.key)
     } catch (e) {
       setError(String(e))
