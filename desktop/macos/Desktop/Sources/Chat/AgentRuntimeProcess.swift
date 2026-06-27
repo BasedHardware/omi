@@ -461,11 +461,17 @@ actor AgentRuntimeProcess {
     let useExtension =
       defaults.object(forKey: "playwrightUseExtension") == nil
       || defaults.bool(forKey: "playwrightUseExtension")
-    if useExtension {
+    let playwrightToken = defaults.string(forKey: "playwrightExtensionToken") ?? ""
+    let hasInstalledPlaywrightBridge = BrowserAutomationTargetResolver.installedTargets()
+      .contains { BrowserAutomationTargetResolver.isExtensionInstalled(in: $0) }
+    if useExtension && !playwrightToken.isEmpty && hasInstalledPlaywrightBridge {
+      env["PLAYWRIGHT_MCP_ENABLED"] = "true"
       env["PLAYWRIGHT_USE_EXTENSION"] = "true"
-      if let token = defaults.string(forKey: "playwrightExtensionToken"), !token.isEmpty {
-        env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = token
-      }
+      env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = playwrightToken
+    } else {
+      env.removeValue(forKey: "PLAYWRIGHT_MCP_ENABLED")
+      env.removeValue(forKey: "PLAYWRIGHT_USE_EXTENSION")
+      env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
 
     proc.environment = env

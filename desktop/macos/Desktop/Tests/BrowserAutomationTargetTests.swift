@@ -179,6 +179,27 @@ final class BrowserAutomationTargetTests: XCTestCase {
     )
   }
 
+  func testAgentRuntimeOnlyEnablesPlaywrightWhenBridgeIsConfigured() throws {
+    let repoRoot = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let runtimeSource = try String(
+      contentsOf: repoRoot.appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift"))
+    let bridgeSource = try String(
+      contentsOf: repoRoot
+        .deletingLastPathComponent()
+        .appendingPathComponent("agent/src/index.ts"))
+
+    XCTAssertTrue(runtimeSource.contains("PLAYWRIGHT_MCP_ENABLED"))
+    XCTAssertTrue(runtimeSource.contains("playwrightExtensionToken"))
+    XCTAssertTrue(runtimeSource.contains("isExtensionInstalled"))
+    XCTAssertTrue(bridgeSource.contains("process.env.PLAYWRIGHT_MCP_ENABLED === \"true\""))
+    XCTAssertFalse(
+      bridgeSource.contains("servers.push({\n    name: \"playwright\""),
+      "The Node bridge should not register Playwright unconditionally."
+    )
+  }
+
   @MainActor
   func testClaudeNativeSetupWaitsForAccessibilityApprovalInsteadOfAgentFallback() {
     XCTAssertTrue(
