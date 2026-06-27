@@ -9,6 +9,7 @@ import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 String _stripMarkdown(String text) {
   return text
@@ -95,8 +96,8 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
         }
 
         return OnboardingStepScaffold(
-          title: 'Ask Omi a Question',
-          subtitle: _aiResponse != null ? '' : 'Press the button once, speak your question, then press again when done',
+          title: context.l10n.deviceOnboardingAskQuestionTitle,
+          subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
           content: Column(
             children: [
               const Spacer(flex: 1),
@@ -175,9 +176,9 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                       end: Alignment.centerRight,
                     ).createShader(bounds);
                   },
-                  child: const Text(
-                    'Processing your question...',
-                    style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w500),
+                  child: Text(
+                    context.l10n.deviceOnboardingProcessingQuestion,
+                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w500),
                   ),
                 );
               },
@@ -227,8 +228,8 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                       ),
                     ),
                     const SizedBox(width: 14),
-                    const Text('Listening...',
-                        style: TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500)),
+                    Text(context.l10n.deviceOnboardingListening,
+                        style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500)),
                   ],
                 ),
               );
