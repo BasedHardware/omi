@@ -14,8 +14,7 @@ These rules apply to every AI agent working in this repository. This file is the
 
 ## Setup
 
-- **Pre-commit hook (required — verify before first commit):** `hook="$(git rev-parse --git-path hooks/pre-commit)"; test -f "$hook" || ln -s -f "$(git rev-parse --show-toplevel)/scripts/pre-commit" "$hook"` — formatting is enforced by CI.
-- **Pre-push hook (required — verify before first push):** `hook="$(git rev-parse --git-path hooks/pre-push)"; test -f "$hook" || ln -s -f "$(git rev-parse --show-toplevel)/scripts/pre-push" "$hook"` — fast deterministic CI lint guards run before push.
+- **Worktree setup (required before first commit/push):** `make setup` — installs the repo Git hooks using linked-worktree-safe paths.
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`).
 
 ## Safety Rules
