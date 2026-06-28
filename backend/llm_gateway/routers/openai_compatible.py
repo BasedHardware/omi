@@ -14,6 +14,7 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRequestError,
 )
 from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
+from llm_gateway.gateway.metrics import observe_error, observe_success, time_request
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
@@ -27,13 +28,23 @@ async def create_chat_completion(
     config: GatewayConfig = Depends(get_gateway_config),
     provider_registry: ProviderRegistry = Depends(get_provider_registry),
 ):
+    started_at = time_request()
+    resolved_route = None
     try:
         request_body = await _request_json(request)
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = build_omi_managed_credential_context(caller)
         result = await execute_chat_completion(resolved_route, credentials, provider_registry)
+        observe_success(started_at, result)
         return JSONResponse(content=result.response)
     except GatewayError as exc:
+        if resolved_route is not None:
+            observe_error(
+                started_at,
+                lane_id=resolved_route.lane.lane_id,
+                route_artifact_id=resolved_route.active_route.route_artifact_id,
+                error=exc,
+            )
         return _error_response(exc)
 
 

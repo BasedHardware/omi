@@ -30,7 +30,7 @@ class ChatCompletionProvider(Protocol):
     ) -> Mapping[str, Any]: ...
 
 
-@dataclass(frozen=True)
+@dataclass
 class ProviderFailure(Exception):
     failure_class: FailureClass
     safe_message: str = 'provider request failed'
