@@ -207,6 +207,37 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
     XCTAssertFalse(panelTopLeft.intersects(modal), "bubble must not cover the modal body")
   }
 
+  // MARK: Screen Recording fallback instruction card
+
+  @MainActor
+  func testInstructionCardCentersOnAnchorAndStaysOnScreen() {
+    let visible = CGRect(x: 0, y: 0, width: 1512, height: 950)
+    let settingsWindow = CGRect(x: 380, y: 120, width: 760, height: 700)
+    let card = CGSize(width: 380, height: 96)
+
+    let frame = CloudConnectorGuidanceOverlay.instructionCardFrame(
+      anchor: settingsWindow, cardSize: card, visibleFrame: visible)
+    // Horizontally centered on the settings window.
+    XCTAssertEqual(frame.midX, settingsWindow.midX, accuracy: 0.5)
+    // Near the window's top edge (AppKit maxY) and fully on screen.
+    XCTAssertLessThanOrEqual(frame.maxY, visible.maxY - 12 + 0.5)
+    XCTAssertGreaterThanOrEqual(frame.minX, visible.minX)
+    XCTAssertLessThanOrEqual(frame.maxX, visible.maxX)
+    XCTAssertEqual(frame.size, card)
+  }
+
+  @MainActor
+  func testInstructionCardWithoutAnchorStaysWithinVisibleFrame() {
+    let visible = CGRect(x: 100, y: 50, width: 1000, height: 800)
+    let card = CGSize(width: 380, height: 96)
+    let frame = CloudConnectorGuidanceOverlay.instructionCardFrame(
+      anchor: nil, cardSize: card, visibleFrame: visible)
+    XCTAssertGreaterThanOrEqual(frame.minX, visible.minX)
+    XCTAssertLessThanOrEqual(frame.maxX, visible.maxX)
+    XCTAssertGreaterThanOrEqual(frame.minY, visible.minY)
+    XCTAssertLessThanOrEqual(frame.maxY, visible.maxY)
+  }
+
   func testRealisticSceneFailsWhenApexIsBelowTheButton() {
     // Regression guard: a placement whose apex sits below the footer (the exact bad
     // screenshot) must be reported as an issue.
