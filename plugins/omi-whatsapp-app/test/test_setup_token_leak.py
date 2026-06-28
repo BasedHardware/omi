@@ -121,7 +121,7 @@ class TestSetupAccessTokenLeak:
         for record in caplog.records:
             assert SECRET_TOKEN not in record.getMessage()
 
-    def test_subscribe_app_http_error_does_not_leak_token_in_logs(self, client, caplog):
+    def test_subscribe_app_http_error_does_not_leak_token_in_logs_all_loggers(self, client, caplog):
         """Same as test #2 but uses caplog propagation for thorough assertion.
 
         Validates that no log record (across all loggers, not just our app's
@@ -169,8 +169,10 @@ class TestSetupHappyPath:
         assert stored_payload["phone_number_id"] == "15550001111"
         assert stored_payload["verify_token"] == "VT_1"
 
-    def test_setup_falls_back_to_phone_number_id_when_get_info_fails(self, client):
-        """If get_phone_number_info 500s, fall back to phone_number_id in the deep link."""
+    def test_setup_returns_502_when_get_phone_info_fails(self, client):
+        """P1.3 fix: no more fallback to phone_number_id. If we can't fetch a
+        real display_phone_number from Meta, the setup fails with a 502 so
+        the user knows the deep link would be broken."""
 
         async def fake_subscribe(phone_number_id, access_token):
             return {"success": True}
@@ -182,7 +184,6 @@ class TestSetupHappyPath:
             with patch("main.whatsapp_client.get_phone_number_info", new=AsyncMock(side_effect=fake_get_info)):
                 r = client.post("/setup", json=_setup_payload())
 
-        assert r.status_code == 200
-        body = r.json()
-        # Falls back to phone_number_id
-        assert body["deep_link"].startswith("https://wa.me/15550001111?text=")
+        assert r.status_code == 502
+        # Error message must not leak access_token
+        assert SECRET_TOKEN not in r.text

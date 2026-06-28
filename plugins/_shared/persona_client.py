@@ -16,6 +16,7 @@ Raises httpx.HTTPStatusError on 4xx/5xx responses (caller decides retry policy).
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import AsyncIterator, Iterable, Optional
 
@@ -68,6 +69,11 @@ async def chat(
     if context:
         body["context"] = context
 
+    # httpx.Timeout sets per-phase timeouts (connect/read/write/pool) — it does
+    # NOT enforce a wall-clock deadline. For SSE streams the read timeout resets
+    # with each chunk, so the call can run far longer than `timeout_seconds`
+    # under slow streams and starve webhook workers. We use asyncio.wait_for
+    # to enforce a true wall-clock cap.
     timeout = httpx.Timeout(timeout_seconds)
 
     try:
@@ -77,14 +83,18 @@ async def chat(
             # tight auth check (api_key must be issued for this exact uid).
             response = await client.post(url, headers=headers, params={"uid": uid}, json=body)
             response.raise_for_status()
-            chunks: list[str] = []
-            async for event in EventSource(response).aiter_sse():
-                # event.data is the joined payload of one SSE event — for the
-                # persona-chat endpoint that's the chunk text (the backend yields
-                # `data: <token>` per token, sometimes multi-line).
-                if event.data:
-                    chunks.append(event.data)
-            return _join_chunks(chunks)
+
+            async def _consume_stream() -> str:
+                chunks: list[str] = []
+                async for event in EventSource(response).aiter_sse():
+                    # event.data is the joined payload of one SSE event — for the
+                    # persona-chat endpoint that's the chunk text (the backend yields
+                    # `data: <token>` per token, sometimes multi-line).
+                    if event.data:
+                        chunks.append(event.data)
+                return _join_chunks(chunks)
+
+            return await asyncio.wait_for(_consume_stream(), timeout=timeout_seconds)
     except httpx.TimeoutException as e:
         logger.error(
             "persona chat timed out after %.1fs (app_id=%s, uid=%s)",
@@ -92,6 +102,17 @@ async def chat(
             app_id,
             uid,
             extra={"err": str(e)},
+        )
+        return ""
+    except asyncio.TimeoutError:
+        # asyncio.wait_for raises asyncio.TimeoutError when the wall-clock cap
+        # fires (P1.4 fix). httpx.TimeoutException only covers per-phase
+        # transport timeouts, not the SSE wall-clock deadline.
+        logger.error(
+            "persona chat wall-clock timeout after %.1fs (app_id=%s, uid=%s)",
+            timeout_seconds,
+            app_id,
+            uid,
         )
         return ""
     except httpx.ConnectError as e:
@@ -119,14 +140,16 @@ def _join_chunks(chunks: Iterable[str]) -> str:
 
 
 def _split_lines(data: str) -> str:
-    """For multi-line SSE data frames, join with newlines; else return as-is.
+    """For multi-line SSE data frames, normalize line endings; else return as-is.
 
     Multi-line events happen when the backend streams a chunk whose text
     itself contains a newline (rare but legitimate — code blocks, lists).
-    We preserve blank lines so the reply formatting survives intact.
+    We use split("\n") (not splitlines()) because splitlines() silently
+    drops trailing empty strings — e.g. "a\n\n" would split into ["a"]
+    instead of ["a", ""], losing the trailing blank line. split("\n")
+    preserves all empty strings at any position.
     """
     if "\n" not in data:
         return data
-    # Preserve blank lines (was previously filtered — fixed per review feedback
-    # from cubic). Each line as-is, joined with newlines.
-    return "\n".join(data.splitlines())
+    # split("\n") preserves trailing empty strings; splitlines() would not.
+    return "\n".join(data.split("\n"))

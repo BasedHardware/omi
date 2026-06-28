@@ -338,3 +338,66 @@ class TestChatErrors:
                 )
 
         assert reply == ""
+
+    @pytest.mark.asyncio
+    async def test_wall_clock_timeout_caps_long_sse_stream(self, caplog):
+        """P1.4 fix: httpx.Timeout sets per-phase timeouts, not a wall-clock cap.
+        For SSE the read timeout resets per chunk, so the call can run far longer
+        than timeout_seconds without asyncio.wait_for. Verify that the wall-clock
+        cap fires even when individual chunks arrive within their own per-phase
+        timeout.
+        """
+        import asyncio
+        import httpx
+        from httpx_sse import EventSource
+
+        # Build a fake SSE response whose aiter_sse yields chunks slowly.
+        # Without asyncio.wait_for wrapping the stream consume, this would
+        # run for ~1s. With the wrap + a 0.1s wall-clock cap, it should be
+        # cancelled and return "".
+        request = httpx.Request("POST", "https://api.omi.me/v2/integrations/app-1/user/persona-chat")
+        resp = httpx.Response(200, content=b"data: chunk1\n\n", request=request)
+
+        # Yield one chunk, then sleep past the wall-clock cap.
+        async def slow_aiter_sse(self):
+            yield type("SSEEvent", (), {"data": "chunk1"})()
+            await asyncio.sleep(0.5)
+            yield type("SSEEvent", (), {"data": "chunk2"})()
+
+        client = AsyncMock()
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+        client.post = AsyncMock(return_value=resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            with patch.object(EventSource, "aiter_sse", slow_aiter_sse):
+                with caplog.at_level(logging.ERROR, logger="persona_client"):
+                    reply = await persona_client.chat(
+                        app_id="app-1",
+                        api_key="k",
+                        omi_base="https://api.omi.me",
+                        text="hi",
+                        uid="u-1",
+                        timeout_seconds=0.1,
+                    )
+
+        # The wall-clock cap should have fired \u2014 reply is "" (timeout path).
+        assert reply == ""
+        # Should have logged the timeout.
+        assert any(
+            "timeout" in r.message.lower() for r in caplog.records
+        ), f"Expected timeout log, got: {[r.message for r in caplog.records]}"
+
+    @pytest.mark.asyncio
+    async def test_split_lines_preserves_trailing_blank(self):
+        """P2.9 fix: _split_lines must preserve trailing blank lines (splitlines
+        silently drops them, contradicting the docstring)."""
+        # "a\n\n" splits into ["a", "", ""] and rejoins as "a\n\n" — both
+        # newlines preserved (splitlines would silently drop the trailing two).
+        assert persona_client._split_lines("a\n\n") == "a\n\n"
+        # Multiple trailing newlines all preserved.
+        assert persona_client._split_lines("a\n\n\n") == "a\n\n\n"
+        # Single newline in the middle is a no-op.
+        assert persona_client._split_lines("a\nb") == "a\nb"
+        # No newline is a no-op.
+        assert persona_client._split_lines("hello") == "hello"

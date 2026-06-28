@@ -49,6 +49,26 @@ except ValueError:
     logger.warning("NUDGE_COOLDOWN_SECONDS is not a float; defaulting to 14400")
     _NUDGE_COOLDOWN_SECONDS = 14400.0
 
+# Webhook HMAC verification. WHATSAPP_APP_SECRET must be set unless the operator
+# has explicitly opted into dev mode by setting OMI_DEV_MODE=1. Production
+# misconfiguration would otherwise leave /webhook accepting unsigned POSTs
+# (anyone with the public URL could forge messages and trigger persona
+# dispatch + outbound sends).
+_WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET")
+_OMI_DEV_MODE = os.getenv("OMI_DEV_MODE") == "1"
+if not _WHATSAPP_APP_SECRET and not _OMI_DEV_MODE:
+    raise RuntimeError(
+        "WHATSAPP_APP_SECRET must be set. Meta signs every webhook delivery with "
+        "HMAC-SHA256(APP_SECRET, body); without it, anyone with the public URL "
+        "can forge messages. To run without verification in dev only, set "
+        "OMI_DEV_MODE=1."
+    )
+if not _WHATSAPP_APP_SECRET:
+    logger.warning(
+        "WHATSAPP_APP_SECRET unset and OMI_DEV_MODE=1 \u2014 webhook signature "
+        "verification is DISABLED. Do not use this in production."
+    )
+
 
 app = FastAPI(
     title="OMI WhatsApp AI-Clone",
@@ -125,8 +145,7 @@ async def webhook_delivery(
 
     # Optional HMAC verification. If WHATSAPP_APP_SECRET is set, we verify the
     # signature. If unset (dev), we skip — production must set this.
-    app_secret = os.getenv("WHATSAPP_APP_SECRET")
-    if app_secret:
+    if _WHATSAPP_APP_SECRET:
         import hmac
         import hashlib
 
@@ -137,7 +156,7 @@ async def webhook_delivery(
             raise HTTPException(status_code=401, detail="Malformed X-Hub-Signature-256")
         presented_sig = x_hub_signature_256[len("sha256=") :]
         expected_sig = hmac.new(
-            app_secret.encode("utf-8"),
+            _WHATSAPP_APP_SECRET.encode("utf-8"),
             raw_body,
             hashlib.sha256,
         ).hexdigest()
@@ -159,19 +178,31 @@ async def webhook_delivery(
         logger.warning("webhook received non-dict JSON, ignoring")
         return {"ok": True}
 
-    # Status updates (delivery receipts, read receipts) come under entry[].changes[].value.statuses
-    # — we don't act on them, just acknowledge.
-    if _has_statuses(payload):
+    # Meta batches webhook events: a single POST can contain multiple entries,
+    # each with multiple changes, each with multiple messages and/or statuses.
+    # We MUST process ALL messages, even when the same payload also contains
+    # statuses (delivery/read receipts) — dropping the whole payload on any
+    # status would silently lose real user messages under load.
+    inbound_messages = list(_iter_inbound_messages(payload))
+
+    if not inbound_messages:
+        # No new user messages (purely status updates, malformed, etc.). 200 OK.
         return {"ok": True}
 
-    msg = _extract_message(payload)
-    if msg is None:
-        return {"ok": True}
+    # Process each inbound message independently. /start handshake binds
+    # the phone; subsequent messages dispatch to the persona.
+    for msg in inbound_messages:
+        await _handle_inbound_message(msg)
 
+    return {"ok": True}
+
+
+async def _handle_inbound_message(msg: dict) -> None:
+    """Handle a single inbound Meta WhatsApp message (text only in v0.1)."""
     from_phone = msg.get("from")
     text = _extract_text(msg)
     if not from_phone:
-        return {"ok": True}
+        return
 
     # /start handshake — bind phone to user.
     is_start, setup_token = _is_setup_start(text or "")
@@ -189,7 +220,7 @@ async def webhook_delivery(
                     str(from_phone),
                     "This setup link is invalid or already used. Please re-run setup from the Omi desktop.",
                 )
-            return {"ok": True}
+            return
 
         simple_storage.save_user(
             phone=str(from_phone),
@@ -209,46 +240,65 @@ async def webhook_delivery(
             "Connected! Open the Omi desktop and toggle AI Clone \u2192 WhatsApp to start receiving auto-replies.",
         )
         logger.info("setup handshake complete: phone=%s user=%s", from_phone, payload_data["omi_uid"])
-        return {"ok": True}
+        return
 
     # Regular text from a known phone: dispatch or nudge.
     user = simple_storage.get_user_by_phone(str(from_phone))
     if user is None:
-        return {"ok": True}
+        return
 
     if not text:
         # Non-text messages (images, voice, etc.) are not handled in v0.1.
-        return {"ok": True}
+        return
 
     if not user.get("auto_reply_enabled"):
         if simple_storage.should_nudge(user, _NUDGE_COOLDOWN_SECONDS):
             await _send_auto_reply_disabled_notice(user, str(from_phone))
             simple_storage.mark_nudged(str(from_phone))
-        return {"ok": True}
+        return
 
     await _dispatch_auto_reply(user, str(from_phone), text)
-    return {"ok": True}
 
 
-def _has_statuses(payload: dict) -> bool:
-    """True if the webhook payload contains delivery/read status updates only."""
-    for entry in payload.get("entry") or []:
-        for change in entry.get("changes") or []:
-            value = change.get("value") or {}
-            if value.get("statuses"):
-                return True
-    return False
+def _iter_inbound_messages(payload: dict):
+    """Yield every inbound text message from a Meta webhook payload.
 
-
-def _extract_message(payload: dict) -> Optional[dict]:
-    """Pull the first inbound message from a Meta webhook payload. None if absent."""
+    Walks entry[] -> changes[] -> value.messages[] (skipping status updates
+    and non-text payloads). Handles mixed/batched payloads correctly: a single
+    POST with 5 messages + 3 statuses yields all 5 messages, not zero.
+    """
     for entry in payload.get("entry") or []:
         for change in entry.get("changes") or []:
             value = change.get("value") or {}
             messages = value.get("messages")
-            if messages and isinstance(messages, list) and messages:
-                return messages[0]
-    return None
+            if not (messages and isinstance(messages, list)):
+                continue
+            for msg in messages:
+                if not isinstance(msg, dict):
+                    continue
+                # v0.1 only handles text messages. Image/voice/etc are
+                # silently skipped (we still 200 so Meta doesn't retry).
+                if msg.get("type") != "text":
+                    continue
+                yield msg
+
+
+def _normalize_e164(raw: Optional[str]) -> Optional[str]:
+    """Normalize a phone number to E.164 digits-only form (no '+', no formatting).
+
+    Meta returns display_phone_number with formatting like "+1 555-000-1111" or
+    "(555) 000-1111". wa.me links require E.164 digits only (no '+', no
+    whitespace, no dashes, no parens). We strip all non-digit characters.
+
+    Returns None if the result is empty or contains non-digit junk.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    digits = "".join(c for c in raw if c.isdigit())
+    # Heuristic: require 7+ digits. Anything shorter is malformed.
+    if len(digits) < 7:
+        return None
+    return digits
 
 
 def _extract_text(msg: dict) -> Optional[str]:
@@ -390,16 +440,29 @@ async def setup(req: SetupRequest):
         },
     )
 
-    # Deep link: https://wa.me/<phone_number>?text=/start%20<token>
-    # The phone_number_id is internal; we need the display phone number for
-    # the user-facing deep link. Fetch it now (best-effort; if it fails,
-    # fall back to phone_number_id).
+    # Deep link: https://wa.me/<E.164_phone>?text=/start%20<token>
+    # The phone_number_id is an internal Meta Graph ID — NOT dialable, can't be
+    # used in a wa.me link. We must fetch display_phone_number (the actual
+    # E.164 number) and normalize it. If we can't get a valid phone, we fail
+    # the setup rather than return a broken link the user can't click.
     try:
         info = await whatsapp_client.get_phone_number_info(req.phone_number_id, req.access_token)
-        display_phone = info.get("display_phone_number") or req.phone_number_id
+        display_phone = _normalize_e164(info.get("display_phone_number"))
     except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
-        logger.warning("get_phone_number_info failed: %s — using phone_number_id as fallback", type(e).__name__)
-        display_phone = req.phone_number_id
+        logger.error("get_phone_number_info failed: %s", type(e).__name__)
+        raise HTTPException(
+            status_code=502,
+            detail="Could not fetch your WhatsApp phone number from Meta. "
+            "Check that the access_token has whatsapp_business_management permissions.",
+        )
+
+    if not display_phone:
+        # Meta returned a phone we couldn't normalize to E.164.
+        logger.error("display_phone_number missing or invalid: %r", info.get("display_phone_number"))
+        raise HTTPException(
+            status_code=502,
+            detail="Meta returned an invalid phone number. Please contact support.",
+        )
 
     deep_link = f"https://wa.me/{display_phone}?text={urllib.parse.quote(f'/start {setup_token}')}"
 

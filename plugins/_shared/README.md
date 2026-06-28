@@ -41,7 +41,9 @@ The plugin that consumes this client (`plugins/omi-telegram-app/`) has its own `
 
 ```python
 import sys, os
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "_shared")))
+# main.py lives at plugins/<plugin>/main.py; _shared/ is at plugins/_shared/.
+# So from main.py, `_shared/` is one `..` up: plugins/<plugin>/.. → plugins/_shared.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "_shared")))
 from persona_client import chat
 
 reply = await chat(
@@ -53,7 +55,7 @@ reply = await chat(
 )
 ```
 
-The plugin's `requirements.txt` must include `httpx>=0.27` and `httpx-sse>=0.4`.
+The plugin's `requirements.txt` must include `httpx==0.27.2` and `httpx-sse==0.4.3` (exact pins — keep these in sync with the versions used by every plugin's runtime and the shared dev requirements to avoid silent version drift).
 
 ## Conventions
 

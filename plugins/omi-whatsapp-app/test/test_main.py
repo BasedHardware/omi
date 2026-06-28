@@ -148,7 +148,9 @@ class TestSetupStub:
             return {"success": True}
 
         async def fake_get_info(phone_number_id, access_token):
-            return {"display_phone_number": phone_number_id, "verified_name": "Test"}
+            # Meta returns formatted phone like "+1 555-000-1111"; our _normalize_e164
+            # strips formatting. Test that the deep link uses digits only.
+            return {"display_phone_number": "+1 555-000-1111", "verified_name": "Test"}
 
         with patch("main.whatsapp_client.subscribe_app", new=AsyncMock(side_effect=fake_subscribe)):
             with patch("main.whatsapp_client.get_phone_number_info", new=AsyncMock(side_effect=fake_get_info)):
@@ -165,8 +167,12 @@ class TestSetupStub:
                     },
                 )
         # Detailed behavior is tested in test_setup_token_leak.py::TestSetupHappyPath.
-        # Here we just verify the endpoint responds successfully.
         assert r.status_code == 200
+        # P1.3 fix: deep link uses digits-only E.164 (no '+', no formatting),
+        # NOT phone_number_id which is an internal Graph ID
+        deep_link = r.json()["deep_link"]
+        assert deep_link.startswith("https://wa.me/15550001111?text=")
+        assert "%2Fstart" in deep_link or "/start" in deep_link
 
 
 # ---------------------------------------------------------------------------
