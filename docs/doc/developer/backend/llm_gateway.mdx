@@ -210,6 +210,27 @@ python backend/scripts/validate-llm-gateway-env.py \
   backend/charts/llm-gateway/dev_omi_llm_gateway_values.yaml
 ```
 
+Backend runtime env also has a cross-plane validator backed by
+`backend/deploy/runtime_env.yaml`. Run it without Cloud Run state to validate
+checked-in GKE config against the manifest:
+
+```bash
+python backend/scripts/validate-backend-runtime-env.py --env dev
+```
+
+Run it against live Cloud Run revisions before traffic shift when changing
+backend runtime env, secret bindings, or internal service discovery:
+
+```bash
+python backend/scripts/validate-backend-runtime-env.py --env dev --check-live-cloud-run
+```
+
+The manifest separates checked-in non-secret values, checked-in secret binding
+names, and platform-specific service discovery. Secret values stay in Secret
+Manager. Provisional values mark known migration gaps that require presence but
+do not yet have a final stable endpoint; use `--strict-provisional` once the
+endpoint is finalized.
+
 Post-deploy smoke check, from inside the GKE network or a pod with cluster DNS access:
 
 ```bash
