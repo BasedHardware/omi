@@ -1,5 +1,6 @@
 import { desktopApi } from './apiClient'
 import { extractJSONObject } from './extractJson'
+import { hostedModelForPurpose, tryByokCompletion } from './modelSelection'
 
 const MODEL = 'claude-haiku-4-5-20251001'
 
@@ -16,23 +17,30 @@ export async function generateConversationTopic(
   const text = transcript.trim()
   if (!text) return null
   try {
-    const res = await desktopApi.post('/v2/chat/completions', {
-      model: MODEL,
-      stream: false,
-      messages: [
-        {
-          role: 'user',
-          content:
-            'Summarize this conversation as a topic. Respond with ONLY a JSON object ' +
-            '{"emoji":"<one emoji that captures the topic>","title":"<a short title, max 5 words>"} ' +
-            'and nothing else.\n\nTranscript:\n' +
-            text.slice(0, 4000)
-        }
-      ]
+    const prompt =
+      'Summarize this conversation as a topic. Respond with ONLY a JSON object ' +
+      '{"emoji":"<one emoji that captures the topic>","title":"<a short title, max 5 words>"} ' +
+      'and nothing else.\n\nTranscript:\n' +
+      text.slice(0, 4000)
+    const byok = await tryByokCompletion('memory', {
+      messages: [{ role: 'user', content: prompt }]
     })
-    const content =
-      (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
-        ?.content ?? ''
+    let content = byok ?? ''
+    if (byok === null) {
+      const res = await desktopApi.post('/v2/chat/completions', {
+        model: hostedModelForPurpose('memory', MODEL),
+        stream: false,
+        messages: [
+          {
+            role: 'user',
+            content: prompt
+          }
+        ]
+      })
+      content =
+        (res.data as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message
+          ?.content ?? ''
+    }
     const obj = JSON.parse(extractJSONObject(content)) as { emoji?: unknown; title?: unknown }
     const emoji = typeof obj.emoji === 'string' ? obj.emoji.trim() : ''
     const title = typeof obj.title === 'string' ? obj.title.trim() : ''
