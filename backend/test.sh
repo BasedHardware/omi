@@ -132,6 +132,7 @@ pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
 pytest tests/unit/test_request_validation_contracts.py -v
 pytest tests/unit/test_conversation_structure_timezone.py -v
+pytest tests/unit/test_conversation_title_names.py -v
 pytest tests/unit/test_action_item_dedup.py -v
 pytest tests/unit/test_action_item_reminder_cancel_on_complete.py -v
 pytest tests/unit/test_action_item_idempotency.py -v
