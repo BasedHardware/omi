@@ -38,6 +38,7 @@ from utils.mcp_memories import (
     parse_optional_mcp_bool,
 )
 import database.mcp_api_key as mcp_api_key_db
+import database.mcp_oauth as mcp_oauth_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 import logging
 
@@ -63,6 +64,18 @@ def create_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id
 @router.delete("/v1/mcp/keys/{key_id}", status_code=204, tags=["mcp"])
 def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     mcp_api_key_db.delete_mcp_key(uid, key_id)
+    return
+
+
+@router.get("/v1/mcp/oauth/grants", tags=["mcp"])
+def get_oauth_grants(uid: str = Depends(get_current_user_id)):
+    return {"grants": mcp_oauth_db.list_user_grants(uid)}
+
+
+@router.delete("/v1/mcp/oauth/grants/{grant_id}", status_code=204, tags=["mcp"])
+def revoke_oauth_grant(grant_id: str, uid: str = Depends(get_current_user_id)):
+    if not mcp_oauth_db.revoke_user_grant(uid, grant_id):
+        raise HTTPException(status_code=404, detail="OAuth grant not found")
     return
 
 
