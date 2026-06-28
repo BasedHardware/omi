@@ -165,8 +165,7 @@ struct MessagesPage: View {
           registry.selectedProviderId = provider.id
         } label: {
           HStack(spacing: 7) {
-            Image(systemName: provider.iconSystemName)
-              .scaledFont(size: 12, weight: .semibold)
+            MessagingProviderIcon(provider: provider, size: 12)
             Text(provider.displayName)
               .scaledFont(size: 13, weight: .semibold)
           }
@@ -184,9 +183,7 @@ struct MessagesPage: View {
 
   private func disconnectedBody(_ provider: any MessagingProvider) -> some View {
     VStack(spacing: 16) {
-      Image(systemName: provider.iconSystemName)
-        .scaledFont(size: 34, weight: .semibold)
-        .foregroundColor(OmiColors.purplePrimary)
+      MessagingProviderIcon(provider: provider, size: 48)
       VStack(spacing: 6) {
         Text("Connect \(provider.displayName)")
           .scaledFont(size: 20, weight: .semibold)
@@ -316,9 +313,10 @@ struct MessagesPage: View {
         composeBar(threadId: selectedThreadId)
       } else {
         VStack(spacing: 10) {
-          Image(systemName: "message.fill")
-            .scaledFont(size: 30, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
+          if let provider {
+            MessagingProviderIcon(provider: provider, size: 40)
+              .opacity(0.55)
+          }
           Text("Select a thread")
             .scaledFont(size: 18, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)

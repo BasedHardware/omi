@@ -71,9 +71,7 @@ struct WhatsAppSettingsSection: View {
             .frame(width: 12, height: 12)
             .shadow(color: statusColor.opacity(0.45), radius: 6)
 
-          Image(systemName: "message.fill")
-            .scaledFont(size: 16)
-            .foregroundColor(OmiColors.purplePrimary)
+          ConnectorBrandIcon(brand: .whatsapp, size: 32, cornerRadius: 8)
 
           VStack(alignment: .leading, spacing: 4) {
             Text("WhatsApp")

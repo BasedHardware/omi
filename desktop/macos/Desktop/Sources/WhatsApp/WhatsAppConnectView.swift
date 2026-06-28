@@ -4,7 +4,6 @@ import SwiftUI
 
 struct WhatsAppConnectView: View {
   @ObservedObject private var state = WhatsAppState.shared
-  @Environment(\.dismiss) private var dismiss
 
   let onDismiss: () -> Void
 
@@ -34,7 +33,6 @@ struct WhatsAppConnectView: View {
       if newValue == .connected {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
           onDismiss()
-          dismiss()
         }
       }
     }
@@ -57,10 +55,7 @@ struct WhatsAppConnectView: View {
 
       Spacer()
 
-      DismissButton {
-        onDismiss()
-        dismiss()
-      }
+      DismissButton(action: onDismiss)
     }
   }
 

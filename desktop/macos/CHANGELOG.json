@@ -14,7 +14,9 @@
     "Fixed WhatsApp unread badges clearing after opening a chat",
     "Fixed WhatsApp settings and linking screens so disconnected accounts hide reply controls and transient sync warnings stay out of the UI",
     "Fixed WhatsApp linked-device chats merging with their real contact thread and allowlisted contacts auto-sending from Draft mode",
-    "Fixed WhatsApp thread ordering when synced chat metadata reports newer placeholder activity than real messages"
+    "Fixed WhatsApp thread ordering when synced chat metadata reports newer placeholder activity than real messages",
+    "Updated WhatsApp to use the official logo instead of the generic message icon",
+    "Fixed WhatsApp link modal dismiss sending the app to the background"
   ],
   "releases": [
     {
