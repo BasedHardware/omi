@@ -10,7 +10,7 @@
 #   Total:          ~2.0s
 #
 # Pre-push hook runs fast deterministic CI lint guards.
-# Install: hook="$(git rev-parse --git-path hooks/pre-push)"; test -f "$hook" || ln -s -f "$(git rev-parse --show-toplevel)/scripts/pre-push" "$hook"
+# Install repo hooks: make setup
 # Run manually: .github/scripts/run-pre-push.sh
 
 repos:
