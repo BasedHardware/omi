@@ -465,6 +465,8 @@ def get_goal_history(goal_id: str, days: int = 30, uid: str = Depends(get_uid_fr
         return mcp_goals.get_goal_history(uid, goal_id, days=days)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+    except mcp_goals.GoalError as e:
+        raise _goal_write_error(e)
 
 
 class McpCreateGoal(BaseModel):
