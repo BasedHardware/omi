@@ -142,11 +142,13 @@ enum MemoryExportExecutor {
     throw ExecutorError.browserSetupRequired(cloudSetupNativeAutomationBlockedMessage(lastResult))
   }
 
-  private static func cloudFormFillSucceeded(_ result: String) -> Bool {
+  nonisolated static func cloudFormFillSucceeded(_ result: String) -> Bool {
     let cleanResult = !result.contains("Missing:")
       && !result.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("Error:")
     return cleanResult
-      && (result.contains("Submitted with button:")
+      && (result.contains("Submitted with button: Connect")
+        || result.contains("Submitted with button: Create")
+        || result.contains("Submitted with button: Save")
         || result.contains("Claude connector connected."))
   }
 
@@ -158,10 +160,11 @@ enum MemoryExportExecutor {
     result.lowercased().contains("screen recording permission is not available")
   }
 
-  private static func cloudFormFillShouldRetry(_ result: String) -> Bool {
+  nonisolated static func cloudFormFillShouldRetry(_ result: String) -> Bool {
     result.contains("Could not find a visible")
       || result.contains("Submit skipped: no enabled")
       || result.contains("set failed")
+      || result.contains("Submitted with button: Add")
   }
 
   private static func cloudFormFillResultSummary(_ result: String) -> String {

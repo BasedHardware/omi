@@ -282,6 +282,31 @@ final class BrowserAutomationTargetTests: XCTestCase {
     )
   }
 
+  func testClaudeCloudSetupDoesNotFinishAfterOnlyAddingConnector() {
+    let addResult = """
+      Native connector form filler result:
+      Provider: claude
+      Browser/app: ChatGPT Atlas
+      Filled: Name, Remote MCP server URL, OAuth Client ID, OAuth Client Secret
+      Method: keyboard fallback
+      Submitted with button: Add (keyboard fallback)
+      """
+
+    XCTAssertFalse(MemoryExportExecutor.cloudFormFillSucceeded(addResult))
+    XCTAssertTrue(MemoryExportExecutor.cloudFormFillShouldRetry(addResult))
+
+    let connectResult = """
+      Native connector form filler result:
+      Provider: claude
+      Browser/app: ChatGPT Atlas
+      Submitted with button: Connect (OCR)
+      Connect pressed; waiting for Claude to finish or show OAuth consent.
+      """
+
+    XCTAssertTrue(MemoryExportExecutor.cloudFormFillSucceeded(connectResult))
+    XCTAssertFalse(MemoryExportExecutor.cloudFormFillShouldRetry(connectResult))
+  }
+
   func testClaudeConnectorStateMachineRefusesUnexpectedStates() {
     XCTAssertEqual(
       CloudConnectorFormAutomation.claudeConnectorAction(
