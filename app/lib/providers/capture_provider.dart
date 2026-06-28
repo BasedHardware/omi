@@ -321,8 +321,6 @@ class CaptureProvider extends ChangeNotifier
         return 'bee';
       case DeviceType.plaud:
         return 'plaud';
-      case DeviceType.frame:
-        return 'frame';
       case DeviceType.appleWatch:
         return 'apple_watch';
       case DeviceType.limitless:
@@ -1117,7 +1115,6 @@ class CaptureProvider extends ChangeNotifier
       case DeviceType.appleWatch:
       case DeviceType.bee:
       case DeviceType.fieldy:
-      case DeviceType.frame:
       case DeviceType.limitless:
       case DeviceType.plaud:
         return null;
@@ -1127,7 +1124,7 @@ class CaptureProvider extends ChangeNotifier
   /// Whether the currently-connected recording device has a concrete native BLE
   /// audio route that the Background Mode / native streaming layer can use.
   /// Returns false for device types with no native route (Apple Watch, Bee,
-  /// Fieldy, Frame, Limitless, Plaud) and for empty-device-id sentinel entries
+  /// Fieldy, Limitless, Plaud) and for empty-device-id sentinel entries
   /// that may linger in preferences from stale state.
   @visibleForTesting
   bool get hasNativeBleAudioRoute {
