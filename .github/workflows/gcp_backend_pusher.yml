@@ -76,10 +76,20 @@ jobs:
           fi
 
           echo "Creating $SECRET_NAME in ${{ vars.GCP_PROJECT_ID }}."
+          # Tolerate a concurrent create from another workflow run losing the
+          # check-then-create race (ALREADY_EXISTS); the secret existing is the
+          # desired end state regardless of which run created it.
           openssl rand -base64 48 | gcloud secrets create "$SECRET_NAME" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --replication-policy="automatic" \
-            --data-file=- >/dev/null
+            --data-file=- >/dev/null || {
+              if gcloud secrets describe "$SECRET_NAME" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+                echo "$SECRET_NAME now exists (created concurrently by another run)."
+                exit 0
+              fi
+              echo "Failed to create or find $SECRET_NAME." >&2
+              exit 1
+            }
 
       - name: Login to GCR
         run: gcloud auth configure-docker
@@ -155,7 +165,7 @@ jobs:
       - name: Smoke LLM Gateway
         if: env.SERVICE == 'llm-gateway'
         run: |
-          SMOKE_POD="llm-gateway-smoke-${GITHUB_RUN_ID}"
+          SMOKE_POD="llm-gateway-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT:-1}"
           cleanup() {
             kubectl -n ${{ vars.ENV }}-omi-backend delete pod "$SMOKE_POD" --ignore-not-found=true
           }
