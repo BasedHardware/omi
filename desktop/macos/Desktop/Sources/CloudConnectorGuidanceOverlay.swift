@@ -10,7 +10,23 @@ final class CloudConnectorGuidanceOverlay {
 
   private init() {}
 
+  func presentClaudeAddHint(windowFrame: CGRect, targetPoint: CGPoint) {
+    presentClaudeHint(
+      actionLabel: "Add",
+      windowFrame: windowFrame,
+      targetPoint: targetPoint
+    )
+  }
+
   func presentClaudeConnectHint(windowFrame: CGRect, targetPoint: CGPoint) {
+    presentClaudeHint(
+      actionLabel: "Connect",
+      windowFrame: windowFrame,
+      targetPoint: targetPoint
+    )
+  }
+
+  private func presentClaudeHint(actionLabel: String, windowFrame: CGRect, targetPoint: CGPoint) {
     dismissTask?.cancel()
     window?.close()
 
@@ -24,7 +40,7 @@ final class CloudConnectorGuidanceOverlay {
       near: windowFrame
     )
 
-    let view = CloudConnectorGuidanceView()
+    let view = CloudConnectorGuidanceView(actionLabel: actionLabel)
     let hostingController = NSHostingController(rootView: view)
     hostingController.view.frame = CGRect(origin: .zero, size: overlaySize)
 
@@ -74,6 +90,8 @@ final class CloudConnectorGuidanceOverlay {
 }
 
 private struct CloudConnectorGuidanceView: View {
+  let actionLabel: String
+
   var body: some View {
     VStack(spacing: 8) {
       HStack(spacing: 10) {
@@ -90,7 +108,7 @@ private struct CloudConnectorGuidanceView: View {
           Text("Finish in Claude")
             .scaledFont(size: 13, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
-          Text("Click the Connect button below.")
+          Text("Click the \(actionLabel) button below.")
             .scaledFont(size: 12, weight: .medium)
             .foregroundColor(OmiColors.textTertiary)
         }

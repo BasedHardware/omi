@@ -298,6 +298,22 @@ enum CloudConnectorFormAutomation {
     return true
   }
 
+  static func showClaudeAddGuidanceOverlay() -> Bool {
+    guard let target = findClaudeConnectorTargetWithNodes(),
+      target.state == .addCustomConnectorModal,
+      let windowFrame = largestWindowFrame(in: target.nodes)
+    else {
+      return false
+    }
+
+    target.app.activate()
+    CloudConnectorGuidanceOverlay.shared.presentClaudeAddHint(
+      windowFrame: windowFrame,
+      targetPoint: claudeAddGuidanceAnchor(in: windowFrame)
+    )
+    return true
+  }
+
   static func dismissGuidanceOverlay() {
     CloudConnectorGuidanceOverlay.shared.dismiss()
   }
@@ -306,6 +322,13 @@ enum CloudConnectorFormAutomation {
     CGPoint(
       x: windowFrame.minX + windowFrame.width * 0.72,
       y: windowFrame.minY + windowFrame.height * 0.33
+    )
+  }
+
+  nonisolated static func claudeAddGuidanceAnchor(in windowFrame: CGRect) -> CGPoint {
+    CGPoint(
+      x: windowFrame.minX + windowFrame.width * 0.86,
+      y: windowFrame.minY + windowFrame.height * 0.84
     )
   }
 

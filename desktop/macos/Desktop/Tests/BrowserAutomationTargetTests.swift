@@ -536,4 +536,14 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertGreaterThan(anchor.y, windowFrame.minY + windowFrame.height * 0.2)
     XCTAssertLessThan(anchor.y, windowFrame.minY + windowFrame.height * 0.5)
   }
+
+  func testClaudeAddGuidanceAnchorStaysNearBottomRightModalAction() {
+    let windowFrame = CGRect(x: 80, y: 60, width: 1600, height: 1000)
+    let anchor = CloudConnectorFormAutomation.claudeAddGuidanceAnchor(in: windowFrame)
+
+    XCTAssertGreaterThan(anchor.x, windowFrame.minX + windowFrame.width * 0.75)
+    XCTAssertLessThan(anchor.x, windowFrame.maxX)
+    XCTAssertGreaterThan(anchor.y, windowFrame.minY + windowFrame.height * 0.7)
+    XCTAssertLessThan(anchor.y, windowFrame.maxY)
+  }
 }

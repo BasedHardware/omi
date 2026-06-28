@@ -133,7 +133,11 @@ enum MemoryExportExecutor {
         throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
       }
       if cloudFormFillRequiresScreenRecordingApproval(lastResult) {
-        if CloudConnectorFormAutomation.showClaudeConnectGuidanceOverlay() {
+        if lastResult.contains("hidden Add button"),
+          CloudConnectorFormAutomation.showClaudeAddGuidanceOverlay()
+        {
+          throw ExecutorError.browserSetupRequired(cloudSetupManualClaudeAddMessage)
+        } else if CloudConnectorFormAutomation.showClaudeConnectGuidanceOverlay() {
           throw ExecutorError.browserSetupRequired(cloudSetupManualClaudeConnectMessage)
         } else {
           requestScreenRecordingApprovalForCloudSetup()
@@ -214,6 +218,14 @@ enum MemoryExportExecutor {
     Claude is waiting for one final click.
 
     I added the connector and pointed to the Connect button in your browser.
+    """
+  }
+
+  private static var cloudSetupManualClaudeAddMessage: String {
+    """
+    Claude is waiting for one click.
+
+    I filled the connector form and pointed to the Add button in your browser.
     """
   }
 
