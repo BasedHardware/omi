@@ -51,7 +51,7 @@ the version if you need to re-release.
 
 - `build-cv1.sh` — runs inside `ghcr.io/zephyrproject-rtos/ci` (firmware bind-mounted
   at `/omi/firmware`): west init/update of NCS v2.9.0, `cp omi.conf prj.conf`, and
-  `west build … --sysbuild` (MCUboot-signed). Mirrors `omi/firmware/omi/BUILD.md`.
+  `west build … --sysbuild` (MCUboot-signed). Mirrors [`omi/firmware/omi/BUILD.md`](../../omi/BUILD.md).
   Outputs `dfu_application.zip`, `merged.hex`, `merged_CPUNET.hex`.
 - `make-release-body.sh` — renders the GitHub Release body + `KEY_VALUE` block.
 
