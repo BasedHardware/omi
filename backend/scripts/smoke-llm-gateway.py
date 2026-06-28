@@ -5,6 +5,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 import httpx
 
@@ -16,6 +17,27 @@ def _raise_for_status(response: httpx.Response, label: str) -> None:
         print(f'ERROR: {label} returned HTTP {response.status_code}')
         print(response.text[:1000])
         raise
+
+
+def _get_ready(client: httpx.Client, url: str, headers: dict[str, str]) -> httpx.Response:
+    last_error: Exception | None = None
+    for attempt in range(1, 31):
+        try:
+            ready = client.get(f'{url}/ready', headers=headers)
+            if ready.status_code < 500:
+                _raise_for_status(ready, '/ready')
+                return ready
+            last_error = httpx.HTTPStatusError(
+                f'/ready returned HTTP {ready.status_code}',
+                request=ready.request,
+                response=ready,
+            )
+        except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError) as exc:
+            last_error = exc
+        if attempt < 30:
+            time.sleep(2)
+    print(f'ERROR: /ready did not become available: {last_error}')
+    return client.get(f'{url}/ready', headers=headers)
 
 
 def main() -> int:
@@ -65,8 +87,7 @@ def main() -> int:
     }
 
     with httpx.Client(timeout=20.0) as client:
-        ready = client.get(f'{base_url}/ready', headers=headers)
-        _raise_for_status(ready, '/ready')
+        _get_ready(client, base_url, headers)
         response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
         _raise_for_status(response, '/v1/chat/completions')
         body = response.json()
