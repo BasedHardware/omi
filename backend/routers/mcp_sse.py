@@ -30,11 +30,18 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
+import database.calendar_meetings as calendar_meetings_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_data import (
+    clean_action_item,
+    clean_chat_message,
+    clean_meeting,
+    clean_person,
+    clean_screen_activity_row,
+)
 from utils.mcp_memories import (
     collect_filtered_memories,
     parse_mcp_bool,
@@ -64,6 +71,7 @@ MCP_SCOPES_SUPPORTED = [
     "chat.read",
     "screen_activity.read",
     "people.read",
+    "calendar.read",
 ]
 
 READ_ONLY_ANNOTATIONS = {
@@ -92,6 +100,7 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
+CALENDAR_READ_SECURITY = [{"type": "oauth2", "scopes": ["calendar.read"]}]
 
 
 class MCPSession:
@@ -450,6 +459,40 @@ MCP_TOOLS = [
                 "limit": {"type": "integer", "description": "Number of summaries to retrieve", "default": 30},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
             },
+        },
+    },
+    {
+        "name": "get_calendar_meetings",
+        "description": (
+            "Retrieve the user's calendar meetings (title, time, participants, platform, and notes), newest first. "
+            "Use this for schedule context, for example who the user is meeting and when."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": CALENDAR_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "start_date": {
+                    "type": "string",
+                    "description": "Only meetings starting on/after this date (yyyy-mm-dd)",
+                },
+                "end_date": {
+                    "type": "string",
+                    "description": "Only meetings starting on/before this date (yyyy-mm-dd)",
+                },
+                "limit": {"type": "integer", "description": "Number of meetings to retrieve", "default": 50},
+            },
+        },
+    },
+    {
+        "name": "get_calendar_meeting_by_id",
+        "description": "Retrieve a single calendar meeting by its ID.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": CALENDAR_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"meeting_id": {"type": "string", "description": "The ID of the meeting"}},
+            "required": ["meeting_id"],
         },
     },
 ]
@@ -866,6 +909,25 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             end_date=arguments.get("end_date"),
         )
         return {"daily_summaries": summaries}
+
+    elif tool_name == "get_calendar_meetings":
+        start = _parse_mcp_date(arguments.get("start_date"), "start_date")
+        end = _parse_mcp_date(arguments.get("end_date"), "end_date")
+        try:
+            limit = parse_mcp_int(arguments.get("limit"), "limit", default=50, minimum=1, maximum=200)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        meetings = calendar_meetings_db.list_meetings(user_id, start_date=start, end_date=end, limit=limit)
+        return {"meetings": [clean_meeting(m) for m in meetings]}
+
+    elif tool_name == "get_calendar_meeting_by_id":
+        meeting_id = arguments.get("meeting_id")
+        if not meeting_id:
+            raise ToolExecutionError("meeting_id is required", code=-32602)
+        meeting = calendar_meetings_db.get_meeting(user_id, meeting_id)
+        if not meeting:
+            raise ToolExecutionError("Meeting not found", code=-32001)
+        return {"meeting": clean_meeting(meeting)}
 
     else:
         raise ToolExecutionError(f"Unknown tool: {tool_name}", code=-32601)
