@@ -455,8 +455,7 @@ MCP_TOOLS = [
 ]
 
 
-@router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
-def oauth_protected_resource_metadata():
+def _protected_resource_metadata():
     return {
         "resource": MCP_RESOURCE_URL,
         "authorization_servers": [MCP_AUTHORIZATION_SERVER_URL],
@@ -464,6 +463,19 @@ def oauth_protected_resource_metadata():
         "bearer_methods_supported": ["header"],
         "resource_documentation": "https://docs.omi.me/doc/developer/mcp/setup",
     }
+
+
+@router.get("/.well-known/oauth-protected-resource", tags=["mcp"])
+def oauth_protected_resource_metadata():
+    return _protected_resource_metadata()
+
+
+# RFC 9728: clients derive the metadata URL by inserting the resource path after the
+# well-known prefix. ChatGPT's verifier probes the path-suffixed variant for the MCP
+# resource (https://api.omi.me/v1/mcp/sse), so serve the same document there too.
+@router.get("/.well-known/oauth-protected-resource/v1/mcp/sse", tags=["mcp"])
+def oauth_protected_resource_metadata_for_resource():
+    return _protected_resource_metadata()
 
 
 @router.get("/.well-known/oauth-authorization-server", tags=["mcp"])
