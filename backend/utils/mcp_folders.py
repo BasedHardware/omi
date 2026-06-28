@@ -44,6 +44,20 @@ class InvalidFolderRequest(FolderError):
     """The request is missing or has invalid fields."""
 
 
+def _require_str(value, field: str) -> str:
+    """The SSE transport forwards raw JSON arguments, so validate types here rather
+    than let a non-string reach ``.strip()`` or Firestore and raise an uncaught error."""
+    if not isinstance(value, str):
+        raise InvalidFolderRequest(f"{field} must be a string")
+    return value
+
+
+def _optional_str(value, field: str) -> Optional[str]:
+    if value is not None and not isinstance(value, str):
+        raise InvalidFolderRequest(f"{field} must be a string")
+    return value
+
+
 def list_folders(uid: str) -> List[dict]:
     return folders_db.get_folders(uid)
 
@@ -55,9 +69,12 @@ def create_folder(
     color: Optional[str] = None,
     icon: Optional[str] = None,
 ) -> dict:
-    name = (name or "").strip()
+    name = (_optional_str(name, "name") or "").strip()
     if not name:
         raise InvalidFolderRequest("Folder name is required")
+    description = _optional_str(description, "description")
+    color = _optional_str(color, "color")
+    icon = _optional_str(icon, "icon")
     custom_count = len([f for f in folders_db.get_folders(uid) if not f.get("is_system")])
     if custom_count >= MAX_CUSTOM_FOLDERS:
         raise FolderLimitReached(f"Maximum folder limit reached ({MAX_CUSTOM_FOLDERS} custom folders)")
@@ -72,20 +89,21 @@ def update_folder(
     color: Optional[str] = None,
     icon: Optional[str] = None,
 ) -> dict:
+    folder_id = _require_str(folder_id, "folder_id")
     if not folders_db.get_folder(uid, folder_id):
         raise FolderNotFound("Folder not found")
     update_data: dict = {}
     if name is not None:
-        name = name.strip()
+        name = _require_str(name, "name").strip()
         if not name:
             raise InvalidFolderRequest("Folder name cannot be empty")
         update_data["name"] = name
     if description is not None:
-        update_data["description"] = description
+        update_data["description"] = _require_str(description, "description")
     if color is not None:
-        update_data["color"] = color
+        update_data["color"] = _require_str(color, "color")
     if icon is not None:
-        update_data["icon"] = icon
+        update_data["icon"] = _require_str(icon, "icon")
     if not update_data:
         raise InvalidFolderRequest("No fields to update")
     folders_db.update_folder(uid, folder_id, update_data)
@@ -93,6 +111,8 @@ def update_folder(
 
 
 def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = None) -> None:
+    folder_id = _require_str(folder_id, "folder_id")
+    move_to_folder_id = _optional_str(move_to_folder_id, "move_to_folder_id")
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise FolderNotFound("Folder not found")
@@ -108,6 +128,8 @@ def delete_folder(uid: str, folder_id: str, move_to_folder_id: Optional[str] = N
 
 def move_conversation(uid: str, conversation_id: str, folder_id: Optional[str]) -> None:
     """Assign a conversation to a folder. ``folder_id=None`` removes it from any folder."""
+    conversation_id = _require_str(conversation_id, "conversation_id")
+    folder_id = _optional_str(folder_id, "folder_id")
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
         raise ConversationNotFound("Conversation not found")
