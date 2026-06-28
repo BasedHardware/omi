@@ -479,6 +479,13 @@ final class DesktopAutomationActionRegistry {
       CloudConnectorGuidanceOverlay.shared.dismiss()
       return ["dismissed": "true", "visible": "false"]
     }
+
+    register(
+      name: "cloud_connector_guidance_probe",
+      summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
+    ) { _ in
+      await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
+    }
   }
 }
 

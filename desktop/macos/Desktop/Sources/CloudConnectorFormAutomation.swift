@@ -335,6 +335,48 @@ enum CloudConnectorFormAutomation {
     CloudConnectorGuidanceOverlay.shared.dismiss()
   }
 
+  /// Read-only diagnostic: runs the real Claude detection (no overlay, no clicks) and
+  /// reports what the accessibility tree actually exposes, so we can see whether the
+  /// Add/Cancel buttons are even found before guessing a position.
+  static func claudeAddGuidanceDiagnostics() -> [String: String] {
+    guard let target = findClaudeConnectorTargetWithNodes() else {
+      return ["found": "false", "reason": "no-claude-connector-target"]
+    }
+    func rectStr(_ r: CGRect) -> String {
+      "\(Int(r.minX)),\(Int(r.minY)),\(Int(r.width)),\(Int(r.height))"
+    }
+    var out: [String: String] = [
+      "found": "true",
+      "state": "\(target.state)",
+      "app": target.app.localizedName ?? target.app.bundleIdentifier ?? "?",
+      "nodeCount": "\(target.nodes.count)",
+    ]
+    let buttons = target.nodes.filter { $0.role.lowercased().contains("button") }
+    out["buttonCount"] = "\(buttons.count)"
+    out["buttonLabels"] =
+      buttons
+      .map { bestLabel(for: $0).trimmingCharacters(in: .whitespacesAndNewlines) }
+      .filter { !$0.isEmpty }
+      .prefix(50)
+      .joined(separator: " | ")
+    if let raw = largestWindowFrame(in: target.nodes) {
+      out["rawWindowFrameTopLeft"] = rectStr(raw)
+    }
+    if let add = findActionNode(in: target.nodes, matching: ["add"]) {
+      out["addNodeTopLeft"] = rectStr(add.frame)
+      out["addNodeLabel"] = bestLabel(for: add)
+    } else {
+      out["addNode"] = "nil"
+    }
+    if let cancel = findActionNode(in: target.nodes, matching: ["cancel"]) {
+      out["cancelNodeTopLeft"] = rectStr(cancel.frame)
+      out["cancelNodeLabel"] = bestLabel(for: cancel)
+    } else {
+      out["cancelNode"] = "nil"
+    }
+    return out
+  }
+
   nonisolated static func claudeConnectGuidanceCandidates(
     windowFrame: CGRect,
     explicitTargetFrames: [CGRect]
