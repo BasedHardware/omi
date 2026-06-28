@@ -59,8 +59,6 @@ class DeviceUtils {
           return Assets.images.beeDevice.path;
         case DeviceType.openglass:
           return Assets.images.omiGlass.path;
-        case DeviceType.frame:
-          return Assets.images.omiDevkitWithoutRope.path;
         case DeviceType.appleWatch:
           return Assets.images.appleWatch.path;
         case DeviceType.plaud:
