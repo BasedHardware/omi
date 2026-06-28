@@ -340,6 +340,58 @@ enum CloudConnectorFormAutomation {
     CloudConnectorGuidanceOverlay.shared.dismiss()
   }
 
+  /// Fallback guidance shown when we cannot anchor to Claude's Add button and must send
+  /// the user to System Settings to grant Screen Recording. We never leave them staring
+  /// at a bare settings pane: an instruction card explains what to enable and where to
+  /// return. Placed near the System Settings window so the two read as one step.
+  static func showScreenRecordingSettingsInstructionOverlay() async {
+    let appName =
+      (Bundle.main.infoDictionary?["CFBundleName"] as? String)
+      ?? (Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String)
+      ?? "Omi"
+    var anchor: CGRect?
+    for _ in 0..<12 {
+      if let frame = systemSettingsWindowAppKitFrame() {
+        anchor = frame
+        break
+      }
+      try? await Task.sleep(nanoseconds: 200_000_000)
+    }
+    CloudConnectorGuidanceOverlay.shared.presentInstructionCard(
+      title: "Allow Screen Recording for \(appName)",
+      subtitle:
+        "Turn on \(appName) under Screen & System Audio Recording, then return to Claude and click Add.",
+      near: anchor
+    )
+  }
+
+  private static func systemSettingsWindowAppKitFrame() -> CGRect? {
+    guard
+      let app = NSWorkspace.shared.runningApplications.first(where: {
+        $0.bundleIdentifier == "com.apple.systempreferences"
+      })
+    else { return nil }
+    let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    var windowElement: AXUIElement?
+    var focused: CFTypeRef?
+    if AXUIElementCopyAttributeValue(appElement, "AXFocusedWindow" as CFString, &focused) == .success,
+      let focused
+    {
+      windowElement = (focused as! AXUIElement)
+    } else {
+      var windowsRef: CFTypeRef?
+      if AXUIElementCopyAttributeValue(appElement, "AXWindows" as CFString, &windowsRef) == .success,
+        let windows = windowsRef as? [AXUIElement], let first = windows.first
+      {
+        windowElement = first
+      }
+    }
+    guard let windowElement else { return nil }
+    let topLeft = frameAttribute(windowElement)
+    guard !topLeft.isNull, !topLeft.isEmpty else { return nil }
+    return SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: topLeft)
+  }
+
   /// Read-only diagnostic: runs the real Claude detection (no overlay, no clicks) and
   /// reports what the accessibility tree actually exposes, so we can see whether the
   /// Add/Cancel buttons are even found before guessing a position.
