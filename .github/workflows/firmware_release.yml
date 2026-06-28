@@ -160,10 +160,20 @@ jobs:
           path: ${{ steps.stage.outputs.out }}/*
           if-no-files-found: error
 
+      - name: Generate Omi Bot token
+        id: app-token
+        if: ${{ github.event.inputs.publish == 'publish' }}
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
       - name: Publish GitHub Release
         if: ${{ github.event.inputs.publish == 'publish' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Release is created/tagged by the Omi Bot GitHub App so it is clearly
+          # attributed to automation, not a person (same as the desktop pipeline).
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           TAG: ${{ steps.meta.outputs.tag }}
           TITLE: Omi CV1 Firmware v${{ steps.meta.outputs.ver }}
