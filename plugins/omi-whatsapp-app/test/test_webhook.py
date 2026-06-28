@@ -334,3 +334,143 @@ class TestUnknownPhone:
             )
         assert r.status_code == 200
         assert mock_send.call_count == 0
+
+
+# ---------------------------------------------------------------------------
+# Batched and mixed payloads (P1.2 fix)
+#
+# Meta batches webhook events under load. A single POST can contain multiple
+# entries, each with multiple changes, each with multiple messages and/or
+# statuses. We MUST process all messages, even when the same payload also
+# contains statuses — dropping the whole payload on any status would silently
+# lose real user messages.
+# ---------------------------------------------------------------------------
+class TestBatchedAndMixedPayloads:
+    def test_mixed_payload_with_statuses_and_messages_processes_all_messages(self, client_no_secret):
+        """A payload with both statuses AND messages must yield ALL messages, not zero."""
+        import simple_storage
+
+        simple_storage.save_user(
+            phone="15550001111",
+            omi_uid="u-1",
+            persona_id="p-1",
+            omi_dev_api_key="k-1",
+            access_token="at-1",
+            phone_number_id="pn-1",
+            verify_token="vt-1",
+            auto_reply_enabled=True,
+        )
+
+        payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "changes": [
+                        {
+                            "value": {
+                                "messaging_product": "whatsapp",
+                                "metadata": {"phone_number_id": "pn1"},
+                                "statuses": [
+                                    {
+                                        "id": "wamid.SENT",
+                                        "status": "sent",
+                                        "timestamp": "1700000000",
+                                        "recipient_id": "15559999999",
+                                    }
+                                ],
+                                "messages": [
+                                    {
+                                        "from": "15550001111",
+                                        "id": "wamid.M1",
+                                        "timestamp": "1700000001",
+                                        "type": "text",
+                                        "text": {"body": "msg one"},
+                                    },
+                                    {
+                                        "from": "15550001111",
+                                        "id": "wamid.M2",
+                                        "timestamp": "1700000002",
+                                        "type": "text",
+                                        "text": {"body": "msg two"},
+                                    },
+                                ],
+                            },
+                            "field": "messages",
+                        }
+                    ],
+                }
+            ],
+        }
+        with patch.object(main, "_persona_chat", new=AsyncMock(return_value="reply")):
+            with patch("main.whatsapp_client.send_message", new=AsyncMock(return_value={})) as mock_send:
+                r = client_no_secret.post("/webhook", json=payload)
+        assert r.status_code == 200
+        # Both messages dispatched → two persona calls → two replies sent.
+        assert mock_send.call_count == 2
+
+    def test_multiple_entries_in_one_payload_all_processed(self, client_no_secret):
+        """Multiple entries under the same object — all messages must be processed."""
+        import simple_storage
+
+        simple_storage.save_user(
+            phone="15550001111",
+            omi_uid="u-1",
+            persona_id="p-1",
+            omi_dev_api_key="k-1",
+            access_token="at-1",
+            phone_number_id="pn-1",
+            verify_token="vt-1",
+            auto_reply_enabled=True,
+        )
+
+        payload = {
+            "object": "whatsapp_business_account",
+            "entry": [
+                {
+                    "id": "BIZ_A",
+                    "changes": [
+                        {
+                            "value": {
+                                "messages": [
+                                    {
+                                        "from": "15550001111",
+                                        "id": "wamid.A1",
+                                        "type": "text",
+                                        "text": {"body": "from A"},
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                },
+                {
+                    "id": "BIZ_B",
+                    "changes": [
+                        {
+                            "value": {
+                                "messages": [
+                                    {
+                                        "from": "15550001111",
+                                        "id": "wamid.B1",
+                                        "type": "text",
+                                        "text": {"body": "from B"},
+                                    }
+                                ],
+                            },
+                        }
+                    ],
+                },
+            ],
+        }
+        with patch.object(main, "_persona_chat", new=AsyncMock(return_value="reply")):
+            with patch("main.whatsapp_client.send_message", new=AsyncMock(return_value={})) as mock_send:
+                r = client_no_secret.post("/webhook", json=payload)
+        assert r.status_code == 200
+        assert mock_send.call_count == 2
+
+    def test_payload_with_only_statuses_returns_200_silently(self, client_no_secret):
+        """Pure status payload (no messages) — 200 OK, no dispatch."""
+        with patch("main.whatsapp_client.send_message", new=AsyncMock(return_value={})) as mock_send:
+            r = client_no_secret.post("/webhook", json=_meta_statuses())
+        assert r.status_code == 200
+        assert mock_send.call_count == 0
