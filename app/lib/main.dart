@@ -292,8 +292,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) =>
               (previous?..updateProviderInstances(conversation, message, people, usage)) ?? CaptureProvider(),
@@ -403,35 +408,36 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               if (Env.isUsingStagingApi) {
                 final topPadding = MediaQuery.of(context).padding.top;
                 return CortexAgentEdgeOverlay(
-                    child: Column(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        MyApp.navigatorKey.currentState?.push(
-                          MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
-                        );
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.only(top: topPadding + 4, bottom: 4),
-                        color: Colors.orange.shade800,
-                        child: Text(
-                          context.l10n.staging.toUpperCase(),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.none,
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          MyApp.navigatorKey.currentState?.push(
+                            MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.only(top: topPadding + 4, bottom: 4),
+                          color: Colors.orange.shade800,
+                          child: Text(
+                            context.l10n.staging.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.none,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
-                    ),
-                  ],
-                ));
+                      Expanded(
+                        child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
+                      ),
+                    ],
+                  ),
+                );
               }
               return CortexAgentEdgeOverlay(child: child!);
             },

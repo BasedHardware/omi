@@ -42,7 +42,10 @@ class _CortexProPageState extends State<CortexProPage> {
       appBar: AppBar(
         backgroundColor: _bg,
         title: Text(l.cortexProTitle),
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 18), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -55,7 +58,9 @@ class _CortexProPageState extends State<CortexProPage> {
               trailing: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                    border: Border.all(color: isPro ? _accent : Colors.white24), borderRadius: BorderRadius.circular(999)),
+                  border: Border.all(color: isPro ? _accent : Colors.white24),
+                  borderRadius: BorderRadius.circular(999),
+                ),
                 child: Text(_badge(tier), style: TextStyle(color: isPro ? _accent : Colors.white70, fontSize: 11)),
               ),
             ),
@@ -91,7 +96,10 @@ class _CortexProPageState extends State<CortexProPage> {
           _section([
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(l.cortexRedeemKey, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+              child: Text(
+                l.cortexRedeemKey,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -101,7 +109,10 @@ class _CortexProPageState extends State<CortexProPage> {
                     child: TextField(
                       controller: _keyController,
                       style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'CORTEX-PRO-XXXX-XXXX-XXXX'),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'CORTEX-PRO-XXXX-XXXX-XXXX',
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -140,7 +151,10 @@ class _CortexProPageState extends State<CortexProPage> {
               value: _sync.enabled && isPro,
               activeColor: _accent,
               title: Text(l.cortexCloudSync, style: const TextStyle(color: Colors.white)),
-              subtitle: Text(isPro ? l.cortexCloudSyncSub : l.cortexProOnly, style: TextStyle(color: Colors.grey.shade500)),
+              subtitle: Text(
+                isPro ? l.cortexCloudSyncSub : l.cortexProOnly,
+                style: TextStyle(color: Colors.grey.shade500),
+              ),
               onChanged: isPro ? (v) => setState(() => _sync.enabled = v) : null,
             ),
             if (isPro && _sync.enabled)
@@ -157,7 +171,9 @@ class _CortexProPageState extends State<CortexProPage> {
                       },
                     ),
                     const SizedBox(width: 12),
-                    Expanded(child: Text(_syncMsg, style: TextStyle(color: Colors.grey.shade500, fontSize: 12))),
+                    Expanded(
+                      child: Text(_syncMsg, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    ),
                   ],
                 ),
               ),
@@ -192,7 +208,7 @@ class _CortexProPageState extends State<CortexProPage> {
   }
 
   Widget _section(List<Widget> children) => Container(
-        decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
-      );
+    decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+  );
 }

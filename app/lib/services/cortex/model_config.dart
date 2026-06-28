@@ -25,7 +25,8 @@ class CortexModelConfig {
   CortexEngineMode get mode => _prefs.getString('cortexEngineMode', defaultValue: 'backend') == 'provider'
       ? CortexEngineMode.provider
       : CortexEngineMode.backend;
-  set mode(CortexEngineMode v) => _prefs.saveString('cortexEngineMode', v == CortexEngineMode.provider ? 'provider' : 'backend');
+  set mode(CortexEngineMode v) =>
+      _prefs.saveString('cortexEngineMode', v == CortexEngineMode.provider ? 'provider' : 'backend');
 
   String? get providerId {
     final v = _prefs.getString('cortexProviderId');

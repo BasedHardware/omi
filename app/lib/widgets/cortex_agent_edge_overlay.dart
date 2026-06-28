@@ -14,8 +14,8 @@ class CortexAgentEdgeOverlay extends StatefulWidget {
 
 class _CortexAgentEdgeOverlayState extends State<CortexAgentEdgeOverlay> with SingleTickerProviderStateMixin {
   static const _accent = Color(0xFF2F6BFF);
-  late final AnimationController _pulse =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))..repeat(reverse: true);
+  late final AnimationController _pulse = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600))
+    ..repeat(reverse: true);
 
   @override
   void dispose() {
@@ -41,9 +41,7 @@ class _CortexAgentEdgeOverlayState extends State<CortexAgentEdgeOverlay> with Si
                     return DecoratedBox(
                       decoration: BoxDecoration(
                         border: Border.all(color: _accent.withOpacity(t), width: 3),
-                        boxShadow: [
-                          BoxShadow(color: _accent.withOpacity(0.5 * t), blurRadius: 24, spreadRadius: 2),
-                        ],
+                        boxShadow: [BoxShadow(color: _accent.withOpacity(0.5 * t), blurRadius: 24, spreadRadius: 2)],
                       ),
                     );
                   },

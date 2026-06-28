@@ -17,8 +17,7 @@ class ProFeature {
 }
 
 const List<ProFeature> kProFeatures = [
-  ProFeature('cloud-sync', 'Cloud sync',
-      'Encrypted sync of your conversations, memories and settings across devices.'),
+  ProFeature('cloud-sync', 'Cloud sync', 'Encrypted sync of your conversations, memories and settings across devices.'),
   ProFeature('priority-models', 'Priority models', 'Pin premium cloud models and get priority routing.'),
   ProFeature('team', 'Team workspaces', 'Shared memories and goals for your team (coming soon).'),
 ];

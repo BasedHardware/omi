@@ -29,7 +29,10 @@ class _CortexModelsPageState extends State<CortexModelsPage> {
       appBar: AppBar(
         backgroundColor: _bg,
         title: Text(l.cortexModelsTitle),
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new, size: 18), onPressed: () => Navigator.pop(context)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -95,8 +98,12 @@ class _CortexModelsPageState extends State<CortexModelsPage> {
                     hint: Text(l.cortexChooseModel),
                     decoration: const InputDecoration(border: OutlineInputBorder()),
                     items: provider.models
-                        .map((m) => DropdownMenuItem<String>(
-                            value: m.id, child: Text(m.note == null ? m.label : '${m.label} — ${m.note}')))
+                        .map(
+                          (m) => DropdownMenuItem<String>(
+                            value: m.id,
+                            child: Text(m.note == null ? m.label : '${m.label} — ${m.note}'),
+                          ),
+                        )
                         .toList(),
                     onChanged: (v) => setState(() => _cfg.modelId = v),
                   ),
@@ -119,7 +126,10 @@ class _CortexModelsPageState extends State<CortexModelsPage> {
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                     child: TextFormField(
                       initialValue: _cfg.customBaseUrl ?? '',
-                      decoration: const InputDecoration(border: OutlineInputBorder(), hintText: 'https://your-endpoint/v1'),
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'https://your-endpoint/v1',
+                      ),
                       onChanged: (v) => _cfg.customBaseUrl = v.trim().isEmpty ? null : v.trim(),
                     ),
                   ),
@@ -148,29 +158,32 @@ class _CortexModelsPageState extends State<CortexModelsPage> {
   }
 
   Widget _section(List<Widget> children) => Container(
-        decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
-      );
+    decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
+    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+  );
 
   Widget _rowLabel(IconData icon, String title, String subtitle) => Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(icon, color: Colors.grey.shade400, size: 18),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
-                  if (subtitle.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                  ],
-                ],
+    padding: const EdgeInsets.all(16),
+    child: Row(
+      children: [
+        Icon(icon, color: Colors.grey.shade400, size: 18),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
               ),
-            ),
-          ],
+              if (subtitle.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+              ],
+            ],
+          ),
         ),
-      );
+      ],
+    ),
+  );
 }
