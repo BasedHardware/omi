@@ -336,3 +336,130 @@ class TestToolRegistry:
                     sse.execute_tool(UID, name, {})
                 except sse.ToolExecutionError as e:
                     assert 'Unknown tool' not in e.message
+
+
+class TestUnifiedSearchFetch:
+    """#4862: ChatGPT/Claude connector contract (search + fetch) over the memory bank."""
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_tool_search_merges_memories_and_conversations(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = [{'memory_id': 'm1', 'score': 0.9}]
+        mock_mem.get_memories_by_ids.return_value = [{'id': 'm1', 'content': 'Loves hiking'}]
+        mock_vec.query_vectors.return_value = ['c1']
+        mock_conv.get_conversations_by_id.return_value = [
+            {'id': 'c1', 'structured': {'title': 'Standup', 'overview': 'Sprint sync'}}
+        ]
+        result = sse.execute_tool(UID, 'search', {'query': 'hiking'})
+        ids = [r['id'] for r in result['results']]
+        assert 'memory:m1' in ids and 'conversation:c1' in ids
+        r0 = result['results'][0]
+        assert {'id', 'title', 'url', 'text'} <= set(r0.keys())
+        assert r0['url'].startswith('https://h.omi.me/')
+
+    @patch('utils.mcp_search.vector_db')
+    def test_tool_search_empty_query_is_invalid(self, mock_vec):
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'search', {'query': '   '})
+        assert ei.value.code == -32602
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_tool_search_filters_locked_and_rejected(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = [
+            {'memory_id': 'm1', 'score': 0.5},
+            {'memory_id': 'm2', 'score': 0.4},
+        ]
+        mock_mem.get_memories_by_ids.return_value = [
+            {'id': 'm1', 'content': 'ok'},
+            {'id': 'm2', 'content': 'locked', 'is_locked': True},
+        ]
+        mock_vec.query_vectors.return_value = ['c1']
+        mock_conv.get_conversations_by_id.return_value = [{'id': 'c1', 'is_locked': True, 'structured': {'title': 'x'}}]
+        result = sse.execute_tool(UID, 'search', {'query': 'q'})
+        assert [r['id'] for r in result['results']] == ['memory:m1']
+
+    @patch('utils.mcp_search.memories_db')
+    def test_tool_fetch_memory(self, mock_mem):
+        mock_mem.get_memory.return_value = {
+            'id': 'm1',
+            'content': 'Loves hiking',
+            'category': 'hobbies',
+            'created_at': NOW,
+        }
+        result = sse.execute_tool(UID, 'fetch', {'id': 'memory:m1'})
+        assert result['id'] == 'memory:m1' and result['text'] == 'Loves hiking'
+        assert result['metadata']['type'] == 'memory'
+        assert result['url'] == 'https://h.omi.me/memories/m1'
+
+    @patch('utils.mcp_search.conversations_db')
+    def test_tool_fetch_conversation(self, mock_conv):
+        mock_conv.get_conversation.return_value = {
+            'id': 'c1',
+            'structured': {'title': 'Standup', 'overview': 'Sprint sync', 'category': 'work'},
+            'transcript_segments': [{'text': 'Hello'}, {'text': 'World'}],
+            'created_at': NOW,
+        }
+        result = sse.execute_tool(UID, 'fetch', {'id': 'conversation:c1'})
+        assert result['title'] == 'Standup'
+        assert 'Sprint sync' in result['text'] and 'Hello' in result['text']
+        assert result['metadata']['type'] == 'conversation'
+
+    @patch('utils.mcp_search.memories_db')
+    def test_tool_fetch_not_found_is_32001(self, mock_mem):
+        mock_mem.get_memory.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'fetch', {'id': 'memory:nope'})
+        assert ei.value.code == -32001
+
+    @patch('utils.mcp_search.conversations_db')
+    def test_tool_fetch_locked_is_paywall(self, mock_conv):
+        mock_conv.get_conversation.return_value = {'id': 'c1', 'is_locked': True, 'structured': {'title': 'x'}}
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'fetch', {'id': 'conversation:c1'})
+        assert ei.value.code == -32002
+
+    def test_tool_fetch_bad_or_nonstring_id_is_invalid(self):
+        for bad in ['garbage', 123]:
+            with pytest.raises(sse.ToolExecutionError) as ei:
+                sse.execute_tool(UID, 'fetch', {'id': bad})
+            assert ei.value.code == -32602
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_rest_search_empty(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = []
+        mock_vec.query_vectors.return_value = []
+        assert rest.mcp_search_endpoint(query='hi', uid=UID) == {'results': []}
+
+    @patch('utils.mcp_search.memories_db')
+    def test_rest_fetch_not_found_404(self, mock_mem):
+        mock_mem.get_memory.return_value = None
+        with pytest.raises(rest.HTTPException) as ei:
+            rest.mcp_fetch_endpoint(id='memory:nope', uid=UID)
+        assert ei.value.status_code == 404
+
+    def test_search_fetch_tools_registered(self):
+        names = {t['name'] for t in sse.MCP_TOOLS}
+        assert {'search', 'fetch'} <= names
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
+    def test_tools_call_emits_structured_content_for_search(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = []
+        mock_vec.query_vectors.return_value = []
+        resp, _ = sse.handle_mcp_message(
+            UID,
+            {
+                'jsonrpc': '2.0',
+                'id': 1,
+                'method': 'tools/call',
+                'params': {'name': 'search', 'arguments': {'query': 'x'}},
+            },
+        )
+        assert resp['result']['structuredContent'] == {'results': []}
+        assert resp['result']['content'][0]['type'] == 'text'
