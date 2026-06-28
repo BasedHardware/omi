@@ -371,14 +371,17 @@ class TestUnifiedSearchFetch:
         mock_vec.find_similar_memories.return_value = [
             {'memory_id': 'm1', 'score': 0.5},
             {'memory_id': 'm2', 'score': 0.4},
+            {'memory_id': 'm3', 'score': 0.3},
         ]
         mock_mem.get_memories_by_ids.return_value = [
             {'id': 'm1', 'content': 'ok'},
             {'id': 'm2', 'content': 'locked', 'is_locked': True},
+            {'id': 'm3', 'content': 'rejected', 'user_review': False},
         ]
         mock_vec.query_vectors.return_value = ['c1']
         mock_conv.get_conversations_by_id.return_value = [{'id': 'c1', 'is_locked': True, 'structured': {'title': 'x'}}]
         result = sse.execute_tool(UID, 'search', {'query': 'q'})
+        # locked memory (m2), rejected memory (m3, user_review False), and locked conversation (c1) all dropped
         assert [r['id'] for r in result['results']] == ['memory:m1']
 
     @patch('utils.mcp_search.memories_db')
@@ -422,7 +425,8 @@ class TestUnifiedSearchFetch:
         assert ei.value.code == -32002
 
     def test_tool_fetch_bad_or_nonstring_id_is_invalid(self):
-        for bad in ['garbage', 123]:
+        # No prefix, non-string, and a valid prefix with an empty raw id are all invalid (not 404).
+        for bad in ['garbage', 123, 'memory:', 'conversation:']:
             with pytest.raises(sse.ToolExecutionError) as ei:
                 sse.execute_tool(UID, 'fetch', {'id': bad})
             assert ei.value.code == -32602
@@ -430,10 +434,23 @@ class TestUnifiedSearchFetch:
     @patch('utils.mcp_search.conversations_db')
     @patch('utils.mcp_search.memories_db')
     @patch('utils.mcp_search.vector_db')
+    def test_tool_search_conversation_preview_falls_back_to_transcript(self, mock_vec, mock_mem, mock_conv):
+        mock_vec.find_similar_memories.return_value = []
+        mock_vec.query_vectors.return_value = ['c1']
+        mock_conv.get_conversations_by_id.return_value = [
+            {'id': 'c1', 'structured': {'title': 'Call'}, 'transcript_segments': [{'text': 'Discussed the roadmap'}]}
+        ]
+        result = sse.execute_tool(UID, 'search', {'query': 'roadmap'})
+        stub = next(r for r in result['results'] if r['id'] == 'conversation:c1')
+        assert 'Discussed the roadmap' in stub['text']
+
+    @patch('utils.mcp_search.conversations_db')
+    @patch('utils.mcp_search.memories_db')
+    @patch('utils.mcp_search.vector_db')
     def test_rest_search_empty(self, mock_vec, mock_mem, mock_conv):
         mock_vec.find_similar_memories.return_value = []
         mock_vec.query_vectors.return_value = []
-        assert rest.mcp_search_endpoint(query='hi', uid=UID) == {'results': []}
+        assert rest.mcp_search_endpoint(rest.McpSearchRequest(query='hi'), uid=UID) == {'results': []}
 
     @patch('utils.mcp_search.memories_db')
     def test_rest_fetch_not_found_404(self, mock_mem):
