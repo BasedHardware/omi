@@ -13,7 +13,6 @@ enum SidebarNavItem: Int, CaseIterable {
   case apps = 8
   case settings = 9
   case permissions = 10
-  case device = 11
   case help = 12
 
   var title: String {
@@ -29,7 +28,6 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "Apps"
     case .settings: return "Settings"
     case .permissions: return "Permissions"
-    case .device: return "Device"
     case .help: return "Help from Founder"
     }
   }
@@ -47,7 +45,6 @@ enum SidebarNavItem: Int, CaseIterable {
     case .apps: return "puzzlepiece.fill"
     case .settings: return "gearshape.fill"
     case .permissions: return "exclamationmark.triangle.fill"
-    case .device: return "wave.3.right.circle.fill"
     case .help: return "bubble.left.fill"
     }
   }
@@ -79,12 +76,8 @@ struct SidebarView: View {
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var insightStorage = InsightStorage.shared
   @ObservedObject private var focusStorage = FocusStorage.shared
-  @ObservedObject private var deviceProvider = DeviceProvider.shared
   @ObservedObject private var updaterViewModel = UpdaterViewModel.shared
   @ObservedObject private var crispManager = CrispManager.shared
-
-  // State for Get Omi Widget (shown when no device is paired, dismissible)
-  @AppStorage("showGetOmiWidget") private var showGetOmiWidget = true
 
   // Tier gating (0 = show all, 1-6 = sequential tiers)
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
@@ -147,12 +140,6 @@ struct SidebarView: View {
         headerSection
           .padding(.top, 12)
           .padding(.horizontal, isCollapsed ? 8 : 16)
-
-        // Expand button when collapsed (below logo)
-        if isCollapsed {
-          collapsedExpandButton
-            .padding(.horizontal, 8)
-        }
 
         Spacer().frame(height: isCollapsed ? 8 : 16)
 
@@ -269,18 +256,6 @@ struct SidebarView: View {
           // Subscription upgrade banner
           // upgradeToPro
 
-          // Device status widget (when device paired/connected)
-          if deviceProvider.isConnected || deviceProvider.pairedDevice != nil {
-            Spacer().frame(height: 12)
-            deviceStatusWidget
-          }
-
-          // Get Omi promo widget (dismissible sales link)
-          if showGetOmiWidget {
-            Spacer().frame(height: 12)
-            getOmiWidget
-          }
-
           // Update available widget
           if updaterViewModel.updateAvailable || updaterViewModel.updateSessionInProgress {
             Spacer().frame(height: 12)
@@ -357,7 +332,6 @@ struct SidebarView: View {
         newTier != 0 && newTier < currentItem.requiredTier,
         selectedIndex != SidebarNavItem.settings.rawValue
           && selectedIndex != SidebarNavItem.permissions.rawValue
-          && selectedIndex != SidebarNavItem.device.rawValue
           && selectedIndex != SidebarNavItem.help.rawValue
       {
         selectedIndex = SidebarNavItem.dashboard.rawValue
@@ -545,71 +519,6 @@ struct SidebarView: View {
   //        .help("Upgrade to Pro")
   //    }
 
-  // MARK: - Get Omi Widget (Sales link to omi.me)
-  private var getOmiWidget: some View {
-    Button(action: {
-      if let url = URL(string: "https://www.omi.me") {
-        NSWorkspace.shared.open(url)
-      }
-    }) {
-      HStack(spacing: 12) {
-        // Omi device image
-        if let deviceImage = OmiDeviceImage.shared {
-          Image(nsImage: deviceImage)
-            .resizable()
-            .aspectRatio(contentMode: .fit)
-            .frame(width: 24, height: 24)
-        } else {
-          // Fallback SF Symbol
-          Image(systemName: "wave.3.right.circle.fill")
-            .scaledFont(size: 17)
-            .foregroundColor(OmiColors.purplePrimary)
-            .frame(width: iconWidth)
-        }
-
-        if !isCollapsed {
-          // Text content
-          VStack(alignment: .leading, spacing: 2) {
-            Text("Get omi Device")
-              .scaledFont(size: 13, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-
-            Text("Your wearable AI companion")
-              .scaledFont(size: 11)
-              .foregroundColor(OmiColors.textTertiary.opacity(0.8))
-          }
-
-          Spacer()
-
-          Button(action: {
-            withAnimation {
-              showGetOmiWidget = false
-            }
-          }) {
-            Image(systemName: "xmark")
-              .scaledFont(size: 10, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
-              .padding(6)
-          }
-          .buttonStyle(.plain)
-          .help("Dismiss")
-        }
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 11)
-      .background(
-        RoundedRectangle(cornerRadius: 10)
-          .fill(OmiColors.backgroundTertiary.opacity(0.6))
-          .overlay(
-            RoundedRectangle(cornerRadius: 10)
-              .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
-          )
-      )
-    }
-    .buttonStyle(.plain)
-    .help(isCollapsed ? "Get omi Device" : "")
-  }
-
   // MARK: - Update Available Widget
   @State private var updateGlowAnimating = false
 
@@ -675,118 +584,6 @@ struct SidebarView: View {
     }
   }
 
-  // MARK: - Device Status Widget
-  private var deviceStatusWidget: some View {
-    Button(action: {
-      // Navigate to Settings > Device tab via notification
-      NotificationCenter.default.post(name: .navigateToDeviceSettings, object: nil)
-    }) {
-      HStack(spacing: 12) {
-        // Device icon with status indicator
-        ZStack(alignment: .bottomTrailing) {
-          // Device image or icon
-          if let deviceImage = OmiDeviceImage.shared {
-            Image(nsImage: deviceImage)
-              .resizable()
-              .aspectRatio(contentMode: .fit)
-              .frame(width: 24, height: 24)
-              .opacity(deviceProvider.isConnected ? 1.0 : 0.5)
-          } else {
-            Image(systemName: "wave.3.right.circle.fill")
-              .scaledFont(size: 17)
-              .foregroundColor(
-                deviceProvider.isConnected ? OmiColors.purplePrimary : OmiColors.textTertiary
-              )
-              .frame(width: iconWidth)
-          }
-
-          // Connection status dot
-          Circle()
-            .fill(deviceProvider.isConnected ? Color.green : Color.orange)
-            .frame(width: 8, height: 8)
-            .offset(x: 2, y: 2)
-        }
-
-        if !isCollapsed {
-          // Text content
-          VStack(alignment: .leading, spacing: 2) {
-            if let device = deviceProvider.connectedDevice ?? deviceProvider.pairedDevice {
-              Text(device.displayName)
-                .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
-                .lineLimit(1)
-
-              HStack(spacing: 6) {
-                if deviceProvider.isConnected {
-                  if deviceProvider.batteryLevel >= 0 {
-                    // Battery indicator
-                    Image(systemName: batteryIconName(level: deviceProvider.batteryLevel))
-                      .scaledFont(size: 10)
-                      .foregroundColor(batteryColor(level: deviceProvider.batteryLevel))
-                    Text("\(deviceProvider.batteryLevel)%")
-                      .scaledFont(size: 11)
-                      .foregroundColor(batteryColor(level: deviceProvider.batteryLevel))
-                  } else {
-                    Text("Connected")
-                      .scaledFont(size: 11)
-                      .foregroundColor(.green)
-                  }
-                } else {
-                  Text("Disconnected")
-                    .scaledFont(size: 11)
-                    .foregroundColor(.orange)
-                }
-              }
-            }
-          }
-
-          Spacer()
-
-          Image(systemName: "chevron.right")
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-      }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 11)
-      .background(
-        RoundedRectangle(cornerRadius: 10)
-          .fill(
-            selectedIndex == SidebarNavItem.device.rawValue
-              ? OmiColors.backgroundTertiary.opacity(0.8)
-              : OmiColors.backgroundTertiary.opacity(0.6)
-          )
-          .overlay(
-            RoundedRectangle(cornerRadius: 10)
-              .stroke(
-                deviceProvider.isConnected
-                  ? Color.green.opacity(0.3)
-                  : OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
-          )
-      )
-    }
-    .buttonStyle(.plain)
-    .help(isCollapsed ? (deviceProvider.connectedDevice?.displayName ?? "Device Settings") : "")
-  }
-
-  private func batteryIconName(level: Int) -> String {
-    switch level {
-    case 0..<10: return "battery.0"
-    case 10..<35: return "battery.25"
-    case 35..<60: return "battery.50"
-    case 60..<85: return "battery.75"
-    default: return "battery.100"
-    }
-  }
-
-  private func batteryColor(level: Int) -> Color {
-    switch level {
-    case 0..<20: return .red
-    case 20..<40: return .orange
-    default: return .green
-    }
-  }
-
   // MARK: - Profile Menu
 
   private var shouldShowReferFriend: Bool {
@@ -843,24 +640,22 @@ struct SidebarView: View {
     Button {
       isProfileMenuPresented.toggle()
     } label: {
-      HStack(spacing: 12) {
+      HStack(spacing: isCollapsed ? 0 : 10) {
         ZStack {
-          Circle()
-            .fill(OmiColors.backgroundTertiary)
-            .frame(width: 30, height: 30)
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(OmiColors.backgroundTertiary.opacity(0.75))
+            .frame(width: 34, height: 34)
 
-          Text(profileInitials)
-            .scaledFont(size: 11, weight: .semibold)
-            .foregroundColor(OmiColors.textPrimary)
+          Image(systemName: "gearshape.fill")
+            .scaledFont(size: 15, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
         }
 
         if !isCollapsed {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(profileDisplayName)
-              .scaledFont(size: 13, weight: .medium)
-              .foregroundColor(OmiColors.textPrimary)
-              .lineLimit(1)
-          }
+          Text("Settings")
+            .scaledFont(size: 13, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+            .lineLimit(1)
 
           Spacer(minLength: 8)
 
@@ -871,7 +666,7 @@ struct SidebarView: View {
       }
       .padding(.horizontal, 12)
       .padding(.vertical, 8)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .frame(maxWidth: .infinity, alignment: isCollapsed ? .center : .leading)
       .background(
         RoundedRectangle(cornerRadius: 12, style: .continuous)
           .fill(
@@ -888,7 +683,7 @@ struct SidebarView: View {
     .popover(isPresented: $isProfileMenuPresented, arrowEdge: .bottom) {
       profileMenuPopover
     }
-    .help("Open profile menu")
+    .help("Open settings menu")
   }
 
   private var profileMenuPopover: some View {

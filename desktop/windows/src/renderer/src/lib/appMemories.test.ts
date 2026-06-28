@@ -1,6 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { appMemoryIdsToDelete, APP_MEMORY_TAG } from './appMemories'
 import type { Memory } from '../hooks/useMemories'
+
+vi.mock('./apiClient', () => ({
+  omiApi: {
+    get: vi.fn(),
+    delete: vi.fn()
+  }
+}))
 
 function mem(id: string, tags?: string[]): Memory {
   return { id, uid: 'u', content: 'Uses Whatever', tags, created_at: '', updated_at: '' } as Memory

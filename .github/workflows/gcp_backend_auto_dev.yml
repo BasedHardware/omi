@@ -32,6 +32,9 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
@@ -41,13 +44,19 @@ jobs:
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
 
+      - name: Compute short SHA
+        id: image-tag
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./backend/Dockerfile
           push: true
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+          tags: |
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
@@ -57,9 +66,14 @@ jobs:
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: >-
+            --network=omi-dev-vpc-1
+            --subnet=omi-us-central1-dev-vpc-1-subnet-1
+            --vpc-egress=private-ranges-only
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
+            OMI_LLM_GATEWAY_URL=http://172.16.63.232
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
@@ -82,19 +96,24 @@ jobs:
         with:
           service: ${{ env.SERVICE }}-sync
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: >-
+            --network=omi-dev-vpc-1
+            --subnet=omi-us-central1-dev-vpc-1-subnet-1
+            --vpc-egress=private-ranges-only
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
+            OMI_LLM_GATEWAY_URL=http://172.16.63.232
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
-      - name: Connect to GKE cluster
-        run: |
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
-          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Install Helm
         uses: azure/setup-helm@v3
@@ -104,7 +123,9 @@ jobs:
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
             ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
+            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.tag=${{ steps.image-tag.outputs.short_sha }}
+          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
@@ -112,13 +133,17 @@ jobs:
         with:
           service: ${{ env.SERVICE }}-integration
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: >-
+            --network=omi-dev-vpc-1
+            --subnet=omi-us-central1-dev-vpc-1-subnet-1
+            --vpc-egress=private-ranges-only
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
+            OMI_LLM_GATEWAY_URL=http://172.16.63.232
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
 
       - name: Show Output
         run: echo "Backend deployed to development environment"
-

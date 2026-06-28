@@ -11,6 +11,8 @@ import sys
 import types
 from unittest.mock import MagicMock
 
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -43,6 +45,17 @@ class _BaseFilter:  # database.daily_summaries imports FieldFilter from this pat
 
 fbq_stub = _stub_module("google.cloud.firestore_v1.base_query")
 fbq_stub.FieldFilter = MagicMock()
+
+database_pkg = sys.modules.get("database")
+if database_pkg is not None:
+    database_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
+
+client_stub = sys.modules.get("database._client")
+if client_stub is not None:
+    client_stub.db = MagicMock()
+
+redis_stub = _stub_module("redis")
+redis_stub.Redis = MagicMock(return_value=MagicMock())
 
 import database.daily_summaries as daily_summaries  # noqa: E402
 

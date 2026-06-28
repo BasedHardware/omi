@@ -58,9 +58,38 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
+  bool get deviceOnboardingCompleted => getBool('deviceOnboardingCompleted');
+
+  set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
+
   bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
 
   set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
+
+  // Batch (offline) capture mode: when on, BLE audio is stored to local .bin files
+  // by the native layer instead of being transcribed in real time. Mutually
+  // exclusive with the realtime transcription socket (see CaptureProvider).
+  bool get batchModeEnabled => getBool('batchModeEnabled');
+
+  set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
+
+  // Transcribe Later: pause capture (native writer drops packets, keeps the file
+  // open) so the user can mute a sensitive moment and resume the same recording.
+  bool get batchMuted => getBool('batchMuted');
+
+  set batchMuted(bool value) => saveBool('batchMuted', value);
+
+  // Transcribe Later: one-shot flag — when set, the native writer finalizes the
+  // current file and starts a fresh one (manual "New recording" cut), then clears it.
+  bool get batchCutRequested => getBool('batchCutRequested');
+
+  set batchCutRequested(bool value) => saveBool('batchCutRequested', value);
+
+  // Set while interactive device onboarding has temporarily suspended Transcribe Later so the
+  // realtime demo works. Persisted so an app-kill mid-onboarding is self-healed on next capture start.
+  bool get batchModeSuspendedForOnboarding => getBool('batchModeSuspendedForOnboarding');
+
+  set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');

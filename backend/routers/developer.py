@@ -1,12 +1,11 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from utils.executors import db_executor, postprocess_executor
 from enum import Enum
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 import database.folders as folders_db
 import database.memories as memories_db
@@ -27,6 +26,7 @@ from models.conversation_enums import (
 )
 from models.geolocation import Geolocation
 from utils.conversations.render import populate_speaker_names, populate_folder_names
+from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     get_current_user_id,
@@ -42,10 +42,10 @@ from dependencies import (
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
-from utils.apps import update_personas_async
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
+from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
 import logging
 
@@ -90,12 +90,16 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
             raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}")
 
     raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
+    # The proactive-notification cap exempts developers, so refresh that cache now
+    # that this user has a key, rather than waiting out its TTL.
+    invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
 @router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["developer"])
 def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     dev_api_key_db.delete_dev_key(uid, key_id)
+    invalidate_developer_cache(uid)
     return
 
 
@@ -104,20 +108,103 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
 # ******************************************************
 
 
+def _coerce_required_memory_id(value) -> str:
+    if not value and value != 0:
+        raise ValueError('id is required')
+    return str(value)
+
+
+def _coerce_optional_memory_datetime(value) -> Optional[datetime]:
+    if value in [None, '']:
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OSError, OverflowError, ValueError):
+            return None
+    return None
+
+
 class CleanerMemory(BaseModel):
     # Core fields (aligned with MemoryResponse)
     id: str
-    content: str
-    category: MemoryCategory
+    content: str = ''
+    category: MemoryCategory = MemoryCategory.interesting
     visibility: Optional[str] = 'private'
-    tags: List[str] = []
-    created_at: datetime
-    updated_at: datetime
-    manually_added: bool
+    tags: List[str] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    manually_added: bool = False
     scoring: Optional[str] = None
-    reviewed: bool
+    reviewed: bool = False
     user_review: Optional[bool] = None
-    edited: bool
+    edited: bool = False
+
+    @field_validator('id', mode='before')
+    def coerce_id(cls, value):
+        return _coerce_required_memory_id(value)
+
+    @field_validator('content', mode='before')
+    def coerce_content(cls, value):
+        if value is None:
+            return ''
+        return str(value)
+
+    @field_validator('category', mode='before')
+    def coerce_category(cls, value):
+        if isinstance(value, MemoryCategory):
+            return value
+        try:
+            return MemoryCategory(value)
+        except (TypeError, ValueError):
+            return MemoryCategory.interesting
+
+    @field_validator('visibility', mode='before')
+    def coerce_visibility(cls, value):
+        return value if value in ['public', 'private'] else 'private'
+
+    @field_validator('tags', mode='before')
+    def coerce_tags(cls, value):
+        if not isinstance(value, list):
+            return []
+        return [str(tag) for tag in value if tag is not None]
+
+    @field_validator('scoring', mode='before')
+    def coerce_scoring(cls, value):
+        if value is None:
+            return None
+        return str(value)
+
+    @field_validator('created_at', 'updated_at', mode='before')
+    def coerce_datetime(cls, value):
+        return _coerce_optional_memory_datetime(value)
+
+    @field_validator('user_review', mode='before')
+    def coerce_user_review(cls, value):
+        if isinstance(value, bool):
+            return value
+        if value in [None, '']:
+            return None
+        if isinstance(value, str):
+            return value.lower() in ['true', '1', 'yes']
+        return bool(value)
+
+    @field_validator('manually_added', 'reviewed', 'edited', mode='before')
+    def coerce_bool(cls, value):
+        if isinstance(value, bool):
+            return value
+        if value in [None, '']:
+            return False
+        if isinstance(value, str):
+            return value.lower() in ['true', '1', 'yes']
+        return bool(value)
 
 
 class CreateMemoryRequest(BaseModel):
@@ -176,8 +263,11 @@ def get_memories(
     # hardening already applied to GET /v3/memories.
     valid_memories = []
     for memory in memories:
+        if not isinstance(memory, dict) or not memory.get('id'):
+            logger.warning('Skipping malformed memory in Developer API memory list')
+            continue
         if memory.get('is_locked', False):
-            content = memory.get('content', '')
+            content = str(memory.get('content') or '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
         try:
             valid_memories.append(CleanerMemory.model_validate(memory))
@@ -223,10 +313,6 @@ def create_memory(
 
     # Save to database
     memories_db.create_memory(uid, memory_db.dict())
-
-    # Update personas asynchronously if visibility is public
-    if memory.visibility == 'public':
-        postprocess_executor.submit(update_personas_async, uid)
 
     return MemoryResponse(
         id=memory_db.id,
@@ -300,10 +386,6 @@ def create_memories_batch(
             for mem in memory_dbs
         ],
     )
-
-    # Update personas if any memory is public
-    if has_public:
-        postprocess_executor.submit(update_personas_async, uid)
 
     # Prepare response
     created_memories = [
@@ -461,10 +543,26 @@ def get_action_items(
         offset=offset,
     )
 
-    # Filter out locked action items
-    unlocked_action_items = [item for item in action_items if not item.get('is_locked', False)]
-
-    return unlocked_action_items
+    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
+    # field like description/completed) doesn't fail the whole page with a 500. Mirrors the hardening
+    # already applied to GET /v1/dev/user/memories.
+    valid_action_items = []
+    for item in action_items:
+        if not isinstance(item, dict) or not item.get('id'):
+            logger.warning('Skipping malformed action item in Developer API action-item list')
+            continue
+        if item.get('is_locked', False):
+            continue
+        try:
+            valid_action_items.append(ActionItemResponse.model_validate(item))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid action item doc {item.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_action_items
 
 
 @router.post("/v1/dev/user/action-items", response_model=ActionItemResponse, tags=["developer"])
@@ -823,7 +921,23 @@ def get_conversations(
 
     populate_folder_names(uid, unlocked_conversations)
 
-    return unlocked_conversations
+    # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
+    # with a 500. Mirrors the hardening already applied to GET /v1/dev/user/memories.
+    valid_conversations = []
+    for conv in unlocked_conversations:
+        if not isinstance(conv, dict) or not conv.get('id'):
+            logger.warning('Skipping malformed conversation in Developer API conversation list')
+            continue
+        try:
+            valid_conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid conversation doc {conv.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_conversations
 
 
 @router.post("/v1/dev/user/conversations", response_model=ConversationResponse, tags=["developer"])
@@ -1332,7 +1446,7 @@ def update_goal_progress(
 @router.get("/v1/dev/user/goals/{goal_id}/history", tags=["developer"])
 def get_goal_history(
     goal_id: str,
-    days: int = Query(default=30, le=365),
+    days: HistoryDays = 30,
     uid: str = Depends(get_uid_with_goals_read),
 ) -> List[dict]:
     """

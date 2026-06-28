@@ -8,7 +8,6 @@ import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/bee_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
-import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
@@ -17,7 +16,6 @@ import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
-import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -59,12 +57,7 @@ class RingStatus {
   final int freeBytes;
   final int rtcValid; // 0 = device RTC not yet synced (timestamps unreliable), 1 = synced
 
-  RingStatus({
-    required this.usedBytes,
-    required this.unreadPackets,
-    required this.freeBytes,
-    required this.rtcValid,
-  });
+  RingStatus({required this.usedBytes, required this.unreadPackets, required this.freeBytes, required this.rtcValid});
 
   bool get isRtcValid => rtcValid != 0;
 
@@ -140,13 +133,6 @@ class DeviceConnectionFactory {
         return BeeDeviceConnection(device, transport);
       case DeviceType.plaud:
         return PlaudDeviceConnection(device, transport);
-      case DeviceType.frame:
-        if (locator.kind == TransportKind.bluetooth) {
-          final deviceId = locator.bluetoothId;
-          if (deviceId == null) return null;
-          transport = FrameTransport(deviceId);
-        }
-        return FrameDeviceConnection(device, transport);
       case DeviceType.appleWatch:
         return AppleWatchDeviceConnection(device, transport);
       case DeviceType.fieldy:
@@ -626,4 +612,10 @@ abstract class DeviceConnection {
   }
 
   Future<int?> performGetMicGain();
+
+  /// Called when the server transcription WebSocket reconnects after a
+  /// network-only outage (BLE stayed connected throughout). Override to
+  /// re-initialize device streaming if the device may have stopped sending
+  /// audio while the socket was dead.
+  Future<void> onNetworkSocketReconnected() async {}
 }

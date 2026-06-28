@@ -28,10 +28,17 @@ import {
   type ToolResultEvent,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@mariozechner/pi-ai";
-import { appendFile, mkdir } from "node:fs/promises";
+import { appendFile, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
+import {
+  buildToolAvailabilitySnapshot,
+  toolNamesForAdapter,
+  toolsForAdapter,
+  type OmiToolInputSchema,
+  type OmiToolManifestEntry,
+} from "../agent/src/runtime/omi-tool-manifest.ts";
 
 // ---------------------------------------------------------------------------
 // Denylist patterns
@@ -421,15 +428,16 @@ export async function appendAudit(entry: AuditEntry): Promise<void> {
 let omiPipeConnection: Socket | null = null;
 let omiPipeBuffer = "";
 let omiCallIdCounter = 0;
-const omiPendingCalls = new Map<string, { resolve: (result: string) => void }>();
+const omiPendingCalls = new Map<string, { connection: Socket; resolve: (result: string) => void }>();
 
 function connectOmiPipe(pipePath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    omiPipeConnection = createConnection(pipePath, () => {
+    const connection = createConnection(pipePath, () => {
       process.stderr.write(`[omi-tools] Connected to bridge pipe\n`);
       resolve();
     });
-    omiPipeConnection.on("data", (data: Buffer) => {
+    omiPipeConnection = connection;
+    connection.on("data", (data: Buffer) => {
       omiPipeBuffer += data.toString();
       let idx;
       while ((idx = omiPipeBuffer.indexOf("\n")) >= 0) {
@@ -449,32 +457,43 @@ function connectOmiPipe(pipePath: string): Promise<void> {
         }
       }
     });
-    omiPipeConnection.on("error", (err) => {
+    connection.on("error", (err) => {
       process.stderr.write(`[omi-tools] Pipe error: ${err.message}\n`);
       reject(err);
     });
     // Handle pipe close — resolve all pending tool calls with an error
     // so they don't hang forever if the bridge disconnects mid-call.
-    omiPipeConnection.on("close", () => {
+    connection.on("close", () => {
       process.stderr.write("[omi-tools] Pipe disconnected\n");
-      omiPipeConnection = null;
-      for (const [, pending] of omiPendingCalls) {
-        pending.resolve("Error: Omi bridge disconnected");
+      if (omiPipeConnection === connection) {
+        omiPipeConnection = null;
+        for (const [callId, pending] of omiPendingCalls) {
+          if (pending.connection === connection) {
+            pending.resolve("Error: Omi bridge disconnected");
+            omiPendingCalls.delete(callId);
+          }
+        }
       }
-      omiPendingCalls.clear();
     });
   });
 }
 
-function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
-  if (!omiPipeConnection) return Promise.resolve("Error: not connected to Omi bridge");
+async function callSwiftTool(name: string, input: Record<string, unknown>, signal?: AbortSignal, timeoutMs = OMI_TOOL_TIMEOUT_MS): Promise<string> {
+  const connection: Socket | null = omiPipeConnection;
+  if (!connection) return Promise.resolve("Error: not connected to Omi bridge");
   if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`;
+  const correlation = await omiRelayCorrelation();
+  if (correlation.disableSwiftBackedTools === true) {
+    return Promise.resolve("Error: Swift-backed Omi tools are disabled for this control-created run");
+  }
+  if (signal?.aborted) return Promise.resolve("Error: tool call aborted");
+  if (omiPipeConnection !== connection) return Promise.resolve("Error: Omi bridge disconnected");
   return new Promise<string>((resolve) => {
     const timer = setTimeout(() => {
       omiPendingCalls.delete(callId);
-      resolve(`Error: tool '${name}' timed out after ${OMI_TOOL_TIMEOUT_MS / 1000}s`);
-    }, OMI_TOOL_TIMEOUT_MS);
+      resolve(`Error: tool '${name}' timed out after ${timeoutMs / 1000}s`);
+    }, timeoutMs);
     const cleanup = () => {
       clearTimeout(timer);
       omiPendingCalls.delete(callId);
@@ -482,17 +501,75 @@ function callSwiftTool(name: string, input: Record<string, unknown>, signal?: Ab
     };
     signal?.addEventListener("abort", cleanup, { once: true });
     omiPendingCalls.set(callId, {
+      connection,
       resolve: (result: string) => {
         clearTimeout(timer);
         signal?.removeEventListener("abort", cleanup);
         resolve(result);
       },
     });
-    omiPipeConnection!.write(JSON.stringify({ type: "tool_use", callId, name, input }) + "\n");
+    connection.write(JSON.stringify({
+      type: "tool_use",
+      callId,
+      name,
+      input,
+      ...correlation,
+    }) + "\n");
   });
 }
 
+async function omiRelayCorrelation(): Promise<Record<string, string | number | boolean>> {
+  const correlation: Record<string, string | number | boolean> = {};
+  if (process.env.OMI_ADAPTER_ID) correlation.adapterId = process.env.OMI_ADAPTER_ID;
+  if (process.env.OMI_REQUEST_ID) correlation.requestId = process.env.OMI_REQUEST_ID;
+  if (process.env.OMI_CLIENT_ID) correlation.clientId = process.env.OMI_CLIENT_ID;
+  if (process.env.OMI_SESSION_ID) correlation.sessionId = process.env.OMI_SESSION_ID;
+  if (process.env.OMI_RUN_ID) correlation.runId = process.env.OMI_RUN_ID;
+  if (process.env.OMI_ATTEMPT_ID) correlation.attemptId = process.env.OMI_ATTEMPT_ID;
+  if (process.env.OMI_ADAPTER_SESSION_ID) correlation.adapterSessionId = process.env.OMI_ADAPTER_SESSION_ID;
+  if (process.env.OMI_LEGACY_ADAPTER_SESSION_ID) {
+    correlation.legacyAdapterSessionId = process.env.OMI_LEGACY_ADAPTER_SESSION_ID;
+  }
+  const protocolVersion = Number(process.env.OMI_PROTOCOL_VERSION);
+  if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+  Object.assign(correlation, await omiContextFileCorrelation());
+  return correlation;
+}
+
+async function omiContextFileCorrelation(): Promise<Record<string, string | number | boolean>> {
+  const path = process.env.OMI_CONTEXT_FILE;
+  if (!path) return {};
+  try {
+    const parsed = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    const correlation: Record<string, string | number | boolean> = {};
+    for (const key of [
+      "adapterId",
+      "requestId",
+      "clientId",
+      "sessionId",
+      "runId",
+      "attemptId",
+      "adapterSessionId",
+      "legacyAdapterSessionId",
+    ]) {
+      const value = parsed[key];
+      if (typeof value === "string" && value.length > 0) correlation[key] = value;
+    }
+    const protocolVersion = parsed.protocolVersion;
+    if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+    if (parsed.disableSwiftBackedTools === true) correlation.disableSwiftBackedTools = true;
+    return correlation;
+  } catch {
+    return {};
+  }
+}
+
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
+export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
+
+export function isSafeSkillName(name: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(name) && name !== "." && name !== ".." && !name.includes("..");
+}
 
 // ---------------------------------------------------------------------------
 // Omi tool definitions — pi-mono defineTool() with TypeBox schemas
@@ -507,202 +584,163 @@ function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
   promptGuidelines?: string[];
   properties: T;
   required: (keyof T)[];
+  schemaOptions?: Record<string, unknown>;
+  timeoutMs?: number;
 }) {
-  return defineTool({
+  const parameters = Type.Object(
+    spec.properties,
+    { additionalProperties: false },
+  );
+  Object.assign(parameters, spec.schemaOptions);
+  const tool = defineTool({
     name: spec.name,
     label: spec.label,
     description: spec.description,
     promptSnippet: spec.promptSnippet,
     promptGuidelines: spec.promptGuidelines,
-    parameters: Type.Object(
-      spec.properties,
-      { additionalProperties: false },
-    ),
+    parameters,
     async execute(_toolCallId, params, signal) {
-      const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal);
+      const result = await callSwiftTool(spec.name, params as Record<string, unknown>, signal, spec.timeoutMs);
       return { content: [{ type: "text" as const, text: result }], details: undefined };
+    },
+  });
+  Object.defineProperty(tool, "__omiTimeoutMsForTest", {
+    value: spec.timeoutMs ?? OMI_TOOL_TIMEOUT_MS,
+    enumerable: false,
+  });
+  return tool;
+}
+
+function typeBoxSchemaForJsonSchema(schema: Record<string, unknown>): unknown {
+  const options: Record<string, unknown> = {};
+  if (typeof schema.description === "string") options.description = schema.description;
+  if (Array.isArray(schema.enum)) options.enum = schema.enum;
+  switch (schema.type) {
+    case "string":
+      return Type.String(options);
+    case "number":
+    case "integer":
+      return Type.Number(options);
+    case "boolean":
+      return Type.Boolean(options);
+    case "array": {
+      const itemSchema = schema.items && typeof schema.items === "object"
+        ? typeBoxSchemaForJsonSchema(schema.items as Record<string, unknown>)
+        : Type.Unknown();
+      return Type.Array(itemSchema as never, options);
+    }
+    case "object": {
+      const properties = typeof schema.properties === "object" && schema.properties
+        ? typeBoxPropertiesForInputSchema({
+            type: "object",
+            properties: schema.properties as Record<string, unknown>,
+            required: Array.isArray(schema.required) ? schema.required as string[] : [],
+            additionalProperties: schema.additionalProperties === true,
+          })
+        : {};
+      return Type.Object(properties, { ...options, additionalProperties: schema.additionalProperties === true });
+    }
+    default:
+      return Type.Unknown(options);
+  }
+}
+
+function typeBoxPropertiesForInputSchema(tool: OmiToolInputSchema): Parameters<typeof Type.Object>[0] {
+  const required = new Set(tool.required ?? []);
+  return Object.fromEntries(
+    Object.entries(tool.properties).map(([name, property]) => {
+      const schema = typeBoxSchemaForJsonSchema(property as Record<string, unknown>);
+      return [name, required.has(name) ? schema : Type.Optional(schema as never)];
+    })
+  ) as Parameters<typeof Type.Object>[0];
+}
+
+function omiManifestTool(tool: OmiToolManifestEntry) {
+  return omiTool({
+    name: tool.name,
+    label: tool.label,
+    description: tool.description,
+    promptSnippet: tool.promptSnippet,
+    promptGuidelines: tool.promptGuidelines,
+    properties: typeBoxPropertiesForInputSchema(tool.inputSchema),
+    required: (tool.inputSchema.required ?? []) as never[],
+    schemaOptions: schemaOptionsForInputSchema(tool.inputSchema),
+    timeoutMs: tool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS,
+  });
+}
+
+function schemaOptionsForInputSchema(schema: OmiToolInputSchema): Record<string, unknown> {
+  const options: Record<string, unknown> = {};
+  for (const key of ["anyOf", "allOf", "oneOf", "if", "then"] as const) {
+    const value = schema[key];
+    if (value !== undefined) options[key] = value;
+  }
+  return options;
+}
+
+function loadSkillTool() {
+  return defineTool({
+    name: "load_skill",
+    label: "Load Skill",
+    description: "Load the full instructions for a named skill listed in available_skills.",
+    promptSnippet: "load_skill - Load the full SKILL.md instructions for an available skill",
+    parameters: Type.Object({
+      name: Type.String({ description: "Skill name exactly as listed in available_skills" }),
+    }, { additionalProperties: false }),
+    async execute(_toolCallId, params) {
+      const name = String((params as { name?: unknown }).name ?? "").trim();
+      if (!isSafeSkillName(name)) {
+        return {
+          content: [{
+            type: "text" as const,
+            text: "Invalid skill name. Use the exact skill name listed in available_skills.",
+          }],
+          details: undefined,
+        };
+      }
+      const workspace = process.env.OMI_WORKSPACE || "";
+      const roots = [
+        workspace ? resolve(workspace, ".claude", "skills") : "",
+        resolve(homedir(), ".claude", "skills"),
+      ].filter(Boolean);
+
+      let content: string | null = null;
+      for (const root of roots) {
+        let realRoot: string;
+        let realFilePath: string;
+        try {
+          realRoot = await realpath(root);
+          realFilePath = await realpath(resolve(root, name, "SKILL.md"));
+        } catch {
+          continue;
+        }
+        if (!realFilePath.startsWith(`${realRoot}/`)) {
+          continue;
+        }
+        try {
+          content = await readFile(realFilePath, "utf8");
+          break;
+        } catch {
+          // Try the next configured skill location.
+        }
+      }
+      if (content && name === "dev-mode" && workspace) {
+        content = `Workspace: ${workspace}\n\n${content}`;
+      }
+      return {
+        content: [{
+          type: "text" as const,
+          text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
+        }],
+        details: undefined,
+      };
     },
   });
 }
 
-export const OMI_TOOLS = [
-  omiTool({
-    name: "execute_sql",
-    label: "Execute SQL",
-    description: "Run SQL on the user's local omi.db SQLite database. Use for app usage stats, screen time, activity counts, task lookups, aggregations. Read-only (SELECT only). Key tables: screenshots, transcription_sessions, action_items, memories, staged_tasks, focus_sessions, observations, goals, indexed_files.",
-    promptSnippet: "execute_sql - Query the user's local omi.db SQLite database (SELECT only)",
-    promptGuidelines: [
-      "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
-      "Use semantic_search instead for fuzzy or conceptual queries about screen content.",
-    ],
-    properties: {
-      query: Type.String({ description: "SQL query to execute" }),
-    },
-    required: ["query"],
-  }),
-  omiTool({
-    name: "semantic_search",
-    label: "Semantic Search",
-    description: "Vector similarity search on the user's screen history. Use for fuzzy/conceptual queries about what the user saw on their computer.",
-    promptSnippet: "semantic_search - Search screen history by meaning",
-    promptGuidelines: [
-      "Prefer semantic_search over execute_sql when the user asks about something they 'saw' or 'looked at'.",
-    ],
-    properties: {
-      query: Type.String({ description: "Natural language search query" }),
-      days: Type.Optional(Type.Number({ description: "Days to search back (default 7)" })),
-      app_filter: Type.Optional(Type.String({ description: "Filter to a specific app" })),
-    },
-    required: ["query"],
-  }),
-  omiTool({
-    name: "get_daily_recap",
-    label: "Daily Recap",
-    description: "Pre-formatted daily activity recap: app usage, conversations, tasks, focus, memories, observations.",
-    promptSnippet: "get_daily_recap - Get a daily activity summary",
-    properties: {
-      days_ago: Type.Optional(Type.Number({ description: "0=today, 1=yesterday, 7=past week" })),
-    },
-    required: [],
-  }),
-  omiTool({
-    name: "search_tasks",
-    label: "Search Tasks",
-    description: "Vector similarity search on tasks. Find tasks by meaning or topic.",
-    promptSnippet: "search_tasks - Find tasks by meaning",
-    properties: {
-      query: Type.String({ description: "Natural language task description" }),
-      include_completed: Type.Optional(Type.Boolean({ description: "Include completed tasks" })),
-    },
-    required: ["query"],
-  }),
-  omiTool({
-    name: "complete_task",
-    label: "Complete Task",
-    description: "Toggle a task's completion status. Syncs to backend.",
-    promptSnippet: "complete_task - Mark a task as complete/incomplete",
-    properties: {
-      task_id: Type.String({ description: "backendId from action_items" }),
-    },
-    required: ["task_id"],
-  }),
-  omiTool({
-    name: "delete_task",
-    label: "Delete Task",
-    description: "Delete a task permanently. Syncs to backend.",
-    promptSnippet: "delete_task - Delete a task permanently",
-    properties: {
-      task_id: Type.String({ description: "backendId from action_items" }),
-    },
-    required: ["task_id"],
-  }),
-  omiTool({
-    name: "get_conversations",
-    label: "Get Conversations",
-    description: "Retrieve user conversations with summaries, action items, metadata. Use for time-based queries or recaps.",
-    promptSnippet: "get_conversations - Retrieve conversations by date range",
-    properties: {
-      start_date: Type.Optional(Type.String({ description: "ISO date with timezone" })),
-      end_date: Type.Optional(Type.String({ description: "ISO date with timezone" })),
-      limit: Type.Optional(Type.Number({ description: "Default 20" })),
-      offset: Type.Optional(Type.Number()),
-      include_transcript: Type.Optional(Type.Boolean({ description: "Load speaker data" })),
-    },
-    required: [],
-  }),
-  omiTool({
-    name: "search_conversations",
-    label: "Search Conversations",
-    description: "Semantic search across conversations. Use for specific events or topics.",
-    promptSnippet: "search_conversations - Find conversations about a topic",
-    properties: {
-      query: Type.String({ description: "Event or topic to search for" }),
-      start_date: Type.Optional(Type.String()),
-      end_date: Type.Optional(Type.String()),
-      limit: Type.Optional(Type.Number({ description: "Default 5, max 20" })),
-      include_transcript: Type.Optional(Type.Boolean()),
-    },
-    required: ["query"],
-  }),
-  omiTool({
-    name: "get_memories",
-    label: "Get Memories",
-    description: "Retrieve user memories — facts, preferences, habits. Use for 'what do you know about me?' type questions.",
-    promptSnippet: "get_memories - Retrieve stored facts and preferences",
-    properties: {
-      limit: Type.Optional(Type.Number({ description: "Default 50" })),
-      offset: Type.Optional(Type.Number()),
-      start_date: Type.Optional(Type.String()),
-      end_date: Type.Optional(Type.String()),
-    },
-    required: [],
-  }),
-  omiTool({
-    name: "search_memories",
-    label: "Search Memories",
-    description: "Semantic search across user memories. Find memories about a topic using AI embeddings.",
-    promptSnippet: "search_memories - Find memories about a topic",
-    properties: {
-      query: Type.String({ description: "Topic to search for" }),
-      limit: Type.Optional(Type.Number({ description: "Default 5, max 20" })),
-    },
-    required: ["query"],
-  }),
-  omiTool({
-    name: "get_action_items",
-    label: "Get Action Items",
-    description: "Retrieve user tasks from Omi backend. Filter by completion status or due date.",
-    promptSnippet: "get_action_items - Retrieve tasks",
-    properties: {
-      limit: Type.Optional(Type.Number()),
-      offset: Type.Optional(Type.Number()),
-      completed: Type.Optional(Type.Boolean({ description: "true=done, false=pending" })),
-      start_date: Type.Optional(Type.String()),
-      end_date: Type.Optional(Type.String()),
-      due_start_date: Type.Optional(Type.String()),
-      due_end_date: Type.Optional(Type.String()),
-    },
-    required: [],
-  }),
-  omiTool({
-    name: "create_action_item",
-    label: "Create Action Item",
-    description: "Create a new task. Use when user explicitly asks to add a task.",
-    promptSnippet: "create_action_item - Create a new task",
-    properties: {
-      description: Type.String({ description: "Short task description" }),
-      due_at: Type.Optional(Type.String({ description: "Due date ISO" })),
-      conversation_id: Type.Optional(Type.String()),
-    },
-    required: ["description"],
-  }),
-  omiTool({
-    name: "update_action_item",
-    label: "Update Action Item",
-    description: "Update task status, description, or due date.",
-    promptSnippet: "update_action_item - Update an existing task",
-    properties: {
-      action_item_id: Type.String({ description: "Task ID (required)" }),
-      completed: Type.Optional(Type.Boolean()),
-      description: Type.Optional(Type.String()),
-      due_at: Type.Optional(Type.String()),
-    },
-    required: ["action_item_id"],
-  }),
-  omiTool({
-    name: "capture_screen",
-    label: "Capture Screen",
-    description: "Capture a screenshot of the user's current screen. Returns the file path to the saved JPEG image. Use the Read tool to view the image after capturing.",
-    promptSnippet: "capture_screen - Take a screenshot of the user's current screen",
-    promptGuidelines: [
-      "Call capture_screen when the user asks about what's on their screen or what they're looking at.",
-      "After capture_screen returns a file path, use Read to view the image.",
-      "Do NOT use bash screencapture — always use this tool instead.",
-    ],
-    properties: {},
-    required: [],
-  }),
-];
+export const OMI_TOOLS = toolsForAdapter("pi-mono").map((tool) => (
+  tool.executor.kind === "nodeTool" ? loadSkillTool() : omiManifestTool(tool)
+));
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   const pipePath = process.env.OMI_BRIDGE_PIPE;
@@ -719,7 +757,23 @@ async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
   for (const tool of OMI_TOOLS) {
     pi.registerTool(tool);
   }
-  process.stderr.write(`[omi-tools] Registered ${OMI_TOOLS.length} Omi tools\n`);
+  const snapshot = buildToolAvailabilitySnapshot("pi-mono");
+  if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
+    try {
+      await writeFile(process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH, `${JSON.stringify(snapshot, null, 2)}\n`);
+    } catch (err) {
+      process.stderr.write(
+        `[omi-tools] Failed to write tool availability snapshot: ${err instanceof Error ? err.message : err}\n`,
+      );
+    }
+  }
+  process.stderr.write(
+    `[omi-tools] adapter=pi-mono advertisedToolCount=${snapshot.advertisedToolCount} advertisedTools=${snapshot.advertisedToolNames.join(",")}\n`,
+  );
+}
+
+export async function __registerOmiToolsForTest(pi: ExtensionAPI): Promise<void> {
+  await registerOmiTools(pi);
 }
 
 // ---------------------------------------------------------------------------
@@ -843,6 +897,7 @@ export const __connectOmiPipeForTest = connectOmiPipe;
 
 /** Test-only: call a Swift tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool;
+export const __omiRelayCorrelationForTest = omiRelayCorrelation;
 
 /** Test-only: access to pending calls map for assertions. */
 export const __omiPendingCallsForTest = omiPendingCalls;

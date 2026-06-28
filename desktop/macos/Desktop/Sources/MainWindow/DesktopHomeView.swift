@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // MARK: - NSHostingView sizingOptions access
@@ -12,6 +13,10 @@ private protocol HostingSizingConfigurable: AnyObject {
 extension NSHostingView: HostingSizingConfigurable {}
 
 struct DesktopHomeView: View {
+  private let minimumWindowWidth: CGFloat = 1200
+  private let minimumWindowHeight: CGFloat = 680
+  private static let pageNavigationAnimation = Animation.easeOut(duration: 0.08)
+
   @StateObject private var appState = AppState()
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
@@ -22,10 +27,11 @@ struct DesktopHomeView: View {
     let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
     return SidebarNavItem.dashboard.rawValue
   }()
-  @State private var isSidebarCollapsed: Bool = false
+  @State private var isSidebarCollapsed: Bool = true
   @AppStorage("currentTierLevel") private var currentTierLevel = 0
   @AppStorage("onboardingStep") private var onboardingStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
+  @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
@@ -34,6 +40,10 @@ struct DesktopHomeView: View {
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
+  @State private var didScheduleAgentVMProvisioning = false
+  @State private var proactiveMonitoringStartGate = RetryableDelayedStartGate()
+  @State private var didScheduleConversationWarmup = false
+  @State private var initialFileIndexingBackfill = DelayedFileIndexingBackfillState()
   // Dismiss state for the Neo "no desktop access" banner (resets each launch).
   @State private var neoDesktopBannerDismissed = false
 
@@ -112,7 +122,7 @@ struct DesktopHomeView: View {
                   onUpgrade: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .planUsage
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }
                   },
@@ -122,7 +132,7 @@ struct DesktopHomeView: View {
                   onBringYourOwnKeys: {
                     appState.showUsageLimitPopup = false
                     selectedSettingsSection = .advanced
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(Self.pageNavigationAnimation) {
                       selectedIndex = SidebarNavItem.settings.rawValue
                     }
                   }
@@ -139,12 +149,10 @@ struct DesktopHomeView: View {
               appState.checkAllPermissions()
 
               // For existing users who haven't indexed files yet, run a background scan
-              if !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") {
-                UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
-                Task {
-                  log("DesktopHomeView: Running background file scan for existing user")
-                  await FileIndexerService.shared.backgroundRescan()
-                }
+              if !AppBuild.usesLazyDevPermissions
+                && !UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing")
+              {
+                scheduleInitialFileIndexing()
               }
 
               let settings = AssistantSettings.shared
@@ -157,6 +165,7 @@ struct DesktopHomeView: View {
                   appState.startTranscription()
                 } else {
                   log("DesktopHomeView: Deferring transcription — API keys not yet loaded")
+                  Task { await APIKeyService.shared.waitForKeys() }
                 }
               } else if !settings.transcriptionEnabled {
                 log("DesktopHomeView: Transcription disabled in settings, skipping auto-start")
@@ -183,15 +192,7 @@ struct DesktopHomeView: View {
               // If API keys aren't loaded yet, this may fail — onChange below retries.
               if settings.screenAnalysisEnabled {
                 if APIKeyService.keysAvailable {
-                  ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
-                    if success {
-                      log("DesktopHomeView: Screen analysis started")
-                    } else {
-                      log(
-                        "DesktopHomeView: Screen analysis failed to start: \(error ?? "unknown") — setting remains enabled for next launch"
-                      )
-                    }
-                  }
+                  scheduleProactiveMonitoringStart(reason: "launch")
                 } else {
                   log(
                     "DesktopHomeView: Deferring screen analysis — API keys not yet loaded"
@@ -201,8 +202,11 @@ struct DesktopHomeView: View {
                 log("DesktopHomeView: Screen analysis disabled in settings, skipping auto-start")
               }
 
-              // Start Crisp chat in background for notifications
-              CrispManager.shared.start()
+              // Start Crisp chat in background for notifications, scoped to the signed-in user
+              CrispManager.shared.start(
+                initialPollDelay: StartupWarmupPolicy.crispInitialPollDelay,
+                sessionUserId: UserDefaults.standard.string(forKey: "auth_userId")
+              )
 
               // Set up floating control bar (only show if user hasn't disabled it)
               FloatingControlBarManager.shared.setup(
@@ -218,14 +222,9 @@ struct DesktopHomeView: View {
             }
             .task {
               // Trigger eager data loading when main content appears
-              // Load conversations/folders in parallel with other data
-              async let vmLoad: Void = viewModelContainer.loadAllData()
-              async let conversations: Void = appState.loadConversations()
-              async let folders: Void = appState.loadFolders()
-              _ = await (vmLoad, conversations, folders)
-
-              // Backend-based check: ensure user has a cloud agent VM
-              await AgentVMService.shared.ensureProvisioned()
+              await viewModelContainer.loadAllData()
+              scheduleConversationWarmup()
+              scheduleAgentVMProvisioning()
             }
             // Refresh conversations when app becomes active (e.g. switching back from another app)
             .onReceive(
@@ -244,8 +243,8 @@ struct DesktopHomeView: View {
               if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
                 plugin.refreshScreenRecordingPermission()
                 if plugin.hasScreenRecordingPermission {
-                  log("DesktopHomeView: Permission available on app active — starting monitoring")
-                  plugin.startMonitoring { _, _ in }
+                  log("DesktopHomeView: Permission available on app active — scheduling monitoring")
+                  scheduleProactiveMonitoringStart(reason: "app active")
                 }
               }
             }
@@ -260,15 +259,7 @@ struct DesktopHomeView: View {
               // Retry screen analysis
               let plugin = ProactiveAssistantsPlugin.shared
               if AssistantSettings.shared.screenAnalysisEnabled && !plugin.isMonitoring {
-                plugin.startMonitoring { success, error in
-                  if success {
-                    log("DesktopHomeView: Screen analysis started (after key load)")
-                  } else {
-                    log(
-                      "DesktopHomeView: Screen analysis retry failed: \(error ?? "unknown")"
-                    )
-                  }
-                }
+                scheduleProactiveMonitoringStart(reason: "key load")
               }
             }
             // Cmd+R: refresh all data (conversations, chat, tasks, memories)
@@ -284,6 +275,16 @@ struct DesktopHomeView: View {
               log(
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
+              resetSessionScopedStartupWarmups(preserveCrispReadState: false)
+              appState.conversations = []
+              appState.folders = []
+              appState.selectedFolderId = nil
+              appState.selectedDateFilter = nil
+              appState.showStarredOnly = false
+              appState.totalConversationsCount = nil
+              appState.conversationsError = nil
+              appState.isLoadingConversations = false
+              appState.isLoadingFolders = false
               appState.hasCompletedOnboarding = false
               appState.stopTranscription()
             }
@@ -291,10 +292,15 @@ struct DesktopHomeView: View {
               log(
                 "DesktopHomeView: resetOnboardingRequested — clearing live onboarding state for current app"
               )
+              resetSessionScopedStartupWarmups(preserveCrispReadState: false)
               appState.hasCompletedOnboarding = false
               onboardingStep = 0
               onboardingJustCompleted = false
               appState.stopTranscription()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+              log("DesktopHomeView: app terminating — cancelling startup warmups")
+              resetSessionScopedStartupWarmups(preserveCrispReadState: true)
             }
             // Handle transcription toggle from menu bar
             .onReceive(NotificationCenter.default.publisher(for: .toggleTranscriptionRequested)) {
@@ -313,6 +319,7 @@ struct DesktopHomeView: View {
               while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(3 * 60 * 60))
                 guard !Task.isCancelled else { break }
+                guard !AppBuild.usesLazyDevPermissions else { continue }
                 guard UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing") else {
                   continue
                 }
@@ -362,7 +369,7 @@ struct DesktopHomeView: View {
       }
     }
     .background(OmiColors.backgroundPrimary)
-    .frame(minWidth: 900, minHeight: 600)
+    .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
     .preferredColorScheme(.dark)
     .tint(OmiColors.purplePrimary)
     .onAppear {
@@ -375,17 +382,11 @@ struct DesktopHomeView: View {
       // which traverses the ENTIRE view tree (~200 samples per window per trigger).
       // Removing .minSize from sizingOptions prevents this full-tree traversal.
       // The window's min size is enforced at the AppKit level instead.
-      DispatchQueue.main.async {
-        for window in NSApp.windows {
-          if window.title.lowercased().hasPrefix("omi") {
-            window.appearance = NSAppearance(named: .darkAqua)
-            window.minSize = NSSize(width: 900, height: 600)
-            // Remove .minSize from hosting view's sizingOptions.
-            // Search contentView itself + all descendants.
-            Self.disableMinSizeComputation(in: window)
-          }
-        }
-      }
+      enforceMainWindowMinimumSize()
+      // SwiftUI's automatic resizability later re-derives the window min from content
+      // extrema and resets our pin, after which the window can be dragged small enough
+      // to hide content. Re-pin on every live resize so AppKit keeps clamping the drag.
+      installMinimumSizeGuardIfNeeded()
       // Redirect if current page isn't visible at current tier
       redirectIfPageHidden()
       reportAutomationState()
@@ -394,7 +395,12 @@ struct DesktopHomeView: View {
       redirectIfPageHidden()
       reportAutomationState()
     }
-    .onChange(of: selectedIndex) { _, _ in reportAutomationState() }
+    .onChange(of: selectedIndex) { _, _ in
+      // Page nav recreates the content hosting view with default sizingOptions, which
+      // resets the window min — re-pin + re-disable to hold the minimum.
+      enforceMainWindowMinimumSize()
+      reportAutomationState()
+    }
     .onChange(of: selectedSettingsSection) { _, _ in reportAutomationState() }
     .onChange(of: highlightedSettingId) { _, _ in reportAutomationState() }
     .onChange(of: authState.isSignedIn) { _, _ in reportAutomationState() }
@@ -402,6 +408,7 @@ struct DesktopHomeView: View {
     .onChange(of: appState.hasCompletedOnboarding) { _, _ in reportAutomationState() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
     { _ in
+      enforceMainWindowMinimumSize()
       reportAutomationState()
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification))
@@ -411,6 +418,56 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationNavigateRequested)) {
       notification in
       handleAutomationNavigation(notification)
+    }
+  }
+
+  private func enforceMainWindowMinimumSize() {
+    let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    DispatchQueue.main.async {
+      for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
+        window.appearance = NSAppearance(named: .darkAqua)
+        window.contentMinSize = minimumContentSize
+        window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: minimumContentSize)).size
+
+        let currentContentSize = window.contentView?.bounds.size ?? window.contentLayoutRect.size
+        let widthDelta = max(0, minimumContentSize.width - currentContentSize.width)
+        let heightDelta = max(0, minimumContentSize.height - currentContentSize.height)
+        if widthDelta > 0 || heightDelta > 0 {
+          var frame = window.frame
+          frame.size.width += widthDelta
+          frame.size.height += heightDelta
+          frame.origin.y -= heightDelta
+          window.setFrame(frame, display: true, animate: false)
+        }
+
+        // Remove .minSize from hosting view's sizingOptions.
+        // Search contentView itself + all descendants.
+        Self.disableMinSizeComputation(in: window)
+      }
+    }
+  }
+
+  /// Re-pin the window minimum on every live resize. SwiftUI's `.automatic` window
+  /// resizability periodically recomputes content-size extrema and overwrites the
+  /// one-shot pin from `enforceMainWindowMinimumSize()`, after which the window can be
+  /// dragged small enough to hide content. Observing `didResize` and re-pinning keeps
+  /// AppKit clamping the live drag at the minimum. Installed once for the app's lifetime.
+  private static var minimumSizeGuardInstalled = false
+  private func installMinimumSizeGuardIfNeeded() {
+    guard !Self.minimumSizeGuardInstalled else { return }
+    Self.minimumSizeGuardInstalled = true
+    let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    NotificationCenter.default.addObserver(
+      forName: NSWindow.didResizeNotification, object: nil, queue: .main
+    ) { note in
+      guard let window = note.object as? NSWindow,
+        window.title.lowercased().hasPrefix("omi")
+      else { return }
+      let frameMin = window.frameRect(
+        forContentRect: NSRect(origin: .zero, size: minimumContentSize)
+      ).size
+      if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
+      if window.minSize != frameMin { window.minSize = frameMin }
     }
   }
 
@@ -426,14 +483,14 @@ struct DesktopHomeView: View {
         // that needs intrinsicContentSize for the sidebar's .fixedSize() to work.
         let typeName = String(describing: type(of: view))
         guard !typeName.contains("ClickThroughHostingView") else {
-          log("DesktopHomeView: Skipping sizingOptions on \(typeName) (needs intrinsic size)")
           // Still visit children
           for subview in view.subviews { visit(subview) }
           return
         }
         let before = hosting.sizingOptions
-        hosting.sizingOptions = []
-        log("DesktopHomeView: Set sizingOptions on \(type(of: view)): \(before) → []")
+        if before != [] {
+          hosting.sizingOptions = []
+        }
       }
       for subview in view.subviews {
         visit(subview)
@@ -448,10 +505,10 @@ struct DesktopHomeView: View {
   private func redirectIfPageHidden() {
     // Tier 0 or tier 6+ shows everything — no redirect needed
     guard currentTierLevel > 0 && currentTierLevel < 6 else { return }
-    // Don't redirect from settings/permissions/device/help pages
+    // Don't redirect from settings/permissions/help pages
     let nonMainPages: Set<Int> = [
       SidebarNavItem.settings.rawValue, SidebarNavItem.permissions.rawValue,
-      SidebarNavItem.device.rawValue, SidebarNavItem.help.rawValue,
+      SidebarNavItem.help.rawValue,
     ]
     guard !nonMainPages.contains(selectedIndex) else { return }
 
@@ -471,6 +528,10 @@ struct DesktopHomeView: View {
   /// Whether to hide the sidebar (rewind mode)
   private var hideSidebar: Bool {
     OMIApp.launchMode == .rewind
+  }
+
+  private var showsPrimarySidebar: Bool {
+    useLegacyHomeDesign && !hideSidebar
   }
 
   private var currentAppStateLabel: String {
@@ -495,17 +556,25 @@ struct DesktopHomeView: View {
       selectedTabIndex: selectedIndex,
       selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
       highlightedSettingId: highlightedSettingId,
+      usesLegacyHomeDesign: useLegacyHomeDesign,
+      showsPrimarySidebar: showsPrimarySidebar,
+      isSidebarCollapsed: isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
       isSignedIn: authState.isSignedIn,
       isRestoringAuth: authState.isRestoringAuth,
       isAppActive: NSApp.isActive,
       mainWindowTitle: currentWindow?.title,
+      floatingBarVisible: FloatingControlBarManager.shared.automationState.isVisible,
+      askOmiOpen: FloatingControlBarManager.shared.automationState.isAskOmiOpen,
+      askOmiFocused: FloatingControlBarManager.shared.automationState.isAskOmiFocused,
+      floatingBarFrame: FloatingControlBarManager.shared.automationState.frame,
+      floatingBarVoiceListening: FloatingControlBarManager.shared.automationState.isVoiceListening,
+      floatingBarVoiceResponseActive: FloatingControlBarManager.shared.automationState.isVoiceResponseActive,
+      floatingBarUsesNotchIsland: FloatingControlBarManager.shared.automationState.usesNotchIsland,
       updatedAt: ISO8601DateFormatter().string(from: Date())
     )
 
-    Task {
-      await DesktopAutomationStateStore.shared.update(snapshot)
-    }
+    DesktopAutomationStateStore.shared.update(snapshot)
   }
 
   private func handleAutomationNavigation(_ notification: Notification) {
@@ -531,9 +600,7 @@ struct DesktopHomeView: View {
     highlightedSettingId = settingId
 
     if let item = resolvedAutomationTarget(target) {
-      withAnimation(.easeInOut(duration: 0.15)) {
-        selectedIndex = item.rawValue
-      }
+      selectedIndex = item.rawValue
     }
 
     reportAutomationState()
@@ -564,8 +631,6 @@ struct DesktopHomeView: View {
       return .settings
     case "permissions":
       return .permissions
-    case "device":
-      return .device
     case "help":
       return .help
     default:
@@ -593,6 +658,124 @@ struct DesktopHomeView: View {
     }
   }
 
+  private func resetSessionScopedStartupWarmups(preserveCrispReadState: Bool) {
+    viewModelContainer.resetStartupState()
+    didScheduleConversationWarmup = false
+    didScheduleAgentVMProvisioning = false
+    proactiveMonitoringStartGate.finishAttempt()
+    initialFileIndexingBackfill.releaseReservation()
+    CrispManager.shared.stop(preserveReadState: preserveCrispReadState)
+  }
+
+  private func scheduleAgentVMProvisioning() {
+    guard !didScheduleAgentVMProvisioning else { return }
+    didScheduleAgentVMProvisioning = true
+
+    let scheduled = viewModelContainer.scheduleSessionWarmup(
+      id: .agentVMProvisioning,
+      delay: StartupWarmupPolicy.agentVMProvisioningDelay,
+      onCancel: { didScheduleAgentVMProvisioning = false }
+    ) {
+      await AgentVMService.shared.ensureProvisioned()
+    }
+    if !scheduled { didScheduleAgentVMProvisioning = false }
+  }
+
+  private func scheduleConversationWarmup() {
+    guard !didScheduleConversationWarmup else { return }
+    didScheduleConversationWarmup = true
+
+    let scheduled = viewModelContainer.scheduleSessionWarmup(
+      id: .conversationWarmup,
+      delay: StartupWarmupPolicy.conversationWarmupDelay,
+      onCancel: { didScheduleConversationWarmup = false }
+    ) {
+      async let conversations: Void = loadConversationsIfNeeded()
+      async let folders: Void = loadFoldersIfNeeded()
+      _ = await (conversations, folders)
+    }
+    if !scheduled { didScheduleConversationWarmup = false }
+  }
+
+  private func loadConversationsIfNeeded() async {
+    guard appState.conversations.isEmpty else { return }
+    await appState.loadConversations()
+  }
+
+  private func loadFoldersIfNeeded() async {
+    guard appState.folders.isEmpty else { return }
+    await appState.loadFolders()
+  }
+
+  private func scheduleInitialFileIndexing() {
+    guard
+      initialFileIndexingBackfill.reserveIfNeeded(
+        hasCompletedBackfill: UserDefaults.standard.bool(forKey: "hasCompletedFileIndexing"))
+    else { return }
+
+    let sessionScope = StartupWarmupSessionScope(
+      userId: UserDefaults.standard.string(forKey: "auth_userId"))
+    let scheduled = viewModelContainer.scheduleSessionWarmup(
+      id: .initialFileIndexing,
+      delay: StartupWarmupPolicy.initialFileIndexingDelay,
+      onCancel: { initialFileIndexingBackfill.releaseReservation() }
+    ) {
+      log("DesktopHomeView: Running delayed background file scan for existing user")
+      await FileIndexerService.shared.backgroundRescan()
+      guard !Task.isCancelled,
+            sessionScope.matches(
+              currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+              isSignedIn: AuthState.shared.isSignedIn)
+      else {
+        initialFileIndexingBackfill.releaseReservation()
+        return
+      }
+      initialFileIndexingBackfill.markScanCompleted()
+      if initialFileIndexingBackfill.shouldMarkComplete {
+        UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
+        log(
+          "DesktopHomeView: Marked existing-user file indexing backfill complete after background scan returned"
+        )
+      }
+    }
+    if !scheduled { initialFileIndexingBackfill.releaseReservation() }
+  }
+
+  private func scheduleProactiveMonitoringStart(reason: String) {
+    guard proactiveMonitoringStartGate.reserve() else { return }
+
+    let scheduled = viewModelContainer.scheduleSessionWarmup(
+      id: .proactiveAssistantsStart,
+      delay: StartupWarmupPolicy.proactiveAssistantsStartDelay,
+      onCancel: { proactiveMonitoringStartGate.finishAttempt() }
+    ) {
+      let plugin = ProactiveAssistantsPlugin.shared
+      guard AssistantSettings.shared.screenAnalysisEnabled, !plugin.isMonitoring else {
+        proactiveMonitoringStartGate.finishAttempt()
+        return
+      }
+      guard APIKeyService.keysAvailable else {
+        proactiveMonitoringStartGate.finishAttempt()
+        log("DesktopHomeView: Screen analysis still deferred after \(reason) — API keys not yet loaded")
+        return
+      }
+
+      plugin.startMonitoring { success, error in
+        Task { @MainActor in
+          proactiveMonitoringStartGate.finishAttempt()
+          if success {
+            log("DesktopHomeView: Screen analysis started (\(reason), delayed)")
+          } else {
+            log(
+              "DesktopHomeView: Screen analysis failed to start (\(reason)): \(error ?? "unknown") — setting remains enabled for next launch"
+            )
+          }
+        }
+      }
+    }
+    if !scheduled { proactiveMonitoringStartGate.finishAttempt() }
+  }
+
   private func updateStoreActivity(for index: Int) {
     viewModelContainer.tasksStore.isActive =
       index == SidebarNavItem.dashboard.rawValue || index == SidebarNavItem.tasks.rawValue
@@ -607,31 +790,49 @@ struct DesktopHomeView: View {
       // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
       // removed, its .help() tooltip graph nodes get invalidated, but the macOS tooltip
       // tracking system still tries to evaluate them during window key state changes.
-      ZStack {
-        if !hideSidebar {
-          SidebarView(
-            selectedIndex: $selectedIndex,
-            isCollapsed: $isSidebarCollapsed,
-            appState: appState
-          )
-          .opacity(isInSettings ? 0 : 1)
-          .allowsHitTesting(!isInSettings)
-        }
+      if isInSettings {
+        ZStack {
+          if showsPrimarySidebar {
+            SidebarView(
+              selectedIndex: $selectedIndex,
+              isCollapsed: $isSidebarCollapsed,
+              appState: appState
+            )
+            .opacity(0)
+            .allowsHitTesting(false)
+          }
 
-        if isInSettings {
           SettingsSidebar(
             selectedSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
             onBack: {
-              withAnimation(.easeInOut(duration: 0.2)) {
-                selectedIndex = previousIndexBeforeSettings
+              withAnimation(Self.pageNavigationAnimation) {
+                selectedIndex =
+                  previousIndexBeforeSettings == SidebarNavItem.settings.rawValue
+                  ? SidebarNavItem.dashboard.rawValue
+                  : previousIndexBeforeSettings
               }
             }
           )
         }
+        .fixedSize(horizontal: true, vertical: false)
+        .clipped()
+      } else if showsPrimarySidebar {
+        ZStack {
+          if showsPrimarySidebar {
+            SidebarView(
+              selectedIndex: $selectedIndex,
+              isCollapsed: $isSidebarCollapsed,
+              appState: appState
+            )
+            .opacity(isInSettings ? 0 : 1)
+            .allowsHitTesting(!isInSettings)
+          }
+
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .clipped()
       }
-      .fixedSize(horizontal: true, vertical: false)
-      .clipped()
 
       // Main content area with rounded container
       ZStack {
@@ -656,17 +857,27 @@ struct DesktopHomeView: View {
         // Page content - switch recreates views on tab change
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
-        PageContentView(
-          selectedIndex: selectedIndex,
-          appState: appState,
-          viewModelContainer: viewModelContainer,
-          selectedSettingsSection: $selectedSettingsSection,
-          highlightedSettingId: $highlightedSettingId,
-          selectedTabIndex: $selectedIndex
-        )
-        .id(selectedIndex)
-        .transition(.opacity.combined(with: .move(edge: .trailing)))
-        .animation(.easeInOut(duration: 0.2), value: selectedIndex)
+        VStack(spacing: 0) {
+          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue {
+            PageChromeBar(
+              onHome: {
+                selectedIndex = SidebarNavItem.dashboard.rawValue
+              }
+            )
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+          }
+
+          PageContentView(
+            selectedIndex: selectedIndex,
+            appState: appState,
+            viewModelContainer: viewModelContainer,
+            selectedSettingsSection: $selectedSettingsSection,
+            highlightedSettingId: $highlightedSettingId,
+            selectedTabIndex: $selectedIndex
+          )
+        }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(14)
@@ -676,12 +887,12 @@ struct DesktopHomeView: View {
         NeoDesktopBanner(
           onUpgrade: {
             selectedSettingsSection = .planUsage
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(Self.pageNavigationAnimation) {
               selectedIndex = SidebarNavItem.settings.rawValue
             }
           },
           onDismiss: {
-            withAnimation(.easeInOut(duration: 0.2)) {
+            withAnimation(Self.pageNavigationAnimation) {
               neoDesktopBannerDismissed = true
             }
           }
@@ -719,73 +930,51 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
       // Set the section directly and navigate to settings
       selectedSettingsSection = .rewind
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      selectedIndex = SidebarNavItem.settings.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
-      // Set the section directly and navigate to settings. Without this the
-      // settings pane opens on whatever section was last selected (General),
-      // leaving no path to reach Device pairing from the device widget (#5917).
-      selectedSettingsSection = .device
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
+      if let url = URL(string: "https://www.omi.me") {
+        NSWorkspace.shared.open(url)
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
       // Navigate to settings > advanced > task assistant subsection
       selectedSettingsSection = .advanced
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      selectedIndex = SidebarNavItem.settings.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSettingsSection = .floatingBar
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      selectedIndex = SidebarNavItem.settings.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
       selectedSettingsSection = .advanced
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.settings.rawValue
-      }
+      selectedIndex = SidebarNavItem.settings.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
       // Navigate to Rewind page (index 6) - triggered by global hotkey Cmd+Option+R
       log(
         "DesktopHomeView: Received navigateToRewind notification, navigating to Rewind (index \(SidebarNavItem.rewind.rawValue))"
       )
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.rewind.rawValue
-      }
+      selectedIndex = SidebarNavItem.rewind.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindNotes)) { _ in
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.rewind.rawValue
-      }
+      selectedIndex = SidebarNavItem.rewind.rawValue
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
         NotificationCenter.default.post(name: .expandRewindTranscript, object: nil)
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
       // Chat now lives on the Dashboard page.
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.dashboard.rawValue
-      }
+      selectedIndex = SidebarNavItem.dashboard.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
-      withAnimation(.easeInOut(duration: 0.2)) {
-        selectedIndex = SidebarNavItem.tasks.rawValue
-      }
+      selectedIndex = SidebarNavItem.tasks.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
       if let rawValue = notification.userInfo?["rawValue"] as? Int,
         let item = SidebarNavItem(rawValue: rawValue)
       {
-        withAnimation(.easeInOut(duration: 0.2)) {
-          selectedIndex = item.rawValue
-        }
+        selectedIndex = item.rawValue
       }
     }
     .onChange(of: selectedIndex) { oldValue, newValue in
@@ -798,13 +987,65 @@ struct DesktopHomeView: View {
       // Only auto-refresh stores when their pages are visible
       updateStoreActivity(for: newValue)
     }
+    .onChange(of: useLegacyHomeDesign) { _, newValue in
+      withAnimation(.easeInOut(duration: 0.2)) {
+        isSidebarCollapsed = !newValue
+      }
+    }
     .onAppear {
+      isSidebarCollapsed = !useLegacyHomeDesign
       updateStoreActivity(for: selectedIndex)
       // Restore window width if the user quit with task chat panel open.
       // The chat panel is never open on startup (showChatPanel defaults to false),
       // but macOS restores the expanded window frame from the previous session.
       restorePreChatWindowWidth()
     }
+  }
+}
+
+private struct PageChromeBar: View {
+  let onHome: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      PageChromeButton(title: "Home", systemImage: "house.fill", action: onHome)
+      Spacer()
+    }
+    .frame(height: 34)
+  }
+}
+
+private struct PageChromeButton: View {
+  let title: String
+  let systemImage: String
+  let action: () -> Void
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 7) {
+        Image(systemName: systemImage)
+          .scaledFont(size: 12, weight: .semibold)
+        Text(title)
+          .scaledFont(size: 12, weight: .semibold)
+      }
+      .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, 11)
+      .padding(.vertical, 7)
+      .background(
+        Capsule(style: .continuous)
+          .fill(.ultraThinMaterial)
+      )
+      .overlay(
+        Capsule(style: .continuous)
+          .stroke(isHovering ? OmiColors.success.opacity(0.34) : OmiColors.border.opacity(0.4), lineWidth: 1)
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .help(title)
+    .accessibilityLabel(title)
   }
 }
 
@@ -868,7 +1109,6 @@ private struct PageContentView: View {
   @Binding var selectedTabIndex: Int
 
   var body: some View {
-    let _ = log("RENDER: PageContentView body evaluated (index=\(selectedIndex))")
     Group {
       switch selectedIndex {
       case 0:
@@ -877,6 +1117,7 @@ private struct PageContentView: View {
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
           selectedIndex: $selectedTabIndex)
       case 1:
         ConversationsPageHost(appState: appState)
@@ -908,8 +1149,6 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
-      case 11:
-        DeviceSettingsPage()
       case 12:
         HelpPage()
       default:
@@ -918,6 +1157,7 @@ private struct PageContentView: View {
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
+          memoriesViewModel: viewModelContainer.memoriesViewModel,
           selectedIndex: $selectedTabIndex)
       }
     }

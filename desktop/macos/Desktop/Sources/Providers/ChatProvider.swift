@@ -109,10 +109,25 @@ enum ChatContentBlock: Identifiable {
         if cleanName.hasPrefix("WebFetch:") {
             return "Fetching page"
         }
+        if cleanName.lowercased().hasPrefix("read:") {
+            return "Reading file"
+        }
+        if cleanName.lowercased().hasPrefix("write:") {
+            return "Writing file"
+        }
+        if cleanName.lowercased().hasPrefix("edit:") {
+            return "Editing file"
+        }
+        if cleanName.lowercased().hasPrefix("bash:") {
+            return "Running command"
+        }
 
         switch cleanName {
         case "execute_sql": return "Querying database"
         case "semantic_search": return "Searching conversations"
+        case "get_task_agent_status": return "Checking agents"
+        case "spawn_agent": return "Starting agent"
+        case "manage_agent_pills": return "Managing agents"
         case "search_tasks": return "Searching tasks"
         case "Read": return "Reading file"
         case "Write": return "Writing file"
@@ -165,6 +180,18 @@ enum ChatContentBlock: Identifiable {
             }
         case "semantic_search":
             summary = input["query"] as? String
+        case "spawn_agent":
+            summary = (input["brief"] ?? input["query"]) as? String
+        case "manage_agent_pills":
+            if let action = input["action"] as? String {
+                if let agentId = input["agent_id"] as? String, !agentId.isEmpty {
+                    summary = "\(action) \(agentId)"
+                } else {
+                    summary = action
+                }
+            } else {
+                summary = nil
+            }
         case "search_tasks":
             summary = input["query"] as? String
         case "request_permission":
@@ -191,9 +218,29 @@ enum ChatContentBlock: Identifiable {
     }
 }
 
-enum ToolCallStatus {
+enum ToolCallStatus: CaseIterable {
     case running
+    /// Promoted by `StallDetector` after the per-tool / inter-event
+    /// timer crosses `StallThresholds.slowGapMs`. Still in flight.
+    case slow
+    /// Promoted after `StallThresholds.stalledGapMs`. Still in flight,
+    /// but eligible for the message-level Cancel banner.
+    case stalled
     case completed
+    /// Terminal failure (timeout, interrupt, bridge error).
+    case failed
+
+    /// True for any state where the tool is still working. Pattern
+    /// matches throughout the UI should use this instead of `== .running`
+    /// so `.slow` and `.stalled` don't accidentally look complete.
+    var isInFlight: Bool {
+        switch self {
+        case .running, .slow, .stalled:
+            return true
+        case .completed, .failed:
+            return false
+        }
+    }
 }
 
 // MARK: - Chat Message Model
@@ -335,6 +382,9 @@ struct MessageMetadata {
         return [
             "execute_sql",
             "semantic_search",
+            "get_task_agent_status",
+            "spawn_agent",
+            "manage_agent_pills",
             "search_tasks",
             "get_daily_recap",
             "complete_task",
@@ -384,6 +434,37 @@ struct ChatMessage: Identifiable {
         self.notificationContext = notificationContext
         self.notificationScreenshot = notificationScreenshot
         self.attachments = attachments
+    }
+}
+
+extension ChatMessage {
+    var copyableText: String {
+        let structuredText = contentBlocks
+            .compactMap(\.copyableText)
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !structuredText.isEmpty {
+            return structuredText
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+extension ChatContentBlock {
+    var copyableText: String? {
+        switch self {
+        case .text(_, let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        case .thinking(_, let text):
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : "Thinking:\n\(trimmed)"
+        case .discoveryCard(_, let title, _, let fullText):
+            let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
+        case .toolCall:
+            return nil
+        }
     }
 }
 
@@ -478,9 +559,9 @@ class ChatProvider: ObservableObject {
 ================================================================================
 🚨 FLOATING BAR MODE — READ THIS FIRST BEFORE ANYTHING ELSE 🚨
 ================================================================================
-ALWAYS check the user's memories and facts using available tools (get_memories, search_memories, execute_sql) before answering ANY question. The user expects personalized answers based on what you know about them.
+SCOPE TOOLS TO THE USER'S OWN DATA. First decide whether the question actually needs the user's personal data. If it's about the user — their memories, facts, preferences, past conversations, tasks, schedule, goals, or app/screen activity — use the available data tools (get_memories, search_memories, execute_sql, get_daily_recap, etc.) to look it up before answering; don't guess. If it's chit-chat, a greeting, or general knowledge that does NOT depend on the user's data, answer directly and immediately WITHOUT calling any tools. The user expects personalized answers when the question is about them — but not a tool round-trip for "hey" or a general question.
 NEVER ask follow-up questions or ask for clarification. ALWAYS give a direct, concrete answer immediately using whatever you know about the user from their memories, context, and facts. If memories mention their devices, preferences, work, budget, or interests — use that to give a specific recommendation, not a generic one.
-If the question contains a product name, software name, or proper noun — search the web for it before answering, even if you think you know what it is.
+Search the web only when you genuinely need current or unfamiliar information you don't already know (e.g. a product/version detail you're unsure of). Don't reflexively look up things you already know — answer general knowledge directly.
 If a screenshot is attached and the user asks a deictic question like "which one", "which option", "which suits me", "what should I choose", or "what's on my screen", ground the answer in the visible options first and prefer what is actually on screen over unrelated context.
 If the screenshot already clearly shows the relevant options, do not ignore it just because the query is short or ambiguous.
 Respond concisely in 1-2 sentences. No lists. No headers. NEVER ask follow-up questions — just answer.
@@ -503,6 +584,29 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var isStopping = false
     @Published var isClearing = false
     @Published var errorMessage: String?
+    /// Monotonic token that increments each time the local user sends a message.
+    /// ChatMessagesView observes this to anchor the viewport on send, rather than
+    /// inferring solely from messages.count changes (which can also come from
+    /// polling/sync).
+    @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
+
+    // MARK: - ChatErrorState (structured replacement for the inline error banner)
+    //
+    // Structured error state for the chat surface. Drives the
+    // ChatErrorCard view. Coexists with the legacy `errorMessage`
+    // banner: mappable BridgeError cases set `currentError` and clear
+    // `errorMessage`; unmappable cases (encoding, quota, agent errors
+    // with free-form messages) keep falling back to the legacy banner.
+    //
+    // Paywall sheets (`isClaudeAuthRequired`, `needsBrowserExtensionSetup`,
+    // `showOmiThresholdAlert`) are deliberately NOT migrated — they're
+    // product flows, not error recovery surfaces.
+    @Published var currentError: ChatErrorState?
+
+    /// Captured at the start of each sendMessage so the .retry recovery
+    /// action can re-issue the user's last prompt. Cleared after a
+    /// successful re-send or on dismiss to avoid stale retries.
+    private var lastFailedPrompt: String?
 
     /// Monotonically-incremented id for each sendMessage / stopAgent cycle.
     /// Watchdog tasks capture their gen and only reset state if it still
@@ -542,6 +646,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// When set, the bridge uses this model instead of the default (Opus).
     /// e.g. "claude-sonnet-4-6" for faster floating bar responses.
     var modelOverride: String?
+    /// Optional per-provider bridge override for spawned/background agents.
+    /// This lets a single pill run Hermes/OpenClaw without changing the user's
+    /// global chat provider preference stored in `chatBridgeMode`.
+    private let bridgeHarnessOverride: AgentHarnessMode?
+
+    var hasBridgeHarnessOverride: Bool {
+        bridgeHarnessOverride != nil
+    }
 
     /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
     /// When true, user can create multiple chat sessions
@@ -555,8 +667,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // with the user's Firebase ID token). Claude Code remains as an opt-in harness that
     // uses the user's own Claude OAuth.
     private lazy var agentBridge: AgentBridge = {
-        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
-        let harness = mode == BridgeMode.piMono.rawValue ? "piMono" : "acp"
+        let harness = resolvedHarnessMode()
         activeBridgeHarness = harness
         return AgentBridge(harnessMode: harness)
     }()
@@ -576,11 +687,36 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         case omiAI = "agentSDK"     // Legacy, auto-migrated to piMono
         case userClaude = "claudeCode"
         case piMono = "piMono"
+        case hermes = "hermes"
+        case openClaw = "openclaw"
     }
     @AppStorage("chatBridgeMode") var bridgeMode: String = BridgeMode.piMono.rawValue
 
     var isUsingOmiAccountProvider: Bool {
-        bridgeMode != BridgeMode.userClaude.rawValue
+        resolvedHarnessMode() == "piMono"
+    }
+
+    nonisolated static func harnessMode(for mode: BridgeMode) -> String {
+        AgentRuntimeRouting.harnessMode(for: mode).rawValue
+    }
+
+    private func resolvedHarnessMode() -> String {
+        if let override = bridgeHarnessOverride {
+            return override.rawValue
+        }
+        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? BridgeMode.piMono.rawValue
+        return Self.harnessMode(for: BridgeMode(rawValue: mode) ?? .piMono)
+    }
+
+    /// The legacy "$50 lifetime Omi AI spend" upgrade nudge (`showOmiThresholdAlert`)
+    /// must never fire for users who already pay — paid subscribers and BYOK users
+    /// aren't capped by the free Omi quota. `omiAICumulativeCostUsd` is seeded from the
+    /// backend *lifetime* total, so without this guard any heavy paying user (e.g. on
+    /// Operator/Architect) trips $50 and gets a bogus "Upgrade Required" alert even
+    /// while well within their plan. The authoritative free-tier block is the
+    /// server-side quota in `FloatingBarUsageLimiter`; this is just a soft nudge.
+    var isExemptFromOmiUpgradeNudge: Bool {
+        FloatingBarUsageLimiter.shared.hasPaidPlan || APIKeyService.isByokActive
     }
 
     /// Whether the agent bridge requires authentication (shown as sheet in UI)
@@ -600,7 +736,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var showOmiThresholdAlert = false
 
     private let messagesPageSize = 50
-    private let maxMessagesInMemory = 200
+    /// Raw server records consumed by history pagination (the backend pages newest-first).
+    /// Kept separate from messages.count: deduped pages and live messages merged by
+    /// polling would otherwise stall or skew the offset.
+    private var messagesPaginationOffset = 0
+
+    /// Reset history-pagination state. Must accompany every clear/replace of
+    /// `messages` outside the two loaders (`selectSession`,
+    /// `loadDefaultChatMessages`), which set both fields from a fresh fetch.
+    private func resetMessagesPagination() {
+        messagesPaginationOffset = 0
+        hasMoreMessages = false
+    }
+
     private var multiChatObserver: AnyCancellable?
     private var playwrightExtensionObserver: AnyCancellable?
     private var sessionGroupingObserver: AnyCancellable?
@@ -660,6 +808,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// after session/new the ACP SDK tracks ongoing history natively.
     private var cachedMainSystemPrompt: String = ""
     private var cachedFloatingSystemPrompt: String = ""
+    private var cachedFloatingPillSystemPrompt: String = ""
 
     // MARK: - CLAUDE.md & Skills (Global)
     @Published var claudeMdContent: String?
@@ -692,7 +841,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // MARK: - System Prompt
     // Prompts are defined in ChatPrompts.swift (converted from Python backend)
 
-    init() {
+    init(bridgeHarnessOverride: AgentHarnessMode? = nil) {
+        self.bridgeHarnessOverride = bridgeHarnessOverride
         log("ChatProvider initialized, will start Claude bridge on first use")
 
         // When the last in-flight save completes, re-run any poll cycle
@@ -783,14 +933,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             .sink { [weak self] _ in
                 Task { @MainActor in
                     guard let self = self else { return }
-                    guard self.agentBridgeStarted else { return }
-                    log("ChatProvider: userDidSignOut — stopping agent bridge so the next user gets a fresh subprocess")
-                    await self.agentBridge.stop()
-                    self.agentBridgeStarted = false
-                    self.messages.removeAll()
-                    self.pendingAttachments.removeAll()
-                    self.sessions.removeAll()
-                    self.currentSession = nil
+                    log("ChatProvider: userDidSignOut — clearing chat state so the next user gets fresh context")
+                    if self.agentBridgeStarted {
+                        await self.agentBridge.stop()
+                        self.agentBridgeStarted = false
+                    }
+                    self.resetSessionStateForAuthChange()
+                    AgentRuntimeStatusStore.shared.reset()
                 }
             }
 
@@ -942,14 +1091,25 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let promptContext = formatMemoriesSection()
             let mainSystemPrompt = buildSystemPrompt(contextString: promptContext, style: .main)
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
+            let floatingPillSystemPrompt = buildFloatingBarSystemPrompt(
+                contextString: promptContext,
+                excludingToolNames: ["spawn_agent", "delegate_agent"]
+            )
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
                 ? ModelQoS.Claude.defaultSelection
                 : ShortcutSettings.shared.selectedModel
             cachedMainSystemPrompt = mainSystemPrompt
             cachedFloatingSystemPrompt = floatingSystemPrompt
+            cachedFloatingPillSystemPrompt = floatingPillSystemPrompt
+            // Hermes and OpenClaw ignore Omi's Claude model aliases, so leave
+            // the model hint nil to avoid recording a model ID in binding metadata
+            // that could trigger spurious context-changed sessions later.
+            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+            let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
+            let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
             await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
-                .init(key: "main", model: ModelQoS.Claude.chat, systemPrompt: mainSystemPrompt),
-                .init(key: "floating", model: floatingModel, systemPrompt: floatingSystemPrompt)
+                .init(key: "main", model: mainWarmupModel, systemPrompt: mainSystemPrompt),
+                .init(key: "floating", model: floatingWarmupModel, systemPrompt: floatingSystemPrompt)
             ])
             return true
         } catch {
@@ -963,18 +1123,35 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Ensures all prompt-backed local context is loaded before we build and cache the ACP session prompt.
     private func preparePromptContextIfNeeded() async {
-        await loadMemoriesIfNeeded()
-        await loadGoalsIfNeeded()
-        await loadTasksIfNeeded()
-        await loadAIProfileIfNeeded()
-        await loadSchemaIfNeeded()
+        await warmupPromptContext()
+    }
+
+    private func resetSessionStateForAuthChange() {
+        messages.removeAll()
+        resetMessagesPagination()
+        pendingAttachments.removeAll()
+        sessions.removeAll()
+        currentSession = nil
+        cachedMemories = []
+        memoriesLoaded = false
+        cachedGoals = []
+        goalsLoaded = false
+        cachedTasks = []
+        tasksLoaded = false
+        cachedAIProfile = ""
+        aiProfileLoaded = false
+        cachedDatabaseSchema = ""
+        schemaLoaded = false
+        cachedMainSystemPrompt = ""
+        cachedFloatingSystemPrompt = ""
+        cachedFloatingPillSystemPrompt = ""
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
     func switchBridgeMode(to mode: BridgeMode) async {
         // Normalize legacy omiAI to piMono
         let resolvedMode: BridgeMode = (mode == .omiAI) ? .piMono : mode
-        let newHarness = resolvedMode == .piMono ? "piMono" : "acp"
+        let newHarness = Self.harnessMode(for: resolvedMode)
         let previousHarness = activeBridgeHarness
         // Compare against the actual running harness, NOT @AppStorage (which may
         // already reflect the new value because another view wrote the same key).
@@ -1181,7 +1358,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             currentSession = session
             isInDefaultChat = false
             messages = []
-            hasMoreMessages = false
+            resetMessagesPagination()
             log("Created new chat session: \(session.id)")
             AnalyticsManager.shared.chatSessionCreated()
 
@@ -1250,12 +1427,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             )
             messages = persistedMessages.map(ChatMessage.init(from:))
                 .sorted(by: { $0.createdAt < $1.createdAt })
+            messagesPaginationOffset = persistedMessages.count
             // If we got a full page, there might be more messages
             hasMoreMessages = persistedMessages.count == messagesPageSize
             log("ChatProvider loaded \(messages.count) messages for session \(session.id), hasMore: \(hasMoreMessages)")
         } catch {
             logError("Failed to load messages for session", error: error)
             messages = []
+            resetMessagesPagination()
         }
 
         isLoading = false
@@ -1269,36 +1448,54 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         isLoadingMoreMessages = true
 
         do {
-            let offset = messages.count
-            let olderMessages: [ChatMessageDB]
-            if let sessionId = currentSessionId {
-                olderMessages = try await APIClient.shared.getMessages(
-                    sessionId: sessionId,
-                    limit: messagesPageSize,
-                    offset: offset
-                )
-            } else {
-                olderMessages = try await APIClient.shared.getMessages(
-                    appId: selectedAppId,
-                    limit: messagesPageSize,
-                    offset: offset
-                )
+            // A burst of live messages (e.g. from another device) shifts the
+            // newest-first window, so a fetched page can dedupe entirely to
+            // messages we already hold. Consume up to a few windows per call so
+            // one user action always yields visible progress; the cursor
+            // advances every iteration, so this terminates. Deliberately NOT
+            // derived from the local message count — overcounting (deletions,
+            // polling gaps) would overshoot and silently skip history, while a
+            // duplicate window only costs a redundant fetch.
+            var appendedCount = 0
+            var existingIds = Set(messages.map(\.id))
+            for _ in 0..<3 {
+                let offset = messagesPaginationOffset
+                let olderMessages: [ChatMessageDB]
+                if let sessionId = currentSessionId {
+                    olderMessages = try await APIClient.shared.getMessages(
+                        sessionId: sessionId,
+                        limit: messagesPageSize,
+                        offset: offset
+                    )
+                } else {
+                    olderMessages = try await APIClient.shared.getMessages(
+                        appId: selectedAppId,
+                        limit: messagesPageSize,
+                        offset: offset
+                    )
+                }
+
+                // Advance by raw records consumed — even when dedupe below drops
+                // some — so the next request can never re-issue the same window.
+                messagesPaginationOffset += olderMessages.count
+
+                // Drop the window overlap before appending.
+                let newMessages = olderMessages.map(ChatMessage.init(from:))
+                    .filter { !existingIds.contains($0.id) }
+                existingIds.formUnion(newMessages.map(\.id))
+
+                // Append older messages and re-sort to ensure correct chronological order
+                if !newMessages.isEmpty {
+                    messages.append(contentsOf: newMessages)
+                    messages.sort(by: { $0.createdAt < $1.createdAt })
+                }
+                appendedCount += newMessages.count
+
+                // Check if there are more (based on the raw page size, pre-dedupe)
+                hasMoreMessages = olderMessages.count == messagesPageSize
+                if appendedCount > 0 || !hasMoreMessages { break }
             }
-
-            let newMessages = olderMessages.map(ChatMessage.init(from:))
-
-            // Append older messages and re-sort to ensure correct chronological order
-            messages.append(contentsOf: newMessages)
-            messages.sort(by: { $0.createdAt < $1.createdAt })
-
-            // Cap memory usage: keep only the most recent messages
-            if messages.count > maxMessagesInMemory {
-                messages.removeFirst(messages.count - maxMessagesInMemory)
-            }
-
-            // Check if there are more
-            hasMoreMessages = olderMessages.count == messagesPageSize
-            log("Loaded \(newMessages.count) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
+            log("Loaded \(appendedCount) more messages, total: \(messages.count), hasMore: \(hasMoreMessages)")
         } catch {
             logError("Failed to load more messages", error: error)
         }
@@ -1324,6 +1521,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 } else {
                     currentSession = nil
                     messages = []
+                    resetMessagesPagination()
                 }
             }
 
@@ -1645,13 +1843,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Called once at warmup (via ensureBridgeStarted) and cached in cachedMainSystemPrompt.
     /// Conversation history is injected here so the brand-new ACP session starts with context
     /// from before the app launch. After session/new the ACP SDK owns history natively.
-    private func buildSystemPrompt(contextString: String, style: ChatSystemPromptStyle) -> String {
-        // Get user name from AuthService
-        let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+    /// Display name for prompts, with a stable fallback — one source so the
+    /// cached static prefix and the live-context tail never disagree.
+    private var promptUserName: String {
+        AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+    }
 
-        // Use the context string from backend (includes memories + conversations)
-        // Fall back to just memories if context is empty
-        let contextSection = contextString.isEmpty ? formatMemoriesSection() : contextString
+    /// When `staticBody` is true, build a cache-friendly prefix with no live data:
+    /// the datetime is blanked and the memories fallback is skipped, because the
+    /// live context is appended separately after the cache-split sentinel.
+    private func buildSystemPrompt(contextString: String, style: ChatSystemPromptStyle, staticBody: Bool = false) -> String {
+        let userName = promptUserName
+
+        // Backend context (memories + conversations); fall back to local memories
+        // when empty — unless building the static body (live data lives in the tail).
+        let contextSection = (contextString.isEmpty && !staticBody) ? formatMemoriesSection() : contextString
 
         // Build individual sections
         let goalSection = formatGoalSection()
@@ -1665,7 +1871,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             goalSection: goalSection,
             tasksSection: tasksSection,
             aiProfileSection: aiProfileSection,
-            databaseSchema: style.includesDatabaseSchema ? cachedDatabaseSchema : ""
+            databaseSchema: style.includesDatabaseSchema ? cachedDatabaseSchema : "",
+            currentDatetime: staticBody ? "" : nil
         )
 
         // Inject conversation history so the new ACP session has context from before app launch.
@@ -1729,17 +1936,48 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return prompt
     }
 
-    private func buildFloatingBarSystemPrompt(contextString: String) -> String {
-        let prompt = buildSystemPrompt(
-            contextString: contextString,
-            style: .floating
-        )
-        return Self.floatingBarSystemPromptPrefix + "\n\n" + prompt
+    /// Sentinel separating the static (cacheable) system prefix from the
+    /// per-conversation live context. The Rust chat proxy splits on this so the
+    /// `cache_control` breakpoint covers only the stable prefix. Must match
+    /// `SYSTEM_CACHE_SPLIT` in `Backend-Rust/src/routes/chat_completions.rs`.
+    static let cacheSplitSentinel = "<<<OMI_CACHE_SPLIT_V1>>>"
+
+    private func buildFloatingBarSystemPrompt(
+        contextString: String,
+        excludingToolNames excludedToolNames: Set<String> = []
+    ) -> String {
+        // Cache-friendly split: the static prefix is byte-identical across
+        // conversations (so the proxy can cache it); volatile data — datetime,
+        // memories, screen — goes in the live tail after the sentinel, which the
+        // proxy leaves uncached. See SYSTEM_CACHE_SPLIT in chat_completions.rs.
+        var staticBody = buildSystemPrompt(contextString: "", style: .floating, staticBody: true)
+        if !excludedToolNames.isEmpty {
+            let fullToolPrompt = DesktopCapabilityRegistry.desktopToolPrompt
+                .replacingOccurrences(of: "{user_name}", with: promptUserName)
+            let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)
+                .replacingOccurrences(of: "{user_name}", with: promptUserName)
+            staticBody = staticBody.replacingOccurrences(
+                of: fullToolPrompt,
+                with: scopedToolPrompt
+            )
+        }
+        let staticPrefix = Self.floatingBarSystemPromptPrefix + "\n\n"
+            + staticBody
+
+        let tz = TimeZone.current.identifier
+        var live = "<live_context>\nCurrent date/time in \(promptUserName)'s timezone (\(tz)): "
+            + ChatPromptBuilder.currentDatetimeString()
+        if !contextString.isEmpty {
+            live += "\n\(contextString)"
+        }
+        live += "\n</live_context>"
+
+        return staticPrefix + "\n\n" + Self.cacheSplitSentinel + "\n\n" + live
     }
 
     /// Build system prompt for task chat sessions.
     func buildTaskChatSystemPrompt() -> String {
-        let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+        let userName = promptUserName
         let contextSection = formatMemoriesSection()
         let goalSection = formatGoalSection()
         let tasksSection = formatTasksSection()
@@ -1781,7 +2019,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Builds system prompt using cached memories only (for simple messages)
     private func buildSystemPromptSimple() -> String {
-        let userName = AuthService.shared.displayName.isEmpty ? "there" : AuthService.shared.givenName
+        let userName = promptUserName
         let memoriesSection = formatMemoriesSection()
 
         return ChatPromptBuilder.buildDesktopChat(
@@ -1801,9 +2039,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         prompt = prompt.replacingOccurrences(of: "{user_name}", with: userName)
         prompt = prompt.replacingOccurrences(of: "{tz}", with: TimeZone.current.identifier)
 
-        let df = DateFormatter()
-        df.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        prompt = prompt.replacingOccurrences(of: "{current_datetime_str}", with: df.string(from: Date()))
+        prompt = prompt.replacingOccurrences(
+            of: "{current_datetime_str}", with: ChatPromptBuilder.currentDatetimeString())
 
         let isoFormatter = ISO8601DateFormatter()
         isoFormatter.timeZone = TimeZone.current
@@ -1832,6 +2069,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         do {
+            let currentChatMode = chatMode
             let result = try await agentBridge.query(
                 prompt: question,
                 systemPrompt: systemPrompt,
@@ -1840,7 +2078,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(toolCall)
+                    let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
                     log("ChatLab: tool \(name) executed")
                     return result
                 },
@@ -1866,16 +2104,27 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Initialize chat: fetch sessions and load messages
     func initialize() async {
+        await initializeVisibleMessages()
+        await warmupPromptContext()
+    }
+
+    /// Load the chat state that is directly visible in Dashboard/Chat without warming prompt-only context.
+    func initializeVisibleMessages() async {
         // Seed cumulative Omi AI cost from backend now that auth is ready (background, no latency)
         Task.detached(priority: .background) { [weak self] in
             guard let serverCost = await APIClient.shared.fetchTotalOmiAICost() else { return }
             guard let self else { return }
+            // Make sure the user's plan is known before deciding whether to nudge —
+            // otherwise a cold plan cache could flash the upgrade alert at a paid user.
+            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
                 // Always trust the server value — it's the authoritative total
                 self.omiAICumulativeCostUsd = serverCost
                 log("ChatProvider: Seeded Omi AI cumulative cost from backend: $\(String(format: "%.4f", serverCost))")
-                // Show upgrade prompt if over threshold but don't block chat
-                if self.bridgeMode != BridgeMode.userClaude.rawValue && serverCost >= 50.0 {
+                // Show upgrade prompt if over threshold but don't block chat. Never for
+                // paid/BYOK users — they aren't subject to the free Omi spend cap.
+                if self.isUsingOmiAccountProvider && serverCost >= 50.0
+                    && !self.isExemptFromOmiUpgradeNudge {
                     log("ChatProvider: Omi AI cost at $\(String(format: "%.2f", serverCost)) on startup — showing upgrade prompt")
                     self.showOmiThresholdAlert = true
                 }
@@ -1892,6 +2141,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             isLoadingSessions = false
             await loadDefaultChatMessages()
         }
+    }
+
+    /// Warm local prompt context used by first send / bridge startup.
+    func warmupPromptContext() async {
         await loadMemoriesIfNeeded()
         await loadGoalsIfNeeded()
         await loadTasksIfNeeded()
@@ -1909,6 +2162,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     func reinitialize() async {
         sessions = []
         messages = []
+        resetMessagesPagination()
         currentSession = nil
         isInDefaultChat = true
         await initialize()
@@ -2122,6 +2376,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
                 messages = persistedMessages.map(ChatMessage.init(from:))
                     .sorted(by: { $0.createdAt < $1.createdAt })
+                messagesPaginationOffset = persistedMessages.count
                 hasMoreMessages = persistedMessages.count == messagesPageSize
                 sessionsLoadError = nil
                 log("ChatProvider loaded \(messages.count) default chat messages, hasMore: \(hasMoreMessages)")
@@ -2137,6 +2392,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         messages = []
+        resetMessagesPagination()
         sessionsLoadError = lastError?.localizedDescription ?? "Failed to load messages. Check your connection and try again."
         isLoading = false
     }
@@ -2279,6 +2535,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if case APIError.unauthorized = error {
                 AuthBackoffTracker.shared.reportAuthFailure()
             }
+            // Benign sign-out race: the isSignedIn guard above passed, but the
+            // token was cleared by the time getMessages ran. Expected, not a bug
+            // — log quietly (breadcrumb only) instead of flooding Sentry.
+            if case AuthError.notSignedIn = error {
+                log("ChatProvider poll skipped: signed out mid-cycle")
+                return
+            }
             // Silent failure — polling errors shouldn't disrupt the user
             logError("ChatProvider poll failed", error: error)
         }
@@ -2330,6 +2593,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             sender: .user
         )
         messages.append(userMessage)
+        // Signal local send for turn anchoring.
+        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         // Persist to backend and sync server ID back to prevent poll duplicates.
         //
@@ -2409,6 +2674,85 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         return aiMessage
+    }
+
+    /// Record a completed turn that did not stream through `sendMessage`.
+    /// Appends both messages to the in-memory provider session immediately, then
+    /// persists them sequentially in the background so later follow-ups retain context.
+    @discardableResult
+    func recordCompletedTurn(userText: String, assistantText: String, logLabel: String = "completed") -> (
+        user: ChatMessage?, assistant: ChatMessage?
+    ) {
+        let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !user.isEmpty || !assistant.isEmpty else { return (nil, nil) }
+
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+
+        var userMessage: ChatMessage?
+        var aiMessage: ChatMessage?
+        if !user.isEmpty {
+            let m = ChatMessage(text: user, sender: .user)
+            messages.append(m)
+            userMessage = m
+        }
+        if !assistant.isEmpty {
+            let m = ChatMessage(text: assistant, sender: .ai)
+            messages.append(m)
+            aiMessage = m
+        }
+
+        // saveMessage site: completed realtime-hub voice turn. Persist both sequentially
+        // (user before assistant) off the voice hot path. `pendingSaves` guards the poll
+        // for the lifetime of both saves so they don't return as duplicates.
+        pendingSaves.begin()
+        Task { [weak self] in
+            if let userMessage {
+                await self?.persistRecordedTurnMessage(
+                    userMessage, text: user, sender: "human",
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel)
+            }
+            if let aiMessage {
+                await self?.persistRecordedTurnMessage(
+                    aiMessage, text: assistant, sender: "ai",
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel)
+            }
+            await MainActor.run { self?.pendingSaves.end() }
+        }
+
+        return (userMessage, aiMessage)
+    }
+
+    /// Record a completed voice turn (realtime-hub / PTT) into chat history.
+    ///
+    /// The realtime hub plays its spoken reply itself and never routes through the
+    /// normal query path, so without this the turn would never appear in chat history
+    /// or sync to the backend. Empty sides are skipped (a tool-only turn with no
+    /// spoken reply still records the user's request).
+    func recordVoiceTurn(userText: String, assistantText: String) {
+        recordCompletedTurn(userText: userText, assistantText: assistantText, logLabel: "voice")
+    }
+
+    /// Persist one recorded-turn message and sync its server ID back into `messages` so a
+    /// subsequent poll doesn't duplicate it. Failures leave the in-memory copy unsynced
+    /// (matches the existing saveMessage sites — no retry).
+    private func persistRecordedTurnMessage(
+        _ message: ChatMessage, text: String, sender: String, appId: String?, sessionId: String?, logLabel: String
+    ) async {
+        do {
+            let response = try await APIClient.shared.saveMessage(
+                text: text, sender: sender, appId: appId, sessionId: sessionId)
+            await MainActor.run {
+                if let index = self.messages.firstIndex(where: { $0.id == message.id }) {
+                    self.messages[index].id = response.id
+                    self.messages[index].isSynced = true
+                }
+            }
+            log("Saved \(logLabel) \(sender) message to backend: \(response.id)")
+        } catch {
+            logError("Failed to persist \(logLabel) \(sender) message", error: error)
+        }
     }
 
     // MARK: - Pending Attachments
@@ -2531,16 +2875,30 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// - Parameters:
     ///   - text: The message text
     ///   - model: Optional model override for this query (e.g. "claude-sonnet-4-6" for floating bar)
-    func sendMessage(_ text: String, model: String? = nil, isFollowUp: Bool = false, systemPromptSuffix: String? = nil, systemPromptPrefix: String? = nil, systemPromptStyle: ChatSystemPromptStyle = .main, sessionKey: String? = nil, resume: String? = nil, imageData: Data? = nil) async {
+    @discardableResult
+    func sendMessage(
+        _ text: String,
+        model: String? = nil,
+        isFollowUp: Bool = false,
+        systemPromptSuffix: String? = nil,
+        systemPromptPrefix: String? = nil,
+        systemPromptStyle: ChatSystemPromptStyle = .main,
+        sessionKey: String? = nil,
+        omiSessionId: String? = nil,
+        surfaceRef: AgentSurfaceReference? = nil,
+        legacyClientScope: String? = nil,
+        resume: String? = nil,
+        imageData: Data? = nil
+    ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return }
+        guard !trimmedText.isEmpty else { return nil }
 
         // Guard against concurrent sendMessage calls.
         // The bridge uses a single message continuation, so concurrent queries
         // would cause responses to be consumed by the wrong caller.
         guard !isSending else {
             log("ChatProvider: sendMessage called while already sending, ignoring")
-            return
+            return nil
         }
 
         // Monthly free-tier limit shared with the floating bar (30 messages/month).
@@ -2555,21 +2913,31 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     object: nil,
                     userInfo: ["reason": "chat"]
                 )
-                return
+                return nil
             }
             usageLimiter.recordQuery()
         }
 
+        // QueryTracer: picked up from the TaskLocal context established by the
+        // floating-bar / PTT entry points (nil for non-traced call sites).
+        let tracer = QueryTracerContext.current
+
         // Ensure bridge is running
+        tracer?.begin("bridge_ensure")
         guard await ensureBridgeStarted() else {
+            tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
             if errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
-            return
+            return nil
         }
+        tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
-        // Show upgrade prompt if over threshold but don't block the message
-        if bridgeMode != BridgeMode.userClaude.rawValue && omiAICumulativeCostUsd >= 50.0 {
+        // Show upgrade prompt if over threshold but don't block the message.
+        // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
+        if isUsingOmiAccountProvider && omiAICumulativeCostUsd >= 50.0
+            && !isExemptFromOmiUpgradeNudge {
             showOmiThresholdAlert = true
         }
 
@@ -2584,13 +2952,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             guard let sid = currentSessionId else {
                 errorMessage = "Failed to create chat session"
-                return
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                return nil
             }
             sessionId = sid
         }
 
         isSending = true
         errorMessage = nil
+        currentError = nil
         sendGeneration += 1
         let sendGen = sendGeneration
 
@@ -2622,7 +2992,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if !ok {
                 isSending = false
                 errorMessage = "Some attachments failed to upload. Remove them and try again."
-                return
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                return nil
             }
             attachmentsForMessage = pendingAttachments
             pendingAttachments.removeAll()
@@ -2684,6 +3055,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 attachments: attachmentsForMessage
             )
             messages.append(userMessage)
+            // Signal to ChatMessagesView after the local user row exists so
+            // it anchors the new turn, not the previous one.
+            localSendToken = LocalSendToken(generation: sendGeneration)
 
             // Track onboarding user messages with full content
             if isOnboarding {
@@ -2713,6 +3087,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var toolStartTimes: [String: Date] = [:]
         var sqlRowsReturned = 0
         var sqlQueryCount = 0
+        var completedResponseText: String?
+
+        // Stall detection.
+        // The detector observes every bridge event (text deltas, tool
+        // activity, etc.) and a 500ms periodic tick task surfaces stall
+        // promotions even during silent gaps. Transitions become
+        // ToolCallStatus updates on individual tool-call blocks; the
+        // banner appears via ToolCallsGroup's hasStalledTool check.
+        let turnStartMs = ChatProvider.monotonicNowMs()
+        let stallDetector = StallDetector(
+            thresholds: .v1Defaults,
+            startedAtMs: turnStartMs
+        )
 
         do {
             // Use the system prompt built at warmup. The agent bridge applies it only
@@ -2727,10 +3114,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 systemPrompt = prefix
             } else {
                 if systemPromptStyle == .floating {
-                    if cachedFloatingSystemPrompt.isEmpty {
+                    if legacyClientScope == AgentLegacyClientScope.floatingPill {
+                        if cachedFloatingPillSystemPrompt.isEmpty {
+                            cachedFloatingPillSystemPrompt = buildFloatingBarSystemPrompt(
+                                contextString: formatMemoriesSection(),
+                                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                            )
+                        }
+                        systemPrompt = cachedFloatingPillSystemPrompt
+                    } else if cachedFloatingSystemPrompt.isEmpty {
                         cachedFloatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: formatMemoriesSection())
+                        systemPrompt = cachedFloatingSystemPrompt
+                    } else {
+                        systemPrompt = cachedFloatingSystemPrompt
                     }
-                    systemPrompt = cachedFloatingSystemPrompt
                 } else {
                     systemPrompt = cachedMainSystemPrompt
                 }
@@ -2763,16 +3160,55 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             }
 
-            // Query the active bridge with streaming
+            // Query the active bridge with streaming. Hermes and OpenClaw do not
+            // accept Omi's Claude model aliases, so leave model choice to the
+            // harness default when either native adapter is active.
+            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
+            let effectiveRequestModel = usesNativeModelChoice ? nil : (model ?? modelOverride)
+
             // Callbacks for agent bridge
+            //
+            // QueryTracer: `isFirstResponse` marks TTFT on the very first output of
+            // any kind (text delta OR tool_use start). `isGenerating` brackets the
+            // text-streaming window so the `generation` span excludes tool time.
+            var isFirstResponse = true
+            var isGenerating = false
+            let currentChatMode = chatMode
+            let currentLegacyClientScope = legacyClientScope
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
+                let nowMs = ChatProvider.monotonicNowMs()
+                if isFirstResponse {
+                    isFirstResponse = false
+                    tracer?.end("ttft")
+                    tracer?.markTTFT()
+                }
+                if !isGenerating {
+                    isGenerating = true
+                    tracer?.begin("generation")
+                }
                 Task { @MainActor [weak self] in
                     self?.appendToMessage(id: aiMessageId, text: delta)
+                    let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
+                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                let result = await ChatToolExecutor.execute(toolCall)
+                // QueryTracer: time the actual tool execution (client-side run of the
+                // tool, distinct from the model-visible tool span in toolActivity).
+                let toolStart = ContinuousClock.now
+                let result = await ChatToolExecutor.execute(
+                    toolCall,
+                    originatingChatMode: currentChatMode,
+                    originatingClientScope: currentLegacyClientScope)
+                if let tracer {
+                    let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
+                    let inputJson =
+                        (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8))
+                        ?? "\(input)"
+                    tracer.captureToolExecution(
+                        toolUseId: callId, name: name, input: inputJson, output: result, durationMs: toolDurMs)
+                }
                 log("OMI tool \(name) executed for callId=\(callId)")
                 // Track SQL query stats for metadata
                 if name == "execute_sql" {
@@ -2786,17 +3222,41 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 return result
             }
             let toolActivityHandler: AgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+                let nowMs = ChatProvider.monotonicNowMs()
+                // Tools without a toolUseId still get tracked under a
+                // synthetic key so the detector's per-tool timer fires.
+                let trackedId = ChatProvider.stallTrackingId(toolUseId: toolUseId, name: name)
+                let toolStatus = ChatProvider.mapBridgeToolStatus(status)
+                let detectorKind: StallDetector.EventKind = toolStatus == .running
+                    ? .toolStarted(id: trackedId)
+                    : .toolCompleted(id: trackedId)
+                // QueryTracer: a span per tool invocation, keyed by toolUseId so
+                // concurrent calls to the same tool don't collide. Overlapping
+                // start/end windows across spans reveal parallel vs sequential
+                // tool execution. A tool_use start also counts as first output
+                // for TTFT when the model leads with a tool call (no text first).
+                let spanKey = "tool:\(toolUseId ?? name)"
+                if status == "started" {
+                    if isFirstResponse {
+                        isFirstResponse = false
+                        tracer?.end("ttft")
+                        tracer?.markTTFT()
+                    }
+                    tracer?.begin(spanKey, metadata: ["tool": name])
+                } else if toolStatus != .running {
+                    tracer?.end(spanKey)
+                }
                 Task { @MainActor [weak self] in
                     self?.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
-                        status: status == "started" ? .running : .completed,
+                        status: toolStatus,
                         toolUseId: toolUseId,
                         input: input
                     )
-                    if status == "started" {
+                    if toolStatus == .running {
                         toolNames.append(name)
-                        toolStartTimes[name] = Date()
+                        toolStartTimes[trackedId] = Date()
                         if (name.contains("browser") || name.contains("playwright")) {
                             let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
                             if token.isEmpty {
@@ -2821,30 +3281,89 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                                 FloatingControlBarManager.shared.showTemporarily()
                             }
                         }
-                    } else if status == "completed", let startTime = toolStartTimes.removeValue(forKey: name) {
-                        let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
-                        AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
+                    } else if let startTime = toolStartTimes.removeValue(forKey: trackedId) {
+                        if toolStatus == .completed {
+                            let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
+                            AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
+                        }
                     }
+                    let transitions = await stallDetector.step(kind: detectorKind, atMs: nowMs)
+                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let thinkingDeltaHandler: AgentBridge.ThinkingDeltaHandler = { [weak self] text in
+                let nowMs = ChatProvider.monotonicNowMs()
                 Task { @MainActor [weak self] in
                     self?.appendThinking(messageId: aiMessageId, text: text)
+                    let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
+                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
             let toolResultDisplayHandler: AgentBridge.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
+                let nowMs = ChatProvider.monotonicNowMs()
                 Task { @MainActor [weak self] in
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                    let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
+                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
+
+            // Periodic tick task surfaces stall promotions during silent
+            // gaps when no bridge events arrive. Cancelled via defer on
+            // scope exit (success or throw).
+            let stallTickTask = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms
+                    if Task.isCancelled { break }
+                    let nowMs = ChatProvider.monotonicNowMs()
+                    let transitions = await stallDetector.tick(atMs: nowMs)
+                    if transitions.isEmpty { continue }
+                    await MainActor.run { [weak self] in
+                        self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    }
+                }
+            }
+            defer { stallTickTask.cancel() }
+
+            // QueryTracer: snapshot the exact request (system prompt + recent
+            // message history) and open the request/TTFT spans. The clock starts
+            // here so ttft measures input → first streamed output.
+            if let tracer {
+                let tracedModel = effectiveRequestModel ?? "unknown"
+                tracer.captureRequest(
+                    systemPrompt: systemPrompt,
+                    messages: Array(messages.suffix(40)).map {
+                        ["role": $0.sender == .user ? "user" : "assistant", "content": $0.text]
+                    },
+                    hasScreenshot: effectiveImageData != nil
+                )
+                tracer.begin("llm_request", metadata: ["model": tracedModel])
+                tracer.begin("ttft")
+            }
+
+            let resolvedSurface =
+                surfaceRef
+                ?? (systemPromptStyle == .main && !isOnboarding ? AgentSurfaceReference.mainChat(chatId: sessionId) : nil)
+            let resolvedOmiSessionId = omiSessionId ?? resolvedSurface.flatMap {
+                AgentRuntimeStatusStore.shared.knownSessionId(for: $0)
+            }
+            let resolvedSessionKey = isOnboarding ? "onboarding" : (sessionKey ?? sessionId ?? "main")
+            let resolvedLegacyClientScope =
+                legacyClientScope
+                ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(resolvedSessionKey)" : nil)
 
             let queryResult = try await agentBridge.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: isOnboarding ? "onboarding" : (sessionKey ?? "main"),
+                sessionKey: resolvedSessionKey,
+                omiSessionId: resolvedOmiSessionId,
+                surfaceKind: resolvedSurface?.surfaceKind,
+                externalRefKind: resolvedSurface?.externalRefKind,
+                externalRefId: resolvedSurface?.externalRefId,
+                legacyClientScope: resolvedLegacyClientScope,
                 cwd: workingDirectory,
                 mode: chatMode.rawValue,
-                model: model ?? modelOverride,
+                model: effectiveRequestModel,
                 resume: resume,
                 imageData: effectiveImageData,
                 onTextDelta: textDeltaHandler,
@@ -2880,7 +3399,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messages[index].text = messageText
                 messages[index].isStreaming = false
                 messages[index].metadata = MessageMetadata(
-                    model: model ?? modelOverride,
+                    model: effectiveRequestModel,
                     inputTokens: queryResult.inputTokens,
                     outputTokens: queryResult.outputTokens,
                     cacheReadTokens: queryResult.cacheReadTokens,
@@ -2893,12 +3412,29 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     sqlRowsReturned: sqlRowsReturned,
                     sqlQueryCount: sqlQueryCount
                 )
-                completeRemainingToolCalls(messageId: aiMessageId)
+                completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .completed)
             } else {
                 // Message no longer in memory (user switched away from this session).
                 messageText = queryResult.text
                 log("Chat response arrived after session switch")
             }
+
+            // QueryTracer: success path — record the response, close the remaining
+            // spans (end calls are no-ops if already closed), and write the trace
+            // with real token / cache / cost numbers from the bridge result.
+            tracer?.captureResponse(text: messageText)
+            tracer?.end("ttft")
+            tracer?.end("generation")
+            tracer?.end("llm_request")
+            tracer?.finalize(
+                tokenCount: queryResult.outputTokens,
+                model: effectiveRequestModel,
+                inputTokens: queryResult.inputTokens,
+                outputTokens: queryResult.outputTokens,
+                cacheReadTokens: queryResult.cacheReadTokens,
+                cacheWriteTokens: queryResult.cacheWriteTokens,
+                costUsd: queryResult.costUsd
+            )
 
             // Release the sending lock as soon as the AI response is visible in the
             // UI. Backend persistence is slow (can timeout at 30s+) and should not
@@ -2976,7 +3512,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     text: aiText,
                     step: "chat",
                     toolCalls: toolNames.isEmpty ? nil : toolNames,
-                    model: model ?? modelOverride
+                    model: effectiveRequestModel
                 )
             }
 
@@ -2996,13 +3532,21 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messageLength: responseLength
             )
 
-            // Skip client-side usage recording for piMono — the backend already
+            // Skip client-side usage recording for piMono (the backend already
             // logs usage server-side via POST /v2/chat/completions, so recording
-            // here would double-count.
-            let isOmiMode = bridgeMode != BridgeMode.userClaude.rawValue
-            let isPiMono = bridgeMode == BridgeMode.piMono.rawValue
-            if !isPiMono {
-                let accountType = isOmiMode ? "omi" : "personal"
+            // here would double-count) and for local harnesses (Hermes/OpenClaw).
+            // The backend's record_llm_usage_bucket always increments the
+            // grand-total desktop_chat bucket regardless of the account
+            // parameter, and /usage-quota sums that bucket regardless of account,
+            // so any POST — even with account="local" — still depletes the user's
+            // Omi/pi-mono quota. The client-side quota gates already skip local
+            // providers, so skip the POST here too. Use the actual harness, not
+            // @AppStorage bridgeMode, because directed Hermes/OpenClaw pills can
+            // override the harness without changing the user's global preference.
+            let effectiveHarness = activeBridgeHarness
+            let isPiMonoHarness = effectiveHarness == Self.harnessMode(for: .piMono)
+            let isUserClaudeHarness = effectiveHarness == Self.harnessMode(for: .userClaude)
+            if isUserClaudeHarness {
                 let r = queryResult
                 Task.detached(priority: .background) {
                     await APIClient.shared.recordLlmUsage(
@@ -3012,15 +3556,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         cacheWriteTokens: r.cacheWriteTokens,
                         totalTokens: r.inputTokens + r.outputTokens + r.cacheReadTokens + r.cacheWriteTokens,
                         costUsd: r.costUsd,
-                        account: accountType
+                        account: "personal"
                     )
                 }
             }
-            if isOmiMode {
+            if isPiMonoHarness {
                 sessionTokensUsed += queryResult.inputTokens + queryResult.outputTokens
                 omiAICumulativeCostUsd += queryResult.costUsd
                 // Show the upgrade flow when the free Omi usage threshold is reached.
-                if omiAICumulativeCostUsd >= 50.0 {
+                // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
+                if omiAICumulativeCostUsd >= 50.0 && !isExemptFromOmiUpgradeNudge {
                     showOmiThresholdAlert = true
                 }
             }
@@ -3030,7 +3575,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             Task.detached(priority: .background) {
                 await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
             }
+            completedResponseText = messageText
         } catch {
+            // QueryTracer: error path — close spans and write the (partial) trace
+            // so failed/timed-out queries still show up in benchmarks.
+            tracer?.end("ttft")
+            tracer?.end("generation")
+            tracer?.end("llm_request")
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+
             // On timeout, cancel the stuck ACP session so it's not left dangling
             if let bridgeError = error as? BridgeError, case .timeout = bridgeError {
                 log("ChatProvider: ACP query timed out, sending interrupt to cancel stuck session")
@@ -3049,7 +3602,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     messages.remove(at: index)
                 } else {
                     messages[index].isStreaming = false
-                    completeRemainingToolCalls(messageId: aiMessageId)
+                    completeRemainingToolCalls(
+                        messageId: aiMessageId,
+                        terminalStatus: ChatProvider.remainingToolStatusAfterPartialResponseError(error)
+                    )
                     log("Bridge error after partial response — keeping \(messages[index].text.count) chars of streamed text")
                     // Still try to persist the partial response.
                     //
@@ -3102,11 +3658,30 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
             }
 
-            // Show error to user (unless they intentionally stopped)
+            // Show error to user (unless they intentionally stopped).
+            //
+            // Prefer the structured ChatErrorState card when the error
+            // maps cleanly. Falls through to the legacy errorMessage
+            // banner for unmappable BridgeError cases (encodingError,
+            // quotaExceeded, .agentError with a free-form message).
+            // Both surfaces coexist — only one is active at a time per
+            // turn.
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
-                // User stopped — no error to show
+                // User stopped — no error to show, but the card system
+                // still surfaces .interrupted so users can resume.
+                if let card = ChatErrorState.from(bridgeError) {
+                    currentError = card
+                    lastFailedPrompt = trimmedText
+                    errorMessage = nil
+                }
+            } else if let bridgeError = error as? BridgeError,
+                      let card = ChatErrorState.from(bridgeError) {
+                currentError = card
+                lastFailedPrompt = trimmedText
+                errorMessage = nil
             } else {
                 errorMessage = error.localizedDescription
+                currentError = nil  // ensure the card is dismissed if it was up
             }
         }
 
@@ -3119,6 +3694,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             log("ChatProvider: chaining follow-up query")
             await sendMessage(followUp, isFollowUp: true)
         }
+        return completedResponseText
     }
 
     /// Generate a title for the session using LLM
@@ -3263,6 +3839,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
 
+        // Detector-promoted .slow / .stalled arrive through the stall
+        // status-update path, not here.
         if status == .running {
             // If we have a toolUseId and input, try to update an existing running block (input arrived after start)
             if let toolUseId = toolUseId, toolInput != nil {
@@ -3283,13 +3861,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                           toolUseId: toolUseId, input: toolInput)
             )
         } else {
-            // Mark as completed — find by toolUseId first, fall back to name
+            // Mark as terminal — find by toolUseId first, fall back to name.
+            // Match any in-flight state so detector-promoted .slow / .stalled
+            // also resolve cleanly when the tool actually finishes.
             for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, .running, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i] {
+                if case .toolCall(let id, let name, let existingStatus, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
+                   existingStatus.isInFlight {
                     let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
                     if matches {
                         messages[index].contentBlocks[i] = .toolCall(
-                            id: id, name: name, status: .completed,
+                            id: id, name: name, status: status,
                             toolUseId: toolUseId ?? existingTuid,
                             input: toolInput ?? existingInput,
                             output: output
@@ -3332,16 +3913,93 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
-    /// Mark any remaining `.running` tool call blocks as `.completed` in a message.
+    /// Mark any remaining in-flight tool call blocks as terminal in a message.
     /// Called when a query finishes (success or interrupt) so spinners don't spin forever.
-    private func completeRemainingToolCalls(messageId: String) {
+    /// Matches `.running`, `.slow`, and `.stalled` (any state where `isInFlight` is true)
+    /// so detector-promoted blocks resolve when the turn ends.
+    private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
         for i in messages[index].contentBlocks.indices {
-            if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = messages[index].contentBlocks[i] {
+            if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = messages[index].contentBlocks[i],
+               status.isInFlight {
                 messages[index].contentBlocks[i] = .toolCall(
-                    id: id, name: name, status: .completed,
+                    id: id, name: name, status: terminalStatus,
                     toolUseId: toolUseId, input: input, output: output
                 )
+            }
+        }
+    }
+
+    /// Monotonic millisecond timestamp for elapsed-time stall detection.
+    /// Unlike wall-clock time, system uptime is unaffected by NTP or
+    /// manual clock changes.
+    nonisolated private static func monotonicNowMs() -> Int {
+        Int(ProcessInfo.processInfo.systemUptime * 1000)
+    }
+
+    /// The key the `StallDetector` tracks a tool under. Tools that arrive
+    /// without a real `toolUseId` fall back to a name-derived synthetic
+    /// key so their per-tool timer still fires. Registration (in the tool
+    /// activity handler) and the transition match in `applyStallTransitions`
+    /// MUST derive the key identically — routing both through this single
+    /// helper keeps them from diverging (a mismatch silently drops every
+    /// stall transition for `toolUseId`-less tools).
+    nonisolated static func stallTrackingId(toolUseId: String?, name: String) -> String {
+        toolUseId ?? "untracked-\(name)"
+    }
+
+    nonisolated static func mapBridgeToolStatus(_ status: String) -> ToolCallStatus {
+        switch status {
+        case "started":
+            return .running
+        case "failed", "cancelled", "interrupted":
+            return .failed
+        default:
+            return .completed
+        }
+    }
+
+    /// Intentional user stops should not make in-flight tool rows look
+    /// like execution errors. Real bridge failures still surface as failed.
+    nonisolated static func remainingToolStatusAfterPartialResponseError(_ error: Error) -> ToolCallStatus {
+        if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+            return .completed
+        }
+        return .failed
+    }
+
+    /// Map a `StallDetector.State` to the matching `ToolCallStatus`.
+    /// The two enums are deliberately separate — the detector tracks a
+    /// 3-state lifecycle independent of UI/persistence concerns.
+    private func mapDetectorState(_ state: StallDetector.State) -> ToolCallStatus {
+        switch state {
+        case .running: return .running
+        case .slow: return .slow
+        case .stalled: return .stalled
+        }
+    }
+
+    /// Apply detector transitions to the message's tool-call blocks.
+    /// Only `.tool(id:from:to:)` transitions are surfaced in the UI;
+    /// `.interEvent` transitions are observed but not rendered here.
+    private func applyStallTransitions(
+        messageId: String,
+        transitions: [StallDetector.Transition]
+    ) {
+        guard !transitions.isEmpty,
+              let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
+
+        for transition in transitions {
+            guard case .tool(let id, _, let to) = transition else { continue }
+            for i in messages[index].contentBlocks.indices {
+                if case .toolCall(let blockId, let name, let oldStatus, let tuid, let input, let output) = messages[index].contentBlocks[i],
+                   ChatProvider.stallTrackingId(toolUseId: tuid, name: name) == id,
+                   oldStatus.isInFlight {
+                    messages[index].contentBlocks[i] = .toolCall(
+                        id: blockId, name: name, status: mapDetectorState(to),
+                        toolUseId: tuid, input: input, output: output
+                    )
+                }
             }
         }
     }
@@ -3406,6 +4064,59 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
+    // MARK: - ChatErrorState recovery dispatch
+
+    /// User tapped the primary CTA on a `ChatErrorCard`. Dispatches to
+    /// the matching recovery action and clears `currentError`.
+    ///
+    /// Every `ChatErrorRecoveryAction` case is wired to a concrete
+    /// handler. Implementations are deliberately minimal: each one
+    /// performs the smallest useful action that points the user at the
+    /// fix path.
+    ///
+    /// - `.retry`: re-issue the last failed prompt.
+    /// - `.dismiss`: clear without further action.
+    /// - `.signIn`: open `https://omi.me/` so the user can complete
+    ///   sign-in. Triggering native OAuth from a chat-error context
+    ///   needs more UI plumbing than fits in this scope — surfacing
+    ///   the URL is the honest minimum.
+    /// - `.installRuntime`: open `https://nodejs.org/` so the user can
+    ///   install Node before the bridge can spawn.
+    func recoverFromError() async {
+        guard let error = currentError else { return }
+        let action = error.primaryRecovery
+        let promptToRetry = lastFailedPrompt
+        currentError = nil
+        lastFailedPrompt = nil
+
+        switch action {
+        case .retry:
+            if let prompt = promptToRetry, !prompt.isEmpty {
+                await sendMessage(prompt)
+            }
+        case .dismiss:
+            break  // already cleared above
+        case .signIn:
+            log("ChatErrorCard: .signIn recovery — opening omi.me sign-in URL")
+            if let url = URL(string: "https://omi.me/") {
+                NSWorkspace.shared.open(url)
+            }
+        case .installRuntime:
+            log("ChatErrorCard: .installRuntime recovery — opening nodejs.org for runtime install")
+            if let url = URL(string: "https://nodejs.org/") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
+    /// User tapped the dismiss "x" on a `ChatErrorCard`. Clears the
+    /// card without firing any recovery action. Used when the user
+    /// wants to acknowledge the error and move on without retrying.
+    func dismissCurrentError() {
+        currentError = nil
+        lastFailedPrompt = nil
+    }
+
     // MARK: - Clear Chat
 
     /// Clear current session messages (delete and create new)
@@ -3416,6 +4127,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         if isInDefaultChat {
             // Default chat mode: clear UI immediately, delete in background
             messages = []
+            resetMessagesPagination()
             log("Cleared default chat messages")
             Task {
                 do {
@@ -3434,6 +4146,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             currentSession = nil
             messages = []
+            resetMessagesPagination()
 
             // Delete old session in background (don't await — backend is slow)
             if let session = sessionToDelete {
@@ -3463,6 +4176,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         selectedAppId = appId
         currentSession = nil
         messages = []
+        resetMessagesPagination()
         sessions = []
         errorMessage = nil
         isInDefaultChat = true

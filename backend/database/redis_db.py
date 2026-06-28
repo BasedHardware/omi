@@ -406,7 +406,7 @@ def save_migrated_retrieval_conversation_id(conversation_id: str):
     r.expire('migrated_retrieval_memory_ids', 60 * 60 * 24 * 7)
 
 
-def set_proactive_noti_sent_at(uid: str, app_id: str, ts: int, ttl: int = 30):
+def set_proactive_noti_sent_at(uid: str, *, app_id: str, ts: int, ttl: int = 30):
     r.set(f'{uid}:{app_id}:proactive_noti_sent_at', ts, ex=ttl)
 
 
@@ -423,7 +423,7 @@ def get_proactive_noti_sent_at_ttl(uid: str, app_id: str):
 
 @try_catch_decorator
 def incr_daily_notification_count(uid: str) -> int:
-    """Atomically increment the daily mentor notification count for a user. Returns new count."""
+    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
     from datetime import datetime, timezone
 
     key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
@@ -434,7 +434,7 @@ def incr_daily_notification_count(uid: str) -> int:
 
 @try_catch_decorator
 def get_daily_notification_count(uid: str) -> int:
-    """Get the current daily mentor notification count for a user."""
+    """Get the current daily proactive-notification count for a user (mentor + third-party apps)."""
     from datetime import datetime, timezone
 
     key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'

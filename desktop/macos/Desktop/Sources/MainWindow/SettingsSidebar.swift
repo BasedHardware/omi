@@ -16,12 +16,6 @@ struct SettingsSearchItem: Identifiable {
   }
 
   static let allSearchableItems: [SettingsSearchItem] = [
-    // Device
-    SettingsSearchItem(
-      name: "Device", subtitle: "Pair and manage your Bluetooth device",
-      keywords: ["device", "bluetooth", "ble", "pair", "pairing", "scan", "connect", "friend"],
-      section: .device, icon: "antenna.radiowaves.left.and.right", settingId: "device.pairing"),
-
     // General
     SettingsSearchItem(
       name: "Rewind", subtitle: "Screen capture and audio recording",
@@ -72,7 +66,7 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["exclude", "ignore", "block apps", "blocklist", "reset to defaults"],
       section: .rewind, icon: "clock.arrow.circlepath", settingId: "rewind.excludedapps"),
     SettingsSearchItem(
-      name: "Battery Optimization", subtitle: "Pause text recognition on battery to save energy",
+      name: "Battery Optimization", subtitle: "Saves power by reducing screenshot frequency",
       keywords: ["battery", "power", "energy", "low power"], section: .rewind,
       icon: "clock.arrow.circlepath", settingId: "rewind.battery"),
     SettingsSearchItem(
@@ -262,11 +256,6 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.draggable"),
     SettingsSearchItem(
-      name: "Voice Questions", subtitle: "Speak replies aloud for push-to-talk questions",
-      keywords: ["voice", "speech", "tts", "audio answers", "push to talk"],
-      section: .floatingBar,
-      icon: "sparkles", settingId: "floatingbar.voiceanswers"),
-    SettingsSearchItem(
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.typedvoiceanswers"),
@@ -330,7 +319,6 @@ struct SettingsSidebar: View {
   private let iconWidth: CGFloat = 20
   private let visibleSections: [SettingsContentView.SettingsSection] = [
     .general,
-    .device,
     .rewind,
     .transcription,
     .notifications,
@@ -515,7 +503,6 @@ struct SettingsSidebarItem: View {
   private var icon: String {
     switch section {
     case .general: return "gearshape"
-    case .device: return "antenna.radiowaves.left.and.right"
     case .rewind: return "clock.arrow.circlepath"
     case .transcription: return "waveform"
     case .notifications: return "bell"

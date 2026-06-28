@@ -55,12 +55,26 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Connect to GKE cluster
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Resolve deployed backend-listen image tag
         run: |
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
-          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+          IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          TAG="${IMAGE##*:}"
+          if [[ -z "$TAG" || "$TAG" == "$IMAGE" || "$TAG" == "latest" ]]; then
+            echo "backend-listen is not currently pinned to an immutable image tag: ${IMAGE:-<missing>}" >&2
+            echo "Run the backend deploy workflow first so chart-only upgrades preserve a short-SHA image tag." >&2
+            exit 1
+          fi
+          echo "BACKEND_LISTEN_IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Helm diff (dry run)
         run: |
@@ -71,6 +85,7 @@ jobs:
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
             --dry-run
 
       # The ExternalSecret resource (which tells external-secrets which GCP
@@ -94,7 +109,8 @@ jobs:
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
+            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set "image.tag=${BACKEND_LISTEN_IMAGE_TAG}"
 
       - name: Verify rollout
         run: |

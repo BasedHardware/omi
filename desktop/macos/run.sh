@@ -18,6 +18,9 @@ Options (via environment variables):
   OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_DESKTOP_API_URL from .env directly)
   PORT=10201                Rust backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
+  OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
+  OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
+  OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (subscriptions, payments, etc; default: https://api.omi.me)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
@@ -77,6 +80,8 @@ unset OPENAI_API_KEY
 # Use Xcode's default toolchain to match the SDK version
 unset TOOLCHAINS
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
 # Timing utilities
 SCRIPT_START_TIME=$(date +%s.%N)
 STEP_START_TIME=$SCRIPT_START_TIME
@@ -98,51 +103,33 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
+# Per-worktree isolation: derive unique ports + bundle name so parallel worktrees don't
+# collide. Sets OMI_INSTANCE / RUST_PORT / PYTHON_PORT / AUTOMATION_PORT / OMI_APP_NAME /
+# OMI_DEV_DIR (explicit overrides always win; the primary checkout keeps "Omi Dev" + 10201).
+source "$SCRIPT_DIR/../../scripts/dev-instance.sh"
+BACKEND_PORT="${PORT:-$RUST_PORT}"
+export PORT="$BACKEND_PORT"
+
 # App configuration
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
-APP_NAME="${OMI_APP_NAME:-Omi Dev}"
-IS_NAMED_BUNDLE=false
-[ -n "${OMI_APP_NAME:-}" ] && IS_NAMED_BUNDLE=true
+source "$SCRIPT_DIR/scripts/app-config.sh"
+derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}"
 
-slugify_identifier() {
-    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
-}
-
-if [ "$IS_NAMED_BUNDLE" = false ]; then
-    EXPECTED_BUNDLE_ID="com.omi.desktop-dev"
-    EXPECTED_URL_SCHEME="omi-computer-dev"
-else
-    APP_SLUG="$(slugify_identifier "$APP_NAME")"
-    if [ -z "$APP_SLUG" ]; then
-        echo "ERROR: OMI_APP_NAME must contain at least one letter or number"
-        exit 1
-    fi
-    EXPECTED_BUNDLE_ID="com.omi.$APP_SLUG"
-    EXPECTED_URL_SCHEME="omi-$APP_SLUG"
-fi
-
-BUNDLE_ID="${OMI_BUNDLE_ID:-$EXPECTED_BUNDLE_ID}"
 BUILD_DIR="build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 APP_PATH="/Applications/$APP_NAME.app"
+# Agent runtime source (staged into the app bundle at Resources/agent below).
+# Without this, `[ -d "$AGENT_DIR/dist" ]` tests an empty path and the agent
+# copy is silently skipped → app shows "AI components missing".
+AGENT_DIR="$SCRIPT_DIR/agent"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
-URL_SCHEME="${OMI_URL_SCHEME:-$EXPECTED_URL_SCHEME}"
-
-if [ "$BUNDLE_ID" != "$EXPECTED_BUNDLE_ID" ]; then
-    echo "ERROR: APP_NAME '$APP_NAME' must use bundle ID '$EXPECTED_BUNDLE_ID' (got '$BUNDLE_ID')"
-    exit 1
-fi
-
-if [ "$URL_SCHEME" != "$EXPECTED_URL_SCHEME" ]; then
-    echo "ERROR: APP_NAME '$APP_NAME' must use URL scheme '$EXPECTED_URL_SCHEME' (got '$URL_SCHEME')"
-    exit 1
-fi
-AUTOMATION_ARGS=()
+AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-${AUTOMATION_PORT:-47777}}"
+AUTOMATION_CAPTURE_ROOT="${OMI_AUTOMATION_CAPTURE_ROOT:-$SCRIPT_DIR/.harness/runs}"
+AUTOMATION_ARGS=("--automation-port=$AUTOMATION_PORT" "--automation-capture-root=$AUTOMATION_CAPTURE_ROOT")
 if [ "${OMI_ENABLE_LOCAL_AUTOMATION:-0}" = "1" ]; then
-    AUTOMATION_PORT="${OMI_AUTOMATION_PORT:-47777}"
-    AUTOMATION_ARGS+=(--automation-bridge "--automation-port=$AUTOMATION_PORT")
+    AUTOMATION_ARGS=(--automation-bridge "${AUTOMATION_ARGS[@]}")
 fi
 
 # Backend configuration (Rust)
@@ -150,9 +137,13 @@ BACKEND_DIR="$(cd "$(dirname "$0")/Backend-Rust" && pwd)"
 BACKEND_PID=""
 TUNNEL_PID=""
 TUNNEL_URL="${TUNNEL_URL:-}"
+AUTH_CACHE=""
 
 # Cleanup function to stop backend, auth, and tunnel on exit
 cleanup() {
+    if [ -n "$AUTH_CACHE" ]; then
+        rm -f "$AUTH_CACHE"
+    fi
     if [ -n "$TUNNEL_PID" ] && kill -0 "$TUNNEL_PID" 2>/dev/null; then
         echo "Stopping tunnel (PID: $TUNNEL_PID)..."
         kill "$TUNNEL_PID" 2>/dev/null || true
@@ -175,11 +166,16 @@ auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E '
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
-# Kill any old Rust backend by process name (port-agnostic)
-pgrep -f "omi-desktop-backend" 2>/dev/null | while read pid; do
-    substep "Killing old backend (PID: $pid)"
-    kill -9 "$pid" 2>/dev/null || true
-done
+# Kill only THIS instance's old Rust backend (tracked via pidfile) — never other
+# worktrees' backends. (Previously `pkill -f omi-desktop-backend` killed every agent's.)
+if [ -f "$OMI_DEV_DIR/rust-backend.pid" ]; then
+    OLD_BACKEND_PID="$(cat "$OMI_DEV_DIR/rust-backend.pid" 2>/dev/null)"
+    if [ -n "$OLD_BACKEND_PID" ] && kill -0 "$OLD_BACKEND_PID" 2>/dev/null; then
+        substep "Killing our old backend (PID: $OLD_BACKEND_PID, port $BACKEND_PORT)"
+        kill -9 "$OLD_BACKEND_PID" 2>/dev/null || true
+    fi
+    rm -f "$OMI_DEV_DIR/rust-backend.pid"
+fi
 sleep 0.5  # Let cfprefsd flush after process death
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
@@ -208,10 +204,14 @@ done
 find "$(dirname "$0")/../../app/build" -name "$APP_NAME.app" -type d -exec rm -rf {} + 2>/dev/null || true
 # Kill stale app bundles from other repo clones (e.g. ~/omi-desktop/)
 # These confuse LaunchServices and get launched instead of the /Applications copy.
-find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
-    substep "Removing stale clone: $stale"
-    rm -rf "$stale"
-done
+if [ "${OMI_SKIP_STALE_BUNDLE_SCAN:-0}" = "1" ]; then
+    substep "Skipping stale clone scan (OMI_SKIP_STALE_BUNDLE_SCAN=1)"
+else
+    find "$HOME" -maxdepth 4 -name "$APP_NAME.app" -type d -not -path "$APP_BUNDLE" -not -path "$APP_PATH" 2>/dev/null | while read stale; do
+        substep "Removing stale clone: $stale"
+        rm -rf "$stale"
+    done
+fi
 
 if [ "${OMI_SKIP_TUNNEL:-0}" != "1" ]; then
     step "Starting Cloudflare quick tunnel..."
@@ -288,9 +288,7 @@ if [ "$1" = "--yolo" ]; then
     apply_yolo_env
 fi
 
-# Read backend PORT from env (default: 10201, never use 8080)
-BACKEND_PORT="${PORT:-10201}"
-export PORT="$BACKEND_PORT"
+# BACKEND_PORT / PORT already derived per-worktree near the top (scripts/dev-instance.sh).
 
 # Validate credentials (needed for both backend and auth)
 CREDS_PATH="$BACKEND_DIR/google-credentials.json"
@@ -328,6 +326,16 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     step "Starting Rust backend..."
     cd "$BACKEND_DIR"
 
+    # Fail loud (don't clobber) if our derived port is already held — another worktree
+    # likely owns it (or a stale process). Better to stop than to silently steal it.
+    PORT_HOLDER="$(lsof -ti tcp:"$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null | head -1)"
+    if [ -n "$PORT_HOLDER" ]; then
+        echo "ERROR: backend port $BACKEND_PORT (instance '$OMI_INSTANCE') is already in use by pid $PORT_HOLDER:"
+        echo "  $(ps -o command= -p "$PORT_HOLDER" 2>/dev/null)"
+        echo "  Another worktree probably owns it. Stop that process, or run with PORT=<free> / OMI_INSTANCE=<name>."
+        exit 1
+    fi
+
     # Build if binary doesn't exist or source is newer
     if [ ! -f "target/release/omi-desktop-backend" ] || [ -n "$(find src -newer target/release/omi-desktop-backend 2>/dev/null)" ]; then
         step "Building Rust backend (cargo build --release)..."
@@ -336,6 +344,7 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
 
     ./target/release/omi-desktop-backend &
     BACKEND_PID=$!
+    echo "$BACKEND_PID" > "$OMI_DEV_DIR/rust-backend.pid"
     cd - > /dev/null
 
     step "Waiting for backend to start..."
@@ -458,14 +467,24 @@ if [ -d "$AGENT_DIR/dist" ]; then
     cp -Rf "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/"
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
     cp -Rf "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/"
+    mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
+    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.js" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+    cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
 fi
 
 substep "Copying pi-mono-extension (for piMono harness)"
 PI_MONO_EXT_DIR="$(dirname "$0")/pi-mono-extension"
 if [ -d "$PI_MONO_EXT_DIR" ]; then
+    if [ ! -d "$PI_MONO_EXT_DIR/node_modules" ]; then
+        substep "Installing pi-mono-extension dependencies"
+        (cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)
+    fi
     mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
     cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
 else
     echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
 fi
@@ -666,6 +685,35 @@ for stale in /private/tmp/omi-dmg-staging-*/Omi\ Beta.app; do
 done
 # Register the /Applications/ copy as the canonical bundle for this bundle ID
 $LSREGISTER -f "$APP_PATH" 2>/dev/null || true
+
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
+    step "Seeding auth from Omi Dev..."
+    if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then
+        if ./scripts/omi-auth-dump.sh com.omi.desktop-dev "$AUTH_CACHE"; then
+            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE"; then
+                auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
+            else
+                echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
+            fi
+        else
+            echo "Warning: could not seed auth from Omi Dev. Launching cold."
+        fi
+        rm -f "$AUTH_CACHE"
+        AUTH_CACHE=""
+    else
+        echo "Warning: could not create temporary auth cache. Launching cold."
+    fi
+fi
+
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; then
+    step "Seeding shortcuts/settings from Omi Dev..."
+    if ./scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev; then
+        auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
+        auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
+    else
+        echo "Warning: could not seed shortcuts/settings from Omi Dev. Continuing with bundle defaults."
+    fi
+fi
 
 step "Starting app..."
 

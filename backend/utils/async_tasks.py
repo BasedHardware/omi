@@ -19,10 +19,13 @@ named utilities with bounded resources, clean shutdown, and observability.
 
 import asyncio
 import logging
+import sys
+import threading
 from dataclasses import dataclass, field
+from types import ModuleType
 from typing import Any, Awaitable, Generic, Iterable, TypeVar
 
-from prometheus_client import Counter, Histogram, REGISTRY
+from prometheus_client import Counter, Histogram
 
 logger = logging.getLogger(__name__)
 
@@ -32,32 +35,55 @@ T = TypeVar('T')
 # Metrics
 # ---------------------------------------------------------------------------
 
+_METRIC_CACHE_MODULE = 'utils._async_tasks_metric_cache'
 
-def _get_registered_collector(name):
-    names_to_collectors = getattr(REGISTRY, '_names_to_collectors', {})
-    candidates = [name]
-    if name.endswith('_total'):
-        candidates.append(name[: -len('_total')])
-    else:
-        candidates.append(f'{name}_total')
-    for candidate in candidates:
-        collector = names_to_collectors.get(candidate)
-        if collector is not None:
-            return collector
-    return None
+
+def _new_metric_cache_module():
+    module = ModuleType(_METRIC_CACHE_MODULE)
+    module.cache = {}
+    module.lock = threading.Lock()
+    return module
+
+
+def _metric_cache_state():
+    state = sys.modules.get(_METRIC_CACHE_MODULE)
+    if state is None:
+        state = sys.modules.setdefault(_METRIC_CACHE_MODULE, _new_metric_cache_module())
+    return state
+
+
+def _metric_cache():
+    return _metric_cache_state().cache
+
+
+def _cacheable_value(value):
+    if isinstance(value, list):
+        return tuple(_cacheable_value(item) for item in value)
+    if isinstance(value, dict):
+        return tuple(sorted((key, _cacheable_value(item)) for key, item in value.items()))
+    return value
+
+
+def _metric_cache_key(metric_class, name, labelnames=(), **kwargs):
+    return (
+        metric_class,
+        name,
+        tuple(labelnames),
+        tuple(sorted((key, _cacheable_value(value)) for key, value in kwargs.items())),
+    )
 
 
 def _get_or_create_metric(metric_class, name, documentation, labelnames=(), **kwargs):
-    existing = _get_registered_collector(name)
-    if existing is not None:
-        return existing
-    try:
-        return metric_class(name, documentation, labelnames, **kwargs)
-    except ValueError as exc:
-        existing = _get_registered_collector(name)
-        if existing is None or 'Duplicated timeseries' not in str(exc):
-            raise
-        return existing
+    state = _metric_cache_state()
+    cache_key = _metric_cache_key(metric_class, name, labelnames, **kwargs)
+    with state.lock:
+        cache = state.cache
+        existing = cache.get(cache_key)
+        if existing is not None:
+            return existing
+        metric = metric_class(name, documentation, labelnames, **kwargs)
+        cache[cache_key] = metric
+        return metric
 
 
 SUPERVISOR_EXIT_TOTAL = _get_or_create_metric(

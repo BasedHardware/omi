@@ -10,23 +10,65 @@ users with older, actively-used profiles to be re-prompted to
 import inspect
 import os
 import sys
+import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
 
 # Mock heavy dependencies at sys.modules level before importing storage
-sys.modules.setdefault("database._client", MagicMock())
+_MISSING = object()
+_STUBBED_MODULES = [
+    "database",
+    "database._client",
+    "database.redis_db",
+    "database.users",
+    "opuslib",
+    "utils.cloud_tasks",
+    "google.cloud.storage",
+    "google.cloud.storage.transfer_manager",
+    "google.cloud.exceptions",
+    "google.oauth2",
+    "google.oauth2.service_account",
+]
+_previous_modules = {name: sys.modules.get(name, _MISSING) for name in _STUBBED_MODULES}
+
+sys.modules["database._client"] = MagicMock()
+_mock_database = types.ModuleType("database")
+_mock_database.__path__ = []
+sys.modules["database"] = _mock_database
+_mock_redis_db = MagicMock()
+_mock_redis_db.cache_signed_url = MagicMock()
+_mock_redis_db.get_cached_signed_url = MagicMock(return_value=None)
+sys.modules["database.redis_db"] = _mock_redis_db
+_mock_database.redis_db = sys.modules["database.redis_db"]
+_mock_database_users = MagicMock()
+_mock_database_users.get_data_protection_level = MagicMock(return_value="standard")
+sys.modules["database.users"] = _mock_database_users
+_mock_database.users = sys.modules["database.users"]
+_mock_opuslib = MagicMock()
+_mock_opuslib.APPLICATION_VOIP = 2048
+sys.modules["opuslib"] = _mock_opuslib
+_mock_cloud_tasks = MagicMock()
+_mock_cloud_tasks.enqueue_audio_merge_job = MagicMock()
+_mock_cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+sys.modules["utils.cloud_tasks"] = _mock_cloud_tasks
 
 _mock_gcs_storage = MagicMock()
 _mock_gcs_storage.Client.return_value = MagicMock()
-sys.modules.setdefault("google.cloud.storage", _mock_gcs_storage)
-sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
-sys.modules.setdefault("google.cloud.exceptions", MagicMock())
-sys.modules.setdefault("google.oauth2", MagicMock())
-sys.modules.setdefault("google.oauth2.service_account", MagicMock())
+sys.modules["google.cloud.storage"] = _mock_gcs_storage
+sys.modules["google.cloud.storage.transfer_manager"] = MagicMock()
+sys.modules["google.cloud.exceptions"] = MagicMock()
+sys.modules["google.oauth2"] = MagicMock()
+sys.modules["google.oauth2.service_account"] = MagicMock()
 
 from utils.other import storage as storage_mod
+
+for _name, _previous in _previous_modules.items():
+    if _previous is _MISSING:
+        sys.modules.pop(_name, None)
+    else:
+        sys.modules[_name] = _previous
 
 
 class TestGetUserHasSpeechProfile:
@@ -62,4 +104,4 @@ class TestGetUserHasSpeechProfile:
     def test_endpoint_does_not_pass_age_cutoff(self):
         """The /v3/speech-profile router must not filter profiles by age (#5128)."""
         router_src = Path(storage_mod.__file__).parents[2] / "routers" / "speech_profile.py"
-        assert "max_age_days" not in router_src.read_text()
+        assert "max_age_days" not in router_src.read_text(encoding="utf-8")

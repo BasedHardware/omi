@@ -26,12 +26,12 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
    gcloud auth application-default login --project <project-id>
    ```
    Replace `<project-id>` with your Google Cloud Project ID.
-   This should generate the `application_default_credentials.json` file in the `~/.config/gcloud` directory. This file is read automatically by gcloud in Python.
+   This should generate the `application_default_credentials.json` file in the gcloud config directory (`~/.config/gcloud` on macOS/Linux or `%APPDATA%\gcloud` on Windows). This file is read automatically by gcloud in Python.
 
-4. Install Python
-   - Mac: `brew install python`
-   - Windows: `choco install python`
-   - Nix envdir: It should be pre-installed
+4. Install Python 3.11
+   - Mac: `brew install python@3.11`
+   - Windows: Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then verify `python --version` prints `3.11.x`
+   - Nix envdir: It should be pre-installed; verify `python --version` prints `3.11.x`
 
 5. Install `pip` if it doesn't exist (follow instructions on [pip installation page](https://pip.pypa.io/en/stable/installation/))
 
@@ -42,7 +42,9 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 7. Install `opus` (required for audio processing)
    - Mac: `brew install opus`
-   - Windows: You should already have it if you're on Windows 10 version 1903 and above
+   - Windows: install a native `libopus` build and make sure its DLL directory is on `PATH`
+     - MSYS2 UCRT64 example: `pacman -S mingw-w64-ucrt-x86_64-opus`
+     - Add `C:\msys64\ucrt64\bin` to `PATH`, then verify from a new shell with `where.exe opus.dll`
 
 8. Move to the backend directory: `cd backend`
 
@@ -65,6 +67,9 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
     **Option A: Using a virtual environment (recommended)**
     ```bash
+    # Verify Python 3.11 before creating the virtual environment
+    python --version
+
     # Create a virtual environment
     python -m venv venv
 

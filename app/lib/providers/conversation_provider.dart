@@ -26,6 +26,7 @@ class ConversationProvider extends ChangeNotifier {
   bool hasDailySummaries = false; // whether user has any daily summaries
   DateTime? selectedDate;
   String? selectedFolderId;
+  String? selectedSpeakerId;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -71,6 +72,7 @@ class ConversationProvider extends ChangeNotifier {
   // The empty-state widget should defer to a pending auto-retry so the user
   // doesn't see "No conversations yet" in the gap between backoff attempts.
   bool get isAwaitingInitialFetchRetry => _initialFetchRetryTimer?.isActive ?? false;
+  bool get hasActiveSearch => previousQuery.isNotEmpty || selectedSpeakerId != null;
 
   ConversationProvider() {
     _setupMergeListener();
@@ -108,6 +110,7 @@ class ConversationProvider extends ChangeNotifier {
     selectedFolderId = null;
     searchStartDate = null;
     searchEndDate = null;
+    selectedSpeakerId = null;
     previousQuery = '';
     totalSearchPages = 1;
     currentSearchPage = 1;
@@ -136,12 +139,14 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void updateSpecificGroupedConvo(ServerConversation convo, DateTime date, int idx) {
-    groupedConversations[date]![idx] = convo;
+    final group = groupedConversations[date];
+    if (group == null || idx < 0 || idx >= group.length) return;
+    group[idx] = convo;
     notifyListeners();
   }
 
   Future<void> searchConversations(String query, {bool showShimmer = false}) async {
-    if (query.isEmpty) {
+    if (query.isEmpty && selectedSpeakerId == null) {
       previousQuery = "";
       currentSearchPage = 0;
       totalSearchPages = 0;
@@ -162,6 +167,7 @@ class ConversationProvider extends ChangeNotifier {
       includeDiscarded: showDiscardedConversations,
       startDate: searchStartDate,
       endDate: searchEndDate,
+      speakerId: selectedSpeakerId,
     );
     convos.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     searchedConversations = convos;
@@ -178,6 +184,11 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setSpeakerFilter(String? speakerId) async {
+    selectedSpeakerId = speakerId;
+    await searchConversations(previousQuery, showShimmer: true);
+  }
+
   Future<void> searchMoreConversations() async {
     if (totalSearchPages < currentSearchPage + 1) {
       return;
@@ -189,6 +200,7 @@ class ConversationProvider extends ChangeNotifier {
       includeDiscarded: showDiscardedConversations,
       startDate: searchStartDate,
       endDate: searchEndDate,
+      speakerId: selectedSpeakerId,
     );
     searchedConversations.addAll(newConvos);
     searchedConversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -235,7 +247,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -252,7 +264,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -267,7 +279,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -420,7 +432,7 @@ class ConversationProvider extends ChangeNotifier {
       // so the list self-heals without the user having to pull-to-refresh.
       conversationsLoadFailed = true;
       if (conversations.isEmpty && selectedFolderId == null) {
-        conversations = SharedPreferencesUtil().cachedConversations;
+        conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations);
       }
       if (searchedConversations.isEmpty) {
         searchedConversations = conversations;
@@ -434,7 +446,7 @@ class ConversationProvider extends ChangeNotifier {
     conversationsLoadFailed = false;
     _initialFetchRetryTimer?.cancel();
     _initialFetchRetryCount = 0;
-    conversations = result.items;
+    conversations = _filterPendingDeletes(result.items);
 
     // processing convos
     processingConversations = conversations.where((m) => m.status == ConversationStatus.processing).toList();
@@ -444,7 +456,7 @@ class ConversationProvider extends ChangeNotifier {
 
     // Only use cache when no folder filter is applied
     if (conversations.isEmpty && selectedFolderId == null) {
-      conversations = SharedPreferencesUtil().cachedConversations;
+      conversations = _filterPendingDeletes(SharedPreferencesUtil().cachedConversations);
     } else if (selectedFolderId == null) {
       // Only cache when viewing all folders
       SharedPreferencesUtil().cachedConversations = conversations;
@@ -548,6 +560,7 @@ class ConversationProvider extends ChangeNotifier {
     selectedDate = date;
 
     // Clear search when applying date filter
+    selectedSpeakerId = null;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -564,6 +577,7 @@ class ConversationProvider extends ChangeNotifier {
     selectedDate = null;
 
     // Clear search when clearing date filter
+    selectedSpeakerId = null;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -613,7 +627,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void groupConversationsByDate() {
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       _groupSearchConvosByDateWithoutNotify();
     } else {
       _groupConversationsByDateWithoutNotify();
@@ -652,7 +666,12 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future getMoreConversationsFromServer() async {
-    if (conversations.length % 50 != 0) return;
+    // Use server-equivalent length so the load-more gate and offset stay aligned
+    // with what the server has — pending-delete IDs are still present server-side
+    // until the 3-second undo timer fires the actual DELETE. Without this, a
+    // delete leaves the local length non-multiple-of-50 and load-more never fires.
+    final serverEquivalentLength = conversations.length + memoriesToDelete.length;
+    if (serverEquivalentLength % 50 != 0) return;
     if (isLoadingConversations) return;
     setLoadingConversations(true);
 
@@ -660,14 +679,14 @@ class ConversationProvider extends ChangeNotifier {
     final (startDate, endDate) = _getDateFilterRange();
 
     var newConversations = await getConversations(
-      offset: conversations.length,
+      offset: serverEquivalentLength,
       includeDiscarded: showDiscardedConversations,
       startDate: startDate,
       endDate: endDate,
       folderId: selectedFolderId,
       starred: showStarredOnly ? true : null,
     );
-    conversations.addAll(newConversations);
+    conversations.addAll(_filterPendingDeletes(newConversations));
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     _groupConversationsByDateWithoutNotify();
     setLoadingConversations(false);
@@ -747,7 +766,7 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       int si = searchedConversations.indexWhere((element) => element.id == conversation.id);
       if (si != -1) {
         searchedConversations[si] = conversation;
@@ -786,6 +805,14 @@ class ConversationProvider extends ChangeNotifier {
   Map<String, ServerConversation> memoriesToDelete = {};
   String? lastDeletedConversationId;
   Map<String, DateTime> deleteTimestamps = {};
+
+  // Hide conversations whose server-side DELETE is still pending (3s undo window
+  // or in-flight HTTP). Without this, a pull-to-refresh during that window
+  // re-surfaces the just-deleted conversation, which users read as "delete didn't work".
+  List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
+    if (memoriesToDelete.isEmpty) return items;
+    return items.where((c) => !memoriesToDelete.containsKey(c.id)).toList();
+  }
 
   void deleteConversationLocally(ServerConversation conversation, DateTime date) {
     if (lastDeletedConversationId != null &&
@@ -886,8 +913,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -900,8 +927,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }

@@ -60,6 +60,16 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     super.initState();
   }
 
+  // iPad requires a non-zero sharePositionOrigin (popover anchor) for the share sheet.
+  Rect _shareOrigin() {
+    if (!mounted) return const Rect.fromLTWH(0, 0, 100, 100);
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return const Rect.fromLTWH(0, 0, 100, 100);
+  }
+
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
@@ -361,8 +371,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           TextButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
+              final message = context.l10n.apiEnvSavedRestartRequired;
               await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
-              AppSnackbar.showSnackbar(context.l10n.apiEnvSavedRestartRequired, duration: const Duration(seconds: 5));
+              if (!context.mounted) return;
+              AppSnackbar.showSnackbar(message, duration: const Duration(seconds: 5));
             },
             child: Text(context.l10n.switchAndRestart, style: const TextStyle(color: Colors.orange)),
           ),
@@ -371,7 +383,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
-  @override
   Widget _buildManualFirmwareFlash(DeviceProvider provider) {
     return _buildSectionContainer(
       children: [
@@ -419,6 +430,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -685,16 +697,18 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                       return;
                                     }
                                     if (files.length == 1) {
-                                      final result = await Share.shareXFiles([
-                                        XFile(files.first.path),
-                                      ], text: 'Omi debug log');
+                                      final result = await Share.shareXFiles(
+                                        [XFile(files.first.path)],
+                                        text: 'Omi debug log',
+                                        sharePositionOrigin: _shareOrigin(),
+                                      );
                                       if (result.status == ShareResultStatus.success) {
                                         Logger.debug('Log shared');
                                       }
                                       return;
                                     }
 
-                                    if (!mounted) return;
+                                    if (!context.mounted) return;
                                     final selected = await showModalBottomSheet<File>(
                                       context: context,
                                       backgroundColor: const Color(0xFF1C1C1E),
@@ -754,9 +768,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                     );
 
                                     if (selected != null) {
-                                      final result = await Share.shareXFiles([
-                                        XFile(selected.path),
-                                      ], text: 'Omi debug log');
+                                      final result = await Share.shareXFiles(
+                                        [XFile(selected.path)],
+                                        text: 'Omi debug log',
+                                        sharePositionOrigin: _shareOrigin(),
+                                      );
                                       if (result.status == ShareResultStatus.success) {
                                         Logger.debug('Log shared');
                                       }
@@ -789,8 +805,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               const SizedBox(width: 12),
                               GestureDetector(
                                 onTap: () async {
+                                  final message = context.l10n.debugLogCleared;
                                   await DebugLogManager.clear();
-                                  AppSnackbar.showSnackbar(context.l10n.debugLogCleared);
+                                  if (!context.mounted) return;
+                                  AppSnackbar.showSnackbar(message);
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -854,6 +872,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               [XFile(exportedPath)],
                               subject: exportTitle,
                               text: exportTitle,
+                              sharePositionOrigin: _shareOrigin(),
                             );
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');

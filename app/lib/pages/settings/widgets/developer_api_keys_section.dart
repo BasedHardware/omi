@@ -35,24 +35,28 @@ class DeveloperApiKeysSection extends StatelessWidget {
   }
 
   Widget _buildCreateKeyButton(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
-        CreateDevApiKeySheet.show(context, provider);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
-            const SizedBox(width: 6),
-            Text(
-              context.l10n.createKey,
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-            ),
-          ],
+    return Material(
+      color: Colors.white.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(20),
+      child: InkWell(
+        onTap: () {
+          final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
+          CreateDevApiKeySheet.show(context, provider);
+        },
+        borderRadius: BorderRadius.circular(20),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+              const SizedBox(width: 6),
+              Text(
+                context.l10n.createKey,
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,6 +1,8 @@
 // Firestore service - Port from Python backend (database.py)
 // Uses Firestore REST API for simplicity and compatibility
 
+mod chat_repository;
+
 use base64::Engine;
 use chrono::{DateTime, Utc};
 use jsonwebtoken::{encode, Algorithm, EncodingKey, Header};
@@ -14,13 +16,12 @@ use tokio::sync::RwLock;
 use crate::encryption;
 
 use crate::models::{
-    ActionItemDB, AdviceCategory, AdviceDB, App, AppReview, AppSummary, Category,
-    ChatSessionDB, Conversation, DailySummarySettings, DistractionEntry, Folder, FocusSessionDB,
-    FocusStats, FocusStatus, GoalDB, GoalHistoryEntry, GoalType, Memory, MemoryCategory, MemoryDB, MessageDB,
-    NotificationSettings, PersonaDB, Structured, TranscriptSegment, TranscriptionPreferences,
-    AIUserProfile, UserProfile,
-    AssistantSettingsData, SharedAssistantSettingsData, FocusSettingsData, TaskSettingsData,
-    AdviceSettingsData, MemorySettingsData, FloatingBarSettingsData,
+    AIUserProfile, ActionItemDB, AdviceCategory, AdviceDB, AdviceSettingsData, App, AppReview,
+    AppSummary, AssistantSettingsData, Category, Conversation, DailySummarySettings,
+    DistractionEntry, FloatingBarSettingsData, FocusSessionDB, FocusSettingsData, FocusStats,
+    FocusStatus, Folder, GoalDB, GoalHistoryEntry, GoalType, Memory, MemoryCategory, MemoryDB,
+    MemorySettingsData, MessageDB, NotificationSettings, PersonaDB, SharedAssistantSettingsData,
+    Structured, TaskSettingsData, TranscriptSegment, TranscriptionPreferences, UserProfile,
 };
 
 /// Service account credentials from JSON file
@@ -34,11 +35,11 @@ struct ServiceAccountCredentials {
 /// JWT claims for Google OAuth2
 #[derive(Debug, Serialize)]
 struct GoogleJwtClaims {
-    iss: String,      // Service account email
-    scope: String,    // OAuth scopes
-    aud: String,      // Token endpoint
-    iat: i64,         // Issued at
-    exp: i64,         // Expiration
+    iss: String,   // Service account email
+    scope: String, // OAuth scopes
+    aud: String,   // Token endpoint
+    iat: i64,      // Issued at
+    exp: i64,      // Expiration
 }
 
 /// Cached access token with expiration
@@ -67,6 +68,7 @@ pub const STAGED_TASKS_SUBCOLLECTION: &str = "staged_tasks";
 pub const PEOPLE_SUBCOLLECTION: &str = "people";
 pub const LLM_USAGE_SUBCOLLECTION: &str = "llm_usage";
 pub const SCREEN_ACTIVITY_SUBCOLLECTION: &str = "screen_activity";
+pub const REALTIME_SESSIONS_SUBCOLLECTION: &str = "realtime_sessions";
 
 /// Generate a document ID from a seed string using SHA256 hash
 /// Copied from Python document_id_from_seed
@@ -115,7 +117,8 @@ impl FirestoreService {
     }
 
     /// Load service account credentials from JSON file
-    fn load_credentials() -> Result<Option<ServiceAccountCredentials>, Box<dyn std::error::Error + Send + Sync>> {
+    fn load_credentials(
+    ) -> Result<Option<ServiceAccountCredentials>, Box<dyn std::error::Error + Send + Sync>> {
         // Check GOOGLE_APPLICATION_CREDENTIALS environment variable
         let creds_path = match std::env::var("GOOGLE_APPLICATION_CREDENTIALS") {
             Ok(path) => path,
@@ -138,7 +141,10 @@ impl FirestoreService {
         let credentials: ServiceAccountCredentials = serde_json::from_str(&creds_json)
             .map_err(|e| format!("Failed to parse credentials JSON: {}", e))?;
 
-        tracing::info!("Loaded credentials for service account: {}", credentials.client_email);
+        tracing::info!(
+            "Loaded credentials for service account: {}",
+            credentials.client_email
+        );
 
         Ok(Some(credentials))
     }
@@ -173,7 +179,9 @@ impl FirestoreService {
     }
 
     /// Fetch a new access token from Google OAuth
-    async fn fetch_new_access_token(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn fetch_new_access_token(
+        &self,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         // Use service account credentials first (has full permissions)
         if let Some(creds) = &self.credentials {
             let token = self.get_token_from_service_account(creds).await?;
@@ -191,11 +199,14 @@ impl FirestoreService {
     }
 
     /// Try to get token from GCP metadata server
-    async fn try_metadata_server(&self) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    async fn try_metadata_server(
+        &self,
+    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let metadata_url =
             "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token";
 
-        let response = self.client
+        let response = self
+            .client
             .get(metadata_url)
             .header("Metadata-Flavor", "Google")
             .timeout(std::time::Duration::from_secs(2))
@@ -220,7 +231,10 @@ impl FirestoreService {
         creds: &ServiceAccountCredentials,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let now = Utc::now().timestamp();
-        let token_uri = creds.token_uri.as_deref().unwrap_or("https://oauth2.googleapis.com/token");
+        let token_uri = creds
+            .token_uri
+            .as_deref()
+            .unwrap_or("https://oauth2.googleapis.com/token");
 
         // Create JWT claims
         let claims = GoogleJwtClaims {
@@ -239,7 +253,8 @@ impl FirestoreService {
             .map_err(|e| format!("Failed to encode JWT: {}", e))?;
 
         // Exchange JWT for access token
-        let response = self.client
+        let response = self
+            .client
             .post(token_uri)
             .form(&[
                 ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
@@ -259,7 +274,9 @@ impl FirestoreService {
             access_token: String,
         }
 
-        let token_response: TokenResponse = response.json().await
+        let token_response: TokenResponse = response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse token response: {}", e))?;
 
         Ok(token_response.access_token)
@@ -285,7 +302,11 @@ impl FirestoreService {
     }
 
     /// Build request with auth header
-    async fn build_request(&self, method: reqwest::Method, url: &str) -> Result<reqwest::RequestBuilder, Box<dyn std::error::Error + Send + Sync>> {
+    async fn build_request(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+    ) -> Result<reqwest::RequestBuilder, Box<dyn std::error::Error + Send + Sync>> {
         let mut req = self.client.request(method, url);
         let token = self.get_access_token().await?;
         req = req.bearer_auth(token);
@@ -293,7 +314,11 @@ impl FirestoreService {
     }
 
     /// Build authenticated request for GCE Compute Engine API (public for agent routes)
-    pub async fn build_compute_request(&self, method: reqwest::Method, url: &str) -> Result<reqwest::RequestBuilder, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn build_compute_request(
+        &self,
+        method: reqwest::Method,
+        url: &str,
+    ) -> Result<reqwest::RequestBuilder, Box<dyn std::error::Error + Send + Sync>> {
         self.build_request(method, url).await
     }
 
@@ -385,21 +410,82 @@ impl FirestoreService {
         }
 
         let results: Vec<Value> = response.json().await?;
-        let total: f64 = results.iter().filter_map(|entry| {
-            let cost = entry
-                .get("document")?
-                .get("fields")?
-                .get("desktop_chat")?
-                .get("mapValue")?
-                .get("fields")?
-                .get("cost_usd")?;
-            // Firestore stores doubles as doubleValue, but may also be integerValue
-            cost.get("doubleValue")
-                .and_then(|v| v.as_f64())
-                .or_else(|| cost.get("integerValue").and_then(|v| v.as_str()).and_then(|s| s.parse::<f64>().ok()))
-        }).sum();
+        let total: f64 = results
+            .iter()
+            .filter_map(|entry| {
+                let cost = entry
+                    .get("document")?
+                    .get("fields")?
+                    .get("desktop_chat")?
+                    .get("mapValue")?
+                    .get("fields")?
+                    .get("cost_usd")?;
+                // Firestore stores doubles as doubleValue, but may also be integerValue
+                cost.get("doubleValue")
+                    .and_then(|v| v.as_f64())
+                    .or_else(|| {
+                        cost.get("integerValue")
+                            .and_then(|v| v.as_str())
+                            .and_then(|s| s.parse::<f64>().ok())
+                    })
+            })
+            .sum();
 
         Ok(total)
+    }
+
+    /// Record a minted realtime session for out-of-band billing reconciliation.
+    ///
+    /// The realtime WS is client↔provider direct, so the backend never sees the
+    /// minutes/tokens inline. This persists a NON-SECRET record of each minted session
+    /// (the doc id is a hash of the token via `document_id_from_seed`; the token itself
+    /// is never stored) so a reconciliation job can later attribute provider usage to
+    /// the user and write the cost into the llm_usage ledger via
+    /// `record_llm_usage(.., "realtime")`. `status` starts "minted"; the reconciler
+    /// flips it to "reconciled".
+    pub async fn record_realtime_session(
+        &self,
+        uid: &str,
+        token: &str,
+        provider: &str,
+        model: &str,
+        expires_at: &str,
+        max_minutes: i64,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let session_id = document_id_from_seed(token);
+        let url = format!(
+            "{}/{}/{}/{}/{}",
+            self.base_url(),
+            USERS_COLLECTION,
+            uid,
+            REALTIME_SESSIONS_SUBCOLLECTION,
+            session_id
+        );
+        let minted_at = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let doc = json!({
+            "fields": {
+                "provider":    { "stringValue": provider },
+                "model":       { "stringValue": model },
+                "status":      { "stringValue": "minted" },
+                "minted_at":   { "timestampValue": minted_at },
+                "expires_at":  { "stringValue": expires_at },
+                "max_minutes": { "integerValue": max_minutes.to_string() },
+            }
+        });
+        let response = self
+            .build_request(reqwest::Method::PATCH, &url)
+            .await?
+            .json(&doc)
+            .send()
+            .await?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "Firestore realtime-session write error: {}",
+                response.text().await?
+            )
+            .into());
+        }
+        Ok(())
     }
 
     // =========================================================================
@@ -525,14 +611,12 @@ impl FirestoreService {
             "structuredQuery": structured_query
         });
 
-        let parent = format!(
-            "{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid
-        );
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
-        tracing::debug!("Firestore query: {}", serde_json::to_string_pretty(&query).unwrap_or_default());
+        tracing::debug!(
+            "Firestore query: {}",
+            serde_json::to_string_pretty(&query).unwrap_or_default()
+        );
 
         let response = self
             .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
@@ -562,7 +646,11 @@ impl FirestoreService {
             })
             .collect();
 
-        tracing::info!("Retrieved {} conversations for user {}", conversations.len(), uid);
+        tracing::info!(
+            "Retrieved {} conversations for user {}",
+            conversations.len(),
+            uid
+        );
         Ok(conversations)
     }
 
@@ -573,12 +661,7 @@ impl FirestoreService {
         include_discarded: bool,
         statuses: &[String],
     ) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
-        let parent = format!(
-            "{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid
-        );
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
         // Build filters (same as get_conversations)
         let mut filters: Vec<Value> = Vec::new();
@@ -639,7 +722,10 @@ impl FirestoreService {
         });
 
         let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runAggregationQuery", parent))
+            .build_request(
+                reqwest::Method::POST,
+                &format!("{}:runAggregationQuery", parent),
+            )
             .await?
             .json(&query)
             .send()
@@ -747,9 +833,7 @@ impl FirestoreService {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // First get the current conversation to append to apps_results
         let current = self.get_conversation(uid, conversation_id).await?;
-        let mut apps_results = current
-            .map(|c| c.apps_results)
-            .unwrap_or_default();
+        let mut apps_results = current.map(|c| c.apps_results).unwrap_or_default();
 
         // Remove existing result for this app if present, then add new one
         apps_results.retain(|r| r.app_id.as_deref() != Some(app_id));
@@ -804,7 +888,11 @@ impl FirestoreService {
             return Err(format!("Firestore update error: {}", error_text).into());
         }
 
-        tracing::info!("Added app result for app {} to conversation {}", app_id, conversation_id);
+        tracing::info!(
+            "Added app result for app {} to conversation {}",
+            app_id,
+            conversation_id
+        );
         Ok(())
     }
 
@@ -1077,7 +1165,10 @@ impl FirestoreService {
             }
 
             let results: Vec<Value> = response.json().await?;
-            let fetched_count = results.iter().filter(|doc| doc.get("document").is_some()).count();
+            let fetched_count = results
+                .iter()
+                .filter(|doc| doc.get("document").is_some())
+                .count();
 
             let batch: Vec<MemoryDB> = results
                 .into_iter()
@@ -1091,13 +1182,11 @@ impl FirestoreService {
                 // memories don't have is_dismissed field - Firestore requires field to exist for filters)
                 .filter(|m| include_dismissed || !m.is_dismissed)
                 // Filter by remaining tags in-memory (first tag is already filtered by Firestore ARRAY_CONTAINS)
-                .filter(|m| {
-                    match tags {
-                        Some(filter_tags) if filter_tags.len() > 1 => {
-                            filter_tags[1..].iter().all(|tag| m.tags.contains(tag))
-                        }
-                        _ => true,
+                .filter(|m| match tags {
+                    Some(filter_tags) if filter_tags.len() > 1 => {
+                        filter_tags[1..].iter().all(|tag| m.tags.contains(tag))
                     }
+                    _ => true,
                 })
                 .collect();
 
@@ -1130,7 +1219,8 @@ impl FirestoreService {
         uid: &str,
         limit: usize,
     ) -> Result<Vec<MemoryDB>, Box<dyn std::error::Error + Send + Sync>> {
-        self.get_memories_filtered(uid, limit, 0, None, None, false).await
+        self.get_memories_filtered(uid, limit, 0, None, None, false)
+            .await
     }
 
     /// Batch fetch conversations and populate source and input_device_name fields on memories
@@ -1362,7 +1452,12 @@ impl FirestoreService {
             return Err(format!("Firestore update error: {}", error_text).into());
         }
 
-        tracing::info!("Reviewed memory {} for user {} with value {}", memory_id, uid, value);
+        tracing::info!(
+            "Reviewed memory {} for user {} with value {}",
+            memory_id,
+            uid,
+            value
+        );
         Ok(())
     }
 
@@ -1411,10 +1506,7 @@ impl FirestoreService {
         );
 
         // Build tags array for Firestore
-        let tags_values: Vec<Value> = tags
-            .iter()
-            .map(|t| json!({"stringValue": t}))
-            .collect();
+        let tags_values: Vec<Value> = tags.iter().map(|t| json!({"stringValue": t})).collect();
 
         // Build fields - always include base fields
         // CRITICAL: Include all fields that Python expects (matching save_memories)
@@ -1478,7 +1570,12 @@ impl FirestoreService {
             return Err(format!("Firestore create error: {}", error_text).into());
         }
 
-        tracing::info!("Created memory {} for user {} (category: {})", memory_id, uid, category_str);
+        tracing::info!(
+            "Created memory {} for user {} (category: {})",
+            memory_id,
+            uid,
+            category_str
+        );
         Ok(memory_id)
     }
 
@@ -1489,7 +1586,21 @@ impl FirestoreService {
         content: &str,
         visibility: &str,
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        self.create_memory(uid, content, visibility, None, None, None, None, &[], None, None, None, None).await
+        self.create_memory(
+            uid,
+            content,
+            visibility,
+            None,
+            None,
+            None,
+            None,
+            &[],
+            None,
+            None,
+            None,
+            None,
+        )
+        .await
     }
 
     /// Update memory read/dismissed status
@@ -2002,7 +2113,10 @@ impl FirestoreService {
             }
 
             let results: Vec<Value> = response.json().await?;
-            let fetched_count = results.iter().filter(|doc| doc.get("document").is_some()).count();
+            let fetched_count = results
+                .iter()
+                .filter(|doc| doc.get("document").is_some())
+                .count();
 
             let batch: Vec<ActionItemDB> = results
                 .into_iter()
@@ -2036,21 +2150,20 @@ impl FirestoreService {
         }
 
         // Enrich action items that have conversation_id but no source
-        self.enrich_action_items_with_source(uid, &mut action_items).await;
+        self.enrich_action_items_with_source(uid, &mut action_items)
+            .await;
 
         // Post-query sort matching Python backend behavior (used by iOS/Flutter app):
         // 1. Items WITH due_at come first (sorted by due_at ascending)
         // 2. Items WITHOUT due_at come last
         // 3. Tie-breaker: created_at descending (newest first)
-        action_items.sort_by(|a, b| {
-            match (&a.due_at, &b.due_at) {
-                (Some(due_a), Some(due_b)) => {
-                    due_a.cmp(due_b).then_with(|| b.created_at.cmp(&a.created_at))
-                }
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => b.created_at.cmp(&a.created_at),
-            }
+        action_items.sort_by(|a, b| match (&a.due_at, &b.due_at) {
+            (Some(due_a), Some(due_b)) => due_a
+                .cmp(due_b)
+                .then_with(|| b.created_at.cmp(&a.created_at)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => b.created_at.cmp(&a.created_at),
         });
 
         Ok(action_items)
@@ -2149,7 +2262,8 @@ impl FirestoreService {
         if action_item.source.is_none() {
             if let Some(conv_id) = &action_item.conversation_id {
                 if let Ok(Some(conv)) = self.get_conversation(uid, conv_id).await {
-                    action_item.source = Some(format!("transcription:{:?}", conv.source).to_lowercase());
+                    action_item.source =
+                        Some(format!("transcription:{:?}", conv.source).to_lowercase());
                 }
             }
         }
@@ -2284,7 +2398,8 @@ impl FirestoreService {
         if action_item.source.is_none() {
             if let Some(conv_id) = &action_item.conversation_id {
                 if let Ok(Some(conv)) = self.get_conversation(uid, conv_id).await {
-                    action_item.source = Some(format!("transcription:{:?}", conv.source).to_lowercase());
+                    action_item.source =
+                        Some(format!("transcription:{:?}", conv.source).to_lowercase());
                 }
             }
         }
@@ -2333,7 +2448,12 @@ impl FirestoreService {
         kept_task_id: &str,
     ) -> Result<ActionItemDB, Box<dyn std::error::Error + Send + Sync>> {
         let field_paths = vec![
-            "deleted", "deleted_by", "deleted_at", "deleted_reason", "kept_task_id", "updated_at",
+            "deleted",
+            "deleted_by",
+            "deleted_at",
+            "deleted_reason",
+            "kept_task_id",
+            "updated_at",
         ];
 
         let fields = json!({
@@ -2378,7 +2498,13 @@ impl FirestoreService {
         let updated_doc: Value = response.json().await?;
         let action_item = self.parse_action_item(&updated_doc)?;
 
-        tracing::info!("Soft-deleted action item {} for user {} (by: {}, reason: {})", item_id, uid, deleted_by, reason);
+        tracing::info!(
+            "Soft-deleted action item {} for user {} (by: {}, reason: {})",
+            item_id,
+            uid,
+            deleted_by,
+            reason
+        );
         Ok(action_item)
     }
 
@@ -2600,11 +2726,7 @@ impl FirestoreService {
             }
         }
 
-        tracing::info!(
-            "Batch updated {} sort orders for user {}",
-            items.len(),
-            uid
-        );
+        tracing::info!("Batch updated {} sort orders for user {}", items.len(), uid);
         Ok(())
     }
 
@@ -2634,7 +2756,10 @@ impl FirestoreService {
         // Check for exact-match duplicate (case-insensitive)
         let existing = self.get_staged_tasks(uid, 200, 0).await.unwrap_or_default();
         let desc_lower = description.to_lowercase();
-        if existing.iter().any(|t| t.description.trim().to_lowercase() == desc_lower) {
+        if existing
+            .iter()
+            .any(|t| t.description.trim().to_lowercase() == desc_lower)
+        {
             tracing::info!(
                 "Skipping duplicate staged task for user {}: {}",
                 uid,
@@ -2726,7 +2851,19 @@ impl FirestoreService {
         // a conversation_id were created by the old save_action_items path (confirmed
         // 0 false positives: no items have both conversation_id AND a real source in Firestore).
         let all_items = self
-            .get_action_items(uid, 10000, 0, Some(false), None, None, None, None, None, None, None)
+            .get_action_items(
+                uid,
+                10000,
+                0,
+                Some(false),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await?;
 
         // Filter: has conversation_id → created by old save_action_items path
@@ -2770,15 +2907,13 @@ impl FirestoreService {
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
         // Query non-completed staged tasks ordered by relevance_score ASC
-        let filters = vec![
-            json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "completed"},
-                    "op": "EQUAL",
-                    "value": {"booleanValue": false}
-                }
-            }),
-        ];
+        let filters = vec![json!({
+            "fieldFilter": {
+                "field": {"fieldPath": "completed"},
+                "op": "EQUAL",
+                "value": {"booleanValue": false}
+            }
+        })];
 
         let query = json!({
             "structuredQuery": {
@@ -2899,7 +3034,9 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                return Err(format!("Firestore batch commit staged scores error: {}", error_text).into());
+                return Err(
+                    format!("Firestore batch commit staged scores error: {}", error_text).into(),
+                );
             }
         }
 
@@ -3063,10 +3200,7 @@ impl FirestoreService {
             .iter()
             .filter_map(|r| r.get("document"))
             .filter_map(|doc| self.parse_action_item(doc).ok())
-            .filter(|item| {
-                item.deleted != Some(true)
-                    && item.from_staged == Some(true)
-            })
+            .filter(|item| item.deleted != Some(true) && item.from_staged == Some(true))
             .count();
 
         Ok(count)
@@ -3127,10 +3261,7 @@ impl FirestoreService {
             .iter()
             .filter_map(|r| r.get("document"))
             .filter_map(|doc| self.parse_action_item(doc).ok())
-            .filter(|item| {
-                item.deleted != Some(true)
-                    && item.from_staged == Some(true)
-            })
+            .filter(|item| item.deleted != Some(true) && item.from_staged == Some(true))
             .collect();
 
         Ok(items)
@@ -3676,7 +3807,10 @@ impl FirestoreService {
             .await?;
 
         if !response.status().is_success() {
-            tracing::warn!("Failed to increment app installs: {}", response.text().await?);
+            tracing::warn!(
+                "Failed to increment app installs: {}",
+                response.text().await?
+            );
         }
 
         Ok(())
@@ -3777,10 +3911,7 @@ impl FirestoreService {
     }
 
     /// Parse Firestore document to App
-    fn parse_app(
-        &self,
-        doc: &Value,
-    ) -> Result<App, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_app(&self, doc: &Value) -> Result<App, Box<dyn std::error::Error + Send + Sync>> {
         let fields = doc.get("fields").ok_or("Missing fields in document")?;
         let name = doc.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let id = name.split('/').last().unwrap_or("").to_string();
@@ -3790,20 +3921,24 @@ impl FirestoreService {
             name: self.parse_string(fields, "name").unwrap_or_default(),
             description: self.parse_string(fields, "description").unwrap_or_default(),
             image: self.parse_string(fields, "image").unwrap_or_default(),
-            category: self.parse_string(fields, "category").unwrap_or_else(|| "other".to_string()),
+            category: self
+                .parse_string(fields, "category")
+                .unwrap_or_else(|| "other".to_string()),
             author: self.parse_string(fields, "author").unwrap_or_default(),
             email: self.parse_string(fields, "email"),
             capabilities: self.parse_string_array(fields, "capabilities"),
             uid: self.parse_string(fields, "uid"),
             approved: self.parse_bool(fields, "approved").unwrap_or(false),
             private: self.parse_bool(fields, "private").unwrap_or(false),
-            status: self.parse_string(fields, "status").unwrap_or_else(|| "under-review".to_string()),
+            status: self
+                .parse_string(fields, "status")
+                .unwrap_or_else(|| "under-review".to_string()),
             chat_prompt: self.parse_string(fields, "chat_prompt"),
             memory_prompt: self.parse_string(fields, "memory_prompt"),
             persona_prompt: self.parse_string(fields, "persona_prompt"),
-            external_integration: None, // TODO: Parse nested object
+            external_integration: None,   // TODO: Parse nested object
             proactive_notification: None, // TODO: Parse nested object
-            chat_tools: vec![], // TODO: Parse array of nested objects
+            chat_tools: vec![],           // TODO: Parse array of nested objects
             installs: self.parse_int(fields, "installs").unwrap_or(0),
             rating_avg: self.parse_float(fields, "rating_avg"),
             rating_count: self.parse_int(fields, "rating_count").unwrap_or(0),
@@ -3844,7 +3979,9 @@ impl FirestoreService {
             name: self.parse_string(fields, "name").unwrap_or_default(),
             description: self.parse_string(fields, "description").unwrap_or_default(),
             image: self.parse_string(fields, "image").unwrap_or_default(),
-            category: self.parse_string(fields, "category").unwrap_or_else(|| "other".to_string()),
+            category: self
+                .parse_string(fields, "category")
+                .unwrap_or_else(|| "other".to_string()),
             author: self.parse_string(fields, "author").unwrap_or_default(),
             capabilities: self.parse_string_array(fields, "capabilities"),
             approved: self.parse_bool(fields, "approved").unwrap_or(false),
@@ -3873,7 +4010,9 @@ impl FirestoreService {
             score: self.parse_int(fields, "score").unwrap_or(0),
             review: self.parse_string(fields, "review").unwrap_or_default(),
             response: self.parse_string(fields, "response"),
-            rated_at: self.parse_timestamp_optional(fields, "rated_at").unwrap_or_else(Utc::now),
+            rated_at: self
+                .parse_timestamp_optional(fields, "rated_at")
+                .unwrap_or_else(Utc::now),
             edited_at: self.parse_timestamp_optional(fields, "edited_at"),
         })
     }
@@ -3904,18 +4043,19 @@ impl FirestoreService {
         doc: &Value,
         uid: &str,
     ) -> Result<Conversation, Box<dyn std::error::Error + Send + Sync>> {
-        let fields = doc
-            .get("fields")
-            .ok_or("Missing fields in document")?;
+        let fields = doc.get("fields").ok_or("Missing fields in document")?;
         let name = doc.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let id = name.split('/').last().unwrap_or("").to_string();
 
         // Use created_at as fallback for missing timestamps
-        let created_at = self.parse_timestamp_optional(fields, "created_at")
+        let created_at = self
+            .parse_timestamp_optional(fields, "created_at")
             .unwrap_or_else(Utc::now);
-        let started_at = self.parse_timestamp_optional(fields, "started_at")
+        let started_at = self
+            .parse_timestamp_optional(fields, "started_at")
             .unwrap_or(created_at);
-        let finished_at = self.parse_timestamp_optional(fields, "finished_at")
+        let finished_at = self
+            .parse_timestamp_optional(fields, "finished_at")
             .unwrap_or(created_at);
 
         // Parse apps_results
@@ -3926,11 +4066,13 @@ impl FirestoreService {
             created_at,
             started_at,
             finished_at,
-            source: self.parse_string(fields, "source")
+            source: self
+                .parse_string(fields, "source")
                 .and_then(|s| serde_json::from_str(&format!("\"{}\"", s)).ok())
                 .unwrap_or_default(),
             language: self.parse_string(fields, "language").unwrap_or_default(),
-            status: self.parse_string(fields, "status")
+            status: self
+                .parse_string(fields, "status")
                 .and_then(|s| serde_json::from_str(&format!("\"{}\"", s)).ok())
                 .unwrap_or_default(),
             discarded: self.parse_bool(fields, "discarded").unwrap_or(false),
@@ -3949,7 +4091,8 @@ impl FirestoreService {
 
     /// Parse apps_results array from Firestore fields
     fn parse_apps_results(&self, fields: &Value) -> Vec<crate::models::AppResult> {
-        let array = match fields.get("apps_results")
+        let array = match fields
+            .get("apps_results")
             .and_then(|a| a.get("arrayValue"))
             .and_then(|a| a.get("values"))
             .and_then(|a| a.as_array())
@@ -3958,12 +4101,15 @@ impl FirestoreService {
             None => return vec![],
         };
 
-        array.iter().filter_map(|item| {
-            let map_fields = item.get("mapValue")?.get("fields")?;
-            let app_id = self.parse_string(map_fields, "app_id");
-            let content = self.parse_string(map_fields, "content").unwrap_or_default();
-            Some(crate::models::AppResult { app_id, content })
-        }).collect()
+        array
+            .iter()
+            .filter_map(|item| {
+                let map_fields = item.get("mapValue")?.get("fields")?;
+                let app_id = self.parse_string(map_fields, "app_id");
+                let content = self.parse_string(map_fields, "content").unwrap_or_default();
+                Some(crate::models::AppResult { app_id, content })
+            })
+            .collect()
     }
 
     /// Parse Firestore document to ActionItemDB
@@ -3979,7 +4125,9 @@ impl FirestoreService {
             id,
             description: self.parse_string(fields, "description").unwrap_or_default(),
             completed: self.parse_bool(fields, "completed").unwrap_or(false),
-            created_at: self.parse_timestamp_optional(fields, "created_at").unwrap_or_else(Utc::now),
+            created_at: self
+                .parse_timestamp_optional(fields, "created_at")
+                .unwrap_or_else(Utc::now),
             updated_at: self.parse_timestamp_optional(fields, "updated_at"),
             due_at: self.parse_timestamp_optional(fields, "due_at"),
             completed_at: self.parse_timestamp_optional(fields, "completed_at"),
@@ -4025,7 +4173,8 @@ impl FirestoreService {
                     Ok(decrypted) => content = decrypted,
                     Err(e) => {
                         tracing::warn!("Failed to decrypt memory {}: {}", id, e);
-                        content = "[Protected memory — cannot decrypt with current key]".to_string();
+                        content =
+                            "[Protected memory — cannot decrypt with current key]".to_string();
                     }
                 }
             } else {
@@ -4041,7 +4190,8 @@ impl FirestoreService {
             id: id.clone(),
             uid: "".to_string(), // Not stored in document
             content,
-            category: self.parse_string(fields, "category")
+            category: self
+                .parse_string(fields, "category")
                 .and_then(|s| serde_json::from_str(&format!("\"{}\"", s)).ok())
                 .unwrap_or_default(),
             created_at: self.parse_timestamp(fields, "created_at")?,
@@ -4049,11 +4199,13 @@ impl FirestoreService {
             conversation_id: self.parse_string(fields, "conversation_id"),
             reviewed: self.parse_bool(fields, "reviewed").unwrap_or(false),
             user_review: self.parse_bool(fields, "user_review").ok(),
-            visibility: self.parse_string(fields, "visibility").unwrap_or_else(|| "private".to_string()),
+            visibility: self
+                .parse_string(fields, "visibility")
+                .unwrap_or_else(|| "private".to_string()),
             manually_added: self.parse_bool(fields, "manually_added").unwrap_or(false),
             scoring: self.parse_string(fields, "scoring"),
             source: self.parse_string(fields, "source"), // Can be stored directly for tips, or enriched from conversation
-            input_device_name: None, // Enriched later from linked conversation
+            input_device_name: None,                     // Enriched later from linked conversation
             confidence: self.parse_float(fields, "confidence"),
             source_app: self.parse_string(fields, "source_app"),
             context_summary: self.parse_string(fields, "context_summary"),
@@ -4071,7 +4223,10 @@ impl FirestoreService {
         &self,
         fields: &Value,
     ) -> Result<Structured, Box<dyn std::error::Error + Send + Sync>> {
-        let structured = fields.get("structured").and_then(|s| s.get("mapValue")).and_then(|m| m.get("fields"));
+        let structured = fields
+            .get("structured")
+            .and_then(|s| s.get("mapValue"))
+            .and_then(|m| m.get("fields"));
 
         if let Some(s) = structured {
             let title = self.parse_string(s, "title").unwrap_or_default();
@@ -4084,8 +4239,11 @@ impl FirestoreService {
             Ok(Structured {
                 title,
                 overview: self.parse_string(s, "overview").unwrap_or_default(),
-                emoji: self.parse_string(s, "emoji").unwrap_or_else(|| "🧠".to_string()),
-                category: self.parse_string(s, "category")
+                emoji: self
+                    .parse_string(s, "emoji")
+                    .unwrap_or_else(|| "🧠".to_string()),
+                category: self
+                    .parse_string(s, "category")
                     .and_then(|c| serde_json::from_str(&format!("\"{}\"", c)).ok())
                     .unwrap_or_default(),
                 action_items: self.parse_action_items_from_structured(s),
@@ -4101,8 +4259,12 @@ impl FirestoreService {
     }
 
     /// Parse action_items array from structured field
-    fn parse_action_items_from_structured(&self, structured_fields: &Value) -> Vec<crate::models::ActionItem> {
-        let array = match structured_fields.get("action_items")
+    fn parse_action_items_from_structured(
+        &self,
+        structured_fields: &Value,
+    ) -> Vec<crate::models::ActionItem> {
+        let array = match structured_fields
+            .get("action_items")
             .and_then(|a| a.get("arrayValue"))
             .and_then(|a| a.get("values"))
             .and_then(|a| a.as_array())
@@ -4111,18 +4273,30 @@ impl FirestoreService {
             None => return vec![],
         };
 
-        array.iter().filter_map(|item| {
-            let map_fields = item.get("mapValue")?.get("fields")?;
-            let description = self.parse_string(map_fields, "description").unwrap_or_default();
-            let completed = self.parse_bool(map_fields, "completed").unwrap_or(false);
-            let due_at = self.parse_timestamp_optional(map_fields, "due_at");
-            Some(crate::models::ActionItem { description, completed, due_at, confidence: None, priority: None })
-        }).collect()
+        array
+            .iter()
+            .filter_map(|item| {
+                let map_fields = item.get("mapValue")?.get("fields")?;
+                let description = self
+                    .parse_string(map_fields, "description")
+                    .unwrap_or_default();
+                let completed = self.parse_bool(map_fields, "completed").unwrap_or(false);
+                let due_at = self.parse_timestamp_optional(map_fields, "due_at");
+                Some(crate::models::ActionItem {
+                    description,
+                    completed,
+                    due_at,
+                    confidence: None,
+                    priority: None,
+                })
+            })
+            .collect()
     }
 
     /// Parse events array from structured field
     fn parse_events_from_structured(&self, structured_fields: &Value) -> Vec<crate::models::Event> {
-        let array = match structured_fields.get("events")
+        let array = match structured_fields
+            .get("events")
             .and_then(|a| a.get("arrayValue"))
             .and_then(|a| a.get("values"))
             .and_then(|a| a.as_array())
@@ -4131,14 +4305,24 @@ impl FirestoreService {
             None => return vec![],
         };
 
-        array.iter().filter_map(|item| {
-            let map_fields = item.get("mapValue")?.get("fields")?;
-            let title = self.parse_string(map_fields, "title").unwrap_or_default();
-            let description = self.parse_string(map_fields, "description").unwrap_or_default();
-            let start = self.parse_timestamp_optional(map_fields, "start")?;
-            let duration = self.parse_int(map_fields, "duration").unwrap_or(30);
-            Some(crate::models::Event { title, description, start, duration })
-        }).collect()
+        array
+            .iter()
+            .filter_map(|item| {
+                let map_fields = item.get("mapValue")?.get("fields")?;
+                let title = self.parse_string(map_fields, "title").unwrap_or_default();
+                let description = self
+                    .parse_string(map_fields, "description")
+                    .unwrap_or_default();
+                let start = self.parse_timestamp_optional(map_fields, "start")?;
+                let duration = self.parse_int(map_fields, "duration").unwrap_or(30);
+                Some(crate::models::Event {
+                    title,
+                    description,
+                    start,
+                    duration,
+                })
+            })
+            .collect()
     }
 
     /// Parse geolocation from conversation fields
@@ -4157,7 +4341,8 @@ impl FirestoreService {
     /// Parse photos array from conversation fields
     /// Decrypts base64 field if data_protection_level is "enhanced"
     fn parse_photos(&self, fields: &Value, uid: &str) -> Vec<crate::models::ConversationPhoto> {
-        let array = match fields.get("photos")
+        let array = match fields
+            .get("photos")
             .and_then(|a| a.get("arrayValue"))
             .and_then(|a| a.get("values"))
             .and_then(|a| a.as_array())
@@ -4213,7 +4398,10 @@ impl FirestoreService {
         let transcript_field = fields.get("transcript_segments");
 
         // Check if transcript is a string (encrypted for enhanced protection)
-        if let Some(string_val) = transcript_field.and_then(|t| t.get("stringValue")).and_then(|s| s.as_str()) {
+        if let Some(string_val) = transcript_field
+            .and_then(|t| t.get("stringValue"))
+            .and_then(|s| s.as_str())
+        {
             let data_protection_level = self.parse_string(fields, "data_protection_level");
             if data_protection_level.as_deref() == Some("enhanced") {
                 if let Some(ref secret) = self.encryption_secret {
@@ -4227,7 +4415,9 @@ impl FirestoreService {
                     };
 
                     // Check if compression is used (should always be true for enhanced)
-                    let is_compressed = self.parse_bool(fields, "transcript_segments_compressed").unwrap_or(false);
+                    let is_compressed = self
+                        .parse_bool(fields, "transcript_segments_compressed")
+                        .unwrap_or(false);
 
                     if is_compressed {
                         // Decrypted payload is a hex string, convert to bytes
@@ -4237,38 +4427,50 @@ impl FirestoreService {
                                 let mut decoder = ZlibDecoder::new(&compressed_bytes[..]);
                                 let mut decompressed = String::new();
                                 if let Err(e) = decoder.read_to_string(&mut decompressed) {
-                                    tracing::warn!("Failed to decompress encrypted transcript segments: {}", e);
+                                    tracing::warn!(
+                                        "Failed to decompress encrypted transcript segments: {}",
+                                        e
+                                    );
                                     return Ok(vec![]);
                                 }
 
                                 // Parse JSON array of segments
-                                match serde_json::from_str::<Vec<serde_json::Value>>(&decompressed) {
+                                match serde_json::from_str::<Vec<serde_json::Value>>(&decompressed)
+                                {
                                     Ok(segments) => {
                                         let result: Vec<TranscriptSegment> = segments
                                             .iter()
                                             .filter_map(|seg| {
                                                 Some(TranscriptSegment {
-                                                    id: seg.get("id")
+                                                    id: seg
+                                                        .get("id")
                                                         .and_then(|s| s.as_str())
                                                         .map(|s| s.to_string()),
                                                     text: seg.get("text")?.as_str()?.to_string(),
-                                                    speaker: seg.get("speaker")
+                                                    speaker: seg
+                                                        .get("speaker")
                                                         .and_then(|s| s.as_str())
                                                         .unwrap_or("SPEAKER_00")
                                                         .to_string(),
-                                                    speaker_id: seg.get("speaker_id")
+                                                    speaker_id: seg
+                                                        .get("speaker_id")
                                                         .and_then(|s| s.as_i64())
-                                                        .unwrap_or(0) as i32,
-                                                    is_user: seg.get("is_user")
+                                                        .unwrap_or(0)
+                                                        as i32,
+                                                    is_user: seg
+                                                        .get("is_user")
                                                         .and_then(|s| s.as_bool())
                                                         .unwrap_or(false),
-                                                    person_id: seg.get("person_id")
+                                                    person_id: seg
+                                                        .get("person_id")
                                                         .and_then(|s| s.as_str())
                                                         .map(|s| s.to_string()),
-                                                    start: seg.get("start")
+                                                    start: seg
+                                                        .get("start")
                                                         .and_then(|s| s.as_f64())
                                                         .unwrap_or(0.0),
-                                                    end: seg.get("end")
+                                                    end: seg
+                                                        .get("end")
                                                         .and_then(|s| s.as_f64())
                                                         .unwrap_or(0.0),
                                                 })
@@ -4284,7 +4486,10 @@ impl FirestoreService {
                                 }
                             }
                             Err(e) => {
-                                tracing::warn!("Failed to decode hex from decrypted transcript: {}", e);
+                                tracing::warn!(
+                                    "Failed to decode hex from decrypted transcript: {}",
+                                    e
+                                );
                                 return Ok(vec![]);
                             }
                         }
@@ -4296,37 +4501,52 @@ impl FirestoreService {
                                     .iter()
                                     .filter_map(|seg| {
                                         Some(TranscriptSegment {
-                                            id: seg.get("id")
+                                            id: seg
+                                                .get("id")
                                                 .and_then(|s| s.as_str())
                                                 .map(|s| s.to_string()),
                                             text: seg.get("text")?.as_str()?.to_string(),
-                                            speaker: seg.get("speaker")
+                                            speaker: seg
+                                                .get("speaker")
                                                 .and_then(|s| s.as_str())
                                                 .unwrap_or("SPEAKER_00")
                                                 .to_string(),
-                                            speaker_id: seg.get("speaker_id")
+                                            speaker_id: seg
+                                                .get("speaker_id")
                                                 .and_then(|s| s.as_i64())
-                                                .unwrap_or(0) as i32,
-                                            is_user: seg.get("is_user")
+                                                .unwrap_or(0)
+                                                as i32,
+                                            is_user: seg
+                                                .get("is_user")
                                                 .and_then(|s| s.as_bool())
                                                 .unwrap_or(false),
-                                            person_id: seg.get("person_id")
+                                            person_id: seg
+                                                .get("person_id")
                                                 .and_then(|s| s.as_str())
                                                 .map(|s| s.to_string()),
-                                            start: seg.get("start")
+                                            start: seg
+                                                .get("start")
                                                 .and_then(|s| s.as_f64())
                                                 .unwrap_or(0.0),
-                                            end: seg.get("end")
+                                            end: seg
+                                                .get("end")
                                                 .and_then(|s| s.as_f64())
                                                 .unwrap_or(0.0),
                                         })
                                     })
                                     .collect();
-                                tracing::debug!("Decrypted {} transcript segments (uncompressed) for user {}", result.len(), uid);
+                                tracing::debug!(
+                                    "Decrypted {} transcript segments (uncompressed) for user {}",
+                                    result.len(),
+                                    uid
+                                );
                                 return Ok(result);
                             }
                             Err(e) => {
-                                tracing::warn!("Failed to parse decrypted transcript segments JSON: {}", e);
+                                tracing::warn!(
+                                    "Failed to parse decrypted transcript segments JSON: {}",
+                                    e
+                                );
                                 return Ok(vec![]);
                             }
                         }
@@ -4339,7 +4559,9 @@ impl FirestoreService {
                 }
             } else {
                 // String but not enhanced - shouldn't happen, but return empty
-                tracing::debug!("Transcript segments are string format but not enhanced protection");
+                tracing::debug!(
+                    "Transcript segments are string format but not enhanced protection"
+                );
                 return Ok(vec![]);
             }
         }
@@ -4374,7 +4596,9 @@ impl FirestoreService {
                     Some(TranscriptSegment {
                         id: self.parse_string(seg_fields, "id"),
                         text: self.parse_string(seg_fields, "text").unwrap_or_default(),
-                        speaker: self.parse_string(seg_fields, "speaker").unwrap_or_else(|| "SPEAKER_00".to_string()),
+                        speaker: self
+                            .parse_string(seg_fields, "speaker")
+                            .unwrap_or_else(|| "SPEAKER_00".to_string()),
                         speaker_id: self.parse_int(seg_fields, "speaker_id").unwrap_or(0),
                         is_user: self.parse_bool(seg_fields, "is_user").unwrap_or(false),
                         person_id: self.parse_string(seg_fields, "person_id"),
@@ -4397,10 +4621,8 @@ impl FirestoreService {
         use std::io::Read;
 
         // Decode base64 to bytes
-        let compressed_bytes = base64::Engine::decode(
-            &base64::engine::general_purpose::STANDARD,
-            b64_str,
-        )?;
+        let compressed_bytes =
+            base64::Engine::decode(&base64::engine::general_purpose::STANDARD, b64_str)?;
 
         // Decompress with zlib
         let mut decoder = ZlibDecoder::new(&compressed_bytes[..]);
@@ -4415,7 +4637,8 @@ impl FirestoreService {
             .iter()
             .filter_map(|seg| {
                 Some(TranscriptSegment {
-                    id: seg.get("id")
+                    id: seg
+                        .get("id")
                         .and_then(|s| s.as_str())
                         .map(|s| s.to_string()),
                     text: seg.get("text")?.as_str()?.to_string(),
@@ -4424,10 +4647,7 @@ impl FirestoreService {
                         .and_then(|s| s.as_str())
                         .unwrap_or("SPEAKER_00")
                         .to_string(),
-                    speaker_id: seg
-                        .get("speaker_id")
-                        .and_then(|s| s.as_i64())
-                        .unwrap_or(0) as i32,
+                    speaker_id: seg.get("speaker_id").and_then(|s| s.as_i64()).unwrap_or(0) as i32,
                     is_user: seg
                         .get("is_user")
                         .and_then(|s| s.as_bool())
@@ -4436,14 +4656,8 @@ impl FirestoreService {
                         .get("person_id")
                         .and_then(|s| s.as_str())
                         .map(|s| s.to_string()),
-                    start: seg
-                        .get("start")
-                        .and_then(|s| s.as_f64())
-                        .unwrap_or(0.0),
-                    end: seg
-                        .get("end")
-                        .and_then(|s| s.as_f64())
-                        .unwrap_or(0.0),
+                    start: seg.get("start").and_then(|s| s.as_f64()).unwrap_or(0.0),
+                    end: seg.get("end").and_then(|s| s.as_f64()).unwrap_or(0.0),
                 })
             })
             .collect())
@@ -4454,55 +4668,105 @@ impl FirestoreService {
     /// If encryption_secret is available, also encrypts (enhanced protection).
     fn conversation_to_firestore(&self, conv: &Conversation, uid: &str) -> Value {
         // Build action_items array for structured
-        let action_items_values: Vec<Value> = conv.structured.action_items.iter().map(|item| {
-            let mut fields = serde_json::Map::new();
-            fields.insert("description".to_string(), json!({"stringValue": item.description}));
-            fields.insert("completed".to_string(), json!({"booleanValue": item.completed}));
-            if let Some(due_at) = &item.due_at {
-                fields.insert("due_at".to_string(), json!({"timestampValue": due_at.to_rfc3339()}));
-            }
-            json!({"mapValue": {"fields": fields}})
-        }).collect();
+        let action_items_values: Vec<Value> = conv
+            .structured
+            .action_items
+            .iter()
+            .map(|item| {
+                let mut fields = serde_json::Map::new();
+                fields.insert(
+                    "description".to_string(),
+                    json!({"stringValue": item.description}),
+                );
+                fields.insert(
+                    "completed".to_string(),
+                    json!({"booleanValue": item.completed}),
+                );
+                if let Some(due_at) = &item.due_at {
+                    fields.insert(
+                        "due_at".to_string(),
+                        json!({"timestampValue": due_at.to_rfc3339()}),
+                    );
+                }
+                json!({"mapValue": {"fields": fields}})
+            })
+            .collect();
 
         // Build events array for structured
-        let events_values: Vec<Value> = conv.structured.events.iter().map(|event| {
-            json!({
-                "mapValue": {
-                    "fields": {
-                        "title": {"stringValue": event.title},
-                        "description": {"stringValue": event.description},
-                        "start": {"timestampValue": event.start.to_rfc3339()},
-                        "duration": {"integerValue": event.duration.to_string()}
+        let events_values: Vec<Value> = conv
+            .structured
+            .events
+            .iter()
+            .map(|event| {
+                json!({
+                    "mapValue": {
+                        "fields": {
+                            "title": {"stringValue": event.title},
+                            "description": {"stringValue": event.description},
+                            "start": {"timestampValue": event.start.to_rfc3339()},
+                            "duration": {"integerValue": event.duration.to_string()}
+                        }
                     }
-                }
+                })
             })
-        }).collect();
+            .collect();
 
         // Build apps_results array
-        let apps_results_values: Vec<Value> = conv.apps_results.iter().map(|result| {
-            let mut fields = serde_json::Map::new();
-            if let Some(app_id) = &result.app_id {
-                fields.insert("app_id".to_string(), json!({"stringValue": app_id}));
-            }
-            fields.insert("content".to_string(), json!({"stringValue": result.content}));
-            json!({"mapValue": {"fields": fields}})
-        }).collect();
+        let apps_results_values: Vec<Value> = conv
+            .apps_results
+            .iter()
+            .map(|result| {
+                let mut fields = serde_json::Map::new();
+                if let Some(app_id) = &result.app_id {
+                    fields.insert("app_id".to_string(), json!({"stringValue": app_id}));
+                }
+                fields.insert(
+                    "content".to_string(),
+                    json!({"stringValue": result.content}),
+                );
+                json!({"mapValue": {"fields": fields}})
+            })
+            .collect();
 
         // Build the main document
         let mut fields = serde_json::Map::new();
 
         // CRITICAL: Include the id field - Python backend requires this
         fields.insert("id".to_string(), json!({"stringValue": conv.id}));
-        fields.insert("created_at".to_string(), json!({"timestampValue": conv.created_at.to_rfc3339()}));
-        fields.insert("started_at".to_string(), json!({"timestampValue": conv.started_at.to_rfc3339()}));
-        fields.insert("finished_at".to_string(), json!({"timestampValue": conv.finished_at.to_rfc3339()}));
-        fields.insert("source".to_string(), json!({"stringValue": format!("{:?}", conv.source).to_lowercase()}));
-        fields.insert("language".to_string(), json!({"stringValue": conv.language}));
-        fields.insert("status".to_string(), json!({"stringValue": format!("{:?}", conv.status).to_lowercase()}));
-        fields.insert("discarded".to_string(), json!({"booleanValue": conv.discarded}));
+        fields.insert(
+            "created_at".to_string(),
+            json!({"timestampValue": conv.created_at.to_rfc3339()}),
+        );
+        fields.insert(
+            "started_at".to_string(),
+            json!({"timestampValue": conv.started_at.to_rfc3339()}),
+        );
+        fields.insert(
+            "finished_at".to_string(),
+            json!({"timestampValue": conv.finished_at.to_rfc3339()}),
+        );
+        fields.insert(
+            "source".to_string(),
+            json!({"stringValue": format!("{:?}", conv.source).to_lowercase()}),
+        );
+        fields.insert(
+            "language".to_string(),
+            json!({"stringValue": conv.language}),
+        );
+        fields.insert(
+            "status".to_string(),
+            json!({"stringValue": format!("{:?}", conv.status).to_lowercase()}),
+        );
+        fields.insert(
+            "discarded".to_string(),
+            json!({"booleanValue": conv.discarded}),
+        );
         fields.insert("deleted".to_string(), json!({"booleanValue": conv.deleted}));
         fields.insert("starred".to_string(), json!({"booleanValue": conv.starred}));
-        fields.insert("is_locked".to_string(), json!({"booleanValue": conv.is_locked}));
+        fields.insert(
+            "is_locked".to_string(),
+            json!({"booleanValue": conv.is_locked}),
+        );
 
         // Add folder_id if present
         if let Some(folder_id) = &conv.folder_id {
@@ -4513,47 +4777,95 @@ impl FirestoreService {
         if let Some(geo) = &conv.geolocation {
             let mut geo_fields = serde_json::Map::new();
             if let Some(place_id) = &geo.google_place_id {
-                geo_fields.insert("google_place_id".to_string(), json!({"stringValue": place_id}));
+                geo_fields.insert(
+                    "google_place_id".to_string(),
+                    json!({"stringValue": place_id}),
+                );
             }
             geo_fields.insert("latitude".to_string(), json!({"doubleValue": geo.latitude}));
-            geo_fields.insert("longitude".to_string(), json!({"doubleValue": geo.longitude}));
+            geo_fields.insert(
+                "longitude".to_string(),
+                json!({"doubleValue": geo.longitude}),
+            );
             if let Some(address) = &geo.address {
                 geo_fields.insert("address".to_string(), json!({"stringValue": address}));
             }
             if let Some(loc_type) = &geo.location_type {
-                geo_fields.insert("location_type".to_string(), json!({"stringValue": loc_type}));
+                geo_fields.insert(
+                    "location_type".to_string(),
+                    json!({"stringValue": loc_type}),
+                );
             }
-            fields.insert("geolocation".to_string(), json!({"mapValue": {"fields": geo_fields}}));
+            fields.insert(
+                "geolocation".to_string(),
+                json!({"mapValue": {"fields": geo_fields}}),
+            );
         }
 
         // Add photos array
         if !conv.photos.is_empty() {
-            let photos_values: Vec<Value> = conv.photos.iter().map(|photo| {
-                let mut photo_fields = serde_json::Map::new();
-                if let Some(id) = &photo.id {
-                    photo_fields.insert("id".to_string(), json!({"stringValue": id}));
-                }
-                photo_fields.insert("base64".to_string(), json!({"stringValue": &photo.base64}));
-                if let Some(desc) = &photo.description {
-                    photo_fields.insert("description".to_string(), json!({"stringValue": desc}));
-                }
-                photo_fields.insert("created_at".to_string(), json!({"timestampValue": photo.created_at.to_rfc3339()}));
-                photo_fields.insert("discarded".to_string(), json!({"booleanValue": photo.discarded}));
-                json!({"mapValue": {"fields": photo_fields}})
-            }).collect();
-            fields.insert("photos".to_string(), json!({"arrayValue": {"values": photos_values}}));
+            let photos_values: Vec<Value> = conv
+                .photos
+                .iter()
+                .map(|photo| {
+                    let mut photo_fields = serde_json::Map::new();
+                    if let Some(id) = &photo.id {
+                        photo_fields.insert("id".to_string(), json!({"stringValue": id}));
+                    }
+                    photo_fields
+                        .insert("base64".to_string(), json!({"stringValue": &photo.base64}));
+                    if let Some(desc) = &photo.description {
+                        photo_fields
+                            .insert("description".to_string(), json!({"stringValue": desc}));
+                    }
+                    photo_fields.insert(
+                        "created_at".to_string(),
+                        json!({"timestampValue": photo.created_at.to_rfc3339()}),
+                    );
+                    photo_fields.insert(
+                        "discarded".to_string(),
+                        json!({"booleanValue": photo.discarded}),
+                    );
+                    json!({"mapValue": {"fields": photo_fields}})
+                })
+                .collect();
+            fields.insert(
+                "photos".to_string(),
+                json!({"arrayValue": {"values": photos_values}}),
+            );
         }
 
         // Build structured with action_items and events
         let mut structured_fields = serde_json::Map::new();
-        structured_fields.insert("title".to_string(), json!({"stringValue": conv.structured.title}));
-        structured_fields.insert("overview".to_string(), json!({"stringValue": conv.structured.overview}));
-        structured_fields.insert("emoji".to_string(), json!({"stringValue": conv.structured.emoji}));
-        structured_fields.insert("category".to_string(), json!({"stringValue": format!("{:?}", conv.structured.category).to_lowercase()}));
-        structured_fields.insert("action_items".to_string(), json!({"arrayValue": {"values": action_items_values}}));
-        structured_fields.insert("events".to_string(), json!({"arrayValue": {"values": events_values}}));
+        structured_fields.insert(
+            "title".to_string(),
+            json!({"stringValue": conv.structured.title}),
+        );
+        structured_fields.insert(
+            "overview".to_string(),
+            json!({"stringValue": conv.structured.overview}),
+        );
+        structured_fields.insert(
+            "emoji".to_string(),
+            json!({"stringValue": conv.structured.emoji}),
+        );
+        structured_fields.insert(
+            "category".to_string(),
+            json!({"stringValue": format!("{:?}", conv.structured.category).to_lowercase()}),
+        );
+        structured_fields.insert(
+            "action_items".to_string(),
+            json!({"arrayValue": {"values": action_items_values}}),
+        );
+        structured_fields.insert(
+            "events".to_string(),
+            json!({"arrayValue": {"values": events_values}}),
+        );
 
-        fields.insert("structured".to_string(), json!({"mapValue": {"fields": structured_fields}}));
+        fields.insert(
+            "structured".to_string(),
+            json!({"mapValue": {"fields": structured_fields}}),
+        );
 
         // Add transcript_segments — compressed (and optionally encrypted) to match Python backend
         {
@@ -4562,24 +4874,29 @@ impl FirestoreService {
             use std::io::Write;
 
             // Step 1: Serialize segments to JSON array (matching Python's json.dumps format)
-            let segments_json: Vec<serde_json::Value> = conv.transcript_segments.iter().map(|seg| {
-                let mut segment = json!({
-                    "text": seg.text,
-                    "speaker": seg.speaker,
-                    "speaker_id": seg.speaker_id,
-                    "is_user": seg.is_user,
-                    "start": seg.start,
-                    "end": seg.end
-                });
-                if let Some(id) = &seg.id {
-                    segment["id"] = json!(id);
-                }
-                if let Some(person_id) = &seg.person_id {
-                    segment["person_id"] = json!(person_id);
-                }
-                segment
-            }).collect();
-            let json_str = serde_json::to_string(&segments_json).unwrap_or_else(|_| "[]".to_string());
+            let segments_json: Vec<serde_json::Value> = conv
+                .transcript_segments
+                .iter()
+                .map(|seg| {
+                    let mut segment = json!({
+                        "text": seg.text,
+                        "speaker": seg.speaker,
+                        "speaker_id": seg.speaker_id,
+                        "is_user": seg.is_user,
+                        "start": seg.start,
+                        "end": seg.end
+                    });
+                    if let Some(id) = &seg.id {
+                        segment["id"] = json!(id);
+                    }
+                    if let Some(person_id) = &seg.person_id {
+                        segment["person_id"] = json!(person_id);
+                    }
+                    segment
+                })
+                .collect();
+            let json_str =
+                serde_json::to_string(&segments_json).unwrap_or_else(|_| "[]".to_string());
 
             // Step 2: Zlib compress
             let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
@@ -4592,29 +4909,51 @@ impl FirestoreService {
                 let hex_str = hex::encode(&compressed_bytes);
                 match encryption::encrypt(&hex_str, uid, secret) {
                     Ok(encrypted) => {
-                        fields.insert("transcript_segments".to_string(), json!({"stringValue": encrypted}));
-                        fields.insert("data_protection_level".to_string(), json!({"stringValue": "enhanced"}));
+                        fields.insert(
+                            "transcript_segments".to_string(),
+                            json!({"stringValue": encrypted}),
+                        );
+                        fields.insert(
+                            "data_protection_level".to_string(),
+                            json!({"stringValue": "enhanced"}),
+                        );
                     }
                     Err(e) => {
                         tracing::warn!("Failed to encrypt transcript segments: {}, falling back to compressed bytes", e);
-                        let b64 = base64::engine::general_purpose::STANDARD.encode(&compressed_bytes);
-                        fields.insert("transcript_segments".to_string(), json!({"bytesValue": b64}));
+                        let b64 =
+                            base64::engine::general_purpose::STANDARD.encode(&compressed_bytes);
+                        fields.insert(
+                            "transcript_segments".to_string(),
+                            json!({"bytesValue": b64}),
+                        );
                     }
                 }
             } else {
                 // Standard: store as bytesValue (Firestore REST API expects base64 for bytes)
                 let b64 = base64::engine::general_purpose::STANDARD.encode(&compressed_bytes);
-                fields.insert("transcript_segments".to_string(), json!({"bytesValue": b64}));
+                fields.insert(
+                    "transcript_segments".to_string(),
+                    json!({"bytesValue": b64}),
+                );
             }
-            fields.insert("transcript_segments_compressed".to_string(), json!({"booleanValue": true}));
+            fields.insert(
+                "transcript_segments_compressed".to_string(),
+                json!({"booleanValue": true}),
+            );
         }
 
         // Add apps_results
-        fields.insert("apps_results".to_string(), json!({"arrayValue": {"values": apps_results_values}}));
+        fields.insert(
+            "apps_results".to_string(),
+            json!({"arrayValue": {"values": apps_results_values}}),
+        );
 
         // Add input_device_name if present
         if let Some(device_name) = &conv.input_device_name {
-            fields.insert("input_device_name".to_string(), json!({"stringValue": device_name}));
+            fields.insert(
+                "input_device_name".to_string(),
+                json!({"stringValue": device_name}),
+            );
         }
 
         json!({"fields": fields})
@@ -4622,10 +4961,18 @@ impl FirestoreService {
 
     // Field parsing helpers
     fn parse_string(&self, fields: &Value, key: &str) -> Option<String> {
-        fields.get(key)?.get("stringValue")?.as_str().map(|s| s.to_string())
+        fields
+            .get(key)?
+            .get("stringValue")?
+            .as_str()
+            .map(|s| s.to_string())
     }
 
-    fn parse_bool(&self, fields: &Value, key: &str) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_bool(
+        &self,
+        fields: &Value,
+        key: &str,
+    ) -> Result<bool, Box<dyn std::error::Error + Send + Sync>> {
         fields
             .get(key)
             .and_then(|v| v.get("booleanValue"))
@@ -4842,8 +5189,12 @@ impl FirestoreService {
         let fields = doc.get("fields").unwrap_or(&empty);
 
         Ok(DailySummarySettings {
-            enabled: self.parse_bool(fields, "daily_summary_enabled").unwrap_or(true),
-            hour: self.parse_int(fields, "daily_summary_hour_local").unwrap_or(22),
+            enabled: self
+                .parse_bool(fields, "daily_summary_enabled")
+                .unwrap_or(true),
+            hour: self
+                .parse_int(fields, "daily_summary_hour_local")
+                .unwrap_or(22),
         })
     }
 
@@ -4865,8 +5216,12 @@ impl FirestoreService {
             "daily_summary_hour_local": {"integerValue": new_hour.to_string()}
         });
 
-        self.update_user_fields(uid, fields, &["daily_summary_enabled", "daily_summary_hour_local"])
-            .await?;
+        self.update_user_fields(
+            uid,
+            fields,
+            &["daily_summary_enabled", "daily_summary_hour_local"],
+        )
+        .await?;
 
         Ok(DailySummarySettings {
             enabled: new_enabled,
@@ -4891,7 +5246,9 @@ impl FirestoreService {
 
         if let Some(pref_fields) = prefs {
             Ok(TranscriptionPreferences {
-                single_language_mode: self.parse_bool(pref_fields, "single_language_mode").unwrap_or(false),
+                single_language_mode: self
+                    .parse_bool(pref_fields, "single_language_mode")
+                    .unwrap_or(false),
                 vocabulary: self.parse_string_array(pref_fields, "vocabulary"),
             })
         } else {
@@ -4975,12 +5332,14 @@ impl FirestoreService {
         };
 
         // Parse shared settings
-        let shared = self.parse_sub_map(sf, "shared").map(|f| SharedAssistantSettingsData {
-            cooldown_interval: self.parse_int(f, "cooldown_interval"),
-            glow_overlay_enabled: self.parse_bool(f, "glow_overlay_enabled").ok(),
-            analysis_delay: self.parse_int(f, "analysis_delay"),
-            screen_analysis_enabled: self.parse_bool(f, "screen_analysis_enabled").ok(),
-        });
+        let shared = self
+            .parse_sub_map(sf, "shared")
+            .map(|f| SharedAssistantSettingsData {
+                cooldown_interval: self.parse_int(f, "cooldown_interval"),
+                glow_overlay_enabled: self.parse_bool(f, "glow_overlay_enabled").ok(),
+                analysis_delay: self.parse_int(f, "analysis_delay"),
+                screen_analysis_enabled: self.parse_bool(f, "screen_analysis_enabled").ok(),
+            });
 
         // Parse focus settings
         let focus = self.parse_sub_map(sf, "focus").map(|f| FocusSettingsData {
@@ -5003,28 +5362,34 @@ impl FirestoreService {
         });
 
         // Parse advice settings
-        let advice = self.parse_sub_map(sf, "advice").map(|f| AdviceSettingsData {
-            enabled: self.parse_bool(f, "enabled").ok(),
-            analysis_prompt: self.parse_string(f, "analysis_prompt"),
-            extraction_interval: self.parse_float(f, "extraction_interval"),
-            min_confidence: self.parse_float(f, "min_confidence"),
-            notifications_enabled: self.parse_bool(f, "notifications_enabled").ok(),
-            excluded_apps: Some(self.parse_string_array(f, "excluded_apps")),
-        });
+        let advice = self
+            .parse_sub_map(sf, "advice")
+            .map(|f| AdviceSettingsData {
+                enabled: self.parse_bool(f, "enabled").ok(),
+                analysis_prompt: self.parse_string(f, "analysis_prompt"),
+                extraction_interval: self.parse_float(f, "extraction_interval"),
+                min_confidence: self.parse_float(f, "min_confidence"),
+                notifications_enabled: self.parse_bool(f, "notifications_enabled").ok(),
+                excluded_apps: Some(self.parse_string_array(f, "excluded_apps")),
+            });
 
         // Parse memory settings
-        let memory = self.parse_sub_map(sf, "memory").map(|f| MemorySettingsData {
-            enabled: self.parse_bool(f, "enabled").ok(),
-            analysis_prompt: self.parse_string(f, "analysis_prompt"),
-            extraction_interval: self.parse_float(f, "extraction_interval"),
-            min_confidence: self.parse_float(f, "min_confidence"),
-            notifications_enabled: self.parse_bool(f, "notifications_enabled").ok(),
-            excluded_apps: Some(self.parse_string_array(f, "excluded_apps")),
-        });
+        let memory = self
+            .parse_sub_map(sf, "memory")
+            .map(|f| MemorySettingsData {
+                enabled: self.parse_bool(f, "enabled").ok(),
+                analysis_prompt: self.parse_string(f, "analysis_prompt"),
+                extraction_interval: self.parse_float(f, "extraction_interval"),
+                min_confidence: self.parse_float(f, "min_confidence"),
+                notifications_enabled: self.parse_bool(f, "notifications_enabled").ok(),
+                excluded_apps: Some(self.parse_string_array(f, "excluded_apps")),
+            });
 
-        let floating_bar = self.parse_sub_map(sf, "floating_bar").map(|f| FloatingBarSettingsData {
-            voice_answers_enabled: self.parse_bool(f, "voice_answers_enabled").ok(),
-        });
+        let floating_bar =
+            self.parse_sub_map(sf, "floating_bar")
+                .map(|f| FloatingBarSettingsData {
+                    voice_answers_enabled: self.parse_bool(f, "voice_answers_enabled").ok(),
+                });
 
         // Read top-level update_channel from user doc (not from assistant_settings sub-map)
         let update_channel = self.parse_string(fields, "update_channel");
@@ -5056,13 +5421,27 @@ impl FirestoreService {
             let new = data.shared.clone().unwrap_or_default();
             let mut m = serde_json::Map::new();
             let ci = new.cooldown_interval.or(cur.cooldown_interval);
-            if let Some(v) = ci { m.insert("cooldown_interval".into(), json!({"integerValue": v.to_string()})); }
+            if let Some(v) = ci {
+                m.insert(
+                    "cooldown_interval".into(),
+                    json!({"integerValue": v.to_string()}),
+                );
+            }
             let go = new.glow_overlay_enabled.or(cur.glow_overlay_enabled);
-            if let Some(v) = go { m.insert("glow_overlay_enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = go {
+                m.insert("glow_overlay_enabled".into(), json!({"booleanValue": v}));
+            }
             let ad = new.analysis_delay.or(cur.analysis_delay);
-            if let Some(v) = ad { m.insert("analysis_delay".into(), json!({"integerValue": v.to_string()})); }
+            if let Some(v) = ad {
+                m.insert(
+                    "analysis_delay".into(),
+                    json!({"integerValue": v.to_string()}),
+                );
+            }
             let sa = new.screen_analysis_enabled.or(cur.screen_analysis_enabled);
-            if let Some(v) = sa { m.insert("screen_analysis_enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = sa {
+                m.insert("screen_analysis_enabled".into(), json!({"booleanValue": v}));
+            }
             if !m.is_empty() {
                 top_fields.insert("shared".into(), self.build_sub_map_value(m));
             }
@@ -5074,15 +5453,28 @@ impl FirestoreService {
             let new = data.focus.clone().unwrap_or_default();
             let mut m = serde_json::Map::new();
             let en = new.enabled.or(cur.enabled);
-            if let Some(v) = en { m.insert("enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = en {
+                m.insert("enabled".into(), json!({"booleanValue": v}));
+            }
             let ap = new.analysis_prompt.or(cur.analysis_prompt);
-            if let Some(v) = ap { m.insert("analysis_prompt".into(), json!({"stringValue": v})); }
+            if let Some(v) = ap {
+                m.insert("analysis_prompt".into(), json!({"stringValue": v}));
+            }
             let ci = new.cooldown_interval.or(cur.cooldown_interval);
-            if let Some(v) = ci { m.insert("cooldown_interval".into(), json!({"integerValue": v.to_string()})); }
+            if let Some(v) = ci {
+                m.insert(
+                    "cooldown_interval".into(),
+                    json!({"integerValue": v.to_string()}),
+                );
+            }
             let ne = new.notifications_enabled.or(cur.notifications_enabled);
-            if let Some(v) = ne { m.insert("notifications_enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = ne {
+                m.insert("notifications_enabled".into(), json!({"booleanValue": v}));
+            }
             let ea = new.excluded_apps.or(cur.excluded_apps);
-            if let Some(v) = ea { m.insert("excluded_apps".into(), self.build_string_array_value(&v)); }
+            if let Some(v) = ea {
+                m.insert("excluded_apps".into(), self.build_string_array_value(&v));
+            }
             if !m.is_empty() {
                 top_fields.insert("focus".into(), self.build_sub_map_value(m));
             }
@@ -5094,19 +5486,33 @@ impl FirestoreService {
             let new = data.task.clone().unwrap_or_default();
             let mut m = serde_json::Map::new();
             let en = new.enabled.or(cur.enabled);
-            if let Some(v) = en { m.insert("enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = en {
+                m.insert("enabled".into(), json!({"booleanValue": v}));
+            }
             let ap = new.analysis_prompt.or(cur.analysis_prompt);
-            if let Some(v) = ap { m.insert("analysis_prompt".into(), json!({"stringValue": v})); }
+            if let Some(v) = ap {
+                m.insert("analysis_prompt".into(), json!({"stringValue": v}));
+            }
             let ei = new.extraction_interval.or(cur.extraction_interval);
-            if let Some(v) = ei { m.insert("extraction_interval".into(), json!({"doubleValue": v})); }
+            if let Some(v) = ei {
+                m.insert("extraction_interval".into(), json!({"doubleValue": v}));
+            }
             let mc = new.min_confidence.or(cur.min_confidence);
-            if let Some(v) = mc { m.insert("min_confidence".into(), json!({"doubleValue": v})); }
+            if let Some(v) = mc {
+                m.insert("min_confidence".into(), json!({"doubleValue": v}));
+            }
             let aa = new.allowed_apps.or(cur.allowed_apps);
-            if let Some(v) = aa { m.insert("allowed_apps".into(), self.build_string_array_value(&v)); }
+            if let Some(v) = aa {
+                m.insert("allowed_apps".into(), self.build_string_array_value(&v));
+            }
             let ne = new.notifications_enabled.or(cur.notifications_enabled);
-            if let Some(v) = ne { m.insert("notifications_enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = ne {
+                m.insert("notifications_enabled".into(), json!({"booleanValue": v}));
+            }
             let bk = new.browser_keywords.or(cur.browser_keywords);
-            if let Some(v) = bk { m.insert("browser_keywords".into(), self.build_string_array_value(&v)); }
+            if let Some(v) = bk {
+                m.insert("browser_keywords".into(), self.build_string_array_value(&v));
+            }
             if !m.is_empty() {
                 top_fields.insert("task".into(), self.build_sub_map_value(m));
             }
@@ -5118,17 +5524,29 @@ impl FirestoreService {
             let new = data.advice.clone().unwrap_or_default();
             let mut m = serde_json::Map::new();
             let en = new.enabled.or(cur.enabled);
-            if let Some(v) = en { m.insert("enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = en {
+                m.insert("enabled".into(), json!({"booleanValue": v}));
+            }
             let ap = new.analysis_prompt.or(cur.analysis_prompt);
-            if let Some(v) = ap { m.insert("analysis_prompt".into(), json!({"stringValue": v})); }
+            if let Some(v) = ap {
+                m.insert("analysis_prompt".into(), json!({"stringValue": v}));
+            }
             let ei = new.extraction_interval.or(cur.extraction_interval);
-            if let Some(v) = ei { m.insert("extraction_interval".into(), json!({"doubleValue": v})); }
+            if let Some(v) = ei {
+                m.insert("extraction_interval".into(), json!({"doubleValue": v}));
+            }
             let mc = new.min_confidence.or(cur.min_confidence);
-            if let Some(v) = mc { m.insert("min_confidence".into(), json!({"doubleValue": v})); }
+            if let Some(v) = mc {
+                m.insert("min_confidence".into(), json!({"doubleValue": v}));
+            }
             let ne = new.notifications_enabled.or(cur.notifications_enabled);
-            if let Some(v) = ne { m.insert("notifications_enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = ne {
+                m.insert("notifications_enabled".into(), json!({"booleanValue": v}));
+            }
             let ea = new.excluded_apps.or(cur.excluded_apps);
-            if let Some(v) = ea { m.insert("excluded_apps".into(), self.build_string_array_value(&v)); }
+            if let Some(v) = ea {
+                m.insert("excluded_apps".into(), self.build_string_array_value(&v));
+            }
             if !m.is_empty() {
                 top_fields.insert("advice".into(), self.build_sub_map_value(m));
             }
@@ -5140,17 +5558,29 @@ impl FirestoreService {
             let new = data.memory.clone().unwrap_or_default();
             let mut m = serde_json::Map::new();
             let en = new.enabled.or(cur.enabled);
-            if let Some(v) = en { m.insert("enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = en {
+                m.insert("enabled".into(), json!({"booleanValue": v}));
+            }
             let ap = new.analysis_prompt.or(cur.analysis_prompt);
-            if let Some(v) = ap { m.insert("analysis_prompt".into(), json!({"stringValue": v})); }
+            if let Some(v) = ap {
+                m.insert("analysis_prompt".into(), json!({"stringValue": v}));
+            }
             let ei = new.extraction_interval.or(cur.extraction_interval);
-            if let Some(v) = ei { m.insert("extraction_interval".into(), json!({"doubleValue": v})); }
+            if let Some(v) = ei {
+                m.insert("extraction_interval".into(), json!({"doubleValue": v}));
+            }
             let mc = new.min_confidence.or(cur.min_confidence);
-            if let Some(v) = mc { m.insert("min_confidence".into(), json!({"doubleValue": v})); }
+            if let Some(v) = mc {
+                m.insert("min_confidence".into(), json!({"doubleValue": v}));
+            }
             let ne = new.notifications_enabled.or(cur.notifications_enabled);
-            if let Some(v) = ne { m.insert("notifications_enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = ne {
+                m.insert("notifications_enabled".into(), json!({"booleanValue": v}));
+            }
             let ea = new.excluded_apps.or(cur.excluded_apps);
-            if let Some(v) = ea { m.insert("excluded_apps".into(), self.build_string_array_value(&v)); }
+            if let Some(v) = ea {
+                m.insert("excluded_apps".into(), self.build_string_array_value(&v));
+            }
             if !m.is_empty() {
                 top_fields.insert("memory".into(), self.build_sub_map_value(m));
             }
@@ -5161,7 +5591,9 @@ impl FirestoreService {
             let new = data.floating_bar.clone().unwrap_or_default();
             let mut m = serde_json::Map::new();
             let vae = new.voice_answers_enabled.or(cur.voice_answers_enabled);
-            if let Some(v) = vae { m.insert("voice_answers_enabled".into(), json!({"booleanValue": v})); }
+            if let Some(v) = vae {
+                m.insert("voice_answers_enabled".into(), json!({"booleanValue": v}));
+            }
             if !m.is_empty() {
                 top_fields.insert("floating_bar".into(), self.build_sub_map_value(m));
             }
@@ -5176,7 +5608,8 @@ impl FirestoreService {
                 }
             });
 
-            self.update_user_fields(uid, fields, &["assistant_settings"]).await?;
+            self.update_user_fields(uid, fields, &["assistant_settings"])
+                .await?;
         }
 
         // Write update_channel as top-level field on user doc (not inside assistant_settings)
@@ -5186,7 +5619,8 @@ impl FirestoreService {
                     "stringValue": channel
                 }
             });
-            self.update_user_fields(uid, fields, &["update_channel"]).await?;
+            self.update_user_fields(uid, fields, &["update_channel"])
+                .await?;
         }
 
         // Return merged state
@@ -5213,22 +5647,16 @@ impl FirestoreService {
         let empty = json!({});
         let fields = doc.get("fields").unwrap_or(&empty);
 
-        Ok(self.parse_string(fields, "language").unwrap_or_else(|| "en".to_string()))
+        Ok(self
+            .parse_string(fields, "language")
+            .unwrap_or_else(|| "en".to_string()))
     }
 
     /// Update user language preference
     /// Languages supported by Deepgram Nova-3 multi-language auto-detection.
     const MULTI_LANGUAGE_SUPPORTED: &[&str] = &[
-        "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ",
-        "es", "es-419",
-        "fr", "fr-CA",
-        "de",
-        "hi",
-        "ru",
-        "pt", "pt-BR", "pt-PT",
-        "ja",
-        "it",
-        "nl",
+        "en", "en-US", "en-AU", "en-GB", "en-IN", "en-NZ", "es", "es-419", "fr", "fr-CA", "de",
+        "hi", "ru", "pt", "pt-BR", "pt-PT", "ja", "it", "nl",
     ];
 
     pub async fn update_user_language(
@@ -5240,11 +5668,13 @@ impl FirestoreService {
         let lang_fields = json!({
             "language": {"stringValue": language}
         });
-        self.update_user_fields(uid, lang_fields, &["language"]).await?;
+        self.update_user_fields(uid, lang_fields, &["language"])
+            .await?;
 
         // Auto-set single_language_mode based on whether the language supports multi-language
         let single_language_mode = !Self::MULTI_LANGUAGE_SUPPORTED.contains(&language);
-        self.update_transcription_preferences(uid, Some(single_language_mode), None).await?;
+        self.update_transcription_preferences(uid, Some(single_language_mode), None)
+            .await?;
 
         Ok(())
     }
@@ -5258,7 +5688,9 @@ impl FirestoreService {
         let empty = json!({});
         let fields = doc.get("fields").unwrap_or(&empty);
 
-        Ok(self.parse_bool(fields, "store_recording_permission").unwrap_or(false))
+        Ok(self
+            .parse_bool(fields, "store_recording_permission")
+            .unwrap_or(false))
     }
 
     /// Set recording permission for a user
@@ -5271,7 +5703,8 @@ impl FirestoreService {
             "store_recording_permission": {"booleanValue": enabled}
         });
 
-        self.update_user_fields(uid, fields, &["store_recording_permission"]).await
+        self.update_user_fields(uid, fields, &["store_recording_permission"])
+            .await
     }
 
     /// Get private cloud sync setting for a user
@@ -5284,7 +5717,9 @@ impl FirestoreService {
         let fields = doc.get("fields").unwrap_or(&empty);
 
         // Default to true if not set
-        Ok(self.parse_bool(fields, "private_cloud_sync_enabled").unwrap_or(true))
+        Ok(self
+            .parse_bool(fields, "private_cloud_sync_enabled")
+            .unwrap_or(true))
     }
 
     /// Set private cloud sync setting for a user
@@ -5297,7 +5732,8 @@ impl FirestoreService {
             "private_cloud_sync_enabled": {"booleanValue": enabled}
         });
 
-        self.update_user_fields(uid, fields, &["private_cloud_sync_enabled"]).await
+        self.update_user_fields(uid, fields, &["private_cloud_sync_enabled"])
+            .await
     }
 
     /// Get notification settings for a user
@@ -5310,8 +5746,12 @@ impl FirestoreService {
         let fields = doc.get("fields").unwrap_or(&empty);
 
         Ok(NotificationSettings {
-            enabled: self.parse_bool(fields, "notifications_enabled").unwrap_or(true),
-            frequency: self.parse_int(fields, "notification_frequency").unwrap_or(3),
+            enabled: self
+                .parse_bool(fields, "notifications_enabled")
+                .unwrap_or(true),
+            frequency: self
+                .parse_int(fields, "notification_frequency")
+                .unwrap_or(3),
         })
     }
 
@@ -5333,8 +5773,12 @@ impl FirestoreService {
             "notification_frequency": {"integerValue": new_frequency.to_string()}
         });
 
-        self.update_user_fields(uid, fields, &["notifications_enabled", "notification_frequency"])
-            .await?;
+        self.update_user_fields(
+            uid,
+            fields,
+            &["notifications_enabled", "notification_frequency"],
+        )
+        .await?;
 
         Ok(NotificationSettings {
             enabled: new_enabled,
@@ -5356,7 +5800,8 @@ impl FirestoreService {
             email: self.parse_string(fields, "email"),
             name: self.parse_string(fields, "name"),
             time_zone: self.parse_string(fields, "time_zone"),
-            created_at: self.parse_timestamp_optional(fields, "created_at")
+            created_at: self
+                .parse_timestamp_optional(fields, "created_at")
                 .map(|dt| dt.to_rfc3339()),
             motivation: self.parse_string(fields, "motivation"),
             use_case: self.parse_string(fields, "use_case"),
@@ -5463,7 +5908,8 @@ impl FirestoreService {
             }
         });
 
-        self.update_user_fields(uid, fields, &["ai_user_profile"]).await?;
+        self.update_user_fields(uid, fields, &["ai_user_profile"])
+            .await?;
 
         Ok(AIUserProfile {
             profile_text: profile_text.to_string(),
@@ -5564,14 +6010,8 @@ impl FirestoreService {
         if let Some(date) = date_filter {
             // Parse date and create start/end timestamps
             if let Ok(parsed_date) = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
-                let start = parsed_date
-                    .and_hms_opt(0, 0, 0)
-                    .unwrap()
-                    .and_utc();
-                let end = parsed_date
-                    .and_hms_opt(23, 59, 59)
-                    .unwrap()
-                    .and_utc();
+                let start = parsed_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let end = parsed_date.and_hms_opt(23, 59, 59).unwrap().and_utc();
 
                 filters.push(json!({
                     "fieldFilter": {
@@ -5768,515 +6208,6 @@ impl FirestoreService {
     }
 
     // =========================================================================
-    // CHAT SESSIONS
-    // =========================================================================
-
-    /// Create a chat session
-    /// Path: users/{uid}/chat_sessions/{session_id}
-    pub async fn create_chat_session(
-        &self,
-        uid: &str,
-        title: Option<&str>,
-        app_id: Option<&str>,
-    ) -> Result<ChatSessionDB, Box<dyn std::error::Error + Send + Sync>> {
-        let session_id = uuid::Uuid::new_v4().to_string();
-        let now = Utc::now();
-
-        let url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CHAT_SESSIONS_SUBCOLLECTION,
-            session_id
-        );
-
-        let mut fields = json!({
-            // CRITICAL: id field required - Python ChatSession model requires it
-            // and chat.py accesses chat_session['id'] directly
-            "id": {"stringValue": &session_id},
-            "title": {"stringValue": title.unwrap_or("New Chat")},
-            "created_at": {"timestampValue": now.to_rfc3339()},
-            "updated_at": {"timestampValue": now.to_rfc3339()},
-            "message_count": {"integerValue": "0"},
-            "starred": {"booleanValue": false}
-        });
-
-        // CRITICAL: Always set app_id and plugin_id fields for backward compatibility
-        // Python backend queries chat_sessions.where(plugin_id == null) for main chat
-        if let Some(app) = app_id {
-            fields["app_id"] = json!({"stringValue": app});
-            fields["plugin_id"] = json!({"stringValue": app});
-        } else {
-            // For main chat (no app), explicitly set null values
-            fields["app_id"] = json!({"nullValue": null});
-            fields["plugin_id"] = json!({"nullValue": null});
-        }
-
-        let doc = json!({"fields": fields});
-
-        let response = self
-            .build_request(reqwest::Method::PATCH, &url)
-            .await?
-            .json(&doc)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore create error: {}", error_text).into());
-        }
-
-        tracing::info!(
-            "Created chat session {} for user {} with title={}",
-            session_id,
-            uid,
-            title.unwrap_or("New Chat")
-        );
-
-        Ok(ChatSessionDB {
-            id: session_id,
-            title: title.unwrap_or("New Chat").to_string(),
-            preview: None,
-            created_at: now,
-            updated_at: now,
-            app_id: app_id.map(|s| s.to_string()),
-            message_count: 0,
-            starred: false,
-        })
-    }
-
-    /// Get chat sessions for a user
-    /// Path: users/{uid}/chat_sessions
-    pub async fn get_chat_sessions(
-        &self,
-        uid: &str,
-        app_id: Option<&str>,
-        limit: usize,
-        offset: usize,
-        starred: Option<bool>,
-    ) -> Result<Vec<ChatSessionDB>, Box<dyn std::error::Error + Send + Sync>> {
-        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
-
-        // Build filters
-        let mut filters: Vec<Value> = Vec::new();
-
-        // Filter by app_id (null = main Omi chat)
-        if let Some(app) = app_id {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "app_id"},
-                    "op": "EQUAL",
-                    "value": {"stringValue": app}
-                }
-            }));
-        }
-
-        // Filter by starred if specified
-        if let Some(is_starred) = starred {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "starred"},
-                    "op": "EQUAL",
-                    "value": {"booleanValue": is_starred}
-                }
-            }));
-        }
-
-        // Build the where clause
-        let where_clause = if filters.is_empty() {
-            None
-        } else if filters.len() == 1 {
-            Some(filters.into_iter().next().unwrap())
-        } else {
-            Some(json!({
-                "compositeFilter": {
-                    "op": "AND",
-                    "filters": filters
-                }
-            }))
-        };
-
-        // Build structured query
-        // NOTE: Use created_at for ordering (not updated_at) for backward compatibility
-        // Old sessions from Flutter app don't have updated_at field
-        let mut structured_query = json!({
-            "from": [{"collectionId": CHAT_SESSIONS_SUBCOLLECTION}],
-            "orderBy": [{"field": {"fieldPath": "created_at"}, "direction": "DESCENDING"}],
-            "limit": limit,
-            "offset": offset
-        });
-
-        if let Some(where_filter) = where_clause {
-            structured_query["where"] = where_filter;
-        }
-
-        let query = json!({
-            "structuredQuery": structured_query
-        });
-
-        let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
-            .await?
-            .json(&query)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            tracing::error!("Firestore query error: {}", error_text);
-            return Ok(vec![]);
-        }
-
-        let results: Vec<Value> = response.json().await?;
-        let sessions = results
-            .into_iter()
-            .filter_map(|doc| {
-                doc.get("document")
-                    .and_then(|d| self.parse_chat_session(d).ok())
-            })
-            .collect();
-
-        Ok(sessions)
-    }
-
-    /// Get a single chat session
-    /// Path: users/{uid}/chat_sessions/{session_id}
-    pub async fn get_chat_session(
-        &self,
-        uid: &str,
-        session_id: &str,
-    ) -> Result<Option<ChatSessionDB>, Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CHAT_SESSIONS_SUBCOLLECTION,
-            session_id
-        );
-
-        let response = self
-            .build_request(reqwest::Method::GET, &url)
-            .await?
-            .send()
-            .await?;
-
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore get error: {}", error_text).into());
-        }
-
-        let doc: Value = response.json().await?;
-        Ok(Some(self.parse_chat_session(&doc)?))
-    }
-
-    /// Update a chat session (title, starred, preview, message_count)
-    /// Path: users/{uid}/chat_sessions/{session_id}
-    pub async fn update_chat_session(
-        &self,
-        uid: &str,
-        session_id: &str,
-        title: Option<&str>,
-        starred: Option<bool>,
-    ) -> Result<ChatSessionDB, Box<dyn std::error::Error + Send + Sync>> {
-        // First get the existing session
-        let existing = self.get_chat_session(uid, session_id).await?
-            .ok_or_else(|| format!("Chat session {} not found", session_id))?;
-
-        let url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CHAT_SESSIONS_SUBCOLLECTION,
-            session_id
-        );
-
-        let now = Utc::now();
-        let mut fields = json!({
-            "title": {"stringValue": title.unwrap_or(&existing.title)},
-            "starred": {"booleanValue": starred.unwrap_or(existing.starred)},
-            "updated_at": {"timestampValue": now.to_rfc3339()},
-            "created_at": {"timestampValue": existing.created_at.to_rfc3339()},
-            "message_count": {"integerValue": existing.message_count.to_string()}
-        });
-
-        if let Some(preview) = &existing.preview {
-            fields["preview"] = json!({"stringValue": preview});
-        }
-        if let Some(app) = &existing.app_id {
-            fields["app_id"] = json!({"stringValue": app});
-        }
-
-        let doc = json!({"fields": fields});
-
-        let response = self
-            .build_request(reqwest::Method::PATCH, &url)
-            .await?
-            .json(&doc)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore update error: {}", error_text).into());
-        }
-
-        tracing::info!(
-            "Updated chat session {} for user {}",
-            session_id,
-            uid
-        );
-
-        Ok(ChatSessionDB {
-            id: session_id.to_string(),
-            title: title.unwrap_or(&existing.title).to_string(),
-            preview: existing.preview,
-            created_at: existing.created_at,
-            updated_at: now,
-            app_id: existing.app_id,
-            message_count: existing.message_count,
-            starred: starred.unwrap_or(existing.starred),
-        })
-    }
-
-    /// Update chat session preview and message count (called when new message is added)
-    pub async fn update_chat_session_with_message(
-        &self,
-        uid: &str,
-        session_id: &str,
-        preview: &str,
-        title: Option<&str>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // First get the existing session
-        let existing = match self.get_chat_session(uid, session_id).await? {
-            Some(s) => s,
-            None => return Ok(()), // Session doesn't exist, skip update
-        };
-
-        let url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CHAT_SESSIONS_SUBCOLLECTION,
-            session_id
-        );
-
-        let now = Utc::now();
-        let new_count = existing.message_count + 1;
-
-        // Use provided title or keep existing (title is auto-generated from first message)
-        let final_title = title.unwrap_or(&existing.title);
-
-        let mut fields = json!({
-            "title": {"stringValue": final_title},
-            "preview": {"stringValue": preview.chars().take(100).collect::<String>()},
-            "updated_at": {"timestampValue": now.to_rfc3339()},
-            "created_at": {"timestampValue": existing.created_at.to_rfc3339()},
-            "message_count": {"integerValue": new_count.to_string()},
-            "starred": {"booleanValue": existing.starred}
-        });
-
-        if let Some(app) = &existing.app_id {
-            fields["app_id"] = json!({"stringValue": app});
-        }
-
-        let doc = json!({"fields": fields});
-
-        let response = self
-            .build_request(reqwest::Method::PATCH, &url)
-            .await?
-            .json(&doc)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            tracing::warn!("Failed to update chat session with message: {}", error_text);
-        }
-
-        Ok(())
-    }
-
-    /// Delete a chat session and its associated messages
-    /// Path: users/{uid}/chat_sessions/{session_id}
-    pub async fn delete_chat_session(
-        &self,
-        uid: &str,
-        session_id: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // First, delete all messages with this session_id
-        if let Err(e) = self.delete_messages_by_session(uid, session_id).await {
-            tracing::warn!("Failed to delete messages for session {}: {}", session_id, e);
-            // Continue with session deletion
-        }
-
-        // Delete the session document
-        let url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CHAT_SESSIONS_SUBCOLLECTION,
-            session_id
-        );
-
-        let response = self
-            .build_request(reqwest::Method::DELETE, &url)
-            .await?
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore delete error: {}", error_text).into());
-        }
-
-        tracing::info!("Deleted chat session {} for user {}", session_id, uid);
-        Ok(())
-    }
-
-    /// Delete all messages with a specific session_id
-    async fn delete_messages_by_session(
-        &self,
-        uid: &str,
-        session_id: &str,
-    ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
-
-        // Query messages with this session_id
-        let structured_query = json!({
-            "from": [{"collectionId": MESSAGES_SUBCOLLECTION}],
-            "where": {
-                "fieldFilter": {
-                    "field": {"fieldPath": "session_id"},
-                    "op": "EQUAL",
-                    "value": {"stringValue": session_id}
-                }
-            },
-            "limit": 500  // Batch delete limit
-        });
-
-        let query = json!({
-            "structuredQuery": structured_query
-        });
-
-        let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
-            .await?
-            .json(&query)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Failed to query messages: {}", error_text).into());
-        }
-
-        let results: Vec<Value> = response.json().await?;
-        let mut deleted_count = 0;
-
-        // Delete each message
-        for result in results {
-            if let Some(doc) = result.get("document") {
-                if let Some(name) = doc.get("name").and_then(|n| n.as_str()) {
-                    // Extract the full document path for deletion
-                    let delete_url = format!(
-                        "https://firestore.googleapis.com/v1/{}",
-                        name
-                    );
-
-                    let delete_response = self
-                        .build_request(reqwest::Method::DELETE, &delete_url)
-                        .await?
-                        .send()
-                        .await?;
-
-                    if delete_response.status().is_success() {
-                        deleted_count += 1;
-                    }
-                }
-            }
-        }
-
-        tracing::info!(
-            "Deleted {} messages for session {} (user {})",
-            deleted_count,
-            session_id,
-            uid
-        );
-
-        Ok(deleted_count)
-    }
-
-    /// Parse a chat session from Firestore document
-    /// Supports both old (Flutter) and new (Desktop) session formats for backward compatibility
-    fn parse_chat_session(
-        &self,
-        doc: &Value,
-    ) -> Result<ChatSessionDB, Box<dyn std::error::Error + Send + Sync>> {
-        let name = doc
-            .get("name")
-            .and_then(|n| n.as_str())
-            .ok_or("Missing document name")?;
-
-        let id = name.split('/').last().unwrap_or("unknown").to_string();
-
-        let fields = doc.get("fields").ok_or("Missing fields")?;
-
-        let created_at = self
-            .parse_timestamp_optional(fields, "created_at")
-            .unwrap_or_else(Utc::now);
-
-        // For message_count: prefer explicit field, fallback to message_ids array length (old format)
-        let message_count = self.parse_int(fields, "message_count").unwrap_or_else(|| {
-            // Old Flutter sessions store message IDs in an array
-            fields
-                .get("message_ids")
-                .and_then(|v| v.get("arrayValue"))
-                .and_then(|a| a.get("values"))
-                .and_then(|v| v.as_array())
-                .map(|arr| arr.len() as i32)
-                .unwrap_or(0)
-        });
-
-        // For app_id: fallback to plugin_id (old Flutter format)
-        let app_id = self
-            .parse_string(fields, "app_id")
-            .or_else(|| self.parse_string(fields, "plugin_id"));
-
-        // For title: use explicit title, or "Omi" for main chat (app_id=null), or "New Chat"
-        // This helps users recognize their main Omi chat from old Flutter sessions
-        let title = self.parse_string(fields, "title").unwrap_or_else(|| {
-            if app_id.is_none() {
-                "Omi".to_string()
-            } else {
-                "New Chat".to_string()
-            }
-        });
-
-        Ok(ChatSessionDB {
-            id,
-            title,
-            preview: self.parse_string(fields, "preview"),
-            created_at,
-            // For updated_at: fallback to created_at (old sessions don't have updated_at)
-            updated_at: self
-                .parse_timestamp_optional(fields, "updated_at")
-                .unwrap_or(created_at),
-            app_id,
-            message_count,
-            starred: self.parse_bool(fields, "starred").unwrap_or(false),
-        })
-    }
-
-    // =========================================================================
     // ADVICE
     // =========================================================================
 
@@ -6439,10 +6370,7 @@ impl FirestoreService {
         let results: Vec<Value> = response.json().await?;
         let advice_list = results
             .into_iter()
-            .filter_map(|doc| {
-                doc.get("document")
-                    .and_then(|d| self.parse_advice(d).ok())
-            })
+            .filter_map(|doc| doc.get("document").and_then(|d| self.parse_advice(d).ok()))
             .collect();
 
         Ok(advice_list)
@@ -6565,7 +6493,9 @@ impl FirestoreService {
         let name = doc.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let id = name.split('/').last().unwrap_or("").to_string();
 
-        let category_str = self.parse_string(fields, "category").unwrap_or_else(|| "other".to_string());
+        let category_str = self
+            .parse_string(fields, "category")
+            .unwrap_or_else(|| "other".to_string());
         let category = match category_str.as_str() {
             "productivity" => AdviceCategory::Productivity,
             "health" => AdviceCategory::Health,
@@ -6583,7 +6513,9 @@ impl FirestoreService {
             confidence: self.parse_float(fields, "confidence").unwrap_or(0.5),
             context_summary: self.parse_string(fields, "context_summary"),
             current_activity: self.parse_string(fields, "current_activity"),
-            created_at: self.parse_timestamp_optional(fields, "created_at").unwrap_or_else(Utc::now),
+            created_at: self
+                .parse_timestamp_optional(fields, "created_at")
+                .unwrap_or_else(Utc::now),
             updated_at: self.parse_timestamp_optional(fields, "updated_at"),
             is_read: self.parse_bool(fields, "is_read").unwrap_or(false),
             is_dismissed: self.parse_bool(fields, "is_dismissed").unwrap_or(false),
@@ -6598,11 +6530,9 @@ impl FirestoreService {
     /// Fetches from desktop_releases collection
     pub async fn get_desktop_releases(
         &self,
-    ) -> Result<Vec<crate::routes::updates::ReleaseInfo>, Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!(
-            "{}/desktop_releases",
-            self.base_url()
-        );
+    ) -> Result<Vec<crate::routes::updates::ReleaseInfo>, Box<dyn std::error::Error + Send + Sync>>
+    {
+        let url = format!("{}/desktop_releases", self.base_url());
 
         let response = self
             .build_request(reqwest::Method::GET, &url)
@@ -6643,7 +6573,12 @@ impl FirestoreService {
     ) -> Result<crate::routes::updates::ReleaseInfo, Box<dyn std::error::Error + Send + Sync>> {
         let fields = doc.get("fields").ok_or("Missing fields")?;
 
-        let changelog = if let Some(arr) = fields.get("changelog").and_then(|c| c.get("arrayValue")).and_then(|a| a.get("values")).and_then(|v| v.as_array()) {
+        let changelog = if let Some(arr) = fields
+            .get("changelog")
+            .and_then(|c| c.get("arrayValue"))
+            .and_then(|a| a.get("values"))
+            .and_then(|v| v.as_array())
+        {
             arr.iter()
                 .filter_map(|v| v.get("stringValue").and_then(|s| s.as_str()))
                 .map(|s| s.to_string())
@@ -6658,9 +6593,15 @@ impl FirestoreService {
         Ok(crate::routes::updates::ReleaseInfo {
             version: self.parse_string(fields, "version").unwrap_or_default(),
             build_number: self.parse_int(fields, "build_number").unwrap_or(0) as u32,
-            download_url: self.parse_string(fields, "download_url").unwrap_or_default(),
-            ed_signature: self.parse_string(fields, "ed_signature").unwrap_or_default(),
-            published_at: self.parse_string(fields, "published_at").unwrap_or_default(),
+            download_url: self
+                .parse_string(fields, "download_url")
+                .unwrap_or_default(),
+            ed_signature: self
+                .parse_string(fields, "ed_signature")
+                .unwrap_or_default(),
+            published_at: self
+                .parse_string(fields, "published_at")
+                .unwrap_or_default(),
             changelog,
             is_live: self.parse_bool(fields, "is_live").unwrap_or(false),
             is_critical: self.parse_bool(fields, "is_critical").unwrap_or(false),
@@ -6675,14 +6616,11 @@ impl FirestoreService {
     ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
         let doc_id = format!("v{}+{}", release.version, release.build_number);
 
-        let url = format!(
-            "{}/desktop_releases/{}",
-            self.base_url(),
-            doc_id
-        );
+        let url = format!("{}/desktop_releases/{}", self.base_url(), doc_id);
 
         // Build changelog array
-        let changelog_values: Vec<Value> = release.changelog
+        let changelog_values: Vec<Value> = release
+            .changelog
             .iter()
             .map(|s| json!({"stringValue": s}))
             .collect();
@@ -6730,11 +6668,7 @@ impl FirestoreService {
         doc_id: &str,
     ) -> Result<(String, String), Box<dyn std::error::Error + Send + Sync>> {
         // Fetch the current document
-        let url = format!(
-            "{}/desktop_releases/{}",
-            self.base_url(),
-            doc_id
-        );
+        let url = format!("{}/desktop_releases/{}", self.base_url(), doc_id);
 
         let response = self
             .build_request(reqwest::Method::GET, &url)
@@ -6755,11 +6689,17 @@ impl FirestoreService {
         let (old_channel, new_channel_value) = match current_channel.as_str() {
             "staging" | "" => ("staging".to_string(), json!({"stringValue": "beta"})),
             "beta" => ("beta".to_string(), json!({"stringValue": "stable"})),
-            "stable" => return Err("Release is already on stable channel, cannot promote further".into()),
+            "stable" => {
+                return Err("Release is already on stable channel, cannot promote further".into())
+            }
             other => return Err(format!("Unknown channel '{}', cannot promote", other).into()),
         };
 
-        let new_channel = new_channel_value.get("stringValue").and_then(|v| v.as_str()).unwrap().to_string();
+        let new_channel = new_channel_value
+            .get("stringValue")
+            .and_then(|v| v.as_str())
+            .unwrap()
+            .to_string();
 
         // PATCH only the channel field
         let patch_url = format!(
@@ -6786,329 +6726,14 @@ impl FirestoreService {
             return Err(format!("Failed to update channel: {}", error_text).into());
         }
 
-        tracing::info!("Promoted release {}: {} → {}", doc_id, old_channel, new_channel);
+        tracing::info!(
+            "Promoted release {}: {} → {}",
+            doc_id,
+            old_channel,
+            new_channel
+        );
 
         Ok((old_channel, new_channel))
-    }
-
-    // =========================================================================
-    // MESSAGES (Chat Persistence)
-    // =========================================================================
-
-    /// Get or create a chat session for the given app_id (None = main default chat).
-    /// Mirrors Python's `acquire_chat_session()`:
-    ///   1. List all chat_sessions, find one matching plugin_id
-    ///   2. If none exists, create one with {id, created_at, plugin_id}
-    /// Returns the session ID.
-    pub async fn acquire_chat_session(
-        &self,
-        uid: &str,
-        app_id: Option<&str>,
-    ) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-        // Step 1: Fetch all chat sessions and find a matching one client-side.
-        // We can't use `WHERE plugin_id == null` via REST API — it doesn't match
-        // documents where the field is absent or was set to null by the Python SDK.
-        let list_url = format!(
-            "{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CHAT_SESSIONS_SUBCOLLECTION
-        );
-
-        let response = self
-            .build_request(reqwest::Method::GET, &list_url)
-            .await?
-            .send()
-            .await?;
-
-        if response.status().is_success() {
-            let body: Value = response.json().await?;
-            if let Some(documents) = body.get("documents").and_then(|d| d.as_array()) {
-                for doc in documents {
-                    let fields = match doc.get("fields") {
-                        Some(f) => f,
-                        None => continue,
-                    };
-
-                    let matches = match app_id {
-                        Some(target_app) => {
-                            // Looking for a session with this specific plugin_id
-                            fields
-                                .get("plugin_id")
-                                .and_then(|v| v.get("stringValue"))
-                                .and_then(|v| v.as_str())
-                                == Some(target_app)
-                        }
-                        None => {
-                            // Looking for main chat: both plugin_id AND app_id must be
-                            // null, absent, or empty.  Without the app_id check, task-chat
-                            // sessions (plugin_id=null, app_id="task-chat") match falsely.
-                            let plugin_id_null = match fields.get("plugin_id") {
-                                None => true,
-                                Some(val) => {
-                                    val.get("nullValue").is_some()
-                                        || val
-                                            .get("stringValue")
-                                            .and_then(|v| v.as_str())
-                                            .map_or(false, |s| s.is_empty())
-                                }
-                            };
-                            let app_id_null = match fields.get("app_id") {
-                                None => true,
-                                Some(val) => {
-                                    val.get("nullValue").is_some()
-                                        || val
-                                            .get("stringValue")
-                                            .and_then(|v| v.as_str())
-                                            .map_or(false, |s| s.is_empty())
-                                }
-                            };
-                            plugin_id_null && app_id_null
-                        }
-                    };
-
-                    if matches {
-                        if let Some(doc_id) = doc
-                            .get("name")
-                            .and_then(|n| n.as_str())
-                            .and_then(|name| name.split('/').last())
-                        {
-                            tracing::info!(
-                                "Found existing chat session {} for user {} (app_id={:?})",
-                                doc_id,
-                                uid,
-                                app_id
-                            );
-                            return Ok(doc_id.to_string());
-                        }
-                    }
-                }
-            }
-        }
-
-        // Step 2: No matching session found — create one (mirrors Python's ChatSession model)
-        let session_id = uuid::Uuid::new_v4().to_string();
-        let now = Utc::now();
-
-        let create_url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CHAT_SESSIONS_SUBCOLLECTION,
-            session_id
-        );
-
-        let mut session_fields = json!({
-            "id": {"stringValue": &session_id},
-            "created_at": {"timestampValue": now.to_rfc3339()},
-            "message_ids": {"arrayValue": {"values": []}},
-            "file_ids": {"arrayValue": {"values": []}}
-        });
-
-        if let Some(app) = app_id {
-            session_fields["plugin_id"] = json!({"stringValue": app});
-            session_fields["app_id"] = json!({"stringValue": app});
-        } else {
-            session_fields["plugin_id"] = json!({"nullValue": null});
-            session_fields["app_id"] = json!({"nullValue": null});
-        }
-
-        let doc = json!({"fields": session_fields});
-
-        let response = self
-            .build_request(reqwest::Method::PATCH, &create_url)
-            .await?
-            .json(&doc)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Failed to create chat session: {}", error_text).into());
-        }
-
-        tracing::info!(
-            "Created new chat session {} for user {} (app_id={:?})",
-            session_id,
-            uid,
-            app_id
-        );
-        Ok(session_id)
-    }
-
-    /// Append a message ID to a chat session's message_ids array.
-    /// Mirrors Python's `add_message_to_chat_session()`.
-    async fn add_message_to_chat_session(
-        &self,
-        uid: &str,
-        chat_session_id: &str,
-        message_id: &str,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // Firestore REST API: use fieldTransforms with appendMissingElements
-        // to atomically append to the array (equivalent to Python's ArrayUnion)
-        let update = json!({
-            "writes": [{
-                "transform": {
-                    "document": format!(
-                        "projects/{}/databases/(default)/documents/{}/{}/{}/{}",
-                        self.project_id, USERS_COLLECTION, uid,
-                        CHAT_SESSIONS_SUBCOLLECTION, chat_session_id
-                    ),
-                    "fieldTransforms": [{
-                        "fieldPath": "message_ids",
-                        "appendMissingElements": {
-                            "values": [{"stringValue": message_id}]
-                        }
-                    }]
-                }
-            }]
-        });
-
-        let commit_url = format!(
-            "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
-            self.project_id
-        );
-
-        let response = self
-            .build_request(reqwest::Method::POST, &commit_url)
-            .await?
-            .json(&update)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            tracing::warn!(
-                "Failed to add message {} to chat session {}: {}",
-                message_id,
-                chat_session_id,
-                error_text
-            );
-        }
-
-        Ok(())
-    }
-
-    /// Save a chat message to Firestore
-    /// Used for chat history persistence
-    pub async fn save_message(
-        &self,
-        uid: &str,
-        text: &str,
-        sender: &str,
-        app_id: Option<&str>,
-        session_id: Option<&str>,
-        metadata: Option<&str>,
-    ) -> Result<MessageDB, Box<dyn std::error::Error + Send + Sync>> {
-        let message_id = uuid::Uuid::new_v4().to_string();
-        let now = Utc::now();
-
-        let url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            MESSAGES_SUBCOLLECTION,
-            message_id
-        );
-
-        let mut fields = json!({
-            // CRITICAL: id field required - Python queries .where('id', '==', message_id)
-            "id": {"stringValue": &message_id},
-            "text": {"stringValue": text},
-            "sender": {"stringValue": sender},
-            "created_at": {"timestampValue": now.to_rfc3339()},
-            "reported": {"booleanValue": false},
-            // CRITICAL: type field required - Python Message model requires it (no default)
-            "type": {"stringValue": "text"},
-            // Default empty arrays for memories_id
-            "memories_id": {"arrayValue": {"values": []}},
-            "from_external_integration": {"booleanValue": false}
-        });
-
-        // CRITICAL: Always set app_id and plugin_id fields (even as null) for backward compatibility
-        // Python backend queries .where(plugin_id == null) for main chat
-        // Firestore won't match documents that don't have the field at all
-        if let Some(app) = app_id {
-            fields["app_id"] = json!({"stringValue": app});
-            fields["plugin_id"] = json!({"stringValue": app});
-        } else {
-            // For main chat (no app), explicitly set null values
-            fields["app_id"] = json!({"nullValue": null});
-            fields["plugin_id"] = json!({"nullValue": null});
-        }
-
-        // Acquire (get or create) a chat session — mirrors Python's acquire_chat_session().
-        // This ensures desktop messages have a chat_session_id so they're visible on mobile.
-        let effective_session_id: Option<String> = if let Some(session) = session_id {
-            Some(session.to_string())
-        } else {
-            match self.acquire_chat_session(uid, app_id).await {
-                Ok(session) => Some(session),
-                Err(e) => {
-                    tracing::warn!("Failed to acquire chat session: {}", e);
-                    None
-                }
-            }
-        };
-
-        if let Some(ref session) = effective_session_id {
-            fields["session_id"] = json!({"stringValue": session});
-            fields["chat_session_id"] = json!({"stringValue": session});
-        }
-
-        if let Some(meta) = metadata {
-            fields["metadata"] = json!({"stringValue": meta});
-        }
-
-        let doc = json!({"fields": fields});
-
-        let response = self
-            .build_request(reqwest::Method::PATCH, &url)
-            .await?
-            .json(&doc)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore create error: {}", error_text).into());
-        }
-
-        // Track message in the chat session's message_ids array
-        // (mirrors Python's add_message_to_chat_session)
-        if let Some(ref session) = effective_session_id {
-            if let Err(e) = self
-                .add_message_to_chat_session(uid, session, &message_id)
-                .await
-            {
-                tracing::warn!("Failed to track message in chat session: {}", e);
-                // Non-fatal — message is already saved
-            }
-        }
-
-        let message = MessageDB {
-            id: message_id.clone(),
-            text: text.to_string(),
-            created_at: now,
-            sender: sender.to_string(),
-            app_id: app_id.map(|s| s.to_string()),
-            session_id: effective_session_id,
-            rating: None,
-            reported: false,
-            metadata: metadata.map(|s| s.to_string()),
-        };
-
-        tracing::info!(
-            "Saved {} message {} for user {} (app_id={:?})",
-            sender,
-            message_id,
-            uid,
-            app_id
-        );
-        Ok(message)
     }
 
     /// Get chat messages for a user with optional app_id and session_id filter
@@ -7236,7 +6861,9 @@ impl FirestoreService {
                 .send()
                 .await?;
 
-            if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
+            if !response.status().is_success()
+                && response.status() != reqwest::StatusCode::NOT_FOUND
+            {
                 let error_text = response.text().await?;
                 tracing::error!("Failed to delete message {}: {}", message.id, error_text);
             }
@@ -7274,7 +6901,11 @@ impl FirestoreService {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            return Err(format!("Firestore query error for {}: {}", subcollection, error_text).into());
+            return Err(format!(
+                "Firestore query error for {}: {}",
+                subcollection, error_text
+            )
+            .into());
         }
 
         let results: Vec<Value> = response.json().await?;
@@ -7308,11 +6939,17 @@ impl FirestoreService {
                 .send()
                 .await?;
 
-            if delete_response.status().is_success() || delete_response.status() == reqwest::StatusCode::NOT_FOUND {
+            if delete_response.status().is_success()
+                || delete_response.status() == reqwest::StatusCode::NOT_FOUND
+            {
                 deleted += 1;
             } else {
                 let error_text = delete_response.text().await?;
-                return Err(format!("Firestore delete error for {}/{}: {}", subcollection, doc_id, error_text).into());
+                return Err(format!(
+                    "Firestore delete error for {}/{}: {}",
+                    subcollection, doc_id, error_text
+                )
+                .into());
             }
         }
 
@@ -7464,7 +7101,11 @@ impl FirestoreService {
 
     /// Parse a Firestore document into a MessageDB
     /// Decrypts text if data_protection_level is "enhanced" and encryption secret is available.
-    fn parse_message(&self, doc: &Value, uid: &str) -> Result<MessageDB, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_message(
+        &self,
+        doc: &Value,
+        uid: &str,
+    ) -> Result<MessageDB, Box<dyn std::error::Error + Send + Sync>> {
         let fields = doc.get("fields").ok_or("Missing fields")?;
         let name = doc.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let id = name.split('/').last().unwrap_or("").to_string();
@@ -7702,7 +7343,11 @@ impl FirestoreService {
             fields["order"] = json!({"integerValue": o.to_string()});
         }
 
-        let update_mask = field_paths.iter().map(|f| format!("updateMask.fieldPaths={}", f)).collect::<Vec<_>>().join("&");
+        let update_mask = field_paths
+            .iter()
+            .map(|f| format!("updateMask.fieldPaths={}", f))
+            .collect::<Vec<_>>()
+            .join("&");
 
         let url = format!(
             "{}/{}/{}/{}/{}?{}",
@@ -7743,12 +7388,18 @@ impl FirestoreService {
         move_to_folder_id: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if let Some(target_id) = move_to_folder_id {
-            let conversations = self.get_conversations(uid, 100, 0, true, &[], None, Some(folder_id), None, None).await?;
+            let conversations = self
+                .get_conversations(uid, 100, 0, true, &[], None, Some(folder_id), None, None)
+                .await?;
             for conv in conversations {
-                let _ = self.set_conversation_folder(uid, &conv.id, Some(target_id)).await;
+                let _ = self
+                    .set_conversation_folder(uid, &conv.id, Some(target_id))
+                    .await;
             }
         } else {
-            let conversations = self.get_conversations(uid, 100, 0, true, &[], None, Some(folder_id), None, None).await?;
+            let conversations = self
+                .get_conversations(uid, 100, 0, true, &[], None, Some(folder_id), None, None)
+                .await?;
             for conv in conversations {
                 let _ = self.set_conversation_folder(uid, &conv.id, None).await;
             }
@@ -7763,7 +7414,11 @@ impl FirestoreService {
             folder_id
         );
 
-        let response = self.build_request(reqwest::Method::DELETE, &url).await?.send().await?;
+        let response = self
+            .build_request(reqwest::Method::DELETE, &url)
+            .await?
+            .send()
+            .await?;
 
         if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
             let error_text = response.text().await?;
@@ -7796,14 +7451,24 @@ impl FirestoreService {
             json!({"fields": {"folder_id": {"nullValue": null}}})
         };
 
-        let response = self.build_request(reqwest::Method::PATCH, &url).await?.json(&doc).send().await?;
+        let response = self
+            .build_request(reqwest::Method::PATCH, &url)
+            .await?
+            .json(&doc)
+            .send()
+            .await?;
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
             return Err(format!("Firestore update error: {}", error_text).into());
         }
 
-        tracing::info!("Set conversation {} folder to {:?} for user {}", conversation_id, folder_id, uid);
+        tracing::info!(
+            "Set conversation {} folder to {:?} for user {}",
+            conversation_id,
+            folder_id,
+            uid
+        );
         Ok(())
     }
 
@@ -7816,11 +7481,20 @@ impl FirestoreService {
     ) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
         let mut moved_count = 0;
         for conv_id in conversation_ids {
-            if self.set_conversation_folder(uid, conv_id, Some(folder_id)).await.is_ok() {
+            if self
+                .set_conversation_folder(uid, conv_id, Some(folder_id))
+                .await
+                .is_ok()
+            {
                 moved_count += 1;
             }
         }
-        tracing::info!("Bulk moved {} conversations to folder {} for user {}", moved_count, folder_id, uid);
+        tracing::info!(
+            "Bulk moved {} conversations to folder {} for user {}",
+            moved_count,
+            folder_id,
+            uid
+        );
         Ok(moved_count)
     }
 
@@ -7841,7 +7515,12 @@ impl FirestoreService {
             );
 
             let doc = json!({"fields": {"order": {"integerValue": index.to_string()}}});
-            let _ = self.build_request(reqwest::Method::PATCH, &url).await?.json(&doc).send().await;
+            let _ = self
+                .build_request(reqwest::Method::PATCH, &url)
+                .await?
+                .json(&doc)
+                .send()
+                .await;
         }
         tracing::info!("Reordered {} folders for user {}", folder_ids.len(), uid);
         Ok(())
@@ -7858,12 +7537,7 @@ impl FirestoreService {
         limit: usize,
     ) -> Result<Vec<GoalDB>, Box<dyn std::error::Error + Send + Sync>> {
         // Query the user's goals subcollection directly
-        let url = format!(
-            "{}/{}/{}:runQuery",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid
-        );
+        let url = format!("{}/{}/{}:runQuery", self.base_url(), USERS_COLLECTION, uid);
 
         // Note: Don't use orderBy with where filter on different fields - requires composite index
         // Instead, we sort in Rust after fetching (like Python backend does)
@@ -7932,14 +7606,31 @@ impl FirestoreService {
         // If we have 4 or more active goals, deactivate the oldest one
         if existing_goals.len() >= 4 {
             if let Some(oldest) = existing_goals.last() {
-                tracing::info!("Deactivating oldest goal {} to make room for new goal", oldest.id);
-                self.update_goal(uid, &oldest.id, None, None, None, None, None, None, None, Some(false), None).await?;
+                tracing::info!(
+                    "Deactivating oldest goal {} to make room for new goal",
+                    oldest.id
+                );
+                self.update_goal(
+                    uid,
+                    &oldest.id,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(false),
+                    None,
+                )
+                .await?;
             }
         }
 
         // Generate a unique ID
         let now = Utc::now();
-        let goal_id = document_id_from_seed(&format!("{}-{}-{}", uid, title, now.timestamp_millis()));
+        let goal_id =
+            document_id_from_seed(&format!("{}-{}-{}", uid, title, now.timestamp_millis()));
 
         let url = format!(
             "{}/{}/{}/{}/{}",
@@ -7968,24 +7659,24 @@ impl FirestoreService {
         });
 
         if let Some(d) = description {
-            fields.as_object_mut().unwrap().insert(
-                "description".to_string(),
-                json!({"stringValue": d}),
-            );
+            fields
+                .as_object_mut()
+                .unwrap()
+                .insert("description".to_string(), json!({"stringValue": d}));
         }
 
         if let Some(u) = unit {
-            fields.as_object_mut().unwrap().insert(
-                "unit".to_string(),
-                json!({"stringValue": u}),
-            );
+            fields
+                .as_object_mut()
+                .unwrap()
+                .insert("unit".to_string(), json!({"stringValue": u}));
         }
 
         if let Some(s) = source {
-            fields.as_object_mut().unwrap().insert(
-                "source".to_string(),
-                json!({"stringValue": s}),
-            );
+            fields
+                .as_object_mut()
+                .unwrap()
+                .insert("source".to_string(), json!({"stringValue": s}));
         }
 
         let doc = json!({"fields": fields});
@@ -8077,14 +7768,21 @@ impl FirestoreService {
         }
         if let Some(cat) = completed_at {
             update_fields.push("completed_at");
-            fields.insert("completed_at".to_string(), json!({"timestampValue": cat.to_rfc3339()}));
+            fields.insert(
+                "completed_at".to_string(),
+                json!({"timestampValue": cat.to_rfc3339()}),
+            );
         }
 
         // Always update updated_at
         update_fields.push("updated_at");
-        fields.insert("updated_at".to_string(), json!({"timestampValue": now.to_rfc3339()}));
+        fields.insert(
+            "updated_at".to_string(),
+            json!({"timestampValue": now.to_rfc3339()}),
+        );
 
-        let update_mask = update_fields.iter()
+        let update_mask = update_fields
+            .iter()
             .map(|f| format!("updateMask.fieldPaths={}", f))
             .collect::<Vec<_>>()
             .join("&");
@@ -8114,7 +7812,9 @@ impl FirestoreService {
         }
 
         // Fetch the updated goal
-        let goal = self.get_goal(uid, goal_id).await?
+        let goal = self
+            .get_goal(uid, goal_id)
+            .await?
             .ok_or("Goal not found after update")?;
 
         tracing::info!("Updated goal {} for user {}", goal_id, uid);
@@ -8128,17 +7828,53 @@ impl FirestoreService {
         goal_id: &str,
         current_value: f64,
     ) -> Result<GoalDB, Box<dyn std::error::Error + Send + Sync>> {
-        let goal = self.update_goal(uid, goal_id, None, None, None, Some(current_value), None, None, None, None, None).await?;
+        let goal = self
+            .update_goal(
+                uid,
+                goal_id,
+                None,
+                None,
+                None,
+                Some(current_value),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await?;
 
         // Also save history entry (inline, fast write)
-        if let Err(e) = self.save_goal_progress_history(uid, goal_id, current_value).await {
+        if let Err(e) = self
+            .save_goal_progress_history(uid, goal_id, current_value)
+            .await
+        {
             tracing::warn!("Failed to save goal progress history: {}", e);
         }
 
         // Auto-complete if current_value >= target_value
         if current_value >= goal.target_value && goal.completed_at.is_none() {
-            tracing::info!("Goal {} completed! current_value={} >= target_value={}", goal_id, current_value, goal.target_value);
-            let completed_goal = self.update_goal(uid, goal_id, None, None, None, None, None, None, None, Some(false), Some(Utc::now())).await?;
+            tracing::info!(
+                "Goal {} completed! current_value={} >= target_value={}",
+                goal_id,
+                current_value,
+                goal.target_value
+            );
+            let completed_goal = self
+                .update_goal(
+                    uid,
+                    goal_id,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(false),
+                    Some(Utc::now()),
+                )
+                .await?;
             return Ok(completed_goal);
         }
 
@@ -8151,12 +7887,7 @@ impl FirestoreService {
         uid: &str,
         limit: usize,
     ) -> Result<Vec<GoalDB>, Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!(
-            "{}/{}/{}:runQuery",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid
-        );
+        let url = format!("{}/{}/{}:runQuery", self.base_url(), USERS_COLLECTION, uid);
 
         let query = json!({
             "structuredQuery": {
@@ -8247,7 +7978,13 @@ impl FirestoreService {
             return Err(format!("Firestore save goal history error: {}", error_text).into());
         }
 
-        tracing::debug!("Saved goal history for {}/{}: {} on {}", uid, goal_id, value, date_key);
+        tracing::debug!(
+            "Saved goal history for {}/{}: {} on {}",
+            uid,
+            goal_id,
+            value,
+            date_key
+        );
         Ok(())
     }
 
@@ -8307,13 +8044,23 @@ impl FirestoreService {
                 if let Some(fields) = doc.get("fields") {
                     let date = self.parse_string(fields, "date").unwrap_or_default();
                     let value = self.parse_double(fields, "value").unwrap_or(0.0);
-                    let recorded_at = self.parse_timestamp_optional(fields, "recorded_at").unwrap_or_else(Utc::now);
-                    history.push(GoalHistoryEntry { date, value, recorded_at });
+                    let recorded_at = self
+                        .parse_timestamp_optional(fields, "recorded_at")
+                        .unwrap_or_else(Utc::now);
+                    history.push(GoalHistoryEntry {
+                        date,
+                        value,
+                        recorded_at,
+                    });
                 }
             }
         }
 
-        tracing::info!("Found {} history entries for goal {}", history.len(), goal_id);
+        tracing::info!(
+            "Found {} history entries for goal {}",
+            history.len(),
+            goal_id
+        );
         Ok(history)
     }
 
@@ -8450,7 +8197,12 @@ impl FirestoreService {
             }
         }
 
-        tracing::info!("Daily score for user {}: {}/{} tasks completed", uid, completed, total);
+        tracing::info!(
+            "Daily score for user {}: {}/{} tasks completed",
+            uid,
+            completed,
+            total
+        );
         Ok((completed, total))
     }
 
@@ -8520,7 +8272,12 @@ impl FirestoreService {
             }
         }
 
-        tracing::info!("Weekly score for user {}: {}/{} tasks completed", uid, completed, total);
+        tracing::info!(
+            "Weekly score for user {}: {}/{} tasks completed",
+            uid,
+            completed,
+            total
+        );
         Ok((completed, total))
     }
 
@@ -8600,7 +8357,12 @@ impl FirestoreService {
         let total = parse_count(total_resp?).await?;
         let completed = parse_count(completed_resp?).await?;
 
-        tracing::info!("Overall score for user {}: {}/{} tasks completed", uid, completed, total);
+        tracing::info!(
+            "Overall score for user {}: {}/{} tasks completed",
+            uid,
+            completed,
+            total
+        );
         Ok((completed, total))
     }
 
@@ -8610,7 +8372,9 @@ impl FirestoreService {
         let name_path = doc.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let id = name_path.split('/').last().unwrap_or("").to_string();
 
-        let goal_type_str = self.parse_string(fields, "goal_type").unwrap_or_else(|| "boolean".to_string());
+        let goal_type_str = self
+            .parse_string(fields, "goal_type")
+            .unwrap_or_else(|| "boolean".to_string());
         let goal_type = match goal_type_str.as_str() {
             "scale" => GoalType::Scale,
             "numeric" => GoalType::Numeric,
@@ -8628,11 +8392,18 @@ impl FirestoreService {
             max_value: self.parse_double(fields, "max_value").unwrap_or(100.0),
             unit: self.parse_string(fields, "unit"),
             is_active: self.parse_bool(fields, "is_active").unwrap_or(true),
-            created_at: self.parse_timestamp_optional(fields, "created_at").unwrap_or_else(Utc::now),
-            updated_at: self.parse_timestamp_optional(fields, "updated_at").unwrap_or_else(Utc::now),
+            created_at: self
+                .parse_timestamp_optional(fields, "created_at")
+                .unwrap_or_else(Utc::now),
+            updated_at: self
+                .parse_timestamp_optional(fields, "updated_at")
+                .unwrap_or_else(Utc::now),
             completed_at: {
                 if fields.get("completed_at").is_some() {
-                    Some(self.parse_timestamp_optional(fields, "completed_at").unwrap_or_else(Utc::now))
+                    Some(
+                        self.parse_timestamp_optional(fields, "completed_at")
+                            .unwrap_or_else(Utc::now),
+                    )
                 } else {
                     None
                 }
@@ -8643,23 +8414,22 @@ impl FirestoreService {
 
     /// Parse double value from Firestore fields
     fn parse_double(&self, fields: &Value, key: &str) -> Option<f64> {
-        fields.get(key)
-            .and_then(|v| {
-                // Try doubleValue first
-                if let Some(d) = v.get("doubleValue").and_then(|d| d.as_f64()) {
-                    return Some(d);
+        fields.get(key).and_then(|v| {
+            // Try doubleValue first
+            if let Some(d) = v.get("doubleValue").and_then(|d| d.as_f64()) {
+                return Some(d);
+            }
+            // Try integerValue (Firestore sometimes stores numbers as integers)
+            if let Some(i) = v.get("integerValue") {
+                if let Some(s) = i.as_str() {
+                    return s.parse::<f64>().ok();
                 }
-                // Try integerValue (Firestore sometimes stores numbers as integers)
-                if let Some(i) = v.get("integerValue") {
-                    if let Some(s) = i.as_str() {
-                        return s.parse::<f64>().ok();
-                    }
-                    if let Some(n) = i.as_i64() {
-                        return Some(n as f64);
-                    }
+                if let Some(n) = i.as_i64() {
+                    return Some(n as f64);
                 }
-                None
-            })
+            }
+            None
+        })
     }
 
     // =========================================================================
@@ -8742,12 +8512,7 @@ impl FirestoreService {
         let persona_id = ulid::Ulid::new().to_string();
         let now = Utc::now();
 
-        let url = format!(
-            "{}/{}/{}",
-            self.base_url(),
-            APPS_COLLECTION,
-            persona_id
-        );
+        let url = format!("{}/{}/{}", self.base_url(), APPS_COLLECTION, persona_id);
 
         let mut fields = json!({
             "id": {"stringValue": &persona_id},
@@ -8880,12 +8645,7 @@ impl FirestoreService {
         &self,
         persona_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!(
-            "{}/{}/{}",
-            self.base_url(),
-            APPS_COLLECTION,
-            persona_id
-        );
+        let url = format!("{}/{}/{}", self.base_url(), APPS_COLLECTION, persona_id);
 
         let response = self
             .build_request(reqwest::Method::DELETE, &url)
@@ -8949,12 +8709,7 @@ impl FirestoreService {
         uid: &str,
         limit: usize,
     ) -> Result<Vec<MemoryDB>, Box<dyn std::error::Error + Send + Sync>> {
-        let parent = format!(
-            "{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid
-        );
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
         let query = json!({
             "structuredQuery": {
@@ -9007,7 +8762,10 @@ impl FirestoreService {
     }
 
     /// Parse a persona from Firestore document
-    fn parse_persona(&self, doc: &Value) -> Result<PersonaDB, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_persona(
+        &self,
+        doc: &Value,
+    ) -> Result<PersonaDB, Box<dyn std::error::Error + Send + Sync>> {
         let fields = doc.get("fields").ok_or("Missing fields")?;
         let name_path = doc.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let id = name_path.split('/').last().unwrap_or("").to_string();
@@ -9028,21 +8786,32 @@ impl FirestoreService {
             username: self.parse_string(fields, "username"),
             description: self.parse_string(fields, "description").unwrap_or_default(),
             image: self.parse_string(fields, "image").unwrap_or_default(),
-            category: self.parse_string(fields, "category").unwrap_or_else(|| "personality-emulation".to_string()),
+            category: self
+                .parse_string(fields, "category")
+                .unwrap_or_else(|| "personality-emulation".to_string()),
             capabilities,
             persona_prompt: self.parse_string(fields, "persona_prompt"),
             approved: self.parse_bool(fields, "approved").unwrap_or(false),
-            status: self.parse_string(fields, "status").unwrap_or_else(|| "under-review".to_string()),
+            status: self
+                .parse_string(fields, "status")
+                .unwrap_or_else(|| "under-review".to_string()),
             is_private: self.parse_bool(fields, "private").unwrap_or(false),
             author: self.parse_string(fields, "author").unwrap_or_default(),
             email: self.parse_string(fields, "email"),
-            created_at: self.parse_timestamp_optional(fields, "created_at").unwrap_or_else(Utc::now),
-            updated_at: self.parse_timestamp_optional(fields, "updated_at").unwrap_or_else(Utc::now),
+            created_at: self
+                .parse_timestamp_optional(fields, "created_at")
+                .unwrap_or_else(Utc::now),
+            updated_at: self
+                .parse_timestamp_optional(fields, "updated_at")
+                .unwrap_or_else(Utc::now),
         })
     }
 
     /// Parse a folder from Firestore document
-    fn parse_folder(&self, doc: &Value) -> Result<Folder, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_folder(
+        &self,
+        doc: &Value,
+    ) -> Result<Folder, Box<dyn std::error::Error + Send + Sync>> {
         let fields = doc.get("fields").ok_or("Missing fields")?;
         let name_path = doc.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let id = name_path.split('/').last().unwrap_or("").to_string();
@@ -9051,9 +8820,15 @@ impl FirestoreService {
             id,
             name: self.parse_string(fields, "name").unwrap_or_default(),
             description: self.parse_string(fields, "description"),
-            color: self.parse_string(fields, "color").unwrap_or_else(|| "#6B7280".to_string()),
-            created_at: self.parse_timestamp_optional(fields, "created_at").unwrap_or_else(Utc::now),
-            updated_at: self.parse_timestamp_optional(fields, "updated_at").unwrap_or_else(Utc::now),
+            color: self
+                .parse_string(fields, "color")
+                .unwrap_or_else(|| "#6B7280".to_string()),
+            created_at: self
+                .parse_timestamp_optional(fields, "created_at")
+                .unwrap_or_else(Utc::now),
+            updated_at: self
+                .parse_timestamp_optional(fields, "updated_at")
+                .unwrap_or_else(Utc::now),
             order: self.parse_int(fields, "order").unwrap_or(0),
             is_default: self.parse_bool(fields, "is_default").unwrap_or(false),
             is_system: self.parse_bool(fields, "is_system").unwrap_or(false),
@@ -9231,17 +9006,23 @@ impl FirestoreService {
         value: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get the current conversation to read segments
-        let conv = self.get_conversation(uid, conversation_id).await?
+        let conv = self
+            .get_conversation(uid, conversation_id)
+            .await?
             .ok_or("Conversation not found")?;
         let mut segments = conv.transcript_segments;
 
         // Update matching segments by stable segment id first, then fall back to explicit index targets.
         for target in segment_ids {
-            let matched_segment = if let Some(index) = target.strip_prefix("#index:")
-                .and_then(|value| value.parse::<usize>().ok()) {
+            let matched_segment = if let Some(index) = target
+                .strip_prefix("#index:")
+                .and_then(|value| value.parse::<usize>().ok())
+            {
                 segments.get_mut(index)
             } else {
-                segments.iter_mut().find(|seg| seg.id.as_deref() == Some(target.as_str()))
+                segments
+                    .iter_mut()
+                    .find(|seg| seg.id.as_deref() == Some(target.as_str()))
             };
 
             if let Some(seg) = matched_segment {
@@ -9364,17 +9145,20 @@ impl FirestoreService {
         );
 
         // Build aliases arrays
-        let aliases_values: Vec<Value> = node.aliases
+        let aliases_values: Vec<Value> = node
+            .aliases
             .iter()
             .map(|a| json!({"stringValue": a}))
             .collect();
 
-        let aliases_lower_values: Vec<Value> = node.aliases_lower
+        let aliases_lower_values: Vec<Value> = node
+            .aliases_lower
             .iter()
             .map(|a| json!({"stringValue": a}))
             .collect();
 
-        let memory_ids_values: Vec<Value> = node.memory_ids
+        let memory_ids_values: Vec<Value> = node
+            .memory_ids
             .iter()
             .map(|m| json!({"stringValue": m}))
             .collect();
@@ -9423,7 +9207,8 @@ impl FirestoreService {
             edge.id
         );
 
-        let memory_ids_values: Vec<Value> = edge.memory_ids
+        let memory_ids_values: Vec<Value> = edge
+            .memory_ids
             .iter()
             .map(|m| json!({"stringValue": m}))
             .collect();
@@ -9458,7 +9243,8 @@ impl FirestoreService {
     pub async fn get_kg_nodes(
         &self,
         uid: &str,
-    ) -> Result<Vec<crate::models::KnowledgeGraphNode>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Vec<crate::models::KnowledgeGraphNode>, Box<dyn std::error::Error + Send + Sync>>
+    {
         let url = format!(
             "{}/{}/{}/{}",
             self.base_url(),
@@ -9497,7 +9283,8 @@ impl FirestoreService {
     pub async fn get_kg_edges(
         &self,
         uid: &str,
-    ) -> Result<Vec<crate::models::KnowledgeGraphEdge>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Vec<crate::models::KnowledgeGraphEdge>, Box<dyn std::error::Error + Send + Sync>>
+    {
         let url = format!(
             "{}/{}/{}/{}",
             self.base_url(),
@@ -9573,15 +9360,25 @@ impl FirestoreService {
                 .await;
         }
 
-        tracing::info!("Deleted {} nodes and {} edges for user {}", nodes.len(), edges.len(), uid);
+        tracing::info!(
+            "Deleted {} nodes and {} edges for user {}",
+            nodes.len(),
+            edges.len(),
+            uid
+        );
         Ok(())
     }
 
     /// Parse a knowledge graph node from Firestore document
-    fn parse_kg_node(&self, doc: &Value) -> Result<crate::models::KnowledgeGraphNode, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_kg_node(
+        &self,
+        doc: &Value,
+    ) -> Result<crate::models::KnowledgeGraphNode, Box<dyn std::error::Error + Send + Sync>> {
         let fields = doc.get("fields").ok_or("Missing fields")?;
 
-        let node_type_str = self.parse_string(fields, "node_type").unwrap_or_else(|| "concept".to_string());
+        let node_type_str = self
+            .parse_string(fields, "node_type")
+            .unwrap_or_else(|| "concept".to_string());
         let node_type = match node_type_str.as_str() {
             "person" => crate::models::NodeType::Person,
             "place" => crate::models::NodeType::Place,
@@ -9598,13 +9395,20 @@ impl FirestoreService {
             memory_ids: self.parse_string_array(fields, "memory_ids"),
             label_lower: self.parse_string(fields, "label_lower").unwrap_or_default(),
             aliases_lower: self.parse_string_array(fields, "aliases_lower"),
-            created_at: self.parse_timestamp_optional(fields, "created_at").unwrap_or_else(Utc::now),
-            updated_at: self.parse_timestamp_optional(fields, "updated_at").unwrap_or_else(Utc::now),
+            created_at: self
+                .parse_timestamp_optional(fields, "created_at")
+                .unwrap_or_else(Utc::now),
+            updated_at: self
+                .parse_timestamp_optional(fields, "updated_at")
+                .unwrap_or_else(Utc::now),
         })
     }
 
     /// Parse a knowledge graph edge from Firestore document
-    fn parse_kg_edge(&self, doc: &Value) -> Result<crate::models::KnowledgeGraphEdge, Box<dyn std::error::Error + Send + Sync>> {
+    fn parse_kg_edge(
+        &self,
+        doc: &Value,
+    ) -> Result<crate::models::KnowledgeGraphEdge, Box<dyn std::error::Error + Send + Sync>> {
         let fields = doc.get("fields").ok_or("Missing fields")?;
 
         Ok(crate::models::KnowledgeGraphEdge {
@@ -9613,7 +9417,9 @@ impl FirestoreService {
             target_id: self.parse_string(fields, "target_id").unwrap_or_default(),
             label: self.parse_string(fields, "label").unwrap_or_default(),
             memory_ids: self.parse_string_array(fields, "memory_ids"),
-            created_at: self.parse_timestamp_optional(fields, "created_at").unwrap_or_else(Utc::now),
+            created_at: self
+                .parse_timestamp_optional(fields, "created_at")
+                .unwrap_or_else(Utc::now),
         })
     }
 
@@ -9625,7 +9431,8 @@ impl FirestoreService {
     pub async fn get_agent_vm(
         &self,
         uid: &str,
-    ) -> Result<Option<crate::models::agent::AgentVm>, Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<Option<crate::models::agent::AgentVm>, Box<dyn std::error::Error + Send + Sync>>
+    {
         let doc = self.get_user_document(uid).await?;
         let empty = json!({});
         let fields = doc.get("fields").unwrap_or(&empty);
@@ -9733,10 +9540,10 @@ impl FirestoreService {
         });
 
         if let Some(ip_val) = ip {
-            vm_fields.as_object_mut().unwrap().insert(
-                "ip".to_string(),
-                json!({"stringValue": ip_val}),
-            );
+            vm_fields
+                .as_object_mut()
+                .unwrap()
+                .insert("ip".to_string(), json!({"stringValue": ip_val}));
         }
 
         let fields = json!({
@@ -9824,7 +9631,11 @@ impl FirestoreService {
 
             if !response.status().is_success() {
                 let error_text = response.text().await?;
-                return Err(format!("Firestore screen_activity batch commit error: {}", error_text).into());
+                return Err(format!(
+                    "Firestore screen_activity batch commit error: {}",
+                    error_text
+                )
+                .into());
             }
 
             written += chunk.len();

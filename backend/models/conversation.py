@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
@@ -118,6 +118,10 @@ class Conversation(BaseModel):
 
     status: Optional[ConversationStatus] = ConversationStatus.completed
     is_locked: bool = False
+    # Lazy processing (freemium cost cut): True when this desktop conversation was stored as a
+    # raw transcript with no LLM enrichment yet — enrichment runs on first open
+    # (get_conversation_by_id → process_conversation). Cleared once enriched.
+    deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
@@ -177,6 +181,7 @@ class CreateConversation(BaseModel):
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     is_locked: bool = False
+    private_cloud_sync_enabled: bool = False
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
@@ -224,10 +229,22 @@ class SetConversationEventsStateRequest(BaseModel):
     events_idx: List[int]
     values: List[bool]
 
+    @model_validator(mode='after')
+    def validate_parallel_arrays(self):
+        if len(self.events_idx) != len(self.values):
+            raise ValueError('events_idx and values must have the same length')
+        return self
+
 
 class SetConversationActionItemsStateRequest(BaseModel):
     items_idx: List[int]
     values: List[bool]
+
+    @model_validator(mode='after')
+    def validate_parallel_arrays(self):
+        if len(self.items_idx) != len(self.values):
+            raise ValueError('items_idx and values must have the same length')
+        return self
 
 
 class BulkAssignSegmentsRequest(BaseModel):
@@ -257,12 +274,13 @@ class UpdateActionItemDescriptionRequest(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
+    query: str = ''
     page: Optional[int] = 1
     per_page: Optional[int] = 10
     include_discarded: Optional[bool] = True
     start_date: Optional[str] = None  # ISO format datetime string
     end_date: Optional[str] = None  # ISO format datetime string
+    speaker_id: Optional[str] = None
 
 
 class TestPromptRequest(BaseModel):

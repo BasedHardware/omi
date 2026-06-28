@@ -12,9 +12,12 @@ import os
 import sys
 import types
 from contextlib import contextmanager
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -27,6 +30,16 @@ def _stub_module(name: str) -> types.ModuleType:
         mod = types.ModuleType(name)
         sys.modules[name] = mod
     return sys.modules[name]
+
+
+def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
+    mod = _stub_module(name)
+    mod.__path__ = [str(path)]
+    if "." in name:
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = _stub_module(parent_name)
+        setattr(parent, child_name, mod)
+    return mod
 
 
 # Stub database package and submodules
@@ -100,6 +113,8 @@ memories_mod.save_memories = MagicMock()
 memories_mod.delete_memory = MagicMock()
 
 # Stub utils modules
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
 for name in [
     "utils.apps",
     "utils.analytics",
@@ -224,6 +239,15 @@ import importlib
 
 process_conversation = importlib.import_module("utils.conversations.process_conversation")
 from models.memories import MemoryDB
+
+
+@pytest.fixture(autouse=True)
+def _restore_module_bindings():
+    if "models.memories" not in sys.modules:
+        importlib.import_module("models.memories")
+    setattr(sys.modules["models"], "memories", sys.modules["models.memories"])
+    auth_mod.get_user_name = MagicMock(return_value="The User")
+    process_conversation.get_user_name = auth_mod.get_user_name
 
 
 def _make_conversation_mock():

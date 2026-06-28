@@ -105,6 +105,7 @@ struct OMIApp: App {
     return Window(windowTitle, id: "main") {
       DesktopHomeView()
         .withFontScaling()
+        .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
@@ -220,6 +221,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var screenCaptureSwitch: NSSwitch?
   private var audioRecordingSwitch: NSSwitch?
   private var relaunchOnLoginSuppressedForOnboarding = false
+  private var apiKeyFetchTask: Task<Void, Never>?
+  private var floatingBarPlanFetchTask: Task<Void, Never>?
+  private var appLifecycleMaintenanceTask: Task<Void, Never>?
+  private var didScheduleInitialSettingsSync = false
+  private var initialSettingsSyncTask: Task<Void, Never>?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     if ViewExporter.shouldExport() {
@@ -244,6 +250,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
+
+    // After a Sparkle update, show a small "what's new" card in the corner of the
+    // main window once. Delayed so the window/overlay exist to render it.
+    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+      WhatsNewToast.shared.presentIfUpdated()
+    }
 
     // Proactive notifications are now OFF by default for everyone. Run the one-time
     // migration before any assistant can fire, so existing users are flipped to Off
@@ -358,6 +370,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           let lower = message.lowercased()
           if lower.contains("api key expired") || lower.contains("renew the api key")
             || lower.contains("api_key_invalid")
+            // GeminiClient maps raw backend auth failures (unauthorized / permission denied /
+            // api key / forbidden) to this user-facing string before it reaches Sentry, so the
+            // raw-message checks above miss it. Same root cause (server-side key needs rotation),
+            // same flood (one bad key emits one event per task-extraction frame for every user).
+            || lower.contains("ai service authentication error")
+            // Backend rejects the auth header on batch (PTT) transcription with a 401
+            // INVALID_AUTH / "Invalid credentials." body — a transient stale-token or BYOK
+            // misconfig, not a per-client app bug. The 30s refresh timer recovers it; left
+            // unfiltered it floods Sentry (one event per failed batch). Same class as the
+            // AuthError.notSignedIn filter below.
+            || lower.contains("invalid_auth")
           {
             return nil
           }
@@ -408,21 +431,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.trackFirstLaunchIfNeeded()
 
     // Set per-user database path before any async tasks can trigger DB initialization.
-    // This is synchronous and must happen before TierManager / TranscriptionRetryService.
+    // This is synchronous and must happen before ViewModelContainer initializes SQLite.
     let userId = UserDefaults.standard.string(forKey: "auth_userId")
     RewindDatabase.currentUserId = (userId?.isEmpty == false) ? userId : "anonymous"
 
     // Start resource monitoring (memory, CPU, disk)
     ResourceMonitor.shared.start()
 
-    // Recover any pending/failed transcription sessions from previous runs
-    Task {
-      await TranscriptionRetryService.shared.recoverPendingTranscriptions()
-      TranscriptionRetryService.shared.start()
-    }
-
-    // Start recurring task scheduler (checks every 60s for due tasks)
-    RecurringTaskScheduler.shared.start()
+    scheduleAppLifecycleMaintenance()
 
     // Identify user if already signed in
     if AuthState.shared.isSignedIn {
@@ -435,14 +451,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
           AuthService.shared.displayName.isEmpty ? nil : AuthService.shared.displayName
         SentrySDK.setUser(sentryUser)
       }
-      // Fetch conversations on startup
-      AuthService.shared.fetchConversations()
+      // Fetch API keys after first-window warmup settles. First-use paths call waitForKeys().
+      scheduleAPIKeyFetch()
 
-      // Fetch API keys from backend (keys are not bundled in the app)
-      APIKeyService.shared.startFetchingKeys()
-
-      // Fetch subscription plan for floating bar usage limits
-      Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
+      // Fetch subscription plan for floating bar usage limits after the startup warmup settles.
+      scheduleFloatingBarPlanFetch()
 
       // Start trial metadata polling (countdown UI + pre-expiry nudges)
       if let state = AppState.current {
@@ -1173,6 +1186,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     sentryHeartbeatTimer?.invalidate()
     sentryHeartbeatTimer = nil
 
+    apiKeyFetchTask?.cancel()
+    apiKeyFetchTask = nil
+    floatingBarPlanFetchTask?.cancel()
+    floatingBarPlanFetchTask = nil
+    appLifecycleMaintenanceTask?.cancel()
+    appLifecycleMaintenanceTask = nil
+    initialSettingsSyncTask?.cancel()
+    initialSettingsSyncTask = nil
+
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
 
@@ -1337,8 +1359,85 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
   }
 
+  private func scheduleFloatingBarPlanFetch() {
+    floatingBarPlanFetchTask?.cancel()
+    floatingBarPlanFetchTask = Task {
+      let delay = StartupWarmupPolicy.floatingBarPlanFetchDelay
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+      guard await AuthState.shared.isSignedIn else { return }
+      await FloatingBarUsageLimiter.shared.fetchPlan()
+    }
+  }
+
+  private func scheduleAPIKeyFetch() {
+    apiKeyFetchTask?.cancel()
+    apiKeyFetchTask = Task {
+      let delay = StartupWarmupPolicy.apiKeyFetchDelay
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+      guard await AuthState.shared.isSignedIn else { return }
+      log("AppDelegate: Starting delayed API key fetch")
+      await APIKeyService.shared.waitForKeys()
+    }
+  }
+
+  private func scheduleAppLifecycleMaintenance() {
+    appLifecycleMaintenanceTask?.cancel()
+    appLifecycleMaintenanceTask = Task {
+      let recoveryDelay = StartupWarmupPolicy.transcriptionRetryRecoveryDelay
+      if recoveryDelay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(recoveryDelay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+
+      await measurePerfAsync("AppDelegate: Transcription retry recovery") {
+        await TranscriptionRetryService.shared.recoverPendingTranscriptions()
+        await MainActor.run {
+          TranscriptionRetryService.shared.start()
+        }
+      }
+
+      let schedulerDelay = max(
+        0,
+        StartupWarmupPolicy.recurringTaskSchedulerInitialDelay
+          - StartupWarmupPolicy.transcriptionRetryRecoveryDelay
+      )
+      if schedulerDelay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(schedulerDelay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+
+      await MainActor.run {
+        RecurringTaskScheduler.shared.start()
+      }
+    }
+  }
+
   func applicationDidBecomeActive(_ notification: Notification) {
+    guard didScheduleInitialSettingsSync else {
+      scheduleInitialSettingsSync()
+      return
+    }
+
     // Sync remote assistant settings so server-side changes take effect promptly
     Task { await SettingsSyncManager.shared.syncFromServer() }
+  }
+
+  private func scheduleInitialSettingsSync() {
+    didScheduleInitialSettingsSync = true
+    initialSettingsSyncTask?.cancel()
+    initialSettingsSyncTask = Task {
+      let delay = StartupWarmupPolicy.initialSettingsSyncDelay
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+      }
+      guard !Task.isCancelled else { return }
+      await SettingsSyncManager.shared.syncFromServer()
+    }
   }
 }

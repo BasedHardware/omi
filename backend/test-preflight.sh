@@ -22,16 +22,31 @@ bad()  { echo -e "  ${RED}✗${NC} $1"; fail=$((fail + 1)); }
 # ── Tools ──
 echo "Tools:"
 
-if command -v python3 &>/dev/null; then
-  ok "python3 $(python3 --version 2>&1 | awk '{print $2}')"
+PYTHON_BIN=""
+FIRST_PYTHON_BIN=""
+for candidate in "${PYTHON:-}" python3 python; do
+  if [[ -n "$candidate" ]] && command -v "$candidate" &>/dev/null && "$candidate" -c "import sys" &>/dev/null; then
+    if [[ -z "$FIRST_PYTHON_BIN" ]]; then
+      FIRST_PYTHON_BIN="$candidate"
+    fi
+    if "$candidate" -m pytest --version &>/dev/null 2>&1; then
+      PYTHON_BIN="$candidate"
+      break
+    fi
+  fi
+done
+PYTHON_BIN="${PYTHON_BIN:-$FIRST_PYTHON_BIN}"
+
+if [[ -n "$PYTHON_BIN" ]]; then
+  ok "$PYTHON_BIN $("$PYTHON_BIN" --version 2>&1 | awk '{print $2}')"
 else
-  bad "python3 not found"
+  bad "python not found"
 fi
 
-if python3 -m pytest --version &>/dev/null 2>&1; then
-  ok "pytest $(python3 -m pytest --version 2>&1 | awk '{print $2}')"
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -m pytest --version &>/dev/null 2>&1; then
+  ok "pytest $("$PYTHON_BIN" -m pytest --version 2>&1 | awk '{print $2}')"
 else
-  bad "pytest not installed (pip install pytest)"
+  bad "pytest not installed (${PYTHON_BIN:-python} -m pip install pytest)"
 fi
 
 if command -v black &>/dev/null; then
@@ -46,7 +61,7 @@ echo "Python packages:"
 
 missing_pkgs=()
 for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram_sdk openpipe; do
-  if python3 -c "import $pkg" &>/dev/null 2>&1; then
+  if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -c "import $pkg" &>/dev/null 2>&1; then
     ok "$pkg"
   else
     missing_pkgs+=("$pkg")
@@ -55,7 +70,7 @@ for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram
 done
 
 if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
-  echo -e "  ${YELLOW}→${NC} Run: pip install -r requirements.txt"
+  echo -e "  ${YELLOW}→${NC} Run: ${PYTHON_BIN:-python} -m pip install -r requirements.txt"
 fi
 
 # ── Environment variables (required for unit tests) ──

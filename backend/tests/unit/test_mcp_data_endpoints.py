@@ -17,6 +17,8 @@ import pytest
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 
 class _AutoMockModule(ModuleType):
     def __getattr__(self, name):
@@ -26,6 +28,44 @@ class _AutoMockModule(ModuleType):
         setattr(self, name, mock)
         return mock
 
+
+def _ensure_package_path(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, ModuleType):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [path]
+    if '.' in name:
+        parent_name, child_name = name.rsplit('.', 1)
+        parent = sys.modules.setdefault(parent_name, ModuleType(parent_name))
+        setattr(parent, child_name, module)
+    return module
+
+
+def _drop_stale_module(module_name, expected_file):
+    module = sys.modules.get(module_name)
+    if module is None:
+        return
+    module_file = getattr(module, '__file__', None)
+    if isinstance(module_file, str) and os.path.abspath(module_file) == expected_file:
+        return
+    sys.modules.pop(module_name, None)
+    parent_name, child_name = module_name.rsplit('.', 1)
+    parent = sys.modules.get(parent_name)
+    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is module:
+        delattr(parent, child_name)
+
+
+_ensure_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
+_ensure_package_path('utils.retrieval', os.path.join(_BACKEND_DIR, 'utils', 'retrieval'))
+_ensure_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
+_drop_stale_module(
+    'utils.retrieval.hybrid',
+    os.path.join(_BACKEND_DIR, 'utils', 'retrieval', 'hybrid.py'),
+)
+_drop_stale_module('models.memories', os.path.join(_BACKEND_DIR, 'models', 'memories.py'))
+_drop_stale_module('models.conversation_enums', os.path.join(_BACKEND_DIR, 'models', 'conversation_enums.py'))
+_drop_stale_module('models.mcp_api_key', os.path.join(_BACKEND_DIR, 'models', 'mcp_api_key.py'))
 
 _stubs = [
     'database._client',
@@ -43,6 +83,7 @@ _stubs = [
     'database.notifications',
     'database.mem_db',
     'database.mcp_api_key',
+    'database.mcp_oauth',
     'database.daily_summaries',
     'database.screen_activity',
     'database.x_posts',
@@ -83,6 +124,8 @@ for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
 
+if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
+    sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
 sys.modules['dependencies'].get_current_user_id = MagicMock(return_value='user-1')
 sys.modules['utils.other.endpoints'].with_rate_limit = MagicMock(side_effect=lambda dependency, _policy: dependency)
@@ -102,6 +145,54 @@ from routers import mcp_sse as sse  # noqa: E402
 
 NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
+
+
+def test_sse_tools_list_filters_by_oauth_scopes():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'tools/list'})
+    names = {tool['name'] for tool in response['result']['tools']}
+
+    assert session_id is None
+    assert 'get_memories' in names
+    assert 'search_memories' in names
+    assert 'create_memory' not in names
+    assert 'get_conversations' not in names
+
+
+def test_sse_tool_security_schemes_match_runtime_scope_map():
+    for tool in sse.MCP_TOOLS:
+        advertised_scopes = tool['securitySchemes'][0]['scopes']
+        assert advertised_scopes == [sse.TOOL_REQUIRED_SCOPE[tool['name']]]
+
+
+def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, _ = sse.handle_mcp_message(
+        auth_context, {'id': 1, 'method': 'tools/call', 'params': {'name': 'create_memory', 'arguments': {}}}
+    )
+
+    assert response['error']['code'] == -32003
+    assert 'memories.write' in response['error']['data']['_meta']['mcp/www_authenticate']
+
+
+def test_authorize_redirect_builder_preserves_existing_query():
+    redirect_uri = sse._redirect_with_code(
+        'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt', 'code-1', 's1'
+    )
+    assert redirect_uri == 'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt&code=code-1&state=s1'
+
+
+def test_legacy_api_key_helper_rejects_oauth_tokens():
+    with patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token:
+        validate_access_token.return_value = {
+            'uid': UID,
+            'scopes': ['memories.read'],
+            'client_id': 'omi',
+            'resource': sse.MCP_RESOURCE_URL,
+            'grant_id': 'grant-1',
+        }
+
+        assert sse.authenticate_api_key('Bearer omi_oat_test') is None
 
 
 def _action_item(item_id='a1', desc='Email Bob', completed=False, deleted=False, locked=False):

@@ -231,6 +231,7 @@ struct SettingsContentView: View {
   @State private var isLoadingChatUsage: Bool = false
   @State private var overageInfo: OverageInfoResponse?
   @State private var isLoadingOverage: Bool = false
+  @State private var planUsageDetailsRequestID: Int = 0
   @State private var showOverageExplainer: Bool = false
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
@@ -268,6 +269,7 @@ struct SettingsContentView: View {
   // Multi-chat mode setting
   @AppStorage("multiChatEnabled") private var multiChatEnabled = false
   @AppStorage("conversationsCompactView") private var conversationsCompactView = true
+  @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") private var chatBridgeMode: String = "piMono"
@@ -303,7 +305,6 @@ struct SettingsContentView: View {
 
   enum SettingsSection: String, CaseIterable {
     case general = "General"
-    case device = "Device"
     case rewind = "Rewind"
     case transcription = "Transcription"
     case notifications = "Notifications"
@@ -452,8 +453,6 @@ struct SettingsContentView: View {
         switch selectedSection {
         case .general:
           generalSection
-        case .device:
-          DeviceSettingsPage()
         case .rewind:
           rewindSection
         case .transcription:
@@ -513,7 +512,13 @@ struct SettingsContentView: View {
         return
       }
       if newValue == .planUsage {
+        // Refetch everything for the CURRENT account. Without the trial + limiter
+        // refresh, switching accounts leaves the previous user's "Trial Ended" /
+        // over-limit state painted here (trialMetadata + serverQuota aren't reset
+        // per-account on a section switch).
         loadSubscriptionInfo()
+        AppState.current?.fetchTrialMetadata()
+        Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
@@ -1023,7 +1028,7 @@ struct SettingsContentView: View {
                 .foregroundColor(OmiColors.textPrimary)
 
               Text(
-                "Pause text recognition on battery to save energy. OCR runs automatically when plugged back in."
+                "On battery, Omi captures your screen less often to save power while keeping text recognition accurate."
               )
               .scaledFont(size: 13)
               .foregroundColor(OmiColors.textTertiary)
@@ -1031,9 +1036,9 @@ struct SettingsContentView: View {
 
             Spacer()
 
-            Toggle("", isOn: $rewindSettings.pauseOCROnBattery)
-              .toggleStyle(.switch)
-              .labelsHidden()
+            Text("Automatic")
+              .scaledFont(size: 13, weight: .medium)
+              .foregroundColor(OmiColors.textSecondary)
           }
         }
       }
@@ -1644,7 +1649,6 @@ struct SettingsContentView: View {
               trackingItem("Onboarding steps completed")
               trackingItem("Settings changes")
               trackingItem("App installations and usage")
-              trackingItem("Device connection status")
               trackingItem("Transcript processing events")
               trackingItem("Conversation creation and updates")
               trackingItem("Memory extraction events")
@@ -2471,6 +2475,28 @@ struct SettingsContentView: View {
         }
       }
 
+      settingsCard(settingId: "floatingbar.notch") {
+        HStack(spacing: 16) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Notch Mode")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Anchor the floating bar around the MacBook notch with agents on the left and voice controls on the right.")
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          Spacer()
+          Toggle("", isOn: $shortcutSettings.notchModeEnabled)
+            .toggleStyle(.switch)
+            .tint(.accentColor)
+            .onChange(of: shortcutSettings.notchModeEnabled) { _, _ in
+              if FloatingControlBarManager.shared.isEnabled {
+                FloatingControlBarManager.shared.show()
+              }
+            }
+        }
+      }
+
       settingsCard(settingId: "floatingbar.draggable") {
         HStack(spacing: 16) {
           VStack(alignment: .leading, spacing: 4) {
@@ -2483,23 +2509,6 @@ struct SettingsContentView: View {
           }
           Spacer()
           Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
-            .toggleStyle(.switch)
-            .tint(OmiColors.purplePrimary)
-        }
-      }
-
-      settingsCard(settingId: "floatingbar.voiceanswers") {
-        HStack(spacing: 16) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Voice Questions")
-              .scaledFont(size: 16, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-            Text("Speak answers aloud when you ask with push to talk.")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textSecondary)
-          }
-          Spacer()
-          Toggle("", isOn: floatingBarVoiceAnswersBinding)
             .toggleStyle(.switch)
             .tint(OmiColors.purplePrimary)
         }
@@ -3420,6 +3429,10 @@ struct SettingsContentView: View {
               if newValue == RealtimeOmniProvider.auto.rawValue {
                 AutoModelSelector.shared.refreshIfStale()
               }
+              // The picker writes @AppStorage directly (bypassing the RealtimeOmniSettings
+              // setter), so post the change ourselves — this is what re-warms the realtime
+              // hub on the newly selected provider (and is a no-op for unchanged providers).
+              NotificationCenter.default.post(name: .realtimeOmniSettingsDidChange, object: nil)
             }
           }
 
@@ -5046,6 +5059,31 @@ struct SettingsContentView: View {
         }
       }
 
+      settingsCard(settingId: "advanced.preferences.legacyhome") {
+        HStack(spacing: 16) {
+          Image(systemName: "rectangle.split.2x1")
+            .scaledFont(size: 16)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 24, height: 24)
+
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Use old Home design")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Text("Show the previous chat-first dashboard instead of the simplified Home")
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          Spacer()
+
+          Toggle("", isOn: $useLegacyHomeDesign)
+            .toggleStyle(.checkbox)
+            .labelsHidden()
+        }
+      }
+
       // Launch at Login toggle
       settingsCard(settingId: "advanced.preferences.launchatlogin") {
         HStack(spacing: 16) {
@@ -5685,20 +5723,6 @@ struct SettingsContentView: View {
     }
   }
 
-  private var floatingBarVoiceAnswersBinding: Binding<Bool> {
-    Binding(
-      get: { shortcutSettings.floatingBarVoiceAnswersEnabled },
-      set: { newValue in
-        shortcutSettings.floatingBarVoiceAnswersEnabled = newValue
-        SettingsSyncManager.shared.pushPartialUpdate(
-          AssistantSettingsResponse(
-            floatingBar: FloatingBarSettingsResponse(voiceAnswersEnabled: newValue)
-          )
-        )
-      }
-    )
-  }
-
   private var floatingBarTypedVoiceAnswersBinding: Binding<Bool> {
     Binding(
       get: { shortcutSettings.floatingBarTypedQuestionVoiceAnswersEnabled },
@@ -6108,6 +6132,7 @@ struct SettingsContentView: View {
             .background(OmiColors.backgroundQuaternary)
 
           // Links
+          linkRow(title: "What's New", url: AppBuild.changelogURLString)
           linkRow(title: "Visit Website", url: "https://omi.me")
           linkRow(title: "Help Center", url: "https://help.omi.me")
           Button(action: {
@@ -7214,6 +7239,7 @@ struct SettingsContentView: View {
     guard !isLoadingSubscription else { return }
     isLoadingSubscription = true
     subscriptionError = nil
+    refreshPlanUsageDetails()
 
     Task {
       do {
@@ -7249,39 +7275,73 @@ struct SettingsContentView: View {
         }
       }
     }
-    loadChatUsageQuota()
-    loadOverageInfo()
   }
 
-  private func loadChatUsageQuota() {
-    guard !isLoadingChatUsage else { return }
+  private func refreshPlanUsageDetails() {
+    planUsageDetailsRequestID += 1
+    let requestID = planUsageDetailsRequestID
     isLoadingChatUsage = true
+    isLoadingOverage = true
+    chatUsageQuota = nil
+    overageInfo = nil
+
     Task {
-      let quota = await APIClient.shared.fetchChatUsageQuota()
-      await MainActor.run {
-        chatUsageQuota = quota
-        isLoadingChatUsage = false
-      }
+      async let quota = APIClient.shared.fetchChatUsageQuota()
+      async let overageInfo = fetchOverageInfoForPlanUsage()
+      let (quotaValue, overageInfoValue) = await (quota, overageInfo)
+      applyPlanUsageDetails(
+        requestID: requestID,
+        quota: quotaValue,
+        overageInfo: overageInfoValue
+      )
     }
   }
 
-  private func loadOverageInfo() {
-    guard !isLoadingOverage else { return }
-    isLoadingOverage = true
-    Task {
-      do {
-        let info = try await APIClient.shared.getOverageInfo()
-        await MainActor.run {
-          overageInfo = info
-          isLoadingOverage = false
-        }
-      } catch {
-        logError("Failed to load overage info", error: error)
-        await MainActor.run {
-          isLoadingOverage = false
-        }
-      }
+  private func fetchOverageInfoForPlanUsage() async -> OverageInfoResponse? {
+    do {
+      return try await APIClient.shared.getOverageInfo()
+    } catch {
+      logError("Failed to load overage info", error: error)
+      return nil
     }
+  }
+
+  @MainActor
+  private func applyPlanUsageDetails(
+    requestID: Int,
+    quota: APIClient.ChatUsageQuota?,
+    overageInfo: OverageInfoResponse?
+  ) {
+    guard requestID == planUsageDetailsRequestID else { return }
+    chatUsageQuota = quota
+    if let quota {
+      FloatingBarUsageLimiter.shared.applyQuota(quota)
+    }
+    self.overageInfo = overageInfo
+    isLoadingChatUsage = false
+    isLoadingOverage = false
+  }
+
+  private func applySuccessfulSubscriptionRefresh(_ subscription: UserSubscriptionResponse) {
+    userSubscription = subscription
+    subscriptionError = nil
+    pendingSubscriptionPriceId = nil
+    pendingCheckoutSessionId = nil
+    selectedPlanIdForCheckout = nil
+
+    FloatingBarUsageLimiter.shared.applyPlan(
+      plan: subscription.subscription.plan,
+      status: subscription.subscription.status
+    )
+
+    if subscription.subscription.plan != .basic,
+       subscription.subscription.status == .active,
+       AppState.current?.isPaywalled == true {
+      AppState.current?.isPaywalled = false
+      log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
+    }
+
+    refreshPlanUsageDetails()
   }
 
   private func startCheckout(for priceId: String) {
@@ -7443,12 +7503,8 @@ struct SettingsContentView: View {
             subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
-            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
-              userSubscription = subscription
-              subscriptionError = nil
-              pendingSubscriptionPriceId = nil
-              pendingCheckoutSessionId = nil
+              applySuccessfulSubscriptionRefresh(subscription)
             }
             return
           }

@@ -1516,6 +1516,10 @@ abstract class BleFlutterApi {
 
   void onStateRestored(List<String> peripheralUuids);
 
+  /// Native batch writer finalized a recording file (rotation / gap / stop) so
+  /// Dart can rescan the recordings dir without waiting for a disconnect.
+  void onBatchRecordingFinalized(String fileName);
+
   static void setUp(BleFlutterApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -1700,6 +1704,31 @@ abstract class BleFlutterApi {
               'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onStateRestored was null, expected non-null List<String>.');
           try {
             api.onStateRestored(arg_peripheralUuids!);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          assert(message != null,
+          'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized was null.');
+          final List<Object?> args = (message as List<Object?>?)!;
+          final String? arg_fileName = (args[0] as String?);
+          assert(arg_fileName != null,
+              'Argument for dev.flutter.pigeon.omi_pigeon.BleFlutterApi.onBatchRecordingFinalized was null, expected non-null String.');
+          try {
+            api.onBatchRecordingFinalized(arg_fileName!);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

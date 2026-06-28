@@ -65,6 +65,30 @@ enum DesktopConversationMatchPolicy {
     return abs(memoryStartedAt.timeIntervalSince(sessionStartedAt)) < startedAtTolerance
   }
 
+  static func shouldBindConversationSession(
+    incomingBackendId: String,
+    activeBackendId: String?,
+    ignoredRotatedBackendIds: Set<String>
+  ) -> Bool {
+    guard !incomingBackendId.isEmpty else { return false }
+    if let activeBackendId, !activeBackendId.isEmpty {
+      return incomingBackendId == activeBackendId
+    }
+    if ignoredRotatedBackendIds.contains(incomingBackendId) {
+      return false
+    }
+    return true
+  }
+
+  static func canCompleteBoundBackendConversation(
+    id conversationId: String,
+    boundBackendId: String,
+    status: ConversationStatus,
+    source: ConversationSource?
+  ) -> Bool {
+    conversationId == boundBackendId && source == .desktop && status != .inProgress
+  }
+
   static func parseMemoryEventDate(_ value: Any?) -> Date? {
     if let date = value as? Date {
       return date
@@ -122,6 +146,10 @@ class AppState: ObservableObject {
   // Access via RecordingTimer.shared.duration
   var recordingDuration: TimeInterval { RecordingTimer.shared.duration }
 
+  private var hasActiveConversationFilters: Bool {
+    showStarredOnly || selectedDateFilter != nil || selectedFolderId != nil
+  }
+
   // Live speaker segments moved to LiveTranscriptMonitor to avoid triggering global re-renders
   // Access via LiveTranscriptMonitor.shared.segments
   var liveSpeakerSegments: [SpeakerSegment] { LiveTranscriptMonitor.shared.segments }
@@ -130,7 +158,9 @@ class AppState: ObservableObject {
   @Published var conversations: [ServerConversation] = []
   @Published var isLoadingConversations: Bool = false
   @Published var conversationsError: String? = nil
-  @Published var totalConversationsCount: Int? = nil  // Total count (fetched separately)
+  @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
+  @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
+  private var pendingConversationMutations: [String: ConversationPendingMutation] = [:]
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -443,6 +473,12 @@ class AppState: ObservableObject {
 
   // Crash-safe transcription storage
   private var currentSessionId: Int64?
+  /// Backend conversation id announced by `/v4/listen` for the active recording session.
+  private var currentBackendConversationId: String?
+  /// Backend id received before the local DB session exists; consumed once startSession completes.
+  private var pendingBackendConversationId: String?
+  /// Backend ids from recently rotated/rejected sessions; ignore fast-reconnect resumes of them.
+  private var ignoredRotatedBackendConversationIds: Set<String> = []
   /// Session ID captured before rotation in finishConversation(), consumed by memory_created handler
   private var finishedSessionId: Int64?
   /// Recording start time captured before rotation, used by memory_created handler for accurate duration analytics
@@ -486,16 +522,20 @@ class AppState: ObservableObject {
     // (ProactiveAssistantsPlugin, isPaywalledEffective) keep blocking until
     // didSet writes the new value. Only basic-tier users have a legitimate
     // pre-fetch paywalled state to preserve.
-    let cachedPlan = UserDefaults.standard.string(forKey: "floatingBar_cachedPlan")
-    let cachedPlanIsPaid = cachedPlan != nil && cachedPlan != "basic"
-    if APIKeyService.isByokActive || cachedPlanIsPaid {
-      self.isPaywalled = false
-      // didSet doesn't fire from init, so flush UserDefaults explicitly for
-      // singletons that read the key directly.
-      UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
-    } else {
-      self.isPaywalled = UserDefaults.standard.bool(forKey: "desktop_isPaywalled")
-    }
+    // Freemium: the desktop trial paywall is disabled by default
+    // (backend TRIAL_PAYWALL_ENABLED off), so a stale cached
+    // `desktop_isPaywalled=true` from a pre-freemium session must not gate
+    // anything on launch. Previously basic-tier users trusted that cache and
+    // flashed the "monthly limit" popup until fetchTrialMetadata refreshed
+    // (~1-2s) — and synchronous readers (ProactiveAssistantsPlugin,
+    // isPaywalledEffective) blocked for that whole window. Always start
+    // non-paywalled and let the backend's trial metadata be authoritative:
+    // fetchTrialMetadata re-sets isPaywalled only if the backend genuinely
+    // reports trial_expired (it won't under freemium).
+    self.isPaywalled = false
+    // didSet doesn't fire from init, so flush UserDefaults explicitly for
+    // singletons that read the key directly.
+    UserDefaults.standard.set(false, forKey: "desktop_isPaywalled")
 
     // Resolve beta/stable before loading backend URLs so beta releases use dev services.
     AppBuild.prepareUpdateChannelForBackendRouting()
@@ -954,9 +994,15 @@ class AppState: ObservableObject {
   func checkAllPermissions() {
     checkNotificationPermission()
     checkScreenRecordingPermission()
-    checkAutomationPermission()
     checkMicrophonePermission()
     checkSystemAudioPermission()
+
+    if AppBuild.usesLazyDevPermissions {
+      log("Permissions: lazy dev mode enabled, skipping startup automation/accessibility/FDA probes")
+      return
+    }
+
+    checkAutomationPermission()
     checkAccessibilityPermission()
     checkFullDiskAccess()
     // One-time startup diagnostic for accessibility
@@ -1665,6 +1711,9 @@ class AppState: ObservableObject {
       liveSpeakerPersonMap = [:]
       LiveTranscriptMonitor.shared.clear()
       recordingStartTime = Date()
+      currentBackendConversationId = nil
+      pendingBackendConversationId = nil
+      ignoredRotatedBackendConversationIds = []
       AudioLevelMonitor.shared.reset()
       RecordingTimer.shared.start()
 
@@ -1685,6 +1734,22 @@ class AppState: ObservableObject {
             self.currentSessionId = sessionId
             // Start live notes session
             LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+          }
+          if let backendId = await MainActor.run(body: { () -> String? in
+            let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId
+            guard let candidate else { return nil }
+            return DesktopConversationMatchPolicy.shouldBindConversationSession(
+              incomingBackendId: candidate,
+              activeBackendId: self.currentBackendConversationId,
+              ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
+            ) ? candidate : nil
+          }) {
+            try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+            await MainActor.run {
+              self.currentBackendConversationId = backendId
+              self.pendingBackendConversationId = nil
+              self.ignoredRotatedBackendConversationIds = []
+            }
           }
           log("Transcription: Created DB session \(sessionId)")
         } catch {
@@ -2073,6 +2138,7 @@ class AppState: ObservableObject {
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
     let capturedSessionId = currentSessionId
     let capturedStartTime = recordingStartTime
+    let capturedBackendConversationId = currentBackendConversationId
     let generationAtStop = recordingGeneration
 
     stopAudioCapture()
@@ -2095,9 +2161,21 @@ class AppState: ObservableObject {
 
       do {
         if let conversation = try await APIClient.shared.forceProcessConversation() {
-          // Validate the returned conversation matches the session we just stopped
-          if let sessionId = capturedSessionId, let startTime = capturedStartTime,
-             DesktopConversationMatchPolicy.matchesDesktopConversation(
+          // Prefer the exact backend conversation id announced by /v4/listen; fall back to
+          // timestamp/source matching for older backend sessions that did not emit the event.
+          if let sessionId = capturedSessionId,
+             let backendConversationId = capturedBackendConversationId,
+             DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+               id: conversation.id,
+               boundBackendId: backendConversationId,
+               status: conversation.status,
+               source: conversation.source) {
+            try? await TranscriptionStorage.shared.markSessionCompleted(
+              id: sessionId, backendId: conversation.id)
+            log("Transcription: Force-processed bound conversation \(conversation.id), session \(sessionId) completed")
+          } else if let sessionId = capturedSessionId, let startTime = capturedStartTime,
+                    capturedBackendConversationId == nil,
+                    DesktopConversationMatchPolicy.matchesDesktopConversation(
               startedAt: conversation.startedAt,
               source: conversation.source,
               sessionStartedAt: startTime) {
@@ -2107,13 +2185,19 @@ class AppState: ObservableObject {
           } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
             // Force-process returned a different conversation — fall back to reconciliation
             log("Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp")
-            await reconcileSession(sessionId: sessionId, startTime: startTime)
+            await reconcileSession(
+              sessionId: sessionId,
+              startTime: startTime,
+              backendConversationId: capturedBackendConversationId)
           }
         } else {
           // 404: No in-progress conversation — WS close handler already processed it.
-          // Reconcile by checking if a matching conversation exists on the backend.
+          // Reconcile by exact backend id when available, otherwise by timestamp/source.
           if let sessionId = capturedSessionId, let startTime = capturedStartTime {
-            await reconcileSession(sessionId: sessionId, startTime: startTime)
+            await reconcileSession(
+              sessionId: sessionId,
+              startTime: startTime,
+              backendConversationId: capturedBackendConversationId)
           }
         }
       } catch {
@@ -2183,8 +2267,33 @@ class AppState: ObservableObject {
 
   /// Reconcile a local session by checking if a matching conversation exists on the backend.
   /// If found, marks the session as completed. Otherwise leaves it as pendingUpload for retry.
-  private func reconcileSession(sessionId: Int64, startTime: Date) async {
+  private func reconcileSession(
+    sessionId: Int64,
+    startTime: Date,
+    backendConversationId: String? = nil
+  ) async {
     do {
+      if let backendConversationId, !backendConversationId.isEmpty {
+        do {
+          let conversation = try await APIClient.shared.getConversation(id: backendConversationId)
+          guard DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
+            id: conversation.id,
+            boundBackendId: backendConversationId,
+            status: conversation.status,
+            source: conversation.source
+          ) else {
+            log("Transcription: Exact backend conversation \(backendConversationId) is not a completed desktop session; falling back to timestamp")
+            throw APIError.invalidResponse
+          }
+          try await TranscriptionStorage.shared.markSessionCompleted(
+            id: sessionId, backendId: conversation.id)
+          log("Transcription: Reconciled session \(sessionId) by exact backend conversation \(conversation.id)")
+          return
+        } catch {
+          logError("Transcription: Exact backend conversation reconciliation failed for session \(sessionId), falling back to timestamp", error: error)
+        }
+      }
+
       let conversations = try await APIClient.shared.getConversations(
         limit: 5,
         includeDiscarded: true,
@@ -2331,8 +2440,16 @@ class AppState: ObservableObject {
     LiveNotesMonitor.shared.endSession()
     LiveNotesMonitor.shared.clear()
 
-    // Reset the recording start time for the next conversation
+    // Reset the recording start time and backend binding for the next conversation.
+    // If the new WebSocket fast-reconnects before the backend finalizes the prior
+    // conversation, it can briefly re-emit the old conversation id; do not bind the
+    // fresh local SQLite session to that rotated id.
     recordingStartTime = Date()
+    if let currentBackendConversationId {
+      ignoredRotatedBackendConversationIds.insert(currentBackendConversationId)
+    }
+    currentBackendConversationId = nil
+    pendingBackendConversationId = nil
     RecordingTimer.shared.restart()
 
     // Restart the 4-hour max recording timer
@@ -2410,6 +2527,22 @@ class AppState: ObservableObject {
         await MainActor.run {
           self.currentSessionId = sessionId
           LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+        }
+        if let backendId = await MainActor.run(body: { () -> String? in
+          let candidate = self.pendingBackendConversationId ?? self.currentBackendConversationId
+          guard let candidate else { return nil }
+          return DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: candidate,
+            activeBackendId: self.currentBackendConversationId,
+            ignoredRotatedBackendIds: self.ignoredRotatedBackendConversationIds
+          ) ? candidate : nil
+        }) {
+          try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+          await MainActor.run {
+            self.currentBackendConversationId = backendId
+            self.pendingBackendConversationId = nil
+            self.ignoredRotatedBackendConversationIds = []
+          }
         }
         log("Transcription: Created new DB session \(sessionId) for next conversation")
       } catch {
@@ -2534,6 +2667,21 @@ class AppState: ObservableObject {
 
   // MARK: - Conversations
 
+  private func updateConversationCount(_ count: Int, filtered: Bool) {
+    if filtered {
+      if filteredConversationsCount != count {
+        filteredConversationsCount = count
+      }
+    } else {
+      if totalConversationsCount != count {
+        totalConversationsCount = count
+      }
+      if filteredConversationsCount != nil {
+        filteredConversationsCount = nil
+      }
+    }
+  }
+
   /// Load conversations - first from local cache (instant), then from API (background refresh)
   func loadConversations() async {
     guard !isLoadingConversations else { return }
@@ -2541,51 +2689,69 @@ class AppState: ObservableObject {
     isLoadingConversations = true
     conversationsError = nil
 
+    let requestShowStarredOnly = showStarredOnly
+    let requestSelectedDateFilter = selectedDateFilter
+    let requestSelectedFolderId = selectedFolderId
+    let requestHasActiveFilters = hasActiveConversationFilters
+
+    func requestFiltersAreCurrent() -> Bool {
+      showStarredOnly == requestShowStarredOnly
+        && selectedDateFilter == requestSelectedDateFilter
+        && selectedFolderId == requestSelectedFolderId
+    }
+
     // Step 1: Load from local cache first (instant display)
-    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery)
-    do {
-      let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) {
-        group in
-        group.addTask {
-          try await TranscriptionStorage.shared.getLocalConversations(
-            limit: 50,
-            starredOnly: self.showStarredOnly,
-            folderId: self.selectedFolderId
-          )
+    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery).
+    // The local cache currently supports starred/folder filters but not server date ranges;
+    // skip it for date-filtered views so the visible list and total count share semantics.
+    if requestSelectedDateFilter == nil {
+      do {
+        let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) { group in
+          group.addTask {
+            try await TranscriptionStorage.shared.getLocalConversations(
+              limit: 50,
+              starredOnly: requestShowStarredOnly,
+              folderId: requestSelectedFolderId
+            )
+          }
+          group.addTask {
+            try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
+            throw CancellationError()
+          }
+          let result = try await group.next()!
+          group.cancelAll()
+          return result
         }
-        group.addTask {
-          try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
-          throw CancellationError()
+
+        if !cachedConversations.isEmpty && requestFiltersAreCurrent() {
+          conversations = cachedConversations
+          log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
+
+          // Get local count
+          let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
+            starredOnly: requestShowStarredOnly,
+            folderId: requestSelectedFolderId)
+          updateConversationCount(localCount, filtered: requestHasActiveFilters)
+
+          // Stop loading state so UI shows cached data immediately
+          isLoadingConversations = false
+          // Notify sidebar immediately so loading indicator clears with cached data
+          NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
         }
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
+      } catch {
+        log("Conversations: Local cache unavailable, falling back to API")
+        // Continue to API fetch even if local fails
       }
-
-      if !cachedConversations.isEmpty {
-        conversations = cachedConversations
-        log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
-
-        // Get local count
-        let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
-          starredOnly: showStarredOnly)
-        totalConversationsCount = localCount
-
-        // Stop loading state so UI shows cached data immediately
-        isLoadingConversations = false
-        // Notify sidebar immediately so loading indicator clears with cached data
-        NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
-      }
-    } catch {
-      log("Conversations: Local cache unavailable, falling back to API")
-      // Continue to API fetch even if local fails
+    } else {
+      conversations = []
+      filteredConversationsCount = 0
     }
 
     // Step 2: Fetch from API in background to get fresh data
     // Calculate date range if date filter is set
     let startDate: Date?
     let endDate: Date?
-    if let filterDate = selectedDateFilter {
+    if let filterDate = requestSelectedDateFilter {
       let calendar = Calendar.current
       startDate = calendar.startOfDay(for: filterDate)
       endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
@@ -2602,16 +2768,33 @@ class AppState: ObservableObject {
       includeDiscarded: false,
       startDate: startDate,
       endDate: endDate,
-      folderId: selectedFolderId,
-      starred: showStarredOnly ? true : nil
+      folderId: requestSelectedFolderId,
+      starred: requestShowStarredOnly ? true : nil
     )
-    async let countTask = APIClient.shared.getConversationsCount(includeDiscarded: false)
+    async let countTask = APIClient.shared.getConversationsCount(
+      includeDiscarded: false,
+      statuses: [.completed, .processing],
+      startDate: startDate,
+      endDate: endDate,
+      folderId: requestSelectedFolderId,
+      starred: requestShowStarredOnly ? true : nil
+    )
 
     do {
       let fetchedConversations = try await conversationsTask
-      conversations = fetchedConversations
+      if requestFiltersAreCurrent() {
+        let reconciliation = ConversationReconciliationPolicy.mergeList(
+          server: fetchedConversations,
+          current: conversations,
+          pendingMutations: pendingConversationMutations
+        )
+        pendingConversationMutations = reconciliation.pendingMutations
+        conversations = reconciliation.conversations
+      } else {
+        log("Conversations: Ignoring stale response for superseded filters")
+      }
       log(
-        "Conversations: Refreshed \(fetchedConversations.count) from API (starred=\(showStarredOnly), date=\(selectedDateFilter?.description ?? "nil"))"
+        "Conversations: Refreshed \(fetchedConversations.count) from API (starred=\(requestShowStarredOnly), date=\(requestSelectedDateFilter?.description ?? "nil"))"
       )
 
       // DEBUG: Log any conversations with empty titles
@@ -2649,8 +2832,12 @@ class AppState: ObservableObject {
     // Update total count from API (more accurate than local)
     do {
       let count = try await countTask
-      totalConversationsCount = count
-      log("Conversations: Total count from API = \(count)")
+      if requestFiltersAreCurrent() {
+        updateConversationCount(count, filtered: requestHasActiveFilters)
+        log("Conversations: Count from API = \(count) (filtered=\(requestHasActiveFilters))")
+      } else {
+        log("Conversations: Ignoring stale count for superseded filters")
+      }
     } catch {
       logError("Conversations: Failed to get count from API", error: error)
       // Keep local count if API fails
@@ -2658,6 +2845,9 @@ class AppState: ObservableObject {
 
     isLoadingConversations = false
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
+    if !requestFiltersAreCurrent() {
+      await loadConversations()
+    }
   }
 
   /// Refresh conversations silently (for app-activation and Cmd+R event-driven refreshes).
@@ -2670,10 +2860,21 @@ class AppState: ObservableObject {
     // Skip if currently doing a full load
     guard !isLoadingConversations else { return }
 
+    let requestShowStarredOnly = showStarredOnly
+    let requestSelectedDateFilter = selectedDateFilter
+    let requestSelectedFolderId = selectedFolderId
+    let requestHasActiveFilters = hasActiveConversationFilters
+
+    func requestFiltersAreCurrent() -> Bool {
+      showStarredOnly == requestShowStarredOnly
+        && selectedDateFilter == requestSelectedDateFilter
+        && selectedFolderId == requestSelectedFolderId
+    }
+
     // Calculate date range if date filter is set
     let startDate: Date?
     let endDate: Date?
-    if let filterDate = selectedDateFilter {
+    if let filterDate = requestSelectedDateFilter {
       let calendar = Calendar.current
       startDate = calendar.startOfDay(for: filterDate)
       endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
@@ -2690,15 +2891,23 @@ class AppState: ObservableObject {
         includeDiscarded: false,
         startDate: startDate,
         endDate: endDate,
-        folderId: selectedFolderId,
-        starred: showStarredOnly ? true : nil
+        folderId: requestSelectedFolderId,
+        starred: requestShowStarredOnly ? true : nil
       )
 
-      // Merge in-place: update existing, add new, remove gone
-      let merged = mergeConversations(source: fetchedConversations, current: conversations)
-      if merged != conversations {
-        conversations = merged
-        log("Conversations: Auto-refresh updated (\(merged.count) items)")
+      if requestFiltersAreCurrent() {
+        let reconciliation = ConversationReconciliationPolicy.mergeList(
+          server: fetchedConversations,
+          current: conversations,
+          pendingMutations: pendingConversationMutations
+        )
+        pendingConversationMutations = reconciliation.pendingMutations
+        if reconciliation.conversations != conversations {
+          conversations = reconciliation.conversations
+          log("Conversations: Auto-refresh updated (\(reconciliation.conversations.count) items)")
+        }
+      } else {
+        log("Conversations: Ignoring stale auto-refresh response for superseded filters")
       }
 
       // Sync to local database in background
@@ -2723,50 +2932,28 @@ class AppState: ObservableObject {
     }
 
     do {
-      let count = try await APIClient.shared.getConversationsCount(includeDiscarded: false)
-      if totalConversationsCount != count {
-        totalConversationsCount = count
+      let count = try await APIClient.shared.getConversationsCount(
+        includeDiscarded: false,
+        statuses: [.completed, .processing],
+        startDate: startDate,
+        endDate: endDate,
+        folderId: requestSelectedFolderId,
+        starred: requestShowStarredOnly ? true : nil
+      )
+      if requestFiltersAreCurrent() {
+        updateConversationCount(count, filtered: requestHasActiveFilters)
       }
     } catch {
       // Keep existing count
     }
   }
 
-  /// Merge fetched conversations into the current list in-place.
-  /// Updates changed items, adds new ones, removes ones no longer in source.
-  private func mergeConversations(source: [ServerConversation], current: [ServerConversation])
-    -> [ServerConversation]
-  {
-    let sourceById = Dictionary(uniqueKeysWithValues: source.map { ($0.id, $0) })
-    let sourceIds = Set(source.map { $0.id })
-    let currentIds = Set(current.map { $0.id })
-
-    var result = current
-
-    // Update existing items in-place
-    for i in result.indices {
-      if let updated = sourceById[result[i].id], updated != result[i] {
-        result[i] = updated
-      }
-    }
-
-    // Remove items no longer in source
-    result.removeAll { !sourceIds.contains($0.id) }
-
-    // Add new items from source that aren't in current
-    let newIds = sourceIds.subtracting(currentIds)
-    if !newIds.isEmpty {
-      let newItems = source.filter { newIds.contains($0.id) }
-      result.append(contentsOf: newItems)
-      // Re-sort by createdAt descending (newest first) to maintain order
-      result.sort { $0.createdAt > $1.createdAt }
-    }
-
-    return result
-  }
-
-  /// Update the starred status of a conversation locally
+  /// Update the starred status of a conversation locally after a successful mutation.
   func setConversationStarred(_ conversationId: String, starred: Bool) {
+    var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
+    mutation.setStarred(starred)
+    pendingConversationMutations[conversationId] = mutation
+
     if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
       conversations[index].starred = starred
     }
@@ -2870,6 +3057,10 @@ class AppState: ObservableObject {
       try await TranscriptionStorage.shared.updateFolderByBackendId(
         conversationId, folderId: folderId)
 
+      var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
+      mutation.setFolderId(folderId)
+      pendingConversationMutations[conversationId] = mutation
+
       // Update local state
       if conversations.contains(where: { $0.id == conversationId }) {
         // Reload to get updated conversation
@@ -2888,8 +3079,12 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Update a conversation title locally (after successful API call)
+  /// Update a conversation title locally after a successful mutation.
   func updateConversationTitle(_ conversationId: String, title: String) {
+    var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
+    mutation.setTitle(title)
+    pendingConversationMutations[conversationId] = mutation
+
     if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
       conversations[index].structured.title = title
     }
@@ -3069,12 +3264,52 @@ class AppState: ObservableObject {
     }
   }
 
+  private func bindActiveSessionToBackendConversation(_ backendId: String) {
+    guard DesktopConversationMatchPolicy.shouldBindConversationSession(
+      incomingBackendId: backendId,
+      activeBackendId: currentBackendConversationId,
+      ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds
+    ) else {
+      pendingBackendConversationId = nil
+      if let currentBackendConversationId, currentBackendConversationId != backendId {
+        ignoredRotatedBackendConversationIds.insert(backendId)
+      }
+      log("Transcription: Ignoring rotated backend conversation id \(backendId) for fresh local session")
+      return
+    }
+
+    ignoredRotatedBackendConversationIds = []
+    currentBackendConversationId = backendId
+
+    guard let sessionId = currentSessionId else {
+      pendingBackendConversationId = backendId
+      log("Transcription: Deferred backend conversation bind until local DB session exists (backend: \(backendId))")
+      return
+    }
+
+    pendingBackendConversationId = nil
+    Task {
+      do {
+        try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+      } catch {
+        logError("Transcription: Failed to bind DB session \(sessionId) to backend conversation \(backendId)", error: error)
+      }
+    }
+  }
+
   /// Handle message events from Python backend `/v4/listen`
   private func handleListenEvent(_ event: TranscriptionService.ListenEvent) {
     switch event.type {
     case "service_status":
       let status = event.raw["status"] as? String ?? "unknown"
       log("Transcription: Backend service status: \(status)")
+
+    case "conversation_session":
+      guard let backendId = event.raw["conversation_id"] as? String, !backendId.isEmpty else {
+        log("Transcription: Ignoring conversation_session event without conversation_id")
+        break
+      }
+      bindActiveSessionToBackendConversation(backendId)
 
     case "memory_processing_started":
       // ConversationEvent: conversation is nested under "memory"
@@ -3791,6 +4026,10 @@ extension Notification.Name {
   /// (userInfo: ["destination": rawValue]) — for headless e2e inspection.
   static let desktopAutomationOpenExportRequested = Notification.Name(
     "desktopAutomationOpenExportRequested")
+  /// Posted to open an import connector sheet from Home or automation
+  /// (userInfo: ["connector": ImportConnector.id]).
+  static let desktopAutomationOpenImportRequested = Notification.Name(
+    "desktopAutomationOpenImportRequested")
   /// Posted when file indexing completes (userInfo: ["totalFiles": Int])
   static let fileIndexingComplete = Notification.Name("fileIndexingComplete")
   /// Posted from Settings to trigger the file indexing sheet

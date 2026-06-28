@@ -2,7 +2,7 @@
 # Multi-stage build for smaller image size
 
 # Build stage
-FROM rust:1.88-slim AS builder
+FROM rust:1.88.0-slim AS builder
 
 WORKDIR /app
 
@@ -19,14 +19,14 @@ COPY Cargo.toml Cargo.lock* ./
 RUN mkdir src && echo "fn main() {}" > src/main.rs
 
 # Build dependencies only (cached layer)
-RUN cargo build --release && rm -rf src
+RUN cargo build --release --locked && rm -rf src
 
 # Copy actual source code and templates
 COPY src ./src
 COPY templates ./templates
 
 # Build the application
-RUN touch src/main.rs && cargo build --release
+RUN touch src/main.rs && cargo build --release --locked
 
 # Runtime stage
 FROM debian:bookworm-slim

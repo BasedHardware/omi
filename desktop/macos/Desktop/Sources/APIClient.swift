@@ -29,8 +29,9 @@ actor APIClient {
   // Short-lived caches to deduplicate simultaneous calls from multiple services
   private var goalsCacheTime: Date?
   private var goalsCache: [Goal]?
-  private var conversationsCountCacheTime: Date?
-  private var conversationsCountCache: Int?
+  // Keyed by the query parameters so a cached total for one filter set is never
+  // returned for a different one (e.g. includeDiscarded / statuses).
+  private var conversationsCountCache: [String: (count: Int, time: Date)] = [:]
 
   init() {
     let config = URLSessionConfiguration.default
@@ -146,6 +147,65 @@ actor APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
 
     return try await performRequest(request)
+  }
+
+  /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
+  /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall and
+  /// returns 402/403 if not entitled — any non-200 surfaces here as a thrown error,
+  /// so we return nil and the caller falls back to the legacy cascade.
+  func mintRealtimeToken(provider: String) async -> String? {
+    struct Resp: Decodable { let token: String }
+    let base = rustBackendURL
+    guard !base.isEmpty else { return nil }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    do {
+      let resp: Resp = try await post(
+        "v2/realtime/session", body: ["provider": provider], customBaseURL: normalized)
+      return resp.token.isEmpty ? nil : resp.token
+    } catch {
+      log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  /// Report a managed realtime turn's token usage so the backend can price it and record
+  /// it into the llm_usage ledger (counts toward quota). Fire-and-forget; failures are
+  /// logged and dropped (the backend reconciler is the eventual safety net). Only called
+  /// for managed (ephemeral) sessions — BYOK users pay the provider directly.
+  func reportRealtimeUsage(
+    provider: String,
+    model: String,
+    inputText: Int,
+    inputAudio: Int,
+    inputCached: Int,
+    outputText: Int,
+    outputAudio: Int
+  ) async {
+    let base = rustBackendURL
+    guard !base.isEmpty else { return }
+    let normalized = base.hasSuffix("/") ? base : base + "/"
+    guard let url = URL(string: normalized + "v2/realtime/usage") else { return }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.timeoutInterval = 15
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    do {
+      let headers = try await buildHeaders(requireAuth: true)
+      for (k, v) in headers { request.setValue(v, forHTTPHeaderField: k) }
+      let body: [String: Any] = [
+        "provider": provider,
+        "model": model,
+        "input_text_tokens": inputText,
+        "input_audio_tokens": inputAudio,
+        "input_cached_tokens": inputCached,
+        "output_text_tokens": outputText,
+        "output_audio_tokens": outputAudio,
+      ]
+      request.httpBody = try JSONSerialization.data(withJSONObject: body)
+      _ = try await session.data(for: request)
+    } catch {
+      log("APIClient: realtime usage report failed: \(error.localizedDescription)")
+    }
   }
 
   func delete(
@@ -302,21 +362,16 @@ extension APIClient {
 
 extension APIClient {
 
-  /// Fetches conversations from the API with optional filtering
-  func getConversations(
-    limit: Int = 50,
-    offset: Int = 0,
+  static func conversationFilterQueryItems(
     statuses: [ConversationStatus] = [],
     includeDiscarded: Bool = false,
     startDate: Date? = nil,
     endDate: Date? = nil,
     folderId: String? = nil,
     starred: Bool? = nil
-  ) async throws -> [ServerConversation] {
+  ) -> [String] {
     var queryItems: [String] = [
-      "limit=\(limit)",
-      "offset=\(offset)",
-      "include_discarded=\(includeDiscarded)",
+      "include_discarded=\(includeDiscarded)"
     ]
 
     if !statuses.isEmpty {
@@ -342,6 +397,33 @@ extension APIClient {
       queryItems.append("starred=\(starred)")
     }
 
+    return queryItems
+  }
+
+  /// Fetches conversations from the API with optional filtering
+  func getConversations(
+    limit: Int = 50,
+    offset: Int = 0,
+    statuses: [ConversationStatus] = [],
+    includeDiscarded: Bool = false,
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
+  ) async throws -> [ServerConversation] {
+    var queryItems: [String] = [
+      "limit=\(limit)",
+      "offset=\(offset)",
+    ]
+    queryItems += Self.conversationFilterQueryItems(
+      statuses: statuses,
+      includeDiscarded: includeDiscarded,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
+
     let endpoint = "v1/conversations?\(queryItems.joined(separator: "&"))"
     return try await get(endpoint)
   }
@@ -354,6 +436,7 @@ extension APIClient {
   /// Deletes a conversation by ID
   func deleteConversation(id: String) async throws {
     try await delete("v1/conversations/\(id)")
+    invalidateConversationsCountCache()
   }
 
   /// Updates the starred status of a conversation
@@ -369,6 +452,7 @@ extension APIClient {
     else {
       throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
+    invalidateConversationsCountCache()
   }
 
   /// Sets the visibility of a conversation for sharing
@@ -448,35 +532,58 @@ extension APIClient {
     return try await post("v1/conversations/search", body: body)
   }
 
+  static func conversationsCountEndpoint(
+    includeDiscarded: Bool = false,
+    statuses: [ConversationStatus] = [.completed, .processing],
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
+  ) -> String {
+    let queryItems = Self.conversationFilterQueryItems(
+      statuses: statuses,
+      includeDiscarded: includeDiscarded,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
+
+    return "v1/conversations/count?\(queryItems.joined(separator: "&"))"
+  }
+
+  func invalidateConversationsCountCache() {
+    conversationsCountCache.removeAll()
+  }
+
   /// Gets the total count of conversations. Uses 5-second cache to deduplicate parallel calls.
   func getConversationsCount(
     includeDiscarded: Bool = false,
-    statuses: [ConversationStatus] = [.completed, .processing]
+    statuses: [ConversationStatus] = [.completed, .processing],
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
   ) async throws -> Int {
-    if let cache = conversationsCountCache, let time = conversationsCountCacheTime,
-      Date().timeIntervalSince(time) < 5
-    {
-      return cache
+    let endpoint = Self.conversationsCountEndpoint(
+      includeDiscarded: includeDiscarded,
+      statuses: statuses,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
+
+    if let cache = conversationsCountCache[endpoint], Date().timeIntervalSince(cache.time) < 5 {
+      return cache.count
     }
-
-    var queryItems: [String] = [
-      "include_discarded=\(includeDiscarded)"
-    ]
-
-    if !statuses.isEmpty {
-      let statusStrings = statuses.map { $0.rawValue }.joined(separator: ",")
-      queryItems.append("statuses=\(statusStrings)")
-    }
-
-    let endpoint = "v1/conversations/count?\(queryItems.joined(separator: "&"))"
 
     struct CountResponse: Decodable {
       let count: Int
     }
 
     let response: CountResponse = try await get(endpoint)
-    conversationsCountCache = response.count
-    conversationsCountCacheTime = Date()
+    conversationsCountCache[endpoint] = (count: response.count, time: Date())
     return response.count
   }
 
@@ -505,7 +612,9 @@ extension APIClient {
     }
 
     let body = MergeRequest(conversationIds: ids, reprocess: reprocess)
-    return try await post("v1/conversations/merge", body: body)
+    let response: MergeConversationsResponse = try await post("v1/conversations/merge", body: body)
+    invalidateConversationsCountCache()
+    return response
   }
 
   // MARK: - Folder API
@@ -539,6 +648,7 @@ extension APIClient {
       endpoint += "?move_to_folder_id=\(moveToId)"
     }
     try await delete(endpoint)
+    invalidateConversationsCountCache()
   }
 
   /// Moves a conversation to a folder
@@ -556,6 +666,7 @@ extension APIClient {
     else {
       throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
     }
+    invalidateConversationsCountCache()
   }
 
 }
@@ -596,12 +707,21 @@ enum ConversationSource: String, Codable {
   }
 }
 
+enum TranscriptPresenceState: Equatable {
+  case omittedFromResponse
+  case lockedOrRedacted
+  case includedEmpty
+  case includedNonEmpty
+}
+
 struct ServerConversation: Codable, Identifiable, Equatable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
       && lhs.status == rhs.status && lhs.discarded == rhs.discarded && lhs.deleted == rhs.deleted
-      && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId && lhs.source == rhs.source
+      && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
+      && lhs.source == rhs.source
+      && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
   }
 
   let id: String
@@ -611,6 +731,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
 
   var structured: Structured
   var transcriptSegments: [TranscriptSegment]
+  var transcriptSegmentsIncluded: Bool
   let geolocation: Geolocation?
   let photos: [ConversationPhoto]
 
@@ -625,6 +746,9 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   var starred: Bool
   let folderId: String?
   let inputDeviceName: String?
+  // Lazy processing: true while only the raw transcript is stored (no LLM summary yet);
+  // cleared once enriched on first open (get_conversation_by_id).
+  let deferred: Bool
 
   enum CodingKeys: String, CodingKey {
     case id
@@ -645,6 +769,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case starred
     case folderId = "folder_id"
     case inputDeviceName = "input_device_name"
+    case deferred
   }
 
   init(from decoder: Decoder) throws {
@@ -655,6 +780,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
     finishedAt = try container.decodeIfPresent(Date.self, forKey: .finishedAt)
     structured = try container.decode(Structured.self, forKey: .structured)
+    transcriptSegmentsIncluded = container.contains(.transcriptSegments)
     transcriptSegments =
       try container.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments) ?? []
     geolocation = try container.decodeIfPresent(Geolocation.self, forKey: .geolocation)
@@ -669,6 +795,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     starred = try container.decodeIfPresent(Bool.self, forKey: .starred) ?? false
     folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
+    deferred = try container.decodeIfPresent(Bool.self, forKey: .deferred) ?? false
   }
 
   /// Memberwise initializer for creating from local storage
@@ -679,6 +806,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     finishedAt: Date?,
     structured: Structured,
     transcriptSegments: [TranscriptSegment],
+    transcriptSegmentsIncluded: Bool,
     geolocation: Geolocation?,
     photos: [ConversationPhoto],
     appsResults: [AppResponse],
@@ -690,7 +818,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     isLocked: Bool,
     starred: Bool,
     folderId: String?,
-    inputDeviceName: String?
+    inputDeviceName: String?,
+    deferred: Bool = false
   ) {
     self.id = id
     self.createdAt = createdAt
@@ -698,6 +827,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.finishedAt = finishedAt
     self.structured = structured
     self.transcriptSegments = transcriptSegments
+    self.transcriptSegmentsIncluded = transcriptSegmentsIncluded
     self.geolocation = geolocation
     self.photos = photos
     self.appsResults = appsResults
@@ -710,6 +840,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     self.starred = starred
     self.folderId = folderId
     self.inputDeviceName = inputDeviceName
+    self.deferred = deferred
   }
 
   /// Returns the title from structured data, or a fallback
@@ -749,6 +880,23 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
       return "\(speaker): \(segment.text)"
     }.joined(separator: "\n\n")
+  }
+
+  var transcriptPresenceState: TranscriptPresenceState {
+    if isLocked {
+      return .lockedOrRedacted
+    }
+    if !transcriptSegmentsIncluded {
+      return .omittedFromResponse
+    }
+    if transcriptSegments.isEmpty {
+      return .includedEmpty
+    }
+    return .includedNonEmpty
+  }
+
+  var shouldFetchDetailForTranscript: Bool {
+    transcriptPresenceState == .omittedFromResponse
   }
 }
 
@@ -1317,7 +1465,10 @@ extension APIClient {
   func createConversationFromSegments(_ request: CreateConversationFromSegmentsRequest)
     async throws -> CreateConversationFromSegmentsResponse
   {
-    return try await post("v1/conversations/from-segments", body: request, customBaseURL: nil)
+    let response: CreateConversationFromSegmentsResponse = try await post(
+      "v1/conversations/from-segments", body: request, customBaseURL: nil)
+    invalidateConversationsCountCache()
+    return response
   }
 }
 
@@ -1648,6 +1799,11 @@ extension APIClient {
 
     let endpoint = "v1/action-items?\(queryItems.joined(separator: "&"))"
     return try await get(endpoint)
+  }
+
+  /// Fetches one action item by backend ID.
+  func getActionItem(id: String) async throws -> TaskActionItem {
+    try await get("v1/action-items/\(id)")
   }
 
   /// Updates an action item
@@ -2668,7 +2824,8 @@ struct Goal: Codable, Identifiable {
   /// Progress as a percentage (0-100), based on targetValue
   var progress: Double {
     guard targetValue != minValue else { return 0 }
-    return ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+    let pct = ((currentValue - minValue) / (targetValue - minValue)) * 100.0
+    return min(max(pct, 0), 100)
   }
 
   /// Whether the goal is completed
@@ -3158,7 +3315,10 @@ extension APIClient {
 
   /// Checks if an external integration app's setup is complete
   func isAppSetupCompleted(url: String, uid: String) async -> Bool {
-    guard !url.isEmpty else { return true }
+    // An empty/unknown completion URL means setup cannot be verified, so report
+    // not-completed (consistent with the invalid-URL and network-failure paths
+    // below). Returning true here would wrongly mark an unconfigured app as set up.
+    guard !url.isEmpty else { return false }
     guard let fullUrl = URL(string: "\(url)?uid=\(uid)") else { return false }
     var request = URLRequest(url: fullUrl)
     request.httpMethod = "GET"
@@ -4942,6 +5102,24 @@ extension APIClient {
     }
   }
 
+  struct CreateCalendarEventRequest: Encodable {
+    let title: String
+    let startTime: String
+    let endTime: String
+    let description: String?
+    let location: String?
+    let attendees: String?
+
+    enum CodingKeys: String, CodingKey {
+      case title
+      case startTime = "start_time"
+      case endTime = "end_time"
+      case description
+      case location
+      case attendees
+    }
+  }
+
   /// Percent-encode a date string for use in query parameters.
   /// `.urlQueryAllowed` does not encode `+`, but servers decode `+` as space in query strings.
   /// This encodes `+` as `%2B` so timezone offsets like `+07:00` survive round-trip.
@@ -5026,6 +5204,25 @@ extension APIClient {
   ) async throws -> ToolResponse {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
     return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
+  }
+
+  func toolCreateCalendarEvent(
+    title: String,
+    startTime: String,
+    endTime: String,
+    description: String? = nil,
+    location: String? = nil,
+    attendees: String? = nil
+  ) async throws -> ToolResponse {
+    let body = CreateCalendarEventRequest(
+      title: title,
+      startTime: startTime,
+      endTime: endTime,
+      description: description,
+      location: location,
+      attendees: attendees
+    )
+    return try await post("v1/tools/calendar-events", body: body, customBaseURL: nil)
   }
 
   // MARK: - X (Twitter) Connector

@@ -12,14 +12,15 @@ This skill teaches you the Omi desktop macOS app's navigation structure, screen 
 
 Two things make iterating on the desktop app slow: signing in (web OAuth) and clicking through the UI to reach a screen. Both are solved — use these before reaching for `agent-swift`.
 
-### 1. Skip the web login (seed auth once, reuse forever)
-Dev/named bundles store auth in UserDefaults (not Keychain), so a signed-in session can be cloned between bundles. Sign in **once** in "Omi Dev", then replay it into any test bundle:
+### 1. Skip the web login (seed auth/settings once, reuse forever)
+Dev/named bundles store auth and common developer settings in UserDefaults (not Keychain), so a signed-in session and shortcuts can be cloned between bundles. Sign in **once** in "Omi Dev", then replay it into any test bundle:
 ```bash
 cd desktop/macos
 ./scripts/omi-auth-dump.sh                                  # capture Omi Dev's session -> tmp/desktop-auth.json
 ./scripts/omi-auth-seed.sh com.omi.omi-myfeature           # replay into a named bundle (run BEFORE launch)
+./scripts/omi-settings-seed.sh com.omi.omi-myfeature       # replay shortcuts/settings
 ```
-The seeded bundle boots already signed-in and past onboarding — no browser. The captured Firebase idToken expires (~1h); re-run `omi-auth-dump.sh` after signing in again if backend calls start 401ing. **Scope:** this is for dev iteration only — when validating the onboarding or auth flows themselves (or running flow-walker E2E), use the real flow per Guard Conditions below.
+The seeded bundle boots already signed-in and past onboarding, with Omi Dev's shortcuts/settings — no browser. The captured Firebase idToken expires (~1h); re-run `omi-auth-dump.sh` after signing in again if backend calls start 401ing. **Scope:** this is for dev iteration only — when validating the onboarding or auth flows themselves (or running flow-walker E2E), use the real flow per Guard Conditions below.
 
 ### 2. Jump straight to any screen (automation bridge)
 The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that **auto-enables on every non-production bundle** (off on prod). `scripts/omi-ctl` drives it — jump to a screen in ~150ms instead of clicking through the sidebar:
@@ -52,6 +53,7 @@ the resulting state snapshot.
 cd desktop/macos
 OMI_APP_NAME="omi-myfeature" ./run.sh &                 # build + launch once
 ./scripts/omi-auth-seed.sh com.omi.omi-myfeature        # (first run, or after re-dump) — relaunch to apply
+./scripts/omi-settings-seed.sh com.omi.omi-myfeature    # copy shortcuts/settings from Omi Dev
 ./scripts/omi-ctl wait-ready
 ./scripts/omi-ctl navigate memories                      # jump to the screen you changed
 agent-swift connect --bundle-id com.omi.omi-myfeature    # then drive/inspect with agent-swift

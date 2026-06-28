@@ -86,8 +86,8 @@ description: "Debug and fix common MCP connection issues"
     # macOS
     tail -n 20 -f ~/Library/Logs/Claude/mcp-server-omi.log
 
-    # Windows
-    type %APPDATA%\Claude\logs\mcp-server-omi.log
+    # Windows PowerShell
+    Get-Content "$env:APPDATA\Claude\logs\mcp-server-omi.log" -Tail 20 -Wait
     ```
   </Tab>
 </Tabs>

@@ -55,12 +55,6 @@ dependencies:
   # Logging
   talker_flutter: 5.0.0
 
-  # Devices
-  frame_sdk:
-    git:
-      url: https://github.com/mdmohsin7/frame-sdk-flutter.git
-      ref: master
-
   # Utils
   pool: ^1.5.1
   collection: ^1.19.1
@@ -104,7 +98,6 @@ dependencies:
     git:
       url: https://github.com/mdmohsin7/opus_dart.git
       ref: dev
-  growthbook_sdk_flutter: 3.9.2
   flutter_timezone: 3.0.1
   cached_network_image: 3.4.1
   map_launcher: ^3.5.0
@@ -186,7 +179,6 @@ flutter:
     - assets/integration_app_logos/
     - assets/competitor-logos/
     - shorebird.yaml
-    - assets/device_assets/frame_lib.lua
   fonts:
     - family: "SF Pro Display"
       fonts:

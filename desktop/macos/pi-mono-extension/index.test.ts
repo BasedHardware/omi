@@ -10,11 +10,11 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { writeFile, unlink } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile, unlink } from "node:fs/promises";
 
 import { createServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
-import { join as pathJoin } from "node:path";
+import { basename, join as pathJoin } from "node:path";
 import {
   classifyBash,
   classifyFileWrite,
@@ -24,12 +24,18 @@ import {
   __resetAuditWarnedForTest,
   OMI_TOOLS,
   OMI_TOOL_TIMEOUT_MS,
+  OMI_LONG_CONTROL_TOOL_TIMEOUT_MS,
+  isSafeSkillName,
   __connectOmiPipeForTest,
   __callSwiftToolForTest,
+  __omiRelayCorrelationForTest,
   __omiPendingCallsForTest,
+  __registerOmiToolsForTest,
   __resetOmiPipeForTest,
 } from "./index.ts";
 import type { ToolCallEvent } from "@mariozechner/pi-coding-agent";
+import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
+import { toolNamesForAdapter } from "../agent/src/runtime/omi-tool-manifest.ts";
 
 // ---------------------------------------------------------------------------
 // classifyBash — allow-by-default for normal dev commands
@@ -921,14 +927,24 @@ test("summarizeInput: read path preserved", () => {
 // ---------------------------------------------------------------------------
 
 /** Helper: create a Unix socket server on a temp path. */
+let mockBridgeCounter = 0;
+
 function createMockBridge(): { server: Server; sockPath: string } {
-  const sockPath = pathJoin(tmpdir(), `omi-test-${process.pid}-${Date.now()}.sock`);
+  mockBridgeCounter += 1;
+  const sockPath = pathJoin(tmpdir(), `omi-test-${process.pid}-${Date.now()}-${mockBridgeCounter}.sock`);
   const server = createServer();
   return { server, sockPath };
 }
 
-test("OMI_TOOLS: exactly 14 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 14);
+test("OMI_TOOLS: exactly 26 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 26);
+});
+
+test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
+  assert.deepEqual(
+    OMI_TOOLS.map((tool) => tool.name),
+    toolNamesForAdapter("pi-mono"),
+  );
 });
 
 test("OMI_TOOLS: all tools have name, label, description, parameters, execute", () => {
@@ -967,14 +983,33 @@ test("OMI_TOOLS: TypeBox schemas have additionalProperties=false", () => {
   }
 });
 
+test("OMI_TOOLS: provider schemas do not invent top-level oneOf", () => {
+  for (const tool of OMI_TOOLS) {
+    const parameters = tool.parameters as any;
+    assert.equal(parameters.oneOf, undefined, `${tool.name} has top-level oneOf`);
+  }
+});
+
 test("OMI_TOOLS: required fields match expected per tool", () => {
   const expected: Record<string, string[]> = {
     execute_sql: ["query"],
     semantic_search: ["query"],
     get_daily_recap: [],
+    get_task_agent_status: [],
+    list_agent_sessions: [],
+    get_agent_run: ["runId"],
+    cancel_agent_run: ["runId"],
+    inspect_agent_artifacts: [],
+    update_agent_artifact_lifecycle: ["artifactId", "state"],
+    load_skill: ["name"],
+    send_agent_message: ["sessionId", "prompt"],
+    delegate_agent: ["mode", "parentRunId", "objective"],
+    spawn_agent: ["brief"],
+    manage_agent_pills: ["action"],
     search_tasks: ["query"],
     complete_task: ["task_id"],
     delete_task: ["task_id"],
+    save_knowledge_graph: ["nodes", "edges"],
     get_conversations: [],
     search_conversations: ["query"],
     get_memories: [],
@@ -991,6 +1026,150 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
       (expected[tool.name] ?? []).sort(),
       `${tool.name} required fields mismatch`,
     );
+  }
+});
+
+test("OMI_TOOLS: top-level schemas keep the object contract", () => {
+  for (const tool of OMI_TOOLS) {
+    const parameters = tool.parameters as any;
+    assert.equal(parameters.type, "object", `${tool.name} parameters must be object-shaped`);
+    assert.ok(parameters.properties, `${tool.name} parameters must declare properties`);
+  }
+});
+
+test("OMI_TOOLS: agent control schemas preserve top-level composite preconditions", () => {
+  const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
+  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
+    { required: ["artifactId"] },
+    { required: ["sessionId"] },
+    { required: ["runId"] },
+    { required: ["attemptId"] },
+  ]);
+  assert.match(inspectArtifacts?.description ?? "", /session, run, or attempt/);
+
+  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
+  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
+    {
+      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
+      then: { required: ["childSessionId"] },
+    },
+  ]);
+  assert.ok(
+    delegateAgent?.promptGuidelines?.some((guideline) =>
+      guideline.includes("Use call for a structured child result")
+    ),
+  );
+});
+
+test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfaces", () => {
+  const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
+  assert.match(delegateAgent?.description ?? "", /canonical child handles/);
+  assert.match(delegateAgent?.description ?? "", /does not create or manage floating pill UI/);
+  assert.ok(
+    delegateAgent?.promptGuidelines?.includes(
+      "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
+    ),
+  );
+
+  const spawnAgent = OMI_TOOLS.find((tool) => tool.name === "spawn_agent");
+  assert.match(spawnAgent?.description ?? "", /legacy floating-bar UI workflow/);
+  assert.ok(
+    spawnAgent?.promptGuidelines?.includes(
+      "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking.",
+    ),
+  );
+});
+
+test("OMI_TOOLS: agent control tools match canonical capability manifest", () => {
+  const controlTools = OMI_TOOLS.filter((tool) =>
+    agentControlCapabilityManifest.some((manifestTool) => manifestTool.name === tool.name)
+  );
+  assert.deepEqual(
+    controlTools.map((tool) => tool.name),
+    agentControlCapabilityManifest.map((tool) => tool.name),
+  );
+
+  for (const manifestTool of agentControlCapabilityManifest) {
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
+    assert.ok(tool, `${manifestTool.name} missing from OMI_TOOLS`);
+    assert.equal(tool!.label, manifestTool.label, `${manifestTool.name} label drifted`);
+    assert.equal(tool!.description, manifestTool.description, `${manifestTool.name} description drifted`);
+    assert.equal(tool!.promptSnippet, manifestTool.promptSnippet, `${manifestTool.name} promptSnippet drifted`);
+    assert.deepEqual(tool!.promptGuidelines ?? [], manifestTool.promptGuidelines, `${manifestTool.name} promptGuidelines drifted`);
+    assert.deepEqual(
+      [...((tool!.parameters as any).required ?? [])].sort(),
+      [...manifestTool.required].sort(),
+      `${manifestTool.name} required fields drifted`
+    );
+    assert.deepEqual((tool!.parameters as any).anyOf, manifestTool.jsonSchemaOptions?.anyOf, `${manifestTool.name} anyOf drifted`);
+    assert.deepEqual((tool!.parameters as any).allOf, manifestTool.jsonSchemaOptions?.allOf, `${manifestTool.name} allOf drifted`);
+
+    for (const [propertyName, manifestProperty] of Object.entries(manifestTool.properties)) {
+      const property = (tool!.parameters as any).properties[propertyName];
+      assert.ok(property, `${manifestTool.name}.${propertyName} missing`);
+      const schemas = property.anyOf ?? [property];
+      const typedSchema = schemas.find((candidate: any) => candidate.type === manifestProperty.type);
+      assert.ok(typedSchema, `${manifestTool.name}.${propertyName} type drifted`);
+      assert.equal(typedSchema.description, manifestProperty.description, `${manifestTool.name}.${propertyName} description drifted`);
+      assert.deepEqual(typedSchema.enum, manifestProperty.enum, `${manifestTool.name}.${propertyName} enum drifted`);
+    }
+  }
+});
+
+test("registerOmiTools: snapshot write failure logs and still registers tools", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-snapshot-failure-"));
+  const previousPipe = process.env.OMI_BRIDGE_PIPE;
+  const previousSnapshotPath = process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH;
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+  const stderrLines: string[] = [];
+  const registeredTools: string[] = [];
+
+  process.env.OMI_BRIDGE_PIPE = sockPath;
+  process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH = dir;
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderrLines.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write;
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    await __registerOmiToolsForTest({
+      registerTool(tool: { name: string }) {
+        registeredTools.push(tool.name);
+      },
+    } as any);
+
+    assert.deepEqual(registeredTools, toolNamesForAdapter("pi-mono"));
+    assert.ok(
+      stderrLines.some((line) => line.includes("Failed to write tool availability snapshot")),
+      "snapshot write failure should be logged",
+    );
+  } finally {
+    __resetOmiPipeForTest();
+    process.stderr.write = originalStderrWrite;
+    if (previousPipe === undefined) {
+      delete process.env.OMI_BRIDGE_PIPE;
+    } else {
+      process.env.OMI_BRIDGE_PIPE = previousPipe;
+    }
+    if (previousSnapshotPath === undefined) {
+      delete process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH;
+    } else {
+      process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH = previousSnapshotPath;
+    }
+    server.close();
+    await rm(dir, { recursive: true, force: true });
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("OMI_TOOLS: agent control timeout classes match canonical manifest", () => {
+  for (const manifestTool of agentControlCapabilityManifest) {
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name)!;
+    const timeoutMs = manifestTool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS;
+    assert.equal((tool as any).__omiTimeoutMsForTest, timeoutMs, `${tool.name} timeout class drifted`);
   }
 });
 
@@ -1054,10 +1233,100 @@ test("OMI_TOOL_TIMEOUT_MS: is 30 seconds", () => {
   assert.equal(OMI_TOOL_TIMEOUT_MS, 30_000);
 });
 
+test("OMI_LONG_CONTROL_TOOL_TIMEOUT_MS: gives agent control runs a longer window", () => {
+  assert.equal(OMI_LONG_CONTROL_TOOL_TIMEOUT_MS, 600_000);
+});
+
+test("load_skill: rejects traversal and path-like names", () => {
+  assert.equal(isSafeSkillName("dev-mode"), true);
+  assert.equal(isSafeSkillName("product_design.v1"), true);
+  assert.equal(isSafeSkillName("../secrets"), false);
+  assert.equal(isSafeSkillName("nested/skill"), false);
+  assert.equal(isSafeSkillName(".."), false);
+  assert.equal(isSafeSkillName("safe..looking"), false);
+});
+
+test("load_skill: refuses symlink escapes from the skills root", async () => {
+  const root = await mkdtemp(pathJoin(tmpdir(), "omi-skill-root-"));
+  const outside = await mkdtemp(pathJoin(tmpdir(), "omi-skill-outside-"));
+  const skillName = `secret-skill-${basename(root).replace(/^omi-skill-root-/, "")}`;
+  const previousWorkspace = process.env.OMI_WORKSPACE;
+  try {
+    await mkdir(pathJoin(root, ".claude", "skills"), { recursive: true });
+    await mkdir(pathJoin(outside, skillName), { recursive: true });
+    await writeFile(pathJoin(outside, skillName, "SKILL.md"), "secret instructions");
+    await symlink(pathJoin(outside, skillName), pathJoin(root, ".claude", "skills", skillName));
+    process.env.OMI_WORKSPACE = root;
+
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === "load_skill")!;
+    const result = await tool.execute("call-1", { name: skillName }, new AbortController().signal);
+
+    assert.equal(result.content[0].type, "text");
+    assert.match(result.content[0].text, /not found/i);
+    assert.doesNotMatch(result.content[0].text, /secret instructions/);
+  } finally {
+    if (previousWorkspace === undefined) {
+      delete process.env.OMI_WORKSPACE;
+    } else {
+      process.env.OMI_WORKSPACE = previousWorkspace;
+    }
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  }
+});
+
 test("callSwiftTool: returns error when not connected", async () => {
   __resetOmiPipeForTest();
   const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
   assert.equal(result, "Error: not connected to Omi bridge");
+});
+
+test("callSwiftTool: rechecks abort after async correlation before writing to Swift", async () => {
+  const source = await readFile(new URL("./index.ts", import.meta.url), "utf8");
+  const callSwiftToolBody = source.slice(
+    source.indexOf("async function callSwiftTool"),
+    source.indexOf("async function omiRelayCorrelation"),
+  );
+  assert.match(callSwiftToolBody, /const correlation = await omiRelayCorrelation\(\);[\s\S]*if \(signal\?\.aborted\)/);
+  assert.ok(
+    callSwiftToolBody.indexOf("if (signal?.aborted)", callSwiftToolBody.indexOf("await omiRelayCorrelation()")) <
+      callSwiftToolBody.indexOf("connection.write"),
+    "abort must be rechecked before emitting tool_use to Swift",
+  );
+});
+
+test("callSwiftTool: disables Swift-backed tools when relay context requests it", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-disable-tools-"));
+  const contextPath = pathJoin(dir, "context.json");
+  const previousContextFile = process.env.OMI_CONTEXT_FILE;
+  process.env.OMI_CONTEXT_FILE = contextPath;
+  await writeFile(contextPath, JSON.stringify({ disableSwiftBackedTools: true }));
+  let sawToolUse = false;
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    server.on("connection", (socket) => {
+      socket.on("data", () => { sawToolUse = true; });
+    });
+
+    await __connectOmiPipeForTest(sockPath);
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "Error: Swift-backed Omi tools are disabled for this control-created run");
+    assert.equal(__omiPendingCallsForTest.size, 0);
+    assert.equal(sawToolUse, false, "disabled tools must not emit tool_use to Swift");
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    if (previousContextFile === undefined) {
+      delete process.env.OMI_CONTEXT_FILE;
+    } else {
+      process.env.OMI_CONTEXT_FILE = previousContextFile;
+    }
+    await rm(dir, { recursive: true, force: true });
+    try { await unlink(sockPath); } catch {}
+  }
 });
 
 test("callSwiftTool: receives result via pipe", async () => {
@@ -1101,6 +1370,194 @@ test("callSwiftTool: receives result via pipe", async () => {
   }
 });
 
+test("callSwiftTool: propagates Omi request correlation over the relay", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const previousEnv = {
+    OMI_CONTEXT_FILE: process.env.OMI_CONTEXT_FILE,
+    OMI_ADAPTER_ID: process.env.OMI_ADAPTER_ID,
+    OMI_REQUEST_ID: process.env.OMI_REQUEST_ID,
+    OMI_CLIENT_ID: process.env.OMI_CLIENT_ID,
+    OMI_PROTOCOL_VERSION: process.env.OMI_PROTOCOL_VERSION,
+    OMI_SESSION_ID: process.env.OMI_SESSION_ID,
+    OMI_RUN_ID: process.env.OMI_RUN_ID,
+    OMI_ATTEMPT_ID: process.env.OMI_ATTEMPT_ID,
+    OMI_ADAPTER_SESSION_ID: process.env.OMI_ADAPTER_SESSION_ID,
+    OMI_LEGACY_ADAPTER_SESSION_ID: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
+  };
+  delete process.env.OMI_CONTEXT_FILE;
+  Object.assign(process.env, {
+    OMI_ADAPTER_ID: "pi-mono",
+    OMI_REQUEST_ID: "request-relay",
+    OMI_CLIENT_ID: "client-relay",
+    OMI_PROTOCOL_VERSION: "2",
+    OMI_SESSION_ID: "ses_relay",
+    OMI_RUN_ID: "run_relay",
+    OMI_ATTEMPT_ID: "att_relay",
+    OMI_ADAPTER_SESSION_ID: "native_relay",
+    OMI_LEGACY_ADAPTER_SESSION_ID: "legacy_relay",
+  });
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+
+    const received = new Promise<any>((resolve) => {
+      server.on("connection", (socket) => {
+        let buf = "";
+        socket.on("data", (data) => {
+          buf += data.toString();
+          const idx = buf.indexOf("\n");
+          if (idx < 0) return;
+          const msg = JSON.parse(buf.slice(0, idx));
+          resolve(msg);
+          socket.write(JSON.stringify({ type: "tool_result", callId: msg.callId, result: "ok" }) + "\n");
+        });
+      });
+    });
+
+    await __connectOmiPipeForTest(sockPath);
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "ok");
+    assert.deepEqual(await __omiRelayCorrelationForTest(), {
+      adapterId: "pi-mono",
+      requestId: "request-relay",
+      clientId: "client-relay",
+      sessionId: "ses_relay",
+      runId: "run_relay",
+      attemptId: "att_relay",
+      adapterSessionId: "native_relay",
+      legacyAdapterSessionId: "legacy_relay",
+      protocolVersion: 2,
+    });
+    const msg = await received;
+    assert.match(msg.callId, /^omi-ext-/);
+    assert.deepEqual(msg, {
+      type: "tool_use",
+      callId: msg.callId,
+      name: "execute_sql",
+      input: { query: "SELECT 1" },
+      adapterId: "pi-mono",
+      requestId: "request-relay",
+      clientId: "client-relay",
+      protocolVersion: 2,
+      sessionId: "ses_relay",
+      runId: "run_relay",
+      attemptId: "att_relay",
+      adapterSessionId: "native_relay",
+      legacyAdapterSessionId: "legacy_relay",
+    });
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("callSwiftTool: reads per-attempt Omi correlation from the context file", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-relay-"));
+  const contextPath = pathJoin(dir, "context.json");
+  const previousEnv = {
+    OMI_CONTEXT_FILE: process.env.OMI_CONTEXT_FILE,
+    OMI_REQUEST_ID: process.env.OMI_REQUEST_ID,
+    OMI_CLIENT_ID: process.env.OMI_CLIENT_ID,
+    OMI_PROTOCOL_VERSION: process.env.OMI_PROTOCOL_VERSION,
+    OMI_SESSION_ID: process.env.OMI_SESSION_ID,
+    OMI_RUN_ID: process.env.OMI_RUN_ID,
+    OMI_ATTEMPT_ID: process.env.OMI_ATTEMPT_ID,
+    OMI_ADAPTER_SESSION_ID: process.env.OMI_ADAPTER_SESSION_ID,
+  };
+  for (const key of Object.keys(previousEnv)) {
+    delete process.env[key];
+  }
+  process.env.OMI_CONTEXT_FILE = contextPath;
+  process.env.OMI_REQUEST_ID = "stale-env-request";
+  process.env.OMI_CLIENT_ID = "stale-env-client";
+  process.env.OMI_RUN_ID = "stale-env-run";
+  process.env.OMI_ATTEMPT_ID = "stale-env-attempt";
+  await writeFile(contextPath, JSON.stringify({
+    adapterId: "pi-mono",
+    protocolVersion: 2,
+    requestId: "request-file",
+    clientId: "client-file",
+    sessionId: "ses_file",
+    runId: "run_file",
+    attemptId: "att_file",
+    adapterSessionId: "native_file",
+  }));
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    const received = new Promise<any>((resolve) => {
+      server.on("connection", (socket) => {
+        let buf = "";
+        socket.on("data", (data) => {
+          buf += data.toString();
+          const idx = buf.indexOf("\n");
+          if (idx < 0) return;
+          const msg = JSON.parse(buf.slice(0, idx));
+          resolve(msg);
+          socket.write(JSON.stringify({ type: "tool_result", callId: msg.callId, result: "ok" }) + "\n");
+        });
+      });
+    });
+
+    await __connectOmiPipeForTest(sockPath);
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "ok");
+    assert.deepEqual(await __omiRelayCorrelationForTest(), {
+      adapterId: "pi-mono",
+      protocolVersion: 2,
+      requestId: "request-file",
+      clientId: "client-file",
+      sessionId: "ses_file",
+      runId: "run_file",
+      attemptId: "att_file",
+      adapterSessionId: "native_file",
+    });
+    const msg = await received;
+    assert.deepEqual({
+      adapterId: msg.adapterId,
+      protocolVersion: msg.protocolVersion,
+      requestId: msg.requestId,
+      clientId: msg.clientId,
+      sessionId: msg.sessionId,
+      runId: msg.runId,
+      attemptId: msg.attemptId,
+      adapterSessionId: msg.adapterSessionId,
+    }, {
+      adapterId: "pi-mono",
+      protocolVersion: 2,
+      requestId: "request-file",
+      clientId: "client-file",
+      sessionId: "ses_file",
+      runId: "run_file",
+      attemptId: "att_file",
+      adapterSessionId: "native_file",
+    });
+  } finally {
+    __resetOmiPipeForTest();
+    server.close();
+    for (const [key, value] of Object.entries(previousEnv)) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    await rm(dir, { recursive: true, force: true });
+    try { await unlink(sockPath); } catch {}
+  }
+});
+
 test("callSwiftTool: disconnect resolves pending calls with error", async () => {
   __resetOmiPipeForTest();
   const { server, sockPath } = createMockBridge();
@@ -1123,6 +1580,51 @@ test("callSwiftTool: disconnect resolves pending calls with error", async () => 
     __resetOmiPipeForTest();
     server.close();
     try { await unlink(sockPath); } catch {}
+  }
+});
+
+test("callSwiftTool: stale socket close does not clear active connection pending calls", async () => {
+  __resetOmiPipeForTest();
+  const first = createMockBridge();
+  const second = createMockBridge();
+  let firstSocket: import("node:net").Socket | undefined;
+
+  try {
+    await new Promise<void>((resolve) => first.server.listen(first.sockPath, resolve));
+    first.server.on("connection", (socket) => {
+      firstSocket = socket;
+    });
+    await __connectOmiPipeForTest(first.sockPath);
+
+    await new Promise<void>((resolve) => second.server.listen(second.sockPath, resolve));
+    second.server.on("connection", (socket) => {
+      let buf = "";
+      socket.on("data", (data) => {
+        buf += data.toString();
+        const idx = buf.indexOf("\n");
+        if (idx < 0) return;
+        const msg = JSON.parse(buf.slice(0, idx));
+        socket.write(JSON.stringify({
+          type: "tool_result",
+          callId: msg.callId,
+          result: "active-result",
+        }) + "\n");
+      });
+    });
+    await __connectOmiPipeForTest(second.sockPath);
+
+    firstSocket?.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const result = await __callSwiftToolForTest("execute_sql", { query: "SELECT 1" });
+    assert.equal(result, "active-result");
+    assert.equal(__omiPendingCallsForTest.size, 0);
+  } finally {
+    __resetOmiPipeForTest();
+    first.server.close();
+    second.server.close();
+    try { await unlink(first.sockPath); } catch {}
+    try { await unlink(second.sockPath); } catch {}
   }
 });
 

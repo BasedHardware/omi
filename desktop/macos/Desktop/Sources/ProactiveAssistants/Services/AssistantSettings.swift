@@ -6,8 +6,8 @@ class AssistantSettings {
     static let shared = AssistantSettings()
 
     /// Controls when system audio (audio from other apps — calls, videos, music) is captured
-    /// during a recording. `always` = capture for the whole recording (default, prior behavior);
-    /// `onlyDuringMeetings` = capture only while a conferencing call is detected; `never` = never.
+    /// during a recording. `always` = capture for the whole recording; `onlyDuringMeetings` =
+    /// capture only while a conferencing call is detected (default); `never` = never.
     enum SystemAudioCaptureMode: String {
         case always
         case onlyDuringMeetings
@@ -40,7 +40,7 @@ class AssistantSettings {
     private let defaultTranscriptionVocabulary: [String] = []
     private let defaultVadGateEnabled = false
     private let defaultBatchTranscriptionEnabled = false
-    private let defaultSystemAudioCaptureMode: SystemAudioCaptureMode = .always
+    private let defaultSystemAudioCaptureMode: SystemAudioCaptureMode = .onlyDuringMeetings
 
     private init() {
         // Register defaults

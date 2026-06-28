@@ -107,6 +107,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   @override
+  Future<void> onNetworkSocketReconnected() async {
+    // The Limitless pendant stops streaming BLE audio after an extended period
+    // without a live server connection. Re-send the enable-data-stream command
+    // so it resumes, just as _reinitializeAfterReconnect() does after BT reconnect.
+    await _reinitializeAfterReconnect();
+  }
+
+  @override
   Future<void> unpair() async {
     await unpairWithoutReset();
   }

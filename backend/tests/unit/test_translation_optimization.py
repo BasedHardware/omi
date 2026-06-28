@@ -13,6 +13,8 @@ import os
 import sys
 import json
 import hashlib
+import importlib.util
+from types import ModuleType
 from unittest.mock import MagicMock, patch, PropertyMock
 
 os.environ.setdefault(
@@ -20,6 +22,35 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test-project")
+
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+_REAL_PACKAGE_DIRS = {
+    "utils": os.path.join(_BACKEND_DIR, "utils"),
+    "models": os.path.join(_BACKEND_DIR, "models"),
+}
+
+
+def _restore_real_backend_package(package_name: str) -> None:
+    """Discard empty package stubs left by earlier collected unit tests."""
+    if _BACKEND_DIR not in sys.path:
+        sys.path.insert(0, _BACKEND_DIR)
+
+    package = sys.modules.get(package_name)
+    if package is None:
+        return
+
+    expected_dir = os.path.abspath(_REAL_PACKAGE_DIRS[package_name])
+    package_paths = getattr(package, "__path__", None)
+    if not package_paths:
+        sys.modules.pop(package_name, None)
+        return
+
+    try:
+        has_real_path = any(os.path.abspath(str(path)) == expected_dir for path in package_paths)
+    except TypeError:
+        has_real_path = False
+    if not has_real_path:
+        sys.modules.pop(package_name, None)
 
 
 def _ensure_mock_module(name: str):
@@ -32,6 +63,67 @@ def _ensure_mock_module(name: str):
         mod.__package__ = name if '.' not in name else name.rsplit('.', 1)[0]
         sys.modules[name] = mod
     return sys.modules[name]
+
+
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+
+def _restore_package_path(name: str, path: str):
+    module = sys.modules.get(name)
+    if module is not None:
+        module.__path__ = [path]
+
+
+class _DetectedLang:
+    def __init__(self, lang: str, prob: float):
+        self.lang = lang
+        self.prob = prob
+
+
+def _guess_language(text: str) -> str:
+    lower = (text or '').lower()
+    if any(marker in lower for marker in ('bonjour', 'merci', 'revoir', 'allez', 'suis', 'content')):
+        return 'fr'
+    if any(marker in lower for marker in ('hola', 'gracias', 'adios', 'adi贸s')):
+        return 'es'
+    if 'danke' in lower:
+        return 'de'
+    return 'en'
+
+
+def _install_langdetect_stub_if_missing():
+    if 'langdetect' not in sys.modules and importlib.util.find_spec('langdetect') is not None:
+        return
+
+    langdetect_mod = sys.modules.get('langdetect') or ModuleType('langdetect')
+    exception_mod = sys.modules.get('langdetect.lang_detect_exception') or ModuleType(
+        'langdetect.lang_detect_exception'
+    )
+
+    class LangDetectException(Exception):
+        pass
+
+    class DetectorFactory:
+        seed = None
+
+    def detect(text):
+        return _guess_language(text)
+
+    def detect_langs(text):
+        return [_DetectedLang(_guess_language(text), 0.99)]
+
+    exception_mod.LangDetectException = LangDetectException
+    langdetect_mod.detect = detect
+    langdetect_mod.detect_langs = detect_langs
+    langdetect_mod.DetectorFactory = DetectorFactory
+    langdetect_mod.lang_detect_exception = exception_mod
+    sys.modules['langdetect'] = langdetect_mod
+    sys.modules['langdetect.lang_detect_exception'] = exception_mod
+
+
+_restore_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
+_restore_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
+_install_langdetect_stub_if_missing()
 
 
 # Stub database module and redis
@@ -50,11 +142,14 @@ sys.modules["google"].__path__ = []
 _ensure_mock_module("google.cloud")
 sys.modules["google.cloud"].__path__ = []
 _ensure_mock_module("google.cloud.translate_v3")
+sys.modules["google.cloud"].translate_v3 = sys.modules["google.cloud.translate_v3"]
 
 mock_translate_client = MagicMock()
 sys.modules["google.cloud.translate_v3"].TranslationServiceClient = MagicMock(return_value=mock_translate_client)
 
 # Force reimport translation modules
+_restore_real_backend_package("utils")
+_restore_real_backend_package("models")
 for mod_name in list(sys.modules.keys()):
     if 'translation' in mod_name and 'test' not in mod_name:
         del sys.modules[mod_name]

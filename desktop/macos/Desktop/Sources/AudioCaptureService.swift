@@ -43,6 +43,7 @@ class AudioCaptureService: @unchecked Sendable {
     private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
     private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
     private var isCapturing = false
+    private var isTrackingOverrideDevice = false
 
     /// Optional explicit device to open instead of the system default input.
     /// Used by the silent-mic fallback path to bind directly to the built-in mic.
@@ -66,6 +67,13 @@ class AudioCaptureService: @unchecked Sendable {
     /// seconds AND the current device transports over Bluetooth. Caller is expected to
     /// fall back to the built-in mic. Fires at most once per capture session.
     var onSilentMicDetected: (() -> Void)?
+
+    /// Human-readable description of the capture device currently in use — for
+    /// diagnostics (which mic a turn was recorded from).
+    var currentDeviceDescription: String {
+        let isBuiltIn = (deviceID == AudioCaptureService.findBuiltInMicDeviceID())
+        return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
+    }
 
     // Silent-mic watchdog (fires once per session)
     private var consecutiveSilentWindows: Int = 0
@@ -167,33 +175,9 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
     private func startCaptureOnQueue() throws {
-        // 1. Resolve input device: explicit override (fallback path) wins over system default.
-        var inputDeviceID: AudioDeviceID = kAudioObjectUnknown
-
-        if let override = overrideDeviceID {
-            inputDeviceID = override
-            log("AudioCapture: Using override device ID \(override)")
-        } else {
-            var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
-
-            let status = AudioObjectGetPropertyData(
-                AudioObjectID(kAudioObjectSystemObject),
-                &address,
-                0,
-                nil,
-                &size,
-                &inputDeviceID
-            )
-
-            guard status == noErr, inputDeviceID != kAudioObjectUnknown else {
-                throw AudioCaptureError.noInputAvailable
-            }
-        }
+        // 1. Resolve input device: explicit override wins while available, otherwise
+        // fall back to the system default instead of pinning capture to a stale device.
+        let inputDeviceID = try resolveInputDeviceID()
         self.deviceID = inputDeviceID
 
         // 2. Get device stream format
@@ -286,6 +270,7 @@ class AudioCaptureService: @unchecked Sendable {
         targetFormat = nil
         detectedSampleRate = 0.0
         smoothedLevel = 0.0
+        isTrackingOverrideDevice = false
 
         // AudioDeviceStop can block waiting for the IO thread — run off main thread
         if let procID = procID, devID != kAudioObjectUnknown {
@@ -348,6 +333,49 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     // MARK: - Private Methods
+
+    private func resolveInputDeviceID() throws -> AudioDeviceID {
+        if let override = overrideDeviceID {
+            if Self.isAvailableInputDevice(override) {
+                log("AudioCapture: Using override device ID \(override)")
+                isTrackingOverrideDevice = true
+                return override
+            }
+            log("AudioCapture: Override device ID \(override) is unavailable; falling back to default input")
+        }
+
+        guard let defaultDeviceID = Self.currentDefaultInputDeviceID() else {
+            throw AudioCaptureError.noInputAvailable
+        }
+        isTrackingOverrideDevice = false
+        return defaultDeviceID
+    }
+
+    private static func currentDefaultInputDeviceID() -> AudioDeviceID? {
+        var deviceID: AudioDeviceID = kAudioObjectUnknown
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &address,
+            0,
+            nil,
+            &size,
+            &deviceID
+        )
+
+        guard status == noErr, isAvailableInputDevice(deviceID) else { return nil }
+        return deviceID
+    }
+
+    private static func isAvailableInputDevice(_ deviceID: AudioDeviceID) -> Bool {
+        deviceID != kAudioObjectUnknown && deviceID != kAudioDeviceUnknown && deviceHasInputChannels(deviceID)
+    }
 
     /// Get stream format for a device on input scope
     private func getStreamFormat(for deviceID: AudioObjectID) -> AudioStreamBasicDescription? {
@@ -523,30 +551,45 @@ class AudioCaptureService: @unchecked Sendable {
     // MARK: - Property Listeners
 
     private func installPropertyListeners() {
-        // Listen for default input device changes — only when we're tracking the
-        // system default. If we're using an explicit override (silent-mic fallback path)
-        // we deliberately ignore default-device changes so we stay pinned to our target.
-        if overrideDeviceID == nil {
-            var defaultDeviceAddress = AudioObjectPropertyAddress(
-                mSelector: kAudioHardwarePropertyDefaultInputDevice,
-                mScope: kAudioObjectPropertyScopeGlobal,
-                mElement: kAudioObjectPropertyElementMain
-            )
+        updateDefaultDeviceListener()
+        installDeviceFormatListener()
+    }
 
-            let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-                self?.audioQueue.async {
-                    self?.handleConfigurationChange()
-                }
-            }
-            self.defaultDeviceListenerBlock = deviceBlock
-
-            AudioObjectAddPropertyListenerBlock(
-                AudioObjectID(kAudioObjectSystemObject),
-                &defaultDeviceAddress,
-                listenerQueue,
-                deviceBlock
-            )
+    private func updateDefaultDeviceListener() {
+        if isTrackingOverrideDevice {
+            removeDefaultDeviceListener()
+            return
         }
+
+        guard defaultDeviceListenerBlock == nil else { return }
+
+        // Listen for default input device changes when the resolved capture device
+        // is the system default. If an explicit override was requested but is
+        // unavailable, capture falls back to the default and must still observe
+        // default-device changes.
+        var defaultDeviceAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
+            self?.audioQueue.async {
+                self?.handleConfigurationChange()
+            }
+        }
+        self.defaultDeviceListenerBlock = deviceBlock
+
+        AudioObjectAddPropertyListenerBlock(
+            AudioObjectID(kAudioObjectSystemObject),
+            &defaultDeviceAddress,
+            listenerQueue,
+            deviceBlock
+        )
+    }
+
+    private func installDeviceFormatListener() {
+        guard deviceFormatListenerBlock == nil else { return }
 
         // Listen for format changes on current device
         var formatAddress = AudioObjectPropertyAddress(
@@ -571,6 +614,11 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     private func removePropertyListeners() {
+        removeDefaultDeviceListener()
+        removeDeviceFormatListener()
+    }
+
+    private func removeDefaultDeviceListener() {
         if let block = defaultDeviceListenerBlock {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioHardwarePropertyDefaultInputDevice,
@@ -585,7 +633,9 @@ class AudioCaptureService: @unchecked Sendable {
             )
             defaultDeviceListenerBlock = nil
         }
+    }
 
+    private func removeDeviceFormatListener() {
         if let block = deviceFormatListenerBlock, deviceID != kAudioObjectUnknown {
             var address = AudioObjectPropertyAddress(
                 mSelector: kAudioDevicePropertyStreamFormat,
@@ -619,21 +669,8 @@ class AudioCaptureService: @unchecked Sendable {
             ioProcID = nil
         }
 
-        // Remove old format listener (device may have changed)
-        if let block = deviceFormatListenerBlock, deviceID != kAudioObjectUnknown {
-            var address = AudioObjectPropertyAddress(
-                mSelector: kAudioDevicePropertyStreamFormat,
-                mScope: kAudioDevicePropertyScopeInput,
-                mElement: kAudioObjectPropertyElementMain
-            )
-            AudioObjectRemovePropertyListenerBlock(
-                deviceID,
-                &address,
-                listenerQueue,
-                block
-            )
-            deviceFormatListenerBlock = nil
-        }
+        // Remove old format listener (device may have changed).
+        removeDeviceFormatListener()
 
         // Delay to let the audio hardware settle after device change
         audioQueue.asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -644,25 +681,10 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
-        // Get new default input device
-        var newDeviceID: AudioDeviceID = kAudioObjectUnknown
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(
-            mSelector: kAudioHardwarePropertyDefaultInputDevice,
-            mScope: kAudioObjectPropertyScopeGlobal,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let status = AudioObjectGetPropertyData(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            0,
-            nil,
-            &size,
-            &newDeviceID
-        )
-
-        guard status == noErr, newDeviceID != kAudioObjectUnknown else {
+        let newDeviceID: AudioDeviceID
+        do {
+            newDeviceID = try resolveInputDeviceID()
+        } catch {
             log("AudioCapture: No valid input device after config change (attempt \(retryCount + 1))")
             retryOrGiveUp(retryCount: retryCount)
             return
@@ -731,26 +753,8 @@ class AudioCaptureService: @unchecked Sendable {
             return
         }
 
-        // Install format listener on new device
-        var formatAddress = AudioObjectPropertyAddress(
-            mSelector: kAudioDevicePropertyStreamFormat,
-            mScope: kAudioDevicePropertyScopeInput,
-            mElement: kAudioObjectPropertyElementMain
-        )
-
-        let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-            self?.audioQueue.async {
-                self?.handleConfigurationChange()
-            }
-        }
-        self.deviceFormatListenerBlock = formatBlock
-
-        AudioObjectAddPropertyListenerBlock(
-            deviceID,
-            &formatAddress,
-            listenerQueue,
-            formatBlock
-        )
+        updateDefaultDeviceListener()
+        installDeviceFormatListener()
 
         log("AudioCapture: Restarted with new configuration")
         isReconfiguring = false
@@ -787,6 +791,25 @@ class AudioCaptureService: @unchecked Sendable {
         guard status == noErr else { return false }
         return transport == kAudioDeviceTransportTypeBluetooth
             || transport == kAudioDeviceTransportTypeBluetoothLE
+    }
+
+    /// True when the system's default OUTPUT device transports over Bluetooth.
+    /// Opening a 16 kHz input on a BT device forces it from A2DP into HFP headset
+    /// mode, which drops the OUTPUT rate to 16 kHz and chops streamed playback —
+    /// so the realtime-hub PTT path captures from the built-in mic instead when
+    /// this is true, keeping the BT output in A2DP.
+    static func isDefaultOutputBluetooth() -> Bool {
+        var deviceID = AudioDeviceID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceID)
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return false }
+        return isBluetoothTransport(deviceID: deviceID)
     }
 
     /// Locate the CoreAudio device ID of the built-in microphone (if present).

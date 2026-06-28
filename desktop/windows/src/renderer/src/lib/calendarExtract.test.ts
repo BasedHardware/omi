@@ -1,6 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { buildCalendarPrompt, parseCalendarTasks } from './calendarExtract'
 import type { CalendarItem } from '../../../shared/types'
+
+vi.mock('./apiClient', () => ({
+  desktopApi: {
+    post: vi.fn()
+  }
+}))
 
 const ev = (over: Partial<CalendarItem>): CalendarItem => ({
   id: 'e1',

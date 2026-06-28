@@ -15,6 +15,9 @@ import sys
 import types
 from unittest.mock import MagicMock
 
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, _BACKEND_DIR)
+
 # Stub heavy deps before importing vector_db. Same pattern as test_memories_batch.
 for mod_name in [
     'pinecone',
@@ -48,16 +51,29 @@ sys.modules['google.cloud.firestore'].FieldFilter = MagicMock
 sys.modules['google.cloud.firestore'].Query = MagicMock
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
-clients_stub = sys.modules.setdefault('utils.llm.clients', types.ModuleType('utils.llm.clients'))
-clients_stub.embeddings = MagicMock()
+database_pkg = sys.modules.get('database')
+if not isinstance(database_pkg, types.ModuleType):
+    database_pkg = types.ModuleType('database')
+    sys.modules['database'] = database_pkg
+database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
+sys.modules.pop('database.vector_db', None)
 
-_backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-_vector_db_path = os.path.join(_backend_dir, 'database', 'vector_db.py')
+previous_clients_stub = sys.modules.get('utils.llm.clients')
+clients_stub = types.ModuleType('utils.llm.clients')
+clients_stub.embeddings = MagicMock()
+sys.modules['utils.llm.clients'] = clients_stub
+
+_vector_db_path = os.path.join(_BACKEND_DIR, 'database', 'vector_db.py')
 _vector_db_spec = importlib.util.spec_from_file_location('action_item_dedup_vector_db', _vector_db_path)
 if _vector_db_spec is None or _vector_db_spec.loader is None:
     raise ImportError(f'Unable to load vector_db from {_vector_db_path}')
 vector_db = importlib.util.module_from_spec(_vector_db_spec)
 _vector_db_spec.loader.exec_module(vector_db)
+
+if previous_clients_stub is None:
+    sys.modules.pop('utils.llm.clients', None)
+else:
+    sys.modules['utils.llm.clients'] = previous_clients_stub
 
 
 def _setup_mocks(monkeypatch, *, index_none=False, query_response=None, embed_raises=None, query_raises=None):

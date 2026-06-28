@@ -91,9 +91,18 @@ llm_clients_stub = _stub_module("utils.llm.clients")
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
 llm_clients_stub.parser = MagicMock()
 
+conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
+conversation_folder_stub.FolderAssignment = MagicMock()
+conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=(None, 0.0, "test stub"))
+conversation_folder_stub.build_folders_context = MagicMock(return_value="")
+
 # Real models (pure pydantic) resolve from the models package directory.
 _stub_package("models")
 sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
+
+_conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
+if _conversation_processing_stub is not None and not hasattr(_conversation_processing_stub, "_local_started_at_iso"):
+    sys.modules.pop("utils.llm.conversation_processing", None)
 
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",

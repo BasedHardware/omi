@@ -14,6 +14,7 @@ struct AIResponseView: View {
     @Binding var isVoiceFollowUp: Bool
     @Binding var voiceFollowUpTranscript: String
     var canClearVisibleConversation: Bool = false
+    var showsHeader: Bool = true
 
     var onClearVisibleConversation: (() -> Void)?
     var onEscape: (() -> Void)?
@@ -23,8 +24,10 @@ struct AIResponseView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            headerView
-                .fixedSize(horizontal: false, vertical: true)
+            if showsHeader {
+                headerView
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             ScrollViewReader { proxy in
                 ScrollView {
@@ -50,25 +53,22 @@ struct AIResponseView: View {
                         // Anchor for auto-scroll
                         Color.clear.frame(height: 1).id("bottom")
                     }
+                    .padding(.trailing, 26)
                     .background(
                         GeometryReader { geo -> Color in
                             let h = geo.size.height
                             DispatchQueue.main.async {
-                                state.responseContentHeight = h
+                                state.reportContentHeight(h, for: .mainResponse)
                             }
                             return Color.clear
                         }
                     )
                 }
                 .onChange(of: currentMessage?.text) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
                 .onChange(of: currentMessage?.contentBlocks.count) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
+                    proxy.scrollTo("bottom", anchor: .bottom)
                 }
                 .onChange(of: chatHistory.count) {
                     withAnimation(.easeOut(duration: 0.15)) {
@@ -95,7 +95,9 @@ struct AIResponseView: View {
                 followUpInputView
             }
         }
-        .padding()
+        .padding(.horizontal, 16)
+        .padding(.top, state.usesNotchIsland ? 0 : 16)
+        .padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
         .onExitCommand {
@@ -349,11 +351,8 @@ struct AIResponseView: View {
 
     private var voiceFollowUpView: some View {
         HStack(spacing: 8) {
-            Circle()
-                .fill(Color.red)
-                .frame(width: 10, height: 10)
-                .scaleEffect(1.2)
-                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isVoiceFollowUp)
+            // Playful realtime mic waveform (replaces the old pulsing red dot)
+            VoiceWaveformBars(isActive: isVoiceFollowUp)
 
             Image(systemName: "mic.fill")
                 .scaledFont(size: 14, weight: .semibold)
@@ -375,7 +374,7 @@ struct AIResponseView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Color.red.opacity(0.15))
+        .background(OmiColors.purplePrimary.opacity(0.12))
         .cornerRadius(8)
     }
 
@@ -503,18 +502,17 @@ struct MessageHoverOverlay<Content: View>: View {
         (isHovered || isBarHovered || showInfoPopover) && !message.isStreaming
     }
 
-    private var actionBarWidth: CGFloat {
-        message.metadata == nil ? 56 : 76
-    }
-
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        VStack(alignment: .leading, spacing: 4) {
             VStack(alignment: .leading, spacing: 8) {
                 content()
             }
-            .padding(.trailing, actionBarWidth)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            actionBar
+            if shouldShowBar {
+                actionBar
+                    .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -545,77 +543,77 @@ struct MessageHoverOverlay<Content: View>: View {
         // `self.message` happens to point to when the click is dispatched.
         let messageText = message.text
         let currentRating = message.rating
-        return VStack(alignment: .trailing, spacing: 2) {
-            HStack(spacing: 6) {
-                // Thumbs up
-                Button(action: { [currentRating] in
-                    let newRating = currentRating == 1 ? nil : 1
-                    guard newRating != lastSubmittedRating else { return }
-                    lastSubmittedRating = newRating
-                    onRate(newRating)
-                    if newRating != nil { showRatingFeedbackBriefly() }
-                }) {
-                    Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
-                        .scaledFont(size: 11)
-                        .foregroundColor(currentRating == 1 ? .green : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Helpful response")
+        return HStack(alignment: .top, spacing: 6) {
+            Spacer(minLength: 0)
 
-                // Thumbs down
-                Button(action: { [currentRating] in
-                    let newRating = currentRating == -1 ? nil : -1
-                    guard newRating != lastSubmittedRating else { return }
-                    lastSubmittedRating = newRating
-                    onRate(newRating)
-                    if newRating != nil { showRatingFeedbackBriefly() }
-                }) {
-                    Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
-                        .scaledFont(size: 11)
-                        .foregroundColor(currentRating == -1 ? .red : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Not helpful")
-
-                // Copy — captures `messageText` explicitly so we always copy the
-                // message this button was drawn for, even if SwiftUI reuses the
-                // overlay view across re-renders.
-                Button(action: { [messageText] in copyText(messageText) }) {
-                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                        .scaledFont(size: 11)
-                        .foregroundColor(showCopied ? .green : .secondary)
-                }
-                .buttonStyle(.plain)
-                .help("Copy response")
-
-                // Info (developer context)
-                if message.metadata != nil {
-                    Button(action: { showInfoPopover.toggle() }) {
-                        Image(systemName: "info.circle")
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(spacing: 6) {
+                    // Thumbs up
+                    Button(action: { [currentRating] in
+                        let newRating = currentRating == 1 ? nil : 1
+                        guard newRating != lastSubmittedRating else { return }
+                        lastSubmittedRating = newRating
+                        onRate(newRating)
+                        if newRating != nil { showRatingFeedbackBriefly() }
+                    }) {
+                        Image(systemName: currentRating == 1 ? "hand.thumbsup.fill" : "hand.thumbsup")
                             .scaledFont(size: 11)
-                            .foregroundColor(showInfoPopover ? .white : .secondary)
+                            .foregroundColor(currentRating == 1 ? .green : .secondary)
                     }
                     .buttonStyle(.plain)
-                    .help("View response context")
-                    .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
-                        MessageMetadataPopover(metadata: message.metadata!)
+                    .help("Helpful response")
+
+                    // Thumbs down
+                    Button(action: { [currentRating] in
+                        let newRating = currentRating == -1 ? nil : -1
+                        guard newRating != lastSubmittedRating else { return }
+                        lastSubmittedRating = newRating
+                        onRate(newRating)
+                        if newRating != nil { showRatingFeedbackBriefly() }
+                    }) {
+                        Image(systemName: currentRating == -1 ? "hand.thumbsdown.fill" : "hand.thumbsdown")
+                            .scaledFont(size: 11)
+                            .foregroundColor(currentRating == -1 ? .red : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Not helpful")
+
+                    // Copy — captures `messageText` explicitly so we always copy the
+                    // message this button was drawn for, even if SwiftUI reuses the
+                    // overlay view across re-renders.
+                    Button(action: { [messageText] in copyText(messageText) }) {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                            .scaledFont(size: 11)
+                            .foregroundColor(showCopied ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Copy response")
+
+                    // Info (developer context)
+                    if message.metadata != nil {
+                        Button(action: { showInfoPopover.toggle() }) {
+                            Image(systemName: "info.circle")
+                                .scaledFont(size: 11)
+                                .foregroundColor(showInfoPopover ? .white : .secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("View response context")
+                        .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+                            MessageMetadataPopover(metadata: message.metadata!)
+                        }
                     }
                 }
-            }
 
-            if showRatingFeedback {
-                Text("Thank you!")
-                    .scaledFont(size: 9)
-                    .foregroundColor(.secondary)
-                    .transition(.opacity)
+                if showRatingFeedback {
+                    Text("Thank you!")
+                        .scaledFont(size: 9)
+                        .foregroundColor(.secondary)
+                        .transition(.opacity)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.2), value: showRatingFeedback)
-        .frame(width: actionBarWidth, alignment: .trailing)
-        .padding(.top, 1)
-        .opacity(shouldShowBar ? 1 : 0)
-        .allowsHitTesting(shouldShowBar)
-        .animation(.easeInOut(duration: 0.15), value: shouldShowBar)
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .onHover { hovering in
             isBarHovered = hovering
             if hovering {

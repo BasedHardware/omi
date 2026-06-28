@@ -52,8 +52,8 @@ class LLMResult:
 try:
     import langchain_core.callbacks  # noqa: F401
     from langchain_core.outputs import Generation, LLMResult
-except ModuleNotFoundError as exc:
-    if exc.name is None or not exc.name.startswith("langchain_core"):
+except (ImportError, ModuleNotFoundError) as exc:
+    if isinstance(exc, ModuleNotFoundError) and (exc.name is None or not exc.name.startswith("langchain_core")):
         raise
 
     _langchain_core_module = sys.modules.setdefault("langchain_core", types.ModuleType("langchain_core"))

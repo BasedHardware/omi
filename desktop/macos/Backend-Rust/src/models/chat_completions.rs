@@ -104,6 +104,16 @@ pub struct Usage {
     pub prompt_tokens: i64,
     pub completion_tokens: i64,
     pub total_tokens: i64,
+    // OpenAI-standard cached-token reporting. Populated from Anthropic's
+    // cache_read_input_tokens so prompt-cache hits propagate through pi-mono
+    // (usage.cacheRead) to the Swift query trace. Omitted when zero.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prompt_tokens_details: Option<PromptTokensDetails>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct PromptTokensDetails {
+    pub cached_tokens: i64,
 }
 
 // ── Streaming chunk types ───────────────────────────────────────────────────
@@ -163,8 +173,11 @@ pub struct AnthropicRequest {
     pub model: String,
     pub max_tokens: u64,
     pub messages: Vec<AnthropicMessage>,
+    /// System prompt as array-of-content-blocks with optional cache_control.
+    /// Produced by `cached_system_block()` which handles sentinel splitting
+    /// so volatile live context (dates, times) is excluded from the cached prefix.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub system: Option<String>,
+    pub system: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temperature: Option<f64>,
     pub stream: bool,
@@ -178,6 +191,34 @@ pub struct AnthropicRequest {
 pub struct AnthropicMessage {
     pub role: String,
     pub content: serde_json::Value,
+}
+
+/// Anthropic content block type (system prompt blocks are always "text").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnthropicContentBlockType {
+    Text,
+}
+
+/// Anthropic cache control type (currently only "ephemeral" is supported).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AnthropicCacheControlType {
+    Ephemeral,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AnthropicSystemContentBlock {
+    #[serde(rename = "type")]
+    pub block_type: AnthropicContentBlockType,
+    pub text: String,
+    pub cache_control: AnthropicCacheControl,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AnthropicCacheControl {
+    #[serde(rename = "type")]
+    pub cache_type: AnthropicCacheControlType,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -376,9 +417,17 @@ pub fn anthropic_usage_to_openai(usage: &AnthropicUsage) -> Usage {
         + usage.cache_creation_input_tokens
         + usage.cache_read_input_tokens;
     let completion_tokens = usage.output_tokens;
+    let prompt_tokens_details = if usage.cache_read_input_tokens > 0 {
+        Some(PromptTokensDetails {
+            cached_tokens: usage.cache_read_input_tokens,
+        })
+    } else {
+        None
+    };
     Usage {
         prompt_tokens,
         completion_tokens,
         total_tokens: prompt_tokens + completion_tokens,
+        prompt_tokens_details,
     }
 }

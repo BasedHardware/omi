@@ -91,6 +91,18 @@ class MessageServiceStatusEvent(MessageEvent):
         return j
 
 
+class ConversationSessionEvent(MessageEvent):
+    event_type: str = "conversation_session"
+    conversation_id: str
+    status: str = "in_progress"
+
+    def to_json(self):
+        j = self.model_dump(mode="json")
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j
+
+
 class PingEvent(MessageEvent):
     event_type: str = "ping"
 

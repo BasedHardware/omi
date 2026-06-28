@@ -16,12 +16,106 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
-# Stub database modules
-sys.modules.setdefault("database._client", MagicMock())
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+_database_stubs = [
+    "database",
+    "database._client",
+    "database.mem_db",
+    "database.redis_db",
+    "database.memories",
+    "database.conversations",
+    "database.notifications",
+    "database.users",
+    "database.tasks",
+    "database.trends",
+    "database.action_items",
+    "database.folders",
+    "database.calendar_meetings",
+    "database.vector_db",
+    "database.apps",
+    "database.llm_usage",
+    "database.chat",
+    "database.goals",
+    "database.webhook_health",
+]
+_utils_stubs = [
+    "utils.apps",
+    "utils.notifications",
+    "utils.conversations",
+    "utils.conversations.factory",
+    "utils.conversations.render",
+    "utils.llm",
+    "utils.llm.clients",
+    "utils.llm.proactive_notification",
+    "utils.llm.usage_tracker",
+    "utils.llms",
+    "utils.llms.memory",
+    "utils.mentor_notifications",
+    "utils.log_sanitizer",
+    "utils.http_client",
+    "utils.subscription",
+    "utils.executors",
+]
+_RESTORED_MODULES = tuple(_database_stubs + _utils_stubs + ["utils.app_integrations"])
+# The real "utils" parent package is intentionally left out: restoring child
+# stubs below also removes any attributes _install_module attached to it.
+# "database" is restored because this test temporarily replaces that parent.
+_MISSING = object()
+_saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if not isinstance(module, types.ModuleType) or not hasattr(module, '__path__'):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [path]
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+    return module
+
+
+def _install_module(name, module):
+    sys.modules[name] = module
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+
+
+def _restore_stub_modules():
+    for name in sorted(_RESTORED_MODULES, key=lambda module_name: module_name.count('.'), reverse=True):
+        current = sys.modules.get(name)
+        original = _saved_modules[name]
+        if original is _MISSING:
+            sys.modules.pop(name, None)
+            if '.' in name:
+                parent_name, attr = name.rsplit('.', 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None and getattr(parent, attr, _MISSING) is current:
+                    delattr(parent, attr)
+        else:
+            sys.modules[name] = original
+            if '.' in name:
+                parent_name, attr = name.rsplit('.', 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None:
+                    setattr(parent, attr, original)
+
+
+_ensure_package("utils", os.path.join(_BACKEND_DIR, "utils"))
+
+# Stub database modules
 _db_pkg = types.ModuleType("database")
-_db_pkg.__path__ = [os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'database'))]
-sys.modules.setdefault("database", _db_pkg)
+_db_pkg.__path__ = [os.path.join(_BACKEND_DIR, "database")]
+_install_module("database", _db_pkg)
+_install_module("database._client", MagicMock())
 
 for submod in [
     "redis_db",
@@ -42,9 +136,9 @@ for submod in [
     "webhook_health",
 ]:
     mod = types.ModuleType(f"database.{submod}")
-    sys.modules.setdefault(f"database.{submod}", mod)
+    _install_module(f"database.{submod}", mod)
 
-sys.modules.setdefault("database.mem_db", types.ModuleType("database.mem_db"))
+_install_module("database.mem_db", types.ModuleType("database.mem_db"))
 sys.modules["database.mem_db"].get_proactive_noti_sent_at = MagicMock(return_value=None)
 sys.modules["database.mem_db"].set_proactive_noti_sent_at = MagicMock()
 sys.modules["database.redis_db"].get_generic_cache = MagicMock(return_value=None)
@@ -75,26 +169,19 @@ sys.modules["database.webhook_health"].record_dev_webhook_failure = MagicMock(re
 sys.modules["database.webhook_health"].record_dev_webhook_success = MagicMock()
 sys.modules["database.webhook_health"]._DEV_FAILURE_THRESHOLD = 100
 
-_utils_stubs = [
-    "utils.apps",
-    "utils.notifications",
-    "utils.conversations",
-    "utils.conversations.factory",
-    "utils.conversations.render",
-    "utils.llm",
-    "utils.llm.clients",
-    "utils.llm.proactive_notification",
-    "utils.llm.usage_tracker",
-    "utils.llms",
-    "utils.llms.memory",
-    "utils.mentor_notifications",
-    "utils.log_sanitizer",
-    "utils.http_client",
-    "utils.subscription",
-]
+_utils_pkg = sys.modules.get("utils")
+if _utils_pkg is None:
+    _utils_pkg = types.ModuleType("utils")
+    sys.modules["utils"] = _utils_pkg
+_utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, "utils")]
+
 for name in _utils_stubs:
-    if name not in sys.modules:
-        sys.modules[name] = types.ModuleType(name)
+    module = sys.modules.get(name)
+    if module is None:
+        module = types.ModuleType(name)
+    _install_module(name, module)
+
+sys.modules["utils.conversations"].__path__ = [os.path.join(_BACKEND_DIR, "utils", "conversations")]
 
 sys.modules["utils.apps"].get_available_apps = MagicMock(return_value=[])
 sys.modules["utils.notifications"].send_notification = MagicMock()
@@ -146,6 +233,7 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
     # Stub module — safe to add mock attributes for import resolution
     _http_mod.get_webhook_client = MagicMock()
     _http_mod.get_maps_client = MagicMock()
+    _http_mod.get_maps_semaphore = MagicMock(return_value=_asyncio.Semaphore(8))
     _mock_cb = MagicMock()
     _mock_cb.allow_request = MagicMock(return_value=True)
     _mock_cb.record_success = MagicMock()
@@ -159,7 +247,7 @@ if _http_mod is not None and not hasattr(_http_mod, '__file__'):
 # run_in_executor calls executor.submit() and wraps the returned Future.
 from concurrent.futures import ThreadPoolExecutor as _TPE
 
-_executors_mod = sys.modules.setdefault("utils.executors", types.ModuleType("utils.executors"))
+_executors_mod = sys.modules["utils.executors"]
 _executors_mod.critical_executor = _TPE(max_workers=2, thread_name_prefix="test-critical")
 _executors_mod.db_executor = _TPE(max_workers=2, thread_name_prefix="test-db")
 _executors_mod.storage_executor = _TPE(max_workers=2, thread_name_prefix="test-storage")
@@ -174,6 +262,7 @@ _executors_mod.run_blocking = _run_blocking
 import importlib
 
 app_integrations = importlib.import_module("utils.app_integrations")
+_restore_stub_modules()
 
 
 def _make_app(app_id: str, webhook_url: str, triggers_realtime=False, triggers_audio=False, uid=None):
@@ -213,8 +302,8 @@ class TestAsyncTriggerRealtimeAudioBytes:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch(
-            "utils.app_integrations.get_webhook_client", return_value=mock_client
+        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch.object(
+            app_integrations, "get_webhook_client", return_value=mock_client
         ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 10))
 
@@ -243,8 +332,8 @@ class TestAsyncTriggerRealtimeAudioBytes:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=_side_effect)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch(
-            "utils.app_integrations.get_webhook_client", return_value=mock_client
+        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch.object(
+            app_integrations, "get_webhook_client", return_value=mock_client
         ):
             # Should not raise
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
@@ -262,9 +351,9 @@ class TestAsyncTriggerRealtimeAudioBytes:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch(
-            "utils.app_integrations.get_webhook_client", return_value=mock_client
-        ), patch("utils.app_integrations.threading") as mock_threading:
+        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
+            app_integrations, "get_webhook_client", return_value=mock_client
+        ), patch.object(app_integrations, "threading") as mock_threading:
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00'))
             mock_threading.Thread.assert_not_called()
 
@@ -289,8 +378,8 @@ class TestAudioBytesChunkedFanOut:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=apps), patch(
-            "utils.app_integrations.get_webhook_client", return_value=mock_client
+        with patch.object(app_integrations, "get_available_apps", return_value=apps), patch.object(
+            app_integrations, "get_webhook_client", return_value=mock_client
         ):
             await app_integrations.trigger_realtime_audio_bytes("uid-1", 8000, bytearray(b'\x00' * 100))
 
@@ -304,8 +393,8 @@ class TestAsyncTriggerRealtimeIntegrations:
     @pytest.mark.asyncio
     async def test_no_apps_returns_empty(self):
         """No apps and no mentor → empty result."""
-        with patch.object(app_integrations, "get_available_apps", return_value=[]), patch(
-            "utils.app_integrations.process_mentor_notification", return_value=None
+        with patch.object(app_integrations, "get_available_apps", return_value=[]), patch.object(
+            app_integrations, "process_mentor_notification", return_value=None
         ):
             result = await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
         assert result == {}
@@ -324,9 +413,9 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch(
-            "utils.app_integrations.process_mentor_notification", return_value=None
-        ), patch("utils.app_integrations.get_webhook_client", return_value=mock_client):
+        with patch.object(app_integrations, "get_available_apps", return_value=[app1, app2]), patch.object(
+            app_integrations, "process_mentor_notification", return_value=None
+        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], "conv-1")
 
         assert mock_client.post.call_count == 2
@@ -344,9 +433,9 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch(
-            "utils.app_integrations.process_mentor_notification", return_value=None
-        ), patch("utils.app_integrations.get_webhook_client", return_value=mock_client), patch.object(
+        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
+            app_integrations, "process_mentor_notification", return_value=None
+        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client), patch.object(
             app_integrations, "send_app_notification"
         ) as mock_notify, patch.object(
             app_integrations, "add_app_message", return_value={"id": "msg-1"}
@@ -368,9 +457,9 @@ class TestAsyncTriggerRealtimeIntegrations:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch(
-            "utils.app_integrations.process_mentor_notification", return_value=None
-        ), patch("utils.app_integrations.get_webhook_client", return_value=mock_client):
+        with patch.object(app_integrations, "get_available_apps", return_value=[app1]), patch.object(
+            app_integrations, "process_mentor_notification", return_value=None
+        ), patch.object(app_integrations, "get_webhook_client", return_value=mock_client):
             await app_integrations.trigger_realtime_integrations("uid-1", [{"text": "hi"}], None)
 
         call_url = mock_client.post.call_args[0][0]

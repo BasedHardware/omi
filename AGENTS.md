@@ -14,7 +14,7 @@ These rules apply to every AI agent working in this repository. This file is the
 
 ## Setup
 
-- **Pre-commit hook (required — verify before first commit):** `test -f .git/hooks/pre-commit || ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit` — formatting is enforced by CI.
+- **Worktree setup (required before first commit/push):** `make setup` — installs the repo Git hooks using linked-worktree-safe paths.
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`).
 
 ## Safety Rules
@@ -29,6 +29,10 @@ These rules apply to every AI agent working in this repository. This file is the
 - **Prefer testing locally first.** The user prefers to build and run the app locally to verify a change works before it goes to a PR or merge. Default to a local named-bundle build + run for desktop changes (and the equivalent local run for other components) before proposing to land anything.
 
 ## Coding Guidelines
+
+### UI / Design (all platforms)
+
+- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions.
 
 ### Backend (Python)
 
@@ -64,7 +68,8 @@ backend (main.py)
   ├── ws ──► pusher (pusher/)
   ├── ──────► diarizer (diarizer/)
   ├── ──────► vad (modal/)
-  └── ──────► deepgram (self-hosted or cloud)
+  ├── ──────► deepgram (self-hosted or cloud)
+  └── ──────► llm-gateway (llm_gateway/main.py)
 
 pusher
   ├── ──────► diarizer (diarizer/)
@@ -80,9 +85,11 @@ backend-sync (main.py, Cloud Run)
 notifications-job (modal/job.py)  [cron]
 ```
 
-Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy}/`
+Helm charts: `backend/charts/{backend-listen,pusher,diarizer,vad,deepgram-self-hosted,agent-proxy,llm-gateway}/`
 
 - **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection and speaker identification (`utils/stt/vad.py`, `utils/stt/speech_profile.py`). Calls deepgram for STT (`utils/stt/streaming.py`).
+- **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
+- **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients.
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and deepgram for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
 - **agent-proxy** (`agent-proxy/main.py`) — GKE. WebSocket proxy at `wss://agent.omi.me/v1/agent/ws`. Validates Firebase ID token, looks up `agentVm` in Firestore, proxies bidirectionally to VM's `ws://<ip>:8080/ws`.
 - **diarizer** (`diarizer/main.py`) — GPU. Speaker embeddings at `/v2/embedding`. Called by backend and pusher (`HOSTED_SPEAKER_EMBEDDING_API_URL`).
@@ -120,12 +127,16 @@ Key rules:
 ### Desktop (macOS — Swift app + Rust backend)
 
 The desktop app is a **Swift Package Manager** project (no Xcode project, no `.xcodeproj`). The Rust backend lives in `desktop/macos/Backend-Rust/`.
+- For user-visible desktop changes, follow `desktop/macos/AGENTS.md` → Changelog Entries and add one `desktop/macos/changelog/unreleased/*.json` fragment.
 
 #### Building & Running
 
 - `cd desktop/macos && ./run.sh` — full local dev (build Swift app + Rust backend + Cloudflare tunnel + launch).
 - `cd desktop/macos && ./run.sh --yolo` — quick start against the prod backend, no local services.
 - `OMI_SKIP_BACKEND=1` — app only, use remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
+- **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (Rust 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped (never the global `omi-desktop-backend` name), and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
+- `Omi Dev` is the canonical shared development profile: `/Applications/Omi Dev.app`, bundle id `com.omi.desktop-dev`, reusable permissions, and auth seed source. Do not pass `OMI_APP_NAME="Omi Dev"` from a linked worktree; that creates a named bundle displayed as Omi Dev with a different bundle id and breaks permission reuse.
+- Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
 - Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
 - **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop/macos && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
 - Release builds are handled entirely by Codemagic CI (no local release script).
@@ -141,6 +152,7 @@ This installs `/Applications/omi-fix-rewind.app` with bundle id `com.omi.omi-fix
 
 Rules:
 - **ALWAYS prefix the name with `omi-`** (e.g. `omi-fix-rewind`, `omi-vision-test`) so bundles group together in `/Applications/`.
+- NEVER use `Omi Dev` as a named bundle. If you need the shared permission/profile grant, launch from the primary checkout with no `OMI_APP_NAME`; otherwise use an `omi-*` named bundle and expect separate macOS permissions.
 - NEVER use bare `./run.sh` when testing a specific change — it overwrites "Omi Dev".
 - NEVER kill or interfere with "Omi", "Omi Beta" — those are production installs.
 - Keep app name and bundle suffix identical (e.g. `omi-search.app` → `com.omi.omi-search`).
@@ -152,10 +164,11 @@ Rules:
 Agents can and should self-test the running app — don't stop at a successful compile. The fast path skips the slow parts (web login, sidebar click-through):
 
 1. **Build + launch a named bundle:** `cd desktop/macos && OMI_APP_NAME="omi-<feature>" ./run.sh` (add `OMI_SKIP_TUNNEL=1` for a local backend without a tunnel; `OMI_SKIP_BACKEND=1 OMI_DESKTOP_API_URL=…` to point at a remote backend).
-2. **Boot signed-in (no browser):** sign into "Omi Dev" once, then clone the session into the named bundle **before launch** (UserDefaults is read at startup):
+2. **Boot signed-in (no browser):** sign into "Omi Dev" once; `./run.sh` auto-clones auth/onboarding plus common shortcuts/settings into named bundles **before launch** (UserDefaults is read at startup). To do it manually:
    ```bash
    cd desktop/macos && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
    ./scripts/omi-auth-seed.sh com.omi.omi-<feature>          # replay into the test bundle
+   ./scripts/omi-settings-seed.sh com.omi.omi-<feature>       # replay shortcuts/settings
    ```
    On next launch `restoreAuthState()` picks it up and boots already-signed-in.
 3. **Inspect / drive the app:**
@@ -224,12 +237,12 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 - Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
-- Make individual commits per file, not bulk commits.
+- Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
 - If push fails (remote ahead): `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
 
 ### RELEASE Command
-Create a branch from `main`, individual commits per file, push and open a PR, merge without squash, then switch back to `main` and pull.
+Create a branch from `main`, make individual commits per feature or testable surface, push and open a PR, merge without squash, then switch back to `main` and pull.
 
 ### RELEASEWITHBACKEND Command
 Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
@@ -242,7 +255,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## CI/CD & Logs
 
-- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic (build, sign, notarize, publish GitHub release, deploy Rust backend).
+- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires manually running `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable.
 - Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Documentation Maintenance
@@ -252,3 +265,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 - If a PR changes setup, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
 - For architecture / core flow / API changes — update Mintlify docs (`docs/doc/developer/`) in the same PR.
 - If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.
+
+## Cursor Cloud specific instructions
+
+Running in a Cursor Cloud VM (Linux x86)? See **[.cursor/cloud-agent-environment.md](.cursor/cloud-agent-environment.md)** — what runs here, the credential-free **hermetic E2E harness** (preferred), running the backend live, and known pre-existing test failures.

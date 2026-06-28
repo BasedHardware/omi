@@ -9,10 +9,52 @@ Covers:
 """
 
 import asyncio
+import sys
 import time
+import types
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+
+def _drop_stale_module(name, required_attrs):
+    module = sys.modules.get(name)
+    if module is None:
+        return
+    if (
+        isinstance(module, types.ModuleType)
+        and getattr(module, "__file__", None)
+        and all(hasattr(module, attr) for attr in required_attrs)
+    ):
+        return
+
+    sys.modules.pop(name, None)
+    parent_name, attr_name = name.rsplit(".", 1)
+    parent = sys.modules.get(parent_name)
+    if parent is not None and getattr(parent, attr_name, None) is module:
+        delattr(parent, attr_name)
+
+
+_ensure_package("utils", BACKEND_DIR / "utils")
+_drop_stale_module("utils.http_client", ["WebhookCircuitBreaker", "get_webhook_circuit_breaker"])
+_drop_stale_module("utils.executors", ["critical_executor", "storage_executor", "shutdown_executors"])
 
 from utils.http_client import (
     WebhookCircuitBreaker,

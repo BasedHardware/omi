@@ -26,6 +26,8 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
 
 def _stub_module(name: str) -> types.ModuleType:
     if name not in sys.modules:
@@ -49,6 +51,51 @@ def _optional_stub_module(name: str) -> tuple[types.ModuleType, bool]:
     mod = types.ModuleType(name)
     sys.modules[name] = mod
     return mod, True
+
+
+def _module_path_points_to(module: types.ModuleType, expected_path: Path) -> bool:
+    raw_paths = getattr(module, "__path__", None)
+    if raw_paths is None:
+        return False
+
+    try:
+        paths = list(raw_paths)
+    except TypeError:
+        return False
+
+    return any(Path(path).resolve() == expected_path for path in paths)
+
+
+def _restore_usage_tracker_import_path() -> None:
+    utils_dir = BACKEND_DIR / "utils"
+    llm_dir = utils_dir / "llm"
+
+    utils_mod = sys.modules.get("utils")
+    if utils_mod is not None and not _module_path_points_to(utils_mod, utils_dir):
+        utils_mod.__path__ = [str(utils_dir)]
+
+    llm_mod = sys.modules.get("utils.llm")
+    if llm_mod is not None and not _module_path_points_to(llm_mod, llm_dir):
+        llm_mod.__path__ = [str(llm_dir)]
+
+    tracker_mod = sys.modules.get("utils.llm.usage_tracker")
+    if tracker_mod is None:
+        return
+
+    expected_file = (llm_dir / "usage_tracker.py").resolve()
+    tracker_file = getattr(tracker_mod, "__file__", None)
+    try:
+        tracker_path = Path(tracker_file).resolve() if tracker_file else None
+    except TypeError:
+        tracker_path = None
+
+    if tracker_path == expected_file:
+        return
+
+    sys.modules.pop("utils.llm.usage_tracker", None)
+    llm_mod = sys.modules.get("utils.llm")
+    if llm_mod is not None and getattr(llm_mod, "usage_tracker", None) is tracker_mod:
+        delattr(llm_mod, "usage_tracker")
 
 
 # --- Stub minimal LangChain modules needed by usage_tracker ---
@@ -168,6 +215,7 @@ _stub_module("utils.llms.memory")
 sys.modules["utils.llms.memory"].get_prompt_memories = MagicMock(return_value=("TestUser", "some memories"))
 
 # --- Import real usage_tracker ---
+_restore_usage_tracker_import_path()
 from utils.llm.usage_tracker import _usage_context, Features
 
 # --- Stub LLM clients (AFTER importing usage_tracker so it's already loaded) ---

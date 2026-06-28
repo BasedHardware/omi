@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 import database.focus_sessions as focus_sessions_db
 from utils.other import endpoints as auth
+from utils.request_validation import validate_calendar_date
 
 router = APIRouter()
 
@@ -49,6 +50,7 @@ def get_focus_sessions(
     date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    date = validate_calendar_date(date)
     return focus_sessions_db.get_focus_sessions(uid, limit=limit, offset=offset, date=date)
 
 
@@ -66,4 +68,5 @@ def get_focus_stats(
     date: str | None = Query(None, pattern=r'^\d{4}-\d{2}-\d{2}$'),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    date = validate_calendar_date(date)
     return focus_sessions_db.get_focus_stats(uid, date=date)

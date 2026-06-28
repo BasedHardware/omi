@@ -221,6 +221,15 @@ class AudioPlayerUtils extends ChangeNotifier {
       }
     }
 
+    // Sharing reuses the already-decoded playback file (e.g. the one produced when
+    // the waveform loaded) instead of decoding the whole recording again.
+    if (forSharing) {
+      final playbackCached = _audioFileCache[wal.id];
+      if (playbackCached != null && File(playbackCached).existsSync()) {
+        return playbackCached;
+      }
+    }
+
     final audioFilePath = await _getAudioFilePath(wal);
     if (audioFilePath == null) return null;
 
@@ -287,10 +296,11 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     List<Uint8List> pcmFrames = [];
     for (final opusFrame in opusFrames) {
-      final pcmFrame = decoder.decode(input: opusFrame);
-      if (pcmFrame != null) {
-        final uint8Frame = Uint8List.fromList(pcmFrame.buffer.asUint8List());
-        pcmFrames.add(uint8Frame);
+      try {
+        final pcmFrame = decoder.decode(input: opusFrame);
+        pcmFrames.add(Uint8List.fromList(pcmFrame.buffer.asUint8List()));
+      } catch (e) {
+        Logger.warning('AudioPlayerUtils: skipping corrupted Opus frame for WAL ${wal.id}: $e');
       }
     }
 

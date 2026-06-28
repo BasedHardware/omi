@@ -543,7 +543,8 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           Navigator.maybeOf(sheetContext)?.pop();
         }
 
-        await Share.shareXFiles([XFile(file.path, mimeType: 'audio/wav')]);
+        final mimeType = file.path.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
+        await Share.shareXFiles([XFile(file.path, mimeType: mimeType)]);
 
         // Track successful completion
         final durationSeconds = DateTime.now().difference(startTime).inSeconds;
@@ -556,6 +557,11 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
 
         await service.cleanup();
       } else {
+        currentState = AudioDownloadState.error;
+        updateSheet?.call(() {});
+
+        await Future.delayed(const Duration(seconds: 2));
+
         if (sheetContext.mounted) {
           Navigator.maybeOf(sheetContext)?.pop();
         }
@@ -565,6 +571,15 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
           conversationId: provider.conversation.id,
           errorMessage: 'No audio files available',
         );
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(context.l10n.audioDownloadFailed),
+              action: SnackBarAction(label: context.l10n.retry, onPressed: () => _downloadAudio(context, provider)),
+            ),
+          );
+        }
       }
     } catch (e) {
       Logger.debug('Error downloading audio: $e');

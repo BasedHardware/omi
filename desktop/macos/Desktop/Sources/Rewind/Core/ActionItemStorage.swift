@@ -609,6 +609,62 @@ actor ActionItemStorage {
         }
     }
 
+    /// Reconcile dashboard visibility fields from authoritative server rows without
+    /// overwriting user-editable task content. This deliberately bypasses the
+    /// 60-second optimistic-update guard in `syncTaskActionItems` only for completion
+    /// and deletion; due dates are reconciled only when they are not protected by a
+    /// recent local edit, because due date edits are PATCHed optimistically.
+    @discardableResult
+    func reconcileDashboardVisibilityFields(_ items: [TaskActionItem]) async throws -> Int {
+        guard !items.isEmpty else { return 0 }
+        let db = try await ensureInitialized()
+
+        let reconciled = try await db.write { database -> Int in
+            var count = 0
+            for item in items {
+                guard var record = try ActionItemRecord
+                    .filter(Column("backendId") == item.id)
+                    .fetchOne(database) else { continue }
+
+                let incomingDeleted = item.deleted ?? false
+                var changed = false
+
+                if record.completed != item.completed {
+                    record.completed = item.completed
+                    changed = true
+                }
+                if record.deleted != incomingDeleted {
+                    record.deleted = incomingDeleted
+                    record.deletedBy = item.deletedBy
+                    changed = true
+                } else if incomingDeleted, record.deletedBy != item.deletedBy {
+                    record.deletedBy = item.deletedBy
+                    changed = true
+                }
+                let incomingTimestamp = item.updatedAt ?? item.createdAt
+                let protectsRecentLocalDueDate = Date().timeIntervalSince(record.updatedAt) < 60
+                    && record.updatedAt > incomingTimestamp
+                if record.dueAt != item.dueAt && !protectsRecentLocalDueDate {
+                    record.dueAt = item.dueAt
+                    changed = true
+                }
+
+                guard changed else { continue }
+                if incomingTimestamp > record.updatedAt {
+                    record.updatedAt = incomingTimestamp
+                }
+                try record.update(database)
+                count += 1
+            }
+            return count
+        }
+
+        if reconciled > 0 {
+            log("ActionItemStorage: Reconciled \(reconciled) dashboard visibility fields from backend")
+        }
+        return reconciled
+    }
+
 
     /// Hard-delete incomplete tasks NOT present in the API response.
     /// This cleans up tasks that were moved to staged_tasks or deleted on the backend
@@ -724,12 +780,26 @@ actor ActionItemStorage {
         insertRecord.backendSynced = false
         let recordToInsert = insertRecord
 
-        let inserted = try await db.write { database in
-            try recordToInsert.inserted(database)
-        }
+        do {
+            let inserted = try await db.write { database in
+                try recordToInsert.inserted(database)
+            }
+            log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
+            return inserted
+        } catch {
+            guard await RewindDatabase.shared.isActionItemsFTSError(error) else {
+                throw error
+            }
 
-        log("ActionItemStorage: Inserted local action item (id: \(inserted.id ?? -1))")
-        return inserted
+            logError("ActionItemStorage: action_items_fts write failed; repairing FTS index and retrying once")
+            try await RewindDatabase.shared.repairActionItemsFTS(in: db, reason: "insertLocalActionItem")
+
+            let inserted = try await db.write { database in
+                try recordToInsert.inserted(database)
+            }
+            log("ActionItemStorage: Inserted local action item after FTS repair (id: \(inserted.id ?? -1))")
+            return inserted
+        }
     }
 
     /// Insert a screen observation (context captured during task extraction)

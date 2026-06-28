@@ -63,11 +63,12 @@ enum LocalAgentAPISettings {
   }
 }
 
-private struct LocalAgentTool {
+struct LocalAgentTool {
   let name: String
   let description: String
   let properties: [String: Any]
   let required: [String]
+  let annotations: [String: Any]
 }
 
 final class LocalAgentAPIServer {
@@ -241,6 +242,9 @@ final class LocalAgentAPIServer {
     guard Self.tools.contains(where: { $0.name == toolName }) else {
       return errorResponse("unknown_tool: \(toolName)", statusCode: 404)
     }
+    if toolName == "get_work_context" {
+      return await workContextResponse(arguments: arguments)
+    }
     if toolName == "get_screenshot" {
       return await screenshotToolResponse(toolName: toolName, arguments: arguments)
     }
@@ -273,16 +277,123 @@ final class LocalAgentAPIServer {
     return diff == 0
   }
 
+  /// One-call "work context" for agents: the current screen + a compressed
+  /// timeline of the last N minutes of on-screen activity. Read-only; composes
+  /// existing Rewind data so agents stop asking the user to screenshot/re-explain.
+  private func workContextResponse(arguments: [String: Any]) async -> LocalHTTPResponse {
+    let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
+    let now = Date()
+    let start = now.addingTimeInterval(-Double(minutes) * 60)
+    let formatter = ISO8601DateFormatter()
+
+    // 1) Screen now — most recent frame whose pixels are currently loadable.
+    //    Frames still buffering in the unflushed active video chunk can't be
+    //    decoded yet; skip them up front so we don't repeatedly attempt (and
+    //    fail) a load — each failed load re-inits storage, a real latency spike
+    //    since the newest frames are commonly in the active chunk.
+    var screenNow: [String: Any] = ["available": false]
+    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+    if let recent = try? await RewindDatabase.shared.getRecentScreenshots(limit: 25) {
+      for shot in recent {
+        guard let sid = shot.id else { continue }
+        if shot.usesVideoStorage, let chunk = shot.videoChunkPath, chunk == activeChunk {
+          continue  // pending: still in the active, unflushed chunk
+        }
+        if let data = try? await loadScreenshotDataEnsuringStorage(for: shot) {
+          screenNow = [
+            "available": true,
+            "screenshot_id": sid,
+            "timestamp": formatter.string(from: shot.timestamp),
+            "app_name": shot.appName,
+            "window_title": shot.windowTitle ?? NSNull(),
+            "ocr_preview": String((shot.ocrText ?? "").prefix(800)),
+            "image_bytes": data.count,
+            "note":
+              "Latest available finalized frame (may be up to ~1 min old, and can predate window_minutes). Call get_screenshot with this screenshot_id to SEE the full-screen image.",
+          ]
+          break
+        }
+      }
+    }
+
+    // 2) Recent activity — sampled frames, consecutive (app, window) runs collapsed.
+    var timeline: [[String: Any]] = []
+    let calendar = Calendar.current
+    func clock(_ date: Date) -> String {
+      let c = calendar.dateComponents([.hour, .minute], from: date)
+      return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
+    }
+    if let shots = try? await RewindDatabase.shared.getScreenshotsSampled(
+      from: start, to: now, targetCount: 80)
+    {
+      var runs: [(app: String, window: String, start: String, end: String, frames: Int)] = []
+      for shot in shots {
+        let window = Self.normalizeWindow(shot.windowTitle ?? "")
+        let cl = clock(shot.timestamp)
+        if var last = runs.last, last.app == shot.appName, last.window == window {
+          last.end = cl
+          last.frames += 1
+          runs[runs.count - 1] = last
+        } else {
+          runs.append((shot.appName, window, cl, cl, 1))
+        }
+      }
+      for run in runs.reversed().prefix(20) {
+        timeline.append([
+          "start": run.start, "end": run.end, "app": run.app,
+          "window": run.window, "frames": run.frames,
+        ])
+      }
+    }
+
+    return jsonResponse([
+      "ok": true,
+      "name": "get_work_context",
+      "window_minutes": minutes,
+      "screen_now": screenNow,
+      "timeline": timeline,
+      "memories_hint":
+        "For the user's operating principles/preferences, also call search_memories (omi-memory).",
+      "guidance":
+        "This is the user's recent on-screen activity. Act on it directly instead of asking them to screenshot or re-explain what they were doing.",
+    ])
+  }
+
+  /// Strip Unicode format/control marks (bidi isolates apps like Telegram inject),
+  /// trailing message counters "(245236)", and leading unread badges "(2) ", so
+  /// near-identical consecutive window titles collapse into one timeline run.
+  private static func normalizeWindow(_ raw: String) -> String {
+    var w = String(
+      raw.unicodeScalars.filter { scalar in
+        let category = scalar.properties.generalCategory
+        return category != .format && category != .control
+      })
+    if let r = w.range(of: #"\s*\(\d{2,}\)\s*$"#, options: .regularExpression) {
+      w.removeSubrange(r)
+    }
+    if let r = w.range(of: #"^\(\d+\)\s*"#, options: .regularExpression) {
+      w.removeSubrange(r)
+    }
+    return w.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   private func screenshotToolResponse(toolName: String, arguments: [String: Any]) async -> LocalHTTPResponse {
     guard let screenshotID = parseInt64(arguments["screenshot_id"] ?? arguments["id"]) else {
       return errorResponse("screenshot_id is required", statusCode: 400)
     }
 
+    let screenshot: Screenshot?
     do {
-      guard let screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID) else {
-        return errorResponse("screenshot_not_found: \(screenshotID)", statusCode: 404)
-      }
+      screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID)
+    } catch {
+      logError("LocalAgentAPIServer: get_screenshot lookup failed", error: error)
+      return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
+    }
+    guard let screenshot else {
+      return errorResponse("screenshot_not_found: \(screenshotID)", statusCode: 404)
+    }
 
+    do {
       let imageData = try await loadScreenshotDataEnsuringStorage(for: screenshot)
       let metadata = screenshotMetadata(screenshot, imageByteCount: imageData.count)
       return jsonResponse([
@@ -293,9 +404,56 @@ final class LocalAgentAPIServer {
         "image_base64": imageData.base64EncodedString(),
       ])
     } catch {
+      // The image row exists but its pixels could not be loaded. Rather than a
+      // generic 500, classify why so agents get an actionable reason + hint.
+      return await screenshotUnavailableResponse(screenshot, screenshotID: screenshotID, error: error)
+    }
+  }
+
+  /// Map a screenshot load failure to a clear, structured response. Recent
+  /// screenshots commonly sit in the active (unfinalized) video chunk, which
+  /// cannot be decoded yet; other rows may be orphaned or have a file that
+  /// retention already removed. All of these previously surfaced as an opaque
+  /// `failed_to_load_screenshot: Screenshot not found` 500.
+  private func screenshotUnavailableResponse(
+    _ screenshot: Screenshot,
+    screenshotID: Int64,
+    error: Error
+  ) async -> LocalHTTPResponse {
+    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
+
+    let code: String
+    let reason: String
+    let hint: String
+
+    if let rewindError = error as? RewindError, case .corruptedVideoChunk = rewindError {
+      code = "screenshot_chunk_corrupted"
+      reason = "The video chunk backing this screenshot is corrupted and cannot be decoded."
+      hint = "Pick a different screenshot_id; this frame's pixels are unrecoverable."
+    } else if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath, chunk == activeChunk {
+      code = "screenshot_pending"
+      reason = "The frame is in the active recording segment that has not been flushed to disk yet."
+      hint = "Retry in ~60s, or choose an older screenshot_id whose video chunk is already finalized."
+    } else if !screenshot.usesVideoStorage, (screenshot.imagePath ?? "").isEmpty {
+      code = "screenshot_image_unavailable"
+      reason = "This screenshot row has no stored image (orphaned capture with no video chunk or image file)."
+      hint = "Pick a different screenshot_id from a recent search_screen_history result."
+    } else if error as? RewindError != nil {
+      code = "screenshot_file_missing"
+      reason = "The image data for this screenshot is no longer on disk (likely removed by retention/cleanup)."
+      hint = "Pick a more recent screenshot_id whose pixels are still retained."
+    } else {
       logError("LocalAgentAPIServer: get_screenshot failed", error: error)
       return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
     }
+
+    return jsonResponse([
+      "ok": false,
+      "error": code,
+      "reason": reason,
+      "hint": hint,
+      "screenshot_id": screenshotID,
+    ], statusCode: 422)
   }
 
   private func loadScreenshotDataEnsuringStorage(for screenshot: Screenshot) async throws -> Data {
@@ -330,90 +488,13 @@ final class LocalAgentAPIServer {
     ]
   }
 
-  private static let tools: [LocalAgentTool] = [
-    LocalAgentTool(
-      name: "get_local_status",
-      description:
-        "Report whether local Omi Desktop context is available, including screen-history counts, indexed screenshot counts, and latest capture time. Call this before local screen-history or SQL work.",
-      properties: [:],
-      required: []
-    ),
-    LocalAgentTool(
-      name: "execute_sql",
-      description:
-        "Run read-only SQL on the local Omi Desktop SQLite database. Use SELECT or WITH queries for structured questions about screenshots, transcriptions, tasks, memories, indexed files, goals, and activity.",
-      properties: ["query": ["type": "string", "description": "SQL query to execute against the local Omi database"]],
-      required: ["query"]
-    ),
-    LocalAgentTool(
-      name: "search_screen_history",
-      description:
-        "Search local Rewind screen history using OCR and semantic similarity. Use for fuzzy questions about what the user saw or worked on. Results include screenshot IDs that can be opened with get_screenshot.",
-      properties: [
-        "query": ["type": "string", "description": "Natural language query"],
-        "days": ["type": "number", "description": "Days to search back; default 7"],
-        "app_filter": ["type": "string", "description": "Optional app name filter"],
-      ],
-      required: ["query"]
-    ),
-    LocalAgentTool(
-      name: "semantic_search",
-      description:
-        "Compatibility alias for search_screen_history.",
-      properties: [
-        "query": ["type": "string", "description": "Natural language query"],
-        "days": ["type": "number", "description": "Days to search back; default 7"],
-        "app_filter": ["type": "string", "description": "Optional app name filter"],
-      ],
-      required: ["query"]
-    ),
-    LocalAgentTool(
-      name: "get_screenshot",
-      description:
-        "Fetch a local Rewind screenshot image by screenshot_id. Use screenshot IDs returned by search_screen_history or execute_sql.",
-      properties: [
-        "screenshot_id": ["type": "number", "description": "Screenshot ID from search_screen_history or the screenshots table"]
-      ],
-      required: ["screenshot_id"]
-    ),
-    LocalAgentTool(
-      name: "get_daily_recap",
-      description: "Get a formatted local activity recap for today, yesterday, or a recent range.",
-      properties: ["days_ago": ["type": "number", "description": "0=today, 1=yesterday, 7=past week"]],
-      required: []
-    ),
-    LocalAgentTool(
-      name: "search_tasks",
-      description: "Semantic search over local Omi tasks and staged tasks.",
-      properties: [
-        "query": ["type": "string", "description": "Task search query"],
-        "include_completed": ["type": "boolean", "description": "Include completed tasks"],
-      ],
-      required: ["query"]
-    ),
-    LocalAgentTool(
-      name: "complete_task",
-      description: "Mark a task complete. This is idempotent; already-completed tasks stay completed. Find the task id first with execute_sql or search_tasks.",
-      properties: ["task_id": ["type": "string", "description": "Task backendId"]],
-      required: ["task_id"]
-    ),
-    LocalAgentTool(
-      name: "delete_task",
-      description: "Delete a task. Find the task id first with execute_sql or search_tasks.",
-      properties: ["task_id": ["type": "string", "description": "Task backendId"]],
-      required: ["task_id"]
-    ),
-  ]
+  private static let tools: [LocalAgentTool] = OmiToolManifest.localAgentAPITools
 
   private func toolJSON(_ tool: LocalAgentTool) -> [String: Any] {
     [
       "name": tool.name,
       "description": tool.description,
-      "annotations": [
-        "readOnlyHint": !["complete_task", "delete_task"].contains(tool.name),
-        "destructiveHint": tool.name == "delete_task",
-        "openWorldHint": false,
-      ],
+      "annotations": tool.annotations,
       "inputSchema": [
         "type": "object",
         "properties": tool.properties,
@@ -461,6 +542,7 @@ final class LocalAgentAPIServer {
     case 401: statusText = "Unauthorized"
     case 404: statusText = "Not Found"
     case 413: statusText = "Payload Too Large"
+    case 422: statusText = "Unprocessable Entity"
     default: statusText = "Internal Server Error"
     }
 

@@ -203,6 +203,48 @@ actor GeminiClient {
       return nil
     }
 
+    /// True for transient backend-capacity failures (rate limit, quota, overload,
+    /// 5xx, network blips) — retryable and not an app bug. Drives both retry
+    /// decisions and Sentry noise suppression (these flood without being actionable).
+    var isTransient: Bool {
+      switch self {
+      case .apiError(let message):
+        let lower = message.lowercased()
+        return lower.contains("service unavailable")
+          || lower.contains("overloaded")
+          || lower.contains("resource exhausted")
+          || lower.contains("high demand")
+          || lower.contains("503")
+          || lower.contains("429")
+          || lower.contains("internal error")
+      case .networkError:
+        return true
+      case .invalidResponse, .missingAPIKey:
+        return false
+      }
+    }
+
+    /// Expected product/account states should not page Sentry. They are useful in
+    /// local logs/breadcrumbs but represent paywall/BYOK state, not client bugs.
+    var isExpectedProductState: Bool {
+      switch self {
+      case .apiError(let message):
+        let lower = message.lowercased()
+        return lower.contains("trial_expired")
+          || lower.contains("trial expired")
+          || lower.contains("payment required")
+          || lower.contains("byok")
+          || lower.contains("bring your own key")
+          || lower.contains("usage limit")
+          || lower.contains("quota exceeded")
+          || lower.contains("http 402")
+      case .missingAPIKey:
+        return true
+      case .networkError, .invalidResponse:
+        return false
+      }
+    }
+
     var errorDescription: String? {
       switch self {
       case .missingAPIKey:
@@ -221,6 +263,13 @@ actor GeminiClient {
     private static func userFacingMessage(for rawMessage: String) -> String {
       let lower = rawMessage.lowercased()
 
+      if lower.contains("trial_expired") || lower.contains("trial expired")
+        || lower.contains("payment required") || lower.contains("byok")
+        || lower.contains("bring your own key") || lower.contains("usage limit")
+        || lower.contains("http 402") || lower.contains("quota exceeded")
+      {
+        return "AI features require an active plan or BYOK keys."
+      }
       if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
         || lower.contains("unauthorized") || lower.contains("permission denied")
         || lower.contains("invalid key") || lower.contains("forbidden")
@@ -313,21 +362,7 @@ actor GeminiClient {
   /// Check if an error is transient and worth retrying
   private func isTransientError(_ error: Error) -> Bool {
     if let geminiError = error as? GeminiClientError {
-      switch geminiError {
-      case .apiError(let message):
-        let lower = message.lowercased()
-        return lower.contains("service unavailable")
-          || lower.contains("overloaded")
-          || lower.contains("resource exhausted")
-          || lower.contains("high demand")
-          || lower.contains("503")
-          || lower.contains("429")
-          || lower.contains("internal error")
-      case .networkError:
-        return true
-      case .invalidResponse, .missingAPIKey:
-        return false
-      }
+      return geminiError.isTransient
     }
     // URLSession network errors are transient
     return (error as NSError).domain == NSURLErrorDomain

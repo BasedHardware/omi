@@ -194,6 +194,7 @@ def get_conversations(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
+    date_field: str = 'created_at',
 ):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -212,12 +213,13 @@ def get_conversations(
 
     # Apply date range filters if provided
     if start_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter(date_field, '>=', start_date))
     if end_date:
-        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
+        conversations_ref = conversations_ref.where(filter=FieldFilter(date_field, '<=', end_date))
 
-    # Sort
-    conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
+    # Sort — must match the range-filter field to satisfy Firestore index requirements
+    sort_field = date_field if (start_date or end_date) else 'created_at'
+    conversations_ref = conversations_ref.order_by(sort_field, direction=firestore.Query.DESCENDING)
 
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
@@ -226,12 +228,31 @@ def get_conversations(
     return conversations
 
 
-def get_conversations_count(uid: str, include_discarded: bool = False, statuses: List[str] = []):
+def get_conversations_count(
+    uid: str,
+    include_discarded: bool = False,
+    statuses: Optional[List[str]] = None,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    categories: Optional[List[str]] = None,
+    folder_id: Optional[str] = None,
+    starred: Optional[bool] = None,
+):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     result = conversations_ref.count().get()
     return int(result[0][0].value)
 
@@ -709,6 +730,10 @@ def get_processing_conversations(uid: str):
         filter=FieldFilter('status', '==', 'processing')
     )
     conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    # Exclude lazy-deferred conversations: they intentionally sit in `processing` (no LLM summary
+    # yet) until the user opens them, where they're enriched on demand. They must NOT be swept
+    # back to pusher for background processing — that would defeat the freemium cost saving.
+    conversations = [c for c in conversations if not c.get('deferred')]
     return conversations
 
 

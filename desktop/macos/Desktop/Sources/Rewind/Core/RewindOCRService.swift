@@ -75,6 +75,18 @@ struct OCRResult: Codable, Equatable {
 actor RewindOCRService {
     static let shared = RewindOCRService()
 
+    /// Recognition languages passed to `VNRecognizeTextRequest`.
+    ///
+    /// Held as a process-lifetime constant so the bridged NSArray backing storage
+    /// can never be released while Vision's TextRecognition framework enumerates
+    /// it asynchronously on `com.apple.root.utility-qos.cooperative`. A Swift
+    /// array literal assigned to `recognitionLanguages` has its storage tied to
+    /// the call frame; once the request is dispatched to a background queue the
+    /// storage can be freed, leaving TextRecognition iterating an
+    /// `__EmptyArrayStorage` and tripping `_assertionFailure` (EXC_BREAKPOINT /
+    /// SIGTRAP). Pinning the array breaks that race. See #5891, #5151.
+    private static let recognitionLanguages: [String] = ["en-US"]
+
     private init() {}
 
     // MARK: - Frame Deduplication
@@ -88,6 +100,14 @@ actor RewindOCRService {
 
     /// Track last-logged OCR mode to only log on change
     private var lastLoggedOCRMode: String?
+
+    static func recognitionLevel() -> VNRequestTextRecognitionLevel {
+        .accurate
+    }
+
+    static func usesLanguageCorrection() -> Bool {
+        true
+    }
 
     /// Compute a perceptual difference hash (dHash) of a CGImage.
     /// Downscales to 9x8 grayscale, then compares each pixel to its right neighbor
@@ -149,9 +169,7 @@ actor RewindOCRService {
 
     /// Extract text with bounding boxes from a CGImage
     func extractTextWithBounds(from cgImage: CGImage) async throws -> OCRResult {
-        let useFastOCR = UserDefaults.standard.object(forKey: "rewindOCRFast") as? Bool ?? true
-        let modeName = useFastOCR ? "fast" : "accurate"
-        let recognitionLevel: VNRequestTextRecognitionLevel = useFastOCR ? .fast : .accurate
+        let modeName = "accurate"
 
         // Log OCR mode once, then only on change; set Sentry tag for queryability
         if modeName != lastLoggedOCRMode {
@@ -211,9 +229,9 @@ actor RewindOCRService {
                 continuation.resume(returning: result)
             }
 
-            request.recognitionLevel = recognitionLevel
-            request.usesLanguageCorrection = false
-            request.recognitionLanguages = ["en-US"]
+            request.recognitionLevel = Self.recognitionLevel()
+            request.usesLanguageCorrection = Self.usesLanguageCorrection()
+            request.recognitionLanguages = Self.recognitionLanguages
 
             let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
 

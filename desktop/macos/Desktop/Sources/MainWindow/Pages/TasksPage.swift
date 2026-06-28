@@ -1808,6 +1808,16 @@ class TasksViewModel: ObservableObject {
 
     // MARK: - Actions (delegate to shared store)
 
+    func loadTasksForFirstUse() async {
+        guard TasksPageFirstUseLoadPolicy.shouldLoadTasks(
+            hasRenderedTasks: !store.tasks.isEmpty,
+            isLoading: store.isLoading
+        ) else { return }
+
+        log("TasksPage: First-use loading task list")
+        await store.loadTasksIfNeeded()
+    }
+
     func loadTasks() async {
         await store.loadTasks()
     }
@@ -2261,14 +2271,17 @@ struct TasksPage: View {
         .background(Color.clear)
         // Modal creation sheet removed — Cmd+N now creates inline at top
         .onAppear {
+            Task { @MainActor in
+                await viewModel.loadTasksForFirstUse()
+                // If tasks are already loaded, notify sidebar to clear loading indicator
+                if !viewModel.isLoading {
+                    NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
+                }
+            }
             // Restore panel UI if coordinator was open when we navigated away
             if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
                 showChatPanel = true
                 adjustWindowWidth(expand: true)
-            }
-            // If tasks are already loaded, notify sidebar to clear loading indicator
-            if !viewModel.isLoading {
-                NotificationCenter.default.post(name: .tasksPageDidLoad, object: nil)
             }
             // Ensure prioritization service is running (no-op if already started)
             Task { await TaskPrioritizationService.shared.start() }
@@ -4362,7 +4375,7 @@ struct TaskRow: View {
                     if !task.completed {
                         Button {
                             let model = ShortcutSettings.shared.selectedModel.isEmpty
-                                ? "claude-sonnet-4-6"
+                                ? ModelQoS.Claude.defaultSelection
                                 : ShortcutSettings.shared.selectedModel
                             AgentPillsManager.shared.spawn(query: task.description, model: model)
                         } label: {
