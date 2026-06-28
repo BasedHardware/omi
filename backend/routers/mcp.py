@@ -28,6 +28,7 @@ from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
+import utils.mcp_search as mcp_search
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -107,6 +108,36 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Unified search + fetch: the ChatGPT/Claude connector contract (issue #4862)
+# ---------------------------------------------------------------------------
+
+
+def _search_http_error(error: mcp_search.SearchError) -> HTTPException:
+    if isinstance(error, mcp_search.ItemNotFound):
+        return HTTPException(status_code=404, detail=str(error))
+    if isinstance(error, mcp_search.ItemLocked):
+        return HTTPException(status_code=402, detail=str(error))
+    return HTTPException(status_code=400, detail=str(error))
+
+
+@router.get("/v1/mcp/search", tags=["mcp"])
+def mcp_search_endpoint(query: str, limit: Optional[int] = None, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"mcp search {uid} query={sanitize_pii(query)}")
+    try:
+        return mcp_search.search(uid, query, limit)
+    except mcp_search.SearchError as e:
+        raise _search_http_error(e)
+
+
+@router.get("/v1/mcp/fetch", tags=["mcp"])
+def mcp_fetch_endpoint(id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        return mcp_search.fetch(uid, id)
+    except mcp_search.SearchError as e:
+        raise _search_http_error(e)
 
 
 class UserProfile(BaseModel):
