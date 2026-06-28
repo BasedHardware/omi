@@ -177,7 +177,8 @@ enum CloudConnectorFormAutomation {
     }
 
     let refreshedNodes = collectNodes(from: form.root, maxDepth: 12, maxNodes: 700)
-    let fields = refreshedNodes
+    let fields =
+      refreshedNodes
       .filter { isInputField($0) }
       .sorted(by: visualOrder)
     var usedElementIDs = Set<ObjectIdentifier>()
@@ -234,7 +235,9 @@ enum CloudConnectorFormAutomation {
     if let pressedButton {
       lines.append("Submitted with button: \(pressedButton)")
     } else {
-      lines.append(submit ? "Submit skipped: no enabled Add/Connect button found." : "Submit skipped by request.")
+      lines.append(
+        submit
+          ? "Submit skipped: no enabled Add/Connect button found." : "Submit skipped by request.")
     }
     return lines.joined(separator: "\n")
   }
@@ -245,13 +248,15 @@ enum CloudConnectorFormAutomation {
     submit: Bool
   ) async -> String? {
     guard provider == "claude" else { return nil }
-    guard let target = findClaudeConnectorTargetWithNodes().map({ (app: $0.app, state: $0.state) }) else {
+    guard let target = findClaudeConnectorTargetWithNodes().map({ (app: $0.app, state: $0.state) })
+    else {
       return nil
     }
 
     switch claudeConnectorAction(for: target.state, submit: submit) {
     case .fillAddModal:
-      return await fillClaudeConnectorAddModalByKeyboard(target: target, values: values, submit: submit)
+      return await fillClaudeConnectorAddModalByKeyboard(
+        target: target, values: values, submit: submit)
     case .pressConnect:
       return await pressClaudeConnectorConnectButton(target: target)
     case .alreadyConnected:
@@ -293,7 +298,7 @@ enum CloudConnectorFormAutomation {
     target.app.activate()
     CloudConnectorGuidanceOverlay.shared.presentClaudeConnectHint(
       windowFrame: windowFrame,
-      targetPoint: claudeConnectGuidanceAnchor(in: windowFrame)
+      candidates: claudeConnectGuidanceCandidates(windowFrame: windowFrame, nodes: target.nodes)
     )
     return true
   }
@@ -309,13 +314,109 @@ enum CloudConnectorFormAutomation {
     target.app.activate()
     CloudConnectorGuidanceOverlay.shared.presentClaudeAddHint(
       windowFrame: windowFrame,
-      targetPoint: claudeAddGuidanceAnchor(in: windowFrame)
+      candidates: claudeAddGuidanceCandidates(windowFrame: windowFrame, nodes: target.nodes)
     )
     return true
   }
 
   static func dismissGuidanceOverlay() {
     CloudConnectorGuidanceOverlay.shared.dismiss()
+  }
+
+  nonisolated static func claudeConnectGuidanceCandidates(
+    windowFrame: CGRect,
+    explicitTargetFrames: [CGRect]
+  ) -> [SpatialOverlayAnchorCandidate] {
+    guidanceCandidates(
+      windowFrame: windowFrame,
+      explicitTargetFrames: explicitTargetFrames,
+      heuristicID: "claude-connect-heuristic",
+      heuristicPoint: claudeConnectGuidanceAnchor(in: windowFrame)
+    )
+  }
+
+  nonisolated static func claudeAddGuidanceCandidates(
+    windowFrame: CGRect,
+    explicitTargetFrames: [CGRect]
+  ) -> [SpatialOverlayAnchorCandidate] {
+    guidanceCandidates(
+      windowFrame: windowFrame,
+      explicitTargetFrames: explicitTargetFrames,
+      heuristicID: "claude-add-heuristic",
+      heuristicPoint: claudeAddGuidanceAnchor(in: windowFrame)
+    )
+  }
+
+  private static func claudeConnectGuidanceCandidates(
+    windowFrame: CGRect,
+    nodes: [AccessibleNode]
+  ) -> [SpatialOverlayAnchorCandidate] {
+    let explicitFrames = findClaudeConnectorDetailConnectButton(in: nodes).map { [$0.frame] } ?? []
+    return claudeConnectGuidanceCandidates(
+      windowFrame: windowFrame,
+      explicitTargetFrames: explicitFrames
+    )
+  }
+
+  private static func claudeAddGuidanceCandidates(
+    windowFrame: CGRect,
+    nodes: [AccessibleNode]
+  ) -> [SpatialOverlayAnchorCandidate] {
+    let explicitFrames = findActionNode(in: nodes, matching: ["add"]).map { [$0.frame] } ?? []
+    return claudeAddGuidanceCandidates(
+      windowFrame: windowFrame,
+      explicitTargetFrames: explicitFrames
+    )
+  }
+
+  nonisolated private static func guidanceCandidates(
+    windowFrame: CGRect,
+    explicitTargetFrames: [CGRect],
+    heuristicID: String,
+    heuristicPoint: CGPoint
+  ) -> [SpatialOverlayAnchorCandidate] {
+    let screen = SpatialOverlayScreen(id: "claude-window", frame: windowFrame, visibleFrame: windowFrame)
+    let window = SpatialOverlayWindow(
+      id: "claude-window",
+      frame: windowFrame,
+      screenID: screen.id
+    )
+    let explicitCandidates = explicitTargetFrames.enumerated().map { index, frame in
+      SpatialOverlayAnchorCandidate(
+        id: "\(heuristicID)-explicit-\(index)",
+        targetRect: frame,
+        screen: screen,
+        window: window,
+        evidence: [
+          SpatialOverlayTargetEvidence(source: .accessibility, confidence: 0.95, label: "Claude action button")
+        ],
+        confidence: 0.95 - Double(index) * 0.01,
+        allowedUses: [.displayGuidance, .performClick]
+      )
+    }
+    let heuristicCandidate = SpatialOverlayAnchorCandidate(
+      id: heuristicID,
+      targetRect: CGRect(
+        x: heuristicPoint.x - 1,
+        y: heuristicPoint.y - 1,
+        width: 2,
+        height: 2
+      ),
+      targetPoint: heuristicPoint,
+      screen: screen,
+      window: window,
+      evidence: [
+        SpatialOverlayTargetEvidence(
+          source: .layoutHeuristic,
+          confidence: 0.58,
+          label: "Claude layout estimate",
+          diagnostics: ["guidance-only"]
+        )
+      ],
+      confidence: 0.58,
+      allowedUses: [.displayGuidance]
+    )
+    return explicitCandidates + [heuristicCandidate]
   }
 
   nonisolated static func claudeConnectGuidanceAnchor(in windowFrame: CGRect) -> CGPoint {
@@ -328,7 +429,8 @@ enum CloudConnectorFormAutomation {
   nonisolated static func claudeAddGuidanceAnchor(in windowFrame: CGRect) -> CGPoint {
     // When Screen Recording is unavailable, Claude's Add button is not visible
     // to OCR or AX. Estimate the button from the stable modal geometry instead
-    // of anchoring against the whole browser window.
+    // of anchoring against the whole browser window. This is guidance-only:
+    // submit clicks still require verified AX or OCR targets.
     let modalWidth = min(windowFrame.width * 0.52, 1_040)
     let modalMaxX = windowFrame.minX + windowFrame.width * 0.50 + modalWidth / 2
     return CGPoint(
@@ -406,7 +508,8 @@ enum CloudConnectorFormAutomation {
       return "Error: Refusing Claude Add because the verified page state changed."
     }
 
-    guard let clickPoint = await resolveClaudeConnectorAddPointByOCR(target: target, nodes: nodes) else {
+    guard let clickPoint = await resolveClaudeConnectorAddPointByOCR(target: target, nodes: nodes)
+    else {
       return
         "Error: The Claude add connector button is not exposed to Accessibility. Refusing blind coordinate or keyboard clicks."
     }
@@ -449,7 +552,8 @@ enum CloudConnectorFormAutomation {
     if let button = findClaudeConnectorDetailConnectButton(in: nodes) {
       _ = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
       try? await Task.sleep(nanoseconds: 700_000_000)
-      return await claudeConnectResultLines(target: target, appElement: appElement, method: "Accessibility")
+      return await claudeConnectResultLines(
+        target: target, appElement: appElement, method: "Accessibility")
     }
 
     guard CGPreflightScreenCaptureAccess() else {
@@ -457,17 +561,20 @@ enum CloudConnectorFormAutomation {
         "Error: Screen Recording permission is not available to Omi, so the native connector form filler cannot OCR the hidden Claude Connect button."
     }
 
-    guard let clickPoint = await resolveClaudeConnectorConnectPointByOCR(
-      target: target,
-      nodes: nodes
-    ) else {
+    guard
+      let clickPoint = await resolveClaudeConnectorConnectPointByOCR(
+        target: target,
+        nodes: nodes
+      )
+    else {
       return
         "Error: Claude connector is added, but the Connect button is not exposed to Accessibility. Refusing blind coordinate or keyboard clicks."
     }
 
     guard let activeTarget = frontmostClaudeConnectorKeyboardTarget(),
       activeTarget.state == .connectorDetailNotConnected,
-      let refreshedPoint = await resolveClaudeConnectorConnectPointByOCR(target: target, nodes: nodes),
+      let refreshedPoint = await resolveClaudeConnectorConnectPointByOCR(
+        target: target, nodes: nodes),
       pointDistance(refreshedPoint, clickPoint) <= 8
     else {
       return "Error: Refusing Claude Connect because the OCR target was not stable."
@@ -520,21 +627,23 @@ enum CloudConnectorFormAutomation {
     if let frontmost = NSWorkspace.shared.frontmostApplication {
       candidates.append(frontmost)
     }
-    candidates.append(contentsOf: NSWorkspace.shared.runningApplications.filter { app in
-      guard app.bundleIdentifier != ownBundleID else { return false }
-      let name = (app.localizedName ?? app.bundleIdentifier ?? "").lowercased()
-      return name.contains("chrome")
-        || name.contains("atlas")
-        || name.contains("brave")
-        || name.contains("edge")
-        || name.contains("arc")
-        || name.contains("opera")
-        || name.contains("vivaldi")
-        || name.contains("chromium")
-    })
-    candidates.append(contentsOf: NSWorkspace.shared.runningApplications.filter { app in
-      app.activationPolicy == .regular && app.bundleIdentifier != ownBundleID
-    })
+    candidates.append(
+      contentsOf: NSWorkspace.shared.runningApplications.filter { app in
+        guard app.bundleIdentifier != ownBundleID else { return false }
+        let name = (app.localizedName ?? app.bundleIdentifier ?? "").lowercased()
+        return name.contains("chrome")
+          || name.contains("atlas")
+          || name.contains("brave")
+          || name.contains("edge")
+          || name.contains("arc")
+          || name.contains("opera")
+          || name.contains("vivaldi")
+          || name.contains("chromium")
+      })
+    candidates.append(
+      contentsOf: NSWorkspace.shared.runningApplications.filter { app in
+        app.activationPolicy == .regular && app.bundleIdentifier != ownBundleID
+      })
 
     var seen = Set<pid_t>()
     for app in candidates where !seen.contains(app.processIdentifier) {
@@ -714,19 +823,23 @@ enum CloudConnectorFormAutomation {
     return nil
   }
 
-  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState {
+  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState
+  {
     let text = nodes.map(\.searchableText).joined(separator: " ")
     return classifyClaudeConnectorPageText(text)
   }
 
-  nonisolated static func classifyClaudeConnectorPageText(_ text: String) -> ClaudeConnectorPageState {
+  nonisolated static func classifyClaudeConnectorPageText(_ text: String)
+    -> ClaudeConnectorPageState
+  {
     let text = text.lowercased()
     guard text.contains("claude.ai/customize/connectors") else { return .other }
 
     let hasAddModalURL = text.contains("modal=add-custom-connector")
     let hasAddModalTitle = text.contains("add custom connector")
     let hasClaudeCustomizeWindowTitle = text.contains("customize - claude")
-    let hasAddModalFields = text.contains("remote mcp server url")
+    let hasAddModalFields =
+      text.contains("remote mcp server url")
       && text.contains("oauth client id")
       && text.contains("oauth client secret")
     if hasAddModalTitle && (hasAddModalURL || hasAddModalFields) {
@@ -736,7 +849,8 @@ enum CloudConnectorFormAutomation {
       return .addCustomConnectorModal
     }
 
-    let hasOmiConnector = text.contains("omi custom")
+    let hasOmiConnector =
+      text.contains("omi custom")
       || (text.contains("omi") && text.contains("https://api.omiapi.com/v1/mcp/sse"))
     guard hasOmiConnector else { return .other }
 
@@ -768,7 +882,8 @@ enum CloudConnectorFormAutomation {
   }
 
   private static func setField(_ element: AXUIElement, to value: String) -> Bool {
-    if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success {
+    if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success
+    {
       return true
     }
     _ = AXUIElementSetAttributeValue(element, "AXFocused" as CFString, kCFBooleanTrue)
@@ -810,10 +925,12 @@ enum CloudConnectorFormAutomation {
   private static func findClaudeConnectorDetailConnectButton(
     in nodes: [AccessibleNode]
   ) -> AccessibleNode? {
-    let windowFrames = nodes
+    let windowFrames =
+      nodes
       .filter { $0.role.lowercased().contains("window") && !$0.frame.isNull && !$0.frame.isEmpty }
       .map(\.frame)
-    guard let windowFrame = windowFrames.max(by: { $0.width * $0.height < $1.width * $1.height }) else {
+    guard let windowFrame = windowFrames.max(by: { $0.width * $0.height < $1.width * $1.height })
+    else {
       return nil
     }
 
@@ -840,21 +957,27 @@ enum CloudConnectorFormAutomation {
     else { return nil }
 
     let captureService = ScreenCaptureService()
-    guard case .success(let image) = await captureService.captureWindowCGImage(windowID: windowID) else {
+    guard case .success(let image) = await captureService.captureWindowCGImage(windowID: windowID)
+    else {
       return nil
     }
 
     let candidates = (try? await ocrTextCandidates(in: image)) ?? []
-    guard let candidate = findClaudeConnectOCRCandidate(
-      candidates,
-      imageSize: CGSize(width: image.width, height: image.height),
-      windowFrame: windowFrame
-    ) else { return nil }
+    guard
+      let candidate = findClaudeConnectOCRCandidate(
+        candidates,
+        imageSize: CGSize(width: image.width, height: image.height),
+        windowFrame: windowFrame
+      )
+    else { return nil }
 
     let imageSize = CGSize(width: image.width, height: image.height)
-    let screenRect = imageRectToScreen(candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
+    let screenRect = imageRectToScreen(
+      candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
     let point = CGPoint(x: screenRect.midX, y: screenRect.midY)
-    guard pointIsInVerifiedBrowserContent(point, app: target.app, windowFrame: windowFrame) else { return nil }
+    guard pointIsInVerifiedBrowserContent(point, app: target.app, windowFrame: windowFrame) else {
+      return nil
+    }
     return point
   }
 
@@ -868,21 +991,27 @@ enum CloudConnectorFormAutomation {
     else { return nil }
 
     let captureService = ScreenCaptureService()
-    guard case .success(let image) = await captureService.captureWindowCGImage(windowID: windowID) else {
+    guard case .success(let image) = await captureService.captureWindowCGImage(windowID: windowID)
+    else {
       return nil
     }
 
     let candidates = (try? await ocrTextCandidates(in: image)) ?? []
-    guard let candidate = findClaudeAddOCRCandidate(
-      candidates,
-      imageSize: CGSize(width: image.width, height: image.height),
-      windowFrame: windowFrame
-    ) else { return nil }
+    guard
+      let candidate = findClaudeAddOCRCandidate(
+        candidates,
+        imageSize: CGSize(width: image.width, height: image.height),
+        windowFrame: windowFrame
+      )
+    else { return nil }
 
     let imageSize = CGSize(width: image.width, height: image.height)
-    let screenRect = imageRectToScreen(candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
+    let screenRect = imageRectToScreen(
+      candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
     let point = CGPoint(x: screenRect.midX, y: screenRect.midY)
-    guard pointIsInVerifiedBrowserContent(point, app: target.app, windowFrame: windowFrame) else { return nil }
+    guard pointIsInVerifiedBrowserContent(point, app: target.app, windowFrame: windowFrame) else {
+      return nil
+    }
     return point
   }
 
@@ -894,7 +1023,8 @@ enum CloudConnectorFormAutomation {
     let safeTopInset = max(88, windowFrame.height * 0.08)
     let matching = candidates.filter { candidate in
       let label = candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-      let screenRect = imageRectToScreen(candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
+      let screenRect = imageRectToScreen(
+        candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
       return label == "connect"
         && candidate.confidence >= 0.75
         && screenRect.midX > windowFrame.midX
@@ -915,7 +1045,8 @@ enum CloudConnectorFormAutomation {
     let safeTopInset = max(88, windowFrame.height * 0.08)
     let matching = candidates.filter { candidate in
       let label = candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-      let screenRect = imageRectToScreen(candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
+      let screenRect = imageRectToScreen(
+        candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
       return label == "add"
         && candidate.confidence >= 0.75
         && screenRect.midX > windowFrame.midX
@@ -941,7 +1072,8 @@ enum CloudConnectorFormAutomation {
         let candidates = observations.compactMap { observation -> OCRTextCandidate? in
           guard let candidate = observation.topCandidates(1).first else { return nil }
           let rect = observation.boundingBox
-          guard rect.origin.x.isFinite, rect.origin.y.isFinite, rect.width.isFinite, rect.height.isFinite
+          guard rect.origin.x.isFinite, rect.origin.y.isFinite, rect.width.isFinite,
+            rect.height.isFinite
           else { return nil }
           let imageRect = CGRect(
             x: rect.origin.x * CGFloat(image.width),
@@ -1043,7 +1175,9 @@ enum CloudConnectorFormAutomation {
     guard result == .success, let element = rawElement else { return false }
     let node = node(from: element)
     let text = node.searchableText
-    if text.contains("address") || text.contains("toolbar") || text.contains("tab") || text.contains("search") {
+    if text.contains("address") || text.contains("toolbar") || text.contains("tab")
+      || text.contains("search")
+    {
       return false
     }
     return true
@@ -1102,7 +1236,8 @@ enum CloudConnectorFormAutomation {
     return ""
   }
 
-  private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+  private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement?
+  {
     var raw: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {
       return nil
@@ -1144,8 +1279,8 @@ enum CloudConnectorFormAutomation {
   }
 }
 
-private extension Array where Element == NSRunningApplication {
-  func uniquedByPID() -> [NSRunningApplication] {
+extension Array where Element == NSRunningApplication {
+  fileprivate func uniquedByPID() -> [NSRunningApplication] {
     var seen = Set<pid_t>()
     var output: [NSRunningApplication] = []
     for app in self where !seen.contains(app.processIdentifier) {

@@ -16,8 +16,10 @@ final class BrowserAutomationTargetTests: XCTestCase {
       installURL: nil,
       supportsChromeWebStore: true
     )
-    let extensionDirectory = root
-      .appendingPathComponent("Profiles/TestChromium/Default/Extensions/\(BrowserAutomationTarget.extensionId)")
+    let extensionDirectory =
+      root
+      .appendingPathComponent(
+        "Profiles/TestChromium/Default/Extensions/\(BrowserAutomationTarget.extensionId)")
     try FileManager.default.createDirectory(
       at: extensionDirectory, withIntermediateDirectories: true)
 
@@ -39,7 +41,9 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
   func testChatGPTAtlasIsSupportedBrowserTarget() throws {
     let atlas = try XCTUnwrap(
-      BrowserAutomationTargetResolver.knownTargets.first { $0.bundleIdentifier == "com.openai.atlas" }
+      BrowserAutomationTargetResolver.knownTargets.first {
+        $0.bundleIdentifier == "com.openai.atlas"
+      }
     )
 
     XCTAssertEqual(atlas.name, "ChatGPT Atlas")
@@ -48,31 +52,42 @@ final class BrowserAutomationTargetTests: XCTestCase {
       atlas.profileDirectoryRelativePath,
       "Library/Application Support/com.openai.atlas/browser-data/host"
     )
-    XCTAssertEqual(atlas.extensionInstallURL()?.absoluteString, BrowserAutomationTarget.chromeWebStoreURL)
-    XCTAssertEqual(atlas.extensionSetupURL()?.absoluteString, BrowserAutomationTarget.chromeWebStoreURL)
+    XCTAssertEqual(
+      atlas.extensionInstallURL()?.absoluteString, BrowserAutomationTarget.chromeWebStoreURL)
+    XCTAssertEqual(
+      atlas.extensionSetupURL()?.absoluteString, BrowserAutomationTarget.chromeWebStoreURL)
     XCTAssertNotEqual(atlas.extensionSetupURL()?.scheme, "chrome-extension")
   }
 
   func testCommonChromiumBrowserVariantsAreSupported() throws {
     let expected: [String: (name: String, profileRoot: String)] = [
       "com.google.Chrome.beta": (
-        "Google Chrome Beta", "Library/Application Support/Google/Chrome Beta"),
+        "Google Chrome Beta", "Library/Application Support/Google/Chrome Beta"
+      ),
       "com.google.Chrome.canary": (
-        "Google Chrome Canary", "Library/Application Support/Google/Chrome Canary"),
+        "Google Chrome Canary", "Library/Application Support/Google/Chrome Canary"
+      ),
       "com.brave.Browser.beta": (
-        "Brave Browser Beta", "Library/Application Support/BraveSoftware/Brave-Browser-Beta"),
+        "Brave Browser Beta", "Library/Application Support/BraveSoftware/Brave-Browser-Beta"
+      ),
       "com.brave.Browser.nightly": (
-        "Brave Browser Nightly", "Library/Application Support/BraveSoftware/Brave-Browser-Nightly"),
+        "Brave Browser Nightly", "Library/Application Support/BraveSoftware/Brave-Browser-Nightly"
+      ),
       "com.microsoft.edgemac.Beta": (
-        "Microsoft Edge Beta", "Library/Application Support/Microsoft Edge Beta"),
+        "Microsoft Edge Beta", "Library/Application Support/Microsoft Edge Beta"
+      ),
       "com.microsoft.edgemac.Dev": (
-        "Microsoft Edge Dev", "Library/Application Support/Microsoft Edge Dev"),
+        "Microsoft Edge Dev", "Library/Application Support/Microsoft Edge Dev"
+      ),
       "com.microsoft.edgemac.Canary": (
-        "Microsoft Edge Canary", "Library/Application Support/Microsoft Edge Canary"),
+        "Microsoft Edge Canary", "Library/Application Support/Microsoft Edge Canary"
+      ),
       "com.operasoftware.Opera": (
-        "Opera", "Library/Application Support/com.operasoftware.Opera"),
+        "Opera", "Library/Application Support/com.operasoftware.Opera"
+      ),
       "com.operasoftware.OperaGX": (
-        "Opera GX", "Library/Application Support/com.operasoftware.OperaGX"),
+        "Opera GX", "Library/Application Support/com.operasoftware.OperaGX"
+      ),
     ]
 
     for (bundleIdentifier, values) in expected {
@@ -85,7 +100,8 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
       XCTAssertEqual(target.name, values.name)
       XCTAssertEqual(target.profileDirectoryRelativePath, values.profileRoot)
-      XCTAssertEqual(target.extensionInstallURL()?.absoluteString, BrowserAutomationTarget.chromeWebStoreURL)
+      XCTAssertEqual(
+        target.extensionInstallURL()?.absoluteString, BrowserAutomationTarget.chromeWebStoreURL)
     }
   }
 
@@ -120,10 +136,12 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
     XCTAssertNotNil(task)
     XCTAssertTrue(task?.body.contains("Use macOS UI automation first") == true)
-    XCTAssertTrue(task?.body.contains("FIRST ACTION: call the `fill_cloud_connector_form` tool") == true)
+    XCTAssertTrue(
+      task?.body.contains("FIRST ACTION: call the `fill_cloud_connector_form` tool") == true)
     XCTAssertTrue(task?.body.contains("\"provider\":\"chatgpt\"") == true)
     XCTAssertTrue(task?.body.contains("\"submit\":true") == true)
-    XCTAssertTrue(task?.body.contains("do not require the user to install a browser extension") == true)
+    XCTAssertTrue(
+      task?.body.contains("do not require the user to install a browser extension") == true)
     XCTAssertTrue(task?.body.contains("Setup values JSON:") == true)
     XCTAssertTrue(task?.body.contains("Automation ladder:") == true)
     XCTAssertTrue(task?.body.contains("execute javascript") == true)
@@ -141,19 +159,23 @@ final class BrowserAutomationTargetTests: XCTestCase {
     )
 
     XCTAssertNotNil(task)
-    XCTAssertTrue(task?.body.contains("FIRST ACTION: call the `fill_cloud_connector_form` tool") == true)
+    XCTAssertTrue(
+      task?.body.contains("FIRST ACTION: call the `fill_cloud_connector_form` tool") == true)
     XCTAssertTrue(task?.body.contains("\"provider\":\"claude\"") == true)
     XCTAssertTrue(task?.body.contains("\"oauth_client_secret\":\"test-key\"") == true)
     XCTAssertTrue(task?.body.contains("\"submit\":true") == true)
     XCTAssertTrue(task?.body.contains("Only fall back to bash") == true)
-    XCTAssertTrue(task?.body.contains("https://claude.ai/customize/connectors?modal=add-custom-connector") == true)
+    XCTAssertTrue(
+      task?.body.contains("https://claude.ai/customize/connectors?modal=add-custom-connector")
+        == true)
   }
 
   func testCloudSetupDoesNotReusePersistedPlaywrightBrowserSelection() throws {
     let repoRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-    let executor = repoRoot
+    let executor =
+      repoRoot
       .appendingPathComponent("Sources/MemoryExportExecutor.swift")
     let source = try String(contentsOf: executor)
 
@@ -167,7 +189,8 @@ final class BrowserAutomationTargetTests: XCTestCase {
     let repoRoot = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-    let executor = repoRoot
+    let executor =
+      repoRoot
       .appendingPathComponent("Sources/MemoryExportExecutor.swift")
     let source = try String(contentsOf: executor)
 
@@ -186,7 +209,8 @@ final class BrowserAutomationTargetTests: XCTestCase {
     let runtimeSource = try String(
       contentsOf: repoRoot.appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift"))
     let bridgeSource = try String(
-      contentsOf: repoRoot
+      contentsOf:
+        repoRoot
         .deletingLastPathComponent()
         .appendingPathComponent("agent/src/index.ts"))
 
@@ -551,41 +575,140 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertLessThan(anchor.y, windowFrame.minY + windowFrame.height * 0.18)
   }
 
-  func testCloudConnectorGuidancePointerTracksTargetAfterFrameClamping() {
-    let overlaySize = CGSize(width: 330, height: 118)
-    let target = CGPoint(x: 1_240, y: 810)
-    let proposedFrame = CloudConnectorGuidanceOverlay.frameForPointerTip(
-      targetPoint: target,
-      overlaySize: overlaySize
+  @MainActor
+  func testClaudeConnectGuidanceUsesExplicitTargetCandidateWhenAvailable() throws {
+    let windowFrame = CGRect(x: 80, y: 60, width: 1600, height: 1000)
+    let explicitFrame = CGRect(x: 1_100, y: 620, width: 120, height: 44)
+    let candidates = CloudConnectorFormAutomation.claudeConnectGuidanceCandidates(
+      windowFrame: windowFrame,
+      explicitTargetFrames: [explicitFrame]
     )
 
-    XCTAssertEqual(proposedFrame.midX, target.x, accuracy: 0.001)
-    XCTAssertLessThan(proposedFrame.minY, target.y)
+    let result = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
+      windowFrame: windowFrame,
+      candidates: candidates
+    ))
 
-    let clampedFrame = CGRect(x: 1_000, y: proposedFrame.minY, width: 330, height: 118)
-    let pointerX = CloudConnectorGuidanceOverlay.pointerX(
-      targetPoint: target,
-      overlayFrame: clampedFrame
-    )
-    XCTAssertEqual(clampedFrame.minX + pointerX, target.x, accuracy: 0.001)
+    XCTAssertTrue(candidates[0].evidence.contains { $0.source == .accessibility })
+    XCTAssertTrue(candidates[0].allowedUses.contains(.performClick))
+    XCTAssertEqual(result.targetPoint.x, explicitFrame.midX, accuracy: 0.001)
+    XCTAssertEqual(result.targetPoint.y, explicitFrame.midY, accuracy: 0.001)
+    XCTAssertEqual(result.globalArrowTip.x, explicitFrame.midX, accuracy: 3)
+    XCTAssertEqual(result.globalArrowTip.y, explicitFrame.midY, accuracy: 3)
   }
 
-  func testCloudConnectorGuidancePointerStaysInsideOverlayWhenTargetIsOutside() {
-    let overlayFrame = CGRect(x: 100, y: 100, width: 330, height: 118)
+  @MainActor
+  func testClaudeAddGuidanceUsesExplicitTargetCandidateWhenAvailable() throws {
+    let windowFrame = CGRect(x: 80, y: 60, width: 1600, height: 1000)
+    let explicitFrame = CGRect(x: 1_250, y: 855, width: 72, height: 42)
+    let candidates = CloudConnectorFormAutomation.claudeAddGuidanceCandidates(
+      windowFrame: windowFrame,
+      explicitTargetFrames: [explicitFrame]
+    )
 
-    XCTAssertEqual(
-      CloudConnectorGuidanceOverlay.pointerX(
-        targetPoint: CGPoint(x: 20, y: 140),
-        overlayFrame: overlayFrame
-      ),
-      28
+    let result = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
+      windowFrame: windowFrame,
+      candidates: candidates
+    ))
+
+    XCTAssertTrue(candidates[0].evidence.contains { $0.source == .accessibility })
+    XCTAssertTrue(candidates[0].allowedUses.contains(.performClick))
+    XCTAssertEqual(result.targetPoint.x, explicitFrame.midX, accuracy: 0.001)
+    XCTAssertEqual(result.targetPoint.y, explicitFrame.midY, accuracy: 0.001)
+    XCTAssertEqual(result.globalArrowTip.x, explicitFrame.midX, accuracy: 3)
+    XCTAssertEqual(result.globalArrowTip.y, explicitFrame.midY, accuracy: 3)
+  }
+
+  @MainActor
+  func testClaudeGuidanceHeuristicsAreFallbackOnly() throws {
+    let windowFrame = CGRect(x: 80, y: 60, width: 1600, height: 1000)
+    let connectCandidates = CloudConnectorFormAutomation.claudeConnectGuidanceCandidates(
+      windowFrame: windowFrame,
+      explicitTargetFrames: []
     )
-    XCTAssertEqual(
-      CloudConnectorGuidanceOverlay.pointerX(
-        targetPoint: CGPoint(x: 520, y: 140),
-        overlayFrame: overlayFrame
-      ),
-      302
+    let addCandidates = CloudConnectorFormAutomation.claudeAddGuidanceCandidates(
+      windowFrame: windowFrame,
+      explicitTargetFrames: []
     )
+
+    let connectResult = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
+      windowFrame: windowFrame,
+      candidates: connectCandidates
+    ))
+    let addResult = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
+      windowFrame: windowFrame,
+      candidates: addCandidates
+    ))
+
+    XCTAssertTrue(connectCandidates[0].evidence.contains { $0.source == .layoutHeuristic })
+    XCTAssertTrue(addCandidates[0].evidence.contains { $0.source == .layoutHeuristic })
+    XCTAssertFalse(connectCandidates[0].allowedUses.contains(.performClick))
+    XCTAssertFalse(addCandidates[0].allowedUses.contains(.performClick))
+    XCTAssertTrue(connectCandidates[0].id.contains("heuristic"))
+    XCTAssertTrue(addCandidates[0].id.contains("heuristic"))
+    XCTAssertEqual(connectResult.globalArrowTip.x, connectResult.targetPoint.x, accuracy: 3)
+    XCTAssertEqual(addResult.globalArrowTip.x, addResult.targetPoint.x, accuracy: 3)
+  }
+
+  func testSpatialOverlayPlacementArrowTracksTargetAfterClamping() throws {
+    let overlaySize = CGSize(width: 330, height: 118)
+    let target = CGPoint(x: 1_240, y: 810)
+    let screen = SpatialOverlayScreen(
+      id: "test",
+      frame: CGRect(x: 0, y: 0, width: 1_342, height: 1_000),
+      visibleFrame: CGRect(x: 0, y: 0, width: 1_342, height: 1_000)
+    )
+    let candidate = SpatialOverlayAnchorCandidate(
+      id: "target",
+      targetRect: CGRect(x: target.x - 1, y: target.y - 1, width: 2, height: 2),
+      screen: screen,
+      confidence: 0.95,
+      allowedUses: [.displayGuidance]
+    )
+    let result = try SpatialOverlayPlacementSolver.place(
+      target: candidate,
+      spec: SpatialOverlayPlacementSpec(
+        overlaySize: overlaySize,
+        preferredEdges: [.above, .below],
+        canCoverTarget: true
+      )
+    ).get()
+
+    XCTAssertEqual(result.globalArrowTip.x, target.x, accuracy: 3)
+    XCTAssertEqual(result.globalArrowTip.y, target.y, accuracy: 3)
+  }
+
+  func testSpatialOverlayPlacementFailsWhenArrowCannotReachTargetAfterClamp() {
+    let screen = SpatialOverlayScreen(
+      id: "test",
+      frame: CGRect(x: 100, y: 0, width: 600, height: 500),
+      visibleFrame: CGRect(x: 100, y: 0, width: 600, height: 500)
+    )
+    let candidate = SpatialOverlayAnchorCandidate(
+      id: "left",
+      targetRect: CGRect(x: 20, y: 140, width: 2, height: 2),
+      screen: screen,
+      confidence: 0.95,
+      allowedUses: [.displayGuidance]
+    )
+
+    let result = SpatialOverlayPlacementSolver.place(
+      target: candidate,
+      spec: SpatialOverlayPlacementSpec(
+        overlaySize: CGSize(width: 330, height: 118),
+        preferredEdges: [.above]
+      )
+    )
+
+    XCTAssertEqual(result.failure, .arrowCannotReachTargetAfterClamping)
+  }
+}
+
+private extension Result {
+  var failure: Failure? {
+    if case .failure(let failure) = self {
+      return failure
+    }
+    return nil
   }
 }
