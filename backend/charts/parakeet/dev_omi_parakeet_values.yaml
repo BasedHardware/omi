@@ -104,6 +104,12 @@ env:
     value: "true"
   - name: PARAKEET_CUDA_GRAPHS
     value: "true"
+  - name: PARAKEET_ATTENTION_MODE
+    value: "auto"
+  - name: PARAKEET_AUTO_ATTN_THRESHOLD
+    value: "300"
+  - name: PARAKEET_MAX_FILE_DURATION
+    value: "7200"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://dev-omi-diarizer.dev-omi-backend.svc.cluster.local:8080"
 
