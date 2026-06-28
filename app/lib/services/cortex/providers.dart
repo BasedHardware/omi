@@ -426,11 +426,17 @@ class RegionGroup {
   const RegionGroup(this.region, this.label, this.providers);
 }
 
-List<RegionGroup> cortexProvidersByRegion() {
+List<RegionGroup> cortexProvidersByRegion({bool cloudOnly = false}) {
   final groups = <RegionGroup>[];
   for (final region in kRegionOrder) {
-    final ps = kCortexProviders.where((p) => p.region == region).toList();
+    final ps = kCortexProviders
+        .where((p) => p.region == region && (!cloudOnly || p.mode == ProviderMode.cloud))
+        .toList();
     if (ps.isNotEmpty) groups.add(RegionGroup(region, kRegionLabels[region]!, ps));
   }
   return groups;
 }
+
+/// Phones can't run real (vision) local models, so the mobile app exposes cloud
+/// providers only. Desktop keeps both local and cloud.
+const bool kCortexMobileCloudOnly = true;

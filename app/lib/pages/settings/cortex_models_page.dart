@@ -63,7 +63,8 @@ class _CortexModelsPageState extends State<CortexModelsPage> {
                   hint: Text(l.cortexChooseProvider),
                   decoration: const InputDecoration(border: OutlineInputBorder()),
                   items: [
-                    for (final g in cortexProvidersByRegion()) ...[
+                    // Mobile is cloud-only: phones can't run real (vision) local models.
+                    for (final g in cortexProvidersByRegion(cloudOnly: kCortexMobileCloudOnly)) ...[
                       // Non-selectable region header. A unique sentinel value keeps
                       // DropdownButton's value assertion happy (no duplicate nulls).
                       DropdownMenuItem<String>(
