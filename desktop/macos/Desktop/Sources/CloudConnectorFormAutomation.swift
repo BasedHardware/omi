@@ -295,10 +295,7 @@ enum CloudConnectorFormAutomation {
     else {
       return false
     }
-    let windowFrame = SpatialOverlayGeometry.appKitFrame(
-      topLeftFrame: rawWindowFrame,
-      screenFrame: screen.frame
-    )
+    let windowFrame = SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: rawWindowFrame)
 
     target.app.activate()
     CloudConnectorGuidanceOverlay.shared.presentClaudeConnectHint(
@@ -320,10 +317,7 @@ enum CloudConnectorFormAutomation {
     else {
       return false
     }
-    let windowFrame = SpatialOverlayGeometry.appKitFrame(
-      topLeftFrame: rawWindowFrame,
-      screenFrame: screen.frame
-    )
+    let windowFrame = SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: rawWindowFrame)
 
     target.app.activate()
     CloudConnectorGuidanceOverlay.shared.presentClaudeAddHint(
@@ -374,7 +368,7 @@ enum CloudConnectorFormAutomation {
   ) -> [SpatialOverlayAnchorCandidate] {
     let explicitFrames =
       findClaudeConnectorDetailConnectButton(in: nodes)
-      .map { [SpatialOverlayGeometry.appKitFrame(topLeftFrame: $0.frame, screenFrame: screen.frame)] }
+      .map { [SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: $0.frame)] }
       ?? []
     return claudeConnectGuidanceCandidates(
       windowFrame: windowFrame,
@@ -389,7 +383,7 @@ enum CloudConnectorFormAutomation {
   ) -> [SpatialOverlayAnchorCandidate] {
     let addFrames =
       findActionNode(in: nodes, matching: ["add"])
-      .map { [SpatialOverlayGeometry.appKitFrame(topLeftFrame: $0.frame, screenFrame: screen.frame)] }
+      .map { [SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: $0.frame)] }
       ?? []
     var candidates = claudeAddGuidanceCandidates(
       windowFrame: windowFrame,
@@ -399,14 +393,11 @@ enum CloudConnectorFormAutomation {
       let cancel = findActionNode(in: nodes, matching: ["cancel"])
     {
       let inferredFrame = inferredClaudeAddButtonFrameFromCancel(cancel.frame)
-      let appKitFrame = SpatialOverlayGeometry.appKitFrame(
-        topLeftFrame: inferredFrame,
-        screenFrame: screen.frame
-      )
+      let appKitFrame = SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: inferredFrame)
       let inferred = SpatialOverlayAnchorCandidate(
         id: "claude-add-inferred-from-cancel",
         targetRect: appKitFrame,
-        screen: screen,
+        screen: candidates.first?.screen ?? screen,
         window: candidates.first?.window,
         evidence: [
           SpatialOverlayTargetEvidence(
@@ -492,16 +483,28 @@ enum CloudConnectorFormAutomation {
   }
 
   nonisolated static func claudeAddGuidanceAnchor(in windowFrame: CGRect) -> CGPoint {
-    // When Screen Recording is unavailable, Claude's Add button is not visible
-    // to OCR or AX. Estimate the button from the stable modal geometry instead
-    // of anchoring against the whole browser window. This is guidance-only:
-    // submit clicks still require verified AX or OCR targets.
+    // When Screen Recording is unavailable, Claude's Add button is not visible to OCR
+    // or AX. Estimate the button from the modal's geometry. The previous estimate put
+    // the Y a flat 20% up from the *window bottom*, which for a tall browser window
+    // lands below the vertically-centered modal's footer (the "arrow below the modal"
+    // bug). Model the modal as a centered dialog and anchor on its footer's bottom-right
+    // instead. Guidance-only: submit clicks still require a verified AX or OCR target.
+    return claudeFooterButtonAnchor(in: windowFrame, fromRightEdgeInset: 70)
+  }
+
+  /// Bottom-right footer-button anchor for Claude's centered "Add custom connector"
+  /// modal, in AppKit coordinates. `fromRightEdgeInset` is the distance from the modal's
+  /// right edge to the button center.
+  nonisolated static func claudeFooterButtonAnchor(
+    in windowFrame: CGRect, fromRightEdgeInset: CGFloat
+  ) -> CGPoint {
     let modalWidth = min(windowFrame.width * 0.52, 1_040)
-    let modalMaxX = windowFrame.minX + windowFrame.width * 0.50 + modalWidth / 2
-    return CGPoint(
-      x: modalMaxX - 70,
-      y: windowFrame.minY + windowFrame.height * 0.20
-    )
+    let modalMaxX = windowFrame.midX + modalWidth / 2
+    // Centered dialog; the footer sits just inside the modal's bottom edge.
+    let modalHeight = min(windowFrame.height * 0.74, 760)
+    let modalBottomY = windowFrame.midY - modalHeight / 2  // AppKit: bottom edge
+    let footerButtonCenterY = modalBottomY + 30 + 27  // footer inset + half button height
+    return CGPoint(x: modalMaxX - fromRightEdgeInset, y: footerButtonCenterY)
   }
 
   private static func fillClaudeConnectorAddModalByKeyboard(
