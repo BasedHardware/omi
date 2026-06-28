@@ -627,10 +627,14 @@ enum CloudConnectorFormAutomation {
 
     let hasAddModalURL = text.contains("modal=add-custom-connector")
     let hasAddModalTitle = text.contains("add custom connector")
+    let hasClaudeCustomizeWindowTitle = text.contains("customize - claude")
     let hasAddModalFields = text.contains("remote mcp server url")
       && text.contains("oauth client id")
       && text.contains("oauth client secret")
     if hasAddModalTitle && (hasAddModalURL || hasAddModalFields) {
+      return .addCustomConnectorModal
+    }
+    if hasAddModalURL && hasClaudeCustomizeWindowTitle {
       return .addCustomConnectorModal
     }
 

@@ -234,6 +234,13 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
     XCTAssertEqual(
       CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXWindow Customize - Claude AXStaticText claude.ai/customize/connectors?modal=add-custom-connector"
+      ),
+      .addCustomConnectorModal
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
         "AXText claude.ai/customize/connectors Omi CUSTOM You are not connected to Omi yet. Connect"
       ),
       .connectorDetailNotConnected
