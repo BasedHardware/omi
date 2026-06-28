@@ -182,6 +182,11 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
     let version = item.displayVersionString
     logSync("Sparkle: Installing update v\(version)")
+    let restoreMainWindow = AppDelegate.shouldRestoreMainWindowAfterUpdateRelaunch()
+    UpdateRelaunchWindowPolicy.markPendingRelaunch(restoreMainWindow: restoreMainWindow)
+    logSync(
+      "Sparkle: Next launch will \(restoreMainWindow ? "restore" : "suppress") the main window after update"
+    )
     Task { @MainActor in
       AnalyticsManager.shared.updateInstalled(version: version)
       self.viewModel?.updateAvailable = false
