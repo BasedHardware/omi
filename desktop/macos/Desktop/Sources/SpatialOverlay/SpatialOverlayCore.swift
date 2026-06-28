@@ -163,7 +163,7 @@ struct SpatialOverlayPlacementSpec: Equatable {
     gap: CGFloat = 0,
     arrowSize: CGSize = CGSize(width: 18, height: 13),
     minimumArrowInset: CGFloat = 28,
-    avoidTargetPadding: CGFloat = 8,
+    avoidTargetPadding: CGFloat = 0,
     canCoverTarget: Bool = false
   ) {
     self.overlaySize = overlaySize
@@ -231,13 +231,14 @@ enum SpatialOverlayPlacementSolver {
     var sawBlocked = false
 
     for edge in spec.preferredEdges {
-      let proposedFrame = frame(for: target.targetPoint, edge: edge, spec: spec)
+      let anchorPoint = anchorPoint(for: target, edge: edge, canCoverTarget: spec.canCoverTarget)
+      let proposedFrame = frame(for: anchorPoint, edge: edge, spec: spec)
       let clampedFrame = clamp(proposedFrame, inside: safeFrame)
       let arrowTip = arrowTip(
-        in: clampedFrame, targetPoint: target.targetPoint, edge: edge, spec: spec)
+        in: clampedFrame, targetPoint: anchorPoint, edge: edge, spec: spec)
       let globalTip = CGPoint(x: clampedFrame.minX + arrowTip.x, y: clampedFrame.minY + arrowTip.y)
       let arrowDistance = hypot(
-        globalTip.x - target.targetPoint.x, globalTip.y - target.targetPoint.y)
+        globalTip.x - anchorPoint.x, globalTip.y - anchorPoint.y)
       guard arrowDistance <= 3 else {
         sawDetachedArrow = true
         continue
@@ -267,7 +268,7 @@ enum SpatialOverlayPlacementSolver {
         - arrowDistance * 10
       let result = SpatialOverlayPlacementResult(
         panelFrame: clampedFrame,
-        targetPoint: target.targetPoint,
+        targetPoint: anchorPoint,
         arrowTipInPanel: arrowTip,
         attachmentEdge: edge,
         score: score,
@@ -293,6 +294,25 @@ enum SpatialOverlayPlacementSolver {
       return .failure(.blockedByRequiredExclusionZones)
     }
     return .failure(.noViablePlacement)
+  }
+
+  private static func anchorPoint(
+    for target: SpatialOverlayAnchorCandidate,
+    edge: SpatialOverlayAttachmentEdge,
+    canCoverTarget: Bool
+  ) -> CGPoint {
+    guard !canCoverTarget else { return target.targetPoint }
+
+    switch edge {
+    case .above:
+      return CGPoint(x: target.targetPoint.x, y: target.targetRect.maxY)
+    case .below:
+      return CGPoint(x: target.targetPoint.x, y: target.targetRect.minY)
+    case .leading:
+      return CGPoint(x: target.targetRect.minX, y: target.targetPoint.y)
+    case .trailing:
+      return CGPoint(x: target.targetRect.maxX, y: target.targetPoint.y)
+    }
   }
 
   private static func frame(

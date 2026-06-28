@@ -349,7 +349,8 @@ enum CloudConnectorFormAutomation {
       windowFrame: windowFrame,
       explicitTargetFrames: explicitTargetFrames,
       heuristicID: "claude-connect-heuristic",
-      heuristicPoint: claudeConnectGuidanceAnchor(in: windowFrame)
+      heuristicPoint: claudeConnectGuidanceAnchor(in: windowFrame),
+      heuristicTargetSize: CGSize(width: 132, height: 54)
     )
   }
 
@@ -361,7 +362,8 @@ enum CloudConnectorFormAutomation {
       windowFrame: windowFrame,
       explicitTargetFrames: explicitTargetFrames,
       heuristicID: "claude-add-heuristic",
-      heuristicPoint: claudeAddGuidanceAnchor(in: windowFrame)
+      heuristicPoint: claudeAddGuidanceAnchor(in: windowFrame),
+      heuristicTargetSize: CGSize(width: 92, height: 54)
     )
   }
 
@@ -399,7 +401,8 @@ enum CloudConnectorFormAutomation {
     windowFrame: CGRect,
     explicitTargetFrames: [CGRect],
     heuristicID: String,
-    heuristicPoint: CGPoint
+    heuristicPoint: CGPoint,
+    heuristicTargetSize: CGSize
   ) -> [SpatialOverlayAnchorCandidate] {
     let screen = SpatialOverlayScreen(id: "claude-window", frame: windowFrame, visibleFrame: windowFrame)
     let window = SpatialOverlayWindow(
@@ -423,10 +426,10 @@ enum CloudConnectorFormAutomation {
     let heuristicCandidate = SpatialOverlayAnchorCandidate(
       id: heuristicID,
       targetRect: CGRect(
-        x: heuristicPoint.x - 1,
-        y: heuristicPoint.y - 1,
-        width: 2,
-        height: 2
+        x: heuristicPoint.x - heuristicTargetSize.width / 2,
+        y: heuristicPoint.y - heuristicTargetSize.height / 2,
+        width: heuristicTargetSize.width,
+        height: heuristicTargetSize.height
       ),
       targetPoint: heuristicPoint,
       screen: screen,

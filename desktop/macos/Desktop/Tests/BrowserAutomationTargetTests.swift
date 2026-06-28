@@ -591,10 +591,7 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
     XCTAssertTrue(candidates[0].evidence.contains { $0.source == .accessibility })
     XCTAssertTrue(candidates[0].allowedUses.contains(.performClick))
-    XCTAssertEqual(result.targetPoint.x, explicitFrame.midX, accuracy: 0.001)
-    XCTAssertEqual(result.targetPoint.y, explicitFrame.midY, accuracy: 0.001)
-    XCTAssertEqual(result.globalArrowTip.x, explicitFrame.midX, accuracy: 3)
-    XCTAssertEqual(result.globalArrowTip.y, explicitFrame.midY, accuracy: 3)
+    assertGuidancePlacement(result, pointsAt: explicitFrame, doesNotCover: explicitFrame)
   }
 
   @MainActor
@@ -613,10 +610,7 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
     XCTAssertTrue(candidates[0].evidence.contains { $0.source == .accessibility })
     XCTAssertTrue(candidates[0].allowedUses.contains(.performClick))
-    XCTAssertEqual(result.targetPoint.x, explicitFrame.midX, accuracy: 0.001)
-    XCTAssertEqual(result.targetPoint.y, explicitFrame.midY, accuracy: 0.001)
-    XCTAssertEqual(result.globalArrowTip.x, explicitFrame.midX, accuracy: 3)
-    XCTAssertEqual(result.globalArrowTip.y, explicitFrame.midY, accuracy: 3)
+    assertGuidancePlacement(result, pointsAt: explicitFrame, doesNotCover: explicitFrame)
   }
 
   @MainActor
@@ -650,8 +644,7 @@ final class BrowserAutomationTargetTests: XCTestCase {
       candidates: [heuristic, explicit]
     ))
 
-    XCTAssertEqual(result.targetPoint.x, explicitFrame.midX, accuracy: 0.001)
-    XCTAssertEqual(result.targetPoint.y, explicitFrame.midY, accuracy: 0.001)
+    assertGuidancePlacement(result, pointsAt: explicitFrame, doesNotCover: explicitFrame)
   }
 
   @MainActor
@@ -732,6 +725,34 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
     XCTAssertEqual(result.globalArrowTip.x, target.x, accuracy: 3)
     XCTAssertEqual(result.globalArrowTip.y, target.y, accuracy: 3)
+  }
+
+  private func assertGuidancePlacement(
+    _ result: SpatialOverlayPlacementResult,
+    pointsAt target: CGRect,
+    doesNotCover coveredTarget: CGRect,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let expandedTarget = target.insetBy(dx: -3, dy: -3)
+    XCTAssertTrue(
+      expandedTarget.contains(result.targetPoint),
+      "Expected target point \(result.targetPoint) to land on \(target)",
+      file: file,
+      line: line
+    )
+    XCTAssertTrue(
+      expandedTarget.contains(result.globalArrowTip),
+      "Expected arrow tip \(result.globalArrowTip) to land on \(target)",
+      file: file,
+      line: line
+    )
+    XCTAssertFalse(
+      result.panelFrame.intersects(coveredTarget),
+      "Expected panel \(result.panelFrame) not to cover \(coveredTarget)",
+      file: file,
+      line: line
+    )
   }
 
   func testSpatialOverlayPlacementFailsWhenArrowCannotReachTargetAfterClamp() {

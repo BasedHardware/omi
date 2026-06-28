@@ -7,6 +7,7 @@ final class CloudConnectorGuidanceOverlay {
 
   private var window: NSWindow?
   private var dismissTask: Task<Void, Never>?
+  private var lastAutomationState: [String: String]?
 
   private init() {}
 
@@ -42,6 +43,12 @@ final class CloudConnectorGuidanceOverlay {
         overlaySize: overlaySize
       )
     else { return }
+
+    lastAutomationState = Self.stateDictionary(
+      actionLabel: actionLabel,
+      placement: placement,
+      candidates: candidates
+    )
 
     let view = CloudConnectorGuidanceView(actionLabel: actionLabel, placement: placement)
     let hostingController = NSHostingController(rootView: view)
@@ -80,30 +87,41 @@ final class CloudConnectorGuidanceOverlay {
     window = nil
   }
 
+  var automationWindow: NSWindow? {
+    window
+  }
+
+  func automationState() -> [String: String] {
+    var state = lastAutomationState ?? [:]
+    state["visible"] = window?.isVisible == true ? "true" : "false"
+    return state
+  }
+
+  func presentAutomationFixture(_ fixture: SpatialOverlayDogfoodFixture) -> [String: String] {
+    switch fixture {
+    case .claudeAddExplicit, .claudeAddHeuristic:
+      presentClaudeAddHint(windowFrame: fixture.windowFrame, candidates: fixture.candidates)
+    case .claudeConnectExplicit, .claudeConnectHeuristic:
+      presentClaudeConnectHint(windowFrame: fixture.windowFrame, candidates: fixture.candidates)
+    }
+
+    var state = automationState()
+    state["fixture"] = fixture.rawValue
+    state["action"] = fixture.actionLabel.lowercased()
+    return state
+  }
+
   static func placementResult(
     windowFrame: CGRect,
     candidates: [SpatialOverlayAnchorCandidate],
     overlaySize: CGSize = CGSize(width: 330, height: 118)
   ) -> SpatialOverlayPlacementResult? {
-    let screen = SpatialOverlayGeometry.screenForTarget(windowFrame: windowFrame)
-    for candidate in candidates.filter({ $0.allowedUses.contains(.displayGuidance) }).map({ candidate in
-      guard let screen else { return candidate }
-      return SpatialOverlayAnchorCandidate(
-        id: candidate.id,
-        targetRect: candidate.targetRect,
-        targetPoint: candidate.targetPoint,
-        screen: screen,
-        window: candidate.window,
-        evidence: candidate.evidence,
-        confidence: candidate.confidence,
-        allowedUses: candidate.allowedUses
-      )
-    }).sorted(by: candidateSort) {
+    for candidate in candidates.filter({ $0.allowedUses.contains(.displayGuidance) }).sorted(by: candidateSort) {
       let spec = SpatialOverlayPlacementSpec(
         overlaySize: overlaySize,
         preferredEdges: [.above, .below, .trailing, .leading],
         gap: 0,
-        canCoverTarget: true
+        canCoverTarget: false
       )
       if case .success(let placement) = SpatialOverlayPlacementSolver.place(target: candidate, spec: spec) {
         return placement
@@ -125,6 +143,48 @@ final class CloudConnectorGuidanceOverlay {
       return lhs.confidence > rhs.confidence
     }
     return lhs.id < rhs.id
+  }
+
+  private static func stateDictionary(
+    actionLabel: String,
+    placement: SpatialOverlayPlacementResult,
+    candidates: [SpatialOverlayAnchorCandidate]
+  ) -> [String: String] {
+    let selected = candidates.first { candidate in
+      candidate.targetRect.insetBy(dx: -1, dy: -1).contains(placement.targetPoint)
+        || (abs(candidate.targetPoint.x - placement.targetPoint.x) <= 1
+          && abs(candidate.targetPoint.y - placement.targetPoint.y) <= 1)
+    }
+    let targetRect = selected?.targetRect ?? CGRect(
+      x: placement.targetPoint.x - 1,
+      y: placement.targetPoint.y - 1,
+      width: 2,
+      height: 2
+    )
+    let issues = SpatialOverlayDogfoodOracle.issues(
+      placement: placement,
+      targetRect: targetRect,
+      coveredTargetRect: targetRect
+    )
+    return [
+      "visible": "true",
+      "action": actionLabel.lowercased(),
+      "edge": "\(placement.attachmentEdge)",
+      "panelFrame": string(placement.panelFrame),
+      "targetPoint": string(placement.targetPoint),
+      "arrowTip": string(placement.globalArrowTip),
+      "candidateId": selected?.id ?? "",
+      "candidateSource": selected?.evidence.first?.source.rawValue ?? "",
+      "issues": issues.map(\.description).joined(separator: "; "),
+    ]
+  }
+
+  private static func string(_ point: CGPoint) -> String {
+    "\(String(format: "%.1f", point.x)),\(String(format: "%.1f", point.y))"
+  }
+
+  private static func string(_ rect: CGRect) -> String {
+    "\(String(format: "%.1f", rect.minX)),\(String(format: "%.1f", rect.minY)),\(String(format: "%.1f", rect.width)),\(String(format: "%.1f", rect.height))"
   }
 }
 

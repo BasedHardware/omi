@@ -446,6 +446,39 @@ final class DesktopAutomationActionRegistry {
       let wait = boolParam(params["wait"], default: true)
       return await FloatingControlBarManager.shared.backFromSubagentForAutomation(wait: wait)
     }
+
+    register(
+      name: "spatial_overlay_present_fixture",
+      summary: "Present a deterministic spatial-overlay fixture for dogfood harnesses",
+      params: ["fixture", "settleMs"]
+    ) { params in
+      guard let fixture = SpatialOverlayDogfoodFixture(rawValue: params["fixture"] ?? "") else {
+        throw DesktopAutomationActionError.invalidParams(
+          "unknown fixture; expected one of \(SpatialOverlayDogfoodFixture.allCases.map(\.rawValue).joined(separator: ","))"
+        )
+      }
+      let settleMs = UInt64(max(0, intParam(params["settleMs"], default: 0)))
+      let state = CloudConnectorGuidanceOverlay.shared.presentAutomationFixture(fixture)
+      if settleMs > 0 {
+        try? await Task.sleep(nanoseconds: settleMs * 1_000_000)
+      }
+      return state
+    }
+
+    register(
+      name: "spatial_overlay_state",
+      summary: "Return the current spatial-overlay dogfood state"
+    ) { _ in
+      CloudConnectorGuidanceOverlay.shared.automationState()
+    }
+
+    register(
+      name: "spatial_overlay_dismiss",
+      summary: "Dismiss the current spatial-overlay dogfood overlay"
+    ) { _ in
+      CloudConnectorGuidanceOverlay.shared.dismiss()
+      return ["dismissed": "true", "visible": "false"]
+    }
   }
 }
 
@@ -913,6 +946,8 @@ final class DesktopAutomationBridge {
       let window: NSWindow?
       if payload.target == "floating" {
         window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
+      } else if payload.target == "overlay" {
+        window = CloudConnectorGuidanceOverlay.shared.automationWindow
       } else {
         window = NSApp.windows.first(where: { window in
           window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow

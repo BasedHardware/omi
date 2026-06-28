@@ -41,6 +41,22 @@ final class SpatialOverlayPlacementTests: XCTestCase {
     XCTAssertEqual(result.globalArrowTip.y, target.targetPoint.y, accuracy: 0.1)
   }
 
+  func testRectangularTargetCanBeAvoidedWithoutCoveringIt() throws {
+    let target = candidate(rect: CGRect(x: 700, y: 420, width: 80, height: 36))
+    let spec = SpatialOverlayPlacementSpec(
+      overlaySize: CGSize(width: 330, height: 118),
+      preferredEdges: [.above],
+      canCoverTarget: false
+    )
+
+    let result = try SpatialOverlayPlacementSolver.place(target: target, spec: spec).get()
+
+    XCTAssertEqual(result.attachmentEdge, .above)
+    XCTAssertFalse(result.panelFrame.intersects(target.targetRect.insetBy(dx: -spec.avoidTargetPadding, dy: -spec.avoidTargetPadding)))
+    XCTAssertEqual(result.globalArrowTip.x, target.targetPoint.x, accuracy: 0.1)
+    XCTAssertEqual(result.globalArrowTip.y, target.targetRect.maxY, accuracy: 0.1)
+  }
+
   func testFailsWhenClampingWouldDetachArrow() {
     let target = candidate(rect: CGRect(x: 12, y: 420, width: 20, height: 20))
     let spec = SpatialOverlayPlacementSpec(

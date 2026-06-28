@@ -1,0 +1,54 @@
+version: 2
+name: claude-guidance-overlay
+description: Cursor-free dogfood flow for Claude spatial guidance overlays.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/CloudConnectorGuidanceOverlay.swift
+  - desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift
+  - desktop/macos/Desktop/Sources/SpatialOverlay/SpatialOverlayCore.swift
+  - desktop/macos/Desktop/Sources/SpatialOverlay/SpatialOverlayDogfood.swift
+preconditions:
+  - automation_bridge_ready
+steps:
+  - id: S1
+    name: Present Claude Add Overlay Fixture
+    bridge.action:
+      name: spatial_overlay_present_fixture
+      params:
+        fixture: claude-add-explicit
+        settleMs: "150"
+    expect:
+      result.detail.visible: "true"
+      result.detail.issues: ""
+      result.detail.action: add
+      result.detail.candidateSource: accessibility
+
+  - id: S2
+    name: Capture Claude Add Overlay
+    visual.export:
+      name: claude-add-overlay
+      target: overlay
+
+  - id: S3
+    name: Read Overlay State
+    bridge.action:
+      name: spatial_overlay_state
+    expect:
+      result.detail.visible: "true"
+      result.detail.issues: ""
+      result.detail.action: add
+
+  - id: S4
+    name: Dismiss Overlay
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S5
+    name: Logs Clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"
+        - "overlay placement failed"
