@@ -260,6 +260,12 @@ enum MemoryExportExecutor {
   }
 
   private static func requestScreenRecordingApprovalForCloudSetup() {
+    // Actually request access first. CGRequestScreenCaptureAccess() both shows the
+    // system consent prompt AND registers this app in the Screen Recording list with a
+    // ready-to-flip toggle. Without it the app never appears in the list, so opening
+    // Settings alone left the user with nothing to turn on.
+    ScreenCaptureService.requestAllScreenCapturePermissions()
+
     guard let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     else { return }
