@@ -66,6 +66,21 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
+      - name: Bootstrap LLM Gateway dev service token
+        if: env.SERVICE == 'llm-gateway' && github.event.inputs.environment == 'development'
+        run: |
+          SECRET_NAME="OMI_LLM_GATEWAY_SERVICE_TOKEN"
+          if gcloud secrets describe "$SECRET_NAME" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            echo "$SECRET_NAME already exists in ${{ vars.GCP_PROJECT_ID }}."
+            exit 0
+          fi
+
+          echo "Creating $SECRET_NAME in ${{ vars.GCP_PROJECT_ID }}."
+          openssl rand -base64 48 | gcloud secrets create "$SECRET_NAME" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --replication-policy="automatic" \
+            --data-file=- >/dev/null
+
       - name: Login to GCR
         run: gcloud auth configure-docker
 
