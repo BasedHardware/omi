@@ -638,13 +638,6 @@ void main() {
       provider.dispose();
     });
 
-    test('returns false for Frame', () {
-      final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
-      expect(provider.hasNativeBleAudioRoute, isFalse);
-      provider.dispose();
-    });
-
     test('returns false for Limitless', () {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.limitless));
@@ -743,17 +736,6 @@ void main() {
     test('enable rejects for device with no native route (Fieldy)', () async {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.fieldy));
-
-      final result = await provider.setBackgroundModeEnabled(true);
-
-      expect(result, isFalse);
-      expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
-      provider.dispose();
-    });
-
-    test('enable rejects for device with no native route (Frame)', () async {
-      final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
 
       final result = await provider.setBackgroundModeEnabled(true);
 
@@ -917,7 +899,7 @@ void main() {
 
     test('switching from no-route device to Omi gains route', () {
       final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.bee));
       expect(provider.hasNativeBleAudioRoute, isFalse);
 
       provider.updateRecordingDevice(_device(id: '11:22:33:44:55:66', type: DeviceType.omi));
@@ -953,6 +935,49 @@ void main() {
       await provider.setBackgroundModeEnabled(true);
       // setBackgroundModeEnabled with batch mode on should keep nativeBleStreaming false
       expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
+      provider.dispose();
+    });
+  });
+
+  // ------------------------------------------------------------------ //
+  // Device mute persistence: a double-tap mute must survive an app      //
+  // kill/restart, otherwise the device silently resumes recording on    //
+  // the next reconnect (Featurebase: "If I turn off recording why       //
+  // doesn't it stay off?", "Cv1 unmutes on disconnect/reconnect").      //
+  // ------------------------------------------------------------------ //
+  group('device mute persistence', () {
+    setUp(() {
+      SharedPreferencesUtil().deviceMuted = false;
+    });
+
+    test('constructor restores muted state when deviceMuted pref is set', () {
+      SharedPreferencesUtil().deviceMuted = true;
+
+      final provider = CaptureProvider();
+
+      // _isPaused restored from prefs so the reconnect path re-applies the mute
+      // instead of resuming capture.
+      expect(provider.isPaused, isTrue);
+      provider.dispose();
+    });
+
+    test('constructor leaves recording unpaused when deviceMuted pref is unset', () {
+      SharedPreferencesUtil().deviceMuted = false;
+
+      final provider = CaptureProvider();
+
+      expect(provider.isPaused, isFalse);
+      provider.dispose();
+    });
+
+    test('pauseDeviceRecording persists the mute to prefs', () async {
+      final provider = CaptureProvider();
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.omi));
+
+      await provider.pauseDeviceRecording();
+
+      expect(provider.isPaused, isTrue);
+      expect(SharedPreferencesUtil().deviceMuted, isTrue);
       provider.dispose();
     });
   });
