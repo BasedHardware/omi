@@ -3024,8 +3024,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // ToolCallStatus updates on individual tool-call blocks; the
         // banner appears via ToolCallsGroup's hasStalledTool check.
         let turnStartMs = ChatProvider.monotonicNowMs()
+        let stallThresholds = StallThresholds.v1Defaults
         let stallDetector = StallDetector(
-            thresholds: .v1Defaults,
+            thresholds: stallThresholds,
             startedAtMs: turnStartMs
         )
 
@@ -3109,7 +3110,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 Task { @MainActor [weak self] in
                     self?.appendToMessage(id: aiMessageId, text: delta)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
-                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    self?.applyStallTransitions(
+                        messageId: aiMessageId,
+                        transitions: transitions,
+                        thresholds: stallThresholds
+                    )
                 }
             }
             let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
@@ -3208,7 +3213,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         }
                     }
                     let transitions = await stallDetector.step(kind: detectorKind, atMs: nowMs)
-                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    self?.applyStallTransitions(
+                        messageId: aiMessageId,
+                        transitions: transitions,
+                        thresholds: stallThresholds
+                    )
                 }
             }
             let thinkingDeltaHandler: AgentBridge.ThinkingDeltaHandler = { [weak self] text in
@@ -3216,7 +3225,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 Task { @MainActor [weak self] in
                     self?.appendThinking(messageId: aiMessageId, text: text)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
-                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    self?.applyStallTransitions(
+                        messageId: aiMessageId,
+                        transitions: transitions,
+                        thresholds: stallThresholds
+                    )
                 }
             }
             let toolResultDisplayHandler: AgentBridge.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
@@ -3224,7 +3237,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 Task { @MainActor [weak self] in
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
-                    self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                    self?.applyStallTransitions(
+                        messageId: aiMessageId,
+                        transitions: transitions,
+                        thresholds: stallThresholds
+                    )
                 }
             }
 
@@ -3239,7 +3256,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     let transitions = await stallDetector.tick(atMs: nowMs)
                     if transitions.isEmpty { continue }
                     await MainActor.run { [weak self] in
-                        self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
+                        self?.applyStallTransitions(
+                            messageId: aiMessageId,
+                            transitions: transitions,
+                            thresholds: stallThresholds
+                        )
                     }
                 }
             }
@@ -3896,13 +3917,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// `.interEvent` transitions are observed but not rendered here.
     private func applyStallTransitions(
         messageId: String,
-        transitions: [StallDetector.Transition]
+        transitions: [StallDetector.Transition],
+        thresholds: StallThresholds
     ) {
         guard !transitions.isEmpty,
               let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
 
         for transition in transitions {
             guard case .tool(let id, _, let to) = transition else { continue }
+            var trackedTransition = false
             for i in messages[index].contentBlocks.indices {
                 if case .toolCall(let blockId, let name, let oldStatus, let tuid, let input, let output) = messages[index].contentBlocks[i],
                    ChatProvider.stallTrackingId(toolUseId: tuid, name: name) == id,
@@ -3912,21 +3935,28 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         id: blockId, name: name, status: newStatus,
                         toolUseId: tuid, input: input, output: output
                     )
-                    trackStallTransition(toolName: name, status: newStatus)
+                    if !trackedTransition {
+                        trackStallTransition(toolName: name, status: newStatus, thresholds: thresholds)
+                        trackedTransition = true
+                    }
                 }
             }
         }
     }
 
-    private func trackStallTransition(toolName: String, status: ToolCallStatus) {
+    private func trackStallTransition(
+        toolName: String,
+        status: ToolCallStatus,
+        thresholds: StallThresholds
+    ) {
         let thresholdMs: Int
         let statusName: String
         switch status {
         case .slow:
-            thresholdMs = StallThresholds.v1Defaults.slowGapMs
+            thresholdMs = thresholds.slowGapMs
             statusName = "slow"
         case .stalled:
-            thresholdMs = StallThresholds.v1Defaults.stalledGapMs
+            thresholdMs = thresholds.stalledGapMs
             statusName = "stalled"
         case .running, .completed, .failed:
             return

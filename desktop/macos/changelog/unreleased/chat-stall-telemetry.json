@@ -1,3 +1,0 @@
-{
-  "change": "Added desktop chat stall telemetry to help tune slow and stalled tool-call thresholds"
-}

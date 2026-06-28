@@ -514,14 +514,8 @@ class AnalyticsManager {
 
   /// Track individual tool calls made by the Claude agent
   func chatToolCallCompleted(toolName: String, durationMs: Int) {
-    let cleanName: String
-    if toolName.hasPrefix("mcp__") {
-      cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
-    } else {
-      cleanName = toolName
-    }
     let props: [String: Any] = [
-      "tool_name": cleanName,
+      "tool_name": Self.normalizedToolName(toolName),
       "duration_ms": durationMs,
     ]
     PostHogManager.shared.track("chat_tool_call_completed", properties: props)
@@ -529,18 +523,19 @@ class AnalyticsManager {
 
   /// Track when client-side stall detection promotes an in-flight tool.
   func chatToolStallTransition(toolName: String, status: String, thresholdMs: Int) {
-    let cleanName: String
-    if toolName.hasPrefix("mcp__") {
-      cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
-    } else {
-      cleanName = toolName
-    }
     let props: [String: Any] = [
-      "tool_name": cleanName,
+      "tool_name": Self.normalizedToolName(toolName),
       "status": status,
       "threshold_ms": thresholdMs,
     ]
     PostHogManager.shared.track("chat_tool_stall_transition", properties: props)
+  }
+
+  private static func normalizedToolName(_ toolName: String) -> String {
+    if toolName.hasPrefix("mcp__") {
+      return String(toolName.split(separator: "__").last ?? Substring(toolName))
+    }
+    return toolName
   }
 
   /// Track user stop requests so stalled-tool false positives can be tuned.
