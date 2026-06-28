@@ -35,6 +35,7 @@ from utils.mcp_data import (
     clean_meeting,
     clean_person,
     clean_screen_activity_row,
+    inclusive_end_of_day,
 )
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -519,6 +520,7 @@ def get_calendar_meetings(
 ):
     logger.info(f"get_calendar_meetings {uid} {limit} {start_date} {end_date}")
     limit = max(1, min(limit, 200))
+    end_date = inclusive_end_of_day(end_date)
     meetings = calendar_meetings_db.list_meetings(uid, start_date=start_date, end_date=end_date, limit=limit)
     return [clean_meeting(m) for m in meetings]
 
