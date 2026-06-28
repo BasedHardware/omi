@@ -158,32 +158,32 @@ class _CortexModelsPageState extends State<CortexModelsPage> {
   }
 
   Widget _section(List<Widget> children) => Container(
-    decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
-  );
+        decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      );
 
   Widget _rowLabel(IconData icon, String title, String subtitle) => Padding(
-    padding: const EdgeInsets.all(16),
-    child: Row(
-      children: [
-        Icon(icon, color: Colors.grey.shade400, size: 18),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.grey.shade400, size: 18),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                  ),
+                  if (subtitle.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  ],
+                ],
               ),
-              if (subtitle.isNotEmpty) ...[
-                const SizedBox(height: 2),
-                Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
-      ],
-    ),
-  );
+      );
 }

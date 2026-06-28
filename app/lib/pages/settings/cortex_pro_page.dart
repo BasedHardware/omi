@@ -208,7 +208,7 @@ class _CortexProPageState extends State<CortexProPage> {
   }
 
   Widget _section(List<Widget> children) => Container(
-    decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
-    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
-  );
+        decoration: BoxDecoration(color: _card, borderRadius: BorderRadius.circular(12)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
+      );
 }

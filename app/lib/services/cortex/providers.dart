@@ -429,9 +429,8 @@ class RegionGroup {
 List<RegionGroup> cortexProvidersByRegion({bool cloudOnly = false}) {
   final groups = <RegionGroup>[];
   for (final region in kRegionOrder) {
-    final ps = kCortexProviders
-        .where((p) => p.region == region && (!cloudOnly || p.mode == ProviderMode.cloud))
-        .toList();
+    final ps =
+        kCortexProviders.where((p) => p.region == region && (!cloudOnly || p.mode == ProviderMode.cloud)).toList();
     if (ps.isNotEmpty) groups.add(RegionGroup(region, kRegionLabels[region]!, ps));
   }
   return groups;
