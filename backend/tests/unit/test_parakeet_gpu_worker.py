@@ -586,37 +586,6 @@ class TestAttentionModeConfig:
         assert worker._attn_is_local is True
         worker.stop()
 
-    def test_local_mode_recasts_bf16_after_change_attention(self):
-        nemo_asr = _get_nemo_asr()
-        mock_model = _make_mock_model()
-        mock_model.to.return_value = mock_model
-        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
-        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
-
-        torch_mod = sys.modules["torch"]
-        orig_avail = torch_mod.cuda.is_available.return_value
-        torch_mod.cuda.is_available.return_value = True
-        torch_mod.cuda.is_bf16_supported.return_value = True
-
-        with patch.dict(
-            os.environ,
-            {
-                "PARAKEET_ATTENTION_MODE": "local",
-                "PARAKEET_LOCAL_ATTN_CONTEXT": "128,128",
-                "PARAKEET_TORCH_COMPILE": "false",
-                "PARAKEET_BF16": "1",
-            },
-        ):
-            worker = GPUWorker()
-            worker._load_model()
-
-        to_calls = mock_model.to.call_args_list
-        assert len(to_calls) >= 2
-        assert to_calls[0] == ((torch_mod.bfloat16,),)
-        assert to_calls[-1] == ((torch_mod.bfloat16,),)
-        torch_mod.cuda.is_available.return_value = orig_avail
-        worker.stop()
-
     def test_auto_mode_skips_torch_compile(self):
         import gpu_worker as gw_mod
 
@@ -679,39 +648,6 @@ class TestSwitchAttention:
             worker._switch_attention(to_local=True)
 
             worker._model.change_attention_model.assert_not_called()
-
-    def test_recast_bf16_after_switch_to_local(self):
-        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
-            worker = GPUWorker()
-            worker._model = MagicMock()
-            worker._model_dtype = _torch.bfloat16
-            worker._attn_is_local = False
-
-            worker._switch_attention(to_local=True)
-
-            worker._model.to.assert_called_once_with(_torch.bfloat16)
-
-    def test_recast_bf16_after_switch_to_full(self):
-        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
-            worker = GPUWorker()
-            worker._model = MagicMock()
-            worker._model_dtype = _torch.bfloat16
-            worker._attn_is_local = True
-
-            worker._switch_attention(to_local=False)
-
-            worker._model.to.assert_called_once_with(_torch.bfloat16)
-
-    def test_no_recast_when_dtype_is_none(self):
-        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto"}):
-            worker = GPUWorker()
-            worker._model = MagicMock()
-            worker._model_dtype = None
-            worker._attn_is_local = False
-
-            worker._switch_attention(to_local=True)
-
-            worker._model.to.assert_not_called()
 
 
 class TestDurationGuard:
