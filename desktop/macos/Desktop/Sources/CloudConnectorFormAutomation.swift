@@ -326,9 +326,14 @@ enum CloudConnectorFormAutomation {
   }
 
   nonisolated static func claudeAddGuidanceAnchor(in windowFrame: CGRect) -> CGPoint {
-    CGPoint(
-      x: windowFrame.minX + windowFrame.width * 0.86,
-      y: windowFrame.minY + windowFrame.height * 0.84
+    // When Screen Recording is unavailable, Claude's Add button is not visible
+    // to OCR or AX. Estimate the button from the stable modal geometry instead
+    // of anchoring against the whole browser window.
+    let modalWidth = min(windowFrame.width * 0.52, 1_040)
+    let modalMaxX = windowFrame.minX + windowFrame.width * 0.50 + modalWidth / 2
+    return CGPoint(
+      x: modalMaxX - 70,
+      y: windowFrame.minY + windowFrame.height * 0.11
     )
   }
 
