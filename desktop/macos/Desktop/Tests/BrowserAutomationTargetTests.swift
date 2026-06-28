@@ -550,4 +550,42 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertGreaterThan(anchor.y, windowFrame.minY + windowFrame.height * 0.08)
     XCTAssertLessThan(anchor.y, windowFrame.minY + windowFrame.height * 0.18)
   }
+
+  func testCloudConnectorGuidancePointerTracksTargetAfterFrameClamping() {
+    let overlaySize = CGSize(width: 330, height: 118)
+    let target = CGPoint(x: 1_240, y: 810)
+    let proposedFrame = CloudConnectorGuidanceOverlay.frameForPointerTip(
+      targetPoint: target,
+      overlaySize: overlaySize
+    )
+
+    XCTAssertEqual(proposedFrame.midX, target.x, accuracy: 0.001)
+    XCTAssertLessThan(proposedFrame.minY, target.y)
+
+    let clampedFrame = CGRect(x: 1_000, y: proposedFrame.minY, width: 330, height: 118)
+    let pointerX = CloudConnectorGuidanceOverlay.pointerX(
+      targetPoint: target,
+      overlayFrame: clampedFrame
+    )
+    XCTAssertEqual(clampedFrame.minX + pointerX, target.x, accuracy: 0.001)
+  }
+
+  func testCloudConnectorGuidancePointerStaysInsideOverlayWhenTargetIsOutside() {
+    let overlayFrame = CGRect(x: 100, y: 100, width: 330, height: 118)
+
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.pointerX(
+        targetPoint: CGPoint(x: 20, y: 140),
+        overlayFrame: overlayFrame
+      ),
+      28
+    )
+    XCTAssertEqual(
+      CloudConnectorGuidanceOverlay.pointerX(
+        targetPoint: CGPoint(x: 520, y: 140),
+        overlayFrame: overlayFrame
+      ),
+      302
+    )
+  }
 }

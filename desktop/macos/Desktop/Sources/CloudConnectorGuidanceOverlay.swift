@@ -31,16 +31,17 @@ final class CloudConnectorGuidanceOverlay {
     window?.close()
 
     let overlaySize = CGSize(width: 330, height: 118)
-    let proposedOrigin = CGPoint(
-      x: targetPoint.x - overlaySize.width / 2,
-      y: targetPoint.y + 34
+    let proposedFrame = Self.frameForPointerTip(
+      targetPoint: targetPoint,
+      overlaySize: overlaySize
     )
     let frame = Self.clampedFrame(
-      CGRect(origin: proposedOrigin, size: overlaySize),
+      proposedFrame,
       near: windowFrame
     )
+    let pointerX = Self.pointerX(targetPoint: targetPoint, overlayFrame: frame)
 
-    let view = CloudConnectorGuidanceView(actionLabel: actionLabel)
+    let view = CloudConnectorGuidanceView(actionLabel: actionLabel, pointerX: pointerX)
     let hostingController = NSHostingController(rootView: view)
     hostingController.view.frame = CGRect(origin: .zero, size: overlaySize)
 
@@ -77,6 +78,19 @@ final class CloudConnectorGuidanceOverlay {
     window = nil
   }
 
+  nonisolated static func frameForPointerTip(targetPoint: CGPoint, overlaySize: CGSize) -> CGRect {
+    CGRect(
+      x: targetPoint.x - overlaySize.width / 2,
+      y: targetPoint.y - overlaySize.height + 6,
+      width: overlaySize.width,
+      height: overlaySize.height
+    )
+  }
+
+  nonisolated static func pointerX(targetPoint: CGPoint, overlayFrame: CGRect) -> CGFloat {
+    min(max(targetPoint.x - overlayFrame.minX, 28), overlayFrame.width - 28)
+  }
+
   private static func clampedFrame(_ frame: CGRect, near windowFrame: CGRect) -> CGRect {
     let screen = NSScreen.screens.first { $0.frame.intersects(windowFrame) } ?? NSScreen.main
     guard let visibleFrame = screen?.visibleFrame else { return frame }
@@ -91,9 +105,10 @@ final class CloudConnectorGuidanceOverlay {
 
 private struct CloudConnectorGuidanceView: View {
   let actionLabel: String
+  let pointerX: CGFloat
 
   var body: some View {
-    VStack(spacing: 8) {
+    VStack(alignment: .leading, spacing: 8) {
       HStack(spacing: 10) {
         ZStack {
           Circle()
@@ -129,6 +144,7 @@ private struct CloudConnectorGuidanceView: View {
       TrianglePointer()
         .fill(OmiColors.success)
         .frame(width: 18, height: 13)
+        .padding(.leading, max(0, pointerX - 17))
     }
     .padding(8)
   }
