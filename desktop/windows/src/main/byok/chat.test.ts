@@ -51,6 +51,23 @@ describe('BYOK chat', () => {
     })
   })
 
+  it('uses custom system prompts for non-chat BYOK completions', () => {
+    const request = buildByokChatRequest(
+      'openai',
+      'sk-openai-secret',
+      [{ role: 'user', content: 'return json' }],
+      'openai:gpt-4o',
+      'Return only JSON.'
+    )
+
+    expect(JSON.parse(String(request.init.body))).toMatchObject({
+      messages: [
+        { role: 'system', content: 'Return only JSON.' },
+        { role: 'user', content: 'return json' }
+      ]
+    })
+  })
+
   it('constructs direct Anthropic and Gemini requests with provider-owned credentials', () => {
     const anthropic = buildByokChatRequest('anthropic', 'sk-ant-secret', [
       { role: 'user', content: 'hello' }
