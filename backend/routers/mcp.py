@@ -28,7 +28,14 @@ from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+import utils.mcp_folders as mcp_folders
+from utils.mcp_data import (
+    clean_action_item,
+    clean_chat_message,
+    clean_folder,
+    clean_person,
+    clean_screen_activity_row,
+)
 from utils.mcp_memories import (
     collect_filtered_memories,
     parse_mcp_bool,
@@ -106,6 +113,92 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
         upsert_memory_vector(uid, memory_id, value, memory.get('category', 'other'))
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Folders: organize conversations into folders from an MCP client (issue #4862)
+# ---------------------------------------------------------------------------
+
+
+class McpCreateFolder(BaseModel):
+    name: str
+    description: Optional[str] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+
+
+class McpUpdateFolder(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+    icon: Optional[str] = None
+
+
+class McpMoveConversation(BaseModel):
+    folder_id: Optional[str] = None
+
+
+def _folder_http_error(error: mcp_folders.FolderError) -> HTTPException:
+    """Map a folder orchestration error to the matching HTTP status."""
+    if isinstance(error, (mcp_folders.FolderNotFound, mcp_folders.ConversationNotFound)):
+        return HTTPException(status_code=404, detail=str(error))
+    if isinstance(error, mcp_folders.ConversationLocked):
+        return HTTPException(status_code=402, detail=str(error))
+    return HTTPException(status_code=400, detail=str(error))
+
+
+@router.get("/v1/mcp/folders", tags=["mcp"])
+def mcp_get_folders(uid: str = Depends(get_uid_from_mcp_api_key)):
+    return [clean_folder(f) for f in mcp_folders.list_folders(uid)]
+
+
+@router.post("/v1/mcp/folders", tags=["mcp"])
+def mcp_create_folder(request: McpCreateFolder, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        folder = mcp_folders.create_folder(
+            uid, name=request.name, description=request.description, color=request.color, icon=request.icon
+        )
+    except mcp_folders.FolderError as e:
+        raise _folder_http_error(e)
+    return clean_folder(folder)
+
+
+@router.patch("/v1/mcp/folders/{folder_id}", tags=["mcp"])
+def mcp_update_folder(folder_id: str, request: McpUpdateFolder, uid: str = Depends(get_uid_from_mcp_api_key)):
+    try:
+        folder = mcp_folders.update_folder(
+            uid,
+            folder_id,
+            name=request.name,
+            description=request.description,
+            color=request.color,
+            icon=request.icon,
+        )
+    except mcp_folders.FolderError as e:
+        raise _folder_http_error(e)
+    return clean_folder(folder)
+
+
+@router.delete("/v1/mcp/folders/{folder_id}", tags=["mcp"])
+def mcp_delete_folder(
+    folder_id: str, move_to_folder_id: Optional[str] = None, uid: str = Depends(get_uid_from_mcp_api_key)
+):
+    try:
+        mcp_folders.delete_folder(uid, folder_id, move_to_folder_id=move_to_folder_id)
+    except mcp_folders.FolderError as e:
+        raise _folder_http_error(e)
+    return {"status": "ok"}
+
+
+@router.patch("/v1/mcp/conversations/{conversation_id}/folder", tags=["mcp"])
+def mcp_move_conversation_to_folder(
+    conversation_id: str, request: McpMoveConversation, uid: str = Depends(get_uid_from_mcp_api_key)
+):
+    try:
+        mcp_folders.move_conversation(uid, conversation_id, request.folder_id)
+    except mcp_folders.FolderError as e:
+        raise _folder_http_error(e)
     return {"status": "ok"}
 
 
@@ -317,11 +410,12 @@ def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     categories: Optional[str] = None,
+    folder_id: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
-    logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
+    logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories} folder={folder_id}")
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
@@ -336,6 +430,7 @@ def get_conversations(
         start_date=start_date,
         end_date=end_date,
         categories=[c.value for c in category_list],
+        folder_id=folder_id,
     )
 
     redact_conversations_for_list(conversations)
