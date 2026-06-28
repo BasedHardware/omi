@@ -104,6 +104,20 @@ jobs:
           path: omi/firmware/v2.9.0
           key: ncs-v2.9.0-${{ runner.os }}
 
+      - name: Sync firmware version into config
+        env:
+          VER: ${{ steps.meta.outputs.ver }}
+        run: |
+          # Make the binary's BLE DIS firmware revision match the release tag.
+          # Without this, a `version` override would publish OTA metadata for one
+          # version while the device reports another -> perpetual update loop.
+          # No-op when version is derived from omi.conf (VER already equals it).
+          CONF=omi/firmware/omi/omi.conf
+          sed -i -E "s|^(CONFIG_BT_DIS_FW_REV_STR=)\".*\"|\1\"$VER\"|" "$CONF"
+          grep -q "CONFIG_BT_DIS_FW_REV_STR=\"$VER\"" "$CONF" || {
+            echo "::error::Failed to set CONFIG_BT_DIS_FW_REV_STR to $VER in $CONF"; exit 1; }
+          echo "omi.conf now: $(grep -E '^CONFIG_BT_DIS_FW_REV_STR=' "$CONF")"
+
       - name: Build firmware (Docker)
         run: |
           docker run --rm \
@@ -167,6 +181,8 @@ jobs:
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+          # Least privilege: only what creating a release/tag needs.
+          permission-contents: write
 
       - name: Publish GitHub Release
         if: ${{ github.event.inputs.publish == 'publish' }}
