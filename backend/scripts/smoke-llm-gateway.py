@@ -40,6 +40,36 @@ def _get_ready(client: httpx.Client, url: str, headers: dict[str, str]) -> httpx
     return client.get(f'{url}/ready', headers=headers)
 
 
+def _assert_success_metric(client: httpx.Client, url: str, metrics_token: str) -> None:
+    headers = {'Authorization': f'Bearer {metrics_token}'}
+    for attempt in range(1, 11):
+        response = client.get(f'{url}/metrics', headers=headers)
+        _raise_for_status(response, '/metrics')
+        metric_line = _find_success_request_metric(response.text)
+        if metric_line is not None:
+            print(f'LLM gateway success metric observed: {metric_line}')
+            return
+        if attempt < 10:
+            time.sleep(2)
+    print('ERROR: llm_gateway_requests_total success metric was not observed')
+    raise RuntimeError('llm gateway success metric missing')
+
+
+def _find_success_request_metric(metrics_text: str) -> str | None:
+    for line in metrics_text.splitlines():
+        if not line.startswith('llm_gateway_requests_total{'):
+            continue
+        if 'lane_id="omi:auto:chat-structured"' not in line or 'outcome="success"' not in line:
+            continue
+        try:
+            value = float(line.rsplit(' ', 1)[-1])
+        except ValueError:
+            continue
+        if value > 0:
+            return line
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Smoke test the internal Omi LLM Gateway.')
     parser.add_argument(
@@ -51,6 +81,16 @@ def main() -> int:
         '--token',
         default=None,
         help='Service bearer token (default: read from OMI_LLM_GATEWAY_SERVICE_TOKEN env var)',
+    )
+    parser.add_argument(
+        '--check-metrics',
+        action='store_true',
+        help='Verify llm_gateway_requests_total increments after the smoke request',
+    )
+    parser.add_argument(
+        '--metrics-token',
+        default=None,
+        help='Metrics bearer token (default: read from METRICS_SECRET env var)',
     )
     args = parser.parse_args()
 
@@ -91,6 +131,12 @@ def main() -> int:
         response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
         _raise_for_status(response, '/v1/chat/completions')
         body = response.json()
+        if args.check_metrics:
+            metrics_token = (args.metrics_token or os.environ.get('METRICS_SECRET') or '').strip()
+            if not metrics_token:
+                print('ERROR: provide --metrics-token or set METRICS_SECRET env var when --check-metrics is used')
+                return 2
+            _assert_success_metric(client, base_url, metrics_token)
 
     content = (body.get('choices') or [{}])[0].get('message', {}).get('content')
     if not isinstance(content, str):

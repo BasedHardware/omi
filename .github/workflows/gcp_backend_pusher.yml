@@ -188,7 +188,7 @@ jobs:
             containers:
               - name: smoke
                 image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
-                command: ["sh", "-c", "python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\""]
+                command: ["sh", "-c", "python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\" --check-metrics --metrics-token \"\$METRICS_SECRET\""]
                 env:
                   - name: SMOKE_URL
                     value: http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080
@@ -197,6 +197,11 @@ jobs:
                       secretKeyRef:
                         name: ${{ vars.ENV }}-omi-backend-secrets
                         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+                  - name: METRICS_SECRET
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${{ vars.ENV }}-omi-backend-secrets
+                        key: METRICS_SECRET
           EOF
 
           for _ in {1..120}; do
