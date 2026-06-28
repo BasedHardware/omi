@@ -41,7 +41,11 @@ class ChatToolExecutor {
     originatingChatMode: ChatMode? = nil,
     originatingClientScope: String? = nil
   ) async -> String {
-    log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    if toolCall.name.hasPrefix("wa_") {
+      log("Executing tool: \(toolCall.name) with redacted WhatsApp args keys=\(toolCall.arguments.keys.sorted())")
+    } else {
+      log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    }
 
     switch toolCall.name {
     case "get_local_status":

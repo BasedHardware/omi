@@ -6,6 +6,7 @@
 import { readFileSync } from "fs";
 import { createConnection } from "net";
 import { createInterface } from "readline";
+import { createHash } from "crypto";
 
 const bridgePipePath = process.env.OMI_BRIDGE_PIPE;
 
@@ -58,6 +59,37 @@ function activeOmiContext(): Record<string, unknown> {
     adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
     legacyAdapterSessionId: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
   };
+}
+
+function stableJSONStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJSONStringify).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([lhs], [rhs]) => lhs.localeCompare(rhs))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJSONStringify(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function withIdempotencyKey(name: string, input: Record<string, unknown>, context: Record<string, unknown>): Record<string, unknown> {
+  if (name !== "wa_send_message" || typeof input.client_message_id === "string" || typeof input.dedupe_id === "string") {
+    return input;
+  }
+  const scope = {
+    requestId: context.requestId,
+    clientId: context.clientId,
+    sessionId: context.sessionId,
+    runId: context.runId,
+    attemptId: context.attemptId,
+  };
+  const hash = createHash("sha256")
+    .update(stableJSONStringify({ scope, input }))
+    .digest("hex")
+    .slice(0, 32);
+  return { ...input, client_message_id: `wa-tool:${hash}` };
 }
 
 function connectToPipe(): Promise<void> {
@@ -130,6 +162,7 @@ async function requestSwiftTool(
   return new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
       pendingToolCalls.delete(callId);
+      sendToolCancel(callId, context);
       reject(new Error(`Timed out waiting for Swift tool result for ${name}`));
     }, 30_000);
     pendingToolCalls.set(callId, { resolve, reject, timeout });
@@ -137,10 +170,19 @@ async function requestSwiftTool(
       type: "tool_use",
       callId,
       name,
-      input,
+      input: withIdempotencyKey(name, input, context),
       ...context,
     }) + "\n");
   });
+}
+
+function sendToolCancel(callId: string, context: Record<string, unknown>): void {
+  if (!pipeConnection) return;
+  pipeConnection.write(JSON.stringify({
+    type: "tool_cancel",
+    callId,
+    ...context,
+  }) + "\n");
 }
 
 function rejectPendingToolCalls(error: Error): void {

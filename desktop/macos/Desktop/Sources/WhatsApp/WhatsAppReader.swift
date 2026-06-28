@@ -1,14 +1,11 @@
 import CryptoKit
 import Foundation
 
-@MainActor
 enum WhatsAppReader {
-  private static let iso8601Formatter = ISO8601DateFormatter()
-
   static func listChats(limit: Int = 50) async -> [MessageThread] {
     let boundedLimit = max(1, min(limit, 200))
     let raw = await runWacliJSON(["chats", "list", "--limit", String(boundedLimit)])
-    return parseChats(raw)
+    return await parseChats(raw)
   }
 
   static func listMessages(chatJid: String, limit: Int = 100) async -> [MessageItem] {
@@ -18,7 +15,7 @@ enum WhatsAppReader {
       "--chat", chatJid,
       "--limit", String(boundedLimit),
     ])
-    return parseMessages(raw)
+    return await parseMessages(raw)
   }
 
   static func backfillRecentMessages(chatJid: String, count: Int = 50) async {
@@ -34,11 +31,11 @@ enum WhatsAppReader {
   private static func runWacliJSON(_ arguments: [String]) async -> Any? {
     let result = await runWacli(arguments, readOnly: true)
     guard result.exitCode == 0, let data = result.output.data(using: .utf8) else {
-      log("WhatsAppReader: wacli failed exit=\(result.exitCode) output=\(result.output.prefix(300))")
+      log("WhatsAppReader: wacli failed exit=\(result.exitCode) outputBytes=\(result.output.utf8.count)")
       return nil
     }
     guard let json = try? JSONSerialization.jsonObject(with: data) else {
-      log("WhatsAppReader: failed to parse wacli JSON for \(arguments.joined(separator: " ")): \(result.output.prefix(300))")
+      log("WhatsAppReader: failed to parse wacli JSON command=\(redactedCommandLabel(arguments)) outputBytes=\(result.output.utf8.count)")
       return nil
     }
     if let envelope = json as? [String: Any], envelope.keys.contains("data") {
@@ -86,8 +83,9 @@ enum WhatsAppReader {
     }.value
   }
 
-  private static func parseChats(_ data: Any?) -> [MessageThread] {
-    collectChats(from: data as Any)
+  private static func parseChats(_ data: Any?) async -> [MessageThread] {
+    let collected = await collectChats(from: data as Any)
+    return collected
       .reduce(into: [String: MessageThread]()) { partial, thread in
         partial[thread.id] = thread
       }
@@ -97,16 +95,22 @@ enum WhatsAppReader {
       }
   }
 
-  private static func collectChats(from value: Any) -> [MessageThread] {
+  private static func collectChats(from value: Any) async -> [MessageThread] {
     if let array = value as? [Any] {
-      return array.flatMap { collectChats(from: $0) }
+      var collected: [MessageThread] = []
+      for item in array {
+        collected.append(contentsOf: await collectChats(from: item))
+      }
+      return collected
     }
     guard let object = value as? [String: Any] else { return [] }
 
-    var threads = nestedCollectionValues(object, keys: ["data", "chats", "items", "results", "conversations"])
-      .flatMap { collectChats(from: $0) }
+    var threads: [MessageThread] = []
+    for nested in nestedCollectionValues(object, keys: ["data", "chats", "items", "results", "conversations"]) {
+      threads.append(contentsOf: await collectChats(from: nested))
+    }
     guard let jid = stringValue(object, keys: ["jid", "JID", "chatJid", "ChatJID", "chat_jid", "id", "ID", "chat"]),
-      isWhatsAppJid(jid)
+      isJidLike(jid)
     else {
       return threads
     }
@@ -117,9 +121,9 @@ enum WhatsAppReader {
       "displayName", "DisplayName", "chatName", "ChatName",
     ])
     if !isGroup {
-      WhatsAppContactResolver.shared.remember(jid: jid, contactName: rawTitle)
+      await WhatsAppContactResolver.shared.remember(jid: jid, contactName: rawTitle)
     }
-    let title = displayTitle(for: jid, rawTitle: rawTitle, isGroup: isGroup)
+    let title = await displayTitle(for: jid, rawTitle: rawTitle, isGroup: isGroup)
     let subtitle = subtitle(for: jid, object: object, isGroup: isGroup)
     let preview = stringValue(object, keys: [
       "lastMessagePreview", "last_message_preview", "lastMessageText", "last_message_text",
@@ -149,8 +153,9 @@ enum WhatsAppReader {
     return threads
   }
 
-  private static func parseMessages(_ data: Any?) -> [MessageItem] {
-    collectMessages(from: data as Any)
+  private static func parseMessages(_ data: Any?) async -> [MessageItem] {
+    let collected = await collectMessages(from: data as Any)
+    return collected
       .reduce(into: [String: MessageItem]()) { partial, message in
         partial[message.id] = message
       }
@@ -160,14 +165,20 @@ enum WhatsAppReader {
       }
   }
 
-  private static func collectMessages(from value: Any) -> [MessageItem] {
+  private static func collectMessages(from value: Any) async -> [MessageItem] {
     if let array = value as? [Any] {
-      return array.flatMap { collectMessages(from: $0) }
+      var collected: [MessageItem] = []
+      for item in array {
+        collected.append(contentsOf: await collectMessages(from: item))
+      }
+      return collected
     }
     guard let object = value as? [String: Any] else { return [] }
 
-    var messages = nestedCollectionValues(object, keys: ["data", "messages", "items", "results"])
-      .flatMap { collectMessages(from: $0) }
+    var messages: [MessageItem] = []
+    for nested in nestedCollectionValues(object, keys: ["data", "messages", "items", "results"]) {
+      messages.append(contentsOf: await collectMessages(from: nested))
+    }
     let rawText = stringValue(object, keys: ["text", "body", "message", "caption", "Text"])
     let displayText = stringValue(object, keys: ["DisplayText", "displayText"])
     guard let text = rawText ?? displayText,
@@ -183,13 +194,16 @@ enum WhatsAppReader {
     let timestamp = dateValue(object, keys: [
       "timestamp", "Timestamp", "time", "createdAt", "CreatedAt", "messageTimestamp", "message_timestamp",
     ])
-    guard senderJid != nil || timestamp != nil || stringValue(object, keys: ["id", "ID", "messageId", "message_id", "MsgID"]) != nil else {
-      return messages
-    }
     let id = stringValue(object, keys: ["id", "ID", "messageId", "message_id", "MsgID"])
       ?? stableFallbackMessageID(senderJid: senderJid, timestamp: timestamp, text: text)
-    let senderName = stringValue(object, keys: ["senderName", "SenderName", "pushName", "PushName", "name", "Name"])
-      ?? senderJid.map { WhatsAppContactResolver.shared.displayName(for: $0) }
+    let senderName: String?
+    if let value = stringValue(object, keys: ["senderName", "SenderName", "pushName", "PushName", "name", "Name"]) {
+      senderName = value
+    } else if let senderJid {
+      senderName = await WhatsAppContactResolver.shared.displayName(for: senderJid)
+    } else {
+      senderName = nil
+    }
 
     messages.append(MessageItem(
       id: id,
@@ -233,10 +247,10 @@ enum WhatsAppReader {
     }
   }
 
-  private static func displayTitle(for jid: String, rawTitle: String?, isGroup: Bool) -> String {
+  private static func displayTitle(for jid: String, rawTitle: String?, isGroup: Bool) async -> String {
     let cleanedTitle = rawTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
     let fallback = isGroup ? "WhatsApp Group" : nil
-    let resolved = WhatsAppContactResolver.shared.displayName(for: jid, fallback: cleanedTitle ?? fallback)
+    let resolved = await WhatsAppContactResolver.shared.displayName(for: jid, fallback: cleanedTitle ?? fallback)
     if isJidLike(resolved) {
       return phoneNumber(from: jid) ?? (isGroup ? "WhatsApp Group" : jid)
     }
@@ -252,16 +266,10 @@ enum WhatsAppReader {
   }
 
   private static func isJidLike(_ value: String) -> Bool {
-    let lowercased = value.lowercased()
-    return isWhatsAppJid(lowercased)
-  }
-
-  private static func isWhatsAppJid(_ value: String) -> Bool {
-    let lowercased = value.lowercased()
-    return lowercased.hasSuffix("@s.whatsapp.net")
-      || lowercased.hasSuffix("@g.us")
-      || lowercased.hasSuffix("@lid")
-      || lowercased.hasSuffix("@broadcast")
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let parts = trimmed.split(separator: "@", omittingEmptySubsequences: false)
+    guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty }) else { return false }
+    return trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
   }
 
   private static func phoneNumber(from jid: String) -> String? {
@@ -330,7 +338,7 @@ enum WhatsAppReader {
         return Date(timeIntervalSince1970: seconds > 10_000_000_000 ? seconds / 1000 : seconds)
       }
       if let string = object[key] as? String {
-        if let date = iso8601Formatter.date(from: string) {
+        if let date = ISO8601DateFormatter().date(from: string) {
           return date
         }
         if let seconds = TimeInterval(string) {
@@ -345,5 +353,9 @@ enum WhatsAppReader {
     let source = "\(senderJid ?? "unknown"):\(Int(timestamp?.timeIntervalSince1970 ?? 0)):\(text)"
     let digest = SHA256.hash(data: Data(source.utf8))
     return digest.map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func redactedCommandLabel(_ arguments: [String]) -> String {
+    arguments.prefix(2).joined(separator: " ")
   }
 }

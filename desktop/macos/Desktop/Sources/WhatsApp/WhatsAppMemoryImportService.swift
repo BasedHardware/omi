@@ -142,7 +142,7 @@ final class WhatsAppMemoryImportService: ObservableObject {
     }
     guard result.exitCode == 0 else {
       lastError = result.output
-      log("WhatsAppMemoryImportService: failed to read messages: \(result.output.prefix(300))")
+      log("WhatsAppMemoryImportService: failed to read messages exit=\(result.exitCode) outputBytes=\(result.output.utf8.count)")
       return []
     }
     return parseMessages(from: result.output)
@@ -319,22 +319,27 @@ final class WhatsAppMemoryImportService: ObservableObject {
     else {
       return []
     }
-    return collectMessages(from: json)
+    return collectMessages(from: json, path: "root")
   }
 
-  private func collectMessages(from value: Any) -> [WhatsAppSyncedMessage] {
+  private func collectMessages(from value: Any, path: String) -> [WhatsAppSyncedMessage] {
     if let array = value as? [Any] {
-      return array.flatMap { collectMessages(from: $0) }
+      return array.enumerated().flatMap { index, item in
+        collectMessages(from: item, path: "\(path).\(index)")
+      }
     }
     guard let object = value as? [String: Any] else { return [] }
-    var messages = object.values.flatMap { collectMessages(from: $0) }
+    var messages = object.keys.sorted().flatMap { key in
+      collectMessages(from: object[key] as Any, path: "\(path).\(key)")
+    }
 
     let chatJid = stringValue(object, keys: ["chatJid", "ChatJID", "chat_jid", "chat", "to", "from"])
     let senderJid = stringValue(object, keys: ["senderJid", "SenderJID", "sender_jid", "sender", "participant", "from"]) ?? chatJid
     let text = stringValue(object, keys: ["text", "body", "message", "caption", "Text", "DisplayText"])
     if let chatJid, let senderJid, let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      let timestamp = dateValue(object, keys: ["timestamp", "Timestamp", "time", "createdAt"])
       let id = stringValue(object, keys: ["id", "ID", "messageId", "message_id", "MsgID"])
-        ?? stableFallbackMessageID(chatJid: chatJid, senderJid: senderJid, text: text)
+        ?? stableFallbackMessageID(chatJid: chatJid, senderJid: senderJid, timestamp: timestamp, text: text, sourcePosition: path)
       messages.append(WhatsAppSyncedMessage(
         id: id,
         chatJid: chatJid,
@@ -342,7 +347,7 @@ final class WhatsAppMemoryImportService: ObservableObject {
         senderName: stringValue(object, keys: ["senderName", "SenderName", "pushName", "PushName", "name", "chatName", "ChatName"]),
         text: text,
         fromMe: boolValue(object, keys: ["fromMe", "from_me", "isFromMe", "FromMe"]) ?? false,
-        timestamp: dateValue(object, keys: ["timestamp", "Timestamp", "time", "createdAt"]),
+        timestamp: timestamp,
         isGroup: (boolValue(object, keys: ["isGroup", "is_group", "group"]) ?? false) || chatJid.contains("@g.us")
       ))
     }
@@ -374,8 +379,15 @@ final class WhatsAppMemoryImportService: ObservableObject {
     "\(message.chatJid)|\(message.senderJid)|\(message.id)|\(Int(message.timestamp?.timeIntervalSince1970 ?? 0))"
   }
 
-  private nonisolated func stableFallbackMessageID(chatJid: String, senderJid: String, text: String) -> String {
-    let source = "\(chatJid):\(senderJid):\(text)"
+  private nonisolated func stableFallbackMessageID(
+    chatJid: String,
+    senderJid: String,
+    timestamp: Date?,
+    text: String,
+    sourcePosition: String
+  ) -> String {
+    let timestampPart = timestamp.map { String(Int($0.timeIntervalSince1970)) } ?? "position:\(sourcePosition)"
+    let source = "\(chatJid):\(senderJid):\(timestampPart):\(text)"
     let digest = SHA256.hash(data: Data(source.utf8))
     return digest.map { String(format: "%02x", $0) }.joined()
   }
