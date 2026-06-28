@@ -29,6 +29,7 @@ from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
     parse_mcp_bool,
@@ -445,6 +446,81 @@ def get_action_items(
         offset=offset,
     )
     return [clean_action_item(i) for i in items if not i.get("deleted", False)]
+
+
+class McpCreateActionItem(BaseModel):
+    description: str
+    due_at: Optional[datetime] = None
+    completed: bool = False
+
+
+class McpUpdateActionItem(BaseModel):
+    description: Optional[str] = None
+    due_at: Optional[datetime] = None
+
+
+def _action_item_write_error(exc: Exception) -> HTTPException:
+    """Map a shared action-item write error to the REST status the memory writes use."""
+    if isinstance(exc, mcp_action_items.ActionItemNotFound):
+        return HTTPException(status_code=404, detail="Action item not found")
+    if isinstance(exc, mcp_action_items.ActionItemLocked):
+        return HTTPException(status_code=402, detail="A paid plan is required to modify this action item.")
+    return HTTPException(status_code=500, detail="Action item write failed")
+
+
+@router.get("/v1/mcp/action-items/search", response_model=List[SimpleActionItem], tags=["mcp"])
+def search_action_items(query: str, limit: int = 10, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"search_action_items {uid} limit={limit}")
+    try:
+        return mcp_action_items.search_action_items(uid, query, limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post("/v1/mcp/action-items", response_model=SimpleActionItem, tags=["mcp"])
+def create_action_item(
+    body: McpCreateActionItem,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
+    logger.info(f"create_action_item {uid} completed={body.completed} has_due={body.due_at is not None}")
+    try:
+        return mcp_action_items.create_action_item(uid, body.description, due_at=body.due_at, completed=body.completed)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except mcp_action_items.ActionItemError as e:
+        raise _action_item_write_error(e)
+
+
+@router.post("/v1/mcp/action-items/{action_item_id}/complete", response_model=SimpleActionItem, tags=["mcp"])
+def complete_action_item(action_item_id: str, completed: bool = True, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"complete_action_item {uid} id={action_item_id} completed={completed}")
+    try:
+        return mcp_action_items.set_completed(uid, action_item_id, completed=completed)
+    except mcp_action_items.ActionItemError as e:
+        raise _action_item_write_error(e)
+
+
+@router.patch("/v1/mcp/action-items/{action_item_id}", response_model=SimpleActionItem, tags=["mcp"])
+def update_action_item(action_item_id: str, body: McpUpdateActionItem, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"update_action_item {uid} id={action_item_id}")
+    try:
+        return mcp_action_items.update_action_item(
+            uid, action_item_id, description=body.description, due_at=body.due_at
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except mcp_action_items.ActionItemError as e:
+        raise _action_item_write_error(e)
+
+
+@router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"])
+def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"delete_action_item {uid} id={action_item_id}")
+    try:
+        mcp_action_items.delete_action_item(uid, action_item_id)
+    except mcp_action_items.ActionItemError as e:
+        raise _action_item_write_error(e)
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------
