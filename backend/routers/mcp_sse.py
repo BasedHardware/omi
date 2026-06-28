@@ -35,6 +35,7 @@ from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
     parse_mcp_bool,
@@ -60,6 +61,7 @@ MCP_SCOPES_SUPPORTED = [
     "memories.write",
     "conversations.read",
     "action_items.read",
+    "action_items.write",
     "goals.read",
     "chat.read",
     "screen_activity.read",
@@ -88,6 +90,7 @@ MEMORIES_READ_SECURITY = [{"type": "oauth2", "scopes": ["memories.read"]}]
 MEMORIES_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["memories.write"]}]
 CONVERSATIONS_READ_SECURITY = [{"type": "oauth2", "scopes": ["conversations.read"]}]
 ACTION_ITEMS_READ_SECURITY = [{"type": "oauth2", "scopes": ["action_items.read"]}]
+ACTION_ITEMS_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["action_items.write"]}]
 GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
@@ -358,6 +361,100 @@ MCP_TOOLS = [
                 "limit": {"type": "integer", "description": "Number of action items to retrieve", "default": 100},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
             },
+        },
+    },
+    {
+        "name": "search_action_items",
+        "description": (
+            "Semantic search across the user's action items (tasks/to-dos). Returns tasks ranked by relevance to "
+            "the query — use this to find a specific task by what it is about before completing or updating it."
+        ),
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": ACTION_ITEMS_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "What to search the user's tasks for"},
+                "limit": {"type": "integer", "description": "Max number of tasks to return (1-50)", "default": 10},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "create_action_item",
+        "description": (
+            "Create a new action item (task/to-do) for the user — for example a follow-up you identified while "
+            "helping them. Retries with the same description return the existing task instead of duplicating it."
+        ),
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": ACTION_ITEMS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "description": "What the user needs to do"},
+                "due_at": {
+                    "type": "string",
+                    "description": "Optional due date/time, ISO 8601 (2026-07-01T17:00:00Z) or YYYY-MM-DD",
+                },
+                "completed": {
+                    "type": "boolean",
+                    "description": "Create it already completed (default false)",
+                    "default": False,
+                },
+            },
+            "required": ["description"],
+        },
+    },
+    {
+        "name": "complete_action_item",
+        "description": "Mark an action item complete, or reopen it by passing completed=false.",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": ACTION_ITEMS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action_item_id": {"type": "string", "description": "The ID of the action item"},
+                "completed": {
+                    "type": "boolean",
+                    "description": "True to complete (default), false to reopen",
+                    "default": True,
+                },
+            },
+            "required": ["action_item_id"],
+        },
+    },
+    {
+        "name": "update_action_item",
+        "description": (
+            "Update an action item's description and/or due date. Only the fields you pass are changed; an omitted "
+            "due date is left unchanged."
+        ),
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": ACTION_ITEMS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action_item_id": {"type": "string", "description": "The ID of the action item"},
+                "description": {"type": "string", "description": "New description for the task"},
+                "due_at": {
+                    "type": "string",
+                    "description": "New due date/time, ISO 8601 (2026-07-01T17:00:00Z) or YYYY-MM-DD",
+                },
+            },
+            "required": ["action_item_id"],
+        },
+    },
+    {
+        "name": "delete_action_item",
+        "description": "Delete an action item by ID. Use this to clean up a task that is no longer relevant.",
+        "annotations": DESTRUCTIVE_WRITE_ANNOTATIONS,
+        "securitySchemes": ACTION_ITEMS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "action_item_id": {"type": "string", "description": "The ID of the action item to delete"},
+            },
+            "required": ["action_item_id"],
         },
     },
     {
@@ -819,6 +916,74 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             offset=offset,
         )
         return {"action_items": [clean_action_item(i) for i in items if not i.get("deleted", False)]}
+
+    elif tool_name == "search_action_items":
+        try:
+            items = mcp_action_items.search_action_items(
+                user_id, arguments.get("query"), limit=arguments.get("limit", 10)
+            )
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        return {"action_items": items}
+
+    elif tool_name == "create_action_item":
+        try:
+            completed = parse_mcp_bool(arguments.get("completed"), "completed", default=False)
+            item = mcp_action_items.create_action_item(
+                user_id,
+                arguments.get("description"),
+                due_at=arguments.get("due_at"),
+                completed=completed,
+            )
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        return {"success": True, "action_item": item}
+
+    elif tool_name == "complete_action_item":
+        action_item_id = arguments.get("action_item_id")
+        if not action_item_id:
+            raise ToolExecutionError("action_item_id is required", code=-32602)
+        try:
+            completed = parse_mcp_bool(arguments.get("completed"), "completed", default=True)
+            item = mcp_action_items.set_completed(user_id, action_item_id, completed=completed)
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        except mcp_action_items.ActionItemNotFound:
+            raise ToolExecutionError("Action item not found", code=-32001)
+        except mcp_action_items.ActionItemLocked:
+            raise ToolExecutionError("A paid plan is required to modify this action item.", code=-32002)
+        return {"success": True, "action_item": item}
+
+    elif tool_name == "update_action_item":
+        action_item_id = arguments.get("action_item_id")
+        if not action_item_id:
+            raise ToolExecutionError("action_item_id is required", code=-32602)
+        try:
+            item = mcp_action_items.update_action_item(
+                user_id,
+                action_item_id,
+                description=arguments.get("description"),
+                due_at=arguments.get("due_at"),
+            )
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        except mcp_action_items.ActionItemNotFound:
+            raise ToolExecutionError("Action item not found", code=-32001)
+        except mcp_action_items.ActionItemLocked:
+            raise ToolExecutionError("A paid plan is required to modify this action item.", code=-32002)
+        return {"success": True, "action_item": item}
+
+    elif tool_name == "delete_action_item":
+        action_item_id = arguments.get("action_item_id")
+        if not action_item_id:
+            raise ToolExecutionError("action_item_id is required", code=-32602)
+        try:
+            mcp_action_items.delete_action_item(user_id, action_item_id)
+        except mcp_action_items.ActionItemNotFound:
+            raise ToolExecutionError("Action item not found", code=-32001)
+        except mcp_action_items.ActionItemLocked:
+            raise ToolExecutionError("A paid plan is required to modify this action item.", code=-32002)
+        return {"success": True}
 
     elif tool_name == "get_goals":
         include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
