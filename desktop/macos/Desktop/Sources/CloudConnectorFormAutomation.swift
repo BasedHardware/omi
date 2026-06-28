@@ -387,13 +387,49 @@ enum CloudConnectorFormAutomation {
     nodes: [AccessibleNode],
     screen: SpatialOverlayScreen
   ) -> [SpatialOverlayAnchorCandidate] {
-    let explicitFrames =
+    let addFrames =
       findActionNode(in: nodes, matching: ["add"])
       .map { [SpatialOverlayGeometry.appKitFrame(topLeftFrame: $0.frame, screenFrame: screen.frame)] }
       ?? []
-    return claudeAddGuidanceCandidates(
+    var candidates = claudeAddGuidanceCandidates(
       windowFrame: windowFrame,
-      explicitTargetFrames: explicitFrames
+      explicitTargetFrames: addFrames
+    )
+    if addFrames.isEmpty,
+      let cancel = findActionNode(in: nodes, matching: ["cancel"])
+    {
+      let inferredFrame = inferredClaudeAddButtonFrameFromCancel(cancel.frame)
+      let appKitFrame = SpatialOverlayGeometry.appKitFrame(
+        topLeftFrame: inferredFrame,
+        screenFrame: screen.frame
+      )
+      let inferred = SpatialOverlayAnchorCandidate(
+        id: "claude-add-inferred-from-cancel",
+        targetRect: appKitFrame,
+        screen: screen,
+        window: candidates.first?.window,
+        evidence: [
+          SpatialOverlayTargetEvidence(
+            source: .layoutHeuristic,
+            confidence: 0.82,
+            label: "Claude Add inferred from Cancel button",
+            diagnostics: ["display-guidance-only", "inferred-from-cancel-button"]
+          )
+        ],
+        confidence: 0.82,
+        allowedUses: [.displayGuidance]
+      )
+      candidates.insert(inferred, at: 0)
+    }
+    return candidates
+  }
+
+  nonisolated static func inferredClaudeAddButtonFrameFromCancel(_ cancelFrame: CGRect) -> CGRect {
+    CGRect(
+      x: cancelFrame.maxX + 12,
+      y: cancelFrame.minY,
+      width: max(72, min(96, cancelFrame.height * 1.65)),
+      height: cancelFrame.height
     )
   }
 

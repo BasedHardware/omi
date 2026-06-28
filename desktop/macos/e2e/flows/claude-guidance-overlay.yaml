@@ -46,6 +46,33 @@ steps:
       result.detail.visible: "false"
 
   - id: S5
+    name: Present Claude Add Inferred Overlay Fixture
+    bridge.action:
+      name: spatial_overlay_present_fixture
+      params:
+        fixture: claude-add-inferred-from-cancel
+        settleMs: "150"
+    expect:
+      result.detail.visible: "true"
+      result.detail.issues: ""
+      result.detail.action: add
+      result.detail.candidateId: claude-add-inferred-from-cancel
+      result.detail.candidateSource: layoutHeuristic
+
+  - id: S6
+    name: Capture Claude Add Inferred Overlay
+    visual.export:
+      name: claude-add-inferred-overlay
+      target: overlay
+
+  - id: S7
+    name: Dismiss Inferred Overlay
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S8
     name: Present Claude Add Heuristic Overlay Fixture
     bridge.action:
       name: spatial_overlay_present_fixture
@@ -58,20 +85,20 @@ steps:
       result.detail.action: add
       result.detail.candidateSource: layoutHeuristic
 
-  - id: S6
+  - id: S9
     name: Capture Claude Add Heuristic Overlay
     visual.export:
       name: claude-add-heuristic-overlay
       target: overlay
 
-  - id: S7
+  - id: S10
     name: Dismiss Heuristic Overlay
     bridge.action:
       name: spatial_overlay_dismiss
     expect:
       result.detail.visible: "false"
 
-  - id: S8
+  - id: S11
     name: Logs Clean
     log.expect:
       absent:

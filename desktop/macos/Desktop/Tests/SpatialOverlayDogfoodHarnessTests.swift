@@ -31,6 +31,30 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
     assertTopLeftCallout(placement, fixture: fixture)
   }
 
+  @MainActor
+  func testClaudeAddGuidanceFixtureCanInferAddButtonFromCancel() throws {
+    let fixture = SpatialOverlayDogfoodFixture.claudeAddInferredFromCancel
+
+    let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
+      windowFrame: fixture.windowFrame,
+      candidates: fixture.candidates
+    ))
+
+    assertCallout(placement, pointsAt: fixture.targetRect, doesNotCover: fixture.targetRect)
+    assertTopLeftCallout(placement, fixture: fixture)
+  }
+
+  func testClaudeAddButtonInferenceUsesCancelFooterGeometry() {
+    let cancel = CGRect(x: 1_006, y: 1_296, width: 106, height: 54)
+    let add = CloudConnectorFormAutomation.inferredClaudeAddButtonFrameFromCancel(cancel)
+
+    XCTAssertEqual(add.minX, cancel.maxX + 12, accuracy: 0.1)
+    XCTAssertEqual(add.midY, cancel.midY, accuracy: 0.1)
+    XCTAssertEqual(add.height, cancel.height, accuracy: 0.1)
+    XCTAssertGreaterThanOrEqual(add.width, 72)
+    XCTAssertLessThanOrEqual(add.width, 96)
+  }
+
   func testClaudeAddDogfoodWouldFailIfOverlayCoveredTarget() {
     let addButton = CGRect(x: 1_124, y: 246, width: 92, height: 54)
     let badPlacement = SpatialOverlayPlacementResult(

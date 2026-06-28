@@ -3,13 +3,14 @@ import Foundation
 
 enum SpatialOverlayDogfoodFixture: String, CaseIterable {
   case claudeAddExplicit = "claude-add-explicit"
+  case claudeAddInferredFromCancel = "claude-add-inferred-from-cancel"
   case claudeAddHeuristic = "claude-add-heuristic"
   case claudeConnectExplicit = "claude-connect-explicit"
   case claudeConnectHeuristic = "claude-connect-heuristic"
 
   var actionLabel: String {
     switch self {
-    case .claudeAddExplicit, .claudeAddHeuristic:
+    case .claudeAddExplicit, .claudeAddInferredFromCancel, .claudeAddHeuristic:
       return "Add"
     case .claudeConnectExplicit, .claudeConnectHeuristic:
       return "Connect"
@@ -18,7 +19,7 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
 
   var windowFrame: CGRect {
     switch self {
-    case .claudeAddExplicit, .claudeAddHeuristic:
+    case .claudeAddExplicit, .claudeAddInferredFromCancel, .claudeAddHeuristic:
       return CGRect(x: 0, y: 0, width: 1510, height: 1596)
     case .claudeConnectExplicit, .claudeConnectHeuristic:
       return CGRect(x: 0, y: 0, width: 1920, height: 1080)
@@ -29,6 +30,12 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
     switch self {
     case .claudeAddExplicit:
       return appKitRect(topLeftRect: CGRect(x: 1_124, y: 1_296, width: 92, height: 54))
+    case .claudeAddInferredFromCancel:
+      return appKitRect(
+        topLeftRect: CloudConnectorFormAutomation.inferredClaudeAddButtonFrameFromCancel(
+          CGRect(x: 1_006, y: 1_296, width: 106, height: 54)
+        )
+      )
     case .claudeAddHeuristic:
       let point = CloudConnectorFormAutomation.claudeAddGuidanceAnchor(in: windowFrame)
       return CGRect(x: point.x - 46, y: point.y - 27, width: 92, height: 54)
@@ -44,6 +51,8 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
     switch self {
     case .claudeAddExplicit:
       return CGRect(x: 1_124, y: 1_296, width: 92, height: 54)
+    case .claudeAddInferredFromCancel:
+      return topLeftRect(appKitRect: targetRect)
     case .claudeAddHeuristic:
       return topLeftRect(appKitRect: targetRect)
     case .claudeConnectExplicit:
@@ -60,6 +69,8 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
         windowFrame: windowFrame,
         explicitTargetFrames: [targetRect]
       )
+    case .claudeAddInferredFromCancel:
+      return [inferredAddCandidate]
     case .claudeAddHeuristic:
       return CloudConnectorFormAutomation.claudeAddGuidanceCandidates(
         windowFrame: windowFrame,
@@ -89,6 +100,31 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
 
   private func appKitRect(topLeftRect: CGRect) -> CGRect {
     SpatialOverlayGeometry.appKitFrame(topLeftFrame: topLeftRect, screenFrame: windowFrame)
+  }
+
+  private var inferredAddCandidate: SpatialOverlayAnchorCandidate {
+    let screen = SpatialOverlayScreen(id: "claude-window", frame: windowFrame, visibleFrame: windowFrame)
+    let window = SpatialOverlayWindow(
+      id: "claude-window",
+      frame: windowFrame,
+      screenID: screen.id
+    )
+    return SpatialOverlayAnchorCandidate(
+      id: "claude-add-inferred-from-cancel",
+      targetRect: targetRect,
+      screen: screen,
+      window: window,
+      evidence: [
+        SpatialOverlayTargetEvidence(
+          source: .layoutHeuristic,
+          confidence: 0.82,
+          label: "Claude Add inferred from Cancel button",
+          diagnostics: ["display-guidance-only", "inferred-from-cancel-button"]
+        )
+      ],
+      confidence: 0.82,
+      allowedUses: [.displayGuidance]
+    )
   }
 }
 

@@ -99,7 +99,7 @@ final class CloudConnectorGuidanceOverlay {
 
   func presentAutomationFixture(_ fixture: SpatialOverlayDogfoodFixture) -> [String: String] {
     switch fixture {
-    case .claudeAddExplicit, .claudeAddHeuristic:
+    case .claudeAddExplicit, .claudeAddInferredFromCancel, .claudeAddHeuristic:
       presentClaudeAddHint(windowFrame: fixture.windowFrame, candidates: fixture.candidates)
     case .claudeConnectExplicit, .claudeConnectHeuristic:
       presentClaudeConnectHint(windowFrame: fixture.windowFrame, candidates: fixture.candidates)
