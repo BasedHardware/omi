@@ -673,20 +673,30 @@ def test_llm_agent_model_kwargs_via_real_instantiation():
     }
     exec(source, ns)
 
-    # Verify gpt-5.1 clients get prompt_cache_retention via extra_body
-    gpt51_clients = [c for c in captured_calls if c.get("model") == "gpt-5.1"]
-    for call in gpt51_clients:
-        eb = call.get("extra_body", {})
-        assert (
-            eb.get("prompt_cache_retention") == "24h"
-        ), f"gpt-5.1 client missing prompt_cache_retention in extra_body: {call}"
+    # Retention is gated by capability (gpt-5.x / o-series families), not an exact model name.
+    # Classify each captured client the same way clients.py does, via model_config.
+    import importlib.util as _ilu
 
-    # Verify non-gpt-5.1 clients do NOT have prompt_cache_retention
-    non_gpt51_clients = [c for c in captured_calls if c.get("model") != "gpt-5.1"]
-    for call in non_gpt51_clients:
+    _spec = _ilu.spec_from_file_location("_mc_cap_test", BACKEND_DIR / "utils" / "llm" / "model_config.py")
+    _mc = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_mc)
+    supports_cache_retention = _mc.supports_cache_retention
+
+    # Retention-capable models must carry prompt_cache_retention; all others must not.
+    for call in captured_calls:
+        model = call.get("model")
         eb = call.get("extra_body", {})
-        assert "prompt_cache_retention" not in eb, f"Non-gpt-5.1 client should not have prompt_cache_retention: {call}"
-    for call in non_gpt51_clients:
+        if model and supports_cache_retention(model):
+            assert (
+                eb.get("prompt_cache_retention") == "24h"
+            ), f"retention-capable client {model} missing prompt_cache_retention in extra_body: {call}"
+        else:
+            assert (
+                "prompt_cache_retention" not in eb
+            ), f"non-retention-capable client {model} should not have prompt_cache_retention: {call}"
+
+    # prompt_cache_key is bound per-request in get_llm(), never baked into module-level model_kwargs.
+    for call in captured_calls:
         mkw = call.get("model_kwargs", {})
         assert "prompt_cache_key" not in mkw, f"Client {call.get('model')} should not have prompt_cache_key"
 
