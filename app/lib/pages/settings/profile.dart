@@ -7,6 +7,8 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
+import 'package:omi/pages/settings/cortex_models_page.dart';
+import 'package:omi/pages/settings/cortex_pro_page.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
 import 'package:omi/pages/settings/people.dart';
@@ -519,6 +521,28 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const CustomVocabularyPage());
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 32),
+
+            // CORTEX SECTION
+            _buildSectionContainer(
+              children: [
+                _buildProfileItem(
+                  title: context.l10n.cortexModelsTitle,
+                  icon: const FaIcon(FontAwesomeIcons.microchip, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const CortexModelsPage());
+                  },
+                ),
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: context.l10n.cortexProTitle,
+                  icon: const FaIcon(FontAwesomeIcons.crown, color: Color(0xFF8E8E93), size: 20),
+                  onTap: () {
+                    routeToPage(context, const CortexProPage());
                   },
                 ),
               ],
