@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 from types import ModuleType
@@ -7,6 +8,7 @@ os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 os.environ['MCP_OAUTH_CHATGPT_CLIENT_SECRET'] = 'client-secret'
 os.environ['MCP_OAUTH_CHATGPT_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
+os.environ['MCP_OAUTH_PUBLIC_REDIRECT_URIS'] = 'https://chatgpt.com/connector_platform_oauth_redirect'
 
 
 class _AutoMockModule(ModuleType):
@@ -108,6 +110,7 @@ from database import mcp_oauth
 def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
     client = mcp_oauth.get_client('omi')
     assert mcp_oauth.verify_client_secret(client, 'client-secret')
+    assert mcp_oauth.verify_client_auth(client, 'client-secret')
     assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector_platform_oauth_redirect')
 
     scopes = mcp_oauth.normalize_scopes('memories.read conversations.read', client)
@@ -137,6 +140,123 @@ def test_authorization_code_exchange_issues_scoped_tokens_and_rejects_reuse():
     auth_context = mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
     assert auth_context['uid'] == 'user-1'
     assert auth_context['scopes'] == ['conversations.read', 'memories.read']
+
+
+def test_public_client_uses_pkce_without_shared_secret():
+    client = mcp_oauth.get_client('omi-mcp-public')
+    assert client['token_endpoint_auth_method'] == 'none'
+    assert mcp_oauth.verify_client_auth(client, None)
+    assert not mcp_oauth.verify_client_auth(client, 'unexpected-secret')
+    assert mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector_platform_oauth_redirect')
+
+    scopes = mcp_oauth.normalize_scopes('memories.read', client)
+    verifier = 'b' * 64
+    grant = mcp_oauth.create_or_update_grant('user-public', 'omi-mcp-public', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    code = mcp_oauth.issue_authorization_code(
+        'user-public',
+        grant['id'],
+        'omi-mcp-public',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256(verifier),
+    )
+
+    token_pair = mcp_oauth.exchange_authorization_code_for_tokens(
+        code,
+        'omi-mcp-public',
+        'https://chatgpt.com/connector_platform_oauth_redirect',
+        mcp_oauth.MCP_RESOURCE_URL,
+        verifier,
+    )
+    assert token_pair['access_token'].startswith('omi_oat_')
+    assert (
+        mcp_oauth.validate_access_token(token_pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)['uid'] == 'user-public'
+    )
+
+
+def test_public_client_rejects_unregistered_redirect_uri():
+    client = mcp_oauth.get_client('omi-mcp-public')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://example.com/oauth/callback')
+
+
+def test_public_client_refresh_token_rotates_without_shared_secret():
+    client = mcp_oauth.get_client('omi-mcp-public')
+    assert mcp_oauth.verify_client_auth(client, None)
+
+    scopes = ['memories.read']
+    grant = mcp_oauth.create_or_update_grant(
+        'user-public-refresh', 'omi-mcp-public', mcp_oauth.MCP_RESOURCE_URL, scopes
+    )
+    first_pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+
+    second_pair = mcp_oauth.rotate_refresh_token(
+        first_pair['refresh_token'], 'omi-mcp-public', mcp_oauth.MCP_RESOURCE_URL
+    )
+    assert second_pair['refresh_token'] != first_pair['refresh_token']
+    assert (
+        mcp_oauth.rotate_refresh_token(first_pair['refresh_token'], 'other-client', mcp_oauth.MCP_RESOURCE_URL) is None
+    )
+
+
+def test_generic_env_client_registry_supports_additional_connectors(monkeypatch):
+    monkeypatch.setenv(
+        'MCP_OAUTH_CLIENTS_JSON',
+        json.dumps(
+            [
+                {
+                    'client_id': 'claude-test',
+                    'client_type': 'public',
+                    'redirect_uris': ['https://claude.ai/api/mcp/auth_callback'],
+                    'scopes': ['memories.read'],
+                }
+            ]
+        ),
+    )
+
+    client = mcp_oauth.get_client('claude-test')
+    assert client['token_endpoint_auth_method'] == 'none'
+    assert client['allowed_scopes'] == ['memories.read']
+    assert mcp_oauth.validate_redirect_uri(client, 'https://claude.ai/api/mcp/auth_callback')
+    assert not mcp_oauth.validate_redirect_uri(client, 'https://chatgpt.com/connector_platform_oauth_redirect')
+
+
+def test_generic_env_client_rejects_string_public_flag(monkeypatch):
+    monkeypatch.setenv(
+        'MCP_OAUTH_CLIENTS_JSON',
+        json.dumps(
+            [
+                {
+                    'client_id': 'misconfigured-public',
+                    'public': 'false',
+                    'redirect_uris': ['https://example.com/callback'],
+                }
+            ]
+        ),
+    )
+
+    assert mcp_oauth.get_client('misconfigured-public') is None
+
+
+def test_default_clients_can_request_all_supported_tool_scopes():
+    requested_scopes = ' '.join(
+        [
+            'memories.read',
+            'memories.write',
+            'conversations.read',
+            'action_items.read',
+            'action_items.write',
+            'goals.read',
+            'chat.read',
+            'screen_activity.read',
+            'people.read',
+        ]
+    )
+
+    assert mcp_oauth.normalize_scopes(requested_scopes, mcp_oauth.get_client('omi')) == sorted(requested_scopes.split())
+    assert mcp_oauth.normalize_scopes(requested_scopes, mcp_oauth.get_client('omi-mcp-public')) == sorted(
+        requested_scopes.split()
+    )
 
 
 def test_refresh_token_rotates_and_old_refresh_reuse_revokes_grant():
