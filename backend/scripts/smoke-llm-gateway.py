@@ -54,7 +54,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    token = args.token or os.environ.get('OMI_LLM_GATEWAY_SERVICE_TOKEN')
+    token = (args.token or os.environ.get('OMI_LLM_GATEWAY_SERVICE_TOKEN') or '').strip()
     if not token:
         print('ERROR: provide --token or set OMI_LLM_GATEWAY_SERVICE_TOKEN env var')
         return 2

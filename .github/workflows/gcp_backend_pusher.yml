@@ -73,7 +73,7 @@ jobs:
           if gcloud secrets describe "$SECRET_NAME" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
             if [[ "${{ github.event.inputs.release_version }}" == "rotate-dev-token" ]]; then
               echo "Rotating $SECRET_NAME in ${{ vars.GCP_PROJECT_ID }}."
-              openssl rand -base64 48 | gcloud secrets versions add "$SECRET_NAME" \
+              openssl rand -base64 48 | tr -d '\n' | gcloud secrets versions add "$SECRET_NAME" \
                 --project="${{ vars.GCP_PROJECT_ID }}" \
                 --data-file=- >/dev/null
               exit 0
@@ -86,7 +86,7 @@ jobs:
           # Tolerate a concurrent create from another workflow run losing the
           # check-then-create race (ALREADY_EXISTS); the secret existing is the
           # desired end state regardless of which run created it.
-          openssl rand -base64 48 | gcloud secrets create "$SECRET_NAME" \
+          openssl rand -base64 48 | tr -d '\n' | gcloud secrets create "$SECRET_NAME" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --replication-policy="automatic" \
             --data-file=- >/dev/null || {
