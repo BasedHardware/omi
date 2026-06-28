@@ -21,6 +21,9 @@ export interface OmiToolInputSchema {
   properties: Record<string, unknown>;
   required?: string[];
   additionalProperties?: boolean;
+}
+
+export interface OmiMcpToolInputSchema extends OmiToolInputSchema {
   anyOf?: unknown[];
   allOf?: unknown[];
   oneOf?: unknown[];
@@ -43,6 +46,7 @@ export interface OmiToolManifestEntry {
   promptGuidelines?: string[];
   latency: "fast local" | "fast network" | "async background";
   inputSchema: OmiToolInputSchema;
+  mcpInputSchema?: OmiMcpToolInputSchema;
   annotations: OmiToolAnnotations;
   timeoutClass: OmiToolTimeoutClass;
   executor: {
@@ -722,9 +726,13 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     latency: tool.latency,
     inputSchema: {
       ...agentControlInputSchema(tool),
-      ...tool.jsonSchemaOptions,
       additionalProperties: false,
     } as OmiToolInputSchema,
+    mcpInputSchema: {
+      ...agentControlInputSchema(tool),
+      ...tool.mcpInputSchemaOptions,
+      additionalProperties: false,
+    } as OmiMcpToolInputSchema,
     annotations: readOnlyLocal,
     timeoutClass: tool.timeoutClass,
     executor: { kind: "runtimeControl" },
@@ -767,11 +775,11 @@ export function toolNamesForAdapter(
 export function mcpToolDefinitionsForAdapter(
   adapterId: "omi-tools-stdio",
   context: OmiToolProjectionContext = {},
-): Array<{ name: string; description: string; inputSchema: OmiToolInputSchema }> {
+): Array<{ name: string; description: string; inputSchema: OmiMcpToolInputSchema }> {
   return toolsForAdapter(adapterId, context).map((tool) => ({
     name: tool.adapters[adapterId]?.adapterName ?? tool.name,
     description: tool.description,
-    inputSchema: tool.inputSchema,
+    inputSchema: tool.mcpInputSchema ?? tool.inputSchema,
   }));
 }
 
