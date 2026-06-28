@@ -86,6 +86,13 @@ def _iso(value):
     return value.isoformat() if hasattr(value, "isoformat") else value
 
 
+def _memory_visible(mem: dict) -> bool:
+    """A memory is hidden from the connector when the user rejected it or it has been
+    superseded. Shared by ``_search_memories`` and ``fetch`` so the two entry points
+    agree (locking is handled separately: skipped in search, a paywall in fetch)."""
+    return mem.get("user_review") is not False and mem.get("invalid_at") is None
+
+
 def _search_memories(uid: str, query: str, limit: int) -> List[dict]:
     fetch_limit = min(limit * 3, 60)
     matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
@@ -97,7 +104,7 @@ def _search_memories(uid: str, query: str, limit: int) -> List[dict]:
     results = []
     for mem in memories:
         # Mirror search_memories: never surface rejected, locked, or superseded facts.
-        if mem.get("user_review") is False or mem.get("is_locked", False) or mem.get("invalid_at") is not None:
+        if not _memory_visible(mem) or mem.get("is_locked", False):
             continue
         mem_id = mem.get("id")
         content = mem.get("content", "") or ""
@@ -202,7 +209,8 @@ def fetch(uid: str, item_id: str) -> dict:
         if not raw_id:
             raise InvalidRequest("memory id is missing in the search id")
         memory = memories_db.get_memory(uid, raw_id)
-        if not memory:
+        # Hide rejected/superseded memories here too, so fetch agrees with search.
+        if not memory or not _memory_visible(memory):
             raise ItemNotFound("Memory not found")
         if memory.get("is_locked", False):
             raise ItemLocked("A paid plan is required to access this memory.")
