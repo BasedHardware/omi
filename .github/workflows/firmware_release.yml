@@ -70,7 +70,10 @@ jobs:
     env:
       # Zephyr CI image blessed by omi/firmware/omi/BUILD.md; bundles the
       # toolchain for the NCS 2.9.0 sysbuild + MCUboot signing build.
-      CI_IMAGE: ghcr.io/zephyrproject-rtos/ci:v0.26.13
+      # Pinned by digest for reproducible, supply-chain-safe builds (tag kept
+      # for readability). Digest = the v0.26.13 multi-arch index; re-resolve with
+      # `docker buildx imagetools inspect ghcr.io/zephyrproject-rtos/ci:<tag>`.
+      CI_IMAGE: ghcr.io/zephyrproject-rtos/ci:v0.26.13@sha256:b0ac6334d1926cd0971a0a444f7adc6dd020e88ee3ce865aa070b6475a3ac4eb
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -170,6 +173,15 @@ jobs:
           name: Omi_CV1_v${{ steps.meta.outputs.ver }}
           path: ${{ steps.stage.outputs.out }}/*
           if-no-files-found: error
+
+      - name: Guard - publish only from main
+        if: ${{ github.event.inputs.publish == 'publish' }}
+        run: |
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error::Refusing to publish a firmware release from '${{ github.ref }}'. Dispatch the publish run from the 'main' branch only."
+            exit 1
+          fi
+          echo "Publishing from main — OK."
 
       - name: Generate Omi Bot token
         id: app-token
