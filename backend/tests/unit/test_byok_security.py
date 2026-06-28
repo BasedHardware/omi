@@ -566,7 +566,14 @@ class TestBYOKCustomProvider:
 
     _BASE = 'https://openrouter.ai/api/v1'
 
-    # --- base URL validation (best-effort SSRF guard) ---
+    @pytest.fixture(autouse=True)
+    def _public_dns(self):
+        # Resolve hostnames to a public IP by default so base-URL validation is
+        # offline and deterministic; the DNS-specific tests override this.
+        with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('104.18.0.1', 443))]):
+            yield
+
+    # --- base URL validation (SSRF guard) ---
     def test_valid_https_public_url(self):
         from utils.byok import validate_custom_base_url
 
@@ -604,6 +611,35 @@ class TestBYOKCustomProvider:
 
         with pytest.raises(ValueError):
             validate_custom_base_url('')
+
+    # --- DNS resolution (a public-looking host that points at an internal IP) ---
+    def test_rejects_hostname_resolving_to_private_ip(self):
+        from utils.byok import validate_custom_base_url
+
+        with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('10.0.0.5', 443))]):
+            with pytest.raises(ValueError):
+                validate_custom_base_url('https://sneaky.example.com/v1')
+
+    def test_rejects_hostname_resolving_to_metadata_ip(self):
+        from utils.byok import validate_custom_base_url
+
+        with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('169.254.169.254', 443))]):
+            with pytest.raises(ValueError):
+                validate_custom_base_url('https://metadata.example.com/v1')
+
+    def test_rejects_when_dns_does_not_resolve(self):
+        import socket as _socket
+        from utils.byok import validate_custom_base_url
+
+        with patch('utils.byok.socket.getaddrinfo', side_effect=_socket.gaierror('no such host')):
+            with pytest.raises(ValueError):
+                validate_custom_base_url('https://nonexistent.example.invalid/v1')
+
+    def test_accepts_hostname_resolving_to_public_ip(self):
+        from utils.byok import validate_custom_base_url
+
+        with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('93.184.216.34', 443))]):
+            assert validate_custom_base_url('https://api.example.com/v1') == 'https://api.example.com/v1'
 
     # --- get_byok_custom_provider (per-request config) ---
     def test_returns_full_config(self):
