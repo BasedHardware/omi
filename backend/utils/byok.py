@@ -119,12 +119,14 @@ def _is_blocked_ip(ip: "ipaddress._BaseAddress") -> bool:
     return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
 
 
-# Cache of the per-host SSRF resolution result so a custom base URL is not
-# re-resolved (a blocking getaddrinfo) on every get_llm call. get_llm already runs
-# in a worker thread (its callers offload the blocking .invoke()), so this is not
-# on the event loop, but caching keeps the lookup off the hot path and bounds the
-# work an attacker could trigger. Short TTL bounds DNS-change staleness; value is
-# True (resolved + public) or a rejection message to re-raise.
+# Cache of per-host SSRF *rejections* only. A custom base URL is validated on every
+# get_llm call (get_byok_custom_provider), so caching avoids re-resolving an abusive
+# or already-blocked host repeatedly. Successful validations are deliberately never
+# cached: a cached success would let an attacker who controls the host's DNS resolve
+# to a public IP, get it cached, then rebind the name to an internal address and have
+# the next TTL window of requests skip re-resolution (DNS rebinding). Only rejection
+# messages are stored; the short TTL bounds how long a rejection sticks after a DNS
+# change. get_llm runs in a worker thread, so the per-call resolution is off the loop.
 _DNS_VALIDATION_CACHE: TTLCache = TTLCache(maxsize=512, ttl=300)
 _dns_validation_lock = threading.Lock()
 
@@ -166,12 +168,13 @@ def validate_custom_base_url(base_url: str) -> str:
             raise ValueError('custom base URL host is not allowed')
         return url  # literal public IP, nothing to resolve
 
-    # Hostname: resolve (cached) and reject if any resolved address is internal, so
-    # a public-looking name pointing at a private/metadata IP cannot slip through.
+    # Hostname: resolve and reject if any resolved address is internal, so a
+    # public-looking name pointing at a private/metadata IP cannot slip through.
+    # Re-resolve on every successful call (successes are never cached) so a host
+    # that has been rebound to an internal address since a prior check is still
+    # caught; only rejections are cached.
     with _dns_validation_lock:
         cached = _DNS_VALIDATION_CACHE.get(lowered)
-    if cached is True:
-        return url
     if isinstance(cached, str):
         raise ValueError(cached)
     try:
@@ -190,8 +193,6 @@ def validate_custom_base_url(base_url: str) -> str:
             with _dns_validation_lock:
                 _DNS_VALIDATION_CACHE[lowered] = msg
             raise ValueError(msg)
-    with _dns_validation_lock:
-        _DNS_VALIDATION_CACHE[lowered] = True
     return url
 
 
