@@ -29,11 +29,6 @@ on:
         type: string
         required: false
         default: ''
-      prerelease:
-        description: 'Mark the release as prerelease (backend will NOT serve prereleases)'
-        type: boolean
-        required: false
-        default: false
       changelog:
         description: 'Pipe-separated changelog e.g. "Fixed audio|Battery improvements"'
         type: string
@@ -61,7 +56,9 @@ on:
         default: 'battery,internet'
 
 permissions:
-  contents: write
+  # Default token is read-only (checkout). The release/tag is created with the
+  # separate, contents:write-scoped Omi Bot app token in the publish step.
+  contents: read
 
 jobs:
   build-cv1:
@@ -197,20 +194,17 @@ jobs:
           OUT: ${{ steps.stage.outputs.out }}
           VER: ${{ steps.meta.outputs.ver }}
           SHA: ${{ github.sha }}
-          PRERELEASE: ${{ github.event.inputs.prerelease }}
         run: |
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             echo "::error::Release $TAG already exists. Bump CONFIG_BT_DIS_FW_REV_STR or pass a new version."
             exit 1
           fi
-          FLAGS=()
-          if [ "$PRERELEASE" = "true" ]; then FLAGS+=(--prerelease); fi
+          # Published, non-draft, non-prerelease — the only shape the backend serves.
           gh release create "$TAG" \
             --repo "$REPO" \
             --title "$TITLE" \
             --notes-file "$BODY_FILE" \
             --target "$SHA" \
-            "${FLAGS[@]}" \
             "$OUT/Omi_CV1_OTA_v$VER.zip" \
             "$OUT/Omi_CV1_v$VER.hex" \
             "$OUT/Omi_CV1_v${VER}_CPUNET.hex"
