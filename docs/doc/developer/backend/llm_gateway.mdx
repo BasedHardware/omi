@@ -8,7 +8,7 @@ description: "Architecture for Omi's internal LLM routing gateway, auto lanes, r
 
 > Status: v1 foundation implemented; first backend pilot is code-on by default with application-level fallback.
 >
-> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor, fake providers for deterministic tests, a live OpenAI-compatible provider adapter, local service URL configuration for backend callers, and a code-on `chat_extraction.requires_context` caller pilot with application-level fallback.
+> Implemented so far: separate FastAPI service skeleton, unauthenticated `/health`, service-authenticated `/ready`, service-authenticated `/v1/chat/completions`, repo-local config schemas/loader, checked-in `omi:auto:chat-structured` lane artifacts, internal service-auth helpers, request-level credential context helpers, typed gateway errors, OpenAI chat-completions request validation, route resolution for the v1 auto lane, the non-streaming provider executor, fake providers for deterministic tests, a live OpenAI-compatible provider adapter, local service URL configuration for backend callers, and code-on structured-output caller pilots for `chat_extraction.requires_context`, `conversation_discard.should_discard`, and `conversation_action_items.extract.shadow` with application-level fallback.
 
 ## Decision
 
@@ -537,6 +537,8 @@ Runtime fail-open means active route failure may use LKG only for failure classe
 - forwards supported OpenAI chat-completions controls such as `temperature`, `max_tokens`, `max_completion_tokens`, `seed`, `top_p`, penalties, `stop`, and `user`;
 - maps typed gateway exceptions to OpenAI-style error envelopes with `error.message`, `error.type`, `error.param`, and `error.code`;
 - rejects unknown auto lanes, bare provider model names, streaming, tools, unsupported capabilities, and unknown top-level request parameters before provider execution.
+
+Another real background caller is the conversation discard classifier in post-processing. It sends `conversation_discard.should_discard` through `omi:auto:chat-structured` and falls back to the legacy `conv_discard` LLM path if the gateway returns invalid output, times out, or fails. Action-item extraction also sends `conversation_action_items.extract.shadow` through the gateway as shadow traffic, then still uses the legacy `conv_action_items` result for product behavior. These routes give the rollout real backend-originated gateway traffic without adding latency to the foreground desktop chat path.
 
 The default provider registry includes the OpenAI-compatible adapter for the checked-in `openai` provider route. It is cached per process, closed during FastAPI lifespan shutdown, uses `OPENAI_API_KEY`, optional `OPENAI_BASE_URL`, and optional `OPENAI_MAX_RESPONSE_BYTES`, posts to `/chat/completions` with `httpx.AsyncClient`, and fails closed with `invalid_route_config` when the managed key is absent or rejected. Tests can still override the registry with fake providers.
 
