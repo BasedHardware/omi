@@ -36,6 +36,7 @@ pytest tests/unit/test_mcp_search_conversations_poison.py -v
 pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
+pytest tests/unit/test_mcp_goals.py -v
 pytest tests/unit/test_mcp_conversations_poison.py -v
 pytest tests/unit/test_mcp_profile_contact.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
