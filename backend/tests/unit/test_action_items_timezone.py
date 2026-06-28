@@ -249,3 +249,13 @@ class TestActionItemsTimezoneRendering:
         # Tokyo is UTC+9, so 22:00 UTC == 07:00 the next day.
         assert result.count("Asia/Tokyo") == 3
         assert "2026-06-27 07:00:00 Asia/Tokyo" in result
+
+    def test_timezone_lookup_failure_falls_back_to_utc(self):
+        # A Firestore failure in the timezone lookup must not abort retrieval; it
+        # falls back to UTC formatting instead (cubic finding on #8483).
+        with patch.object(action_item_tools.action_items_db, 'get_action_items', return_value=[_item()]), patch.object(
+            action_item_tools.notification_db, 'get_user_time_zone', side_effect=RuntimeError("firestore down")
+        ):
+            result = get_action_items_tool(config=_make_config())
+        assert "Due: 2026-06-26 22:00:00 UTC" in result
+        assert "Error" not in result
