@@ -10,6 +10,7 @@ from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
+from utils.llm.temporal import current_date_for_uid
 from .clients import get_llm
 import logging
 
@@ -88,6 +89,7 @@ def new_memories_extractor(
                 'conversation': content,
                 'memories_str': memories_str,
                 'language_instruction': language_instruction,
+                'current_date': current_date_for_uid(uid),
                 'format_instructions': parser.get_format_instructions(),
             }
         )
@@ -130,6 +132,7 @@ def extract_memories_from_text(
                 'text_source': text_source,
                 'memories_str': memories_str,
                 'language_instruction': language_instruction,
+                'current_date': current_date_for_uid(uid),
                 'format_instructions': parser.get_format_instructions(),
             }
         )
