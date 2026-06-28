@@ -19,6 +19,8 @@ DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES_ENV_VAR = 'OPENAI_MAX_RESPONSE_BYTES'
 PROVIDER_ERROR_DETAIL_BYTES = 1000
+EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR = 'LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS'
+GENERIC_PROVIDER_FAILURE_MESSAGE = 'provider request failed'
 
 
 class ChatCompletionProvider(Protocol):
@@ -35,7 +37,7 @@ class ChatCompletionProvider(Protocol):
 @dataclass
 class ProviderFailure(Exception):
     failure_class: FailureClass
-    safe_message: str = 'provider request failed'
+    safe_message: str = GENERIC_PROVIDER_FAILURE_MESSAGE
 
     def __str__(self) -> str:
         return self.safe_message
@@ -80,8 +82,16 @@ class OpenAICompatibleChatCompletionProvider:
                 },
                 timeout=timeout_ms / 1000.0,
             ) as response:
+                status_code = response.status_code
+                if status_code >= 400:
+                    # On error responses, read only a small bounded preview so
+                    # that a large/invalid-content-length body cannot reclassify
+                    # the status-specific failure class (e.g. 401 -> 5XX). The
+                    # body is never surfaced unless LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS
+                    # is explicitly enabled.
+                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                    _raise_for_status(status_code, error_preview)
                 body = await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
-                _raise_for_status(response.status_code, body)
                 parsed = _parse_limited_json_response(body)
         except httpx.TimeoutException as exc:
             raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
@@ -176,8 +186,14 @@ def _raise_for_status(status_code: int, body: bytes = b'') -> None:
 
 
 def _provider_error_message(status_code: int, body: bytes) -> str:
+    if not _expose_provider_error_details():
+        return GENERIC_PROVIDER_FAILURE_MESSAGE
     preview = body.decode('utf-8', errors='replace')[:PROVIDER_ERROR_DETAIL_BYTES]
     return f'provider request failed: status={status_code} body={sanitize(preview)}'
+
+
+def _expose_provider_error_details() -> bool:
+    return os.getenv(EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR, '').strip().lower() == 'true'
 
 
 async def _read_limited_response(response: httpx.Response, *, max_bytes: int) -> bytes:
@@ -196,6 +212,28 @@ async def _read_limited_response(response: httpx.Response, *, max_bytes: int) ->
         if total > max_bytes:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
         chunks.append(chunk)
+    return b''.join(chunks)
+
+
+async def _read_bounded_preview(response: httpx.Response, *, max_bytes: int) -> bytes:
+    """Read at most ``max_bytes`` of the response body, truncating silently.
+
+    Unlike :func:`_read_limited_response`, an oversized body never raises a
+    failure class — the preview is simply truncated. This keeps status-specific
+    classification (401/403/429/4xx) intact regardless of body size, so a
+    large error response from the provider is not reclassified as a generic 5xx.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    async for chunk in response.aiter_bytes():
+        remaining = max_bytes - total
+        if remaining <= 0:
+            break
+        if len(chunk) > remaining:
+            chunks.append(chunk[:remaining])
+            break
+        chunks.append(chunk)
+        total += len(chunk)
     return b''.join(chunks)
 
 

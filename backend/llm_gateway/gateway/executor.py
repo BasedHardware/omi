@@ -15,13 +15,16 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
 )
-from llm_gateway.gateway.providers import ChatCompletionProvider, ProviderFailure
+from llm_gateway.gateway.providers import (
+    ChatCompletionProvider,
+    EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR,
+    GENERIC_PROVIDER_FAILURE_MESSAGE,
+    ProviderFailure,
+)
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutStage, RouteArtifact
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.log_sanitizer import sanitize
-
-EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR = 'LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS'
 
 
 @dataclass(frozen=True)
@@ -320,7 +323,7 @@ def _map_provider_failure(exc: ProviderFailure, credential_context: CredentialCo
 
 
 def _safe_failure_message(failure_class: FailureClass, provider_message: str | None = None) -> str:
-    if _expose_provider_error_details() and provider_message and provider_message != 'provider request failed':
+    if _expose_provider_error_details() and provider_message and provider_message != GENERIC_PROVIDER_FAILURE_MESSAGE:
         return sanitize(provider_message)
     return f'provider request failed: {failure_class.value}'
 
