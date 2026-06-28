@@ -128,8 +128,22 @@ notif_mod.sync_action_item_reminder = MagicMock()
 _stub_package("utils")
 _stub_package("utils.conversations")
 _stub_package("utils.retrieval")
+_stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
+
+
+class FakeCalendarEventTool:
+    def __init__(self):
+        self.calls = []
+
+    async def ainvoke(self, tool_input, config=None):
+        self.calls.append((tool_input, config))
+        return f"✅ Successfully created calendar event: {tool_input['title']}"
+
+
+calendar_tools_mod = _stub_module("utils.retrieval.tools.calendar_tools")
+calendar_tools_mod.create_calendar_event_tool = FakeCalendarEventTool()
 
 # Stub render and factory modules
 render_mod = _stub_module("utils.conversations.render")
@@ -568,6 +582,7 @@ class TestUpdateActionItemText:
         action_items_db.get_action_item.reset_mock()
         action_items_db.update_action_item.reset_mock()
         action_items_db.update_action_item.return_value = True
+        calendar_tools_mod.create_calendar_event_tool.calls.clear()
         notif_mod.send_action_item_completed_notification.reset_mock()
 
     def test_empty_id_rejected(self):
@@ -731,6 +746,30 @@ class TestRouterEndpoints:
         body = resp.json()
         assert body["tool_name"] == "update_action_item"
         assert "completed" in body["result_text"].lower()
+
+    def test_create_calendar_event_endpoint(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00-04:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+                "location": "Zoom",
+                "attendees": "sam@example.com",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "create_calendar_event"
+        assert "Design review" in body["result_text"]
+
+        tool_input, config = calendar_tools_mod.create_calendar_event_tool.calls[-1]
+        assert tool_input["title"] == "Design review"
+        assert tool_input["start_time"] == "2026-06-28T14:00:00-04:00"
+        assert tool_input["end_time"] == "2026-06-28T15:00:00-04:00"
+        assert tool_input["location"] == "Zoom"
+        assert tool_input["attendees"] == "sam@example.com"
+        assert config == {"configurable": {"user_id": "test-uid"}}
 
     def test_get_conversations_query_params(self):
         """Query params are forwarded correctly to the service."""

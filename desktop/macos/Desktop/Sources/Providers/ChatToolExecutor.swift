@@ -169,6 +169,8 @@ class ChatToolExecutor {
       return await executeBackendTool(toolCall)
     case "update_action_item":
       return await executeBackendTool(toolCall)
+    case "create_calendar_event":
+      return await executeBackendTool(toolCall)
 
     default:
       return "Unknown tool: \(toolCall.name)"
@@ -1670,6 +1672,30 @@ class ChatToolExecutor {
           completed: args["completed"] as? Bool,
           description: args["description"] as? String,
           dueAt: validatedUpdateDueAt
+        )
+        return resp.resultText
+
+      case "create_calendar_event":
+        guard let title = args["title"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+          return "Error: title is required"
+        }
+        guard let startTime = args["start_time"] as? String, !startTime.isEmpty else {
+          return "Error: start_time is required"
+        }
+        guard let endTime = args["end_time"] as? String, !endTime.isEmpty else {
+          return "Error: end_time is required"
+        }
+        let validatedStart = validateISODate(startTime, paramName: "start_time")
+        if let error = validatedStart.error { return error }
+        let validatedEnd = validateISODate(endTime, paramName: "end_time")
+        if let error = validatedEnd.error { return error }
+        let resp = try await api.toolCreateCalendarEvent(
+          title: title,
+          startTime: validatedStart.valid ?? startTime,
+          endTime: validatedEnd.valid ?? endTime,
+          description: args["description"] as? String,
+          location: args["location"] as? String,
+          attendees: args["attendees"] as? String
         )
         return resp.resultText
 

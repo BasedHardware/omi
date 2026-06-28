@@ -13,6 +13,7 @@ Endpoints:
 - GET   /v1/tools/action-items           — list action items
 - POST  /v1/tools/action-items           — create action item
 - PATCH /v1/tools/action-items/{id}      — update action item
+- POST  /v1/tools/calendar-events        — create calendar event
 """
 
 import logging
@@ -31,6 +32,7 @@ from utils.retrieval.tool_services.action_items import (
     create_action_item_text,
     update_action_item_text,
 )
+from utils.retrieval.tools.calendar_tools import create_calendar_event_tool
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +78,15 @@ class UpdateActionItemRequest(BaseModel):
     completed: Optional[bool] = Field(default=None)
     description: Optional[str] = Field(default=None)
     due_at: Optional[str] = Field(default=None, description="ISO date with timezone")
+
+
+class CreateCalendarEventRequest(BaseModel):
+    title: str = Field(description="Event title")
+    start_time: str = Field(description="ISO date/time with timezone")
+    end_time: str = Field(description="ISO date/time with timezone")
+    description: Optional[str] = Field(default=None, description="Event description")
+    location: Optional[str] = Field(default=None, description="Event location")
+    attendees: Optional[str] = Field(default=None, description="Comma-separated attendee names or email addresses")
 
 
 # --------------- conversation endpoints ---------------
@@ -234,3 +245,25 @@ def update_action_item(
         due_at=body.due_at,
     )
     return _ok("update_action_item", result)
+
+
+# --------------- calendar endpoints ---------------
+
+
+@router.post("/v1/tools/calendar-events", response_model=ToolResponse)
+async def create_calendar_event(
+    body: CreateCalendarEventRequest,
+    uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
+):
+    result = await create_calendar_event_tool.ainvoke(
+        {
+            "title": body.title,
+            "start_time": body.start_time,
+            "end_time": body.end_time,
+            "description": body.description,
+            "location": body.location,
+            "attendees": body.attendees,
+        },
+        config={"configurable": {"user_id": uid}},
+    )
+    return _ok("create_calendar_event", result)
