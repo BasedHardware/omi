@@ -182,7 +182,7 @@ INSTRUCTIONS:
 - The folder should feel like a natural home for this conversation
 - Folders annotated [home for X conversations] are the standard home for that category; when the conversation's Category matches one, prefer it unless a custom folder's description is a clearly better fit
 - Only assign to a non-default folder if the theme clearly matches
-- When in doubt, use the DEFAULT folder
+- When no folder clearly matches, prefer the folder for the conversation's category if one is listed above, otherwise use the DEFAULT folder
 
 Provide:
 - folder_id: The best matching folder ID from the list above
