@@ -1,0 +1,12 @@
+feature_bundles:
+  - feature: chat_extraction.requires_context
+    lane_id: omi:auto:chat-structured
+    prompt_version: chat_extraction.requires_context.v1
+    parser_version: RequiresContext.v1
+    eval_suite: chat_extraction_requires_context.v1
+    promotion_gates:
+      schema_valid_rate: ">= 99.5%"
+      classification_agreement_delta: ">= 0"
+      false_negative_regression: none
+      p95_latency_ms: "<= LKG + 10%"
+      cost_per_success: "<= LKG + 15%"

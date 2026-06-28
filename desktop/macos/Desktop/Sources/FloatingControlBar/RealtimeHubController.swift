@@ -50,15 +50,67 @@ enum RealtimeHubCloseClassifier {
   }
 }
 
+/// Keeps the response glow tied to perceived playback instead of raw PCM chunk
+/// boundaries. Realtime providers can leave short gaps between streamed audio
+/// buffers; clearing the glow on every empty queue makes the notch resize and
+/// shimmer restart repeatedly.
+final class RealtimeResponseGlowGate {
+  private let idleClearDelay: TimeInterval
+  private let setActive: (Bool) -> Void
+  private var idleClearWorkItem: DispatchWorkItem?
+  private(set) var isActive = false
+
+  init(idleClearDelay: TimeInterval = 0.75, setActive: @escaping (Bool) -> Void) {
+    self.idleClearDelay = idleClearDelay
+    self.setActive = setActive
+  }
+
+  func markPlaybackActive() {
+    idleClearWorkItem?.cancel()
+    idleClearWorkItem = nil
+    guard !isActive else { return }
+    isActive = true
+    setActive(true)
+  }
+
+  func scheduleIdleClear() {
+    idleClearWorkItem?.cancel()
+    let workItem = DispatchWorkItem { [weak self] in
+      guard let self else { return }
+      self.isActive = false
+      self.setActive(false)
+      self.idleClearWorkItem = nil
+    }
+    idleClearWorkItem = workItem
+    DispatchQueue.main.asyncAfter(deadline: .now() + idleClearDelay, execute: workItem)
+  }
+
+  func clearImmediately() {
+    idleClearWorkItem?.cancel()
+    idleClearWorkItem = nil
+    guard isActive else {
+      setActive(false)
+      return
+    }
+    isActive = false
+    setActive(false)
+  }
+}
+
 @MainActor
-final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
+final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeechSynthesizerDelegate {
   static let shared = RealtimeHubController()
 
   private weak var barState: FloatingControlBarState?
   private var session: RealtimeHubSession?
   private var sessionProvider: RealtimeHubProvider?
+  private var sessionAuth: HubAuth?
   private var pcmPlayer: StreamingPCMPlayer?
   private let speech = AVSpeechSynthesizer()
+  private lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active in
+    self?.barState?.isVoiceResponseActive = active
+  }
+  private let agentControlService = AgentControlService()
 
   // Per-turn state.
   private var turnTranscript = ""
@@ -66,6 +118,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
   private var audioReceivedThisTurn = false
+  /// Tracks whether local AVSpeechSynthesizer speech is queued or active this
+  /// turn. Set synchronously in speak() to avoid the race where exitVoiceUI
+  /// checks speech.isSpeaking before the synthesizer has started the queued
+  /// utterance (which can clear the response glow mid-utterance). Cleared in
+  /// both didFinish and didCancel delegate callbacks so cancellation paths
+  /// (system interruption, stopSpeaking) always release the glow.
+  private var localSpeechActive = false
   /// `spawn_agent` is a handoff, not a read tool. After the tool result returns,
   /// the realtime model sometimes continues with meta/control text; never speak it.
   private var suppressAssistantOutputForCurrentTurn = false
@@ -94,6 +153,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// True between commit and turn-done — used to detect barge-in (a new PTT while
   /// the previous reply is still in flight).
   private var responding = false
+  /// True while native realtime PCM has been scheduled locally but has not drained yet.
+  /// Provider turn completion means the server finished sending; the Mac may still be
+  /// playing the queued tail, and a new PTT during that tail is still a barge-in.
+  private var realtimePlaybackActive = false
+  /// Monotonic owner for realtime playback-idle callbacks. The PCM player can
+  /// complete older buffers after a stop, rebuild, or newer audio chunk; only the
+  /// latest scheduled playback epoch may clear `realtimePlaybackActive`.
+  private var realtimePlaybackEpoch = 0
 
   /// Log tag for the currently-connected provider.
   private var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
@@ -112,17 +179,25 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// spawn creates its own provider; warming this one primes node/auth caches.
   private var warmProvider: ChatProvider?
 
-  private override init() {
-    super.init()
-  }
-
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
+  /// A Gemini active-reply barge-in replaces the whole session. Managed sessions
+  /// need a fresh one-use token first, so hold early mic chunks/commit until the
+  /// replacement session exists and can use its normal socket-open buffering.
+  private var bargeInReplacementInFlight = false
+  private var bargeInReplacementPendingTurn = false
+  private var bargeInReplacementPendingCommit = false
+  private var bargeInReplacementAudioBuffer: [Data] = []
 
   /// Failover chain: when the Auto-selected (primary) provider can't connect, the hub
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
   /// nil = on the primary; non-nil = the provider we failed over TO.
   private var fallbackProvider: RealtimeHubProvider?
+
+  private override init() {
+    super.init()
+    speech.delegate = self
+  }
 
   /// The realtime provider to actually connect: the failover pick if we've switched to
   /// it, otherwise the user/Auto-selected one.
@@ -276,10 +351,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     hubConnected = false
     session = s
     sessionProvider = provider
+    sessionAuth = auth
     // Both providers stream native spoken audio (24k PCM) → StreamingPCMPlayer;
     // AVSpeech is only a no-audio fallback.
     if pcmPlayer == nil {
-      pcmPlayer = StreamingPCMPlayer(sampleRate: 24000)
+      pcmPlayer = makePCMPlayer()
     }
     s.start()
     log(
@@ -294,7 +370,126 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     session?.stop()
     session = nil
     sessionProvider = nil
+    sessionAuth = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
+    clearBargeInReplacementState()
+  }
+
+  private func clearBargeInReplacementState() {
+    bargeInReplacementInFlight = false
+    bargeInReplacementPendingTurn = false
+    bargeInReplacementPendingCommit = false
+    bargeInReplacementAudioBuffer.removeAll()
+  }
+
+  @discardableResult
+  private func restartSessionForBargeIn() -> Bool {
+    guard let provider = sessionProvider, let auth = sessionAuth else { return false }
+    session?.detach()
+    session?.stop()
+    session = nil
+    sessionProvider = nil
+    sessionAuth = nil
+    hubConnected = false
+    bargeInReplacementInFlight = true
+    bargeInReplacementPendingTurn = true
+    bargeInReplacementPendingCommit = false
+    bargeInReplacementAudioBuffer.removeAll()
+    switch auth {
+    case .byokKey:
+      startReplacementSessionForBargeIn(provider: provider, auth: auth)
+    case .ephemeral:
+      remintReplacementSessionForBargeIn(provider: provider)
+    }
+    return true
+  }
+
+  private func remintReplacementSessionForBargeIn(provider: RealtimeHubProvider) {
+    guard !minting else {
+      log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement skipped; token mint already in flight")
+      clearBargeInReplacementState()
+      return
+    }
+    minting = true
+    let providerParam = provider == .openai ? "openai" : "gemini"
+    log("RealtimeHub[\(provider.displayName)]: minting fresh token for barge-in replacement")
+    Task { [weak self] in
+      let token = await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      guard let self else { return }
+      self.minting = false
+      guard self.bargeInReplacementInFlight else { return }
+      guard self.effectiveProvider == provider, self.session == nil else {
+        self.clearBargeInReplacementState()
+        self.ensureWarm()
+        return
+      }
+      guard let token else {
+        self.failBargeInReplacement(provider: provider, reason: "token mint failed")
+        if !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
+        }
+        return
+      }
+      self.startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))
+    }
+  }
+
+  private func startReplacementSessionForBargeIn(provider: RealtimeHubProvider, auth: HubAuth) {
+    startSession(provider: provider, auth: auth)
+    bargeInReplacementInFlight = false
+    if bargeInReplacementPendingTurn {
+      bargeInReplacementPendingTurn = false
+      session?.beginInputTurn(interrupting: false)
+    }
+    if provider == .gemini, let speculativeScreenshot {
+      session?.sendVideoFrame(speculativeScreenshot, mime: "image/jpeg")
+    }
+    flushBargeInReplacementAudioBuffer()
+    if bargeInReplacementPendingCommit {
+      bargeInReplacementPendingCommit = false
+      session?.commitInputTurn()
+    }
+  }
+
+  private func failBargeInReplacement(provider: RealtimeHubProvider, reason: String) {
+    let hadCommittedTurn = bargeInReplacementPendingCommit
+    clearBargeInReplacementState()
+    guard hadCommittedTurn else { return }
+    log("RealtimeHub[\(provider.displayName)]: barge-in replacement failed after commit — \(reason)")
+    responding = false
+    realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
+    pcmPlayer?.stop()
+    responseGlowGate.clearImmediately()
+    exitVoiceUI(clearResponseGlow: true)
+  }
+
+  private func flushBargeInReplacementAudioBuffer() {
+    guard let s = session, !bargeInReplacementAudioBuffer.isEmpty else { return }
+    let bufferedChunks = bargeInReplacementAudioBuffer
+    bargeInReplacementAudioBuffer.removeAll()
+    for pcm16k in bufferedChunks {
+      sendAudio(pcm16k, to: s)
+    }
+  }
+
+  private func makePCMPlayer() -> StreamingPCMPlayer {
+    let player = StreamingPCMPlayer(sampleRate: 24000)
+    player.onPlaybackScheduled = { [weak self] playbackEpoch in
+      Task { @MainActor in
+        guard let self else { return }
+        self.realtimePlaybackActive = true
+        self.realtimePlaybackEpoch = playbackEpoch
+      }
+    }
+    player.onPlaybackIdle = { [weak self] playbackEpoch in
+      Task { @MainActor in
+        guard let self, self.realtimePlaybackEpoch == playbackEpoch else { return }
+        self.realtimePlaybackActive = false
+        self.clearResponseGlowIfRealtimeAudioIdle()
+      }
+    }
+    return player
   }
 
   // MARK: - PTT integration
@@ -304,8 +499,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   func beginTurn() {
     // Barge-in: was a reply from the previous turn still in flight when the user
     // started talking again?
-    let bargeIn = responding
+    let providerResponseInFlight = responding
+    let bargeIn = responding || realtimePlaybackActive || localSpeechActive || speech.isSpeaking
     responding = false
+    realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
+    var replacementSessionOwnsInputTurn = false
     turnTranscript = ""
     assistantText = ""
     speculativeWarmDone = false
@@ -314,20 +513,45 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     lastTurnAt = Date()
-    pcmPlayer?.stop()  // stop any prior reply locally
-    if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
     if bargeIn {
-      // Interrupt the in-flight reply IN-SESSION (no teardown — the warm socket and
-      // its conversation context survive). OpenAI: response.cancel + clear input.
-      // Gemini: the fresh activityStart sent by beginInputTurn(interrupting:) cancels
-      // the current generation server-side; the pending-reply gate drops its tail.
-      log("RealtimeHub[\(providerTag)]: barge-in — interrupting in-flight reply (same session)")
-      session?.cancelActiveResponse()
+      pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
+    }
+    // Stop any queued or active local speech BEFORE resetting the flag, so a
+    // barge-in before the synthesizer started playback still cancels the prior
+    // turn's reply. Using localSpeechActive (set synchronously in speak) instead
+    // of speech.isSpeaking, which is false until playback actually starts.
+    if localSpeechActive || speech.isSpeaking {
+      speech.stopSpeaking(at: .immediate)
+      localSpeechActive = false
+    }
+    responseGlowGate.clearImmediately()
+    if providerResponseInFlight {
+      switch session?.bargeInStrategy ?? .inSessionCancel {
+      case .inSessionCancel:
+        // OpenAI exposes an explicit response.cancel path, so the warm socket and
+        // conversation context survive while the next input buffer starts clean.
+        log("RealtimeHub[\(providerTag)]: barge-in — interrupting in-flight reply (same session)")
+        session?.cancelActiveResponse()
+      case .freshSession:
+        // Gemini Live has no reliable in-session cancel for a streaming reply. Reusing
+        // that socket can leave the next PTT turn queued behind the old generation, so
+        // replace the connection and let the fresh session buffer this new turn while it opens.
+        if restartSessionForBargeIn() {
+          replacementSessionOwnsInputTurn = true
+          log("RealtimeHub: barge-in — replacing session for clean next turn")
+        } else {
+          session?.cancelActiveResponse()
+        }
+      }
+    } else if bargeIn {
+      log("RealtimeHub[\(providerTag)]: barge-in — stopping local playback tail")
     }
     ensureWarm()  // (re)connect only if the socket idle-closed
     // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
     // turn on a warm session; OpenAI no-op).
-    session?.beginInputTurn(interrupting: bargeIn)
+    if !replacementSessionOwnsInputTurn {
+      session?.beginInputTurn(interrupting: providerResponseInFlight)
+    }
     // Capture the screen at turn START and, for Gemini, send it in-turn right away — early
     // enough that the ~450KB JPEG uploads/decodes during the seconds of speech, so the
     // model can see it when it answers. A frame attached at commit (PTT-up) lands too late:
@@ -346,7 +570,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
   func feedAudio(_ pcm16k: Data) {
-    guard let s = session else { return }
+    guard let s = session else {
+      if bargeInReplacementInFlight {
+        bargeInReplacementAudioBuffer.append(pcm16k)
+      }
+      return
+    }
+    sendAudio(pcm16k, to: s)
+  }
+
+  private func sendAudio(_ pcm16k: Data, to s: RealtimeHubSession) {
     let rate = s.requiredInputSampleRate
     let pcm = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
     s.sendAudio(pcm)
@@ -357,6 +590,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     responding = true
     // (The screen frame is sent at turn START — see beginTurn — so it has time to
     // upload/decode before the model answers. Nothing to attach here.)
+    guard session != nil else {
+      if bargeInReplacementInFlight {
+        bargeInReplacementPendingCommit = true
+      } else {
+        responding = false
+        exitVoiceUI(clearResponseGlow: true)
+      }
+      return
+    }
     session?.commitInputTurn()
   }
 
@@ -364,24 +606,46 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// turn behind, or the model answers the non-speech later.
   func cancelTurn() {
     responding = false
+    realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
     turnTranscript = ""
     assistantText = ""
+    clearBargeInReplacementState()
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
     // and leave the reply gated off so the model never answers the silence. Keeps the
     // warm session (and its context) so the next real turn is instant and in-context.
     session?.abandonInputTurn()
-    exitVoiceUI()
+    exitVoiceUI(clearResponseGlow: true)
   }
 
   // MARK: - RealtimeHubSessionDelegate
 
-  func hubDidConnect() {
+  private func isCurrentSession(_ source: RealtimeHubSession) -> Bool {
+    source === session
+  }
+
+  private func sendToolResultIfCurrent(
+    source: RealtimeHubSession,
+    callId: String,
+    name: String,
+    output: String
+  ) {
+    guard isCurrentSession(source) else {
+      log("RealtimeHub[\(providerTag)]: dropping stale tool result \(name)")
+      return
+    }
+    source.sendToolResult(callId: callId, name: name, output: output)
+  }
+
+  func hubDidConnect(source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
   }
 
-  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool) {
+  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
     if isFinal {
       if !text.isEmpty { turnTranscript = text }
     } else {
@@ -401,14 +665,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
-  func hubDidReceiveAudio(_ pcm24k: Data) {
+  func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
     guard !suppressAssistantOutputForCurrentTurn else { return }
+    // If PTT muted music/system output while listening, make sure the model's
+    // reply is audible even if capture teardown restore is delayed by hardware.
+    SystemAudioMuteController.shared.restore()
+    guard let pcmPlayer, pcmPlayer.enqueue(pcm24k) else {
+      log("RealtimeHub[\(providerTag)]: native audio chunk could not be scheduled; keeping text fallback armed")
+      return
+    }
     audioReceivedThisTurn = true
-    barState?.isVoiceResponseActive = true
-    pcmPlayer?.enqueue(pcm24k)  // native spoken audio (OpenAI + Gemini)
+    realtimePlaybackActive = true
+    realtimePlaybackEpoch = pcmPlayer.playbackEpoch
+    responseGlowGate.markPlaybackActive()
   }
 
-  func hubDidEmitText(_ text: String, isFinal: Bool) {
+  func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
     guard !suppressAssistantOutputForCurrentTurn else { return }
     if !text.isEmpty { assistantText += text }
     if isFinal {
@@ -417,7 +691,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // speak it locally via macOS AVSpeechSynthesizer. Normally both providers
       // stream spoken audio (played by StreamingPCMPlayer) so this stays unused.
       if !audioReceivedThisTurn, !reply.isEmpty {
-        barState?.isVoiceResponseActive = true
+        responseGlowGate.markPlaybackActive()
         speak(reply)
       }
       if !reply.isEmpty { log("RealtimeHub: reply — \(reply.prefix(160))") }
@@ -428,6 +702,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// empty/whitespace result → `emptyText`. Shared by the data read/write tool cases so the
   /// Task / do-catch / blank-check / log / sendToolResult tail lives in exactly one place.
   private func runToolAndSpeak(
+    source: RealtimeHubSession,
     callId: String, name: String, detail: String = "",
     emptyText: String, errorText: String,
     _ body: @escaping () async throws -> String
@@ -439,16 +714,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       if out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out = emptyText }
       let suffix = detail.isEmpty ? "" : " \(detail)"
       log("RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) → \(out.prefix(60))")
-      self.session?.sendToolResult(callId: callId, name: name, output: out)
+      self.sendToolResultIfCurrent(source: source, callId: callId, name: name, output: out)
     }
   }
 
-  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String) {
+  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
     let arguments =
       (try? JSONSerialization.jsonObject(with: Data(argumentsJSON.utf8)) as? [String: Any]) ?? [:]
     guard let tool = HubTool(rawValue: name) else {
       log("RealtimeHub[\(providerTag)]: tool_call UNKNOWN \(name) — rejecting")
-      session?.sendToolResult(callId: callId, name: name, output: "Unknown tool.")
+      sendToolResultIfCurrent(source: source, callId: callId, name: name, output: "Unknown tool.")
       return
     }
     func arg(_ key: String) -> String { (arguments[key] as? String) ?? turnTranscript }
@@ -464,7 +740,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         guard let self else { return }
         let answer = await self.escalateToHigherModel(
           query, context: context, aboutUser: self.aboutUserCard)
-        self.session?.sendToolResult(callId: callId, name: name, output: answer)
+        self.sendToolResultIfCurrent(source: source, callId: callId, name: name, output: answer)
       }
     case .getTasks:
       // Fast LOCAL read — no agent. Fetch today's + overdue tasks and hand them back
@@ -483,11 +759,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         if !today.isEmpty { out += "Due today (\(today.count)):\n\(list(today))\n" }
         if out.isEmpty { out = "No tasks overdue or due today." }
         log("RealtimeHub[\(self.providerTag)]: tool get_tasks → \(overdue.count) overdue, \(today.count) today")
-        self.session?.sendToolResult(callId: callId, name: name, output: out)
+        self.sendToolResultIfCurrent(source: source, callId: callId, name: name, output: out)
       }
     case .getMemories:
       // Fast READ — "who am I" / "what do you know about me". Backend memories+facts.
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name,
         emptyText: "I don't have any memories saved about you yet.",
         errorText: "Could not read your memories right now."
@@ -495,6 +772,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     case .searchMemories:
       let query = arg("query")
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
         emptyText: "I couldn't find anything about that.",
         errorText: "Could not search your memories right now."
@@ -503,6 +781,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Capped for voice: top 5, summaries only (no full transcripts).
       let query = arg("query")
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
         emptyText: "I couldn't find a conversation about that.",
         errorText: "Could not search your conversations right now."
@@ -516,6 +795,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Capped for voice: top 3, summaries only. This is the recency path; search_conversations
       // is semantic and must NOT be used for "most recent".
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name,
         emptyText: "I don't see any recent conversations.",
         errorText: "Could not read your recent conversations right now."
@@ -530,6 +810,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // chat answer "what did I do yesterday" from one code path.
       let daysAgo = argInt("days_ago") ?? 1
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name, detail: "days_ago=\(daysAgo)",
         emptyText: "I don't have any activity recorded for then.",
         errorText: "Could not pull up your activity right now."
@@ -544,6 +825,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let dueStart = arguments["due_start_date"] as? String
       let dueEnd = arguments["due_end_date"] as? String
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name, detail: completed.map { "completed=\($0)" } ?? "",
         emptyText: "I couldn't find any matching tasks.",
         errorText: "Could not read your tasks right now."
@@ -555,20 +837,30 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     case .getTaskAgentStatus:
       let result = TaskAgentStatusRegistry.shared.combinedSummary()
       log("RealtimeHub[\(providerTag)]: tool get_task_agent_status")
-      session?.sendToolResult(callId: callId, name: name, output: result)
+      sendToolResultIfCurrent(source: source, callId: callId, name: name, output: result)
     case .manageAgentPills:
       let action = ((arguments["action"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
         .flatMap { $0.isEmpty ? nil : $0 } ?? "list"
       let agentId = (arguments["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
       let result = AgentPillsManager.shared.manage(action: action, agentId: agentId)
       log("RealtimeHub[\(providerTag)]: tool manage_agent_pills action=\(action)")
-      session?.sendToolResult(callId: callId, name: name, output: result)
+      sendToolResultIfCurrent(source: source, callId: callId, name: name, output: result)
+    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle:
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
+        emptyText: "No canonical agent data came back.",
+        errorText: "Could not reach the agent control plane right now."
+      ) {
+        try await self.agentControlService.executeVoiceTool(name: name, arguments: arguments)
+      }
     case .searchScreenHistory:
       // Fast LOCAL semantic search over screen history (same executor as chat).
       let query = arg("query")
       var toolArgs: [String: Any] = ["query": query]
       if let days = argInt("days") { toolArgs["days"] = days }
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name, detail: "q=\"\(query.prefix(60))\"",
         emptyText: "I couldn't find anything on your screen about that.",
         errorText: "Could not search your screen history right now."
@@ -581,11 +873,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
       let dueAt = arguments["due_at"] as? String
       guard !description.isEmpty else {
-        session?.sendToolResult(
-          callId: callId, name: name, output: "No task description was given.")
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: "No task description was given.")
         return
       }
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name, detail: "\"\(description.prefix(60))\"",
         emptyText: "Task created.",
         errorText: "Could not create the task right now."
@@ -596,8 +889,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     case .updateActionItem:
       guard let id = (arguments["id"] as? String), !id.isEmpty else {
-        session?.sendToolResult(
-          callId: callId, name: name,
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
           output: "Missing the task id — call get_tasks first to find it.")
         return
       }
@@ -605,6 +898,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let newDescription = arguments["description"] as? String
       let dueAt = arguments["due_at"] as? String
       runToolAndSpeak(
+        source: source,
         callId: callId, name: name, detail: "id=\(id.prefix(8))",
         emptyText: "Task updated.",
         errorText: "Could not update the task right now."
@@ -616,6 +910,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     case .spawnAgent:
       let brief = arg("brief")
       let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let providerName = ((arguments["provider"] as? String) ?? "")
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+        .lowercased()
+        .replacingOccurrences(of: " ", with: "")
+      let directedProvider: AgentPillsManager.DirectedProvider?
+      switch providerName {
+      case "openclaw": directedProvider = .openclaw
+      case "hermes": directedProvider = .hermes
+      case "": directedProvider = nil
+      default:
+        session?.sendToolResult(
+          callId: callId, name: name,
+          output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
+        return
+      }
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
@@ -624,8 +933,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // must NOT also speak its canned randomAck ("on it") or we double up.
       let pill = AgentPillsManager.shared.spawnFromUserQuery(
         brief, model: model, fromVoice: false,
-        preFetchedTitle: (title?.isEmpty == false) ? title : nil)
-      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) titled=\(title?.isEmpty == false)")
+        preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
+        bridgeHarnessOverride: directedProvider?.harnessMode)
+      log("RealtimeHub[\(providerTag)]: tool spawn_agent → AgentBridge pill=\"\(pill.title)\" model=\(model) provider=\(directedProvider?.rawValue ?? "default") titled=\(title?.isEmpty == false)")
       if !audioReceivedThisTurn {
         let existingAck = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
         let ack = existingAck.isEmpty ? "Starting a background agent." : existingAck
@@ -634,8 +944,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         speak(ack)
       }
       suppressAssistantOutputForCurrentTurn = true
-      session?.sendToolResult(
-        callId: callId, name: name,
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
         output: "Agent started.")
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the
@@ -645,25 +955,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
       if sessionProvider == .openai, let shot { session?.injectImage(shot) }
       log("RealtimeHub[\(providerTag)]: tool screenshot → ack (\(shot?.count ?? 0) bytes, screen on turn)")
-      session?.sendToolResult(
-        callId: callId, name: name,
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
         output: shot == nil ? "Could not capture the screen." : "Screen captured.")
     case .pointClick:
       let x = (arguments["x"] as? Double) ?? (arguments["x"] as? NSNumber)?.doubleValue ?? 0
       let y = (arguments["y"] as? Double) ?? (arguments["y"] as? NSNumber)?.doubleValue ?? 0
       let ok = Self.click(at: CGPoint(x: x, y: y))
-      session?.sendToolResult(
-        callId: callId, name: name,
+      sendToolResultIfCurrent(
+        source: source, callId: callId, name: name,
         output: ok ? "Clicked at \(Int(x)), \(Int(y))." : "Could not click.")
     }
   }
 
-  func hubDidFinishTurn() {
+  func hubDidFinishTurn(source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
     responding = false
     hubReconnectStrikes = 0  // a completed turn proves the hub works — reset the budget
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     log("RealtimeHub[\(providerTag)]: turn done — heard=\"\(heard.prefix(80))\" audio=\(audioReceivedThisTurn)")
+    if realtimePlaybackActive {
+      log("RealtimeHub[\(providerTag)]: server turn done; waiting for local playback to drain")
+    }
     // Record the completed turn into chat history (+ backend sync) in the background.
     // The hub plays its reply itself and never routes through the query path, so this is
     // the only place voice turns get persisted. Idempotent per turn; recordVoiceTurn is
@@ -675,7 +989,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     exitVoiceUI()
   }
 
-  func hubDidError(_ message: String) {
+  func hubDidError(_ message: String, source: RealtimeHubSession) {
+    guard isCurrentSession(source) else { return }
     // A socket we intentionally dropped is detached in teardownSession() before it's
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.
@@ -703,8 +1018,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     // The reply is dead — stop any buffered audio before collapsing.
     pcmPlayer?.stop()
-    if speech.isSpeaking { speech.stopSpeaking(at: .immediate) }
-    exitVoiceUI()
+    realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
+    if localSpeechActive || speech.isSpeaking {
+      speech.stopSpeaking(at: .immediate)
+      localSpeechActive = false
+    }
+    exitVoiceUI(clearResponseGlow: true)
     teardownSession()
     // A session that died fast (connected, then the provider rejected/aborted it — e.g.
     // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider
@@ -731,14 +1051,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   /// Return the floating bar from its PTT voice state to compact after a hub turn.
-  private func exitVoiceUI() {
+  private func exitVoiceUI(clearResponseGlow: Bool = false) {
     guard let barState else { return }
     // Capture before clearing: a mid-turn error or silent-tap cancel clears the
     // listening flag here, so PushToTalkManager.updateBarState() (which resizes only
     // on a wasListening→false transition) would see no change and leave the bar wide.
     let wasExpandedForVoice = barState.isVoiceListening
     barState.voiceTranscript = ""
-    barState.isVoiceResponseActive = false
+    // When the turn fell back to local AVSpeechSynthesizer speech (no realtime audio)
+    // or the spawn_agent path spoke a local ack, audioReceivedThisTurn is false but
+    // the synthesizer has been asked to speak. Keep the glow active until the delegate
+    // (didFinish/didCancel) clears it, so the spoken-response indicator doesn't
+    // disappear mid-utterance. Using localSpeechActive (set synchronously in speak)
+    // instead of speech.isSpeaking avoids the race where isSpeaking is still false
+    // because the synthesizer hasn't started the queued utterance yet.
+    if clearResponseGlow || (!audioReceivedThisTurn && !localSpeechActive) {
+      responseGlowGate.clearImmediately()
+    }
     barState.isVoiceListening = false
     barState.isVoiceLocked = false
     barState.isVoiceFollowUp = false
@@ -750,6 +1079,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
     else { return }
     FloatingControlBarManager.shared.resizeForPTT(expanded: false)
+  }
+
+  private func clearResponseGlowIfRealtimeAudioIdle() {
+    responseGlowGate.scheduleIdleClear()
   }
 
   // MARK: - Tools
@@ -815,7 +1148,29 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     utterance.voice =
       AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
       ?? AVSpeechSynthesisVoice(language: "en-US")
+    // Set synchronously so exitVoiceUI sees it even before the synthesizer
+    // starts playback (isSpeaking is false until the queued utterance begins).
+    localSpeechActive = true
     speech.speak(utterance)
+  }
+
+  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      self.localSpeechActive = false
+      self.responseGlowGate.clearImmediately()
+    }
+  }
+
+  /// Handles non-explicit cancellation paths (system interruption, future code,
+  /// or unexpected state) so the response glow doesn't stay stuck when speech
+  /// is cancelled without didFinish firing.
+  nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+    Task { @MainActor [weak self] in
+      guard let self else { return }
+      self.localSpeechActive = false
+      self.responseGlowGate.clearImmediately()
+    }
   }
 
   /// Local synthetic mouse click (point_click tool).

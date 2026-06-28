@@ -28,6 +28,16 @@ enum HubTool: String {
   case getTaskAgentStatus = "get_task_agent_status"
   /// Manage floating-bar agent pills. Fast local action.
   case manageAgentPills = "manage_agent_pills"
+  /// List canonical Omi-managed agent sessions and runs.
+  case listAgentSessions = "list_agent_sessions"
+  /// Inspect one canonical Omi-managed agent run.
+  case getAgentRun = "get_agent_run"
+  /// Request cancellation for one canonical Omi-managed agent run.
+  case cancelAgentRun = "cancel_agent_run"
+  /// Inspect metadata for canonical Omi-managed agent artifacts.
+  case inspectAgentArtifacts = "inspect_agent_artifacts"
+  /// Update metadata-only lifecycle state for a canonical Omi-managed artifact.
+  case updateAgentArtifactLifecycle = "update_agent_artifact_lifecycle"
   /// Read what Omi knows about the user (memories / facts) and return it inline to speak.
   /// Fast synchronous READ — the answer to "who am I" / "what do you know about me".
   case getMemories = "get_memories"
@@ -144,6 +154,8 @@ enum RealtimeHubTools {
     user. So always emit the spawn_agent call. You may add one short natural sentence as you \
     call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
     with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
+    - If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \
+    "openclaw" or "hermes". Treat those as available local providers, not as sessions to inspect.
     - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
     and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \
     You are fully capable; do it directly, even when the ask is long or open-ended. Do \
@@ -155,6 +167,9 @@ enum RealtimeHubTools {
     referring to); then speak a natural, spoken-length version of what comes back.
     - When you need to see what's on screen, call screenshot first. Use point_click only \
     when the user clearly asks you to click something.
+    - For canonical Omi agent/subagent management, call list_agent_sessions first, then use \
+    its agentRef values internally for get_agent_run, cancel_agent_run, or artifact inspection. \
+    Never read agentRef, artifactRef, canonical IDs, or tool JSON aloud.
 
     Keep latency low: prefer answering directly when you can.
     """
@@ -339,6 +354,106 @@ enum RealtimeHubTools {
       ],
       [
         "type": "function",
+        "name": HubTool.listAgentSessions.rawValue,
+        "description":
+          "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, and migrated surfaces. "
+          + "Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "status": [
+              "type": "string",
+              "enum": ["open", "archived", "closed"],
+              "description": "Optional session status filter.",
+            ],
+            "surfaceKind": [
+              "type": "string",
+              "enum": ["main_chat", "task_chat", "realtime", "delegated_agent", "floating_pill"],
+              "description": "Optional canonical surface filter.",
+            ],
+            "limit": [
+              "type": "number",
+              "description": "Maximum sessions to return. Default 50.",
+            ],
+          ],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.getAgentRun.rawValue,
+        "description":
+          "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "agentRef": ["type": "string", "description": "Opaque agent handle from list_agent_sessions."],
+            "runId": ["type": "string", "description": "Canonical Omi run id."],
+            "includeEvents": ["type": "boolean", "description": "Include ordered kernel events. Default true."],
+            "eventLimit": ["type": "number", "description": "Maximum events to return. Default 100."],
+          ],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.cancelAgentRun.rawValue,
+        "description":
+          "Request cancellation for one canonical Omi-managed agent run. Use when the user asks to stop or kill a running canonical agent/subagent.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "agentRef": ["type": "string", "description": "Opaque agent handle from list_agent_sessions."],
+            "runId": ["type": "string", "description": "Canonical Omi run id to cancel."]
+          ],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.inspectAgentArtifacts.rawValue,
+        "description":
+          "Inspect metadata and references for canonical Omi-managed agent artifacts. Does not read arbitrary artifact contents.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "agentRef": ["type": "string", "description": "Opaque agent handle from list_agent_sessions."],
+            "artifactRef": ["type": "string", "description": "Opaque artifact handle from inspect_agent_artifacts."],
+            "artifactId": ["type": "string", "description": "Canonical Omi artifact id."],
+            "sessionId": ["type": "string", "description": "Canonical Omi session id."],
+            "runId": ["type": "string", "description": "Canonical Omi run id."],
+            "attemptId": ["type": "string", "description": "Canonical Omi attempt id."],
+            "role": [
+              "type": "string",
+              "enum": ["input", "result", "checkpoint", "tool_output", "log", "other"],
+              "description": "Optional artifact role filter.",
+            ],
+            "limit": ["type": "number", "description": "Maximum artifacts to return. Default 50."],
+          ],
+        ],
+      ],
+      [
+        "type": "function",
+        "name": HubTool.updateAgentArtifactLifecycle.rawValue,
+        "description":
+          "Update metadata-only lifecycle state for one canonical Omi-managed agent artifact. Does not open, delete, retain, or read files.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "artifactRef": ["type": "string", "description": "Opaque artifact handle from inspect_agent_artifacts."],
+            "artifactId": ["type": "string", "description": "Canonical Omi artifact id."],
+            "state": [
+              "type": "string",
+              "enum": ["retained", "dismissed", "opened"],
+              "description": "Target metadata lifecycle state.",
+            ],
+            "sessionId": ["type": "string", "description": "Optional canonical Omi session id scope guard."],
+            "runId": ["type": "string", "description": "Optional canonical Omi run id scope guard."],
+            "attemptId": ["type": "string", "description": "Optional canonical Omi attempt id scope guard."],
+            "reason": ["type": "string", "description": "Optional short reason."],
+          ],
+          "required": ["state"],
+        ],
+      ],
+      [
+        "type": "function",
         "name": HubTool.createActionItem.rawValue,
         "description":
           "Create a new task / to-do / reminder for the user ('remind me to…', 'add … to my "
@@ -391,6 +506,11 @@ enum RealtimeHubTools {
               "description":
                 "A short Title Case label for the task pill (≤ ~5 words, no trailing "
                 + "punctuation), e.g. 'Draft Launch Email'.",
+            ],
+            "provider": [
+              "type": "string",
+              "enum": ["openclaw", "hermes"],
+              "description": "Optional local provider to run this background agent through.",
             ],
           ],
           "required": ["brief"],

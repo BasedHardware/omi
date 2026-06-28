@@ -58,6 +58,12 @@ export interface ControlToolRequestMessage extends ProtocolEnvelope {
   input: Record<string, unknown>;
 }
 
+export interface DirectControlToolRequestMessage extends ProtocolEnvelope {
+  type: "direct_control_tool";
+  name: string;
+  input: Record<string, unknown>;
+}
+
 export interface StopMessage {
   type: "stop";
 }
@@ -79,7 +85,7 @@ export interface AuthenticateMessage {
 
 export interface WarmupSessionConfig {
   key: string;
-  model: string;
+  model?: string;
   systemPrompt?: string;
 }
 
@@ -103,6 +109,7 @@ export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
   | ControlToolRequestMessage
+  | DirectControlToolRequestMessage
   | StopMessage
   | InterruptMessage
   | InvalidateSessionMessage
@@ -145,11 +152,22 @@ export interface ResultMessage extends QueryScopedOutbound {
   text: string;
   sessionId: string;
   terminalStatus?: "succeeded" | "failed" | "cancelled";
+  failure?: RuntimeFailurePayload;
   costUsd?: number;
   inputTokens?: number;
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+}
+
+export interface RuntimeFailurePayload {
+  code: string;
+  userMessage: string;
+  technicalMessage?: string;
+  source?: string;
+  adapterId?: string;
+  provider?: string;
+  retryable?: boolean;
 }
 
 export interface ToolActivityMessage extends QueryScopedOutbound {
@@ -175,6 +193,7 @@ export interface ThinkingDeltaMessage extends QueryScopedOutbound {
 export interface ErrorMessage extends QueryScopedOutbound {
   type: "error";
   message: string;
+  failure?: RuntimeFailurePayload;
 }
 
 /** Sent when ACP requires user authentication (OAuth) */

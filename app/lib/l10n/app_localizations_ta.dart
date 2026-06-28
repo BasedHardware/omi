@@ -1722,12 +1722,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -7820,6 +7815,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get viewAll => 'அனைத்தையும் பார்';
 
   @override
+  String get expand => 'விரிவாக்கு';
+
+  @override
   String get addTask => 'பணியைச் சேர்க்க';
 
   @override
@@ -8512,12 +8510,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9430,4 +9423,107 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'இடைநிறுத்தப்பட்டது — ஒலி பதிவு செய்யப்படவில்லை';
+
+  @override
+  String get deviceTutorial => 'Omi ஐ எவ்வாறு பயன்படுத்துவது';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'உங்கள் Omi-யிடம் பேசுங்கள்';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'சில வார்த்தைகள் சொல்லி, அவை உடனடியாகத் தோன்றுவதைப் பாருங்கள்';
+
+  @override
+  String get deviceOnboardingGoodJob => 'அருமை!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'பேசத் தொடங்குங்கள்...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi-யிடம் ஒரு கேள்வி கேளுங்கள்';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'பொத்தானை ஒருமுறை அழுத்தி, உங்கள் கேள்வியைச் சொல்லி, முடிந்ததும் மீண்டும் அழுத்துங்கள்';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'உங்கள் கேள்வி செயலாக்கப்படுகிறது...';
+
+  @override
+  String get deviceOnboardingListening => 'கேட்கிறது...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'அணைக்கவும்';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'இயக்கவும்';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'பொத்தானை 3 வினாடிகள் அழுத்திப் பிடியுங்கள்';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'மீண்டும் இயக்க பொத்தானை அழுத்துங்கள்';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'விளக்கு அணையும் வரை பொத்தானை உறுதியாக அழுத்திப் பிடியுங்கள்';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'இணைக்கப்பட்டது';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'இணைக்கப்பட்டது!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'இணைப்பு துண்டிக்கப்பட்டது';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'அணைக்கப்படுகிறது...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'இரட்டை தட்டலைத் தனிப்பயனாக்குங்கள்';
+
+  @override
+  String get deviceOnboardingEndConversation => 'உரையாடலை முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'தற்போதைய உரையாடலைச் சேமித்து முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'முடக்கு / நீக்கு';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'மைக்ரோஃபோனை இயக்கவோ அணைக்கவோ செய்யுங்கள்';
+
+  @override
+  String get deviceOnboardingStarConversation => 'நடப்பு உரையாடலை நட்சத்திரமிடுங்கள்';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'உரையாடலை முக்கியமானதாகக் குறியிடுங்கள்';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'அது ஒற்றைத் தட்டல் — விரைவாக இருமுறை தட்டிப் பாருங்கள்!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'இப்போதே முயற்சியுங்கள்! உங்கள் Omi-யை இரட்டை தட்டுங்கள்';
+
+  @override
+  String get deviceOnboardingContinue => 'தொடரவும்';
+
+  @override
+  String get deviceOnboardingFinish => 'முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'உங்கள் Omi செய்யக்கூடிய அனைத்தையும் விரைவாக நேரடியாகப் பார்க்கும் சுற்றுலா.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'சுமார் 1 நிமிடம்';
+  @override
+  String get jumpToLatestMessage => 'சமீபத்திய செய்திக்குச் செல்';
+
+  @override
+  String get latest => 'சமீபத்தியது';
 }

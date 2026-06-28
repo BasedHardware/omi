@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from google.cloud import firestore
@@ -224,14 +224,279 @@ def clear_byok_active(uid: str):
 
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
     # Stored in a top-level collection so it survives the user record being deleted.
+    # Use merge=True so a retried delete request does not erase a durable wipe marker
+    # (pending/failed/retrying/deleting_auth) already written to the same document.
     db.collection('account_deletions').document(uid).set(
         {
             'uid': uid,
             'reason': reason or '',
             'reason_details': reason_details or '',
             'timestamp': datetime.now(timezone.utc),
-        }
+        },
+        merge=True,
     )
+
+
+def mark_user_deletion_wipe_started(uid: str):
+    """Mark that the background data wipe has been queued but not yet completed.
+
+    Persisted in the top-level ``account_deletions`` collection so it survives a
+    deploy or pod restart. A reconciliation worker can query for documents where
+    ``wipe_status == 'pending'`` and re-enqueue incomplete wipes, ensuring the
+    in-process ``cleanup_executor`` backlog is not silently lost.
+
+    The worker transitions the marker to ``'running'`` (via
+    ``mark_user_deletion_wipe_running``) as soon as it actually starts
+    executing, so the reconciler can distinguish a genuinely orphaned queued
+    wipe from one that is actively executing but slow.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_running(uid: str):
+    """Transition a queued wipe marker to ``running`` once the worker starts.
+
+    Called by ``background_wipe_user_data`` at the top of the executor future.
+    This lets the reconciler distinguish a genuinely orphaned ``pending`` wipe
+    (queued in the executor backlog but never picked up — safe to re-enqueue)
+    from a ``running`` wipe (actively executing — only recovered if the claim
+    is stale, i.e. the worker probably crashed).
+
+    Without this, a slow but live wipe could be reclaimed as orphaned after
+    ``stale_after`` (default 10 min) and re-enqueued concurrently, leading to
+    duplicate work where a later failure overwrites a successful completion.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_intent(uid: str):
+    """Persist a non-actionable deletion intent *before* auth deletion.
+
+    Written BEFORE ``auth.delete_account()`` succeeds. The reconciler only
+    recovers stale ``'deleting_auth'`` records *after* verifying the Firebase
+    auth user is actually gone, so a crash between this write and the confirmed
+    auth deletion cannot trigger a premature data wipe for a user whose Firebase
+    account still exists.
+
+    Call ``mark_user_deletion_wipe_started`` to transition the marker to the
+    actionable ``'pending'`` state once auth deletion is confirmed.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'deleting_auth', 'wipe_intent_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_completed(uid: str):
+    """Mark the background data wipe as finished."""
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_failed(uid: str):
+    """Mark the background data wipe as failed so a reconciliation worker can retry."""
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def cancel_user_deletion_wipe(uid: str):
+    """Cancel a pending deletion-wipe marker.
+
+    Called when the Firebase auth deletion fails after the marker was already
+    persisted. Without this, the reconciliation worker would later wipe the
+    user's data even though their Firebase account still exists.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def get_pending_deletion_wipes(
+    limit: int = 100,
+    stale_after: timedelta = timedelta(minutes=10),
+    running_stale_after: timedelta = timedelta(minutes=30),
+) -> list[dict]:
+    """Return account_deletions documents whose wipe needs retry.
+
+    Queries ``failed`` records (always actionable), stale ``pending`` records
+    (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
+    (intent written but never transitioned to ``pending`` — usually a crash
+    after ``auth.delete_account()`` succeeded), stale ``running`` records (worker
+    started but hasn't finished within ``running_stale_after`` — probably
+    crashed), and stale ``retrying`` claims (worker probably crashed). Fresh
+    ``pending``, ``deleting_auth``, and ``running`` markers from in-progress
+    deletions are excluded so the reconciler doesn't double-enqueue a wipe that
+    is still running.
+
+    The caller is responsible for verifying the Firebase auth user is actually
+    gone before recovering a ``deleting_auth`` record — this function returns
+    candidates, and ``claim_deletion_wipe`` also age-guards inside a transaction.
+
+    All queries are single-field equality filters on ``wipe_status`` to avoid
+    requiring Firestore composite indexes. Age filtering is done in Python.
+    """
+    stale_cutoff = datetime.now(timezone.utc) - stale_after
+    running_cutoff = datetime.now(timezone.utc) - running_stale_after
+    budget = limit
+
+    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(budget).stream()
+    result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
+
+    if len(result) < limit:
+        # Over-fetch *all* pending docs and age-filter in Python. A tight
+        # ``.limit(budget)`` would cap the query before stale records beyond the
+        # first page of fresh pending docs, leaving them permanently unqueued.
+        # The ``account_deletions`` collection only holds deletion events so
+        # the full scan is bounded.
+        pending_docs = db.collection('account_deletions').where('wipe_status', '==', 'pending').stream()
+        for doc in pending_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            queued_at = data.get('wipe_queued_at')
+            if queued_at and queued_at < stale_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        # Recover stale ``running`` markers — the worker started but hasn't
+        # finished within ``running_stale_after``. This is much longer than the
+        # ``pending`` stale window because a legitimately slow wipe (queued
+        # behind other cleanup jobs) can take several minutes; we only want to
+        # reclaim a ``running`` marker when the worker has almost certainly
+        # crashed or the pod was killed mid-execution.
+        running_docs = db.collection('account_deletions').where('wipe_status', '==', 'running').stream()
+        for doc in running_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            running_at = data.get('wipe_running_at')
+            if running_at and running_at < running_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        # Over-fetch all 'deleting_auth' docs and age-filter in Python. A stale
+        # 'deleting_auth' record (intent written but never transitioned to
+        # 'pending') usually means a crash/deploy after auth.delete_account()
+        # succeeded. The reconciler verifies the Firebase user is gone before
+        # recovering these — see reconcile_pending_deletion_wipes.
+        deleting_auth_docs = db.collection('account_deletions').where('wipe_status', '==', 'deleting_auth').stream()
+        for doc in deleting_auth_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            intent_at = data.get('wipe_intent_at')
+            if intent_at and intent_at < stale_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        retrying_docs = db.collection('account_deletions').where('wipe_status', '==', 'retrying').stream()
+        for doc in retrying_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            claimed_at = data.get('wipe_claimed_at')
+            # Use the longer ``running_stale_after`` window so a queued-but-
+            # not-yet-running retrying claim is not returned as a candidate
+            # before the executor future has had a chance to start.
+            if claimed_at and claimed_at < running_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    return result
+
+
+@transactional
+def _claim_deletion_wipe_txn(
+    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta
+) -> str | None:
+    """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
+
+    Transitions ``wipe_status`` from ``failed``, stale ``pending``, stale
+    ``deleting_auth`` (auth user verified gone by caller), stale ``running``
+    (worker crashed mid-execution), or stale ``retrying`` to ``retrying`` so
+    concurrent workers cannot re-enqueue the same wipe. Fresh ``pending``,
+    ``deleting_auth``, and ``running`` markers (recently written by an
+    in-progress deletion) are left untouched to avoid wiping data before
+    Firebase auth deletion succeeds or interrupting a live worker. ``retrying``
+    claims that are not yet stale are also refused (another worker owns them).
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    data = snapshot.to_dict()
+    status = data.get('wipe_status')
+    now = datetime.now(timezone.utc)
+    if status == 'deleting_auth':
+        # Recoverable only after the caller verified the Firebase auth user is
+        # gone. Re-validate the age inside the transaction so a fresh intent
+        # from an in-progress deletion is never claimed prematurely.
+        intent_at = data.get('wipe_intent_at')
+        if intent_at and intent_at >= now - stale_after:
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'pending':
+        # Re-validate the pending marker age *inside* the transaction. The
+        # reconciler query may have returned a stale record that was since
+        # refreshed by a new delete request; claiming a fresh marker could
+        # enqueue a wipe before Firebase auth deletion has succeeded.
+        queued_at = data.get('wipe_queued_at')
+        if queued_at and queued_at >= now - stale_after:
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'running':
+        # A ``running`` marker means the worker started executing. Only reclaim
+        # it if it's stale beyond ``running_stale_after`` — the worker almost
+        # certainly crashed or the pod was killed mid-execution. A fresh or
+        # moderately recent ``running`` marker belongs to a live worker.
+        running_at = data.get('wipe_running_at')
+        if running_at and running_at >= now - running_stale_after:
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'failed':
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'retrying':
+        claimed_at = data.get('wipe_claimed_at')
+        # Use the longer ``running_stale_after`` window (not ``stale_after``)
+        # because a retrying wipe was just claimed by the reconciler and
+        # enqueued. If the executor backlog is full, the future may sit queued
+        # beyond ``stale_after`` (10 min) without transitioning to ``running``.
+        # Using the short window would let the periodic reconciler enqueue
+        # another copy every pass, causing duplicate wipes to race.
+        if claimed_at and claimed_at < now - running_stale_after:
+            # Stale claim (worker probably crashed). Re-claim it.
+            transaction.update(doc_ref, {'wipe_claimed_at': now})
+            return snapshot.id
+    return None
+
+
+def claim_deletion_wipe(
+    uid: str,
+    stale_after: timedelta = timedelta(minutes=10),
+    running_stale_after: timedelta = timedelta(minutes=30),
+) -> str | None:
+    """Attempt to claim a pending/failed/stale wipe for re-enqueueing.
+
+    Returns the uid if claimed (caller should enqueue the wipe), or ``None`` if
+    another worker already owns a non-stale claim. This prevents the same wipe
+    from being re-enqueued concurrently by multiple workers or scheduler runs.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
 
 
 def create_person(uid: str, data: dict):
@@ -957,6 +1222,23 @@ def get_user_subscription(uid: str) -> Subscription:
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)
     return default_subscription
+
+
+def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
+    """Gets the user's stored subscription without creating a default record."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get(['subscription'])
+    if not user_doc.exists:
+        return None
+
+    user_data = user_doc.to_dict()
+    if 'subscription' not in user_data:
+        return None
+
+    sub_data = user_data['subscription']
+    if sub_data.get('plan') == 'free':
+        sub_data['plan'] = PlanType.basic.value
+    return Subscription(**sub_data)
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:

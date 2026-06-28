@@ -69,5 +69,8 @@ function contractCheckedAdapter(adapter: RuntimeAdapter): RuntimeAdapter {
     },
     cancelAttempt: (context) => adapter.cancelAttempt(context),
     closeBinding: adapter.closeBinding ? (binding) => adapter.closeBinding!(binding) : undefined,
+    effectiveMcpServers: adapter.effectiveMcpServers
+      ? (mcpServers) => adapter.effectiveMcpServers!(mcpServers)
+      : undefined,
   };
 }

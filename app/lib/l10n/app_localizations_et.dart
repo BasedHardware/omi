@@ -1712,12 +1712,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'SEADET',
-      one: 'SEADE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -7764,6 +7759,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get viewAll => 'Vaata kõiki';
 
   @override
+  String get expand => 'Laienda';
+
+  @override
   String get addTask => 'Lisa ülesanne';
 
   @override
@@ -9360,4 +9358,106 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
+
+  @override
+  String get deviceTutorial => 'Kuidas Omi\'t kasutada';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Räägi oma Omisse';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Ütle paar sõna ja vaata, kuidas need reaalajas ilmuvad';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Tubli!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Hakka rääkima...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Esita Omile küsimus';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Vajuta nuppu üks kord, esita küsimus ja vajuta lõpetamiseks uuesti';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Töötlen sinu küsimust...';
+
+  @override
+  String get deviceOnboardingListening => 'Kuulan...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Lülita välja';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Lülita sisse';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Hoia nuppu 3 sekundit all';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Vajuta nuppu, et see uuesti sisse lülitada';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Hoia nuppu kindlalt all, kuni tuli kustub';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Ühendatud';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Ühendatud!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Ühendus katkenud';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Lülitan välja...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Kohanda topeltkoputust';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Lõpeta vestlus';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Salvesta ja lõpeta praegune vestlus';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Vaigista / Taasta heli';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Lülita mikrofon sisse või välja';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Märgi käimasolev vestlus tähega';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Märgi vestlus oluliseks';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'See oli üks koputus — proovi koputada kaks korda kiiresti!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Proovi kohe! Koputa oma Omile kaks korda';
+
+  @override
+  String get deviceOnboardingContinue => 'Jätka';
+
+  @override
+  String get deviceOnboardingFinish => 'Lõpeta';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutvu oma Omiga';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Kiire ja praktiline ülevaade kõigest, mida sinu Omi suudab.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Umbes 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Hüppa uusima sõnumi juurde';
+
+  @override
+  String get latest => 'Uusim';
 }

@@ -107,6 +107,10 @@ action_items_db.get_action_item = MagicMock(
     }
 )
 action_items_db.update_action_item = MagicMock(return_value=True)
+
+# Stub database.notifications (action_item_tools imports get_user_time_zone for tz rendering)
+notifications_db = _stub_module("database.notifications")
+notifications_db.get_user_time_zone = MagicMock(return_value="UTC")
 _stub_package("database")
 
 # Stub notifications
@@ -151,6 +155,21 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
 
+# Stub utils.conversations.render (action_item_tools imports resolve_display_tz)
+_render_stub = _stub_module("utils.conversations.render")
+
+
+def _real_resolve_display_tz(tz):
+    if tz:
+        try:
+            return ZoneInfo(tz), tz
+        except Exception:
+            pass
+    return timezone.utc, "UTC"
+
+
+_render_stub.resolve_display_tz = _real_resolve_display_tz
+
 # Stub utils.retrieval.agentic
 import contextvars
 
@@ -168,6 +187,12 @@ llm_clients_stub.parser = MagicMock()
 llm_clients_stub.llm_high = MagicMock()
 llm_clients_stub.llm_medium_experiment = MagicMock()
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
+
+# Stub utils.llm.conversation_folder (conversation_processing imports from it after a recent refactor)
+conv_folder_stub = _stub_module("utils.llm.conversation_folder")
+conv_folder_stub.FolderAssignment = MagicMock()
+conv_folder_stub.assign_conversation_to_folder = MagicMock()
+conv_folder_stub.build_folders_context = MagicMock(return_value="")
 
 # Load models first
 _stub_package("models")

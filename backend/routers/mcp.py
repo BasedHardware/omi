@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
 
-from utils.executors import db_executor, postprocess_executor
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -24,7 +23,6 @@ import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
-from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
@@ -77,7 +75,6 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
         upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
-    postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
 

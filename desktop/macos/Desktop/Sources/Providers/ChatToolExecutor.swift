@@ -36,7 +36,11 @@ class ChatToolExecutor {
   }
 
   /// Execute a tool call and return the result as a string
-  static func execute(_ toolCall: ToolCall, originatingChatMode: ChatMode? = nil) async -> String {
+  static func execute(
+    _ toolCall: ToolCall,
+    originatingChatMode: ChatMode? = nil,
+    originatingClientScope: String? = nil
+  ) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
 
     switch toolCall.name {
@@ -47,7 +51,11 @@ class ChatToolExecutor {
       return await executeTaskAgentStatus()
 
     case "spawn_agent":
-      return await executeSpawnAgent(toolCall.arguments, originatingChatMode: originatingChatMode)
+      return await executeSpawnAgent(
+        toolCall.arguments,
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
 
     case "manage_agent_pills":
       return await executeManageAgentPills(toolCall.arguments)
@@ -446,9 +454,16 @@ class ChatToolExecutor {
     return TaskAgentStatusRegistry.shared.combinedSnapshotJSON()
   }
 
-  private static func executeSpawnAgent(_ args: [String: Any], originatingChatMode: ChatMode?) async -> String {
+  private static func executeSpawnAgent(
+    _ args: [String: Any],
+    originatingChatMode: ChatMode?,
+    originatingClientScope: String?
+  ) async -> String {
     if originatingChatMode == .ask {
       return "Error: spawn_agent is unavailable in Ask mode. Switch to Act mode before starting a background agent."
+    }
+    if originatingClientScope == AgentLegacyClientScope.floatingPill {
+      return "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
     }
     let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -456,13 +471,26 @@ class ChatToolExecutor {
       return "Error: Missing brief. Pass a clear, self-contained task brief."
     }
     let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let providerName = ((args["provider"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: " ", with: "")
+    let directedProvider: AgentPillsManager.DirectedProvider?
+    switch providerName {
+    case "openclaw": directedProvider = .openclaw
+    case "hermes": directedProvider = .hermes
+    case "": directedProvider = nil
+    default:
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes."
+    }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
     let pill = AgentPillsManager.shared.spawnFromUserQuery(
       brief,
       model: model,
       fromVoice: false,
-      preFetchedTitle: (title?.isEmpty == false) ? title : nil
+      preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
+      bridgeHarnessOverride: directedProvider?.harnessMode
     )
     return """
     Agent started as a floating agent pill.

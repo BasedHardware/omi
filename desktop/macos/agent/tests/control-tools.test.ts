@@ -10,6 +10,7 @@ import {
   handleAgentControlToolCall,
   isAgentControlToolName,
   legacyControlRequestKey,
+  registerSignedDirectControlOwner,
   resolveControlRequestContext,
   type AgentControlToolContext,
   withDefaultOwnerGuard,
@@ -63,6 +64,29 @@ describe("agent control tools", () => {
         inputSchema: agentControlInputSchema(tool),
       })),
     );
+  });
+
+  it("constrains canonical list surfaceKind to known surfaces", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const invalid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+        surfaceKind: "surprise_surface",
+      }),
+    );
+    const valid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+        surfaceKind: "realtime",
+      }),
+    );
+
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: { code: "invalid_tool_input" },
+    });
+    expect(valid.ok).toBe(true);
+    store.close();
   });
 
   it("documents delegate_agent as canonical delegation, not floating pill UI", () => {
@@ -247,6 +271,24 @@ describe("agent control tools", () => {
         clientId: "swift-client",
       }),
     ).toThrow("missing active control owner");
+  });
+
+  it("registers signed direct control envelopes when no request owner is active", () => {
+    const ownersByRequest = new Map<string, string>();
+    const requestKey = controlRequestKey({ requestId: "realtime-request", clientId: "realtime-hub" });
+
+    const inserted = registerSignedDirectControlOwner({
+      requestKey,
+      ownerGuard: " signed-in-owner ",
+      ownerIdForRequest: (key) => ownersByRequest.get(key),
+      registerOwner: (key, ownerId) => {
+        ownersByRequest.set(key, ownerId);
+        return true;
+      },
+    });
+
+    expect(inserted).toBe(true);
+    expect(requestKey ? ownersByRequest.get(requestKey) : undefined).toBe("signed-in-owner");
   });
 
   it("rejects cold direct control calls without active request context", async () => {
@@ -566,6 +608,18 @@ describe("agent control tools", () => {
       }),
     ]);
 
+    const inspectedByArtifact = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "inspect_agent_artifacts", {
+        artifactId: "art_test",
+        ownerId: "owner",
+      }),
+    );
+    expect(inspectedByArtifact.artifacts).toHaveLength(1);
+    expect(inspectedByArtifact.artifacts[0]).toMatchObject({
+      artifactId: "art_test",
+      omiSessionId: result.session.sessionId,
+    });
+
     const events = kernel.getRun({ runId: result.run.runId, includeEvents: true }).events;
     expect(events.find((event: any) => event.type === "artifact.created")).toMatchObject({
       sessionId: result.session.sessionId,
@@ -708,7 +762,7 @@ describe("agent control tools", () => {
   it("rejects unscoped direct kernel artifact inspection", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     expect(() => kernel.inspectArtifacts({ ownerId: "owner" })).toThrow(
-      "Inspecting artifacts requires sessionId, runId, or attemptId",
+      "Inspecting artifacts requires artifactId, sessionId, runId, or attemptId",
     );
     store.close();
   });
@@ -1113,6 +1167,7 @@ describe("agent control tools", () => {
       ownerId: "owner",
       requestId: "delegate-tools-1",
       clientId: "delegate-client",
+      adapterId: "fake",
       protocolVersion: 2,
       includeSwiftBackedTools: false,
     });
@@ -1125,6 +1180,41 @@ describe("agent control tools", () => {
       },
     ]);
     expect(adapter.executed.at(-1)?.metadata).toMatchObject({ disableSwiftBackedTools: true });
+    store.close();
+  });
+
+  it("routes delegated child runs through the resolved adapter override", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+    const buildMcpServers = vi.fn(() => []);
+
+    const delegated = parseToolResult(
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "delegate_agent", {
+        mode: "call",
+        parentRunId: parent.run.runId,
+        objective: "use OpenClaw for this child",
+        defaultAdapterId: "openclaw",
+        requestId: "delegate-openclaw-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(delegated.ok).toBe(true);
+    expect(delegated.childSession.defaultAdapterId).toBe("openclaw");
+    expect(delegated.childRun).toMatchObject({
+      status: "failed",
+      errorCode: "adapter_not_registered",
+    });
+    expect(delegated.childRun.errorMessage).toContain("Adapter not registered: openclaw");
+    expect(buildMcpServers).toHaveBeenCalledWith("ask", undefined, undefined, {
+      ownerId: "owner",
+      requestId: "delegate-openclaw-1",
+      clientId: "delegate-client",
+      adapterId: "openclaw",
+      protocolVersion: 2,
+      includeSwiftBackedTools: false,
+    });
     store.close();
   });
 

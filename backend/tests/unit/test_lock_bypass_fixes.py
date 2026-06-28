@@ -921,21 +921,21 @@ class TestUsersLockEnforcement:
         locked_conv = _make_conversation(locked=True)
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
         conversations_db.iter_all_conversations = MagicMock(return_value=iter([locked_conv, unlocked_conv]))
-        memories_db.get_memories = MagicMock(return_value=[])
+        memories_db.get_non_filtered_memories = MagicMock(return_value=[])
         chat_db.iter_all_messages = MagicMock(return_value=iter([]))
 
-        # These functions are imported via 'from database.users import *' so they live
-        # in the routers.users namespace. Use create=True since the wildcard import
-        # may not have populated them in the stub environment.
-        # Patches must stay active during body consumption since generate() is lazy.
-        with patch('routers.users.get_user_profile', return_value={'name': 'Test'}, create=True):
-            with patch('routers.users.get_people', return_value=[], create=True):
-                with patch('routers.users.get_standalone_action_items', return_value=[], create=True):
+        # The export generator lives in services.users.data_export, which binds
+        # these helpers at module level. Patch the service-level symbols so the
+        # stub environment returns controlled data instead of MagicMock defaults.
+        # Patches must stay active during body consumption since the generator is lazy.
+        with patch('services.users.data_export.get_user_profile', return_value={'name': 'Test'}):
+            with patch('services.users.data_export.get_people', return_value=[]):
+                with patch('services.users.data_export.get_standalone_action_items', return_value=[]):
                     from routers.users import export_all_user_data
 
                     response = export_all_user_data(uid='test-uid')
 
-                    # Consume body inside patches — generate() is a lazy generator.
+                    # Consume body inside patches — the generator is lazy.
                     # StreamingResponse wraps sync generators as async iterators,
                     # so iterate the underlying generator directly.
                     import asyncio

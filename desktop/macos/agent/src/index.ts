@@ -37,6 +37,7 @@ import { unlinkSync, appendFileSync } from "fs";
 import type {
   InboundMessage,
   ControlToolRequestMessage,
+  DirectControlToolRequestMessage,
   OutboundMessage,
   QueryScopedOutbound,
   QueryMessage,
@@ -47,7 +48,7 @@ import type {
 } from "./protocol.js";
 import { requestIdFor } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
-import type { PromptBlock } from "./adapters/interface.js";
+import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
@@ -55,20 +56,35 @@ import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
 import {
+  adapterActivationError,
+  adapterIdForHarnessMode,
+  ensureRegisteredAdapter,
+} from "./runtime/adapter-selection.js";
+import {
   activeControlToolOwnerId,
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
   legacyControlRequestKey,
+  registerSignedDirectControlOwner,
   resolveControlRequestContext,
   withMergedOwnerGuard,
   DEFAULT_LOCAL_OWNER_ID,
   type AgentControlToolContext,
+  type ResolvedControlRequestContext,
 } from "./runtime/control-tools.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const DIRECT_CONTROL_TOOL_NAMES = new Set<string>([
+  "list_agent_sessions",
+  "get_agent_run",
+  "cancel_agent_run",
+  "inspect_agent_artifacts",
+  "update_agent_artifact_lifecycle",
+]);
 
 // Resolve paths to bundled tools
 const playwrightCli = join(
@@ -595,7 +611,7 @@ function buildMcpServers(
     const omiToolsEnv: Array<{ name: string; value: string }> = [
       { name: "OMI_BRIDGE_PIPE", value: omiToolsPipePath },
       { name: "OMI_QUERY_MODE", value: mode },
-      { name: "OMI_ADAPTER_ID", value: "acp" },
+      { name: "OMI_ADAPTER_ID", value: context?.adapterId ?? "acp" },
     ];
     if (context) {
       omiToolsEnv.push(
@@ -802,7 +818,7 @@ async function main(): Promise<void> {
   logErr(`Bridge main() starting (pid=${process.pid}, node=${process.version}, execPath=${process.execPath})`);
 
   const defaultHarnessMode = process.env.HARNESS_MODE || "acp";
-  const defaultAdapterId = defaultHarnessMode === "piMono" ? "pi-mono" : "acp";
+  const defaultAdapterId = adapterIdForHarnessMode(defaultHarnessMode);
   logErr(`Default harness mode: ${defaultHarnessMode}`);
 
   // 1. Start Unix socket for omi-tools relay
@@ -810,9 +826,11 @@ async function main(): Promise<void> {
   logErr("omi-tools relay started");
   process.env.OMI_BRIDGE_PIPE = omiToolsPipePath;
 
-  // 2. Start the ACP subprocess
-  await startAcpProcess();
-  logErr("ACP subprocess spawned");
+  // 2. Start ACP only when selected or lazily needed by an ACP query.
+  if (defaultAdapterId === "acp") {
+    await startAcpProcess();
+    logErr("ACP subprocess spawned");
+  }
 
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
@@ -873,6 +891,10 @@ async function main(): Promise<void> {
   let piMonoClasses: typeof import("./adapters/pi-mono.js") | undefined;
   let piMonoAuthToken = process.env.OMI_AUTH_TOKEN;
   const piMonoAdapters = new Set<import("./adapters/pi-mono.js").PiMonoAdapter>();
+  const localAcpAdapters = new Set<RuntimeAdapter>();
+  const stopLocalAcpAdapters = async (): Promise<void> => {
+    await Promise.all([...localAcpAdapters].map((adapter) => adapter.stop()));
+  };
   let currentOwnerId = DEFAULT_LOCAL_OWNER_ID;
   const ensurePiMonoAdapter = async (authToken: string | undefined): Promise<boolean> => {
     if (!authToken) return false;
@@ -893,8 +915,36 @@ async function main(): Promise<void> {
   };
 
   const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  const ensureHermesAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "hermes", {
+      log: logErr,
+      maxWorkers: 1,
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
+  const ensureOpenClawAdapter = async (): Promise<boolean> => {
+    return ensureRegisteredAdapter(registry, "openclaw", {
+      log: logErr,
+      maxWorkers: configuredPiMonoMaxWorkers(),
+      onCreate: (adapter) => localAcpAdapters.add(adapter),
+    });
+  };
+  const hermesAvailable = await ensureHermesAdapter();
+  const openClawAvailable = await ensureOpenClawAdapter();
   if (!piMonoAvailable && defaultAdapterId === "pi-mono") {
     const msg = "pi-mono mode requires OMI_AUTH_TOKEN (Firebase ID token); refusing to start";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!hermesAvailable && defaultAdapterId === "hermes") {
+    const msg = adapterActivationError("hermes") ?? "Hermes adapter is unavailable.";
+    logErr(msg);
+    send({ type: "error", message: msg });
+    process.exit(1);
+  }
+  if (!openClawAvailable && defaultAdapterId === "openclaw") {
+    const msg = adapterActivationError("openclaw") ?? "OpenClaw adapter is unavailable.";
     logErr(msg);
     send({ type: "error", message: msg });
     process.exit(1);
@@ -959,6 +1009,7 @@ async function main(): Promise<void> {
             throw new Error("protocol v2 query requires requestId");
           }
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
+          query.ownerId = queryOwnerId;
           query.requestId = query.protocolVersion === 2 ? query.requestId!.trim() : requestIdFor(query)?.trim() || randomUUID();
           const queryRequestId = requestIdFor(query);
           const queryOwnerKey =
@@ -968,7 +1019,18 @@ async function main(): Promise<void> {
           currentOwnerId = queryOwnerId;
           try {
             if (adapterId === "acp") {
+              await startAcpProcess();
               await initializeAcp();
+            } else if (adapterId === "pi-mono") {
+              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+            } else if (adapterId === "hermes") {
+              if (!(await ensureHermesAdapter())) {
+                throw new Error(adapterActivationError("hermes"));
+              }
+            } else if (adapterId === "openclaw") {
+              if (!(await ensureOpenClawAdapter())) {
+                throw new Error(adapterActivationError("openclaw"));
+              }
             }
             await facade.handleQuery(query);
           } finally {
@@ -1156,6 +1218,131 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "direct_control_tool": {
+        const control = msg as DirectControlToolRequestMessage;
+        if (control.protocolVersion === 2 && !control.clientId?.trim()) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId: control.requestId?.trim(),
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: { code: "invalid_request", message: "protocol v2 direct control requires clientId" },
+            }),
+          });
+          break;
+        }
+        if (control.protocolVersion === 2 && !control.requestId?.trim()) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId: control.requestId?.trim(),
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: { code: "invalid_request", message: "protocol v2 direct control requires requestId" },
+            }),
+          });
+          break;
+        }
+        const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control);
+        if (!DIRECT_CONTROL_TOOL_NAMES.has(control.name)) {
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "unsupported_direct_control_tool",
+                message: `Direct app control cannot execute ${control.name}`,
+              },
+            }),
+          });
+          break;
+        }
+
+        const requestKey = controlRequestKey({ requestId, clientId: control.clientId });
+        let directControlOwnerInserted = registerSignedDirectControlOwner({
+          requestKey,
+          ownerGuard: control.ownerId,
+          ownerIdForRequest: (key) => activeControlToolOwnersByRequest.get(key),
+          registerOwner: registerActiveControlOwner,
+        });
+        const releaseDirectControlOwner = () => {
+          if (requestKey && directControlOwnerInserted) {
+            activeControlToolOwnersByRequest.delete(requestKey);
+            directControlOwnerInserted = false;
+          }
+        };
+
+        let controlContext: ResolvedControlRequestContext;
+        let controlInput: Record<string, unknown>;
+        try {
+          controlContext = resolveControlRequestContext({
+            ownerGuard: control.ownerId,
+            activeOwnerId: requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined,
+            requireActiveOwner: true,
+            requireOwnerGuard: true,
+            requestId,
+            clientId: control.clientId,
+          });
+          controlInput = withMergedOwnerGuard(control.input ?? {}, controlContext.ownerGuard, controlContext.activeOwnerId);
+        } catch (error) {
+          releaseDirectControlOwner();
+          send({
+            type: "control_tool_result",
+            protocolVersion: control.protocolVersion,
+            requestId,
+            clientId: control.clientId,
+            name: control.name,
+            result: JSON.stringify({
+              ok: false,
+              error: {
+                code: "invalid_owner_id",
+                message: error instanceof Error ? error.message : String(error),
+              },
+            }),
+          });
+          break;
+        }
+
+        const result = await (async () => {
+          try {
+            return agentControlToolContext
+              ? await handleAgentControlToolCall(
+                  {
+                    ...agentControlToolContext,
+                    getProtocolVersion: () => control.protocolVersion,
+                    getOwnerId: () => controlContext.activeOwnerId,
+                  },
+                  control.name,
+                  controlInput,
+                )
+              : JSON.stringify({
+                  ok: false,
+                  error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
+                });
+          } finally {
+            releaseDirectControlOwner();
+          }
+        })();
+        send({
+          type: "control_tool_result",
+          protocolVersion: control.protocolVersion,
+          requestId,
+          clientId: control.clientId,
+          name: control.name,
+          result,
+        });
+        break;
+      }
+
       case "interrupt":
         logErr("Interrupt requested by user");
         facade.handleInterrupt(msg).catch((err) => {
@@ -1202,6 +1389,7 @@ async function main(): Promise<void> {
         store.close();
         await acpAdapter.stop();
         await Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
+        await stopLocalAcpAdapters();
         process.exit(0);
         break;
 
@@ -1216,6 +1404,7 @@ async function main(): Promise<void> {
     store.close();
     void acpAdapter.stop();
     void Promise.all([...piMonoAdapters].map((adapter) => adapter.stop()));
+    void stopLocalAcpAdapters();
     process.exit(0);
   });
 }

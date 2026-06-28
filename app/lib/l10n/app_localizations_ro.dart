@@ -1722,12 +1722,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOZITIVE',
-      one: 'DISPOZITIV',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -7802,6 +7797,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get viewAll => 'Vezi tot';
 
   @override
+  String get expand => 'Extinde';
+
+  @override
   String get addTask => 'Adaugă sarcină';
 
   @override
@@ -9408,4 +9406,106 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
+
+  @override
+  String get deviceTutorial => 'Cum să folosești Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Vorbește în Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Spune câteva cuvinte și privește-le cum apar în timp real';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Bravo!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Începe să vorbești...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Pune-i o întrebare lui Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Apasă butonul o dată, rostește întrebarea, apoi apasă din nou când ai terminat';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Se procesează întrebarea ta...';
+
+  @override
+  String get deviceOnboardingListening => 'Ascultă...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Oprire';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Pornire';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Ține butonul apăsat 3 secunde';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Apasă butonul pentru a-l porni din nou';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Ține butonul apăsat ferm până se stinge lumina';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Conectat';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Conectat!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Deconectat';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Se oprește...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalizează dublul tap';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Încheie conversația';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Salvează și încheie conversația curentă';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Dezactivează / Activează sunetul';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Pornește sau oprește microfonul';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Marchează conversația în curs';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Marchează conversația ca importantă';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'A fost un singur tap — încearcă să atingi de două ori rapid!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Încearcă acum! Atinge Omi de două ori';
+
+  @override
+  String get deviceOnboardingContinue => 'Continuă';
+
+  @override
+  String get deviceOnboardingFinish => 'Termină';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Cunoaște-ți Omi-ul';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un tur rapid și practic prin tot ce poate face Omi-ul tău.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximativ 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Sari la cel mai recent mesaj';
+
+  @override
+  String get latest => 'Recent';
 }

@@ -215,7 +215,7 @@ struct AppsPage: View {
                             // Featured section (apps marked as is_popular in backend)
                             if !appProvider.popularApps.isEmpty {
                                 AppGridSection(
-                                    title: "Featured",
+                                    title: "Other",
                                     apps: Array(appProvider.popularApps.prefix(6)),
                                     appProvider: appProvider,
                                     onSelectApp: { selectedApp = $0 },
@@ -951,12 +951,6 @@ struct ImportsSection: View {
                     }
                 }
             }
-            .background(OmiColors.backgroundPrimary)
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
-            )
         }
     }
 }
@@ -2124,12 +2118,8 @@ struct AppCard: View {
                 }
             }
             .padding(14)
-            .background(isHovering ? OmiColors.backgroundSecondary : OmiColors.backgroundPrimary)
+            .background(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
             .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
-            )
         }
         .buttonStyle(.plain)
         .onHover { hovering in

@@ -9,6 +9,41 @@ struct FloatingChatExchange: Identifiable {
     let aiMessage: ChatMessage
 }
 
+enum FloatingConversationSurface: Equatable {
+    case closed
+    case mainInput
+    case mainResponse
+    case agent(UUID)
+
+    var isOpen: Bool {
+        switch self {
+        case .closed: return false
+        case .mainInput, .mainResponse, .agent: return true
+        }
+    }
+
+    var isResponseLike: Bool {
+        switch self {
+        case .mainResponse, .agent: return true
+        case .closed, .mainInput: return false
+        }
+    }
+
+    var agentID: UUID? {
+        guard case .agent(let id) = self else { return nil }
+        return id
+    }
+
+    var measurementKey: String {
+        switch self {
+        case .closed: return "closed"
+        case .mainInput: return "mainInput"
+        case .mainResponse: return "mainResponse"
+        case .agent(let id): return "agent:\(id.uuidString)"
+        }
+    }
+}
+
 /// Hidden provenance carried with a floating-bar notification so follow-up
 /// questions can explain where the notification came from without guessing.
 struct FloatingBarNotificationContext: Equatable {
@@ -55,6 +90,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
 @MainActor
 class FloatingControlBarState: NSObject, ObservableObject {
     static let visibleConversationReuseInterval: TimeInterval = 10 * 60
+    static var voiceResponseWatchdogDelay: TimeInterval = 30
 
     @Published var isRecording: Bool = false
     @Published var duration: Int = 0
@@ -74,8 +110,37 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var currentQuestionMessageId: String? = nil
     @Published var inputViewHeight: CGFloat = 120
     @Published var responseContentHeight: CGFloat = 0
+    @Published private(set) var responseContentHeights: [String: CGFloat] = [:]
     @Published var chatHistory: [FloatingChatExchange] = []
     @Published var lastConversationActivityAt: Date? = nil
+    @Published var activeAgentChatPillID: UUID? = nil
+    @Published var conversationSurface: FloatingConversationSurface = .closed
+
+    /// Notch subagent switcher visibility state. Mirrored from the SwiftUI view
+    /// so the window can account for an expanded switcher when resizing.
+    @Published var agentSwitcherPinned: Bool = false
+    @Published var agentSwitcherHovering: Bool = false
+    var isAgentSwitcherExpanded: Bool { agentSwitcherPinned || agentSwitcherHovering }
+    @Published private(set) var notchHoverMenuOpen: Bool = false
+    var canShowNotchHoverMenu: Bool {
+        usesNotchIsland
+            && !showingAIConversation
+            && !isVoiceListening
+            && !isShowingNotification
+            && currentNotification == nil
+    }
+    var isNotchHoverMenuVisible: Bool {
+        canShowNotchHoverMenu && notchHoverMenuOpen
+    }
+
+    func setNotchHoverMenuOpen(_ open: Bool) {
+        notchHoverMenuOpen = open
+        isHoveringBar = open
+        agentSwitcherHovering = open
+        if !open {
+            agentSwitcherPinned = false
+        }
+    }
 
     /// Convenience accessor for plain-text response (used by window geometry and error handling).
     var aiResponseText: String {
@@ -93,7 +158,13 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var isVoiceListening: Bool = false
     @Published var isVoiceLocked: Bool = false
     @Published var voiceTranscript: String = ""
-    @Published var isVoiceResponseActive: Bool = false
+    @Published var isVoiceResponseActive: Bool = false {
+        didSet { updateVoiceResponseWatchdog() }
+    }
+    /// True only when the notch-mode setting is enabled and the current display
+    /// exposes a real camera housing safe area. External displays keep old pill UI.
+    @Published var usesNotchIsland: Bool = false
+    @Published var notchRevealProgress: CGFloat = 1
 
     // Voice follow-up state (PTT while AI conversation is active)
     @Published var isVoiceFollowUp: Bool = false
@@ -102,6 +173,8 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// Whether the current query originated from voice (PTT). Used to decide
     /// whether voice responses should play for this particular query.
     @Published var currentQueryFromVoice: Bool = false
+
+    private var voiceResponseWatchdogWorkItem: DispatchWorkItem?
 
     // Model selection
     @Published var selectedModel: String = ModelQoS.Claude.defaultSelection
@@ -113,8 +186,12 @@ class FloatingControlBarState: NSObject, ObservableObject {
         currentNotification != nil
     }
 
-    var hasVisibleConversation: Bool {
+    var hasMainConversation: Bool {
         !chatHistory.isEmpty || currentAIMessage != nil || !displayedQuery.isEmpty
+    }
+
+    var hasVisibleConversation: Bool {
+        conversationSurface.isOpen || activeAgentChatPillID != nil || hasMainConversation
     }
 
     var canRestoreVisibleConversation: Bool {
@@ -126,17 +203,114 @@ class FloatingControlBarState: NSObject, ObservableObject {
         lastConversationActivityAt = date
     }
 
-    func clearVisibleConversation() {
+    func present(_ surface: FloatingConversationSurface) {
+        conversationSurface = surface
+        activeAgentChatPillID = surface.agentID
+        showingAIConversation = surface.isOpen
+        showingAIResponse = surface.isResponseLike
+        markConversationActivity()
+    }
+
+    func leaveAgentSurface() {
+        activeAgentChatPillID = nil
+        let nextSurface: FloatingConversationSurface = hasMainConversation ? .mainResponse : .mainInput
+        present(nextSurface)
+    }
+
+    func hideConversationSurface() {
+        // Cancel in-flight work before resetting process flags so UI state and
+        // active response/follow-up workflows stay in sync. Without this, a
+        // streaming response or PTT follow-up keeps running after its UI flags
+        // are cleared, and late-arriving chunks update a surface nobody sees.
+        // (Cubic P2 — presentation/process desync.)
+        FloatingControlBarManager.shared.cancelChat()
+        // Call cancelListening() directly instead of gating on isVoiceFollowUp:
+        // the derived UI flag is not the authoritative source of microphone
+        // state, and cancelListening() is already guarded by state != .idle.
+        // (Cubic P2 — stale PTT capture after surface hide.)
+        PushToTalkManager.shared.cancelListening()
+        activeAgentChatPillID = nil
+        conversationSurface = .closed
+        showingAIConversation = false
+        showingAIResponse = false
+        isAILoading = false
+        isVoiceFollowUp = false
+        voiceFollowUpTranscript = ""
+        markConversationActivity()
+    }
+
+    func reportContentHeight(_ height: CGFloat, for surface: FloatingConversationSurface) {
+        guard height > 0, conversationSurface == surface else { return }
+        let measuredHeight = (height * 2).rounded(.up) / 2
+        let key = surface.measurementKey
+        if let previousHeight = responseContentHeights[key],
+           abs(previousHeight - measuredHeight) < 0.5
+        {
+            return
+        }
+        responseContentHeights[key] = measuredHeight
+        if surface == .mainResponse {
+            responseContentHeight = measuredHeight
+        }
+    }
+
+    func measuredContentHeight(for surface: FloatingConversationSurface) -> CGFloat? {
+        responseContentHeights[surface.measurementKey]
+    }
+
+    func resetMeasuredContentHeight(for surface: FloatingConversationSurface) {
+        responseContentHeights.removeValue(forKey: surface.measurementKey)
+        if surface == .mainResponse {
+            responseContentHeight = 0
+        }
+    }
+
+    func clearVisibleConversation(cancelInFlightWork: Bool = true) {
+        // When cancelInFlightWork is true (default), cancel in-flight chat
+        // streaming and PTT capture before resetting UI flags. This is needed
+        // from close/restore/notification paths where stale streams and mic
+        // capture should be stopped. (Cubic P2.)
+        //
+        // Callers that only need a UI reset (e.g. openAIInputWithQuery, which
+        // already cancelled its own subscriptions and is about to route a new
+        // typed query) pass cancelInFlightWork: false to avoid killing a
+        // provider session that the new query depends on. (Cubic P2 — semantic
+        // mismatch between method name and hard-cancellation side effects.)
+        if cancelInFlightWork {
+            FloatingControlBarManager.shared.cancelChat()
+            PushToTalkManager.shared.cancelListening()
+        }
+        activeAgentChatPillID = nil
+        conversationSurface = .closed
+        responseContentHeights = [:]
+        responseContentHeight = 0
         aiInputText = ""
         displayedQuery = ""
         currentAIMessage = nil
         currentQuestionMessageId = nil
         chatHistory = []
+        showingAIConversation = false
         showingAIResponse = false
         isAILoading = false
         isVoiceFollowUp = false
         voiceFollowUpTranscript = ""
         currentQueryFromVoice = false
         lastConversationActivityAt = nil
+    }
+
+    private func updateVoiceResponseWatchdog() {
+        voiceResponseWatchdogWorkItem?.cancel()
+        voiceResponseWatchdogWorkItem = nil
+        guard isVoiceResponseActive else { return }
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, self.isVoiceResponseActive else { return }
+            self.isVoiceResponseActive = false
+        }
+        voiceResponseWatchdogWorkItem = workItem
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.voiceResponseWatchdogDelay,
+            execute: workItem
+        )
     }
 }
