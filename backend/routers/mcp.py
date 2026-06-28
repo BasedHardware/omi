@@ -115,6 +115,11 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
 # ---------------------------------------------------------------------------
 
 
+class McpSearchRequest(BaseModel):
+    query: str
+    limit: Optional[int] = None
+
+
 def _search_http_error(error: mcp_search.SearchError) -> HTTPException:
     if isinstance(error, mcp_search.ItemNotFound):
         return HTTPException(status_code=404, detail=str(error))
@@ -123,11 +128,12 @@ def _search_http_error(error: mcp_search.SearchError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(error))
 
 
-@router.get("/v1/mcp/search", tags=["mcp"])
-def mcp_search_endpoint(query: str, limit: Optional[int] = None, uid: str = Depends(get_uid_from_mcp_api_key)):
-    logger.info(f"mcp search {uid} query={sanitize_pii(query)}")
+# POST (not GET) so the search query stays out of the URL and access logs.
+@router.post("/v1/mcp/search", tags=["mcp"])
+def mcp_search_endpoint(request: McpSearchRequest, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"mcp search {uid} query={sanitize_pii(request.query)}")
     try:
-        return mcp_search.search(uid, query, limit)
+        return mcp_search.search(uid, request.query, request.limit)
     except mcp_search.SearchError as e:
         raise _search_http_error(e)
 
