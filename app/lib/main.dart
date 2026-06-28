@@ -87,7 +87,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       channelKey: 'channel',
       channelName: 'Omi Notifications',
       channelDescription: 'Notification channel for Omi',
-      defaultColor: const Color(0xFF9D50DD),
+      defaultColor: const Color(0xFF2F6BFF),
       ledColor: Colors.white,
     ),
   ]);
@@ -363,9 +363,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             supportedLocales: AppLocalizations.supportedLocales,
             theme: ThemeData(
               useMaterial3: false,
+              fontFamily: 'Oxanium',
               colorScheme: const ColorScheme.dark(
                 primary: Colors.black,
-                secondary: Colors.deepPurple,
+                secondary: Color(0xFF2F6BFF),
                 surface: Colors.black38,
               ),
               snackBarTheme: const SnackBarThemeData(
@@ -380,7 +381,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ),
               textSelectionTheme: const TextSelectionThemeData(
                 cursorColor: Colors.white,
-                selectionColor: Colors.deepPurple,
+                selectionColor: Color(0xFF2F6BFF),
                 selectionHandleColor: Colors.white,
               ),
               cupertinoOverrideTheme: const CupertinoThemeData(

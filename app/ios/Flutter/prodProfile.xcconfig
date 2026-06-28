@@ -4,6 +4,6 @@
 #include "Custom.xcconfig"
 
 ASSET_PREFIX=prod
-BUNDLE_NAME=Omi
-BUNDLE_DISPLAY_NAME=Omi
+BUNDLE_NAME=Cortex
+BUNDLE_DISPLAY_NAME=Cortex
 GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.208440318997-ukinsq3sijhcetkhr26ssqp1terbq7as

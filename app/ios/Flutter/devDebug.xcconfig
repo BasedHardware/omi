@@ -4,7 +4,7 @@
 #include "Custom.xcconfig"
 
 ASSET_PREFIX=dev
-BUNDLE_NAME=Omi Dev
-BUNDLE_DISPLAY_NAME=Omi Dev
+BUNDLE_NAME=Cortex Dev
+BUNDLE_DISPLAY_NAME=Cortex Dev
 APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12.development
 GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde
