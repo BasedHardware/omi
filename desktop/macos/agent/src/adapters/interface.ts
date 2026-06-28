@@ -4,6 +4,7 @@
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
 import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
+import type { RuntimeFailure } from "../runtime/failures.js";
 import type { ArtifactRole, ResumeFidelity, RunMode } from "../runtime/types.js";
 
 /**
@@ -371,6 +372,7 @@ export interface AdapterAttemptResult {
   /** Adapter-owned native session id exposed for compatibility fields while v1 clients migrate. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";
+  failure?: RuntimeFailure;
   artifacts?: AdapterArtifactReference[];
 }
 

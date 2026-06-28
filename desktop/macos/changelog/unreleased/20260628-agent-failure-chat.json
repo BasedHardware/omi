@@ -1,0 +1,3 @@
+{
+  "change": "Fixed failed agent runs so provider errors appear in the agent chat detail, not just the row summary"
+}

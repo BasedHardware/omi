@@ -323,17 +323,25 @@ class TaskChatState: ObservableObject {
             streamingFlushWorkItem = nil
             flushStreamingBuffer()
 
+            let failedByUserStop: Bool
+            if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+                failedByUserStop = true
+            } else {
+                failedByUserStop = false
+            }
+
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                if messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
+                if failedByUserStop && messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
                     messages.remove(at: index)
                 } else {
+                    Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
                     messages[index].isStreaming = false
                     completeRemainingToolCalls(messageId: aiMessageId)
                     persistMessage(messages[index])
                 }
             }
 
-            if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+            if failedByUserStop {
                 TaskAgentStatusRegistry.shared.markStopped(taskId: taskId)
             } else {
                 errorMessage = error.localizedDescription
@@ -353,6 +361,12 @@ class TaskChatState: ObservableObject {
     }
 
     // MARK: - Follow-Up
+
+    static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
+        if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            message.text = "Failed: \(errorDescription)"
+        }
+    }
 
     func sendFollowUp(_ text: String) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)

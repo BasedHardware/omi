@@ -14,6 +14,7 @@ import type {
   WarmupSessionConfig,
 } from "../protocol.js";
 import { requestIdFor } from "../protocol.js";
+import type { RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 
@@ -224,9 +225,12 @@ export class JsonlCompatibilityFacade {
       context.adapterSessionId = result.adapterSessionId ?? undefined;
 
       if (result.terminalStatus === "failed") {
+        const failure = failureFromResultJson(result.run.resultJson);
+        const message = failure?.userMessage ?? result.run.errorMessage ?? "Agent run failed";
         const errorMessage: ErrorMessage = {
           type: "error",
-          message: result.run.errorMessage ?? "Agent run failed",
+          message,
+          failure,
         };
         this.send(this.withCorrelation(errorMessage, context));
         return;
@@ -238,6 +242,7 @@ export class JsonlCompatibilityFacade {
         sessionId: this.compatibilityResultSessionId(context, result.session.sessionId),
         adapterSessionId: result.adapterSessionId ?? undefined,
         terminalStatus: result.terminalStatus,
+        failure: failureFromResultJson(result.run.resultJson),
         costUsd: result.run.costUsd ?? 0,
         inputTokens: result.run.inputTokens ?? Math.ceil(input.prompt.length / 4),
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
@@ -692,6 +697,19 @@ export class JsonlCompatibilityFacade {
       return true;
     };
   }
+}
+
+function failureFromResultJson(resultJson: string | null): RuntimeFailure | undefined {
+  if (!resultJson) return undefined;
+  try {
+    const parsed = JSON.parse(resultJson) as { failure?: RuntimeFailure };
+    if (parsed.failure?.code && parsed.failure.userMessage) {
+      return parsed.failure;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function parsePayload(payloadJson: string): Record<string, unknown> {

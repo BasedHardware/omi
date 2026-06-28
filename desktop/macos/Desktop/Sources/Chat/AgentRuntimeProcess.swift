@@ -882,7 +882,8 @@ actor AgentRuntimeProcess {
   }
 
   private func failRequest(_ message: RuntimeMessage) {
-    let raw = message.payload["message"] as? String ?? "Unknown error"
+    let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
+    let raw = failure?.displayMessage ?? message.payload["message"] as? String ?? "Unknown error"
     if let requestKey = message.requestKey,
       let controlRequest = activeControlRequests.removeValue(forKey: requestKey)
     {

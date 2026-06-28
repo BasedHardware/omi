@@ -41,6 +41,24 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertNil(projection?.completedAt)
   }
 
+  func testErrorProjectionUsesStructuredFailure() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"error","protocolVersion":2,"requestId":"req","sessionId":"ses-failed","runId":"run-failed","attemptId":"attempt-failed","message":"legacy text","failure":{"code":"adapter_process_exited","source":"adapter_process","adapterId":"openclaw","provider":"openai","retryable":true,"userMessage":"OpenClaw failed: OpenAI API error: upstream unavailable","technicalMessage":"OpenAI API error: upstream unavailable"}}"#
+    )!
+
+    store.ingest(message: message, surface: surface)
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.status, .failed)
+    XCTAssertEqual(projection?.errorMessage, "OpenClaw failed: OpenAI API error: upstream unavailable")
+    XCTAssertEqual(projection?.failure?.code, "adapter_process_exited")
+    XCTAssertEqual(projection?.failure?.adapterId, "openclaw")
+    XCTAssertEqual(projection?.failure?.provider, "openai")
+    XCTAssertEqual(projection?.failure?.retryable, true)
+  }
+
   func testUpdateActivityDoesNotReviveTerminalProjection() {
     let store = AgentRuntimeStatusStore()
     let surface = AgentSurfaceReference.taskChat(taskId: "task-terminal")
