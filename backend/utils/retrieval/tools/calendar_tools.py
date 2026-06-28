@@ -55,6 +55,20 @@ def _format_event_dt(dt: datetime, display_tz, tz_label: str) -> str:
     return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
 
 
+async def _get_user_display_tz(uid: str):
+    """Return ``(tzinfo, label)`` for the user's timezone, read off the event loop.
+
+    A timezone lookup failure must never abort the calendar tool, so fall back to
+    UTC and let the events still render (issue #4643).
+    """
+    try:
+        tz = await run_blocking(db_executor, notification_db.get_user_time_zone, uid)
+    except Exception as tz_error:
+        logger.warning(f"get_calendar_events_tool - timezone lookup failed, formatting in UTC: {tz_error}")
+        tz = None
+    return _resolve_display_tz(tz)
+
+
 from utils.log_sanitizer import sanitize, sanitize_pii
 import logging
 
@@ -716,8 +730,7 @@ async def get_calendar_events_tool(
         # Format events
         # Render event times in the user's timezone so the chat model labels the time
         # of day correctly (issue #4643). The tz read is sync Firestore, so offload it.
-        tz = await run_blocking(db_executor, notification_db.get_user_time_zone, uid)
-        display_tz, tz_label = _resolve_display_tz(tz)
+        display_tz, tz_label = await _get_user_display_tz(uid)
         result = f"Calendar Events ({len(events)} found):\n\n"
 
         for i, event in enumerate(events, 1):
