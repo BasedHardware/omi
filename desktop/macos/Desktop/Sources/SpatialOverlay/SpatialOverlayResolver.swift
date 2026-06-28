@@ -94,7 +94,7 @@ struct SpatialOverlayAnchorResolver {
       return .failure(.noCandidates)
     }
 
-    let allowed = candidates.filter { $0.allowedUses.contains(spec.use) }
+    let allowed = candidates.filter { candidateIsAllowed($0, for: spec.use) }
     guard !allowed.isEmpty else {
       return .failure(.noCandidateAllowedForUse(spec.use))
     }
@@ -128,6 +128,15 @@ struct SpatialOverlayAnchorResolver {
     return spec.preferredSources.enumerated().compactMap { index, source in
       sources.contains(source) ? index : nil
     }.min() ?? spec.preferredSources.count
+  }
+
+  private func candidateIsAllowed(
+    _ candidate: SpatialOverlayAnchorCandidate,
+    for use: SpatialOverlayAnchorUse
+  ) -> Bool {
+    guard candidate.allowedUses.contains(use) else { return false }
+    guard use == .performClick else { return true }
+    return candidate.evidence.contains { $0.source == .accessibility || $0.source == .ocr }
   }
 }
 

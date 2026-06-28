@@ -464,7 +464,7 @@ final class BrowserAutomationTargetTests: XCTestCase {
     let candidate = CloudConnectorFormAutomation.OCRTextCandidate(
       text: "Add",
       confidence: 0.92,
-      imageRect: CGRect(x: 1260, y: 855, width: 72, height: 42)
+      imageRect: CGRect(x: 1260, y: 230, width: 72, height: 42)
     )
 
     XCTAssertEqual(
@@ -483,12 +483,12 @@ final class BrowserAutomationTargetTests: XCTestCase {
     let good = CloudConnectorFormAutomation.OCRTextCandidate(
       text: "Add",
       confidence: 0.92,
-      imageRect: CGRect(x: 1260, y: 855, width: 72, height: 42)
+      imageRect: CGRect(x: 1260, y: 230, width: 72, height: 42)
     )
     let cancel = CloudConnectorFormAutomation.OCRTextCandidate(
       text: "Cancel",
       confidence: 0.92,
-      imageRect: CGRect(x: 1140, y: 855, width: 110, height: 42)
+      imageRect: CGRect(x: 1140, y: 230, width: 110, height: 42)
     )
     let sidebar = CloudConnectorFormAutomation.OCRTextCandidate(
       text: "Add",
@@ -503,12 +503,12 @@ final class BrowserAutomationTargetTests: XCTestCase {
     let lowConfidence = CloudConnectorFormAutomation.OCRTextCandidate(
       text: "Add",
       confidence: 0.4,
-      imageRect: CGRect(x: 1260, y: 855, width: 72, height: 42)
+      imageRect: CGRect(x: 1260, y: 230, width: 72, height: 42)
     )
     let substring = CloudConnectorFormAutomation.OCRTextCandidate(
       text: "Added",
       confidence: 0.92,
-      imageRect: CGRect(x: 1260, y: 855, width: 90, height: 42)
+      imageRect: CGRect(x: 1260, y: 230, width: 90, height: 42)
     )
 
     XCTAssertNil(
@@ -571,8 +571,8 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
     XCTAssertGreaterThan(anchor.x, windowFrame.minX + windowFrame.width * 0.55)
     XCTAssertLessThan(anchor.x, windowFrame.minX + windowFrame.width * 0.75)
-    XCTAssertGreaterThan(anchor.y, windowFrame.minY + windowFrame.height * 0.08)
-    XCTAssertLessThan(anchor.y, windowFrame.minY + windowFrame.height * 0.18)
+    XCTAssertGreaterThan(anchor.y, windowFrame.minY + windowFrame.height * 0.16)
+    XCTAssertLessThan(anchor.y, windowFrame.minY + windowFrame.height * 0.26)
   }
 
   @MainActor
@@ -617,6 +617,62 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertEqual(result.targetPoint.y, explicitFrame.midY, accuracy: 0.001)
     XCTAssertEqual(result.globalArrowTip.x, explicitFrame.midX, accuracy: 3)
     XCTAssertEqual(result.globalArrowTip.y, explicitFrame.midY, accuracy: 3)
+  }
+
+  @MainActor
+  func testClaudeGuidancePrefersExplicitCandidateOverHigherConfidenceHeuristic() throws {
+    let windowFrame = CGRect(x: 80, y: 60, width: 1600, height: 1000)
+    let screen = SpatialOverlayScreen(id: "test", frame: windowFrame, visibleFrame: windowFrame)
+    let explicitFrame = CGRect(x: 1_250, y: 230, width: 72, height: 42)
+    let explicit = SpatialOverlayAnchorCandidate(
+      id: "explicit-add",
+      targetRect: explicitFrame,
+      screen: screen,
+      evidence: [
+        SpatialOverlayTargetEvidence(source: .accessibility, confidence: 0.90, label: "Add")
+      ],
+      confidence: 0.90,
+      allowedUses: [.displayGuidance, .performClick]
+    )
+    let heuristic = SpatialOverlayAnchorCandidate(
+      id: "heuristic-add",
+      targetRect: CGRect(x: explicitFrame.midX + 120, y: explicitFrame.midY + 80, width: 2, height: 2),
+      screen: screen,
+      evidence: [
+        SpatialOverlayTargetEvidence(source: .layoutHeuristic, confidence: 0.99, label: "estimate")
+      ],
+      confidence: 0.99,
+      allowedUses: [.displayGuidance]
+    )
+
+    let result = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
+      windowFrame: windowFrame,
+      candidates: [heuristic, explicit]
+    ))
+
+    XCTAssertEqual(result.targetPoint.x, explicitFrame.midX, accuracy: 0.001)
+    XCTAssertEqual(result.targetPoint.y, explicitFrame.midY, accuracy: 0.001)
+  }
+
+  @MainActor
+  func testClaudeGuidanceIgnoresCandidatesNotAllowedForDisplay() throws {
+    let windowFrame = CGRect(x: 80, y: 60, width: 1600, height: 1000)
+    let screen = SpatialOverlayScreen(id: "test", frame: windowFrame, visibleFrame: windowFrame)
+    let clickOnly = SpatialOverlayAnchorCandidate(
+      id: "click-only",
+      targetRect: CGRect(x: 1_250, y: 230, width: 72, height: 42),
+      screen: screen,
+      evidence: [
+        SpatialOverlayTargetEvidence(source: .accessibility, confidence: 0.99, label: "Add")
+      ],
+      confidence: 0.99,
+      allowedUses: [.performClick]
+    )
+
+    XCTAssertNil(CloudConnectorGuidanceOverlay.placementResult(
+      windowFrame: windowFrame,
+      candidates: [clickOnly]
+    ))
   }
 
   @MainActor

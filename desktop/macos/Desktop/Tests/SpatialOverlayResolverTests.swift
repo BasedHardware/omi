@@ -20,7 +20,7 @@ final class SpatialOverlayResolverTests: XCTestCase {
       id: "add-heuristic",
       rect: CGRect(x: 1190, y: 162, width: 2, height: 2),
       source: .layoutHeuristic,
-      confidence: 0.58,
+      confidence: 0.99,
       uses: [.displayGuidance]
     )
     let snapshot = SpatialOverlayDesktopSnapshot(screens: [screen], candidates: [heuristic, explicit])
@@ -40,8 +40,8 @@ final class SpatialOverlayResolverTests: XCTestCase {
       id: "add-heuristic",
       rect: CGRect(x: 1190, y: 162, width: 2, height: 2),
       source: .layoutHeuristic,
-      confidence: 0.58,
-      uses: [.displayGuidance]
+      confidence: 0.99,
+      uses: [.displayGuidance, .performClick]
     )
     let snapshot = SpatialOverlayDesktopSnapshot(screens: [screen], candidates: [heuristic])
 

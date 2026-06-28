@@ -36,6 +36,18 @@ enum SpatialOverlayGeometry {
     return screen(containing: windowFrame, in: screens) ?? screens.first
   }
 
+  static func screenForTopLeftFrame(_ frame: CGRect) -> SpatialOverlayScreen? {
+    let screens = NSScreen.screens.map(screen(from:))
+    return screens
+      .map { screen -> (SpatialOverlayScreen, CGFloat) in
+        let convertedFrame = appKitFrame(topLeftFrame: frame, screenFrame: screen.frame)
+        return (screen, screen.frame.intersection(convertedFrame).spatialOverlayArea)
+      }
+      .filter { $0.1 > 0 }
+      .sorted { lhs, rhs in lhs.1 > rhs.1 }
+      .first?.0
+  }
+
   static func screenFrameForTopLeftNormalization(preferredScreen: NSScreen? = NSScreen.main)
     -> NSRect
   {

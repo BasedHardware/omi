@@ -86,7 +86,7 @@ final class CloudConnectorGuidanceOverlay {
     overlaySize: CGSize = CGSize(width: 330, height: 118)
   ) -> SpatialOverlayPlacementResult? {
     let screen = SpatialOverlayGeometry.screenForTarget(windowFrame: windowFrame)
-    for candidate in candidates.map({ candidate in
+    for candidate in candidates.filter({ $0.allowedUses.contains(.displayGuidance) }).map({ candidate in
       guard let screen else { return candidate }
       return SpatialOverlayAnchorCandidate(
         id: candidate.id,
@@ -116,13 +116,13 @@ final class CloudConnectorGuidanceOverlay {
     lhs: SpatialOverlayAnchorCandidate,
     rhs: SpatialOverlayAnchorCandidate
   ) -> Bool {
-    if lhs.confidence != rhs.confidence {
-      return lhs.confidence > rhs.confidence
-    }
     let lhsExplicit = lhs.evidence.contains { $0.source == .accessibility || $0.source == .ocr }
     let rhsExplicit = rhs.evidence.contains { $0.source == .accessibility || $0.source == .ocr }
     if lhsExplicit != rhsExplicit {
       return lhsExplicit
+    }
+    if lhs.confidence != rhs.confidence {
+      return lhs.confidence > rhs.confidence
     }
     return lhs.id < rhs.id
   }

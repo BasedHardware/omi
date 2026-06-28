@@ -400,6 +400,9 @@ struct MemoryExportDestinationSheet: View {
 
   @StateObject private var model = MemoryExportDestinationSheetModel()
   @State private var showManualSetup = false
+  @State private var permissionRefreshID = 0
+
+  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -455,6 +458,17 @@ struct MemoryExportDestinationSheet: View {
         await model.generateMCPKey()
       }
     }
+    .onReceive(permissionRefreshTimer) { _ in
+      refreshPermissionStateIfNeeded()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      refreshPermissionStateIfNeeded()
+    }
+  }
+
+  private func refreshPermissionStateIfNeeded() {
+    guard MemoryExportExecutor.requiresAccessibilityPreflight(destination) else { return }
+    permissionRefreshID += 1
   }
 
   @ViewBuilder
@@ -606,6 +620,7 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var executeButtonTitle: String {
+    _ = permissionRefreshID
     switch destination.mcpExecuteKind {
     case .localAutonomous:
       return "Do it for me"

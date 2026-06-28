@@ -290,15 +290,24 @@ enum CloudConnectorFormAutomation {
   static func showClaudeConnectGuidanceOverlay() -> Bool {
     guard let target = findClaudeConnectorTargetWithNodes(),
       target.state == .connectorDetailNotConnected,
-      let windowFrame = largestWindowFrame(in: target.nodes)
+      let rawWindowFrame = largestWindowFrame(in: target.nodes),
+      let screen = SpatialOverlayGeometry.screenForTopLeftFrame(rawWindowFrame)
     else {
       return false
     }
+    let windowFrame = SpatialOverlayGeometry.appKitFrame(
+      topLeftFrame: rawWindowFrame,
+      screenFrame: screen.frame
+    )
 
     target.app.activate()
     CloudConnectorGuidanceOverlay.shared.presentClaudeConnectHint(
       windowFrame: windowFrame,
-      candidates: claudeConnectGuidanceCandidates(windowFrame: windowFrame, nodes: target.nodes)
+      candidates: claudeConnectGuidanceCandidates(
+        windowFrame: windowFrame,
+        nodes: target.nodes,
+        screen: screen
+      )
     )
     return true
   }
@@ -306,15 +315,24 @@ enum CloudConnectorFormAutomation {
   static func showClaudeAddGuidanceOverlay() -> Bool {
     guard let target = findClaudeConnectorTargetWithNodes(),
       target.state == .addCustomConnectorModal,
-      let windowFrame = largestWindowFrame(in: target.nodes)
+      let rawWindowFrame = largestWindowFrame(in: target.nodes),
+      let screen = SpatialOverlayGeometry.screenForTopLeftFrame(rawWindowFrame)
     else {
       return false
     }
+    let windowFrame = SpatialOverlayGeometry.appKitFrame(
+      topLeftFrame: rawWindowFrame,
+      screenFrame: screen.frame
+    )
 
     target.app.activate()
     CloudConnectorGuidanceOverlay.shared.presentClaudeAddHint(
       windowFrame: windowFrame,
-      candidates: claudeAddGuidanceCandidates(windowFrame: windowFrame, nodes: target.nodes)
+      candidates: claudeAddGuidanceCandidates(
+        windowFrame: windowFrame,
+        nodes: target.nodes,
+        screen: screen
+      )
     )
     return true
   }
@@ -349,9 +367,13 @@ enum CloudConnectorFormAutomation {
 
   private static func claudeConnectGuidanceCandidates(
     windowFrame: CGRect,
-    nodes: [AccessibleNode]
+    nodes: [AccessibleNode],
+    screen: SpatialOverlayScreen
   ) -> [SpatialOverlayAnchorCandidate] {
-    let explicitFrames = findClaudeConnectorDetailConnectButton(in: nodes).map { [$0.frame] } ?? []
+    let explicitFrames =
+      findClaudeConnectorDetailConnectButton(in: nodes)
+      .map { [SpatialOverlayGeometry.appKitFrame(topLeftFrame: $0.frame, screenFrame: screen.frame)] }
+      ?? []
     return claudeConnectGuidanceCandidates(
       windowFrame: windowFrame,
       explicitTargetFrames: explicitFrames
@@ -360,9 +382,13 @@ enum CloudConnectorFormAutomation {
 
   private static func claudeAddGuidanceCandidates(
     windowFrame: CGRect,
-    nodes: [AccessibleNode]
+    nodes: [AccessibleNode],
+    screen: SpatialOverlayScreen
   ) -> [SpatialOverlayAnchorCandidate] {
-    let explicitFrames = findActionNode(in: nodes, matching: ["add"]).map { [$0.frame] } ?? []
+    let explicitFrames =
+      findActionNode(in: nodes, matching: ["add"])
+      .map { [SpatialOverlayGeometry.appKitFrame(topLeftFrame: $0.frame, screenFrame: screen.frame)] }
+      ?? []
     return claudeAddGuidanceCandidates(
       windowFrame: windowFrame,
       explicitTargetFrames: explicitFrames
@@ -435,7 +461,7 @@ enum CloudConnectorFormAutomation {
     let modalMaxX = windowFrame.minX + windowFrame.width * 0.50 + modalWidth / 2
     return CGPoint(
       x: modalMaxX - 70,
-      y: windowFrame.minY + windowFrame.height * 0.11
+      y: windowFrame.minY + windowFrame.height * 0.20
     )
   }
 
@@ -1050,7 +1076,8 @@ enum CloudConnectorFormAutomation {
       return label == "add"
         && candidate.confidence >= 0.75
         && screenRect.midX > windowFrame.midX
-        && screenRect.midY > windowFrame.minY + windowFrame.height * 0.55
+        && screenRect.midY > windowFrame.minY + windowFrame.height * 0.12
+        && screenRect.midY < windowFrame.minY + windowFrame.height * 0.50
         && screenRect.midY > windowFrame.minY + safeTopInset
         && screenRect.maxX < windowFrame.maxX - 12
         && screenRect.minY > windowFrame.minY + 12
