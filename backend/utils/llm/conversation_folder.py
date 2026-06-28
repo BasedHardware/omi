@@ -54,12 +54,16 @@ def build_folders_context(folders: List[dict]) -> str:
         name = folder.get('name', '')
         description = folder.get('description', '')
         is_default = folder.get('is_default', False)
+        category_mapping = folder.get('category_mapping')
 
         # Format: folder_id | "Folder Name" → Description
         if description:
             line = f'- {folder_id} | "{name}" → {description}'
         else:
             line = f'- {folder_id} | "{name}"'
+
+        if category_mapping:
+            line += f" [home for {category_mapping} conversations]"
 
         if is_default:
             line += " (DEFAULT - use when no other folder matches)"
@@ -86,25 +90,45 @@ def validate_folder_assignment(
     response: FolderAssignment,
     user_folders: List[dict],
     default_folder_id: Optional[str],
+    category_folder_id: Optional[str] = None,
     confidence_threshold: float = 0.7,
 ) -> FolderAssignmentResult:
-    """Apply route-specific safety checks to a parsed folder assignment."""
+    """Apply route-specific safety checks to a parsed folder assignment.
+
+    When the model returns an invalid folder or is below the confidence threshold, prefer
+    the category-aligned folder (the system folder that owns the conversation's category)
+    over the catch-all default, so an uncertain "finance" conversation still lands in Work
+    rather than the default folder (issue #4043). Falls back to the default when there is
+    no category-aligned folder.
+    """
 
     valid_folder_ids = {f.get('id') for f in user_folders}
+    category_folder_id = category_folder_id if category_folder_id in valid_folder_ids else None
+    fallback_id = category_folder_id or default_folder_id
+    via_category = fallback_id is not None and fallback_id == category_folder_id
+
     if response.folder_id not in valid_folder_ids:
         return FolderAssignmentResult(
-            folder_id=default_folder_id,
+            folder_id=fallback_id,
             confidence=0.3,
-            reasoning="Invalid folder ID returned, using default",
-            validation_status='invalid_folder_id_defaulted',
+            reasoning=(
+                "Invalid folder ID returned, using category-aligned folder"
+                if via_category
+                else "Invalid folder ID returned, using default"
+            ),
+            validation_status='invalid_folder_id_category_matched' if via_category else 'invalid_folder_id_defaulted',
         )
 
-    if response.confidence < confidence_threshold and default_folder_id:
+    if response.confidence < confidence_threshold and fallback_id:
         return FolderAssignmentResult(
-            folder_id=default_folder_id,
+            folder_id=fallback_id,
             confidence=response.confidence,
-            reasoning=f"Low confidence ({response.confidence:.2f}), using default folder",
-            validation_status='low_confidence_defaulted',
+            reasoning=(
+                f"Low confidence ({response.confidence:.2f}), using category-aligned folder"
+                if via_category
+                else f"Low confidence ({response.confidence:.2f}), using default folder"
+            ),
+            validation_status='low_confidence_category_matched' if via_category else 'low_confidence_defaulted',
         )
 
     return FolderAssignmentResult(
@@ -120,6 +144,7 @@ def assign_conversation_to_folder(
     overview: str,
     category: str,
     user_folders: List[dict],
+    category_folder_id: Optional[str] = None,
 ) -> Tuple[Optional[str], float, str]:
     """
     Use AI to assign a conversation to the most appropriate folder.
@@ -129,6 +154,9 @@ def assign_conversation_to_folder(
         overview: The conversation overview/summary
         category: The conversation category
         user_folders: List of user's folders with id, name, description, is_default
+        category_folder_id: The system folder that owns this conversation's category
+            (see database.folders.resolve_category_folder_id). Used as the preferred
+            fallback over the default folder when the model is unsure (issue #4043).
 
     Returns:
         Tuple of (folder_id, confidence, reasoning)
@@ -152,6 +180,7 @@ CONVERSATION:
 INSTRUCTIONS:
 - Match based on the dominant theme of the conversation (what it's fundamentally about)
 - The folder should feel like a natural home for this conversation
+- Folders annotated [home for X conversations] are the standard home for that category; when the conversation's Category matches one, prefer it unless a custom folder's description is a clearly better fit
 - Only assign to a non-default folder if the theme clearly matches
 - When in doubt, use the DEFAULT folder
 
@@ -174,9 +203,11 @@ Provide:
                 'format_instructions': folder_parser.get_format_instructions(),
             }
         )
-        result = validate_folder_assignment(response, user_folders, default_folder_id)
+        result = validate_folder_assignment(
+            response, user_folders, default_folder_id, category_folder_id=category_folder_id
+        )
         return result.folder_id, result.confidence, result.reasoning
 
     except Exception as e:
         logger.error(f'Error assigning conversation to folder: {e}')
-        return default_folder_id, 0.0, f"Error: {str(e)}"
+        return category_folder_id or default_folder_id, 0.0, f"Error: {str(e)}"
