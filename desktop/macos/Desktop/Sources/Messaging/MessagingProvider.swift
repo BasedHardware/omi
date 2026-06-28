@@ -5,7 +5,7 @@ protocol MessagingProvider: AnyObject {
   var id: String { get }
   var displayName: String { get }
   var iconSystemName: String { get }
-  var brandResourceName: String? { get }
+  var connectorBrand: ConnectorBrand? { get }
 
   var isConnected: Bool { get }
 

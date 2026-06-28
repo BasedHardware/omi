@@ -13,7 +13,7 @@ final class WhatsAppMessagingProvider: MessagingProvider {
   let id = "whatsapp"
   let displayName = "WhatsApp"
   let iconSystemName = "message.fill"
-  var brandResourceName: String? { "whatsapp_logo" }
+  var connectorBrand: ConnectorBrand? { .whatsapp }
 
   var isConnected: Bool {
     WhatsAppState.shared.connectionState.isConnected
