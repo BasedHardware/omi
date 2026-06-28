@@ -524,11 +524,14 @@ class TestPeople:
         assert ei.value.code == -32001
         mock_db.update_person.assert_not_called()
 
+    @patch('utils.mcp_people.delete_user_person_speech_samples')
     @patch('utils.mcp_people.users_db')
-    def test_tool_delete_person(self, mock_db):
+    def test_tool_delete_person(self, mock_db, mock_cleanup):
         mock_db.get_person.return_value = self._person()
         assert sse.execute_tool(UID, 'delete_person', {'person_id': 'p1'})['success'] is True
         mock_db.delete_person.assert_called_once_with(UID, 'p1')
+        # also cleans up the person's GCS speech-sample blobs, like the REST endpoint
+        mock_cleanup.assert_called_once_with(UID, 'p1')
 
     @patch('utils.mcp_people.users_db')
     def test_tool_delete_person_not_found_is_32001(self, mock_db):
