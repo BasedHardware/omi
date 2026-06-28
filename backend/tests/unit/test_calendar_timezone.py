@@ -6,13 +6,14 @@ event's own zone, so the chat model mislabeled the time of day ("tonight" vs
 helpers, which these tests cover directly (no Google API or async needed).
 """
 
+import asyncio
 import importlib.util
 import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -124,3 +125,17 @@ class TestFormatEventDt:
         # Tokyo is UTC+9, so 22:00 UTC is 07:00 the next day.
         out = calendar_tools._format_event_dt(_UTC_INSTANT, ZoneInfo("Asia/Tokyo"), "Asia/Tokyo")
         assert out == "2026-07-01 07:00:00 Asia/Tokyo"
+
+
+class TestUserDisplayTz:
+    def test_lookup_success(self):
+        with patch.object(calendar_tools, "run_blocking", new=AsyncMock(return_value="America/Los_Angeles")):
+            tzinfo, label = asyncio.run(calendar_tools._get_user_display_tz("uid"))
+        assert tzinfo == _LA and label == "America/Los_Angeles"
+
+    def test_lookup_failure_falls_back_to_utc(self):
+        # A Firestore failure in the timezone lookup must not abort the tool; it
+        # falls back to UTC so the calendar events still render (cubic on #8495).
+        with patch.object(calendar_tools, "run_blocking", new=AsyncMock(side_effect=RuntimeError("firestore down"))):
+            tzinfo, label = asyncio.run(calendar_tools._get_user_display_tz("uid"))
+        assert tzinfo == timezone.utc and label == "UTC"
