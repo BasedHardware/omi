@@ -16,6 +16,7 @@ validated against enrolled fingerprints so that:
 import hashlib
 import ipaddress
 import logging
+import socket
 import threading
 import time
 from contextvars import ContextVar
@@ -113,13 +114,25 @@ def has_byok_keys() -> bool:
     return any(not k.startswith('__') for k in keys)
 
 
+def _is_blocked_ip(ip: "ipaddress._BaseAddress") -> bool:
+    """True for any address the backend must never make an outbound call to."""
+    return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
+
+
 def validate_custom_base_url(base_url: str) -> str:
     """Validate a user-supplied custom provider base URL and return it normalized.
 
     The backend makes outbound LLM calls to this URL with the user's key, so this
-    is a best-effort SSRF guard: require HTTPS and reject hosts that point back at
-    internal/loopback/link-local/private addresses (e.g. the cloud metadata
-    endpoint). Raises ValueError on anything that does not pass.
+    is an SSRF guard: require HTTPS, reject literal internal/loopback/link-local/
+    private addresses, and resolve a hostname so a public-looking name that points
+    at a private/metadata IP is blocked too. Raises ValueError on anything that
+    does not pass.
+
+    Note: this validates at call time and does not pin the resolved IP through to
+    the LLM client's connection, so a host that re-resolves to an internal address
+    between this check and the actual request (active DNS rebinding) is not fully
+    covered. Connect-time pinning would route the custom client through a dedicated
+    transport and is a follow-up.
     """
     if not base_url or not isinstance(base_url, str):
         raise ValueError('custom base URL is required')
@@ -133,14 +146,30 @@ def validate_custom_base_url(base_url: str) -> str:
     lowered = host.lower()
     if lowered == 'localhost' or lowered.endswith('.localhost') or lowered.endswith('.local'):
         raise ValueError('custom base URL host is not allowed')
+
     try:
-        ip = ipaddress.ip_address(lowered)
+        literal_ip = ipaddress.ip_address(lowered)
     except ValueError:
-        ip = None
-    if ip is not None and (
-        ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
-    ):
-        raise ValueError('custom base URL host is not allowed')
+        literal_ip = None
+    if literal_ip is not None:
+        if _is_blocked_ip(literal_ip):
+            raise ValueError('custom base URL host is not allowed')
+        return url  # literal public IP, nothing to resolve
+
+    # Hostname: resolve and reject if any resolved address is internal, so a
+    # public-looking name pointing at a private/metadata IP cannot slip through.
+    try:
+        infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
+    except socket.gaierror as e:
+        raise ValueError(f'custom base URL host did not resolve: {e}')
+    for info in infos:
+        addr = info[4][0]
+        try:
+            resolved = ipaddress.ip_address(addr)
+        except ValueError:
+            continue
+        if _is_blocked_ip(resolved):
+            raise ValueError('custom base URL resolves to a non-public address')
     return url
 
 
