@@ -231,9 +231,16 @@ class TestGoalOrchestration:
 
     @patch('utils.mcp_goals.goals_db')
     def test_history_clamps_days(self, mock_db):
+        mock_db.get_all_goals.return_value = [_goal()]
         mock_db.get_goal_history.return_value = [{'date': '2026-06-27', 'value': 3}]
         goals.get_goal_history(UID, 'g1', days=9999)
         assert mock_db.get_goal_history.call_args.kwargs['days'] == 365
+
+    @patch('utils.mcp_goals.goals_db')
+    def test_history_missing_goal_raises(self, mock_db):
+        mock_db.get_all_goals.return_value = []  # goal does not exist
+        with pytest.raises(goals.GoalNotFound):
+            goals.get_goal_history(UID, 'missing')
 
 
 # ---------------------------------------------------------------------------
@@ -272,8 +279,16 @@ class TestRestTransport:
 
     @patch('utils.mcp_goals.goals_db')
     def test_rest_history(self, mock_db):
+        mock_db.get_all_goals.return_value = [_goal()]
         mock_db.get_goal_history.return_value = [{'date': '2026-06-27', 'value': 3}]
         assert rest.get_goal_history('g1', uid=UID) == [{'date': '2026-06-27', 'value': 3}]
+
+    @patch('utils.mcp_goals.goals_db')
+    def test_rest_history_missing_is_404(self, mock_db):
+        mock_db.get_all_goals.return_value = []
+        with pytest.raises(HTTPException) as ei:
+            rest.get_goal_history('missing', uid=UID)
+        assert ei.value.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -317,9 +332,17 @@ class TestSseDispatch:
 
     @patch('utils.mcp_goals.goals_db')
     def test_tool_history(self, mock_db):
+        mock_db.get_all_goals.return_value = [_goal()]
         mock_db.get_goal_history.return_value = [{'date': '2026-06-27', 'value': 3}]
         result = sse.execute_tool(UID, 'get_goal_history', {'goal_id': 'g1'})
         assert result['history'][0]['value'] == 3
+
+    @patch('utils.mcp_goals.goals_db')
+    def test_tool_history_missing_is_not_found(self, mock_db):
+        mock_db.get_all_goals.return_value = []
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'get_goal_history', {'goal_id': 'missing'})
+        assert ei.value.code == -32001
 
 
 class TestToolRegistration:
