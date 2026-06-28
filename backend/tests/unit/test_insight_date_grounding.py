@@ -13,7 +13,7 @@ import os
 import re
 import sys
 import types
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -80,20 +80,42 @@ class TestCurrentDate:
             assert temporal.current_date_in_tz("Not/AZone") == "2026-05-21"
 
     def test_for_uid_reads_user_timezone(self):
+        # database.notifications is imported lazily inside current_date_for_uid, so patch the
+        # stubbed module that the lazy import resolves to.
         with patch.object(temporal, "datetime") as md:
             md.now.return_value = _FIXED
-            with patch.object(temporal.notification_db, "get_user_time_zone", return_value="UTC"):
+            with patch.object(_nb, "get_user_time_zone", return_value="UTC"):
                 assert temporal.current_date_for_uid("u1") == "2026-05-21"
 
     def test_for_uid_falls_back_when_lookup_raises(self):
         with patch.object(temporal, "datetime") as md:
             md.now.return_value = _FIXED
-            with patch.object(temporal.notification_db, "get_user_time_zone", side_effect=RuntimeError("down")):
+            with patch.object(_nb, "get_user_time_zone", side_effect=RuntimeError("down")):
                 assert temporal.current_date_for_uid("u1") == "2026-05-21"
 
     def test_real_call_returns_iso_date(self):
         # Smoke test with no mock: a real YYYY-MM-DD string.
         assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", temporal.current_date_in_tz("UTC"))
+
+
+class TestDateInTz:
+    def test_renders_content_datetime_date(self):
+        dt = datetime(2026, 5, 21, 12, 0, tzinfo=timezone.utc)
+        assert temporal.date_in_tz(dt, "UTC") == "2026-05-21"
+
+    def test_naive_datetime_treated_as_utc(self):
+        assert temporal.date_in_tz(datetime(2026, 5, 21, 12, 0), "UTC") == "2026-05-21"
+
+    def test_converts_into_offset_zone_crossing_day_boundary(self):
+        # 02:00 UTC is the previous day at UTC-7. Patch the zone resolver so the assertion does
+        # not depend on host tzdata.
+        with patch.object(temporal, "_zone", return_value=timezone(timedelta(hours=-7))):
+            dt = datetime(2026, 5, 21, 2, 0, tzinfo=timezone.utc)
+            assert temporal.date_in_tz(dt, "America/Los_Angeles") == "2026-05-20"
+
+    def test_invalid_tz_falls_back_to_utc(self):
+        dt = datetime(2026, 5, 21, 12, 0, tzinfo=timezone.utc)
+        assert temporal.date_in_tz(dt, "Not/AZone") == "2026-05-21"
 
 
 def _capture_prompt(fn, **kwargs):
