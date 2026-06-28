@@ -76,6 +76,27 @@ CATEGORY_TO_FOLDER_MAPPING = {
 }
 
 
+def resolve_category_folder_id(category: Optional[str], user_folders: List[dict]) -> Optional[str]:
+    """Folder id of the system folder that owns a conversation's category.
+
+    Every conversation category folds onto one of the three system buckets via
+    ``CATEGORY_TO_FOLDER_MAPPING``; this returns the user's folder for that bucket so AI
+    folder assignment can fall back to the category-aligned folder instead of the
+    catch-all default when the model is unsure (issue #4043). Returns None when the
+    category is unknown or the user has no folder for that bucket (e.g. they deleted a
+    system folder).
+    """
+    if not category:
+        return None
+    bucket = CATEGORY_TO_FOLDER_MAPPING.get(str(category).lower())
+    if not bucket:
+        return None
+    for folder in user_folders or []:
+        if folder.get('category_mapping') == bucket:
+            return folder.get('id')
+    return None
+
+
 def get_folders(uid: str) -> List[dict]:
     """Get all folders for a user, sorted by order."""
     user_ref = db.collection('users').document(uid)
