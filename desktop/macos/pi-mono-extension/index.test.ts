@@ -983,10 +983,13 @@ test("OMI_TOOLS: TypeBox schemas have additionalProperties=false", () => {
   }
 });
 
-test("OMI_TOOLS: provider schemas do not invent top-level oneOf", () => {
+test("OMI_TOOLS: provider schemas do not advertise unsupported top-level composites", () => {
+  const unsupportedTopLevelKeys = ["anyOf", "allOf", "oneOf", "if", "then"] as const;
   for (const tool of OMI_TOOLS) {
     const parameters = tool.parameters as any;
-    assert.equal(parameters.oneOf, undefined, `${tool.name} has top-level oneOf`);
+    for (const key of unsupportedTopLevelKeys) {
+      assert.equal(parameters[key], undefined, `${tool.name} has top-level ${key}`);
+    }
   }
 });
 
@@ -1037,23 +1040,18 @@ test("OMI_TOOLS: top-level schemas keep the object contract", () => {
   }
 });
 
-test("OMI_TOOLS: agent control schemas preserve top-level composite preconditions", () => {
+test("OMI_TOOLS: agent control schemas keep runtime precondition guidance without top-level composites", () => {
   const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
-  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
-    { required: ["artifactId"] },
-    { required: ["sessionId"] },
-    { required: ["runId"] },
-    { required: ["attemptId"] },
-  ]);
+  assert.equal((inspectArtifacts?.parameters as any).anyOf, undefined);
   assert.match(inspectArtifacts?.description ?? "", /session, run, or attempt/);
+  assert.ok(
+    inspectArtifacts?.promptGuidelines?.some((guideline) =>
+      guideline.includes("get_agent_run")
+    ),
+  );
 
   const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
-    {
-      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-      then: { required: ["childSessionId"] },
-    },
-  ]);
+  assert.equal((delegateAgent?.parameters as any).allOf, undefined);
   assert.ok(
     delegateAgent?.promptGuidelines?.some((guideline) =>
       guideline.includes("Use call for a structured child result")
@@ -1101,8 +1099,8 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
       [...manifestTool.required].sort(),
       `${manifestTool.name} required fields drifted`
     );
-    assert.deepEqual((tool!.parameters as any).anyOf, manifestTool.jsonSchemaOptions?.anyOf, `${manifestTool.name} anyOf drifted`);
-    assert.deepEqual((tool!.parameters as any).allOf, manifestTool.jsonSchemaOptions?.allOf, `${manifestTool.name} allOf drifted`);
+    assert.equal((tool!.parameters as any).anyOf, undefined, `${manifestTool.name} should not advertise top-level anyOf`);
+    assert.equal((tool!.parameters as any).allOf, undefined, `${manifestTool.name} should not advertise top-level allOf`);
 
     for (const [propertyName, manifestProperty] of Object.entries(manifestTool.properties)) {
       const property = (tool!.parameters as any).properties[propertyName];
