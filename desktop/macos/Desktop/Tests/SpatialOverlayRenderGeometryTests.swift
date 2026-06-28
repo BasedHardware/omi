@@ -125,6 +125,88 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
       "bubble \(panelTopLeft) must not cover the Add button \(scene.addButtonTopLeft)")
   }
 
+  // MARK: Located-modal fallback (AX blind to the Add/Cancel buttons)
+
+  func testClaudeModalRectUnionsLocatedFieldFramesAndRejectsTooFew() {
+    let fields = [
+      CGRect(x: 310, y: 420, width: 970, height: 56),  // Name
+      CGRect(x: 310, y: 510, width: 970, height: 56),  // URL
+      CGRect(x: 310, y: 680, width: 970, height: 56),  // client id
+    ]
+    let rect = CloudConnectorFormAutomation.claudeModalRect(fromFieldFrames: fields)
+    XCTAssertEqual(rect?.minX, 310)
+    XCTAssertEqual(rect?.maxX, 1280)
+    XCTAssertEqual(rect?.minY, 420)
+    XCTAssertEqual(rect?.maxY, 736)
+    XCTAssertNil(CloudConnectorFormAutomation.claudeModalRect(fromFieldFrames: [fields[0]]))
+  }
+
+  func testFooterFallbackAnchorsModalBottomRightAndStaysInsideWindow() {
+    let window = CGRect(x: 200, y: 80, width: 1100, height: 820)
+    let modal = CGRect(x: 310, y: 420, width: 970, height: 316)  // top-left
+    let target = CloudConnectorFormAutomation.claudeAddFallbackFooterTarget(
+      modalTopLeft: modal, window: window)
+    let footer = try! XCTUnwrap(target)
+    // Footer hugs the modal's bottom-right.
+    XCTAssertEqual(footer.rect.maxX, modal.maxX, accuracy: 0.001)
+    XCTAssertGreaterThanOrEqual(footer.rect.minY, modal.maxY - 0.001)
+    // Stays inside the window (never off-screen dead space — the old bug).
+    XCTAssertLessThanOrEqual(footer.rect.maxY, window.maxY + 0.001)
+    XCTAssertTrue(footer.rect.contains(footer.point))
+  }
+
+  /// The exact scenario from the bad screenshot: AX exposes the modal's fields but NOT
+  /// the Add/Cancel buttons. The arrow must land on the located modal footer and the
+  /// bubble must not cover the modal — never point into the dead space below the window.
+  @MainActor
+  func testBlindClaudeAddApexLandsOnLocatedModalFooterNotBelowWindow() {
+    let flip: CGFloat = 982
+    let window = CGRect(x: 160, y: 60, width: 1200, height: 860)  // top-left
+    let modal = CGRect(x: 430, y: 260, width: 660, height: 420)  // located via fields
+
+    let footer = try! XCTUnwrap(
+      CloudConnectorFormAutomation.claudeAddFallbackFooterTarget(
+        modalTopLeft: modal, window: window))
+
+    func toAppKitRect(_ r: CGRect) -> CGRect {
+      SpatialOverlayGeometry.appKitFrame(topLeftOrigin: r.origin, size: r.size, flipMaxY: flip)
+    }
+    func toAppKitPoint(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x, y: flip - p.y) }
+
+    let candidate = SpatialOverlayAnchorCandidate(
+      id: "claude-add-modal-footer",
+      targetRect: toAppKitRect(footer.rect),
+      targetPoint: toAppKitPoint(footer.point),
+      screen: SpatialOverlayScreen(
+        id: "w", frame: toAppKitRect(window), visibleFrame: toAppKitRect(window),
+        exclusionZones: [
+          SpatialOverlayExclusionZone(rect: toAppKitRect(modal), kind: .targetWindowChrome)
+        ]),
+      window: SpatialOverlayWindow(id: "w", frame: toAppKitRect(window)),
+      evidence: [SpatialOverlayTargetEvidence(source: .layoutHeuristic, confidence: 0.55)],
+      confidence: 0.55,
+      allowedUses: [.displayGuidance])
+
+    let placement = try! XCTUnwrap(
+      CloudConnectorGuidanceOverlay.placementResult(
+        windowFrame: toAppKitRect(window), candidates: [candidate]))
+    let render = SpatialOverlayRenderGeometry(
+      placement: placement, panelSize: CGSize(width: 330, height: 118))
+
+    // Apex back in top-left space.
+    let apex = CGPoint(x: render.globalRenderedArrowTip.x, y: flip - render.globalRenderedArrowTip.y)
+    XCTAssertTrue(
+      footer.rect.insetBy(dx: -3, dy: -3).contains(apex),
+      "apex \(apex) must land on the located modal footer \(footer.rect)")
+    // Never below the window (the bad-screenshot symptom).
+    XCTAssertLessThanOrEqual(apex.y, window.maxY, "apex must not be below the window")
+    // Bubble must not cover the modal body.
+    let panelTopLeft = CGRect(
+      x: placement.panelFrame.minX, y: flip - placement.panelFrame.maxY,
+      width: placement.panelFrame.width, height: placement.panelFrame.height)
+    XCTAssertFalse(panelTopLeft.intersects(modal), "bubble must not cover the modal body")
+  }
+
   func testRealisticSceneFailsWhenApexIsBelowTheButton() {
     // Regression guard: a placement whose apex sits below the footer (the exact bad
     // screenshot) must be reported as an issue.
