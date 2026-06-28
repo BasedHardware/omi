@@ -14,19 +14,26 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-# Import the FastAPI app via importlib (avoids the pip-installed `main` package
-# shadowing our local module).
+# Import `main` and `simple_storage` via importlib (avoiding sys.path pollution
+# that would conflict with omi-telegram-app when both plugin suites run together).
 _PLUGIN_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_SPEC = importlib.util.spec_from_file_location("main", os.path.join(_PLUGIN_ROOT, "main.py"))
-main = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(main)
+
+
+def _load(name):
+    spec = importlib.util.spec_from_file_location(name, os.path.join(_PLUGIN_ROOT, f"{name}.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+main = _load("main")
 app = main.app
 
 
 @pytest.fixture(autouse=True)
 def _isolated_storage(tmp_path, monkeypatch):
     """Point simple_storage at a per-test tmp dir so tests don't pollute each other."""
-    import simple_storage
+    simple_storage = main.simple_storage
 
     monkeypatch.setattr(simple_storage, "STORAGE_DIR", str(tmp_path))
     monkeypatch.setattr(simple_storage, "USERS_FILE", os.path.join(str(tmp_path), "users_data.json"))
@@ -61,7 +68,7 @@ class TestHealth:
 class TestWebhookVerify:
     def test_returns_challenge_on_matching_verify_token(self, client):
         # Pre-register a user with a known verify_token.
-        import simple_storage
+        simple_storage = main.simple_storage
 
         simple_storage.save_user(
             phone="15550001111",
@@ -89,7 +96,7 @@ class TestWebhookVerify:
     def test_returns_challenge_for_pending_setup_verify_token(self, client):
         """Verification should succeed for verify_tokens of pending_setups too —
         the user does the verification step BEFORE the /start handshake."""
-        import simple_storage
+        simple_storage = main.simple_storage
 
         simple_storage.save_pending_setup(
             "setup_tok",
@@ -166,7 +173,7 @@ class TestSetupStub:
                         "public_base_url": "https://clone.example.com",
                     },
                 )
-        # Detailed behavior is tested in test_setup_token_leak.py::TestSetupHappyPath.
+        # Detailed behavior is tested in test_whatsapp_setup_token_leak.py::TestSetupHappyPath.
         assert r.status_code == 200
         # P1.3 fix: deep link uses digits-only E.164 (no '+', no formatting),
         # NOT phone_number_id which is an internal Graph ID
@@ -180,7 +187,7 @@ class TestSetupStub:
 # ---------------------------------------------------------------------------
 class TestToggleStub:
     def test_toggle_403_on_unknown_phone(self, client):
-        """Smoke test for /toggle — detailed behavior is in test_toggle.py."""
+        """Smoke test for /toggle — detailed behavior is in test_whatsapp_toggle.py."""
         r = client.post("/toggle", json={"phone": "15550001111", "enabled": True, "access_token": "at1"})
         # Unknown phone with wrong access_token both return 403.
         assert r.status_code == 403
