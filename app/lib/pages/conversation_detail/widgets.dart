@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -28,12 +29,12 @@ import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/folder_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'maps_util.dart';
 
 // Highlight search matches with current result highlighting
@@ -120,7 +121,48 @@ class GetSummaryWidgets extends StatelessWidget {
     }
   }
 
+  String _formatAttendeesLabel(List<String> attendees) {
+    if (attendees.isEmpty) return '';
+    if (attendees.length == 1) return _formatAttendeeName(attendees[0]);
+    if (attendees.length == 2) {
+      return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])}';
+    }
+    return '${_formatAttendeeName(attendees[0])}, ${_formatAttendeeName(attendees[1])} +${attendees.length - 2}';
+  }
+
+  String _formatAttendeeName(String attendee) {
+    if (attendee.contains('@')) {
+      String localPart = attendee.split('@')[0];
+      if (localPart.isNotEmpty) {
+        return localPart[0].toUpperCase() + localPart.substring(1);
+      }
+      return localPart;
+    }
+    return attendee.split(' ')[0];
+  }
+
+  void _showCalendarEventDetails(BuildContext context, CalendarEventLink calendarEvent) {
+    final provider = Provider.of<ConversationDetailProvider>(context, listen: false);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => CalendarEventDetailsSheet(
+        calendarEvent: calendarEvent,
+        onUnlink: () async {
+          await provider.unlinkCalendarEvent();
+        },
+      ),
+    );
+  }
+
   Widget _buildInfoChips(BuildContext context, ServerConversation conversation) {
+    final date = _getDateFormat(context, conversation.startedAt ?? conversation.createdAt);
+    final time = conversation.source == ConversationSource.sdcard
+        ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
+        : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt);
+    final hasCalendarEvent = conversation.calendarEvent != null;
+
     return Consumer<FolderProvider>(
       builder: (context, folderProvider, _) {
         final folder = conversation.folderId != null ? folderProvider.getFolderById(conversation.folderId!) : null;
@@ -129,21 +171,33 @@ class GetSummaryWidgets extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            // Date chip
+            // Combined date & time chip - uses Google Calendar logo when event is linked
             _buildChip(
-              label: _getDateFormat(context, conversation.startedAt ?? conversation.createdAt),
-              icon: Icons.calendar_today,
-            ),
-            // Time chip
-            _buildChip(
-              label: conversation.source == ConversationSource.sdcard
-                  ? setTimeSDCard(conversation.startedAt, conversation.createdAt)
-                  : setTime(conversation.startedAt, conversation.createdAt, conversation.finishedAt),
-              icon: Icons.access_time,
+              label: '$date, $time',
+              icon: hasCalendarEvent ? null : Icons.calendar_today,
+              leadingWidget: hasCalendarEvent
+                  ? ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: Image.asset(
+                        'assets/integration_app_logos/google-calendar.png',
+                        width: 14,
+                        height: 14,
+                        fit: BoxFit.cover,
+                      ),
+                    )
+                  : null,
+              onTap: hasCalendarEvent ? () => _showCalendarEventDetails(context, conversation.calendarEvent!) : null,
             ),
             // Duration chip
             if (conversation.transcriptSegments.isNotEmpty && _getDuration(context, conversation).isNotEmpty)
               _buildChip(label: _getDuration(context, conversation), icon: Icons.timelapse),
+            // Attendees chip (only when calendar event is linked and has attendees)
+            if (hasCalendarEvent && conversation.calendarEvent!.attendees.isNotEmpty)
+              _buildChip(
+                label: _formatAttendeesLabel(conversation.calendarEvent!.attendees),
+                icon: Icons.people,
+                onTap: () => _showCalendarEventDetails(context, conversation.calendarEvent!),
+              ),
             // Folder chip
             _buildFolderChip(
               context: context,
@@ -178,7 +232,7 @@ class GetSummaryWidgets extends StatelessWidget {
         HapticFeedback.selectionClick();
 
         // Track folder chip clicked
-        MixpanelManager().conversationDetailFolderChipClicked(
+        PlatformManager.instance.analytics.conversationDetailFolderChipClicked(
           conversationId: conversationId,
           currentFolderId: currentFolderId,
         );
@@ -197,7 +251,7 @@ class GetSummaryWidgets extends StatelessWidget {
           context.read<ConversationDetailProvider>().updateFolderIdLocally(newFolderId);
 
           // Track conversation moved to folder
-          MixpanelManager().conversationMovedToFolder(
+          PlatformManager.instance.analytics.conversationMovedToFolder(
             conversationId: conversationId,
             fromFolderId: currentFolderId,
             toFolderId: newFolderId,
@@ -323,7 +377,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     provider.updateVisibilityLocally(previousVisibility);
                     return;
                   }
-                  MixpanelManager().conversationVisibilityChanged(
+                  PlatformManager.instance.analytics.conversationVisibilityChanged(
                     conversationId: conversation.id,
                     fromVisibility: previousVisibility.value,
                     toVisibility: ConversationVisibility.private_.value,
@@ -353,7 +407,7 @@ class GetSummaryWidgets extends StatelessWidget {
                     provider.updateVisibilityLocally(previousVisibility);
                     return;
                   }
-                  MixpanelManager().conversationVisibilityChanged(
+                  PlatformManager.instance.analytics.conversationVisibilityChanged(
                     conversationId: conversation.id,
                     fromVisibility: previousVisibility.value,
                     toVisibility: ConversationVisibility.shared.value,
@@ -411,14 +465,25 @@ class GetSummaryWidgets extends StatelessWidget {
     );
   }
 
-  Widget _buildChip({required String label, required IconData icon}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
+  Widget _buildChip({
+    required String label,
+    IconData? icon,
+    Widget? leadingWidget,
+    VoidCallback? onTap,
+  }) {
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.withValues(alpha: 0.16),
+        borderRadius: BorderRadius.circular(12),
+      ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: Colors.grey.shade300),
+          if (leadingWidget != null)
+            leadingWidget
+          else if (icon != null)
+            Icon(icon, size: 14, color: Colors.grey.shade300),
           const SizedBox(width: 6),
           Text(
             label,
@@ -427,6 +492,14 @@ class GetSummaryWidgets extends StatelessWidget {
         ],
       ),
     );
+
+    if (onTap != null) {
+      return GestureDetector(
+        onTap: onTap,
+        child: chip,
+      );
+    }
+    return chip;
   }
 
   @override
@@ -495,7 +568,10 @@ class ActionItemsListWidget extends StatelessWidget {
                               duration: const Duration(seconds: 2),
                             ),
                           );
-                          MixpanelManager().copiedConversationDetails(provider.conversation, source: 'Action Items');
+                          PlatformManager.instance.analytics.copiedConversationDetails(
+                            provider.conversation,
+                            source: 'Action Items',
+                          );
                         },
                         icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
                       ),
@@ -522,7 +598,7 @@ class ActionItemsListWidget extends StatelessWidget {
                     var tempIdx = idx;
                     provider.deleteActionItem(idx);
                     provider.deleteActionItemPermanently(tempItem, tempIdx);
-                    MixpanelManager().deletedActionItem(provider.conversation);
+                    PlatformManager.instance.analytics.deletedActionItem(provider.conversation);
                     // ScaffoldMessenger.of(context)
                     //     .showSnackBar(
                     //       SnackBar(
@@ -541,7 +617,7 @@ class ActionItemsListWidget extends StatelessWidget {
                     //     .then((reason) {
                     //   if (reason != SnackBarClosedReason.action) {
                     //     provider.deleteActionItemPermanently(tempItem, tempIdx);
-                    //     MixpanelManager().deletedActionItem(provider.conversation);
+                    //     PlatformManager.instance.analytics.deletedActionItem(provider.conversation);
                     //   }
                     // });
                   },
@@ -563,9 +639,9 @@ class ActionItemsListWidget extends StatelessWidget {
                                   context.read<ConversationDetailProvider>().updateActionItemState(value, idx);
                                   setConversationActionItemState(provider.conversation.id, [idx], [value]);
                                   if (value) {
-                                    MixpanelManager().checkedActionItem(provider.conversation, idx);
+                                    PlatformManager.instance.analytics.checkedActionItem(provider.conversation, idx);
                                   } else {
-                                    MixpanelManager().uncheckedActionItem(provider.conversation, idx);
+                                    PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, idx);
                                   }
                                 }
                               },
@@ -840,7 +916,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
             GestureDetector(
               onTap: () async {
                 if (widget.app != null) {
-                  MixpanelManager().pageOpened('App Detail');
+                  PlatformManager.instance.analytics.pageOpened('App Detail');
                   await routeToPage(context, AppDetailPage(app: widget.app!));
                 }
               },
@@ -1220,6 +1296,8 @@ class GetGeolocationWidgets extends StatelessWidget {
 ///************ SETTINGS BOTTOM SHEET *************
 ///************************************************
 
+///************************************************
+
 class GetSheetTitle extends StatelessWidget {
   const GetSheetTitle({super.key});
 
@@ -1356,17 +1434,161 @@ class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
   }
 }
 
-_copyContent(BuildContext context, String content) {
-  Clipboard.setData(ClipboardData(text: content));
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.transcriptCopiedToClipboard)));
-  HapticFeedback.lightImpact();
-  Navigator.pop(context);
+class CalendarEventDetailsSheet extends StatefulWidget {
+  final CalendarEventLink calendarEvent;
+  final Future<void> Function()? onUnlink;
+
+  const CalendarEventDetailsSheet({
+    super.key,
+    required this.calendarEvent,
+    this.onUnlink,
+  });
+
+  @override
+  State<CalendarEventDetailsSheet> createState() => _CalendarEventDetailsSheetState();
 }
 
-_getLoadingIndicator() {
-  return const SizedBox(
-    width: 24,
-    height: 24,
-    child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-  );
+class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
+  bool _unlinking = false;
+
+  String _fmt(DateTime dt) {
+    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+    final m = dt.minute.toString().padLeft(2, '0');
+    final period = dt.hour < 12 ? 'AM' : 'PM';
+    return '$h:$m $period';
+  }
+
+  Future<void> _shareWithAttendees() async {
+    final emails = widget.calendarEvent.attendeeEmails;
+    if (emails.isEmpty) return;
+    final subject = Uri.encodeComponent('Notes: ${widget.calendarEvent.title}');
+    final uri = Uri.parse('mailto:${emails.join(',')}?subject=$subject');
+    await launchUrl(uri);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final start = widget.calendarEvent.startTime;
+    final end = widget.calendarEvent.endTime;
+    final timeStr = '${_fmt(start)} – ${_fmt(end)}';
+
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFF1A1A1A),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(children: [
+            const Icon(Icons.calendar_today, size: 18, color: Colors.white70),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                widget.calendarEvent.title,
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 12),
+          Row(children: [
+            const Icon(Icons.access_time, size: 16, color: Colors.white54),
+            const SizedBox(width: 8),
+            Text(timeStr, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+          ]),
+          if (widget.calendarEvent.attendees.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.people_outline, size: 16, color: Colors.white54),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  widget.calendarEvent.attendees.join(', '),
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ),
+            ]),
+          ],
+          if (widget.calendarEvent.htmlLink != null) ...[
+            const SizedBox(height: 16),
+            GestureDetector(
+              onTap: () => launchUrl(Uri.parse(widget.calendarEvent.htmlLink!), mode: LaunchMode.externalApplication),
+              child: const Text(
+                'Open in Google Calendar',
+                style: TextStyle(color: Color(0xFF4285F4), fontSize: 14, decoration: TextDecoration.underline),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          const Divider(color: Color(0xFF2C2C2E)),
+          const SizedBox(height: 8),
+          // Share with attendees button
+          if (widget.calendarEvent.attendeeEmails.isNotEmpty)
+            _ActionRow(
+              icon: Icons.share_outlined,
+              label: 'Share with attendees',
+              onTap: _shareWithAttendees,
+            ),
+          // Unlink button
+          if (widget.onUnlink != null)
+            _ActionRow(
+              icon: Icons.link_off,
+              label: 'Unlink calendar event',
+              color: Colors.redAccent,
+              loading: _unlinking,
+              onTap: () async {
+                setState(() => _unlinking = true);
+                await widget.onUnlink!();
+                if (!mounted) return;
+                Navigator.pop(context);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ActionRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final Color color;
+  final bool loading;
+
+  const _ActionRow({
+    required this.icon,
+    required this.label,
+    this.onTap,
+    this.color = Colors.white,
+    this.loading = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: loading ? null : onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(children: [
+          loading
+              ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: color))
+              : Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Text(label, style: TextStyle(color: color, fontSize: 15)),
+        ]),
+      ),
+    );
+  }
 }

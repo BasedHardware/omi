@@ -3,6 +3,7 @@ from typing import Tuple, List
 from .clients import get_llm
 from .usage_tracker import track_usage, Features
 from database.memories import get_memories
+from utils.executors import db_executor, run_blocking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 async def get_relevant_memories(uid: str, limit: int = 100) -> List[dict]:
     """Get recent relevant memories to personalize notifications."""
-    memories = get_memories(uid, limit=limit)
+    memories = await run_blocking(db_executor, get_memories, uid, limit)
     return [m for m in memories if not m.get('is_locked')]
 
 

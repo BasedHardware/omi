@@ -49,6 +49,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/announcement_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -59,7 +60,6 @@ import 'package:omi/services/quick_actions_service.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -70,7 +70,9 @@ import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'widgets/battery_info_widget.dart';
+import 'widgets/capture_mode_chip.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -189,7 +191,10 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       // Reload convos
       if (mounted) {
         Provider.of<ConversationProvider>(context, listen: false).refreshConversations();
-        Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+        final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
+        captureProvider.refreshInProgressConversations();
+        // Pick up any batch recordings the native layer wrote while backgrounded/closed.
+        Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
       }
 
       // Ensure agent VM is running and restart keepalive
@@ -354,10 +359,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           // All async setup (streamDeviceRecording, refreshMessages) is already awaited above,
           // so the widget tree is fully settled — push directly.
           if (mounted) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
           }
           break;
         case "settings":
@@ -404,7 +406,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         case "daily-summary":
           if (detailPageId != null && detailPageId.isNotEmpty) {
             // Track notification opened
-            MixpanelManager().dailySummaryNotificationOpened(
+            PlatformManager.instance.analytics.dailySummaryNotificationOpened(
               summaryId: detailPageId,
               date: '', // Date not available in navigate_to, will be fetched when detail page loads
             );
@@ -460,9 +462,36 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         connectedDevice: deviceProvider.connectedDevice,
       );
 
-      // Register callback for device connection to check firmware announcements
-      deviceProvider.onDeviceConnected = _onDeviceConnectedForAnnouncements;
+      // Register callback for device connection to check firmware announcements and device onboarding
+      deviceProvider.onDeviceConnected = (BtDevice device) {
+        _onDeviceConnectedForAnnouncements(device);
+        _checkDeviceOnboarding(device);
+      };
+
+      // Also check if already connected right now
+      if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
+        _checkDeviceOnboarding(deviceProvider.connectedDevice!);
+      }
     });
+  }
+
+  bool _deviceOnboardingShown = false;
+
+  void _checkDeviceOnboarding(BtDevice device) async {
+    if (device.type != DeviceType.omi) return;
+    if (_deviceOnboardingShown) return;
+    if (SharedPreferencesUtil().deviceOnboardingCompleted) return;
+
+    // Double-check with Firestore
+    final state = await getUserOnboardingState();
+    if (state?['device_onboarding_completed'] == true) {
+      SharedPreferencesUtil().deviceOnboardingCompleted = true;
+      return;
+    }
+
+    if (!mounted || _deviceOnboardingShown) return;
+    _deviceOnboardingShown = true;
+    routeToPage(context, const InteractiveDeviceOnboardingWrapper());
   }
 
   void _registerAutoSyncCallback() {
@@ -471,6 +500,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
       final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
       final syncProvider = Provider.of<SyncProvider>(context, listen: false);
       deviceProvider.onOfflineDataDetected = (device, fileCount, totalBytes) {
+        // Custom STT users sync manually (with confirmation) — never auto-sync,
+        // since offline files are transcribed on Omi and count toward the limit.
+        if (SharedPreferencesUtil().useCustomStt) {
+          Logger.debug('HomePage: Auto-sync skipped, custom STT provider enabled');
+          return;
+        }
+        // Omi users can disable auto-sync from device settings. Defaults to on.
+        if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
+          Logger.debug('HomePage: Auto-sync skipped, disabled by user');
+          return;
+        }
         if (!syncProvider.isSyncing) {
           Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
           syncProvider.syncWals();
@@ -684,12 +724,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               },
                             ),
                             if (home.selectedIndex == 0)
-                              Positioned(
-                                left: 16,
-                                right: 16,
-                                bottom: 78,
-                                child: _buildChatBar(context),
-                              ),
+                              Positioned(left: 16, right: 16, bottom: 78, child: _buildChatBar(context)),
                           ],
                         );
                       },
@@ -715,7 +750,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
-        MixpanelManager().bottomNavigationTabClicked('Chat');
+        PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
         Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
       },
       child: Container(
@@ -726,15 +761,17 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           border: Border.all(color: const Color(0xFF35343B), width: 1),
           boxShadow: [
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.65),
-                blurRadius: 60,
-                spreadRadius: 14,
-                offset: const Offset(0, -16)),
+              color: Colors.black.withValues(alpha: 0.65),
+              blurRadius: 60,
+              spreadRadius: 14,
+              offset: const Offset(0, -16),
+            ),
             BoxShadow(
-                color: Colors.black.withValues(alpha: 0.45),
-                blurRadius: 32,
-                spreadRadius: 6,
-                offset: const Offset(0, -8)),
+              color: Colors.black.withValues(alpha: 0.45),
+              blurRadius: 32,
+              spreadRadius: 6,
+              offset: const Offset(0, -8),
+            ),
             BoxShadow(color: Colors.black.withValues(alpha: 0.25), blurRadius: 10, offset: const Offset(0, 2)),
           ],
         ),
@@ -751,11 +788,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
             GestureDetector(
               onTap: () {
                 HapticFeedback.lightImpact();
-                MixpanelManager().bottomNavigationTabClicked('Chat Voice');
+                PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat Voice');
                 Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)));
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
+                );
               },
               child: Container(
                 width: 42,
@@ -907,7 +944,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                     );
                                                     Navigator.of(context).pop();
                                                     await provider.clearDateFilter();
-                                                    MixpanelManager().calendarFilterCleared();
+                                                    PlatformManager.instance.analytics.calendarFilterCleared();
                                                   },
                                                   child: Text(
                                                     context.l10n.removeFilter,
@@ -924,7 +961,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                                     );
                                                     Navigator.of(context).pop();
                                                     await provider.filterConversationsByDate(selectedDate);
-                                                    MixpanelManager().calendarFilterApplied(selectedDate);
+                                                    PlatformManager.instance.analytics.calendarFilterApplied(
+                                                      selectedDate,
+                                                    );
                                                   },
                                                   child: Text(
                                                     context.l10n.done,
@@ -990,7 +1029,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           icon: const Icon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
                           onPressed: () {
                             HapticFeedback.mediumImpact();
-                            MixpanelManager().exportTasksBannerClicked();
+                            PlatformManager.instance.analytics.exportTasksBannerClicked();
                             Navigator.of(
                               context,
                             ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
@@ -1037,7 +1076,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           subtitle: context.l10n.createAndShareYourApp,
                           iconWidget: const Icon(Icons.apps, size: 18),
                           onTap: () {
-                            MixpanelManager().pageOpened('Submit App');
+                            PlatformManager.instance.analytics.pageOpened('Submit App');
                             routeToPage(context, const AddAppPage());
                           },
                         ),
@@ -1046,7 +1085,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           subtitle: context.l10n.connectExternalAiTools,
                           iconWidget: const Icon(Icons.cable, size: 18),
                           onTap: () {
-                            MixpanelManager().pageOpened('Add MCP Server');
+                            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
                             routeToPage(context, const AddMcpServerPage());
                           },
                         ),
@@ -1067,6 +1106,21 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
+              // Recording mode chip — home tab only, when a Transcribe-Later-capable device is connected
+              Consumer2<HomeProvider, DeviceProvider>(
+                builder: (context, homeProvider, deviceProvider, _) {
+                  final device = deviceProvider.connectedDevice;
+                  if (homeProvider.selectedIndex != 0 ||
+                      device == null ||
+                      !CaptureModeChip.supportsDevice(device.type)) {
+                    return const SizedBox.shrink();
+                  }
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: CaptureModeChip(deviceType: device.type),
+                  );
+                },
+              ),
               // Settings button - always visible
               Container(
                 width: 36,
@@ -1077,7 +1131,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   icon: const Icon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
                   onPressed: () {
                     HapticFeedback.mediumImpact();
-                    MixpanelManager().pageOpened('Settings');
+                    PlatformManager.instance.analytics.pageOpened('Settings');
                     String language = SharedPreferencesUtil().userPrimaryLanguage;
                     bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
                     String transcriptModel = SharedPreferencesUtil().transcriptionModel;

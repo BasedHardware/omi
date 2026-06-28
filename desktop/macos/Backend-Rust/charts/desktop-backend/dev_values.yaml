@@ -1,0 +1,124 @@
+# Development environment values for desktop-backend
+
+replicaCount: 1
+
+image:
+  repository: gcr.io/based-hardware-dev/desktop-backend
+  pullPolicy: Always
+  tag: "latest"
+
+service:
+  port: 8080
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"8080":{"name": "dev-desktop-backend-neg"}}}'
+
+env:
+  - name: PORT
+    value: "8080"
+  # NOTE: intentionally points to prod Firestore (based-hardware), not dev
+  - name: FIREBASE_PROJECT_ID
+    value: "based-hardware"
+  - name: RUST_LOG
+    value: "debug"
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    value: "/app/google-credentials.json"
+  - name: OPENAI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OPENAI_API_KEY
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: GEMINI_API_KEY
+  - name: RESEND_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: RESEND_API_KEY
+  - name: ENCRYPTION_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: ENCRYPTION_SECRET
+  - name: REDIS_DB_HOST
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_HOST
+  - name: REDIS_DB_PORT
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_PORT
+  - name: REDIS_DB_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: REDIS_DB_PASSWORD
+  - name: FIREBASE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: FIREBASE_API_KEY
+  - name: PINECONE_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: PINECONE_API_KEY
+  - name: PINECONE_HOST
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: PINECONE_HOST
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 3
+  periodSeconds: 10
+
+startupProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  failureThreshold: 30
+  periodSeconds: 10
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+
+affinity:
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: service
+              operator: In
+              values:
+                - backend-listen
+            - key: env
+              operator: In
+              values:
+                - dev

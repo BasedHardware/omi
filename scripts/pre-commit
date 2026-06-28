@@ -1,5 +1,25 @@
 #!/bin/sh
 
+# Universal source hygiene: fail fast on unresolved merge conflict markers.
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM)
+
+if [ -n "$STAGED_FILES" ]; then
+  conflict_found=0
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    if git grep --cached -n -I -E '^(<<<<<<<|>>>>>>>)' -- "$file"; then
+      conflict_found=1
+    fi
+  done <<EOF
+$STAGED_FILES
+EOF
+
+  if [ "$conflict_found" -eq 1 ]; then
+    echo "Unresolved merge conflict markers found in staged files" >&2
+    exit 1
+  fi
+fi
+
 # Dart formatting for app/
 STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACM "app/**.dart" | grep -v -e '\.gen\.dart$' -e '\.g\.dart$')
 
@@ -77,6 +97,40 @@ if [ -n "$STAGED_C_FILES" ]; then
   fi
   echo "$STAGED_C_FILES" | xargs clang-format -i
   echo "$STAGED_C_FILES" | xargs git add
+fi
+
+# Rust formatting/checking for desktop backend.
+STAGED_DESKTOP_RUST_INPUTS=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^desktop/macos/Backend-Rust/' || true)
+STAGED_DESKTOP_RUST_FILES=$(printf '%s\n' "$STAGED_DESKTOP_RUST_INPUTS" | grep -E '\.rs$' || true)
+
+if [ -n "$STAGED_DESKTOP_RUST_INPUTS" ]; then
+  echo "Checking desktop Rust backend..."
+  if ! command -v cargo >/dev/null 2>&1; then
+    echo "cargo is not installed. Please install Rust/Cargo first" >&2
+    exit 1
+  fi
+  if [ -n "$STAGED_DESKTOP_RUST_FILES" ]; then
+    while IFS= read -r file; do
+      [ -n "$file" ] || continue
+      rel_file=${file#desktop/macos/Backend-Rust/}
+      if ! (
+        cd desktop/macos/Backend-Rust && \
+          rustfmt --edition 2021 "$rel_file"
+      ); then
+        echo "rustfmt failed for $file" >&2
+        exit 1
+      fi
+      git add "$file"
+    done <<EOF
+$STAGED_DESKTOP_RUST_FILES
+EOF
+  fi
+  if ! (
+    cd desktop/macos/Backend-Rust && \
+      cargo check --locked
+  ); then
+    exit 1
+  fi
 fi
 
 exit 0

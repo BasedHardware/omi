@@ -149,7 +149,7 @@ class TestBatchMemoriesRequestValidation:
         import re
 
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'memories.py')
-        with open(os.path.abspath(path), 'r') as f:
+        with open(os.path.abspath(path), 'r', encoding='utf-8') as f:
             content = f.read()
         m = re.search(r'MEMORIES_BATCH_MAX\s*=\s*(\d+)', content)
         assert m, "MEMORIES_BATCH_MAX constant not found in routers/memories.py"

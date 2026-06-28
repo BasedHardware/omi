@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -13,7 +14,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -21,6 +21,7 @@ import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'firmware_update.dart';
 import 'omiglass_ota_update.dart';
 
@@ -174,11 +175,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               child: Padding(
                 padding: const EdgeInsets.only(left: 2, top: 1),
                 child: charging
-                    ? const FaIcon(
-                        FontAwesomeIcons.chargingStation,
-                        color: Color.fromARGB(255, 0, 255, 8),
-                        size: 20,
-                      )
+                    ? const FaIcon(FontAwesomeIcons.chargingStation, color: Color.fromARGB(255, 0, 255, 8), size: 20)
                     : FaIcon(
                         _getBatteryIcon(provider.batteryLevel),
                         color: _getBatteryColor(provider.batteryLevel),
@@ -215,6 +212,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
+          // How to Use Your Omi (interactive tutorial) — Omi devices only, while connected
+          if (provider.connectedDevice?.type == DeviceType.omi) ...[
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.graduationCap,
+              title: context.l10n.deviceTutorial,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)),
+                );
+              },
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
           // Firmware Update
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.download,
@@ -376,7 +386,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               if (mounted && Navigator.of(context).canPop()) {
                 Navigator.of(context).pop();
               }
-              MixpanelManager().disconnectFriendClicked();
+              PlatformManager.instance.analytics.disconnectFriendClicked();
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),

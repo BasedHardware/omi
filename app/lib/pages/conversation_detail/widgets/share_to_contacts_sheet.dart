@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -12,7 +13,6 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Contact with phone number for sharing
@@ -58,7 +58,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
   void initState() {
     super.initState();
     // Track sheet opened
-    MixpanelManager().shareToContactsSheetOpened(widget.conversation.id);
+    PlatformManager.instance.analytics.shareToContactsSheetOpened(widget.conversation.id);
     _loadContacts();
   }
 
@@ -153,7 +153,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
     // Track selection changes
     final selectedCount = _selectedContacts.length;
     if (selectedCount > 0) {
-      MixpanelManager().shareToContactsSelected(widget.conversation.id, selectedCount);
+      PlatformManager.instance.analytics.shareToContactsSelected(widget.conversation.id, selectedCount);
     }
   }
 
@@ -204,7 +204,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       // Launch native SMS app
       if (await canLaunchUrl(smsUri)) {
         // Track SMS opened
-        MixpanelManager().shareToContactsSmsOpened(widget.conversation.id, selected.length);
+        PlatformManager.instance.analytics.shareToContactsSmsOpened(widget.conversation.id, selected.length);
         HapticFeedback.mediumImpact();
         Navigator.of(context).pop();
         await launchUrl(smsUri);
@@ -372,8 +372,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                                 _selectedContacts.isEmpty
                                     ? context.l10n.selectContactsToShare
                                     : _selectedContacts.length > 1
-                                    ? context.l10n.shareWithContactsCount(_selectedContacts.length)
-                                    : context.l10n.shareWithContactCount(_selectedContacts.length),
+                                        ? context.l10n.shareWithContactsCount(_selectedContacts.length)
+                                        : context.l10n.shareWithContactCount(_selectedContacts.length),
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                       ),

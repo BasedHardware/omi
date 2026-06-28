@@ -185,3 +185,10 @@ affinity:
               operator: In
               values:
                 - v2
+
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0

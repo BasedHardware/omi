@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -7,6 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()  # No-op if .env doesn't exist (production); loads local dev secrets otherwise
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 import firebase_admin
 from fastapi import FastAPI
@@ -15,6 +17,8 @@ from routers import (
     chat,
     firmware,
     transcribe,
+    omni_relay,
+    auto_model,
     notifications,
     speech_profile,
     agents,
@@ -33,10 +37,13 @@ from routers import (
     action_items,
     task_integrations,
     integrations,
+    x_connector,
     other,
     developer,
     updates,
     calendar_meetings,
+    google_calendar,
+    calendar_onboarding,
     imports,
     knowledge_graph,
     wrapped,
@@ -60,6 +67,14 @@ from utils.other.timeout import TimeoutMiddleware
 from utils.observability import log_langsmith_status
 from utils.subscription import validate_stripe_price_ids
 from utils.http_client import close_all_clients
+from utils.executors import (
+    drain_background_tasks,
+    log_executor_health,
+    run_blocking,
+    db_executor,
+    start_background_task,
+)
+from services.users.account_deletion import reconcile_pending_deletion_wipes
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -84,10 +99,13 @@ MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
 app = FastAPI()
 
 app.include_router(transcribe.router)
+app.include_router(omni_relay.router)
+app.include_router(auto_model.router)
 app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
+app.include_router(x_connector.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
@@ -106,6 +124,8 @@ app.include_router(sync.router)
 
 app.include_router(apps.router)
 app.include_router(calendar_meetings.router)
+app.include_router(google_calendar.router)
+app.include_router(calendar_onboarding.router)
 app.include_router(oauth.router)  # Added oauth router (for Omi Apps)
 app.include_router(auth.router)  # Added auth router (for the main Omi App, this is the core auth router)
 
@@ -141,15 +161,64 @@ methods_timeout = {
     "DELETE": os.environ.get('HTTP_DELETE_TIMEOUT'),
 }
 
-app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout)
+# The Cloud Tasks sync-job handler runs the whole pipeline inside the request,
+# so it needs a much higher cap than the default. Must stay below the job run
+# lock TTL (1800s) so a lock can never expire under a live run.
+paths_timeout = {
+    "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
+    "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
+}
+
+app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)
 
 from utils.byok import BYOKMiddleware
 
 app.add_middleware(BYOKMiddleware)
 
 
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(log_executor_health())
+    # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
+    # to db_executor so the blocking Firestore queries don't stall event-loop startup.
+    start_background_task(
+        run_blocking(db_executor, _drain_pending_deletion_wipes),
+        name='startup_deletion_wipe_reconcile',
+    )
+    # Periodic reconciliation ensures stale retrying claims (worker crashed) and
+    # new pending/failed wipes are retried without requiring a restart.
+    start_background_task(_periodic_deletion_wipe_reconcile(), name='periodic_deletion_wipe_reconcile')
+
+
+def _drain_pending_deletion_wipes():
+    """Best-effort reconciliation of pending/failed account-deletion wipes on startup."""
+    try:
+        result = reconcile_pending_deletion_wipes()
+        if result.get('requeued'):
+            logger.info(f"Startup deletion-wipe reconciliation: {result}")
+    except Exception as e:
+        logger.error(f"Startup deletion-wipe reconciliation failed: {e}")
+
+
+async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
+    """Periodically reconcile orphaned or failed account-deletion wipes.
+
+    Runs every 5 minutes (default) so stale retrying claims and new
+    pending/failed wipes are retried without requiring a restart.
+    """
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            result = await run_blocking(db_executor, reconcile_pending_deletion_wipes)
+            if result.get('requeued'):
+                logger.info(f"Periodic deletion-wipe reconciliation: {result}")
+        except Exception as e:
+            logger.error(f"Periodic deletion-wipe reconciliation failed: {e}")
+
+
 @app.on_event("shutdown")
 async def shutdown_event():
+    await drain_background_tasks(timeout=10.0)
     await close_all_clients()
 
 

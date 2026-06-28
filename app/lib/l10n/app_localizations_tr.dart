@@ -64,6 +64,12 @@ class AppLocalizationsTr extends AppLocalizations {
   String get copySummary => 'Özeti kopyala';
 
   @override
+  String get copyConversationId => 'Konuşma kimliğini kopyala';
+
+  @override
+  String get conversationIdCopied => 'Konuşma kimliği panoya kopyalandı';
+
+  @override
   String get testPrompt => 'İstemi Test Et';
 
   @override
@@ -422,6 +428,12 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get offlineSync => 'Çevrimdışı Senkronizasyon';
+
+  @override
+  String get autoSync => 'Otomatik eşitleme';
+
+  @override
+  String get autoSyncDescription => 'Cihazınız bağlandığında çevrimdışı kayıtları otomatik olarak eşitleyin';
 
   @override
   String get deviceSettings => 'Cihaz Ayarları';
@@ -957,11 +969,6 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String insightsUsedThisMonth(String used, String limit) {
     return 'Bu ay $limit içgörüden $used elde edildi';
-  }
-
-  @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return 'Bu ay $limit anıdan $used oluşturuldu';
   }
 
   @override
@@ -1641,7 +1648,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get finalTouches => 'Son dokunuşlar';
 
   @override
-  String get processing => 'İşleniyor...';
+  String get processing => 'İşleniyor';
 
   @override
   String get features => 'Özellikler';
@@ -1711,12 +1718,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'CİHAZ',
-      one: 'CİHAZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'CİHAZ', one: 'CİHAZ');
     return '$count $_temp0 YAKINLARDA BULUNDU';
   }
 
@@ -4633,41 +4635,13 @@ class AppLocalizationsTr extends AppLocalizations {
       'Omi\'nin değerli bir kullanıcısı olduğunuz için teşekkür ederiz. Herhangi bir sorunuz veya endişeniz varsa, team@basedhardware.com adresinden bize ulaşmaktan çekinmeyin.';
 
   @override
-  String get wifiSyncSettings => 'WiFi Senkronizasyon Ayarları';
-
-  @override
-  String get enterHotspotCredentials => 'Telefonunuzun hotspot kimlik bilgilerini girin';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi senkronizasyonu telefonunuzu hotspot olarak kullanır. Adı ve şifreyi Ayarlar > Kişisel Erişim Noktası\'nda bulun.';
-
-  @override
-  String get hotspotNameSsid => 'Hotspot Adı (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'örn. iPhone Hotspot';
-
-  @override
   String get password => 'Şifre';
-
-  @override
-  String get enterHotspotPassword => 'Hotspot şifresini girin';
 
   @override
   String get saveCredentials => 'Kimlik Bilgilerini Kaydet';
 
   @override
   String get clearCredentials => 'Kimlik Bilgilerini Temizle';
-
-  @override
-  String get pleaseEnterHotspotName => 'Lütfen bir hotspot adı girin';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi kimlik bilgileri kaydedildi';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi kimlik bilgileri temizlendi';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5814,9 +5788,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Hızlı aktarım';
-
-  @override
   String get syncingStatus => 'Senkronize ediliyor';
 
   @override
@@ -5826,15 +5797,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String etaLabel(String time) {
     return 'Tahmini süre: $time';
   }
-
-  @override
-  String get transferMethod => 'Aktarım yöntemi';
-
-  @override
-  String get fast => 'Hızlı';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5855,25 +5817,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get processedFilesDeleted => 'İşlenmiş dosyalar silindi';
 
   @override
-  String get wifiEnableFailed => 'Cihazda WiFi etkinleştirilemedi. Lütfen tekrar deneyin.';
-
-  @override
-  String get deviceNoFastTransfer => 'Cihazınız Hızlı Aktarımı desteklemiyor. Bunun yerine Bluetooth kullanın.';
-
-  @override
-  String get enableHotspotMessage => 'Lütfen telefonunuzun erişim noktasını etkinleştirin ve tekrar deneyin.';
-
-  @override
-  String get transferStartFailed => 'Aktarım başlatılamadı. Lütfen tekrar deneyin.';
-
-  @override
   String get deviceNotResponding => 'Cihaz yanıt vermedi. Lütfen tekrar deneyin.';
-
-  @override
-  String get invalidWifiCredentials => 'Geçersiz WiFi kimlik bilgileri. Erişim noktası ayarlarınızı kontrol edin.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi bağlantısı başarısız oldu. Lütfen tekrar deneyin.';
 
   @override
   String get sdCardProcessing => 'SD Kart İşleniyor';
@@ -5885,9 +5829,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get process => 'İşle';
-
-  @override
-  String get wifiSyncFailed => 'WiFi Senkronizasyonu Başarısız';
 
   @override
   String get processingFailed => 'İşleme Başarısız';
@@ -6665,24 +6606,13 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi Senkronizasyonu';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item panoya kopyalandı';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Bağlantı Başarısız';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceName cihazına bağlanılıyor';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName WiFi\'sini etkinleştir';
   }
 
   @override
@@ -6779,9 +6709,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get statusUnprocessed => 'İşlenmedi';
 
   @override
-  String get switchedToFastTransfer => 'Hızlı Aktarıma geçildi';
-
-  @override
   String get transferCompleteMessage => 'Aktarım tamamlandı! Bu kaydı artık çalabilirsiniz.';
 
   @override
@@ -6793,33 +6720,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transferCancelled => 'Aktarım iptal edildi';
 
   @override
-  String get fastTransferEnabled => 'Hızlı aktarım etkinleştirildi';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth senkronizasyonu etkinleştirildi';
-
-  @override
-  String get enableFastTransfer => 'Hızlı aktarımı etkinleştir';
-
-  @override
-  String get fastTransferDescription =>
-      'Hızlı aktarım, ~5 kat daha hızlı hızlar için WiFi kullanır. Telefonunuz aktarım sırasında geçici olarak Omi cihazınızın WiFi ağına bağlanacaktır.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Aktarım sırasında internet erişimi duraklatıldı';
-
-  @override
-  String get chooseTransferMethodDescription => 'Kayıtların Omi cihazından telefonunuza nasıl aktarılacağını seçin.';
-
-  @override
-  String get wifiSpeed => 'WiFi ile ~150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '5 KAT DAHA HIZLI';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Omi cihazınıza doğrudan WiFi bağlantısı oluşturur. Telefonunuz aktarım sırasında geçici olarak normal WiFi bağlantısını keser.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6841,7 +6742,15 @@ class AppLocalizationsTr extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Düşük Pil Uyarısı';
 
   @override
-  String get lowBatteryAlertBody => 'Cihazınızın pili azaldı. Şarj etme zamanı! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Pil seviyeniz %$level. Şarj etme zamanı! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi tamamen şarj oldu';
+
+  @override
+  String get batteryFullyChargedBody => 'Omi cihazınız tamamen şarj oldu. Fişini çekebilirsiniz!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Omi Cihazınız Bağlantı Kesildi';
@@ -7512,13 +7421,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Ses metne dönüştürülemedi';
 
   @override
-  String get locationPermissionRequired => 'Konum izni gerekli';
-
-  @override
-  String get locationPermissionContent =>
-      'Hızlı Transfer, WiFi bağlantısını doğrulamak için konum izni gerektirir. Devam etmek için lütfen konum izni verin.';
-
-  @override
   String get pdfTranscriptExport => 'Döküm Dışa Aktar';
 
   @override
@@ -7663,12 +7565,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get dailyRecapsDescription => 'Günlük özetleriniz oluşturulduktan sonra burada görünecek';
 
   @override
-  String get chooseTransferMethod => 'Aktarım yöntemi seçin';
-
-  @override
-  String get fastTransferSpeed => 'WiFi ile ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Büyük zaman farkı tespit edildi ($gap)';
   }
@@ -7677,10 +7573,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Büyük zaman farkları tespit edildi ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'Cihaz WiFi senkronizasyonunu desteklemiyor, Bluetooth\'a geçiliyor';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health bu cihazda kullanılamıyor';
@@ -7879,6 +7771,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get viewAll => 'Tümünü gör';
+
+  @override
+  String get expand => 'Genişlet';
 
   @override
   String get addTask => 'Görev ekle';
@@ -8444,7 +8339,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get manageStorage => 'Depolamayı yönet';
 
   @override
-  String get safelyBackedUp => 'Telefonunuza güvenli şekilde yedeklendi';
+  String get safelyBackedUp => 'Oluşturulan konuşmalar';
 
   @override
   String get notYetSynced => 'Henüz telefonunuzla senkronize edilmedi';
@@ -9241,4 +9136,341 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Tümünün seçimini kaldır';
+
+  @override
+  String get bulkExportAlreadyExported => 'Seçilen tüm görevler zaten dışa aktarıldı';
+
+  @override
+  String get bulkDeleteFailed => 'Görevler silinemedi. Lütfen tekrar deneyin.';
+
+  @override
+  String get deleteRecap => 'Özeti sil';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Bu özet silinsin mi?';
+
+  @override
+  String get deleteRecapConfirmBody => 'Bu özet kalıcı olarak kaldırılacak. O güne ait orijinal sohbetler etkilenmez.';
+
+  @override
+  String get deleteRecapAction => 'Sil';
+
+  @override
+  String get recapDeletedSnackbar => 'Özet silindi';
+
+  @override
+  String get recapDeleteFailed => 'Özet silinemedi. Daha sonra tekrar deneyin.';
+
+  @override
+  String get syncStatusBackedUp => 'Yedeklendi';
+
+  @override
+  String get syncStatusBackingUp => 'Senkronize ediliyor…';
+
+  @override
+  String get syncStatusWaiting => 'Eşitleme bekleniyor';
+
+  @override
+  String get syncStatusRetrying => 'İşlenemedi — yeniden deneniyor';
+
+  @override
+  String get syncStatusFailed => 'Başarısız — Yeniden Dene\'ye dokunun';
+
+  @override
+  String get syncStatusFileUnavailable => 'Dosya kullanılamıyor';
+
+  @override
+  String get noRecordingsYet => 'Henüz kayıt yok';
+
+  @override
+  String get syncInProgress => 'Eşitleme sürüyor';
+
+  @override
+  String get syncStatusUploaded => 'Yüklendi · Omi\'de işleniyor';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Hâlâ işleniyor';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Bu kayıt yüklendi ancak Omi hâlâ konuşmayı oluşturuyor. Şimdi silerseniz ve işleme başarısız olursa kurtarılamaz. Yine de silinsin mi?';
+
+  @override
+  String get syncCardAllBackedUp => 'Tüm kayıtlar eşitlendi';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt eşitlemeye hazır',
+      one: '1 kayıt eşitlemeye hazır',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi\'de işleniyor…';
+
+  @override
+  String get syncCardWaitingInternet => 'İnternet bekleniyor';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kayıt ilgi bekliyor',
+      one: '1 kayıt ilgi bekliyor',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Kayıtlar cihazınızdan bu telefona aktarılıp yerel olarak saklanır, ardından Omi\'nin sunucusuna yüklenir; burada deşifre edilip görüşmelere dönüştürülür.';
+
+  @override
+  String get syncStepUpload => 'Eşitle';
+
+  @override
+  String get syncStepUploadDesc => 'Kaydınız Omi\'nin sunucusuna gönderilir';
+
+  @override
+  String get syncStepProcess => 'Yazıya dök';
+
+  @override
+  String get syncStepProcessDesc => 'Omi sesi bir konuşmaya dönüştürür';
+
+  @override
+  String get syncStepBackedUp => 'Konuşma hazır';
+
+  @override
+  String get syncStepBackedUpDesc => 'Konuşmalar altında bulabilirsin';
+
+  @override
+  String get syncFailureFootnote =>
+      'İşlem başarısız olursa, kayıt bir sonraki eşitlemede otomatik olarak yeniden denenir.';
+
+  @override
+  String get syncStatusConversationCreated => 'Konuşma oluşturuldu';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi\'ye yükleniyor';
+
+  @override
+  String get syncCardDownloadingTitle => 'Cihazınızdan indiriliyor';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total / $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Cihazınızda';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Cihazınızdan indiriliyor';
+
+  @override
+  String get newestFirst => 'Önce en yeniler';
+
+  @override
+  String get noSyncedRecordingsYet => 'Henüz senkronize edilmiş kayıt yok';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Daha fazla ödeme yöntemi yakında';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Bu işlem arka planda sürer — bu ekrandan ayrılabilirsiniz.';
+
+  @override
+  String get syncCardRateLimited => 'Adil kullanım sınırına ulaşıldı — eşitleme otomatik olarak sürdürülecek';
+
+  @override
+  String get syncCardBackendBusy => 'Omi sunucuları yoğun — kapasite boşaldığında kayıtlarınız eşitlenecek';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Mevcut donanım yazılımı sürümü belirlenemiyor';
+
+  @override
+  String get promoCode => 'Promosyon kodu';
+
+  @override
+  String get enterPromoCode => 'Promosyon kodunu girin';
+
+  @override
+  String get invalidPromotionCode => 'Geçersiz promosyon kodu.';
+
+  @override
+  String get backgroundModeTitle => 'Arka Plan Modu';
+
+  @override
+  String get backgroundModeDescription => 'Uygulama tamamen kapalıyken bile Omi\'nizi kayıtta tutun.';
+
+  @override
+  String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın.';
+
+  @override
+  String get regenerateRecap => 'Özeti yeniden oluştur';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Özet yeniden oluşturuldu';
+
+  @override
+  String get recapRegenerateFailed => 'Özet yeniden oluşturulamadı. Lütfen daha sonra tekrar deneyin.';
+
+  @override
+  String get recapRegenerateCooldown => 'Yeniden oluşturmadan önce lütfen birkaç saniye bekleyin.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Bu gün için özetlenecek konuşma bulunamadı.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Eşitleme, Omi transkripsiyonunu kullanır';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.';
+
+  @override
+  String get transcribeLaterTitle => 'Sonradan Transkribe Et';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.';
+
+  @override
+  String get transcribeLaterNote => 'Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.';
+
+  @override
+  String get recordingMode => 'Kayıt modu';
+
+  @override
+  String get captureModeLater => 'Sonra';
+
+  @override
+  String get captureModeLiveDescription => 'Siz konuşurken gerçek zamanlı olarak yazıya dökün.';
+
+  @override
+  String get captureModeLaterDescription => 'Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün.';
+
+  @override
+  String get unmute => 'Sesi aç';
+
+  @override
+  String get newRecording => 'Yeni kayıt';
+
+  @override
+  String get transcribeLaterPaused => 'Duraklatıldı — ses kaydedilmiyor';
+
+  @override
+  String get deviceTutorial => 'Omi Nasıl Kullanılır';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Omi\'nize Konuşun';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Birkaç kelime söyleyin ve gerçek zamanlı olarak göründüklerini izleyin';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Aferin!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Konuşmaya başlayın...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi\'ye Bir Soru Sorun';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'Düğmeye bir kez basın, sorunuzu söyleyin, bitince tekrar basın';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Sorunuz işleniyor...';
+
+  @override
+  String get deviceOnboardingListening => 'Dinliyor...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Kapat';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Aç';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Düğmeyi 3 saniye basılı tutun';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tekrar açmak için düğmeye basın';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Işık sönene kadar düğmeyi sıkıca basılı tutun';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Bağlandı';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Bağlandı!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Bağlantı kesildi';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Kapatılıyor...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Çift Dokunmayı Özelleştir';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Konuşmayı Bitir';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Mevcut konuşmayı kaydet ve bitir';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Sustur / Sesi Aç';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Mikrofonu aç veya kapat';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Devam Eden Konuşmayı Yıldızla';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Konuşmayı önemli olarak işaretle';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Bu tek dokunuştu — hızlıca iki kez dokunmayı deneyin!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Şimdi deneyin! Omi\'nize çift dokunun';
+
+  @override
+  String get deviceOnboardingContinue => 'Devam Et';
+
+  @override
+  String get deviceOnboardingFinish => 'Bitir';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi\'nizi Tanıyın';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi\'nizin yapabileceği her şeyin hızlı ve uygulamalı bir turu.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Yaklaşık 1 dakika';
+  @override
+  String get jumpToLatestMessage => 'En son mesaja git';
+
+  @override
+  String get latest => 'En son';
 }

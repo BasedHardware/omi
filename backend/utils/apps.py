@@ -6,8 +6,10 @@ import secrets
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any
+from urllib.parse import urlparse
 
 import httpx
+from fastapi import HTTPException
 from database.cache import get_memory_cache, get_pubsub_manager
 from database.redis_db import delete_generic_cache
 from database.apps import (
@@ -73,6 +75,7 @@ from utils.conversations.render import conversations_to_string
 from utils import stripe
 from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.llm.usage_tracker import track_usage, Features
+from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
 import logging
 
@@ -81,6 +84,63 @@ logger = logging.getLogger(__name__)
 MarketplaceAppReviewUIDs = (
     os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv('MARKETPLACE_APP_REVIEWERS') else []
 )
+
+
+def validate_app_endpoints_for_reenable(app_dict: dict, update_dict: dict, app_id: str):
+    """Validate all configured endpoints before allowing a disabled app to be re-enabled.
+
+    Raises HTTPException(400) if any endpoint is unreachable or unhealthy.
+    """
+    updated_ext = (
+        (update_dict.get('external_integration') or {})
+        if isinstance(update_dict.get('external_integration'), dict)
+        else {}
+    )
+    existing_ext = app_dict.get('external_integration') or {}
+    endpoints_to_check = []
+    seen_urls = set()
+    webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
+    if webhook_url:
+        endpoints_to_check.append(('webhook', webhook_url, 'POST', True))
+        seen_urls.add(webhook_url)
+    mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
+    if mcp_url:
+        endpoints_to_check.append(('MCP server', mcp_url, 'POST', False))
+        seen_urls.add(mcp_url)
+    chat_tools = update_dict.get('chat_tools') or app_dict.get('chat_tools') or []
+    for tool in chat_tools:
+        ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
+        if ep and ep not in seen_urls:
+            endpoints_to_check.append(('chat tool', ep, 'HEAD', False))
+            seen_urls.add(ep)
+    if not endpoints_to_check:
+        raise HTTPException(
+            status_code=400,
+            detail='No configured endpoints found. Add a webhook URL, MCP server, or chat tool before re-enabling.',
+        )
+    for label, url, method, require_2xx in endpoints_to_check:
+        try:
+            resp = httpx.request(method, url, json={}, timeout=10.0, follow_redirects=True)
+            if require_2xx and (resp.status_code < 200 or resp.status_code >= 300):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f'{label.capitalize()} endpoint returned {resp.status_code}. Fix it before re-enabling.',
+                )
+        except httpx.TimeoutException:
+            raise HTTPException(
+                status_code=400, detail=f'{label.capitalize()} endpoint timed out. Fix it before re-enabling.'
+            )
+        except httpx.ConnectError:
+            raise HTTPException(
+                status_code=400, detail=f'Cannot connect to {label} endpoint. Fix it before re-enabling.'
+            )
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f'{label.capitalize()} health check failed for {app_id}: {e}')
+            raise HTTPException(
+                status_code=400, detail=f'{label.capitalize()} health check failed. Fix it before re-enabling.'
+            )
 
 
 # ********************************
@@ -259,6 +319,8 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     apps_review = get_apps_reviews(app_ids) if include_reviews else {}
 
     for app in all_apps:
+        if app.get('disabled'):
+            continue
         # Copy dict to avoid mutating cached objects
         app_dict = dict(app)
         app_dict['enabled'] = app['id'] in user_enabled
@@ -385,6 +447,8 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
 
         apps = []
         for app in all_apps:
+            if app.get('disabled'):
+                continue
             app_dict = app
             app_dict['installs'] = apps_installs.get(app['id'], 0)
             if include_reviews:
@@ -623,14 +687,16 @@ async def generate_persona_prompt(uid: str, persona: dict):
     """Generate a persona prompt based on user memories and conversations."""
 
     # Get latest memories and user info — exclude locked content
-    memories = [m for m in get_memories(uid, limit=250) if not m.get('is_locked')]
-    user_name = get_user_name(uid)
+    all_memories = await run_blocking(db_executor, get_memories, uid, limit=250)
+    memories = [m for m in all_memories if not m.get('is_locked')]
+    user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations — exclude locked content
-    conversations = deserialize_conversations([c for c in get_conversations(uid, limit=10) if not c.get('is_locked')])
+    all_conversations = await run_blocking(db_executor, get_conversations, uid, limit=10)
+    conversations = deserialize_conversations([c for c in all_conversations if not c.get('is_locked')])
     conversation_history = conversations_to_string(conversations)
     with track_usage(uid, Features.PERSONA):
-        conversation_history = condense_conversations([conversation_history])
+        conversation_history = await run_blocking(llm_executor, condense_conversations, [conversation_history])
 
     tweets = None
     if "twitter" in persona['connected_accounts']:
@@ -641,7 +707,9 @@ async def generate_persona_prompt(uid: str, persona: dict):
 
     # Condense memories
     with track_usage(uid, Features.PERSONA):
-        memories_text = condense_memories([memory['content'] for memory in memories], user_name)
+        memories_text = await run_blocking(
+            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name
+        )
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -740,15 +808,16 @@ def update_personas_async(uid: str):
 async def update_persona_prompt(persona: dict):
     """Update a persona's chat prompt with latest memories and conversations."""
     # Get latest memories and user info
-    memories = get_user_public_memories(persona['uid'], limit=250)
-    user_name = get_user_name(persona['uid'])
+    memories = await run_blocking(db_executor, get_user_public_memories, persona['uid'], limit=250)
+    user_name = await run_blocking(db_executor, get_user_name, persona['uid'])
 
     # Get and condense recent conversations
-    conversations = deserialize_conversations(get_conversations(persona['uid'], limit=10))
+    all_conversations = await run_blocking(db_executor, get_conversations, persona['uid'], limit=10)
+    conversations = deserialize_conversations(all_conversations)
     conversation_history = conversations_to_string(conversations)
     uid = persona['uid']
     with track_usage(uid, Features.PERSONA):
-        conversation_history = condense_conversations([conversation_history])
+        conversation_history = await run_blocking(llm_executor, condense_conversations, [conversation_history])
 
     condensed_tweets = None
     # Condense tweets
@@ -757,11 +826,13 @@ async def update_persona_prompt(persona: dict):
         timeline = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [tweet.text for tweet in timeline.timeline]
         with track_usage(uid, Features.PERSONA):
-            condensed_tweets = condense_tweets(tweets, persona['name'])
+            condensed_tweets = await run_blocking(llm_executor, condense_tweets, tweets, persona['name'])
 
     # Condense memories
     with track_usage(uid, Features.PERSONA):
-        memories_text = condense_memories([memory['content'] for memory in memories], user_name)
+        memories_text = await run_blocking(
+            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name
+        )
 
     # Generate updated chat prompt
     persona_prompt = f"""
@@ -823,8 +894,8 @@ Use these facts, conversations and tweets to shape your personality. Responses s
     persona['persona_prompt'] = persona_prompt
     persona['updated_at'] = datetime.now(timezone.utc)
 
-    update_persona_in_db(persona)
-    delete_app_cache_by_id(persona['id'])
+    await run_blocking(db_executor, update_persona_in_db, persona)
+    await run_blocking(db_executor, delete_app_cache_by_id, persona['id'])
 
 
 def increment_username(username: str):

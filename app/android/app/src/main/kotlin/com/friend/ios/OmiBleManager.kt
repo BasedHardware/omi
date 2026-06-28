@@ -47,9 +47,8 @@ class OmiBleManager private constructor(private val application: Application) {
             get() = _instance != null
 
         /** True while the Flutter engine is alive. Set in MainActivity.configureFlutterEngine,
-         *  cleared in MainActivity.onDestroy(isFinishing). CompanionService checks this to
-         *  avoid starting the foreground service when the app is dead — Omi needs the Flutter
-         *  app for WebSocket audio streaming. */
+         *  cleared in MainActivity.onDestroy(isFinishing). The BLE foreground service can
+         *  continue running after this becomes false. */
         @Volatile
         var isFlutterAlive: Boolean = false
 
@@ -83,6 +82,13 @@ class OmiBleManager private constructor(private val application: Application) {
 
     @Volatile
     var connectionListener: BleConnectionListener? = null
+
+    interface CharacteristicValueListener {
+        fun onCharacteristicValue(address: String, serviceUuid: String, characteristicUuid: String, value: ByteArray)
+    }
+
+    @Volatile
+    var characteristicValueListener: CharacteristicValueListener? = null
 
     @Volatile
     var flutterApi: BleFlutterApi? = null
@@ -633,6 +639,7 @@ class OmiBleManager private constructor(private val application: Application) {
 
             if (servicesDiscoveredFor.contains(address)) {
                 Log.i(TAG, "Ignoring duplicate onServicesDiscovered for $address")
+                completeCommand()
                 return
             }
 
@@ -675,8 +682,11 @@ class OmiBleManager private constructor(private val application: Application) {
                 persistBatteryReading(address, value[0].toInt() and 0xFF)
             }
 
-            mainHandler.post {
-                flutterApi?.onCharacteristicValueUpdated(address, serviceUuid, charUuid, value) {}
+            characteristicValueListener?.onCharacteristicValue(address, serviceUuid, charUuid, value.copyOf())
+            if (isFlutterAlive) {
+                mainHandler.post {
+                    flutterApi?.onCharacteristicValueUpdated(address, serviceUuid, charUuid, value) {}
+                }
             }
         }
 

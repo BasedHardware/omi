@@ -1,8 +1,7 @@
-import asyncio
 import logging
 from typing import List, Optional
 
-from utils.executors import critical_executor
+from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
@@ -10,11 +9,11 @@ from pydantic import BaseModel, Field, ValidationError
 import database.memories as memories_db
 from database.vector_db import (
     delete_memory_vector,
+    delete_memory_vectors_batch,
     upsert_memory_vector,
     upsert_memory_vectors_batch,
 )
 from models.memories import MemoryDB, Memory, MemoryCategory
-from utils.apps import update_personas_async
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -54,27 +53,31 @@ async def create_memory(
     memory: Memory,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:create")),
 ):
-    memory.category = MemoryCategory.manual
-    memory_db = MemoryDB.from_memory(memory, uid, None, True)
+    # Honor the client-supplied category (the Memory model defaults it to
+    # `interesting`). Only memories the user explicitly typed in arrive as
+    # `manual`; auto-extracted ones (system/interesting) keep their category so
+    # the mobile app files them under "About You"/"Insights" instead of dumping
+    # everything into "Manual". manually_added tracks human entry, so derive it
+    # from the category rather than forcing it True for every API caller.
+    manually_added = memory.category == MemoryCategory.manual
+    memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
 
     # Build payload outside try so serialization bugs aren't misreported as
     # transient 503s — only the Firestore write should be retryable.
     payload = memory_db.dict()
 
     try:
-        await asyncio.to_thread(memories_db.create_memory, uid, payload)
+        await run_blocking(db_executor, memories_db.create_memory, uid, payload)
     except Exception:
         logger.exception("Firestore create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     try:
-        await asyncio.to_thread(upsert_memory_vector, uid, memory_db.id, memory_db.content, memory_db.category.value)
+        await run_blocking(
+            postprocess_executor, upsert_memory_vector, uid, memory_db.id, memory_db.content, memory_db.category.value
+        )
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
-
-    if memory.visibility == 'public':
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(critical_executor, update_personas_async, uid)
 
     return memory_db
 
@@ -102,13 +105,15 @@ async def create_memories_batch(
     if not request.memories:
         return BatchMemoriesResponse(memories=[], created_count=0)
 
-    # Hardcode category to manual to match the single-create endpoint. Callers
-    # that need auto-categorization should use the dev API.
+    # Honor each item's category (defaults to `interesting` per the Memory
+    # model). Desktop import/extraction paths send `system`/`interesting` so
+    # they land under "About You"/"Insights"; only user-typed memories send
+    # `manual`. Derive manually_added from the category instead of forcing it.
     memory_dbs: List[MemoryDB] = []
     has_public = False
     for memory in request.memories:
-        memory.category = MemoryCategory.manual
-        memory_db = MemoryDB.from_memory(memory, uid, None, True)
+        manually_added = memory.category == MemoryCategory.manual
+        memory_db = MemoryDB.from_memory(memory, uid, None, manually_added)
         memory_dbs.append(memory_db)
         if memory.visibility == 'public':
             has_public = True
@@ -129,21 +134,21 @@ async def create_memories_batch(
             ],
         )
 
-    await asyncio.to_thread(_persist)
-
-    if has_public:
-        loop = asyncio.get_running_loop()
-        loop.run_in_executor(critical_executor, update_personas_async, uid)
+    await run_blocking(db_executor, _persist)
 
     return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
 def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
+    # Clamp pagination so an out-of-range value cannot reach Firestore .limit()/.offset(), which raises
+    # on a negative argument and would otherwise 500 the request.
+    offset = max(0, offset)
     # Use high limits for the first page
     # Warn: should remove
     if offset == 0:
         limit = 5000
+    limit = max(1, min(limit, 5000))
     memories = memories_db.get_memories(uid, limit, offset)
 
     valid_memories = []
@@ -180,7 +185,25 @@ def delete_memory(
 def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
+    # Collect all memory IDs before Firestore delete so we can also purge
+    # their Pinecone vectors — otherwise orphaned vectors become search
+    # noise that never gets cleaned up.
+    memory_ids = []
+    offset = 0
+    batch_size = 1000
+    while True:
+        memories = memories_db.get_memories(uid, limit=batch_size, offset=offset, include_invalidated=True)
+        if not memories:
+            break
+        batch_ids = [m.get('id') for m in memories if m.get('id')]
+        memory_ids.extend(batch_ids)
+        offset += batch_size
+
     memories_db.delete_all_memories(uid)
+
+    if memory_ids:
+        delete_memory_vectors_batch(uid, memory_ids)
+
     return {'status': 'ok'}
 
 
@@ -201,8 +224,15 @@ def edit_memory(
     value: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
-    _validate_memory(uid, memory_id)
+    memory = _validate_memory(uid, memory_id)
     memories_db.edit_memory(uid, memory_id, value)
+    # Re-embed so semantic search reflects the new content. Without this the Pinecone
+    # vector keeps matching the OLD text — a silent staleness bug that breaks the
+    # "constantly updated brain" (search would still surface the pre-edit fact).
+    try:
+        upsert_memory_vector(uid, memory_id, value, memory.get('category', 'system'))
+    except Exception:
+        logger.exception("Vector upsert failed uid=%s memory_id=%s (memory edited, vector stale)", uid, memory_id)
     return {'status': 'ok'}
 
 
@@ -216,5 +246,4 @@ def update_memory_visibility(
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     memories_db.change_memory_visibility(uid, memory_id, value)
-    critical_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}

@@ -53,6 +53,9 @@ from .screen_activity_tools import (
 from .preference_tools import (
     save_user_preference_tool,
 )
+from .web_tools import (
+    fetch_url_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -79,4 +82,5 @@ __all__ = [
     'get_screen_activity_tool',
     'search_screen_activity_tool',
     'save_user_preference_tool',
+    'fetch_url_tool',
 ]

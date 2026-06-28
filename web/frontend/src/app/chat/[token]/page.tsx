@@ -10,13 +10,14 @@ interface ChatParams {
 }
 
 interface ChatPageProps {
-  params: ChatParams;
+  params: Promise<ChatParams>;
 }
 
 export async function generateMetadata(
-  { params }: { params: ChatParams },
+  props: { params: Promise<ChatParams> },
   parent: ResolvingMetadata,
 ): Promise<Metadata> {
+  const params = await props.params;
   const prevData = (await parent) as Metadata;
   let data: { sender_name?: string; count?: number } | null = null;
 
@@ -69,8 +70,8 @@ function getPlatformLink(userAgent: string, token: string) {
         'https://play.google.com/store/apps/details?id=com.friend.ios',
       )};end`
     : isIOS
-      ? `omi://h.omi.me/chat/${token}`
-      : 'https://omi.me';
+    ? `omi://h.omi.me/chat/${token}`
+    : 'https://omi.me';
 }
 
 function formatTimestamp(timestamp: string | null) {
@@ -91,14 +92,15 @@ function formatTimestamp(timestamp: string | null) {
   });
 }
 
-export default async function SharedChatPage({ params }: ChatPageProps) {
+export default async function SharedChatPage(props: ChatPageProps) {
+  const params = await props.params;
   const token = params.token;
   const data = await getSharedChat(token);
   if (!data) {
     notFound();
   }
 
-  const userAgent = headers().get('user-agent') || '';
+  const userAgent = (await headers()).get('user-agent') || '';
   const link = getPlatformLink(userAgent, token);
 
   return (

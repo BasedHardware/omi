@@ -71,6 +71,12 @@ final class BleHostApiImpl: BleHostApi {
         return bleManager.getBluetoothState()
     }
 
+    func enableBluetooth(completion: @escaping (Result<Bool, Error>) -> Void) {
+        // iOS can't enable Bluetooth programmatically — the OS prompts the user.
+        // Report the current power state so Dart can react accordingly.
+        completion(.success(bleManager.getBluetoothState() == "on"))
+    }
+
     func isPeripheralConnected(uuid: String) throws -> Bool {
         return bleManager.isPeripheralConnected(uuid: uuid)
     }

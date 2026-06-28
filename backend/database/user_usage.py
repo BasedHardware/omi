@@ -33,6 +33,17 @@ def get_monthly_chat_usage(uid: str, now: Optional[datetime] = None) -> dict:
             continue
         data = snap.to_dict() or {}
         for key, value in data.items():
+            # The Rust desktop-backend commits desktop_chat usage via dotted Firestore
+            # fieldPaths (e.g. "desktop_chat.call_count"), which Firestore materializes
+            # as a NESTED map ({desktop_chat: {call_count, cost_usd, ...}}) — not the flat
+            # dotted string keys the Python backend writes. Read the grand-total
+            # `desktop_chat` map here; the `desktop_chat_*` prefixed maps (per-account /
+            # realtime breakdowns) are already summed into it, so don't double-count them.
+            if isinstance(value, dict):
+                if key == 'desktop_chat':
+                    questions += int(value.get('call_count', 0) or 0)
+                    cost_usd += float(value.get('cost_usd', 0) or 0)
+                continue
             if not isinstance(value, (int, float)):
                 continue
             if key.startswith('desktop_chat'):

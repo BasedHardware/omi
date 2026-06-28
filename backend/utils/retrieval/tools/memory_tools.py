@@ -12,6 +12,7 @@ from langchain_core.runnables import RunnableConfig
 import database.memories as memory_db
 import database.vector_db as vector_db
 from models.memories import MemoryDB
+from utils.retrieval.hybrid import rrf_rerank
 import logging
 
 logger = logging.getLogger(__name__)
@@ -263,8 +264,10 @@ def search_memories_tool(
     limit = min(limit, 20)
 
     try:
-        # Perform vector search on memories (no threshold, just return top matches)
-        matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)
+        # Over-fetch then rerank: pull more vector candidates than we need so the
+        # keyword (BM25) signal can promote exact-term matches the vector ranking buried.
+        fetch_limit = min(limit * 3, 60)
+        matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=fetch_limit)
 
         logger.info(f"📊 search_memories_tool - found {len(matches)} results for query: '{query}'")
 
@@ -281,21 +284,39 @@ def search_memories_tool(
         if not memory_ids:
             return f"Found matches but no valid memory IDs for query: '{query}'"
 
-        memories_data = memory_db.get_memories_by_ids(uid, memory_ids)
+        docs_by_id = {m.get('id'): m for m in memory_db.get_memories_by_ids(uid, memory_ids)}
 
-        # Filter out locked memories (paid plan required)
-        memories_data = [m for m in memories_data if not m.get('is_locked', False)]
+        # Preserve vector order, and drop locked / rejected / superseded memories so the
+        # agent never reasons over a fact that is no longer true.
+        candidates = []
+        for mid in memory_ids:
+            m = docs_by_id.get(mid)
+            if not m:
+                continue
+            if m.get('is_locked', False) or m.get('user_review') is False or m.get('invalid_at') is not None:
+                continue
+            candidates.append(
+                {
+                    'id': m.get('id'),
+                    'content': m.get('content', ''),
+                    'vector_score': scores_by_id.get(mid, 0),
+                    '_doc': m,
+                }
+            )
 
-        if not memories_data:
+        if not candidates:
             return f"No memories found matching '{query}'. The content may require a paid plan to access."
+
+        # Semantic score sets the vector rank; RRF then fuses in the BM25 keyword rank.
+        candidates.sort(key=lambda c: c.get('vector_score', 0), reverse=True)
+        candidates = rrf_rerank(query, candidates, limit)
 
         # Convert to MemoryDB objects with scores
         memory_objects = []
-        for memory_data in memories_data:
+        for cand in candidates:
             try:
-                memory_obj = MemoryDB(**memory_data)
-                score = scores_by_id.get(memory_data.get('id'), 0)
-                memory_objects.append({'memory': memory_obj, 'score': score})
+                memory_obj = MemoryDB(**cand['_doc'])
+                memory_objects.append({'memory': memory_obj, 'score': cand.get('vector_score', 0)})
             except Exception as e:
                 logger.error(f"Error creating MemoryDB object: {e}")
                 continue

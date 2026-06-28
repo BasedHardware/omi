@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:flutter/material.dart';
@@ -15,7 +16,6 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -40,9 +40,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  })  : position = initialPosition,
-        velocity = v.Vector3.zero(),
-        force = v.Vector3.zero();
+  }) : position = initialPosition,
+       velocity = v.Vector3.zero(),
+       force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -265,7 +265,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   final _repaintNotifier = ValueNotifier<int>(0);
 
   String? _selectedNodeId;
-  Set<String> _highlightedNodeIds = {};
+  final Set<String> _highlightedNodeIds = {};
   int _autoRebuildAttempts = 0;
 
   @override
@@ -285,7 +285,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     if (widget.trackOpenEvent) {
-      MixpanelManager().brainMapOpened();
+      PlatformManager.instance.analytics.brainMapOpened();
     }
     _loadGraph();
   }
@@ -326,6 +326,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
       final newEdges = data['edges'] as List<dynamic>? ?? [];
+
+      if (_error != null && mounted) {
+        setState(() {
+          _error = null;
+        });
+      }
 
       if (_isSameGraph(newNodes, newEdges)) {
         if (!silent) {
@@ -374,7 +380,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     });
 
     try {
-      MixpanelManager().brainMapRebuilt();
+      PlatformManager.instance.analytics.brainMapRebuilt();
       await KnowledgeGraphApi.rebuildKnowledgeGraph();
       if (!mounted) return;
 
@@ -524,7 +530,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   }
 
   Future<void> _shareGraph() async {
-    MixpanelManager().brainMapShareClicked();
+    PlatformManager.instance.analytics.brainMapShareClicked();
     try {
       final boundary = _graphKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return;
@@ -542,16 +548,16 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       canvas.drawImage(image, Offset.zero, paint);
 
       // Draw minimal branding "omi.me" at top center
-      final textSpan = TextSpan(
+      const textSpan = TextSpan(
         text: 'omi.me',
-        style: const TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
+        style: TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       textPainter.layout();
 
       // Center horizontally, near top
       final xPos = (image.width - textPainter.width) / 2;
-      final yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
+      const yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
 
       textPainter.paint(canvas, Offset(xPos, yPos));
 
@@ -817,11 +823,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _highlightedNodeIds.clear();
 
       if (hitNodeId != null) {
-        _highlightedNodeIds.add(hitNodeId!);
+        _highlightedNodeIds.add(hitNodeId);
 
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {
-          MixpanelManager().brainMapNodeClicked(node.id, node.label, node.nodeType);
+          PlatformManager.instance.analytics.brainMapNodeClicked(node.id, node.label, node.nodeType);
         }
 
         // Find neighbors

@@ -17,6 +17,14 @@ memories_collection = 'memories'
 users_collection = 'users'
 
 
+def get_memory_ids(uid: str) -> List[str]:
+    """Return all memory document IDs for a user without decrypting any fields (IDs-only projection).
+
+    Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
+    coll = db.collection(users_collection).document(uid).collection(memories_collection)
+    return [doc.id for doc in coll.select([]).stream()]
+
+
 # *********************************
 # ******* ENCRYPTION HELPERS ******
 # *********************************
@@ -71,8 +79,10 @@ def get_memories(
     categories: List[str] = [],
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    include_invalidated: bool = False,
+    sort: str = 'scoring_desc',
 ):
-    logger.info(f'get_memories db {uid} {limit} {offset} {categories} {start_date} {end_date}')
+    logger.info(f'get_memories db {uid} {limit} {offset} {categories} {start_date} {end_date} {sort}')
     memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
 
     if categories:
@@ -84,17 +94,26 @@ def get_memories(
     if end_date:
         memories_ref = memories_ref.where(filter=FieldFilter('created_at', '<=', end_date))
 
-    memories_ref = (
-        memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING)
-        .order_by('created_at', direction=firestore.Query.DESCENDING)
-        .limit(limit)
-        .offset(offset)
+    # Keep the Firestore query on the existing indexed order. MCP-specific sort
+    # modes are applied after batch collection to avoid requiring extra
+    # composite indexes for category-filtered reads.
+    memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
+        'created_at', direction=firestore.Query.DESCENDING
     )
+
+    memories_ref = memories_ref.limit(limit).offset(offset)
 
     # TODO: put user review to firestore query
     memories = [doc.to_dict() for doc in memories_ref.stream()]
     logger.info(f"get_memories {len(memories)}")
-    result = [memory for memory in memories if memory.get('user_review') is not False]
+    # Exclude user-rejected memories, and (by default) superseded/retracted ones.
+    # invalid_at is filtered in Python: old docs lack the field (-> None -> active),
+    # which a Firestore `== None` filter would wrongly drop.
+    result = [
+        memory
+        for memory in memories
+        if memory.get('user_review') is not False and (include_invalidated or memory.get('invalid_at') is None)
+    ]
     return result
 
 
@@ -245,6 +264,27 @@ def edit_memory(uid: str, memory_id: str, value: str):
         content = encryption.encrypt(content, uid)
 
     memory_ref.update({'content': content, 'edited': True, 'updated_at': datetime.now(timezone.utc)})
+
+
+def invalidate_memory(
+    uid: str, memory_id: str, superseded_by: Optional[str] = None, invalid_at: Optional[datetime] = None
+):
+    """Soft-invalidate a memory that has been superseded or retracted.
+
+    Unlike delete_memory this keeps the document (history) but stamps invalid_at so
+    every retrieval path excludes it — the "constantly updated brain" stops surfacing
+    a fact the moment it stops being true. Callers should also drop the Pinecone vector
+    so the memory disappears from semantic search too.
+    """
+    if invalid_at is None:
+        invalid_at = datetime.now(timezone.utc)
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    update_payload = {'invalid_at': invalid_at, 'updated_at': datetime.now(timezone.utc)}
+    if superseded_by is not None:
+        update_payload['superseded_by'] = superseded_by
+    memory_ref.update(update_payload)
 
 
 def delete_memory(uid: str, memory_id: str):

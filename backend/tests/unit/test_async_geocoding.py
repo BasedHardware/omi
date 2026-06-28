@@ -8,31 +8,130 @@ import asyncio
 import json
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+_RESTORED_MODULES = (
+    "database._client",
+    "database.redis_db",
+    "models",
+    "models.conversation",
+    "utils",
+    "utils.conversations",
+    "utils.conversations.location",
+    "utils.http_client",
+)
+_MISSING = object()
+_saved_modules = {name: sys.modules.get(name, _MISSING) for name in _RESTORED_MODULES}
+
+
+def _install_module(name, module):
+    sys.modules[name] = module
+    if "." in name:
+        parent_name, attr = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr, module)
+
+
+def _restore_modules():
+    for name in sorted(_RESTORED_MODULES, key=lambda module_name: module_name.count("."), reverse=True):
+        current = sys.modules.get(name)
+        original = _saved_modules[name]
+        if original is _MISSING:
+            sys.modules.pop(name, None)
+            if "." in name:
+                parent_name, attr = name.rsplit(".", 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None and getattr(parent, attr, _MISSING) is current:
+                    delattr(parent, attr)
+        else:
+            sys.modules[name] = original
+            if "." in name:
+                parent_name, attr = name.rsplit(".", 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None:
+                    setattr(parent, attr, original)
+
+
+def _ensure_package_path(name: str, path: Path) -> types.ModuleType:
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    try:
+        module_path = Path(module_file).resolve() if module_file else None
+    except TypeError:
+        module_path = None
+
+    if module_path == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
+
+
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
+_drop_stale_module("models.conversation", BACKEND_DIR / "models" / "conversation.py")
+_drop_stale_module("utils.conversations.location", BACKEND_DIR / "utils" / "conversations" / "location.py")
+
+
 # Mock database._client before importing anything that touches GCP
-sys.modules.setdefault("database._client", MagicMock())
+_install_module("database._client", MagicMock())
 
 # Stub database.redis_db with r attribute
-_redis_mod = sys.modules.get("database.redis_db")
-if _redis_mod is None:
-    _redis_mod = types.ModuleType("database.redis_db")
-    sys.modules["database.redis_db"] = _redis_mod
-if not hasattr(_redis_mod, 'r'):
-    _redis_mod.r = MagicMock()
+_redis_mod = types.ModuleType("database.redis_db")
+_redis_mod.r = MagicMock()
+_install_module("database.redis_db", _redis_mod)
 
 # Stub utils.http_client
-if "utils.http_client" not in sys.modules:
+_http_mod = sys.modules.get("utils.http_client")
+if _http_mod is None:
     _http_mod = types.ModuleType("utils.http_client")
+if not hasattr(_http_mod, "get_maps_client"):
     _http_mod.get_maps_client = MagicMock()
+if not hasattr(_http_mod, "get_webhook_client"):
     _http_mod.get_webhook_client = MagicMock()
+if not hasattr(_http_mod, "get_maps_semaphore"):
     _http_mod.get_maps_semaphore = MagicMock(return_value=asyncio.Semaphore(8))
-    sys.modules["utils.http_client"] = _http_mod
+_install_module("utils.http_client", _http_mod)
 
-from models.conversation import Geolocation
-from utils.conversations.location import async_get_google_maps_location
+try:
+    from models.conversation import Geolocation
+    from utils.conversations import location as location_module
+
+    async_get_google_maps_location = location_module.async_get_google_maps_location
+finally:
+    _restore_modules()
 
 
 class TestAsyncCacheHit:
@@ -47,11 +146,11 @@ class TestAsyncCacheHit:
             "address": "San Francisco, CA",
             "location_type": "locality",
         }
-        with patch("utils.conversations.location.r") as mock_r:
+        with patch.object(location_module, "r") as mock_r:
             mock_r.get.return_value = json.dumps(cached)
             mock_client = AsyncMock()
 
-            with patch("utils.conversations.location.get_maps_client", return_value=mock_client):
+            with patch.object(location_module, "get_maps_client", return_value=mock_client):
                 result = await async_get_google_maps_location(37.78512, -122.40932)
 
                 # Should NOT call httpx
@@ -82,8 +181,8 @@ class TestAsyncCacheMiss:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch("utils.conversations.location.r") as mock_r, patch(
-            "utils.conversations.location.get_maps_client", return_value=mock_client
+        with patch.object(location_module, "r") as mock_r, patch.object(
+            location_module, "get_maps_client", return_value=mock_client
         ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
             mock_r.get.return_value = None
 
@@ -110,8 +209,8 @@ class TestAsyncCacheMiss:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch("utils.conversations.location.r") as mock_r, patch(
-            "utils.conversations.location.get_maps_client", return_value=mock_client
+        with patch.object(location_module, "r") as mock_r, patch.object(
+            location_module, "get_maps_client", return_value=mock_client
         ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
             mock_r.get.return_value = None
 
@@ -133,8 +232,8 @@ class TestAsyncApiEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch("utils.conversations.location.r") as mock_r, patch(
-            "utils.conversations.location.get_maps_client", return_value=mock_client
+        with patch.object(location_module, "r") as mock_r, patch.object(
+            location_module, "get_maps_client", return_value=mock_client
         ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
             mock_r.get.return_value = None
             result = await async_get_google_maps_location(37.785, -122.409)
@@ -152,8 +251,8 @@ class TestAsyncApiEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch("utils.conversations.location.r") as mock_r, patch(
-            "utils.conversations.location.get_maps_client", return_value=mock_client
+        with patch.object(location_module, "r") as mock_r, patch.object(
+            location_module, "get_maps_client", return_value=mock_client
         ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
             mock_r.get.return_value = None
             result = await async_get_google_maps_location(37.785, -122.409)
@@ -172,8 +271,8 @@ class TestAsyncApiEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_httpx_response)
 
-        with patch("utils.conversations.location.r") as mock_r, patch(
-            "utils.conversations.location.get_maps_client", return_value=mock_client
+        with patch.object(location_module, "r") as mock_r, patch.object(
+            location_module, "get_maps_client", return_value=mock_client
         ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
             mock_r.get.side_effect = ConnectionError("Redis down")
 
@@ -190,8 +289,8 @@ class TestAsyncApiEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
 
-        with patch("utils.conversations.location.r") as mock_r, patch(
-            "utils.conversations.location.get_maps_client", return_value=mock_client
+        with patch.object(location_module, "r") as mock_r, patch.object(
+            location_module, "get_maps_client", return_value=mock_client
         ), patch.dict("os.environ", {"GOOGLE_MAPS_API_KEY": "test-key"}):
             mock_r.get.return_value = None
             result = await async_get_google_maps_location(37.785, -122.409)

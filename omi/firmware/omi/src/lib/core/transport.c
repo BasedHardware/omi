@@ -924,6 +924,56 @@ static void update_mtu(struct bt_conn *conn)
     LOG_ERR("bt_gatt_exchange_mtu() failed after retries (last err %d)", err);
 }
 
+static void log_local_ble_addresses(void)
+{
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    bt_id_get(addrs, &count);
+
+    if (count == 0U) {
+        LOG_WRN("No local BLE identity address found");
+        printk("BLE_ADDR: unavailable (count=0)\n");
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        char addr[BT_ADDR_LE_STR_LEN];
+
+        bt_addr_le_to_str(&addrs[i], addr, sizeof(addr));
+        LOG_INF("BLE identity[%u]: %s", (unsigned int)i, addr);
+        printk("BLE_ADDR[%u]: %s\n", (unsigned int)i, addr);
+    }
+}
+
+static int ensure_local_ble_identity(void)
+{
+#if defined(CONFIG_BT_SETTINGS)
+    int err = settings_load();
+    if (err && err != -ENOENT) {
+        LOG_ERR("Failed to load BT settings (err %d)", err);
+        return err;
+    }
+#endif
+
+    bt_addr_le_t addrs[CONFIG_BT_ID_MAX];
+    size_t count = CONFIG_BT_ID_MAX;
+
+    bt_id_get(addrs, &count);
+    if (count > 0U) {
+        return 0;
+    }
+
+    int id = bt_id_create(NULL, NULL);
+    if (id < 0) {
+        LOG_ERR("Failed to create local BLE identity (err %d)", id);
+        return id;
+    }
+
+    LOG_INF("Created local BLE identity %d", id);
+    return 0;
+}
+
 //
 // Ring Buffer
 //
@@ -1075,7 +1125,6 @@ static bool push_to_gatt(struct bt_conn *conn)
 
 #define OPUS_PREFIX_LENGTH 1
 #define OPUS_PADDED_LENGTH 80
-#define MAX_WRITE_SIZE 440
 static uint32_t offset = 0;
 static uint16_t buffer_offset = 0;
 
@@ -1180,12 +1229,12 @@ void pusher(void)
                 bt_conn_unref(conn);
             } else if (!conn) {
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
-                if (get_file_size() < MAX_STORAGE_BYTES && is_sd_on()) {
+                if (is_sd_on()) {
                     storage_full_warned = false;
                     write_to_storage();
                 } else {
                     if (!storage_full_warned) {
-                        LOG_WRN("Storage full, stopping offline storage");
+                        LOG_WRN("Offline storage unavailable");
                         storage_full_warned = true;
                     }
                 }
@@ -1277,6 +1326,14 @@ int transport_start()
     }
 
     LOG_INF("Transport bluetooth initialized");
+
+    err = ensure_local_ble_identity();
+    if (err) {
+        LOG_WRN("Continuing without confirmed BLE identity (err %d)", err);
+    }
+
+    // Production-line helper: emit local BLE addresses on UART for fixture parsing.
+    log_local_ble_addresses();
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         err = shell_bt_nus_init();

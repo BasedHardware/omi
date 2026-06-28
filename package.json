@@ -5,5 +5,10 @@
   },
   "devDependencies": {
     "dotenv-cli": "^8.0.0"
+  },
+  "overrides": {
+    "@xmldom/xmldom": "^0.9.8",
+    "tar": "^7.5.11",
+    "postcss": "^8.5.10"
   }
 }

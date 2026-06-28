@@ -6,15 +6,99 @@ upload extraction path, and the transcribe.py Firestore loading path.
 
 import os
 import sys
+import types
 
 import numpy as np
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 
 os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
+_STUBBED_MODULES = {}
+
+
+def _install_module_stub(name, module):
+    sys.modules[name] = module
+    _STUBBED_MODULES[name] = module
+    return module
+
+
 sys.modules.setdefault("database._client", MagicMock())
 sys.modules.setdefault("utils.other.storage", MagicMock())
 sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
+
+
+def _clear_speech_profile_module():
+    routers_module = sys.modules.get("routers")
+    if routers_module is not None and hasattr(routers_module, "speech_profile"):
+        delattr(routers_module, "speech_profile")
+    sys.modules.pop("routers.speech_profile", None)
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_speech_profile_import():
+    _clear_speech_profile_module()
+    yield
+    _clear_speech_profile_module()
+
+
+def _make_speech_profile_import_stubs():
+    pydub_module = types.ModuleType("pydub")
+    pydub_module.AudioSegment = MagicMock()
+    vad_module = types.ModuleType("utils.stt.vad")
+    vad_module.apply_vad_for_speech_profile = MagicMock()
+    return {
+        "av": MagicMock(),
+        "pydub": pydub_module,
+        "utils.stt.vad": vad_module,
+    }
+
+
+def _cosine_cdist(a, b, metric="cosine"):
+    if metric != "cosine":
+        raise ValueError(f"Unsupported metric for scipy stub: {metric}")
+
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    if a.ndim == 1:
+        a = a.reshape(1, -1)
+    if b.ndim == 1:
+        b = b.reshape(1, -1)
+
+    numerator = a @ b.T
+    denominator = np.linalg.norm(a, axis=1, keepdims=True) @ np.linalg.norm(b, axis=1, keepdims=True).T
+    similarity = np.divide(
+        numerator,
+        denominator,
+        out=np.zeros((a.shape[0], b.shape[0]), dtype=np.float32),
+        where=denominator != 0,
+    )
+    return 1.0 - similarity
+
+
+def _install_scipy_distance_stub(import_error):
+    if "scipy" in sys.modules or "scipy.spatial" in sys.modules:
+        raise import_error
+
+    scipy_module = _install_module_stub("scipy", types.ModuleType("scipy"))
+    spatial_module = _install_module_stub("scipy.spatial", types.ModuleType("scipy.spatial"))
+    distance_module = types.ModuleType("scipy.spatial.distance")
+    distance_module.cdist = _cosine_cdist
+    _install_module_stub("scipy.spatial.distance", distance_module)
+    scipy_module.spatial = spatial_module
+    spatial_module.distance = distance_module
+
+
+try:
+    import scipy.spatial.distance  # noqa: F401
+except ImportError as exc:
+    _install_scipy_distance_stub(exc)
+
+
+def teardown_module():
+    for name in reversed(_STUBBED_MODULES):
+        module = _STUBBED_MODULES[name]
+        if sys.modules.get(name) is module:
+            sys.modules.pop(name, None)
 
 
 # ─── Firestore Helpers ──────────────────────────────────────────────────────
@@ -130,6 +214,7 @@ class TestGetUserSpeakerEmbedding:
 class TestSpeechProfileEmbeddingExtraction:
     """Tests for the embedding extraction in upload_profile route."""
 
+    @patch.dict(sys.modules, _make_speech_profile_import_stubs())
     @patch('routers.speech_profile.set_user_speaker_embedding')
     @patch('routers.speech_profile.extract_embedding')
     @patch('routers.speech_profile.upload_profile_audio', return_value='https://storage.example.com/profile.wav')
@@ -183,6 +268,7 @@ class TestSpeechProfileEmbeddingExtraction:
         assert isinstance(stored_embedding, list)
         assert len(stored_embedding) == 512
 
+    @patch.dict(sys.modules, _make_speech_profile_import_stubs())
     @patch('routers.speech_profile.set_user_speaker_embedding')
     @patch('routers.speech_profile.extract_embedding', side_effect=Exception("API unavailable"))
     @patch('routers.speech_profile.upload_profile_audio', return_value='https://storage.example.com/profile.wav')

@@ -33,6 +33,8 @@ DEFAULT_PROFILE_NAME = "default"
 ENV_CONFIG_PATH = "OMI_CONFIG"
 ENV_API_KEY = "OMI_API_KEY"
 ENV_API_BASE = "OMI_API_BASE"
+ENV_LOCAL_API_URL = "OMI_LOCAL_API_URL"
+ENV_LOCAL_TOKEN = "OMI_LOCAL_TOKEN"
 ENV_PROFILE = "OMI_PROFILE"
 
 
@@ -55,6 +57,8 @@ class Profile:
     refresh_token: Optional[str] = None
     id_token_expires_at: Optional[float] = None  # unix epoch seconds
     api_base: str = DEFAULT_API_BASE
+    local_api_url: Optional[str] = None
+    local_token: Optional[str] = None
     extra: dict[str, Any] = field(default_factory=dict)
 
     def is_authenticated(self) -> bool:
@@ -76,6 +80,10 @@ class Profile:
             out["refresh_token"] = self.refresh_token
         if self.id_token_expires_at is not None:
             out["id_token_expires_at"] = self.id_token_expires_at
+        if self.local_api_url:
+            out["local_api_url"] = self.local_api_url
+        if self.local_token:
+            out["local_token"] = self.local_token
         # Round-trip preserve unknown keys for forward compatibility.
         for k, v in self.extra.items():
             if k not in out:
@@ -91,6 +99,8 @@ class Profile:
             "refresh_token",
             "id_token_expires_at",
             "api_base",
+            "local_api_url",
+            "local_token",
         }
         extra = {k: v for k, v in data.items() if k not in known}
         return cls(
@@ -101,6 +111,8 @@ class Profile:
             refresh_token=data.get("refresh_token"),
             id_token_expires_at=data.get("id_token_expires_at"),
             api_base=data.get("api_base", DEFAULT_API_BASE),
+            local_api_url=data.get("local_api_url"),
+            local_token=data.get("local_token"),
             extra=extra,
         )
 
@@ -110,6 +122,12 @@ class Profile:
             return _mask_token(self.api_key)
         if self.auth_method == "oauth" and self.id_token:
             return _mask_token(self.id_token)
+        return "(none)"
+
+    def masked_local_token(self) -> str:
+        """Return a redacted form of the local Desktop API token."""
+        if self.local_token:
+            return _mask_token(self.local_token)
         return "(none)"
 
 

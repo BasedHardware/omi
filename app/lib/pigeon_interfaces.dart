@@ -194,6 +194,12 @@ abstract class BleHostApi {
   @SwiftFunction('getBluetoothState()')
   String getBluetoothState();
 
+  /// (Android only) Show the system "enable Bluetooth" prompt. Resolves to true
+  /// once Bluetooth is on. No-op on iOS — returns whether the adapter is powered on.
+  @async
+  @SwiftFunction('enableBluetooth()')
+  bool enableBluetooth();
+
   @SwiftFunction('isPeripheralConnected(uuid:)')
   bool isPeripheralConnected(String uuid);
 
@@ -242,4 +248,8 @@ abstract class BleFlutterApi {
   void onRssiUpdate(String peripheralUuid, int rssi);
 
   void onStateRestored(List<String> peripheralUuids);
+
+  /// Native batch writer finalized a recording file (rotation / gap / stop) so
+  /// Dart can rescan the recordings dir without waiting for a disconnect.
+  void onBatchRecordingFinalized(String fileName);
 }

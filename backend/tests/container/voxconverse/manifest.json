@@ -1,0 +1,27 @@
+{
+  "dataset": "VoxConverse",
+  "version": "0.3",
+  "license": "CC-BY-4.0",
+  "source": "https://github.com/joonson/voxconverse",
+  "audio_url": "https://www.robots.ox.ac.uk/~vgg/data/voxconverse/data/voxconverse_test_wav.zip",
+  "split": "test",
+  "clips": [
+    {"id": "dohag", "duration_s": 42.2, "speakers": 1, "segments": 3},
+    {"id": "neiye", "duration_s": 48.0, "speakers": 1, "segments": 3},
+    {"id": "jxydp", "duration_s": 86.0, "speakers": 1, "segments": 1},
+    {"id": "wdvva", "duration_s": 65.4, "speakers": 2, "segments": 14},
+    {"id": "lubpm", "duration_s": 81.0, "speakers": 2, "segments": 9},
+    {"id": "luobn", "duration_s": 84.8, "speakers": 2, "segments": 12},
+    {"id": "xkmqx", "duration_s": 48.5, "speakers": 3, "segments": 7},
+    {"id": "eguui", "duration_s": 98.7, "speakers": 3, "segments": 15},
+    {"id": "bvyvm", "duration_s": 117.0, "speakers": 3, "segments": 16},
+    {"id": "msbyq", "duration_s": 38.2, "speakers": 4, "segments": 7},
+    {"id": "eucfa", "duration_s": 81.4, "speakers": 4, "segments": 18},
+    {"id": "cqfmj", "duration_s": 113.9, "speakers": 4, "segments": 18},
+    {"id": "gyomp", "duration_s": 74.7, "speakers": 5, "segments": 8},
+    {"id": "tnjoh", "duration_s": 87.4, "speakers": 5, "segments": 11},
+    {"id": "gkiki", "duration_s": 112.2, "speakers": 6, "segments": 9}
+  ],
+  "total_duration_s": 1183.4,
+  "citation": "Chung, J.S., Huh, J., Nagrani, A., Afouras, T., Zisserman, A. (2020) Spot the conversation: speaker diarisation in the wild. Proc. Interspeech."
+}

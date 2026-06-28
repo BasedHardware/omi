@@ -17,10 +17,14 @@ for mod_name in [
     'database.user_usage',
     'database.conversations',
     'firebase_admin',
+    'firebase_admin.auth',
     'firebase_admin.messaging',
 ]:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = ModuleType(mod_name)
+
+sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
+sys.modules['firebase_admin.auth'].get_user = MagicMock()
 
 # Stub redis_db.r
 _mock_redis = MagicMock()
@@ -252,12 +256,30 @@ class TestSyncEndpointCodeStructure:
         import os
 
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             return f.read()
 
-    def test_no_402_block(self):
-        """sync.py must not raise 402 (lock instead of block)."""
+    @staticmethod
+    def _function_body(source, marker):
+        start = source.find(marker)
+        assert start != -1, f'{marker} not found in sync.py'
+        end = source.find('\n@router.', start + 1)
+        if end == -1:
+            end = len(source)
+        return source[start:end]
+
+    def _sync_local_files_bodies(self):
         source = self._read_sync_source()
+        return '\n'.join(
+            [
+                self._function_body(source, 'async def sync_local_files('),
+                self._function_body(source, 'async def sync_local_files_v2('),
+            ]
+        )
+
+    def test_no_402_block(self):
+        """sync-local-files must not raise 402 (lock instead of block)."""
+        source = self._sync_local_files_bodies()
         assert 'status_code=402' not in source
 
     def test_should_lock_flag_exists(self):

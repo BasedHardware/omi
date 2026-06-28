@@ -81,6 +81,18 @@ const nextConfig = {
       },
     ],
   },
+  async headers() {
+    // Prevent clickjacking: disallow embedding any page (incl. /login) in a frame.
+    return [
+      {
+        source: '/(.*)?',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

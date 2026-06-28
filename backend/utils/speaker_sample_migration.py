@@ -19,6 +19,7 @@ from utils.speaker_sample import (
     download_sample_audio,
     verify_and_transcribe_sample,
 )
+from utils.executors import storage_executor, sync_executor, run_blocking
 from utils.stt.speaker_embedding import extract_embedding_from_bytes
 import logging
 
@@ -87,7 +88,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
 
         for sample_path in samples:
             try:
-                audio_bytes = await asyncio.to_thread(download_sample_audio, sample_path)
+                audio_bytes = await run_blocking(storage_executor, download_sample_audio, sample_path)
             except NotFound:
                 logger.warning(f"Sample not found in storage, skipping: {sample_path} {uid} {person_id}")
                 # Mark for removal from Firestore (blob already gone)
@@ -121,15 +122,17 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: dict) -> dict:
         # Now safe to delete blobs - no transient failures
         for sample_path in samples_to_delete:
             try:
-                await asyncio.to_thread(delete_sample_from_storage, sample_path)
+                await run_blocking(storage_executor, delete_sample_from_storage, sample_path)
             except Exception as e:
                 logger.error(f"Failed to delete sample {sample_path}: {e} {uid} {person_id}")
 
         new_embedding = None
         if valid_samples:
             try:
-                first_sample_audio = await asyncio.to_thread(download_sample_audio, valid_samples[0])
-                embedding = await asyncio.to_thread(extract_embedding_from_bytes, first_sample_audio, "sample.wav")
+                first_sample_audio = await run_blocking(storage_executor, download_sample_audio, valid_samples[0])
+                embedding = await run_blocking(
+                    sync_executor, extract_embedding_from_bytes, first_sample_audio, "sample.wav"
+                )
                 new_embedding = embedding.flatten().tolist()
             except Exception as e:
                 logger.error(f"Error extracting speaker embedding: {e} {uid} {person_id}")
@@ -202,8 +205,10 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: dict) -> dict:
         # Regenerate embedding from the first (latest) sample using v2/embedding API
         new_embedding = None
         try:
-            first_sample_audio = await asyncio.to_thread(download_sample_audio, samples[0])
-            embedding = await asyncio.to_thread(extract_embedding_from_bytes, first_sample_audio, "sample.wav")
+            first_sample_audio = await run_blocking(storage_executor, download_sample_audio, samples[0])
+            embedding = await run_blocking(
+                sync_executor, extract_embedding_from_bytes, first_sample_audio, "sample.wav"
+            )
             new_embedding = embedding.flatten().tolist()
         except NotFound:
             # Sample missing - don't advance to v3 to avoid caching stale v1 embedding

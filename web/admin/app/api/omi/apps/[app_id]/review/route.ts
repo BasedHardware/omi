@@ -9,10 +9,8 @@ interface ReviewRequestBody {
   reason?: string; // Optional for rejection
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { app_id: string } }
-) {
+export async function POST(request: NextRequest, props: { params: Promise<{ app_id: string }> }) {
+  const params = await props.params;
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
 

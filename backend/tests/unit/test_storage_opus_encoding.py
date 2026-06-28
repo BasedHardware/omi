@@ -21,6 +21,7 @@ os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 # Mock heavy dependencies at sys.modules level before importing storage
 sys.modules.setdefault("database._client", MagicMock())
+sys.modules.setdefault("database.users", MagicMock())
 
 _mock_gcs_storage = MagicMock()
 _mock_gcs_client_instance = MagicMock()
@@ -30,10 +31,16 @@ sys.modules.setdefault("google.cloud.storage.transfer_manager", MagicMock())
 sys.modules.setdefault("google.cloud.exceptions", MagicMock())
 sys.modules.setdefault("google.oauth2", MagicMock())
 sys.modules.setdefault("google.oauth2.service_account", MagicMock())
+sys.modules.setdefault("utils.cloud_tasks", MagicMock())
+sys.modules["utils.cloud_tasks"].enqueue_audio_merge_job = MagicMock()
+sys.modules["utils.cloud_tasks"].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
 
 from utils.other import storage as storage_mod
 
+requires_native_opus = pytest.mark.skipif(storage_mod.opuslib is None, reason="native libopus is not installed")
 
+
+@requires_native_opus
 class TestOpusEncodeDecode:
     """Tests for encode_pcm_to_opus and decode_opus_to_pcm."""
 
@@ -151,6 +158,7 @@ class TestExtensionHelpers:
         assert storage_mod._strip_extension("file.unknown") == "file"
 
 
+@requires_native_opus
 class TestUploadOpusEncoding:
     """Tests for upload_audio_chunk with always-on Opus encoding."""
 
@@ -344,6 +352,7 @@ class TestDownloadFallbackPath:
         with pytest.raises(FileNotFoundError):
             storage_mod.download_audio_chunks_and_merge('uid', 'conv', [1000.0], fill_gaps=False)
 
+    @requires_native_opus
     @patch.object(storage_mod, 'NotFound', _FakeNotFound)
     def test_opus_decode_success_no_fallback(self):
         """When .opus chunk is valid, uses it without trying .bin."""
@@ -584,6 +593,7 @@ class TestDownloadBatchBlobs:
         assert len(batch_downloads) == 1
 
     @patch.object(storage_mod, 'NotFound', type('FakeNotFound', (Exception,), {}))
+    @requires_native_opus
     def test_mixed_single_and_batch_download(self):
         """Mix of single-chunk and batch blobs downloads correctly."""
         mock_bucket = MagicMock()

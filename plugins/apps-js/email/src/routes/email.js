@@ -27,24 +27,25 @@ router.post('/webhook', webhookController.handleWebhook);
  * @desc Generate and draft an email
  * @access Private
  */
-router.post('/draft', catchAsync(async (req, res) => {
+router.post('/draft', auth, catchAsync(async (req, res) => {
   const { 
     recipientEmail,
     recipientName,
     subject,
     content,
-    userId,
     userRequest,
     tone = 'professional',
     format = 'text'
   } = req.body;
+  const userId = req.user?.id;
+  const requestedUserId = req.body.userId;
   
   if (!recipientEmail) {
     throw ErrorFactory.badRequest('Recipient email is required', 'missing_parameter');
   }
   
-  if (!userId) {
-    throw ErrorFactory.badRequest('User ID is required', 'missing_parameter');
+  if (requestedUserId && requestedUserId !== userId) {
+    throw ErrorFactory.forbidden('Authenticated user does not match requested user');
   }
   
   // Either content or userRequest must be provided
@@ -106,17 +107,22 @@ router.post('/draft', catchAsync(async (req, res) => {
  * @desc Send a drafted email
  * @access Private
  */
-router.post('/send', catchAsync(async (req, res) => {
+router.post('/send', auth, catchAsync(async (req, res) => {
   const { 
     recipientEmail,
     subject,
     content,
-    userId,
     format = 'text'
   } = req.body;
+  const userId = req.user?.id;
+  const requestedUserId = req.body.userId;
   
-  if (!recipientEmail || !subject || !content || !userId) {
-    throw ErrorFactory.badRequest('Recipient email, subject, content, and userId are required', 'missing_parameter');
+  if (!recipientEmail || !subject || !content) {
+    throw ErrorFactory.badRequest('Recipient email, subject, and content are required', 'missing_parameter');
+  }
+
+  if (requestedUserId && requestedUserId !== userId) {
+    throw ErrorFactory.forbidden('Authenticated user does not match requested user');
   }
   
   // Get authenticated user and send function
@@ -570,4 +576,4 @@ router.post('/search', auth, async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

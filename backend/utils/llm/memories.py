@@ -231,15 +231,39 @@ Respond with ONLY "system" or "interesting" - nothing else."""
 
 
 class MemoryResolution(BaseModel):
-    """Result of resolving a new memory against similar existing memories."""
+    """Result of resolving a new memory against similar existing memories.
+
+    Drives the "constantly updated brain": when a new fact changes the truth of an
+    older one (e.g. loved ice cream -> now hates it, lived in NYC -> now LA, age 25 -> 26),
+    the older memory is listed in `supersedes` so it gets invalidated, while the new fact
+    is stored as the current truth.
+    """
 
     action: str = Field(
-        description="Action to take: 'keep_new' (add new memory), 'keep_existing' (skip new, existing is sufficient), 'merge' (replace existing with merged version), 'keep_both' (both provide distinct value)"
+        description=(
+            "One of: 'add' (store the new memory; existing facts stay untouched), "
+            "'skip' (new is a duplicate / already known — do not store), "
+            "'update' (new fact makes one or more existing facts outdated/false — store new AND list them in supersedes), "
+            "'merge' (new + existing should become a single richer fact — provide merged_content AND list the ones it replaces in supersedes), "
+            "'keep_both' (related but BOTH remain true at the same time — store new, supersede nothing)"
+        )
+    )
+    supersedes: List[int] = Field(
+        default=[],
+        description=(
+            "1-based indices (from the numbered EXISTING list) of memories that are now "
+            "OUTDATED or FALSE and must be invalidated. Only for 'update' / 'merge'. "
+            "Never include a fact that can still be true alongside the new one."
+        ),
     )
     merged_content: Optional[str] = Field(
-        default=None, description="If action is 'merge', the combined/refined memory content. Must be under 10 words."
+        default=None, description="If action is 'merge', the combined/refined memory content. Keep under 12 words."
     )
-    reasoning: str = Field(description="Brief explanation of why this action was chosen")
+    reasoning: str = Field(default="", description="Brief explanation of why this action was chosen")
+
+
+# Backwards-compatible action aliases (older callers/tests used these names).
+_LEGACY_ACTION_ALIASES = {'keep_new': 'add', 'keep_existing': 'skip'}
 
 
 def resolve_memory_conflict(
@@ -248,56 +272,65 @@ def resolve_memory_conflict(
     language: Optional[str] = None,
 ) -> MemoryResolution:
     """
-    Use LLM to decide how to handle a new memory that's similar to existing ones.
+    Use an LLM to decide how a newly extracted memory relates to existing similar ones,
+    and which (if any) existing memories it makes outdated.
 
     Args:
         new_memory: The newly extracted memory content
-        similar_memories: List of similar existing memories with 'content' and 'score' keys
+        similar_memories: Ordered list of similar existing memories, each a dict with at
+            least 'content' (and usually 'memory_id', 'score'). The 1-based position in
+            this list is what `MemoryResolution.supersedes` refers to.
         language: Language code for merged content output
 
     Returns:
-        MemoryResolution with action and optional merged content
+        MemoryResolution with action, supersedes indices, and optional merged content.
     """
     if not similar_memories:
-        return MemoryResolution(action='keep_new', reasoning='No similar memories found')
+        return MemoryResolution(action='add', reasoning='No similar memories found')
 
-    existing_str = "\n".join([f"- \"{m['content']}\" (similarity: {m['score']:.2f})" for m in similar_memories])
+    existing_str = "\n".join(
+        [f"{i + 1}. \"{m['content']}\" (similarity: {m.get('score', 0):.2f})" for i, m in enumerate(similar_memories)]
+    )
 
     language_note = ""
     if language and language != 'en':
-        language_note = (
-            f"\n5. If action is 'merge', write merged_content in {language} (same language as the memories)."
-        )
+        language_note = f"\n- If action is 'merge', write merged_content in {language} (same language as the memories)."
 
-    prompt = f"""You are a memory management system. A new memory has been extracted that is similar to existing memories.
-Decide the best action to maintain an accurate, non-redundant knowledge base.
+    prompt = f"""You maintain a personal knowledge base of true facts about a user. A NEW fact was just learned.
+Decide how it relates to the EXISTING facts so the knowledge base always reflects the CURRENT truth.
 
-NEW MEMORY: "{new_memory}"
+NEW FACT: "{new_memory}"
 
-SIMILAR EXISTING MEMORIES:
+EXISTING FACTS (numbered):
 {existing_str}
 
-RULES:
-1. "keep_new" - The new memory adds genuinely NEW information not in existing memories
-2. "keep_existing" - The new memory is redundant; existing memories already capture this
-3. "merge" - The new memory REFINES or UPDATES existing knowledge (e.g., adds specificity, corrects, or combines info). Provide merged_content (max 10 words)
-4. "keep_both" - Both memories provide distinct, non-conflicting value (rare - only if truly different aspects){language_note}
+Choose ONE action:
+- "add": the new fact is genuinely new and does not change any existing fact. Store it.
+- "skip": the new fact is already captured by an existing fact (a duplicate / no new info). Do not store it.
+- "update": the new fact makes one or more existing facts OUTDATED or FALSE (the same attribute now has a different value). Store the new fact AND put the indices of every outdated fact in "supersedes".
+- "merge": the new fact and an existing one should become a SINGLE richer fact. Provide "merged_content" AND put the replaced indices in "supersedes".
+- "keep_both": the new fact and the existing ones are all still TRUE at the same time. Store the new fact, supersede nothing.
+
+CRITICAL — only put a fact in "supersedes" if it is now genuinely FALSE or OUTDATED. Two preferences that can both be true at once must NEVER supersede each other.{language_note}
 
 EXAMPLES:
-- Existing: "Likes pancakes" + New: "Doesn't like blueberry pancakes" → merge: "Likes pancakes but not blueberry ones"
-- Existing: "Works at Google" + New: "Works at Google as engineer" → merge: "Works at Google as engineer"
-- Existing: "Has a dog" + New: "Has a dog named Max" → merge: "Has a dog named Max"
-- Existing: "Enjoys hiking" + New: "Enjoys hiking" → keep_existing (duplicate)
-- Existing: "Lives in NYC" + New: "Has apartment in Brooklyn" → keep_both (complementary info)
+- New: "Hates ice cream" | Existing: 1."Loves ice cream" → update, supersedes [1] (preference flipped — the old one is now false)
+- New: "Lives in Los Angeles" | Existing: 1."Lives in New York City" → update, supersedes [1] (moved — can't live in both)
+- New: "Is 26 years old" | Existing: 1."Is 25 years old" → update, supersedes [1] (age changed)
+- New: "Works at Google as engineer" | Existing: 1."Works at Google" → merge: "Works at Google as engineer", supersedes [1]
+- New: "Enjoys hiking" | Existing: 1."Enjoys hiking" → skip (duplicate)
+- New: "Likes tennis" | Existing: 1."Likes basketball" → keep_both (can like both sports)
+- New: "Has a dog named Max" | Existing: 1."Has a dog", 2."Lives in NYC" → merge: "Has a dog named Max", supersedes [1]
 
-Respond with the action and reasoning."""
+Respond with action, supersedes (indices), merged_content (only for merge), and reasoning."""
 
     try:
         parser = PydanticOutputParser(pydantic_object=MemoryResolution)
         chain = get_llm('memory_conflict') | parser
         response: MemoryResolution = chain.invoke(prompt + f"\n\n{parser.get_format_instructions()}")
+        response.action = _LEGACY_ACTION_ALIASES.get(response.action, response.action)
         return response
     except Exception as e:
         logger.error(f'Error resolving memory conflict: {e}')
-        # Default to keeping new if resolution fails
-        return MemoryResolution(action='keep_new', reasoning=f'Resolution failed: {e}')
+        # Default to storing the new memory if resolution fails (never lose information).
+        return MemoryResolution(action='add', reasoning=f'Resolution failed: {e}')

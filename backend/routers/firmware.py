@@ -155,14 +155,16 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
     return collected
 
 
-def _parse_firmware_version(version_str: Optional[str]) -> Tuple[int, ...]:
+def _parse_firmware_version(version_str: Optional[str]) -> Optional[Tuple[int, ...]]:
     """
     Parses a firmware version string (e.g., "v1.2.3" or "1.2.3") into a tuple of integers.
-    Returns (0,0,0) for invalid, empty, or unparsable strings to ensure comparisons
-    treat them as the lowest possible version.
+    Returns None for empty/invalid/unparsable strings. Callers MUST treat None as
+    "version unknown" — not as (0, 0, 0) — otherwise an empty current_firmware
+    matches every legacy release and surfaces a stale upgrade prompt to users
+    whose actual firmware is current.
     """
     if not version_str:
-        return (0, 0, 0)
+        return None
 
     normalized_version_str = version_str.lower()
     if normalized_version_str.startswith('v'):
@@ -175,8 +177,7 @@ def _parse_firmware_version(version_str: Optional[str]) -> Tuple[int, ...]:
         try:
             version_tuple.append(int(part))
         except ValueError:
-            # Non-integer part, treat as invalid/very old
-            return (0, 0, 0)
+            return None
 
     # Pad with zeros if less than 3 parts for consistent comparison (e.g., 1.2 -> 1.2.0)
     while len(version_tuple) < 3:
@@ -231,6 +232,9 @@ def _find_candidate_releases(
 
         if current_firmware_tuple is not None:
             release_firmware_tuple = _parse_firmware_version(release_firmware_version_str)
+            # Skip releases with unparseable release_firmware_version metadata.
+            if release_firmware_tuple is None:
+                continue
 
             # Condition A: Release must be strictly newer than current version
             if not (release_firmware_tuple > current_firmware_tuple):
@@ -240,7 +244,8 @@ def _find_candidate_releases(
             minimum_firmware_required_str = kv.get("minimum_firmware_required")
             if minimum_firmware_required_str:
                 min_req_tuple = _parse_firmware_version(minimum_firmware_required_str)
-                if not (current_firmware_tuple >= min_req_tuple):
+                # Treat unparseable min_req as no requirement — same as missing key.
+                if min_req_tuple is not None and not (current_firmware_tuple >= min_req_tuple):
                     continue
 
         candidates.append(release)
@@ -300,11 +305,21 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     if not device:
         raise HTTPException(status_code=404, detail="Device not found")
 
+    # Refuse to recommend an upgrade when we can't trust the current version.
+    # A missing/garbled firmware_revision used to be silently treated as 0.0.0,
+    # which made every legacy release look "newer" and surfaced stale upgrade
+    # prompts to users whose actual firmware was current. Fail loud instead.
+    current_firmware_tuple = _parse_firmware_version(firmware_revision)
+    if current_firmware_tuple is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not determine current firmware version",
+        )
+
     releases = await get_omi_github_releases("github_releases_omi", tag_filter=FIRMWARE_TAG_PATTERN)
     if not releases:
         raise HTTPException(status_code=404, detail="No releases found for the repository")
 
-    current_firmware_tuple = _parse_firmware_version(firmware_revision)
     release_prefix = _get_release_prefix(device)
     candidates = _find_candidate_releases(releases, release_prefix, current_firmware_tuple)
 

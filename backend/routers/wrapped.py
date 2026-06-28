@@ -6,7 +6,7 @@ Provides generation and retrieval of yearly recap data.
 
 from datetime import datetime, timezone
 
-from utils.executors import critical_executor
+from utils.executors import llm_executor
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -109,7 +109,7 @@ def generate_wrapped(
         if wrapped_db.is_wrapped_stuck(wrapped):
             # Restart stuck job
             wrapped_db.reset_wrapped_for_regeneration(uid, year)
-            critical_executor.submit(_run_wrapped_generation, uid, year)
+            llm_executor.submit(_run_wrapped_generation, uid, year)
             return GenerateWrappedResponse(
                 status=WrappedStatus.PROCESSING,
                 message="Restarting stuck generation...",
@@ -127,7 +127,7 @@ def generate_wrapped(
         wrapped_db.create_wrapped(uid, year)
 
     # Start generation in background
-    critical_executor.submit(_run_wrapped_generation, uid, year)
+    llm_executor.submit(_run_wrapped_generation, uid, year)
 
     return GenerateWrappedResponse(
         status=WrappedStatus.PROCESSING,

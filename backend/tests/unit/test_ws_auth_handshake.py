@@ -7,21 +7,135 @@ Verifies that:
 """
 
 import asyncio
+import importlib
+import sys
+import types
 import unittest
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from fastapi import FastAPI, WebSocket, WebSocketException, Depends
 from fastapi.testclient import TestClient
-from firebase_admin.auth import InvalidIdTokenError
 from starlette.websockets import WebSocketDisconnect
 
-from utils.other.endpoints import get_current_user_uid_ws_listen, get_current_user_uid_ws, get_current_user_uid
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
 
-class TestWebSocketAuthListen(unittest.TestCase):
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+database_package = _ensure_package("database", BACKEND_DIR / "database")
+_ensure_package("utils", BACKEND_DIR / "utils")
+_ensure_package("utils.other", BACKEND_DIR / "utils" / "other")
+
+firebase_admin_stub = sys.modules.setdefault("firebase_admin", types.ModuleType("firebase_admin"))
+firebase_auth_stub = sys.modules.setdefault("firebase_admin.auth", types.ModuleType("firebase_admin.auth"))
+firebase_admin_stub.auth = firebase_auth_stub
+for error_name in (
+    "CertificateFetchError",
+    "ExpiredIdTokenError",
+    "InvalidIdTokenError",
+    "RevokedIdTokenError",
+):
+    auth_error = getattr(firebase_auth_stub, error_name, None)
+    if not isinstance(auth_error, type) or not issubclass(auth_error, Exception):
+        setattr(firebase_auth_stub, error_name, type(error_name, (Exception,), {}))
+firebase_auth_stub.verify_id_token = MagicMock(side_effect=firebase_auth_stub.InvalidIdTokenError("Invalid token"))
+if not hasattr(firebase_auth_stub, "get_user"):
+    firebase_auth_stub.get_user = MagicMock()
+
+from firebase_admin.auth import CertificateFetchError, InvalidIdTokenError
+
+existing_endpoints = sys.modules.get('utils.other.endpoints')
+if existing_endpoints is not None and not hasattr(existing_endpoints, 'get_current_user_uid_ws_listen'):
+    sys.modules.pop('utils.other.endpoints', None)
+    utils_other = sys.modules.get('utils.other')
+    if utils_other is not None and getattr(utils_other, 'endpoints', None) is existing_endpoints:
+        delattr(utils_other, 'endpoints')
+
+database_client_stub = types.ModuleType('database._client')
+database_client_stub.db = MagicMock()
+database_client_stub.document_id_from_seed = MagicMock(return_value='doc-id')
+original_database_client = sys.modules.get('database._client')
+original_database_client_attr = getattr(database_package, '_client', None)
+original_database_client_attr_missing = not hasattr(database_package, '_client')
+sys.modules['database._client'] = database_client_stub
+database_package._client = database_client_stub
+
+database_redis_stub = types.ModuleType('database.redis_db')
+database_redis_stub.check_rate_limit = MagicMock(return_value=True)
+database_redis_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+database_redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
+original_database_redis = sys.modules.get('database.redis_db')
+original_database_redis_attr = getattr(database_package, 'redis_db', None)
+original_database_redis_attr_missing = not hasattr(database_package, 'redis_db')
+sys.modules['database.redis_db'] = database_redis_stub
+database_package.redis_db = database_redis_stub
+
+database_users_stub = types.ModuleType('database.users')
+database_users_stub.record_user_platform = MagicMock()
+original_database_users = sys.modules.get('database.users')
+original_database_users_attr = getattr(database_package, 'users', None)
+original_database_users_attr_missing = not hasattr(database_package, 'users')
+sys.modules['database.users'] = database_users_stub
+database_package.users = database_users_stub
+
+try:
+    endpoints = importlib.import_module('utils.other.endpoints')
+    endpoints.record_user_platform = database_users_stub.record_user_platform
+    get_current_user_uid_ws_listen = endpoints.get_current_user_uid_ws_listen
+    get_current_user_uid_ws = endpoints.get_current_user_uid_ws
+    get_current_user_uid = endpoints.get_current_user_uid
+finally:
+    if original_database_client is None:
+        sys.modules.pop('database._client', None)
+    else:
+        sys.modules['database._client'] = original_database_client
+    if original_database_client_attr_missing:
+        delattr(database_package, '_client')
+    else:
+        database_package._client = original_database_client_attr
+    if original_database_redis is None:
+        sys.modules.pop('database.redis_db', None)
+    else:
+        sys.modules['database.redis_db'] = original_database_redis
+    if original_database_redis_attr_missing:
+        delattr(database_package, 'redis_db')
+    else:
+        database_package.redis_db = original_database_redis_attr
+    if original_database_users is None:
+        sys.modules.pop('database.users', None)
+    else:
+        sys.modules['database.users'] = original_database_users
+    if original_database_users_attr_missing:
+        delattr(database_package, 'users')
+    else:
+        database_package.users = original_database_users_attr
+
+
+class WebSocketAuthTestCase(unittest.TestCase):
+    def setUp(self):
+        database_users_stub.record_user_platform.reset_mock()
+
+
+class TestWebSocketAuthListen(WebSocketAuthTestCase):
     """Test get_current_user_uid_ws_listen — auth-only, no rate limiter (used by /v4/listen)."""
 
     def setUp(self):
+        super().setUp()
         self.app = FastAPI()
 
         @self.app.websocket("/ws-listen")
@@ -39,13 +153,56 @@ class TestWebSocketAuthListen(unittest.TestCase):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
 
-    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token expired'))
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('bad token'))
     def test_invalid_token_sends_close_1008(self, mock_verify):
         """Invalid token -> WebSocketDisconnect with code 1008."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer invalid_token"}):
                 self.fail("Expected WebSocket to be closed by server")
         self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token expired'))
+    def test_expired_token_sends_close_4001(self, mock_verify):
+        """Expired token -> WebSocketDisconnect with code 4001 so clients can refresh."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer expired_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Certificate key not found'))
+    def test_certificate_key_error_sends_close_4001(self, mock_verify):
+        """Certificate/key failures -> 4001 so clients can force-refresh the token."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer stale_key_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch(
+        'utils.other.endpoints.verify_token',
+        side_effect=CertificateFetchError('Certificate fetch failed', RuntimeError('network unavailable')),
+    )
+    def test_certificate_fetch_error_sends_close_4001(self, mock_verify):
+        """Real Firebase cert fetch failures -> 4001 so clients can refresh their token."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer cert_fetch_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4001)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('API key invalid'))
+    def test_non_certificate_key_error_sends_close_1008(self, mock_verify):
+        """Generic key errors should not be treated as token-refresh certificate failures."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer invalid_key_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 1008)
+
+    @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('Token revoked'))
+    def test_revoked_token_sends_close_4004(self, mock_verify):
+        """Revoked token -> WebSocketDisconnect with code 4004 so clients can re-login."""
+        with self.assertRaises(WebSocketDisconnect) as ctx:
+            with self.client.websocket_connect("/ws-listen", headers={"Authorization": "Bearer revoked_token"}):
+                self.fail("Expected WebSocket to be closed by server")
+        self.assertEqual(ctx.exception.code, 4004)
 
     def test_malformed_auth_header_sends_close_1008(self):
         """Malformed auth header -> WebSocketDisconnect with code 1008."""
@@ -87,10 +244,11 @@ class TestWebSocketAuthListen(unittest.TestCase):
         mock_lock.assert_not_called()
 
 
-class TestWebSocketAuthWithRateLimit(unittest.TestCase):
+class TestWebSocketAuthWithRateLimit(WebSocketAuthTestCase):
     """Test get_current_user_uid_ws — auth + rate limiting."""
 
     def setUp(self):
+        super().setUp()
         self.app = FastAPI()
 
         @self.app.websocket("/ws-ratelimited")
@@ -159,16 +317,16 @@ class TestWebSocketAuthWithRateLimit(unittest.TestCase):
 
     @patch('utils.other.endpoints.try_acquire_listen_lock')
     @patch('utils.other.endpoints.verify_token', side_effect=InvalidIdTokenError('expired'))
-    def test_invalid_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
-        """Invalid token should short-circuit before rate limiter is called."""
+    def test_expired_token_does_not_call_rate_limiter(self, mock_verify, mock_lock):
+        """Expired token should short-circuit before rate limiter is called."""
         with self.assertRaises(WebSocketDisconnect) as ctx:
             with self.client.websocket_connect("/ws-ratelimited", headers={"Authorization": "Bearer bad"}):
                 pass
-        self.assertEqual(ctx.exception.code, 1008)
+        self.assertEqual(ctx.exception.code, 4001)
         mock_lock.assert_not_called()
 
 
-class TestWebSocketCloseFrameBehavior(unittest.TestCase):
+class TestWebSocketCloseFrameBehavior(WebSocketAuthTestCase):
     """Test that WebSocketException actually sends ASGI close message (vs HTTPException which doesn't)."""
 
     def test_ws_exception_sends_close_message(self):
@@ -275,14 +433,14 @@ class TestWebSocketCloseFrameBehavior(unittest.TestCase):
         self.assertEqual(len(close_messages), 0, f"HTTPException should not send close frame, got: {sent_messages}")
 
 
-class TestListenEndpointNotAffectWebListen(unittest.TestCase):
+class TestListenEndpointNotAffectWebListen(WebSocketAuthTestCase):
     """Verify /v4/listen uses WS auth (no rate limiter) and /v4/web/listen is unchanged (source-level check)."""
 
     def _read_transcribe_source(self):
         import os
 
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-        with open(path) as f:
+        with open(path, encoding='utf-8') as f:
             return f.read()
 
     def test_listen_handler_uses_ws_listen_auth(self):

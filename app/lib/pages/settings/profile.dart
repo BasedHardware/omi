@@ -1,8 +1,11 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/pages/payments/payments_page.dart';
+import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
 import 'package:omi/pages/settings/language_settings_page.dart';
 import 'package:omi/pages/settings/custom_vocabulary_page.dart';
@@ -10,9 +13,9 @@ import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 
 import 'package:omi/pages/settings/conversation_display_settings.dart';
 
@@ -141,7 +144,7 @@ class _ProfilePageState extends State<ProfilePage> {
           builder: (context, setSheetState) {
             void pick(int value) {
               setState(() => SharedPreferencesUtil().voiceResponseMode = value);
-              MixpanelManager().voiceResponseModeChanged(value);
+              PlatformManager.instance.analytics.voiceResponseModeChanged(value);
               Navigator.pop(sheetContext);
             }
 
@@ -232,6 +235,228 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
+  void _showBackgroundModeSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final captureProvider = context.read<CaptureProvider>();
+            final enabled = SharedPreferencesUtil().backgroundModeEnabled;
+            final canEnable = captureProvider.hasNativeBleAudioRoute;
+            void setEnabled(bool value) async {
+              if (value && !canEnable) return;
+              final accepted = await captureProvider.setBackgroundModeEnabled(value);
+              if (accepted) {
+                setSheetState(() {});
+                setState(() {});
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3C3C43),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.l10n.backgroundModeTitle,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Switch(
+                          value: enabled,
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: const Color(0xFF8B5CF6),
+                          onChanged: (enabled || canEnable) ? (v) => setEnabled(v) : null,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      context.l10n.backgroundModeDescription,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A2E),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              context.l10n.backgroundModeNote,
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (!canEnable) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3A2A2A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0A030), size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                context.l10n.backgroundModeUnavailable,
+                                style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showOfflineModeSheet() {
+    final captureProvider = context.read<CaptureProvider>();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final enabled = SharedPreferencesUtil().batchModeEnabled;
+            Future<void> setEnabled(bool value) async {
+              await captureProvider.setBatchMode(value);
+              setSheetState(() {});
+              setState(() {});
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3C3C43),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            context.l10n.transcribeLaterTitle,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                        Switch(
+                          value: enabled,
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: const Color(0xFF8B5CF6),
+                          onChanged: (v) => setEnabled(v),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      context.l10n.transcribeLaterDescription,
+                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2A2A2E),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              context.l10n.transcribeLaterNote,
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (SharedPreferencesUtil().getBool('batchStorageFull')) ...[
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3A2A2A),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0A030), size: 18),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                context.l10n.transcribeLaterStorageFull,
+                                style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -262,7 +487,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       : SharedPreferencesUtil().givenName,
                   icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
-                    MixpanelManager().pageOpened('Profile Change Name');
+                    PlatformManager.instance.analytics.pageOpened('Profile Change Name');
                     await showDialog(
                       context: context,
                       builder: (BuildContext context) {
@@ -308,7 +533,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
                     routeToPage(context, const SpeechProfilePage());
-                    MixpanelManager().pageOpened('Profile Speech Profile');
+                    PlatformManager.instance.analytics.pageOpened('Profile Speech Profile');
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -325,6 +550,24 @@ class _ProfilePageState extends State<ProfilePage> {
                   title: context.l10n.voiceResponseMode,
                   chipValue: _voiceResponseModeLabel(SharedPreferencesUtil().voiceResponseMode),
                   onTap: _showVoiceResponseModeSheet,
+                ),
+                if (PlatformService.isAndroid) ...[
+                  const Divider(height: 1, color: Color(0xFF3C3C43)),
+                  _buildProfileItem(
+                    title: context.l10n.backgroundModeTitle,
+                    icon: const FaIcon(FontAwesomeIcons.towerBroadcast, color: Color(0xFF8E8E93), size: 20),
+                    showBetaTag: true,
+                    chipValue: SharedPreferencesUtil().backgroundModeEnabled ? context.l10n.on : context.l10n.off,
+                    onTap: _showBackgroundModeSheet,
+                  ),
+                ],
+                const Divider(height: 1, color: Color(0xFF3C3C43)),
+                _buildProfileItem(
+                  title: context.l10n.transcribeLaterTitle,
+                  icon: const FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
+                  showBetaTag: true,
+                  chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
+                  onTap: _showOfflineModeSheet,
                 ),
               ],
             ),
@@ -384,7 +627,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   title: context.l10n.deleteAccountTitle,
                   icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
                   onTap: () {
-                    MixpanelManager().pageOpened('Profile Delete Account Dialog');
+                    PlatformManager.instance.analytics.pageOpened('Profile Delete Account Dialog');
                     Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
                   },
                 ),

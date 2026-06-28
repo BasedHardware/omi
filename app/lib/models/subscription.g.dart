@@ -10,7 +10,6 @@ PlanLimits _$PlanLimitsFromJson(Map<String, dynamic> json) => PlanLimits(
       transcriptionSeconds: (json['transcription_seconds'] as num?)?.toInt(),
       wordsTranscribed: (json['words_transcribed'] as num?)?.toInt(),
       insightsGained: (json['insights_gained'] as num?)?.toInt(),
-      memoriesCreated: (json['memories_created'] as num?)?.toInt(),
       chatQuestionsPerMonth:
           (json['chat_questions_per_month'] as num?)?.toInt(),
       chatCostUsdPerMonth:
@@ -22,7 +21,6 @@ Map<String, dynamic> _$PlanLimitsToJson(PlanLimits instance) =>
       'transcription_seconds': instance.transcriptionSeconds,
       'words_transcribed': instance.wordsTranscribed,
       'insights_gained': instance.insightsGained,
-      'memories_created': instance.memoriesCreated,
       'chat_questions_per_month': instance.chatQuestionsPerMonth,
       'chat_cost_usd_per_month': instance.chatCostUsdPerMonth,
     };
@@ -151,8 +149,6 @@ UserSubscriptionResponse _$UserSubscriptionResponseFromJson(
       wordsTranscribedLimit: (json['words_transcribed_limit'] as num).toInt(),
       insightsGainedUsed: (json['insights_gained_used'] as num).toInt(),
       insightsGainedLimit: (json['insights_gained_limit'] as num).toInt(),
-      memoriesCreatedUsed: (json['memories_created_used'] as num).toInt(),
-      memoriesCreatedLimit: (json['memories_created_limit'] as num).toInt(),
       availablePlans: (json['available_plans'] as List<dynamic>?)
               ?.map((e) => SubscriptionPlan.fromJson(e as Map<String, dynamic>))
               .toList() ??
@@ -179,8 +175,6 @@ Map<String, dynamic> _$UserSubscriptionResponseToJson(
       'words_transcribed_limit': instance.wordsTranscribedLimit,
       'insights_gained_used': instance.insightsGainedUsed,
       'insights_gained_limit': instance.insightsGainedLimit,
-      'memories_created_used': instance.memoriesCreatedUsed,
-      'memories_created_limit': instance.memoriesCreatedLimit,
       'available_plans': instance.availablePlans,
       'show_subscription_ui': instance.showSubscriptionUi,
       'chat_quota_used': instance.chatQuotaUsed,

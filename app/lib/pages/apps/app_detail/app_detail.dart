@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -17,6 +18,7 @@ import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/app_detail/reviews_list_page.dart';
+import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 import 'package:omi/pages/apps/app_home_web_page.dart';
 import 'package:omi/pages/apps/markdown_viewer.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
@@ -24,7 +26,6 @@ import 'package:omi/pages/apps/widgets/full_screen_image_viewer.dart';
 import 'package:omi/pages/chat/page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
@@ -115,7 +116,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
     if (enabled) {
       prefs.enableApp(app.id);
-      MixpanelManager().appEnabled(app.id);
+      PlatformManager.instance.analytics.appEnabled(app.id);
       context.read<AppProvider>().filterApps();
 
       setState(() {
@@ -159,7 +160,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
       final result = await cancelAppSubscription(widget.app.id);
       if (result != null && result['status'] == 'success') {
         // Track subscription cancellation
-        MixpanelManager().appDetailSubscriptionCancelled(appId: widget.app.id, appName: widget.app.name);
+        PlatformManager.instance.analytics.appDetailSubscriptionCancelled(
+          appId: widget.app.id,
+          appName: widget.app.name,
+        );
 
         await _loadSubscriptionData();
 
@@ -201,7 +205,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     app = widget.app;
 
     // Track app detail page viewed
-    MixpanelManager().appDetailViewed(
+    PlatformManager.instance.analytics.appDetailViewed(
       appId: app.id,
       appName: app.name,
       category: app.category,
@@ -227,7 +231,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
               '](assets/',
               '](https://raw.githubusercontent.com/BasedHardware/Omi/main/plugins/instructions/${app.id}/assets/',
             );
-            setState(() => instructionsMarkdown = value);
+            if (mounted) setState(() => instructionsMarkdown = value);
           });
         }
       }
@@ -289,7 +293,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Future _checkPaymentStatus(String appId) async {
-    MixpanelManager().appPurchaseStarted(appId);
+    PlatformManager.instance.analytics.appPurchaseStarted(appId);
     _paymentCheckTimer = Timer.periodic(const Duration(seconds: 5), (timer) async {
       var prefs = SharedPreferencesUtil();
       if (mounted) {
@@ -300,9 +304,9 @@ class _AppDetailPageState extends State<AppDetailPage> {
       if (details != null && details['is_user_paid']) {
         var enabled = await enableAppServer(appId);
         if (enabled) {
-          MixpanelManager().appPurchaseCompleted(appId);
+          PlatformManager.instance.analytics.appPurchaseCompleted(appId);
           prefs.enableApp(appId);
-          MixpanelManager().appEnabled(appId);
+          PlatformManager.instance.analytics.appEnabled(appId);
 
           if (!mounted) {
             timer.cancel();
@@ -614,7 +618,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               }
 
                               // Track chat button clicked
-                              MixpanelManager().appDetailChatClicked(appId: app.id, appName: app.name);
+                              PlatformManager.instance.analytics.appDetailChatClicked(appId: app.id, appName: app.name);
 
                               // Navigate directly to chat page
                               if (mounted) {
@@ -672,15 +676,16 @@ class _AppDetailPageState extends State<AppDetailPage> {
                             icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                             onPressed: () async {
                               HapticFeedback.mediumImpact();
-                              MixpanelManager().track('App Shared', properties: {'appId': app.id});
+                              PlatformManager.instance.analytics.track('App Shared', properties: {'appId': app.id});
 
                               // Track share button clicked
-                              MixpanelManager().appDetailShared(appId: app.id, appName: app.name);
+                              PlatformManager.instance.analytics.appDetailShared(appId: app.id, appName: app.name);
 
                               // Get the position of the share button for iOS
                               final RenderBox? box = context.findRenderObject() as RenderBox?;
-                              final Rect? sharePositionOrigin =
-                                  box != null ? box.localToGlobal(Offset.zero) & box.size : null;
+                              final Rect? sharePositionOrigin = box != null
+                                  ? box.localToGlobal(Offset.zero) & box.size
+                                  : null;
 
                               await Share.share(
                                 'https://h.omi.me/apps/${app.id}',
@@ -694,32 +699,32 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     ),
               appProvider.isAppOwner
                   ? (isLoading
-                      ? const SizedBox.shrink()
-                      : Container(
-                          width: 36,
-                          height: 36,
-                          margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              await showModalBottomSheet(
-                                context: context,
-                                shape: const RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(16),
-                                    topRight: Radius.circular(16),
+                        ? const SizedBox.shrink()
+                        : Container(
+                            width: 36,
+                            height: 36,
+                            margin: const EdgeInsets.only(right: 8),
+                            decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                            child: IconButton(
+                              padding: EdgeInsets.zero,
+                              icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                              onPressed: () async {
+                                HapticFeedback.mediumImpact();
+                                await showModalBottomSheet(
+                                  context: context,
+                                  shape: const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.only(
+                                      topLeft: Radius.circular(16),
+                                      topRight: Radius.circular(16),
+                                    ),
                                   ),
-                                ),
-                                builder: (context) {
-                                  return ShowAppOptionsSheet(app: app);
-                                },
-                              );
-                            },
-                          ),
-                        ))
+                                  builder: (context) {
+                                    return ShowAppOptionsSheet(app: app);
+                                  },
+                                );
+                              },
+                            ),
+                          ))
                   : const SizedBox(width: 8),
             ],
           ),
@@ -836,73 +841,73 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       color: const Color(0xFF35343B),
                                     )
                                   : app.enabled
-                                      ? AnimatedLoadingButton(
-                                          text: 'Disable',
-                                          width: 90,
-                                          height: 32,
-                                          onPressed: () => _toggleApp(app.id, false),
-                                          color: Colors.grey.shade700,
-                                        )
-                                      : (app.isPaid && !app.isUserPaid
-                                          ? AnimatedLoadingButton(
-                                              width: 100,
-                                              height: 32,
-                                              text: "Subscribe",
-                                              onPressed: () async {
-                                                // Track subscribe button clicked
-                                                MixpanelManager().appDetailSubscribeClicked(
-                                                  appId: app.id,
-                                                  appName: app.name,
-                                                );
+                                  ? AnimatedLoadingButton(
+                                      text: 'Disable',
+                                      width: 90,
+                                      height: 32,
+                                      onPressed: () => _toggleApp(app.id, false),
+                                      color: Colors.grey.shade700,
+                                    )
+                                  : (app.isPaid && !app.isUserPaid
+                                        ? AnimatedLoadingButton(
+                                            width: 100,
+                                            height: 32,
+                                            text: "Subscribe",
+                                            onPressed: () async {
+                                              // Track subscribe button clicked
+                                              PlatformManager.instance.analytics.appDetailSubscribeClicked(
+                                                appId: app.id,
+                                                appName: app.name,
+                                              );
 
-                                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                  final uri = Uri.tryParse(app.paymentLink!);
-                                                  if (uri == null) {
-                                                    ScaffoldMessenger.of(context).showSnackBar(
-                                                      SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
-                                                    );
-                                                    return;
-                                                  }
-                                                  _checkPaymentStatus(app.id);
-                                                  await _launchUrlSafely(uri);
-                                                } else {
-                                                  await _toggleApp(app.id, true);
-                                                }
-                                              },
-                                              color: const Color(0xFF8B5CF6),
-                                            )
-                                          : AnimatedLoadingButton(
-                                              width: 75,
-                                              height: 32,
-                                              text: 'Enable',
-                                              onPressed: () async {
-                                                if (app.worksExternally()) {
-                                                  showDialog(
-                                                    context: context,
-                                                    builder: (ctx) {
-                                                      return StatefulBuilder(
-                                                        builder: (ctx, setState) {
-                                                          return ConfirmationDialog(
-                                                            title: context.l10n.dataAccessNotice,
-                                                            description: context.l10n.dataAccessNoticeDescription,
-                                                            onConfirm: () {
-                                                              _toggleApp(app.id, true);
-                                                              Navigator.pop(context);
-                                                            },
-                                                            onCancel: () {
-                                                              Navigator.pop(context);
-                                                            },
-                                                          );
-                                                        },
-                                                      );
-                                                    },
+                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                                final uri = Uri.tryParse(app.paymentLink!);
+                                                if (uri == null) {
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
                                                   );
-                                                } else {
-                                                  _toggleApp(app.id, true);
+                                                  return;
                                                 }
-                                              },
-                                              color: const Color(0xFF8B5CF6),
-                                            )),
+                                                _checkPaymentStatus(app.id);
+                                                await _launchUrlSafely(uri);
+                                              } else {
+                                                await _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: const Color(0xFF8B5CF6),
+                                          )
+                                        : AnimatedLoadingButton(
+                                            width: 75,
+                                            height: 32,
+                                            text: 'Enable',
+                                            onPressed: () async {
+                                              if (app.worksExternally()) {
+                                                showDialog(
+                                                  context: context,
+                                                  builder: (ctx) {
+                                                    return StatefulBuilder(
+                                                      builder: (ctx, setState) {
+                                                        return ConfirmationDialog(
+                                                          title: context.l10n.dataAccessNotice,
+                                                          description: context.l10n.dataAccessNoticeDescription,
+                                                          onConfirm: () {
+                                                            _toggleApp(app.id, true);
+                                                            Navigator.pop(context);
+                                                          },
+                                                          onCancel: () {
+                                                            Navigator.pop(context);
+                                                          },
+                                                        );
+                                                      },
+                                                    );
+                                                  },
+                                                );
+                                              } else {
+                                                _toggleApp(app.id, true);
+                                              }
+                                            },
+                                            color: const Color(0xFF8B5CF6),
+                                          )),
                             ],
                           ),
                         ),
@@ -1191,7 +1196,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           return GestureDetector(
                             onTap: () {
                               // Track preview image viewed
-                              MixpanelManager().appDetailPreviewImageViewed(appId: app.id, imageIndex: index);
+                              PlatformManager.instance.analytics.appDetailPreviewImageViewed(
+                                appId: app.id,
+                                imageIndex: index,
+                              );
 
                               Navigator.push(
                                 context,
@@ -1340,7 +1348,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               onTap: () {
                                 if (app.reviews.isNotEmpty) {
                                   // Track reviews page opened
-                                  MixpanelManager().appDetailReviewsOpened(
+                                  PlatformManager.instance.analytics.appDetailReviewsOpened(
                                     appId: app.id,
                                     reviewCount: app.reviews.length,
                                   );
@@ -1390,8 +1398,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     ),
                                     const SizedBox(height: 16),
                                     RecentReviewsSection(
-                                      reviews:
-                                          app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
+                                      reviews: app.reviews
+                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
+                                          .take(3)
+                                          .toList(),
                                       userReview: app.userReview,
                                       app: app,
                                       onReviewUpdated: () {
@@ -1520,7 +1530,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
 
       prefs.enableApp(appId);
-      MixpanelManager().appEnabled(appId);
+      PlatformManager.instance.analytics.appEnabled(appId);
       context.read<AppProvider>().filterApps();
 
       setState(() {
@@ -1543,7 +1553,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
       prefs.disableApp(appId);
       var res = await disableAppServer(appId);
       print(res);
-      MixpanelManager().appDisabled(appId);
+      PlatformManager.instance.analytics.appDisabled(appId);
 
       if (!mounted) return;
 
@@ -1650,16 +1660,6 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     super.dispose();
   }
 
-  String _getAvatarUrl(String seed, String? username) {
-    // Using Avatar Placeholder API for random avatars
-    // If username is available, use username-based avatar for consistency
-    if (username != null && username.isNotEmpty) {
-      return 'https://avatar.iran.liara.run/username?username=${Uri.encodeComponent(username)}';
-    }
-    // Otherwise use a seeded random avatar
-    return 'https://avatar.iran.liara.run/public/${seed.hashCode % 100}';
-  }
-
   Future<void> _submitReview() async {
     if (editRating == 0) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.pleaseSelectRating)));
@@ -1673,8 +1673,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       final userName = widget.userReview?.username.isNotEmpty == true
           ? widget.userReview!.username
           : prefs.fullName.isNotEmpty
-              ? prefs.fullName
-              : prefs.givenName;
+          ? prefs.fullName
+          : prefs.givenName;
 
       final rev = AppReview(
         uid: prefs.uid,
@@ -1712,7 +1712,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           SharedPreferencesUtil().appsList = appsList;
         }
 
-        MixpanelManager().appRated(widget.app.id, editRating);
+        PlatformManager.instance.analytics.appRated(widget.app.id, editRating);
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1891,8 +1891,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
     final l10n = AppLocalizations.of(context)!;
-    final displayName =
-        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
+    final displayName = isUserReview
+        ? l10n.yourReview
+        : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(
@@ -1903,40 +1904,13 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Random Avatar
-              ClipOval(
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  color: Colors.grey.shade800,
-                  child: Image.network(
-                    _getAvatarUrl(avatarSeed, review.username),
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      final initial = review.username.isNotEmpty ? review.username[0].toUpperCase() : 'A';
-                      return Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: isUserReview ? Colors.deepPurple.withOpacity(0.2) : Colors.grey.shade800,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Text(
-                            initial,
-                            style: TextStyle(
-                              color: isUserReview ? Colors.deepPurple : Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+              // Avatar
+              ReviewAvatar(
+                seed: avatarSeed,
+                username: review.username,
+                size: 36,
+                backgroundColor: isUserReview ? Colors.deepPurple.withOpacity(0.2) : null,
+                foregroundColor: isUserReview ? Colors.deepPurple : null,
               ),
               const SizedBox(width: 12),
               // Name, date, and stars

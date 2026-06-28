@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
+import logging
 import uuid
 
-from utils.executors import critical_executor
+from utils.executors import db_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Optional, List
@@ -24,11 +26,31 @@ from utils.notifications import (
     send_action_item_data_message,
     send_action_item_update_message,
     send_action_item_deletion_message,
+    send_action_items_batch_deletion_message,
+    sync_action_item_reminder,
 )
 from utils.task_sync import auto_sync_action_item
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
+
+
+def _batch_mutation_response(result, *, locked_ids: Optional[set[str]] = None) -> dict:
+    """Preserve legacy success shape unless there is partial-outcome detail.
+
+    Mobile clients historically treat batch endpoints as boolean success paths,
+    and the hermetic e2e harness pins that happy-path contract. Missing/no-op
+    details are only emitted when they carry actionable information.
+    """
+    body = {"status": "ok", "updated_count": result.updated_count}
+    locked_ids = locked_ids or set()
+    if result.missing_ids or result.noop_ids or locked_ids:
+        body.update(result.model())
+        if locked_ids:
+            body["locked_ids"] = sorted(locked_ids)
+    return body
 
 
 # Request models specific to action items
@@ -100,8 +122,8 @@ class BatchUpdateActionItemsRequest(BaseModel):
 @router.patch("/v1/action-items/batch", tags=['action-items'])
 def batch_update_action_items(request: BatchUpdateActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Batch update sort_order and indent_level for multiple action items."""
-    action_items_db.batch_update_action_items(uid, request.items)
-    return {"status": "ok", "updated_count": len(request.items)}
+    result = action_items_db.batch_update_action_items(uid, request.items)
+    return _batch_mutation_response(result)
 
 
 # *****************************
@@ -175,16 +197,17 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
         if update_data:
             updates.append({'id': item.id, 'data': update_data})
 
-    action_items_db.batch_sync_update_action_items(uid, updates)
+    result = action_items_db.batch_sync_update_action_items(uid, updates)
 
-    desc_updates = [u for u in updates if 'description' in u['data']]
+    updated_ids = set(result.updated_ids)
+    desc_updates = [u for u in updates if u['id'] in updated_ids and 'description' in u['data']]
     if desc_updates:
         upsert_action_item_vectors_batch(
             uid,
             [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
         )
 
-    return {"status": "ok", "updated_count": len(updates)}
+    return _batch_mutation_response(result, locked_ids=locked_ids)
 
 
 # *****************************
@@ -192,9 +215,31 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
 # *****************************
 
 
+def _content_idempotency_key(uid: str, description: str) -> str:
+    """Stable idempotency key from (uid, normalized description).
+
+    Two POSTs from the same user with the same description (modulo case +
+    surrounding whitespace) collapse to the same key, so a flaky-network
+    retry no longer creates a duplicate Firestore document.
+
+    Uses a length-prefixed encoding so the boundary between ``uid`` and
+    ``description`` is unambiguous: ``f"{len(uid)}:{uid}:{description}"``.
+    Without this, a uid containing ``:`` (federated identities, future
+    multi-tenant ids) could collide with a different ``(uid, description)``
+    pair after concatenation.
+    """
+    normalized = (description or '').strip().lower()
+    payload = f"{len(uid)}:{uid}:{normalized}"
+    return hashlib.sha256(payload.encode('utf-8')).hexdigest()
+
+
 @router.post("/v1/action-items", response_model=ActionItemResponse, tags=['action-items'])
 def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth.get_current_user_uid)):
-    """Create a new action item."""
+    """Create a new action item.
+
+    Content-idempotent on (uid, normalized description): a retry of the same
+    request returns the original action_item rather than creating a duplicate.
+    """
     action_item_data = {
         'description': request.description,
         'completed': request.completed,
@@ -202,14 +247,16 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
         'conversation_id': request.conversation_id,
     }
 
-    action_item_id = action_items_db.create_action_item(uid, action_item_data)
+    idempotency_key = _content_idempotency_key(uid, request.description)
+    action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
     action_item = action_items_db.get_action_item(uid, action_item_id)
 
     if not action_item:
         raise HTTPException(status_code=500, detail="Failed to create action item")
 
-    # Send FCM data message if action item has a due date
-    if request.due_at:
+    # Schedule a reminder only for an open task with a due date — an already-completed item must
+    # not arm a reminder (#5085).
+    if request.due_at and not request.completed:
         send_action_item_data_message(
             user_id=uid,
             action_item_id=action_item_id,
@@ -222,7 +269,7 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
     def _run_auto_sync():
         asyncio.run(auto_sync_action_item(uid, {"id": action_item_id, **action_item_data}, skip_apple_reminders=True))
 
-    critical_executor.submit(_run_auto_sync)
+    db_executor.submit(_run_auto_sync)
 
     return ActionItemResponse(**action_item)
 
@@ -356,13 +403,16 @@ def update_action_item(
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
 
-    # Send FCM update message if due_at changed
-    if 'due_at' in update_data and update_data['due_at']:
-        send_action_item_update_message(
+    # Reconcile the client-scheduled reminder when completion or due date changed, using the final
+    # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
+    # (#5085). Previously this re-armed the reminder whenever due_at was present, even on completion.
+    if 'completed' in update_data or 'due_at' in update_data:
+        sync_action_item_reminder(
             user_id=uid,
             action_item_id=action_item_id,
             description=updated_item.get('description', ''),
-            due_at=update_data['due_at'].isoformat(),
+            completed=bool(updated_item.get('completed')),
+            due_at=updated_item.get('due_at'),
         )
 
     return ActionItemResponse(**updated_item)
@@ -387,6 +437,16 @@ def toggle_action_item_completion(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+
+    # Cancel the scheduled client reminder on completion, or re-schedule it when un-completing an
+    # item that still has a future due date (#5085).
+    sync_action_item_reminder(
+        user_id=uid,
+        action_item_id=action_item_id,
+        description=updated_item.get('description', ''),
+        completed=completed,
+        due_at=updated_item.get('due_at'),
+    )
 
     # Notify sender if this was a shared task that just got completed
     if completed and existing_item.get('shared_from'):
@@ -421,6 +481,27 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
     return {"status": "Ok"}
 
 
+class BatchDeleteActionItemsRequest(BaseModel):
+    ids: List[str] = Field(description="IDs of action items to delete", min_length=1, max_length=10000)
+
+
+@router.post("/v1/action-items/batch-delete", tags=['action-items'])
+def batch_delete_action_items(request: BatchDeleteActionItemsRequest, uid: str = Depends(auth.get_current_user_uid)):
+    """Delete multiple action items in one request.
+
+    Firestore deletes go through chunked batched commits in the DB layer; the
+    vector store delete and the FCM cancellation message both use their batch
+    helpers — no per-id loop on this hot path.
+    """
+    deleted_ids = action_items_db.delete_action_items_batch(uid, request.ids)
+
+    if deleted_ids:
+        delete_action_item_vectors_batch(uid, deleted_ids)
+        send_action_items_batch_deletion_message(user_id=uid, action_item_ids=deleted_ids)
+
+    return {"status": "Ok", "deleted_count": len(deleted_ids), "deleted_ids": deleted_ids}
+
+
 # *****************************
 # *** CONVERSATION-SPECIFIC ***
 # *****************************
@@ -435,7 +516,15 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
     action_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
-    response_items = [ActionItemResponse(**item) for item in action_items]
+    response_items = []
+    for item in action_items:
+        try:
+            response_items.append(ActionItemResponse(**item))
+        except ValidationError:
+            logger.warning(
+                f"Skipping malformed action item {item.get('id')} for conversation {conversation_id}, uid {uid}"
+            )
+            continue
 
     return {"action_items": response_items, "conversation_id": conversation_id}
 

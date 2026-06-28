@@ -64,6 +64,12 @@ class AppLocalizationsEt extends AppLocalizations {
   String get copySummary => 'Kopeeri kokkuvõte';
 
   @override
+  String get copyConversationId => 'Kopeeri vestluse ID';
+
+  @override
+  String get conversationIdCopied => 'Vestluse ID kopeeriti lõikelauale';
+
+  @override
   String get testPrompt => 'Testi käsku';
 
   @override
@@ -422,6 +428,12 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get offlineSync => 'Võrguühenduseta sünkroonimine';
+
+  @override
+  String get autoSync => 'Automaatne sünkroonimine';
+
+  @override
+  String get autoSyncDescription => 'Sünkrooni võrguühenduseta salvestised automaatselt, kui seade ühendatakse';
 
   @override
   String get deviceSettings => 'Seadme seaded';
@@ -959,11 +971,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used/$limit mälestust loodud sel kuul';
-  }
-
-  @override
   String get visibility => 'Nähtavus';
 
   @override
@@ -1456,7 +1463,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get payYourSttProvider => 'Kasutage Omi-d vabalt. Maksite ainult oma STT pakkujale otse.';
 
   @override
-  String get freeMinutesMonth => '1200 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
+  String get freeMinutesMonth => '600 tasuta minutit kuus kaasa arvatud. Piiramatu koos ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1635,7 +1642,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get finalTouches => 'Viimased lihvid';
 
   @override
-  String get processing => 'Töötlemine...';
+  String get processing => 'Töötlemine';
 
   @override
   String get features => 'Funktsioonid';
@@ -1705,12 +1712,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'SEADET',
-      one: 'SEADE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'SEADET', one: 'SEADE');
     return '$count $_temp0 LEITUD LÄHEDALT';
   }
 
@@ -4622,41 +4624,13 @@ class AppLocalizationsEt extends AppLocalizations {
       'Täname, et olete Omi väärtuslik kasutaja. Kui teil on küsimusi või muresid, võtke meiega ühendust aadressil team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi sünkroonimise seaded';
-
-  @override
-  String get enterHotspotCredentials => 'Sisestage oma telefoni leviala mandaadid';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi sünkroonimine kasutab teie telefoni levialana. Leidke nimi ja parool menüüst Seaded > Isiklik leviala.';
-
-  @override
-  String get hotspotNameSsid => 'Leviala nimi (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'nt iPhone Hotspot';
-
-  @override
   String get password => 'Parool';
-
-  @override
-  String get enterHotspotPassword => 'Sisestage leviala parool';
 
   @override
   String get saveCredentials => 'Salvesta mandaadid';
 
   @override
   String get clearCredentials => 'Kustuta mandaadid';
-
-  @override
-  String get pleaseEnterHotspotName => 'Palun sisestage leviala nimi';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi mandaadid salvestatud';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi mandaadid kustutatud';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -4725,7 +4699,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Konkreetset andmetele juurdepääsu pole seadistatud.';
 
   @override
-  String get basicPlanDescription => '1200 premium minutit + piiramatu seadmes';
+  String get basicPlanDescription => '600 premium minutit + piiramatu seadmes';
 
   @override
   String get minutes => 'minutit';
@@ -5804,9 +5778,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Kiire edastus';
-
-  @override
   String get syncingStatus => 'Sünkroonimine';
 
   @override
@@ -5816,15 +5787,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String etaLabel(String time) {
     return 'Hinnanguline aeg: $time';
   }
-
-  @override
-  String get transferMethod => 'Edastusmeetod';
-
-  @override
-  String get fast => 'Kiire';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5845,25 +5807,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get processedFilesDeleted => 'Töödeldud failid kustutatud';
 
   @override
-  String get wifiEnableFailed => 'Seadme WiFi lubamine ebaõnnestus. Palun proovige uuesti.';
-
-  @override
-  String get deviceNoFastTransfer => 'Teie seade ei toeta kiiret ülekannet. Kasutage selle asemel Bluetooth-i.';
-
-  @override
-  String get enableHotspotMessage => 'Palun lülitage oma telefoni kuumkoht sisse ja proovige uuesti.';
-
-  @override
-  String get transferStartFailed => 'Ülekande alustamine ebaõnnestus. Palun proovige uuesti.';
-
-  @override
   String get deviceNotResponding => 'Seade ei vastanud. Palun proovige uuesti.';
-
-  @override
-  String get invalidWifiCredentials => 'Vigased WiFi andmed. Kontrollige oma kuumkoha seadeid.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi ühendus ebaõnnestus. Palun proovige uuesti.';
 
   @override
   String get sdCardProcessing => 'SD-kaardi töötlemine';
@@ -5875,9 +5819,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get process => 'Töötle';
-
-  @override
-  String get wifiSyncFailed => 'WiFi sünkroonimine ebaõnnestus';
 
   @override
   String get processingFailed => 'Töötlemine ebaõnnestus';
@@ -6050,7 +5991,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '1200 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
+      '600 premium minutit kuus. Seadmesisene vahekaart pakub piiramatut tasuta transkriptsiooni.';
 
   @override
   String get viewUsage => 'Vaata kasutust';
@@ -6132,7 +6073,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '1200 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
+      '600 premium minutit/kuus. Seadmes vahekaart pakub piiramatut tasuta transkriptsiooni. ';
 
   @override
   String get audioProcessedLocally =>
@@ -6656,24 +6597,13 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi sünkroonimine';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item kopeeritud lõikelauale';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Ühendus ebaõnnestus';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Ühendamine seadmega $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Luba $deviceName WiFi';
   }
 
   @override
@@ -6770,9 +6700,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get statusUnprocessed => 'Töötlemata';
 
   @override
-  String get switchedToFastTransfer => 'Lülitatud kiirele ülekandele';
-
-  @override
   String get transferCompleteMessage => 'Ülekanne lõpetatud! Nüüd saate seda salvestist esitada.';
 
   @override
@@ -6784,33 +6711,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transferCancelled => 'Ülekanne tühistatud';
 
   @override
-  String get fastTransferEnabled => 'Kiire edastus lubatud';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetoothi sünkroonimine lubatud';
-
-  @override
-  String get enableFastTransfer => 'Luba kiire edastus';
-
-  @override
-  String get fastTransferDescription =>
-      'Kiire edastus kasutab WiFi-d ~5x kiiremate kiiruste jaoks. Teie telefon ühendub ajutiselt edastuse ajal Omi seadme WiFi-võrguga.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Interneti-juurdepääs on edastuse ajal peatatud';
-
-  @override
-  String get chooseTransferMethodDescription => 'Valige, kuidas salvestised edastatakse Omi seadmest telefoni.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s WiFi kaudu';
-
-  @override
-  String get fiveTimesFaster => '5X KIIREM';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Loob otseühenduse WiFi kaudu Omi seadmega. Teie telefon katkestab ajutiselt ühenduse tavalise WiFi-ga edastuse ajal.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6832,7 +6733,15 @@ class AppLocalizationsEt extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Tühja aku hoiatus';
 
   @override
-  String get lowBatteryAlertBody => 'Teie seadme aku on tühi. Aeg laadida! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Sinu aku on $level%. Aeg laadida! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi on täielikult laetud';
+
+  @override
+  String get batteryFullyChargedBody => 'Teie Omi seade on täielikult laetud. Võite selle lahti ühendada!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Teie Omi seade on lahti ühendatud';
@@ -7498,13 +7407,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Heli transkribeerimine ebaõnnestus';
 
   @override
-  String get locationPermissionRequired => 'Asukoha luba nõutav';
-
-  @override
-  String get locationPermissionContent =>
-      'Kiire edastus vajab asukoha luba WiFi-ühenduse kontrollimiseks. Jätkamiseks andke palun asukoha luba.';
-
-  @override
   String get pdfTranscriptExport => 'Transkriptsiooni eksport';
 
   @override
@@ -7649,12 +7551,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get dailyRecapsDescription => 'Teie päevased kokkuvõtted ilmuvad siia pärast nende loomist';
 
   @override
-  String get chooseTransferMethod => 'Valige ülekandemeetod';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s WiFi kaudu';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Tuvastati suur ajavahe ($gap)';
   }
@@ -7663,9 +7559,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Tuvastati suured ajavahed ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Seade ei toeta WiFi sünkroniseerimist, lülitumine Bluetoothile';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health pole selles seadmes saadaval';
@@ -7864,6 +7757,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get viewAll => 'Vaata kõiki';
+
+  @override
+  String get expand => 'Laienda';
 
   @override
   String get addTask => 'Lisa ülesanne';
@@ -8429,7 +8325,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get manageStorage => 'Halda salvestusruumi';
 
   @override
-  String get safelyBackedUp => 'Turvaliselt teie telefonile varundatud';
+  String get safelyBackedUp => 'Loodud vestlused';
 
   @override
   String get notYetSynced => 'Pole veel teie telefoniga sünkroniseeritud';
@@ -9225,4 +9121,343 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Tühista kõigi valik';
+
+  @override
+  String get bulkExportAlreadyExported => 'Kõik valitud ülesanded on juba eksporditud';
+
+  @override
+  String get bulkDeleteFailed => 'Ülesandeid ei õnnestunud kustutada. Palun proovi uuesti.';
+
+  @override
+  String get deleteRecap => 'Kustuta kokkuvõte';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Kustutada see kokkuvõte?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Kokkuvõte eemaldatakse jäädavalt. Selle päeva algsed vestlused jäävad puutumata.';
+
+  @override
+  String get deleteRecapAction => 'Kustuta';
+
+  @override
+  String get recapDeletedSnackbar => 'Kokkuvõte kustutatud';
+
+  @override
+  String get recapDeleteFailed => 'Kokkuvõtet ei saanud kustutada. Proovi hiljem uuesti.';
+
+  @override
+  String get syncStatusBackedUp => 'Varundatud';
+
+  @override
+  String get syncStatusBackingUp => 'Sünkroonimine…';
+
+  @override
+  String get syncStatusWaiting => 'Ootab sünkroonimist';
+
+  @override
+  String get syncStatusRetrying => 'Töötlemine ebaõnnestus — proovin uuesti';
+
+  @override
+  String get syncStatusFailed => 'Ebaõnnestus — puuduta Proovi uuesti';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fail pole saadaval';
+
+  @override
+  String get noRecordingsYet => 'Salvestisi veel pole';
+
+  @override
+  String get syncInProgress => 'Sünkroonimine käib';
+
+  @override
+  String get syncStatusUploaded => 'Üles laaditud · töödeldakse Omis';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Töötlemine veel käib';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'See salvestis on üles laaditud, kuid Omi loob veel vestlust. Kui kustutad selle nüüd ja töötlemine ebaõnnestub, ei saa seda taastada. Kas kustutada ikkagi?';
+
+  @override
+  String get syncCardAllBackedUp => 'Kõik salvestused sünkroonitud';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestust on sünkroonimiseks valmis',
+      one: '1 salvestus on sünkroonimiseks valmis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Töötlemine Omis…';
+
+  @override
+  String get syncCardWaitingInternet => 'Ootan internetiühendust';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count salvestist vajab tähelepanu',
+      one: '1 salvestis vajab tähelepanu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Salvestised kantakse sinu seadmest sellesse telefoni ja salvestatakse kohapeal ning seejärel laaditakse üles Omi serverisse, kus need transkribeeritakse ja muudetakse vestlusteks.';
+
+  @override
+  String get syncStepUpload => 'Sünkrooni';
+
+  @override
+  String get syncStepUploadDesc => 'Sinu salvestis saadetakse Omi serverisse';
+
+  @override
+  String get syncStepProcess => 'Transkribeerimine';
+
+  @override
+  String get syncStepProcessDesc => 'Omi muudab heli vestluseks';
+
+  @override
+  String get syncStepBackedUp => 'Vestlus on valmis';
+
+  @override
+  String get syncStepBackedUpDesc => 'Leiad selle jaotisest Vestlused';
+
+  @override
+  String get syncFailureFootnote =>
+      'Kui töötlemine ebaõnnestub, proovitakse salvestist järgmise sünkroonimise käigus automaatselt uuesti.';
+
+  @override
+  String get syncStatusConversationCreated => 'Vestlus loodud';
+
+  @override
+  String get syncCardUploadingTitle => 'Üleslaadimine Omisse';
+
+  @override
+  String get syncCardDownloadingTitle => 'Allalaadimine sinu seadmest';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current / $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Sinu seadmes';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Allalaadimine sinu seadmest';
+
+  @override
+  String get newestFirst => 'Uusimad esmalt';
+
+  @override
+  String get noSyncedRecordingsYet => 'Sünkroonitud salvestisi pole veel';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Peagi rohkem makseviise';
+
+  @override
+  String get syncProcessingBackgroundHint => 'See jätkub taustal — võite sellelt ekraanilt lahkuda.';
+
+  @override
+  String get syncCardRateLimited => 'Õiglase kasutuse piir on saavutatud — sünkroonimine jätkub automaatselt';
+
+  @override
+  String get syncCardBackendBusy => 'Omi serverid on hõivatud — sinu salvestised sünkroonitakse, kui maht vabaneb';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Praeguse püsivara versiooni ei õnnestunud tuvastada';
+
+  @override
+  String get promoCode => 'Sooduskood';
+
+  @override
+  String get enterPromoCode => 'Sisestage sooduskood';
+
+  @override
+  String get invalidPromotionCode => 'Kehtetu sooduskood.';
+
+  @override
+  String get backgroundModeTitle => 'Taustarežiim';
+
+  @override
+  String get backgroundModeDescription => 'Hoia oma Omi salvestamas ka siis, kui rakendus on täielikult suletud.';
+
+  @override
+  String get backgroundModeNote => 'Praegu töötab ainult Omi seadmetega ja seda täiustatakse pidevalt.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'Taustarežiim pole saadaval, sest ühtegi ühilduvat seadet pole ühendatud. Selle funktsiooni kasutamiseks ühenda Omi, OpenGlass või Friend Pendant seade.';
+
+  @override
+  String get regenerateRecap => 'Loo kokkuvõte uuesti';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Kokkuvõte loodi uuesti';
+
+  @override
+  String get recapRegenerateFailed => 'Kokkuvõtet ei õnnestunud uuesti luua. Proovi hiljem uuesti.';
+
+  @override
+  String get recapRegenerateCooldown => 'Palun oota mõni sekund enne uuesti loomist.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Selle päeva jaoks pole vestlusi, mida kokku võtta.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sünkroonimine kasutab Omi transkriptsiooni';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkribeeri hiljem';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Salvesta heli kohe ja transkribeeri see vajaduse korral hiljem, mitte reaalajas. Salvestised hoitakse sinu telefonis ning vestluste loomiseks laadid need üles.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Praegu töötab Omi seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.';
+
+  @override
+  String get recordingMode => 'Salvestusrežiim';
+
+  @override
+  String get captureModeLater => 'Hiljem';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribeeri reaalajas, kui räägid.';
+
+  @override
+  String get captureModeLaterDescription => 'Salvesta heli kohe ja transkribeeri, millal soovid.';
+
+  @override
+  String get unmute => 'Tühista vaigistus';
+
+  @override
+  String get newRecording => 'Uus salvestus';
+
+  @override
+  String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
+
+  @override
+  String get deviceTutorial => 'Kuidas Omi\'t kasutada';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Räägi oma Omisse';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Ütle paar sõna ja vaata, kuidas need reaalajas ilmuvad';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Tubli!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Hakka rääkima...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Esita Omile küsimus';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Vajuta nuppu üks kord, esita küsimus ja vajuta lõpetamiseks uuesti';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Töötlen sinu küsimust...';
+
+  @override
+  String get deviceOnboardingListening => 'Kuulan...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Lülita välja';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Lülita sisse';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Hoia nuppu 3 sekundit all';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Vajuta nuppu, et see uuesti sisse lülitada';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Hoia nuppu kindlalt all, kuni tuli kustub';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Ühendatud';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Ühendatud!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Ühendus katkenud';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Lülitan välja...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Kohanda topeltkoputust';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Lõpeta vestlus';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Salvesta ja lõpeta praegune vestlus';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Vaigista / Taasta heli';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Lülita mikrofon sisse või välja';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Märgi käimasolev vestlus tähega';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Märgi vestlus oluliseks';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'See oli üks koputus — proovi koputada kaks korda kiiresti!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Proovi kohe! Koputa oma Omile kaks korda';
+
+  @override
+  String get deviceOnboardingContinue => 'Jätka';
+
+  @override
+  String get deviceOnboardingFinish => 'Lõpeta';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutvu oma Omiga';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Kiire ja praktiline ülevaade kõigest, mida sinu Omi suudab.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Umbes 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Hüppa uusima sõnumi juurde';
+
+  @override
+  String get latest => 'Uusim';
 }

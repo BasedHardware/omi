@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/pages/conversations/widgets/speaker_filter_sheet.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -59,7 +60,7 @@ class _SearchWidgetState extends State<SearchWidget> {
 
     // Hide search bar if focus is lost and there's no search query
     if (!_homeProvider!.isConvoSearchFieldFocused &&
-        _convoProvider!.previousQuery.isEmpty &&
+        !_convoProvider!.hasActiveSearch &&
         _homeProvider!.showConvoSearchBar) {
       _homeProvider!.hideConvoSearchBar();
     }
@@ -105,7 +106,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                             final provider = Provider.of<ConversationProvider>(context, listen: false);
                             Navigator.of(context).pop();
                             await provider.clearDateFilter();
-                            MixpanelManager().calendarFilterCleared();
+                            PlatformManager.instance.analytics.calendarFilterCleared();
                           } else {
                             Navigator.of(context).pop();
                           }
@@ -122,7 +123,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                           final provider = Provider.of<ConversationProvider>(context, listen: false);
                           Navigator.of(context).pop();
                           await provider.filterConversationsByDate(selectedDate);
-                          MixpanelManager().calendarFilterApplied(selectedDate);
+                          PlatformManager.instance.analytics.calendarFilterApplied(selectedDate);
                         },
                         child: Text(
                           context.l10n.done,
@@ -171,7 +172,7 @@ class _SearchWidgetState extends State<SearchWidget> {
               controller: searchController,
               focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
               onTap: () {
-                MixpanelManager().searchBarFocused();
+                PlatformManager.instance.analytics.searchBarFocused();
               },
               onChanged: (value) {
                 var provider = Provider.of<ConversationProvider>(context, listen: false);
@@ -179,7 +180,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                   await provider.searchConversations(value);
                   if (value.isNotEmpty) {
                     // Track search query with results count
-                    MixpanelManager().searchQueryEntered(value, provider.searchedConversations.length);
+                    PlatformManager.instance.analytics.searchQueryEntered(value, provider.searchedConversations.length);
                   }
                 });
                 setShowClearButton();
@@ -201,9 +202,10 @@ class _SearchWidgetState extends State<SearchWidget> {
                           await provider.searchConversations(""); // clear
                           searchController.clear();
                           setShowClearButton();
-                          // Hide search bar when search is cleared
-                          homeProvider.hideConvoSearchBar();
-                          MixpanelManager().searchQueryCleared();
+                          if (!provider.hasActiveSearch) {
+                            homeProvider.hideConvoSearchBar();
+                          }
+                          PlatformManager.instance.analytics.searchQueryCleared();
                         },
                         child: const Icon(Icons.close, color: Colors.white),
                       )
@@ -212,6 +214,30 @@ class _SearchWidgetState extends State<SearchWidget> {
               ),
               style: const TextStyle(color: Colors.white),
             ),
+          ),
+          const SizedBox(width: 8),
+          Consumer<ConversationProvider>(
+            builder: (context, convoProvider, _) {
+              final isActive = convoProvider.selectedSpeakerId != null;
+              return Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: isActive ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: IconButton(
+                  key: const Key('conversation_speaker_filter'),
+                  padding: EdgeInsets.zero,
+                  tooltip: context.l10n.phoneSpeaker,
+                  icon: Icon(Icons.person_search, size: 20, color: isActive ? Colors.white : Colors.white70),
+                  onPressed: () async {
+                    HapticFeedback.mediumImpact();
+                    await showSpeakerFilterSheet(context);
+                  },
+                ),
+              );
+            },
           ),
           const SizedBox(width: 8),
           // Calendar button - same height as search bar (48px)

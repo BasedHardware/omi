@@ -36,7 +36,9 @@ def create_app_monthly_recurring_price(product_id: str, amount_in_cents: int, cu
     return price
 
 
-def create_subscription_checkout_session(uid: str, price_id: str, idempotency_key: str = None, customer_id: str = None):
+def create_subscription_checkout_session(
+    uid: str, price_id: str, idempotency_key: str = None, customer_id: str = None, promotion_code_id: str = None
+):
     """Create a Stripe Checkout session for a subscription."""
     try:
         success_url = urljoin(base_url, 'v1/payments/success?session_id={CHECKOUT_SESSION_ID}')
@@ -55,7 +57,6 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
             'mode': 'subscription',
             'success_url': success_url,
             'cancel_url': cancel_url,
-            'allow_promotion_codes': True,
             'metadata': {
                 'uid': uid,
                 'sub_type': 'unlimited',
@@ -68,6 +69,11 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
             },
         }
 
+        if promotion_code_id:
+            session_params['discounts'] = [{'promotion_code': promotion_code_id}]
+        else:
+            session_params['allow_promotion_codes'] = True
+
         if customer_id:
             session_params['customer'] = customer_id
             session_params['customer_update'] = {'name': 'auto', 'address': 'auto'}
@@ -77,6 +83,8 @@ def create_subscription_checkout_session(uid: str, price_id: str, idempotency_ke
 
         checkout_session = stripe.checkout.Session.create(**session_params)
         return checkout_session
+    except stripe.error.InvalidRequestError:
+        raise
     except Exception as e:
         logger.error(f"Error creating checkout session: {e}")
         return None

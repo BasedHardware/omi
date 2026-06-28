@@ -1,6 +1,6 @@
-import json
+from __future__ import annotations
+
 import re
-import threading
 import uuid
 from typing import List, Dict, Any, Union, Optional
 import hashlib
@@ -21,7 +21,10 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from services.users.data_export import iter_user_data_export
+from services.users.account_deletion import start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
+from database.webhook_health import record_dev_webhook_success
 from database.conversations import get_in_progress_conversation, get_conversation
 from database.redis_db import (
     cache_user_geolocation,
@@ -35,7 +38,11 @@ from database.redis_db import (
     set_user_data_protection_level,
     get_generic_cache,
     set_generic_cache,
+    get_daily_summary_uid,
+    store_daily_summary_to_uid,
+    remove_daily_summary_to_uid,
 )
+
 from database.users import (
     get_user_transcription_preferences,
     set_user_transcription_preferences,
@@ -61,6 +68,7 @@ from models.users import (
     PlanType,
     PricingOption,
     PhoneCallQuota,
+    TrialMetadata,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
@@ -71,11 +79,16 @@ from utils.subscription import (
     get_plan_limits,
     get_plan_features,
     get_monthly_usage_for_subscription,
+    is_trial_paywalled,
+    neo_grandfather_until,
     reconcile_basic_plan_with_stripe,
     filter_plans_for_user,
+    has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
     legacy_plan_features,
+    clear_trial_paywall_cache,
+    get_trial_metadata,
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
@@ -92,7 +105,6 @@ from utils.other.storage import (
     delete_user_person_speech_sample,
 )
 from utils.webhooks import webhook_first_time_setup
-from database.action_items import get_action_items as get_standalone_action_items
 from utils.byok import has_byok_keys, invalidate_byok_state_cache
 import logging
 
@@ -129,43 +141,13 @@ class DeleteAccountRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-def _background_wipe_user_data(uid: str):
-    try:
-        delete_user_data(uid)
-        logger.info(f'delete_account background wipe complete for {uid}')
-    except Exception as e:
-        logger.error(f'delete_account background wipe failed for {uid}: {sanitize(str(e))}')
-
-
 @router.delete('/v1/users/delete-account', tags=['v1'])
 def delete_account(
     request: DeleteAccountRequest = DeleteAccountRequest(),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     try:
-        # 1. Persist deletion feedback first (top-level collection survives wipe).
-        if request.reason or request.reason_details:
-            try:
-                users_db.set_user_deletion_feedback(uid, request.reason, request.reason_details)
-            except Exception as e:
-                logger.info(f'delete_account feedback store failed: {sanitize(str(e))}')
-
-        # 2. Revoke Firebase auth immediately so tokens are useless and the
-        #    account cannot be logged back into while the data wipe runs.
-        try:
-            auth.delete_account(uid)
-        except Exception as e:
-            err = str(e).upper()
-            if 'USER_NOT_FOUND' in err or 'NO USER RECORD' in err:
-                logger.info(f'delete_account firebase user already gone for {uid}')
-            else:
-                raise
-
-        # 3. Wipe Firestore subcollections in the background — can take minutes
-        #    for heavy users and would otherwise time out at the load balancer.
-        threading.Thread(target=_background_wipe_user_data, args=(uid,), daemon=True).start()
-
-        return {'status': 'ok', 'message': 'Account deletion started'}
+        return start_account_deletion(uid, reason=request.reason, reason_details=request.reason_details)
     except Exception as e:
         logger.info(f'delete_account {sanitize(str(e))}')
         raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
@@ -205,7 +187,9 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
 @router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
 def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    url = data['url']
+    url = data.get('url')
+    if url is None:
+        raise HTTPException(status_code=400, detail='url is required')
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
     set_user_webhook_db(uid, wtype, url)
@@ -226,6 +210,7 @@ def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.ge
 @router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'])
 def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     enable_user_webhook_db(uid, wtype)
+    record_dev_webhook_success(uid, wtype.value)
     return {'status': 'ok'}
 
 
@@ -287,6 +272,7 @@ def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     return {
         'completed': state.get('completed', False),
         'acquisition_source': state.get('acquisition_source', ''),
+        'device_onboarding_completed': state.get('device_onboarding_completed', False),
     }
 
 
@@ -298,6 +284,8 @@ def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user
         current_state['completed'] = data['completed']
     if 'acquisition_source' in data:
         current_state['acquisition_source'] = data['acquisition_source']
+    if 'device_onboarding_completed' in data:
+        current_state['device_onboarding_completed'] = data['device_onboarding_completed']
     set_user_onboarding_state(uid, current_state)
     return {'status': 'ok'}
 
@@ -564,6 +552,8 @@ class TranscriptionPreferencesResponse(BaseModel):
     single_language_mode: bool = False
     vocabulary: List[str] = []
     language: str = ''
+    uses_custom_stt: bool = False
+    custom_stt_since: Optional[datetime] = None
 
 
 class TranscriptionPreferencesUpdate(BaseModel):
@@ -796,6 +786,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
             )
     users_db.set_byok_active(uid, data.fingerprints)
     invalidate_byok_state_cache(uid)
+    clear_trial_paywall_cache(uid)
     return {"active": True}
 
 
@@ -804,6 +795,7 @@ def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byo
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
     invalidate_byok_state_cache(uid)
+    clear_trial_paywall_cache(uid)
     return {"active": False}
 
 
@@ -817,7 +809,6 @@ def _byok_unlimited_subscription() -> Subscription:
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
-            memories_created=None,
         ),
     )
 
@@ -847,8 +838,6 @@ def get_user_subscription_endpoint(
             words_transcribed_limit=0,
             insights_gained_used=0,
             insights_gained_limit=0,
-            memories_created_used=0,
-            memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
             phone_call_quota=unlimited_phone_quota,
@@ -863,7 +852,6 @@ def get_user_subscription_endpoint(
                 transcription_seconds=None,
                 words_transcribed=None,
                 insights_gained=None,
-                memories_created=None,
             ),
         )
         return UserSubscriptionResponse(
@@ -874,8 +862,6 @@ def get_user_subscription_endpoint(
             words_transcribed_limit=0,
             insights_gained_used=0,
             insights_gained_limit=0,
-            memories_created_used=0,
-            memories_created_limit=0,
             available_plans=[],
             show_subscription_ui=False,
             phone_call_quota=unlimited_phone_quota,
@@ -919,13 +905,11 @@ def get_user_subscription_endpoint(
     transcription_seconds_used = usage.get('transcription_seconds', 0)
     words_transcribed_used = usage.get('words_transcribed', 0)
     insights_gained_used = usage.get('insights_gained', 0)
-    memories_created_used = usage.get('memories_created', 0)
 
     # Get limits from subscription (0 means unlimited)
     transcription_seconds_limit = subscription.limits.transcription_seconds or 0
     words_transcribed_limit = subscription.limits.words_transcribed or 0
     insights_gained_limit = subscription.limits.insights_gained or 0
-    memories_created_limit = subscription.limits.memories_created or 0
 
     # Build available plans. Version-gated: new clients see Operator + Architect,
     # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
@@ -933,7 +917,10 @@ def get_user_subscription_endpoint(
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
-    definitions_for_user = filter_plans_for_user(all_definitions, subscription.plan, platform=x_app_platform)
+    ever_purchased = has_ever_purchased(uid, raw_subscription)
+    definitions_for_user = filter_plans_for_user(
+        all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
+    )
     for definition in definitions_for_user:
         plan_prices: List[PricingOption] = []
         monthly_price_id = definition["monthly_price_id"]
@@ -1008,7 +995,7 @@ def get_user_subscription_endpoint(
     phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
 
     # Chat quota — reuse the shared snapshot helper
-    chat_snapshot = get_chat_quota_snapshot(uid)
+    chat_snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
@@ -1022,8 +1009,6 @@ def get_user_subscription_endpoint(
         words_transcribed_limit=words_transcribed_limit,
         insights_gained_used=insights_gained_used,
         insights_gained_limit=insights_gained_limit,
-        memories_created_used=memories_created_used,
-        memories_created_limit=memories_created_limit,
         available_plans=available_plans,
         show_subscription_ui=show_subscription_ui,
         chat_quota_used=round(chat_snapshot['used'], 4),
@@ -1032,11 +1017,15 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
+        desktop_grandfather_until=neo_grandfather_until(subscription),
     )
 
 
 @router.get('/v1/users/me/usage-quota', tags=['users'], response_model=ChatUsageQuota)
-def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
+def get_user_chat_usage_quota(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     """Current-month chat usage for the user, plus their plan's cap.
 
     Used by the desktop app. Mobile uses the subscription endpoint instead.
@@ -1056,7 +1045,7 @@ def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
             reset_at=None,
         )
 
-    snapshot = get_chat_quota_snapshot(uid)
+    snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
     plan = snapshot['plan']
 
     if snapshot['limit'] is not None and snapshot['limit'] > 0:
@@ -1074,6 +1063,46 @@ def get_user_chat_usage_quota(uid: str = Depends(auth.get_current_user_uid)):
         allowed=snapshot['allowed'],
         reset_at=snapshot['reset_at'],
     )
+
+
+class PaywallStatusResponse(BaseModel):
+    paywalled: bool
+
+
+@router.get('/v1/users/me/paywall', tags=['users'], response_model=PaywallStatusResponse)
+def get_user_paywall_status(
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+    platform: Optional[str] = Query(None),
+):
+    """Trial-paywall status for the calling user on the given platform.
+
+    Used by the Rust desktop-backend middleware to decide whether to proxy
+    paid LLM / TTS / Pinecone traffic. Mirrors the exact semantics of
+    `is_trial_paywalled`: basic plan + no active BYOK + Firebase Auth
+    account >3d old + platform in {macos, desktop}. Mobile platforms always
+    return `paywalled=false`.
+
+    Platform comes from `X-App-Platform` header (preferred) or `platform`
+    query param (fallback). Unknown / missing platforms are never paywalled.
+    """
+    resolved_platform = x_app_platform or platform
+    return PaywallStatusResponse(paywalled=is_trial_paywalled(uid, resolved_platform))
+
+
+@router.get('/v1/users/me/trial', tags=['users'], response_model=TrialMetadata)
+def get_user_trial_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Structured trial metadata for the calling user.
+
+    Returns trial timing info (start, end, remaining seconds, expired flag)
+    plus the list of features available during trial and the plan the user
+    falls to after trial expiry. Used by desktop clients to render countdown
+    banners and pre-expiry upgrade nudges.
+
+    Paid-plan and BYOK users get `trial_expired=False` with zeroed timing
+    (trial is irrelevant to them — they have full access).
+    """
+    return get_trial_metadata(uid)
 
 
 # **************************************
@@ -1206,7 +1235,9 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
             end_date_utc = datetime.combine(display_date, time.max).replace(tzinfo=pytz.utc)
 
     # Get conversations for the date, excluding locked conversations
-    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+    )
     if conversations_data:
         conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
@@ -1273,18 +1304,142 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     return summary
 
 
+@router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'])
+def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Set the visibility of a daily summary. Use value='shared' to make it shareable.
+    """
+    if value not in ('shared', 'private'):
+        raise HTTPException(status_code=400, detail="Invalid visibility value. Must be 'shared' or 'private'")
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+    daily_summaries_db.set_daily_summary_visibility(uid, summary_id, value)
+    if value == 'private':
+        remove_daily_summary_to_uid(summary_id)
+    else:
+        store_daily_summary_to_uid(summary_id, uid)
+    return {'status': 'Ok'}
+
+
 @router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
 def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Delete a daily summary by ID.
     """
-    # Verify it exists first
     summary = daily_summaries_db.get_daily_summary(uid, summary_id)
     if not summary:
         raise HTTPException(status_code=404, detail='Daily summary not found')
 
     daily_summaries_db.delete_daily_summary(uid, summary_id)
     return {'status': 'ok'}
+
+
+# Cooldown between user-initiated regenerations of the same summary. Cheap
+# guard against double-taps wasting LLM tokens — not a security boundary.
+_REGENERATE_COOLDOWN_SECONDS = 30
+
+
+@router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'])
+def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """
+    Re-run summary generation for the date of an existing daily summary and
+    overwrite the same doc in place. No push notification — the user is
+    already looking at the page.
+    """
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    date_str = summary.get('date')
+    if not date_str:
+        raise HTTPException(status_code=400, detail='Daily summary is missing its date')
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail='Daily summary has an invalid date')
+
+    cooldown_key = f'daily_summary_regen:{uid}:{summary_id}'
+    if get_generic_cache(cooldown_key):
+        raise HTTPException(
+            status_code=429,
+            detail='Please wait a few seconds before regenerating this recap again.',
+        )
+    # Set the cooldown BEFORE the LLM call, not after. The check-then-set
+    # window was wide enough that two concurrent requests could both pass
+    # the guard and double-bill the LLM. This isn't atomic SETNX, but the
+    # eager set closes the practical race for accidental double-taps.
+    set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
+
+    # Resolve the user's local day boundaries the same way the scheduled job
+    # does, so the regenerated payload uses the identical conversation set.
+    time_zone_name = notification_db.get_user_time_zone(uid)
+    if time_zone_name:
+        try:
+            user_tz = pytz.timezone(time_zone_name)
+            start_of_day = user_tz.localize(datetime.combine(target_date, time.min))
+            end_of_day = user_tz.localize(datetime.combine(target_date, time.max))
+            start_date_utc = start_of_day.astimezone(pytz.utc)
+            end_date_utc = end_of_day.astimezone(pytz.utc)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Timezone error: {str(e)}')
+    else:
+        start_date_utc = datetime.combine(target_date, time.min).replace(tzinfo=pytz.utc)
+        end_date_utc = datetime.combine(target_date, time.max).replace(tzinfo=pytz.utc)
+
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+    )
+    if conversations_data:
+        conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
+    if not conversations_data:
+        raise HTTPException(status_code=400, detail=f'No conversations found for {date_str}')
+
+    conversations = deserialize_conversations(conversations_data)
+
+    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
+    # Preserve fields readers care about that the generator silently resets:
+    # - visibility: sharing state shouldn't toggle off on regenerate
+    # - created_at: generator stamps a fresh utcnow(), but UI sorts/displays
+    #   summaries by when they were first created, not last regenerated
+    if 'visibility' in summary:
+        summary_data['visibility'] = summary['visibility']
+    if 'created_at' in summary:
+        summary_data['created_at'] = summary['created_at']
+    summary_data['regenerated_at'] = datetime.utcnow().isoformat()
+
+    daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
+
+    refreshed = daily_summaries_db.get_daily_summary(uid, summary_id)
+    return refreshed or {**summary_data, 'id': summary_id}
+
+
+@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
+def get_shared_daily_summary(summary_id: str):
+    """
+    Public endpoint to retrieve a daily summary for sharing. No auth required.
+    """
+    uid = get_daily_summary_uid(summary_id)
+    if not uid:
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    summary = daily_summaries_db.get_daily_summary(uid, summary_id)
+    if not summary or summary.get('visibility') != 'shared':
+        raise HTTPException(status_code=404, detail='Daily summary not found')
+
+    _PUBLIC_FIELDS = {
+        'id',
+        'date',
+        'headline',
+        'overview',
+        'day_emoji',
+        'stats',
+        'highlights',
+        'action_items',
+        'decisions_made',
+        'knowledge_nuggets',
+    }
+    return {k: v for k, v in summary.items() if k in _PUBLIC_FIELDS}
 
 
 # ***********************************
@@ -1375,55 +1530,11 @@ def get_llm_top_features(
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
 
 
-def _json_default(obj):
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    raise TypeError(f"Type {type(obj)} not serializable")
-
-
 @router.get('/v1/users/export', tags=['v1'])
-async def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
+def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
-
-    def generate():
-        profile = get_user_profile(uid)
-        memories_list = memories_db.get_memories(uid, limit=10000, offset=0)
-        people = get_people(uid)
-        action_items = get_standalone_action_items(uid, limit=10000, offset=0)
-
-        # Stream pretty-printed JSON, yielding conversations and messages one at a time
-        yield '{\n'
-        yield '  "profile": ' + json.dumps(profile if profile else {}, default=_json_default, indent=2) + ',\n'
-
-        # Stream conversations via generator (batched internally, never all in memory)
-        # Note: locked conversations are intentionally included in GDPR/CCPA exports per Art. 15
-        yield '  "conversations": [\n'
-        first = True
-        for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
-            if not first:
-                yield ',\n'
-            first = False
-            yield '    ' + json.dumps(conv, default=_json_default, indent=4)
-        yield '\n  ],\n'
-
-        yield '  "memories": ' + json.dumps(memories_list, default=_json_default, indent=2) + ',\n'
-        yield '  "people": ' + json.dumps(people, default=_json_default, indent=2) + ',\n'
-        yield '  "action_items": ' + json.dumps(action_items, default=_json_default, indent=2) + ',\n'
-
-        # Stream chat messages via generator (batched internally, never all in memory)
-        yield '  "chat_messages": [\n'
-        first = True
-        for msg in chat_db.iter_all_messages(uid):
-            if not first:
-                yield ',\n'
-            first = False
-            yield '    ' + json.dumps(msg, default=_json_default, indent=4)
-        yield '\n  ]\n'
-
-        yield '}\n'
-
     return StreamingResponse(
-        generate(),
+        iter_user_data_export(uid),
         media_type='application/json',
         headers={'Content-Disposition': 'attachment; filename="omi-export.json"'},
     )

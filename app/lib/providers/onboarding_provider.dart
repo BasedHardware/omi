@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -19,9 +19,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/audio/foreground.dart';
-import 'package:omi/utils/bluetooth/bluetooth_adapter.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
@@ -71,20 +69,23 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   void updateLocationPermission(bool value) {
     hasLocationPermission = value;
     SharedPreferencesUtil().locationEnabled = value;
-    AnalyticsManager().setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
+    PlatformManager.instance.analytics.setUserAttribute('Location Enabled', SharedPreferencesUtil().locationEnabled);
     notifyListeners();
   }
 
   void updateNotificationPermission(bool value) {
     hasNotificationPermission = value;
     SharedPreferencesUtil().notificationsEnabled = value;
-    AnalyticsManager().setUserAttribute('Notifications Enabled', SharedPreferencesUtil().notificationsEnabled);
+    PlatformManager.instance.analytics.setUserAttribute(
+      'Notifications Enabled',
+      SharedPreferencesUtil().notificationsEnabled,
+    );
     notifyListeners();
   }
 
   void updateBackgroundPermission(bool value) {
     hasBackgroundPermission = value;
-    AnalyticsManager().setUserAttribute('Background Permission Enabled', hasBackgroundPermission);
+    PlatformManager.instance.analytics.setUserAttribute('Background Permission Enabled', hasBackgroundPermission);
     notifyListeners();
   }
 
@@ -94,25 +95,18 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBluetoothPermissions() async {
-    FlutterBluePlus.setLogLevel(LogLevel.info, color: true);
-
     if (Platform.isIOS) {
       PermissionStatus bleStatus = await Permission.bluetooth.request();
       Logger.debug('bleStatus: $bleStatus');
       updateBluetoothPermission(bleStatus.isGranted);
     } else {
       if (Platform.isAndroid) {
-        if (!(await BluetoothAdapter.isSupported) ||
-            FlutterBluePlus.adapterStateNow != BluetoothAdapterStateHelper.on) {
-          try {
-            await FlutterBluePlus.turnOn();
-          } catch (e) {
-            if (e is FlutterBluePlusException) {
-              if (e.code == 11) {
-                //  onShowDialog();
-              }
-            }
-          }
+        // Show the system "enable Bluetooth" prompt if the adapter is off.
+        // No-op when Bluetooth is already on.
+        try {
+          await BleHostApi().enableBluetooth();
+        } catch (e) {
+          Logger.debug('enableBluetooth failed: $e');
         }
       }
       PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();

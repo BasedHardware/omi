@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,7 +28,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -58,6 +58,16 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       context.read<McpProvider>().fetchKeys();
     });
     super.initState();
+  }
+
+  // iPad requires a non-zero sharePositionOrigin (popover anchor) for the share sheet.
+  Rect _shareOrigin() {
+    if (!mounted) return const Rect.fromLTWH(0, 0, 100, 100);
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return const Rect.fromLTWH(0, 0, 100, 100);
   }
 
   Widget _buildSectionContainer({required List<Widget> children}) {
@@ -255,6 +265,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       builder: (context, provider, child) {
         if (provider.isLoading && provider.keys.isEmpty) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
@@ -262,6 +273,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         }
         if (provider.error != null) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: Center(
@@ -271,6 +283,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         }
         if (provider.keys.isEmpty) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: Column(
@@ -307,7 +320,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       child: InkWell(
         onTap: () {
           launchUrl(Uri.parse(url));
-          MixpanelManager().pageOpened('$label Docs');
+          PlatformManager.instance.analytics.pageOpened('$label Docs');
         },
         borderRadius: BorderRadius.circular(20),
         child: Padding(
@@ -358,8 +371,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           TextButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
+              final message = context.l10n.apiEnvSavedRestartRequired;
               await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
-              AppSnackbar.showSnackbar(context.l10n.apiEnvSavedRestartRequired, duration: const Duration(seconds: 5));
+              if (!context.mounted) return;
+              AppSnackbar.showSnackbar(message, duration: const Duration(seconds: 5));
             },
             child: Text(context.l10n.switchAndRestart, style: const TextStyle(color: Colors.orange)),
           ),
@@ -368,7 +383,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
-  @override
   Widget _buildManualFirmwareFlash(DeviceProvider provider) {
     return _buildSectionContainer(
       children: [
@@ -416,6 +430,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -682,16 +697,18 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                       return;
                                     }
                                     if (files.length == 1) {
-                                      final result = await Share.shareXFiles([
-                                        XFile(files.first.path),
-                                      ], text: 'Omi debug log');
+                                      final result = await Share.shareXFiles(
+                                        [XFile(files.first.path)],
+                                        text: 'Omi debug log',
+                                        sharePositionOrigin: _shareOrigin(),
+                                      );
                                       if (result.status == ShareResultStatus.success) {
                                         Logger.debug('Log shared');
                                       }
                                       return;
                                     }
 
-                                    if (!mounted) return;
+                                    if (!context.mounted) return;
                                     final selected = await showModalBottomSheet<File>(
                                       context: context,
                                       backgroundColor: const Color(0xFF1C1C1E),
@@ -751,9 +768,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                     );
 
                                     if (selected != null) {
-                                      final result = await Share.shareXFiles([
-                                        XFile(selected.path),
-                                      ], text: 'Omi debug log');
+                                      final result = await Share.shareXFiles(
+                                        [XFile(selected.path)],
+                                        text: 'Omi debug log',
+                                        sharePositionOrigin: _shareOrigin(),
+                                      );
                                       if (result.status == ShareResultStatus.success) {
                                         Logger.debug('Log shared');
                                       }
@@ -786,8 +805,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               const SizedBox(width: 12),
                               GestureDetector(
                                 onTap: () async {
+                                  final message = context.l10n.debugLogCleared;
                                   await DebugLogManager.clear();
-                                  AppSnackbar.showSnackbar(context.l10n.debugLogCleared);
+                                  if (!context.mounted) return;
+                                  AppSnackbar.showSnackbar(message);
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
@@ -823,6 +844,8 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                         ? null
                         : () async {
                             if (provider.loadingExportMemories) return;
+                            // Capture l10n before async gaps
+                            final exportTitle = context.l10n.exportAllData;
                             setState(() => provider.loadingExportMemories = true);
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -834,23 +857,30 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                             final filePath = '${directory.path}/omi-export.json';
                             final exportedPath = await exportUserDataToFile(filePath);
                             if (exportedPath == null) {
+                              // Always reset the flag so the button is re-enabled even if widget is unmounted
+                              provider.loadingExportMemories = false;
                               if (context.mounted) {
                                 ScaffoldMessenger.of(
                                   context,
                                 ).showSnackBar(const SnackBar(content: Text('Export failed. Please try again.')));
+                                setState(() {});
                               }
-                              setState(() => provider.loadingExportMemories = false);
                               return;
                             }
 
-                            final result = await Share.shareXFiles([
-                              XFile(exportedPath),
-                            ], text: 'Exported Data from Omi');
+                            final result = await Share.shareXFiles(
+                              [XFile(exportedPath)],
+                              subject: exportTitle,
+                              text: exportTitle,
+                              sharePositionOrigin: _shareOrigin(),
+                            );
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
                             }
-                            MixpanelManager().exportMemories();
-                            setState(() => provider.loadingExportMemories = false);
+                            PlatformManager.instance.analytics.exportMemories();
+                            // Always reset the flag so the button is re-enabled even if widget is unmounted
+                            provider.loadingExportMemories = false;
+                            if (mounted) setState(() {});
                           },
                     child: Container(
                       padding: const EdgeInsets.all(16),

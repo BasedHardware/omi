@@ -35,7 +35,6 @@ class PlanLimits(BaseModel):
     transcription_seconds: Optional[int] = None
     words_transcribed: Optional[int] = None
     insights_gained: Optional[int] = None
-    memories_created: Optional[int] = None
     # Chat caps. Exactly one of these is set per plan: `free` and `unlimited`
     # (displayed as "Plus") cap by question count; `architect` caps by cost_usd.
     chat_questions_per_month: Optional[int] = None
@@ -62,6 +61,11 @@ class Subscription(BaseModel):
     plan: PlanType = PlanType.basic
     status: SubscriptionStatus = SubscriptionStatus.active
     current_period_end: Optional[int] = None
+    # Period start is used by the Neo desktop-grandfather check. Populated by the
+    # Stripe webhook on every subscription event going forward; existing subs
+    # have None until their first post-deploy webhook fires (renewal/cancel/etc.)
+    # and are treated as pre-cutoff (grandfathered) until then.
+    current_period_start: Optional[int] = None
     stripe_subscription_id: Optional[str] = None
     current_price_id: Optional[str] = None
     features: List[str] = []
@@ -89,6 +93,18 @@ class SubscriptionPlan(BaseModel):
     legacy: bool = False
 
 
+class TrialMetadata(BaseModel):
+    """Structured trial state for desktop clients to render countdown UI."""
+
+    trial_started_at: Optional[int] = None  # unix seconds
+    trial_ends_at: Optional[int] = None  # unix seconds
+    trial_remaining_seconds: int = 0
+    trial_expired: bool = False
+    trial_duration_seconds: int = 0  # configured trial length
+    trial_features: List[str] = []
+    plan_after_trial: str = 'Free'  # display name of fallback plan
+
+
 class PhoneCallQuota(BaseModel):
     """Phone call feature access + remaining-quota snapshot for the client."""
 
@@ -110,8 +126,6 @@ class UserSubscriptionResponse(BaseModel):
     words_transcribed_limit: int
     insights_gained_used: int
     insights_gained_limit: int
-    memories_created_used: int
-    memories_created_limit: int
     available_plans: List[SubscriptionPlan] = []
     show_subscription_ui: bool = True
     # Chat quota usage — derived from llm_usage collection
@@ -123,3 +137,8 @@ class UserSubscriptionResponse(BaseModel):
     # Phone call feature access snapshot — null means the client hasn't been
     # given a quota read (older servers or disabled endpoints).
     phone_call_quota: Optional[PhoneCallQuota] = None
+    # Unix seconds. Set for Neo subscribers who retain desktop access under the
+    # grandfather rule (subscription period started before NEO_DESKTOP_GRANDFATHER_CUTOFF)
+    # — value is `subscription.current_period_end`. Null otherwise. The desktop client
+    # uses this to render a "Neo desktop access ends on <date>" notice.
+    desktop_grandfather_until: Optional[int] = None

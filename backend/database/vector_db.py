@@ -6,6 +6,7 @@ from typing import List
 
 from pinecone import Pinecone
 
+from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from utils.llm.clients import embeddings
 import logging
 
@@ -83,9 +84,9 @@ def query_vectors_by_metadata(
         filter_data['$and'].append(
             {
                 '$or': [
-                    {'people': {'$in': people}},
-                    {'topics': {'$in': topics}},
-                    {'entities': {'$in': entities}},
+                    {ConversationMetadataKeys.PEOPLE: {'$in': people}},
+                    {ConversationMetadataKeys.TOPICS: {'$in': topics}},
+                    {ConversationMetadataKeys.ENTITIES: {'$in': entities}},
                     # {'dates': {'$in': dates_mentioned}},
                 ]
             }
@@ -119,13 +120,13 @@ def query_vectors_by_metadata(
         metadata = item['metadata']
         conversation_id = metadata['memory_id']
         for topic in topics:
-            if topic in metadata.get('topics', []):
+            if topic in metadata_list(metadata, ConversationMetadataKeys.TOPICS):
                 conversation_id_to_matches[conversation_id] += 1
         for entity in entities:
-            if entity in metadata.get('entities', []):
+            if entity in metadata_list(metadata, ConversationMetadataKeys.ENTITIES):
                 conversation_id_to_matches[conversation_id] += 1
         for person in people:
-            if person in metadata.get('people_mentioned', []):
+            if person in metadata_list(metadata, ConversationMetadataKeys.PEOPLE):
                 conversation_id_to_matches[conversation_id] += 1
 
     conversations_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
@@ -139,6 +140,9 @@ def delete_vector(uid: str, conversation_id: str):
 
     Note: Vectors are stored with ID format '{uid}-{conversation_id}'
     """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping conversation vector delete')
+        return
     vector_id = f'{uid}-{conversation_id}'
     result = index.delete(ids=[vector_id], namespace="ns1")
     logger.info(f'delete_vector {vector_id} {result}')
@@ -287,6 +291,63 @@ def delete_memory_vector(uid: str, memory_id: str):
     vector_id = f'{uid}-{memory_id}'
     result = index.delete(ids=[vector_id], namespace=MEMORIES_NAMESPACE)
     logger.info(f'delete_memory_vector {vector_id} {result}')
+
+
+# ==========================================
+# X (Twitter) Post Vector Functions
+# Semantic search over the user's raw imported tweets/bookmarks.
+# ==========================================
+
+X_POSTS_NAMESPACE = "ns_x"
+
+
+def upsert_x_post_vectors_batch(uid: str, items: List[dict]) -> int:
+    """Upsert X post embeddings in one request. Each item: {'post_id', 'content', 'kind'}.
+    Returns the number of vectors written (0 if Pinecone is not configured)."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping x_post vector batch upsert')
+        return 0
+    items = [it for it in items if (it.get('content') or '').strip()]
+    if not items:
+        return 0
+
+    vectors = embeddings.embed_documents([it['content'] for it in items])
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    payload = [
+        {
+            "id": f"{uid}-x-{it['post_id']}",
+            "values": vectors[i],
+            "metadata": {
+                "uid": uid,
+                "post_id": str(it['post_id']),
+                "kind": it.get('kind', 'tweet'),
+                "created_at": now_ts,
+            },
+        }
+        for i, it in enumerate(items)
+    ]
+    res = index.upsert(vectors=payload, namespace=X_POSTS_NAMESPACE)
+    logger.info(f'upsert_x_post_vectors_batch count={len(payload)} {res}')
+    return len(payload)
+
+
+def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[dict]:
+    """Semantic search over the user's X posts. Returns [{post_id, kind, score}]."""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping x_post similarity search')
+        return []
+    vector = embeddings.embed_query(content)
+    xc = index.query(
+        vector=vector, top_k=limit, include_metadata=True, filter={'uid': uid}, namespace=X_POSTS_NAMESPACE
+    )
+    return [
+        {
+            'post_id': m['metadata'].get('post_id'),
+            'kind': m['metadata'].get('kind'),
+            'score': m['score'],
+        }
+        for m in xc.get('matches', [])
+    ]
 
 
 # ==========================================
@@ -532,3 +593,161 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]):
     vector_ids = [f'{uid}-ai-{aid}' for aid in action_item_ids]
     index.delete(ids=vector_ids, namespace=ACTION_ITEMS_NAMESPACE)
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
+
+
+def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]):
+    """Delete a user's conversation vectors (ns1) in one batched, chunked call.
+
+    Chunked so a single failure can't abandon the rest (and to stay under Pinecone's per-delete id
+    limit). Used by account deletion to purge all of a user's conversation vectors.
+    """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping conversation vector batch delete')
+        return
+    if not conversation_ids:
+        return
+    vector_ids = [f'{uid}-{cid}' for cid in conversation_ids]
+    for i in range(0, len(vector_ids), 1000):
+        index.delete(ids=vector_ids[i : i + 1000], namespace="ns1")
+    logger.info(f'delete_conversation_vectors_batch count={len(vector_ids)}')
+
+
+def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
+    """Delete a user's memory vectors (ns2) in batched, chunked calls.
+
+    Each chunk is individually wrapped in try/except so a transient failure
+    on one chunk does not abandon the rest. Returns the number of vectors
+    successfully deleted (0 if Pinecone is not configured).
+    """
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping memory vector batch delete')
+        return 0
+    if not memory_ids:
+        return 0
+    vector_ids = [f'{uid}-{mid}' for mid in memory_ids]
+    total_deleted = 0
+    for i in range(0, len(vector_ids), 1000):
+        chunk = vector_ids[i : i + 1000]
+        try:
+            index.delete(ids=chunk, namespace=MEMORIES_NAMESPACE)
+            total_deleted += len(chunk)
+        except Exception:
+            logger.warning(f'delete_memory_vectors_batch chunk failed uid={uid} chunk={i // 1000}')
+    logger.info(f'delete_memory_vectors_batch uid={uid} total_deleted={total_deleted}')
+    return total_deleted
+
+
+# ---------------------------------------------------------------------------
+# Transcript chunks ("ns_tchunks"): verbatim retrieval over raw conversation
+# transcripts. Conversation vectors (ns1) embed only the structured SUMMARY, so
+# specific details (exact dates, names, numbers, one-off mentions) are not
+# findable semantically. Chunk vectors make the raw transcript searchable.
+#
+# Privacy: chunk TEXT is embedded but never stored in Pinecone metadata —
+# transcripts are encrypted at rest in Firestore, and mirroring them as
+# plaintext metadata would bypass that. Readers re-hydrate the text from
+# Firestore via (conversation_id, chunk_index).
+TRANSCRIPT_CHUNKS_NAMESPACE = "ns_tchunks"
+
+
+def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List[dict]) -> int:
+    """chunks: [{'text': str, 'created_at': int unix ts, 'chunk_index': int}]"""
+    if index is None:
+        logger.warning('Pinecone index not initialized, skipping transcript chunk upsert')
+        return 0
+    chunks = [c for c in chunks if (c.get('text') or '').strip()]
+    if not chunks:
+        return 0
+
+    vectors = embeddings.embed_documents([c['text'] for c in chunks])
+    payload = []
+    for c, v in zip(chunks, vectors):
+        payload.append(
+            {
+                'id': f"{uid}-{conversation_id}-c{c['chunk_index']}",
+                'values': v,
+                'metadata': {
+                    'uid': uid,
+                    'conversation_id': conversation_id,
+                    'chunk_index': c['chunk_index'],
+                    'created_at': int(c['created_at']),
+                },
+            }
+        )
+
+    upserted = 0
+    for i in range(0, len(payload), 100):
+        index.upsert(vectors=payload[i : i + 100], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+        upserted += len(payload[i : i + 100])
+    logger.info(f'upsert_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={upserted}')
+    return upserted
+
+
+def search_transcript_chunks(
+    uid: str, query: str, limit: int = 20, starts_at: int = None, ends_at: int = None
+) -> List[dict]:
+    """Semantic search over transcript chunks. Returns chunk references
+    [{conversation_id, chunk_index, created_at, score}] — hydrate text from
+    Firestore (utils.conversations.transcript_chunks.hydrate_chunk_texts)."""
+    if index is None:
+        return []
+    vector = embeddings.embed_query(query)
+    filter_data = {'uid': uid}
+    if starts_at is not None and ends_at is not None:
+        filter_data['created_at'] = {'$gte': int(starts_at), '$lte': int(ends_at)}
+    xc = index.query(
+        vector=vector,
+        top_k=limit,
+        include_metadata=True,
+        filter=filter_data,
+        namespace=TRANSCRIPT_CHUNKS_NAMESPACE,
+    )
+    results = []
+    for m in xc.get('matches', []):
+        md = m.get('metadata') or {}
+        results.append(
+            {
+                'created_at': int(md['created_at']) if md.get('created_at') is not None else None,
+                'conversation_id': md.get('conversation_id'),
+                'chunk_index': int(md['chunk_index']) if md.get('chunk_index') is not None else None,
+                'score': m.get('score', 0),
+            }
+        )
+    return results
+
+
+def delete_transcript_chunk_vectors(uid: str, conversation_id: str):
+    """Delete all chunk vectors for one conversation (id-prefix listing on serverless)."""
+    if index is None:
+        return
+    prefix = f'{uid}-{conversation_id}-c'
+    try:
+        ids = []
+        for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
+            ids.extend(page if isinstance(page, list) else [page])
+        for i in range(0, len(ids), 1000):
+            index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+        if ids:
+            logger.info(f'delete_transcript_chunk_vectors uid={uid} conversation={conversation_id} count={len(ids)}')
+    except Exception:
+        logger.warning(f'delete_transcript_chunk_vectors failed uid={uid} conversation={conversation_id}')
+
+
+def delete_transcript_chunk_vectors_batch(uid: str, conversation_ids: List[str]) -> int:
+    """Account-deletion purge: drop all transcript-chunk vectors for the user's conversations."""
+    if index is None or not conversation_ids:
+        return 0
+    deleted = 0
+    for conversation_id in conversation_ids:
+        prefix = f'{uid}-{conversation_id}-c'
+        try:
+            ids = []
+            for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
+                ids.extend(page if isinstance(page, list) else [page])
+            for i in range(0, len(ids), 1000):
+                index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
+            deleted += len(ids)
+        except Exception:
+            logger.warning(f'delete_transcript_chunk_vectors_batch failed uid={uid} conversation={conversation_id}')
+    logger.info(f'delete_transcript_chunk_vectors_batch uid={uid} total_deleted={deleted}')
+    return deleted

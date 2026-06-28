@@ -1,5 +1,6 @@
 import 'dart:math';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -9,7 +10,6 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/other/temp.dart';
 
@@ -135,7 +135,7 @@ class SectionAppItemCard extends StatelessWidget {
       builder: (context, isEnabled, child) {
         return GestureDetector(
           onTap: () async {
-            MixpanelManager().pageOpened('App Detail');
+            PlatformManager.instance.analytics.pageOpened('App Detail');
             await routeToPage(context, AppDetailPage(app: app));
             context.read<AppProvider>().filterApps();
           },

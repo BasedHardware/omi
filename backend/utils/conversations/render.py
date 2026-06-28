@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Sequence
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.folders as folders_db
 import database.users as users_db
@@ -9,6 +11,23 @@ from models.other import Person
 
 if TYPE_CHECKING:
     from models.conversation import Conversation
+
+logger = logging.getLogger(__name__)
+
+
+def resolve_display_tz(tz: str | None):
+    """Return ``(tzinfo, label)`` for rendering timestamps in a user's local timezone.
+
+    Falls back to ``(UTC, "UTC")`` when the zone is missing or not a valid IANA name.
+    Shared by the chat retrieval tools so every user-facing timestamp is shown in the
+    user's local time rather than UTC (see issue #4643).
+    """
+    if tz:
+        try:
+            return ZoneInfo(tz), tz
+        except (ZoneInfoNotFoundError, ValueError):
+            logger.warning(f"resolve_display_tz: invalid timezone '{tz}', falling back to UTC")
+    return timezone.utc, "UTC"
 
 
 # ---------------------------------------------------------------------------
@@ -131,16 +150,22 @@ def conversations_to_string(
     include_timestamps: bool = False,
     people: List[Person] = None,
     user_name: str = None,
+    tz: str = None,
 ) -> str:
     """Format a sequence of Conversation objects into a human-readable string.
 
     Callers must pass deserialized Conversation objects (use factory.deserialize_conversation
     for raw dicts). This function does NOT accept dicts.
+
+    When ``tz`` (an IANA timezone name like "America/Sao_Paulo") is provided, timestamps are
+    rendered in that timezone and labelled accordingly; otherwise they default to UTC. Pass the
+    user's timezone when this text is fed to the chat LLM so it reasons about times correctly.
     """
     result = []
     people_map = {p.id: p for p in people} if people else {}
+    display_tz, tz_label = resolve_display_tz(tz)
     for i, conversation in enumerate(conversations):
-        formatted_date = conversation.created_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+        formatted_date = conversation.created_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
         conversation_str = (
             f"Conversation #{i + 1}\n"
             f"{formatted_date} ({str(conversation.structured.category.value).capitalize()})\n"
@@ -148,11 +173,13 @@ def conversations_to_string(
 
         # Add started_at and finished_at if available
         if conversation.started_at:
-            formatted_started = conversation.started_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+            formatted_started = (
+                conversation.started_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
+            )
             conversation_str += f"Started: {formatted_started}\n"
         if conversation.finished_at:
             formatted_finished = (
-                conversation.finished_at.astimezone(timezone.utc).strftime("%d %b %Y at %H:%M") + " UTC"
+                conversation.finished_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
             )
             conversation_str += f"Finished: {formatted_finished}\n"
 

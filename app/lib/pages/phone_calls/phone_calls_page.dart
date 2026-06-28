@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
@@ -11,7 +12,6 @@ import 'package:omi/pages/phone_calls/phone_setup_intro_page.dart';
 import 'package:omi/pages/settings/phone_call_settings_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class PhoneCallsPage extends StatefulWidget {
@@ -36,7 +36,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadContacts();
-    MixpanelManager().phoneCallPageOpened();
+    PlatformManager.instance.analytics.phoneCallPageOpened();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<PhoneCallProvider>().loadVerifiedNumbers();
     });
@@ -53,6 +53,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
   Future<void> _loadContacts() async {
     try {
       bool hasPermission = await FlutterContacts.requestPermission(readonly: true);
+      if (!mounted) return;
       if (!hasPermission) {
         setState(() {
           _permissionDenied = true;
@@ -65,19 +66,24 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       contacts = contacts.where((c) => c.phones.isNotEmpty).toList();
       contacts.sort((a, b) => a.displayName.compareTo(b.displayName));
 
-      setState(() {
-        _contacts = contacts;
-        _filteredContacts = contacts;
-        _loadingContacts = false;
-      });
+      if (mounted) {
+        setState(() {
+          _contacts = contacts;
+          _filteredContacts = contacts;
+          _loadingContacts = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _loadingContacts = false;
-      });
+      if (mounted) {
+        setState(() {
+          _loadingContacts = false;
+        });
+      }
     }
   }
 
   void _filterContacts(String query) {
+    if (!mounted) return;
     setState(() {
       if (query.isEmpty) {
         _filteredContacts = _contacts;
@@ -99,9 +105,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     // Block if already on a call
     if (provider.callState != PhoneCallState.idle && provider.callState != PhoneCallState.ended) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.callAlreadyInProgress)),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.callAlreadyInProgress)));
       return;
     }
 
@@ -166,9 +170,8 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined, color: Colors.white),
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const PhoneCallSettingsPage()),
-            ),
+            onPressed: () =>
+                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneCallSettingsPage())),
           ),
         ],
         bottom: TabBar(
@@ -301,16 +304,20 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                 // Invisible spacer to balance the backspace button
                 const SizedBox(width: 48),
                 Expanded(
-                  child: Text(
-                    hasDigits ? _dialpadController.text : context.l10n.phoneEnterNumber,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: hasDigits ? (_dialpadController.text.length > 12 ? 24 : 32) : 20,
-                      fontWeight: FontWeight.w300,
-                      letterSpacing: hasDigits ? 2 : 0,
-                      color: hasDigits ? Colors.white : Colors.grey[600],
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onLongPressStart: (details) => _showPasteMenu(details.globalPosition),
+                    child: Text(
+                      hasDigits ? _dialpadController.text : context.l10n.phoneEnterNumber,
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: hasDigits ? (_dialpadController.text.length > 12 ? 24 : 32) : 20,
+                        fontWeight: FontWeight.w300,
+                        letterSpacing: hasDigits ? 2 : 0,
+                        color: hasDigits ? Colors.white : Colors.grey[600],
+                      ),
                     ),
                   ),
                 ),
@@ -418,6 +425,65 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         }),
       ),
     );
+  }
+
+  /// Keep only dialpad-valid characters (digits, *, #) plus a leading +.
+  /// Strips spaces, dashes, parens, dots, and other formatting from pasted text
+  /// like "+1 (415) 555-1234" → "+14155551234".
+  String _sanitizePastedNumber(String input) {
+    final buf = StringBuffer();
+    var seenPlus = false;
+    for (var i = 0; i < input.length; i++) {
+      final ch = input[i];
+      if (ch == '+' && !seenPlus && buf.isEmpty) {
+        buf.write('+');
+        seenPlus = true;
+      } else if (ch.codeUnitAt(0) >= 0x30 && ch.codeUnitAt(0) <= 0x39) {
+        buf.write(ch);
+      } else if (ch == '*' || ch == '#') {
+        buf.write(ch);
+      }
+    }
+    return buf.toString();
+  }
+
+  Future<void> _showPasteMenu(Offset globalPosition) async {
+    HapticFeedback.lightImpact();
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!mounted) return;
+
+    final raw = clipboardData?.text;
+    if (raw == null || raw.trim().isEmpty) return;
+
+    final sanitized = _sanitizePastedNumber(raw);
+    if (sanitized.isEmpty) return;
+
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (overlay == null) return;
+
+    final selected = await showMenu<String>(
+      context: context,
+      color: const Color(0xFF2A2A2E),
+      position: RelativeRect.fromLTRB(
+        globalPosition.dx,
+        globalPosition.dy,
+        overlay.size.width - globalPosition.dx,
+        overlay.size.height - globalPosition.dy,
+      ),
+      items: [
+        PopupMenuItem<String>(
+          value: 'paste',
+          child: Text(context.l10n.paste, style: const TextStyle(color: Colors.white)),
+        ),
+      ],
+    );
+
+    if (selected == 'paste' && mounted) {
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _dialpadController.text = sanitized;
+      });
+    }
   }
 
   /// Extracts the country code (e.g. "+1", "+91") from an E.164 phone number

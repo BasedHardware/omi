@@ -80,6 +80,8 @@ notif_mod.send_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
 notif_mod.send_action_item_update_message = MagicMock()
 notif_mod.send_action_item_deletion_message = MagicMock()
+notif_mod.send_action_items_batch_deletion_message = MagicMock()
+notif_mod.sync_action_item_reminder = MagicMock()
 
 _stub_module("utils.task_sync")
 sys.modules["utils.task_sync"].auto_sync_action_item = MagicMock()
@@ -667,7 +669,19 @@ class TestSyncBatchSkipsLocked:
                 {"id": "t1", "description": "OK", "is_locked": False},
                 {"id": "t2", "description": "Secret", "is_locked": True},
             ]
-            mock_db.batch_sync_update_action_items = MagicMock()
+            batch_result = types.SimpleNamespace(
+                updated_ids=["t1"],
+                missing_ids=[],
+                noop_ids=[],
+                updated_count=1,
+            )
+            batch_result.model = lambda: {
+                "updated_count": 1,
+                "updated_ids": ["t1"],
+                "missing_ids": [],
+                "noop_ids": [],
+            }
+            mock_db.batch_sync_update_action_items = MagicMock(return_value=batch_result)
 
             request = SyncBatchRequest(
                 items=[

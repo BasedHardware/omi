@@ -10,8 +10,6 @@ extension SyncMethodExtension on SyncMethod {
     switch (this) {
       case SyncMethod.ble:
         return 'Bluetooth';
-      case SyncMethod.wifi:
-        return 'Fast Transfer';
     }
   }
 
@@ -19,8 +17,6 @@ extension SyncMethodExtension on SyncMethod {
     switch (this) {
       case SyncMethod.ble:
         return 'BLE';
-      case SyncMethod.wifi:
-        return 'WiFi';
     }
   }
 
@@ -28,8 +24,6 @@ extension SyncMethodExtension on SyncMethod {
     switch (this) {
       case SyncMethod.ble:
         return 'Syncing via Bluetooth';
-      case SyncMethod.wifi:
-        return 'Syncing via WiFi';
     }
   }
 }
@@ -42,7 +36,7 @@ class SyncState {
   final Wal? failedWal;
   final List<SyncedConversationPointer> syncedConversations;
   final double? speedKBps; // Download speed in KB/s
-  final SyncMethod? syncMethod; // Current sync method (BLE or WiFi)
+  final SyncMethod? syncMethod;
   final int? currentFile; // 1-based index of file being transferred
   final int? totalFiles; // Total files to transfer
   final int? uploadedBytes; // Bytes uploaded to cloud so far

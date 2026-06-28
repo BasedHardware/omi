@@ -20,6 +20,7 @@ import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class UsagePage extends StatefulWidget {
@@ -45,6 +46,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   Future<void> _loadFairUseStatus() async {
     try {
       final result = await getFairUseStatus();
+      // Reconcile the rate-limit cooldown regardless of widget mount state.
+      reconcileSyncRateLimitWithFairUseStatus(result);
       if (mounted && result != null) {
         setState(() => _fairUseStatus = result);
       }
@@ -64,9 +67,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final provider = context.read<UsageProvider>();
     final localeName = l10n.localeName;
 
-    final RenderRepaintBoundary boundary =
-        _screenshotKeys[_tabController.index].currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final captureContext = _screenshotKeys[_tabController.index].currentContext;
+    if (captureContext == null || !mounted) return;
+    final RenderRepaintBoundary boundary = captureContext.findRenderObject() as RenderRepaintBoundary;
     final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+    if (!mounted) return;
 
     // Load logo
     final ByteData logoData = await rootBundle.load('assets/images/herologo.png');
@@ -123,7 +128,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     // Convert the canvas to a new image and then to bytes
     final watermarkedImage = await recorder.endRecording().toImage(image.width, image.height);
     final ByteData? byteData = await watermarkedImage.toByteData(format: ui.ImageByteFormat.png);
-    final Uint8List pngBytes = byteData!.buffer.asUint8List();
+    if (byteData == null) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.wrappedFailedToShare)));
+      return;
+    }
+    final Uint8List pngBytes = byteData.buffer.asUint8List();
 
     final tempDir = await getTemporaryDirectory();
     final file = await File('${tempDir.path}/omi_usage.png').create();
@@ -194,7 +203,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: shareText));
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: periodTitle.isEmpty ? null : periodTitle,
+        text: shareText.isEmpty ? null : shareText,
+      ),
+    );
   }
 
   String _getPeriodForIndex(int index) {
@@ -467,10 +482,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            context.l10n.upgradeToUnlimited,
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                          ),
+                          Text(context.l10n.upgrade, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                           const SizedBox(width: 8),
                           const Icon(Icons.arrow_forward, size: 18),
                         ],
@@ -1052,7 +1064,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(value, style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1)),
+            Text(
+              value,
+              style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1),
+            ),
             const SizedBox(height: 12),
             Row(
               children: [
@@ -1267,36 +1282,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     children: [
                       Text(
                         context.l10n.insightsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: percentage,
-                        backgroundColor: Colors.grey.shade700,
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-            if (icon == FontAwesomeIcons.brain &&
-                subscription != null &&
-                subscription.subscription.plan == PlanType.basic &&
-                subscription.memoriesCreatedLimit > 0) ...[
-              const SizedBox(height: 16),
-              Builder(
-                builder: (context) {
-                  final used = subscription.memoriesCreatedUsed;
-                  final limit = subscription.memoriesCreatedLimit;
-                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.memoriesUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
                         style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
                       ),
                       const SizedBox(height: 8),

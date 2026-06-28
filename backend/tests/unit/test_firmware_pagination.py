@@ -23,7 +23,13 @@ sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
 sys.modules.setdefault('google.auth', MagicMock())
 sys.modules.setdefault('google.auth.transport.requests', MagicMock())
 
-from routers.firmware import get_omi_github_releases, FIRMWARE_TAG_PATTERN, MAX_PAGES
+from routers.firmware import (
+    get_omi_github_releases,
+    FIRMWARE_TAG_PATTERN,
+    MAX_PAGES,
+    _parse_firmware_version,
+    _find_candidate_releases,
+)
 
 
 def _make_release(tag_name, draft=False, published_at="2026-01-30T00:00:00Z"):
@@ -326,3 +332,105 @@ class TestLastKnownGoodFallback:
         ttl_by_key = {call.args[0]: call.kwargs.get("ttl") for call in mock_set.call_args_list}
         assert ttl_by_key["test_key"] == 300
         assert ttl_by_key["test_key:lkg"] == 86400
+
+
+class TestParseFirmwareVersion:
+    """`_parse_firmware_version` now returns None for unparseable input so callers can
+    distinguish "unknown" from "very old". Treating unknown as (0,0,0) is what caused
+    /v2/firmware/latest to recommend a stale legacy release to users with current
+    firmware whose BLE characteristic read transiently failed."""
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("3.0.19", (3, 0, 19)),
+            ("v3.0.19", (3, 0, 19)),
+            ("V3.0.19", (3, 0, 19)),
+            ("1.2", (1, 2, 0)),
+            ("1", (1, 0, 0)),
+            ("0.0.0", (0, 0, 0)),
+        ],
+    )
+    def test_parses_valid_versions(self, value, expected):
+        assert _parse_firmware_version(value) == expected
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            None,
+            "",
+            "unknown",
+            "Unknown",
+            "abc",
+            "1.x.0",
+            "1..2",
+        ],
+    )
+    def test_returns_none_for_invalid(self, value):
+        assert _parse_firmware_version(value) is None
+
+
+class TestFindCandidateReleasesGuardsAgainstBadMetadata:
+    """Defense-in-depth: releases with garbled `release_firmware_version` in their body
+    are skipped instead of crashing the comparison, and garbled `minimum_firmware_required`
+    is treated as "no requirement" (matches the missing-key behavior).
+    """
+
+    @staticmethod
+    def _release(tag, body, published_at="2026-01-30T00:00:00Z"):
+        return {
+            "tag_name": tag,
+            "body": body,
+            "draft": False,
+            "prerelease": False,
+            "published_at": published_at,
+        }
+
+    def test_skips_release_with_unparseable_release_firmware_version(self):
+        releases = [
+            self._release(
+                "Omi_CV1_v3.0.19",
+                "<!-- KEY_VALUE_START\nrelease_firmware_version:not-a-version\nKEY_VALUE_END -->",
+            ),
+            self._release(
+                "Omi_CV1_v3.0.18",
+                "<!-- KEY_VALUE_START\nrelease_firmware_version:3.0.18\nKEY_VALUE_END -->",
+            ),
+        ]
+        candidates = _find_candidate_releases(releases, "Omi_CV1", (3, 0, 17))
+        tags = [c["tag_name"] for c in candidates]
+        assert tags == ["Omi_CV1_v3.0.18"]
+
+    def test_treats_unparseable_min_req_as_unset(self):
+        releases = [
+            self._release(
+                "Omi_CV1_v3.0.19",
+                "<!-- KEY_VALUE_START\nrelease_firmware_version:3.0.19\nminimum_firmware_required:garbage\nKEY_VALUE_END -->",
+            ),
+        ]
+        # User on 1.0.0 — would normally be blocked by minimum_firmware_required:3.0.6.
+        # With garbled min_req, treat as no requirement (same as missing key).
+        candidates = _find_candidate_releases(releases, "Omi_CV1", (1, 0, 0))
+        assert len(candidates) == 1
+
+
+class TestGetLatestVersionRejectsUnknownCurrent:
+    """`/v2/firmware/latest` must refuse to recommend an upgrade when it can't trust
+    the caller's reported current firmware. Without this, an empty / garbled
+    firmware_revision matched every legacy release and surfaced stale upgrade
+    prompts to up-to-date users."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("firmware_revision", ["", "unknown", "abc"])
+    async def test_invalid_current_firmware_returns_400(self, firmware_revision):
+        from routers.firmware import get_latest_version
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await get_latest_version(
+                device_model="Omi CV 1",
+                firmware_revision=firmware_revision,
+                hardware_revision="1",
+                manufacturer_name="Omi",
+            )
+        assert exc.value.status_code == 400

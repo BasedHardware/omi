@@ -1,10 +1,10 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/api/payment.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 
 class UsageProvider with ChangeNotifier {
@@ -119,7 +119,7 @@ class UsageProvider with ChangeNotifier {
     try {
       _subscription = await getUserSubscription();
       if (_subscription != null) {
-        MixpanelManager().setSubscriptionTier(_subscription!.subscription.plan.name);
+        PlatformManager.instance.analytics.setSubscriptionTier(_subscription!.subscription.plan.name);
       }
     } catch (e) {
       _error = 'Failed to load subscription data. Please try again later.';
@@ -222,7 +222,7 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId}) async {
+  Future<Map<String, dynamic>?> upgradeUserSubscription({required String priceId, String? promotionCode}) async {
     if (_isPaymentLoading) return null;
 
     _isPaymentLoading = true;
@@ -230,10 +230,10 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await upgradeSubscription(priceId: priceId);
-      if (result != null) {
-        await fetchSubscription(); // Refresh subscription data
-        await loadAvailablePlans(); // Refresh available plans
+      final result = await upgradeSubscription(priceId: priceId, promotionCode: promotionCode);
+      if (result != null && result['error'] != true) {
+        await fetchSubscription();
+        await loadAvailablePlans();
       }
       return result;
     } catch (e) {
@@ -246,7 +246,7 @@ class UsageProvider with ChangeNotifier {
     }
   }
 
-  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId}) async {
+  Future<Map<String, dynamic>?> createUserCheckoutSession({required String priceId, String? promotionCode}) async {
     if (_isPaymentLoading) return null;
 
     _isPaymentLoading = true;
@@ -254,7 +254,7 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final sessionData = await createCheckoutSession(priceId: priceId);
+      final sessionData = await createCheckoutSession(priceId: priceId, promotionCode: promotionCode);
       return sessionData;
     } catch (e) {
       _error = 'Failed to create checkout session. Please try again later.';

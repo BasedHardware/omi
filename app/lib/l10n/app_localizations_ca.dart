@@ -64,6 +64,12 @@ class AppLocalizationsCa extends AppLocalizations {
   String get copySummary => 'Copiar resum';
 
   @override
+  String get copyConversationId => 'Copia l\'ID de la conversa';
+
+  @override
+  String get conversationIdCopied => 'ID de la conversa copiat al porta-retalls';
+
+  @override
   String get testPrompt => 'Provar indicació';
 
   @override
@@ -422,6 +428,13 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get offlineSync => 'Sincronització fora de línia';
+
+  @override
+  String get autoSync => 'Sincronització automàtica';
+
+  @override
+  String get autoSyncDescription =>
+      'Sincronitza automàticament els enregistraments fora de línia quan el dispositiu es connecti';
 
   @override
   String get deviceSettings => 'Configuració del dispositiu';
@@ -959,11 +972,6 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String insightsUsedThisMonth(String used, String limit) {
     return '$used de $limit informacions obtingudes aquest mes';
-  }
-
-  @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used de $limit records creats aquest mes';
   }
 
   @override
@@ -1646,7 +1654,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get finalTouches => 'Tocs finals';
 
   @override
-  String get processing => 'Processant...';
+  String get processing => 'Processant';
 
   @override
   String get features => 'Funcionalitats';
@@ -1716,12 +1724,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIUS',
-      one: 'DISPOSITIU',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -4651,41 +4654,13 @@ class AppLocalizationsCa extends AppLocalizations {
       'Gràcies per ser un usuari valorat d\'Omi. Si tens alguna pregunta o preocupació, no dubtis a contactar-nos a team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'Configuració de sincronització WiFi';
-
-  @override
-  String get enterHotspotCredentials => 'Introdueix les credencials del punt d\'accés del telèfon';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'La sincronització WiFi utilitza el telèfon com a punt d\'accés. Troba el nom i la contrasenya a Configuració > Punt d\'accés personal.';
-
-  @override
-  String get hotspotNameSsid => 'Nom del punt d\'accés (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'p. ex. Punt d\'accés iPhone';
-
-  @override
   String get password => 'Contrasenya';
-
-  @override
-  String get enterHotspotPassword => 'Introdueix la contrasenya del punt d\'accés';
 
   @override
   String get saveCredentials => 'Desa les credencials';
 
   @override
   String get clearCredentials => 'Esborra les credencials';
-
-  @override
-  String get pleaseEnterHotspotName => 'Si us plau, introdueix un nom de punt d\'accés';
-
-  @override
-  String get wifiCredentialsSaved => 'Credencials WiFi desades';
-
-  @override
-  String get wifiCredentialsCleared => 'Credencials WiFi esborrades';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5836,9 +5811,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Transferència ràpida';
-
-  @override
   String get syncingStatus => 'Sincronitzant';
 
   @override
@@ -5848,15 +5820,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String etaLabel(String time) {
     return 'Temps estimat: $time';
   }
-
-  @override
-  String get transferMethod => 'Mètode de transferència';
-
-  @override
-  String get fast => 'Ràpid';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telèfon';
@@ -5877,26 +5840,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get processedFilesDeleted => 'Fitxers processats eliminats';
 
   @override
-  String get wifiEnableFailed => 'No s\'ha pogut activar el WiFi al dispositiu. Si us plau, torna-ho a provar.';
-
-  @override
-  String get deviceNoFastTransfer =>
-      'El teu dispositiu no suporta transferència ràpida. Utilitza Bluetooth en el seu lloc.';
-
-  @override
-  String get enableHotspotMessage => 'Si us plau, activa el punt d\'accés del teu telèfon i torna-ho a provar.';
-
-  @override
-  String get transferStartFailed => 'No s\'ha pogut iniciar la transferència. Si us plau, torna-ho a provar.';
-
-  @override
   String get deviceNotResponding => 'El dispositiu no respon. Si us plau, torna-ho a provar.';
-
-  @override
-  String get invalidWifiCredentials => 'Credencials WiFi no vàlides. Comprova la configuració del punt d\'accés.';
-
-  @override
-  String get wifiConnectionFailed => 'Connexió WiFi fallada. Si us plau, torna-ho a provar.';
 
   @override
   String get sdCardProcessing => 'Processament de targeta SD';
@@ -5908,9 +5852,6 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get process => 'Processar';
-
-  @override
-  String get wifiSyncFailed => 'Sincronització WiFi fallada';
 
   @override
   String get processingFailed => 'Processament fallat';
@@ -6691,24 +6632,13 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'Sincronització WiFi';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item copiat al porta-retalls';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Connexió fallada';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Connectant a $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Activar WiFi de $deviceName';
   }
 
   @override
@@ -6805,9 +6735,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get statusUnprocessed => 'No processat';
 
   @override
-  String get switchedToFastTransfer => 'Canviat a transferència ràpida';
-
-  @override
   String get transferCompleteMessage => 'Transferència completada! Ara pots reproduir aquest enregistrament.';
 
   @override
@@ -6819,34 +6746,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transferCancelled => 'Transferència cancel·lada';
 
   @override
-  String get fastTransferEnabled => 'Transferència ràpida activada';
-
-  @override
   String get bluetoothSyncEnabled => 'Sincronització Bluetooth activada';
-
-  @override
-  String get enableFastTransfer => 'Activar transferència ràpida';
-
-  @override
-  String get fastTransferDescription =>
-      'La transferència ràpida utilitza WiFi per velocitats ~5x més ràpides. El teu telèfon es connectarà temporalment a la xarxa WiFi del dispositiu Omi durant la transferència.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'L\'accés a internet es pausa durant la transferència';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'Tria com es transfereixen les gravacions del dispositiu Omi al telèfon.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s via WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X MÉS RÀPID';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Crea una connexió WiFi directa al dispositiu Omi. El telèfon es desconnecta temporalment del WiFi habitual durant la transferència.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6868,7 +6768,15 @@ class AppLocalizationsCa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Alerta de bateria baixa';
 
   @override
-  String get lowBatteryAlertBody => 'La bateria del teu dispositiu és baixa. És hora de carregar! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'La teva bateria és al $level%. És hora de carregar! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'L\'Omi està completament carregat';
+
+  @override
+  String get batteryFullyChargedBody => 'El teu dispositiu Omi està completament carregat. Pots desconnectar-lo!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'El teu dispositiu Omi s\'ha desconnectat';
@@ -7546,13 +7454,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get voiceFailedToTranscribe => 'No s\'ha pogut transcriure l\'àudio';
 
   @override
-  String get locationPermissionRequired => 'Es requereix permís d\'ubicació';
-
-  @override
-  String get locationPermissionContent =>
-      'La transferència ràpida requereix permís d\'ubicació per verificar la connexió WiFi. Si us plau, concediu el permís d\'ubicació per continuar.';
-
-  @override
   String get pdfTranscriptExport => 'Exportació de transcripció';
 
   @override
@@ -7697,12 +7598,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get dailyRecapsDescription => 'Els teus resums diaris apareixeran aquí un cop generats';
 
   @override
-  String get chooseTransferMethod => 'Tria el mètode de transferència';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s via WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'S\'ha detectat un gran interval de temps ($gap)';
   }
@@ -7711,10 +7606,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'S\'han detectat grans intervals de temps ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'El dispositiu no admet sincronització WiFi, canviant a Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health no està disponible en aquest dispositiu';
@@ -7913,6 +7804,9 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get viewAll => 'Veure tot';
+
+  @override
+  String get expand => 'Expandeix';
 
   @override
   String get addTask => 'Afegir tasca';
@@ -8483,7 +8377,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get manageStorage => 'Gestionar emmagatzematge';
 
   @override
-  String get safelyBackedUp => 'Còpia de seguretat al vostre telèfon';
+  String get safelyBackedUp => 'Converses creades';
 
   @override
   String get notYetSynced => 'Encara no sincronitzat amb el vostre telèfon';
@@ -9282,4 +9176,345 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Desselecciona tot';
+
+  @override
+  String get bulkExportAlreadyExported => 'Totes les tasques seleccionades ja s\'han exportat';
+
+  @override
+  String get bulkDeleteFailed => 'No s\'han pogut eliminar les tasques. Torna-ho a provar.';
+
+  @override
+  String get deleteRecap => 'Esborra el resum';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Esborrar aquest resum?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Aquest resum s\'eliminarà permanentment. Les converses originals d\'aquell dia no es veuran afectades.';
+
+  @override
+  String get deleteRecapAction => 'Esborra';
+
+  @override
+  String get recapDeletedSnackbar => 'Resum esborrat';
+
+  @override
+  String get recapDeleteFailed => 'No s\'ha pogut esborrar el resum. Torna-ho a provar més tard.';
+
+  @override
+  String get syncStatusBackedUp => 'Còpia feta';
+
+  @override
+  String get syncStatusBackingUp => 'Sincronitzant…';
+
+  @override
+  String get syncStatusWaiting => 'Esperant a sincronitzar';
+
+  @override
+  String get syncStatusRetrying => 'No s\'ha pogut processar — reintentant';
+
+  @override
+  String get syncStatusFailed => 'Ha fallat — toca Reintenta';
+
+  @override
+  String get syncStatusFileUnavailable => 'Fitxer no disponible';
+
+  @override
+  String get noRecordingsYet => 'Encara no hi ha enregistraments';
+
+  @override
+  String get syncInProgress => 'Sincronització en curs';
+
+  @override
+  String get syncStatusUploaded => 'Pujat · processant-se a Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Encara s\'està processant';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Aquest enregistrament s\'ha pujat però Omi encara està creant la conversa. Si l\'elimines ara i el processament falla, no es podrà recuperar. Vols eliminar-lo igualment?';
+
+  @override
+  String get syncCardAllBackedUp => 'Tots els enregistraments sincronitzats';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count enregistraments a punt per sincronitzar',
+      one: '1 enregistrament a punt per sincronitzar',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Processant a Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Esperant connexió';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count gravacions requereixen atenció',
+      one: '1 gravació requereix atenció',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Els enregistraments es transfereixen del teu dispositiu a aquest telèfon i s\'emmagatzemen localment, i després es pugen al servidor d\'Omi, on es transcriuen i es converteixen en converses.';
+
+  @override
+  String get syncStepUpload => 'Sincronitza';
+
+  @override
+  String get syncStepUploadDesc => 'La teva gravació s\'envia al servidor d\'Omi';
+
+  @override
+  String get syncStepProcess => 'Transcripció';
+
+  @override
+  String get syncStepProcessDesc => 'Omi converteix l\'àudio en una conversa';
+
+  @override
+  String get syncStepBackedUp => 'Conversa a punt';
+
+  @override
+  String get syncStepBackedUpDesc => 'La trobaràs a Converses';
+
+  @override
+  String get syncFailureFootnote =>
+      'Si el processament falla, la gravació es torna a intentar automàticament a la propera sincronització.';
+
+  @override
+  String get syncStatusConversationCreated => 'Conversa creada';
+
+  @override
+  String get syncCardUploadingTitle => 'Pujant a Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'S\'està baixant del teu dispositiu';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current de $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'Al teu dispositiu';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'S\'està baixant del teu dispositiu';
+
+  @override
+  String get newestFirst => 'Més recents primer';
+
+  @override
+  String get noSyncedRecordingsYet => 'Encara no hi ha enregistraments sincronitzats';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Aviat hi haurà més mètodes de pagament';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Això continua en segon pla — pots sortir d\'aquesta pantalla.';
+
+  @override
+  String get syncCardRateLimited => 'S\'ha assolit el límit d\'ús just — la sincronització es reprendrà automàticament';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Els servidors d\'Omi estan saturats — els enregistraments se sincronitzaran quan hi hagi capacitat disponible';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'No s\'ha pogut determinar la versió actual del firmware';
+
+  @override
+  String get promoCode => 'Codi promocional';
+
+  @override
+  String get enterPromoCode => 'Introduïu el codi promocional';
+
+  @override
+  String get invalidPromotionCode => 'Codi promocional no vàlid.';
+
+  @override
+  String get backgroundModeTitle => 'Mode en segon pla';
+
+  @override
+  String get backgroundModeDescription =>
+      'Mantén l\'Omi gravant fins i tot quan l\'aplicació està completament tancada.';
+
+  @override
+  String get backgroundModeNote => 'De moment només funciona amb dispositius Omi i es millora contínuament.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'El mode en segon pla no està disponible perquè no hi ha cap dispositiu compatible connectat. Connecta un dispositiu Omi, OpenGlass o Friend Pendant per utilitzar aquesta funció.';
+
+  @override
+  String get regenerateRecap => 'Regenera el resum';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Resum regenerat';
+
+  @override
+  String get recapRegenerateFailed => 'No s\'ha pogut regenerar el resum. Torna-ho a provar més tard.';
+
+  @override
+  String get recapRegenerateCooldown => 'Espera uns segons abans de tornar a regenerar.';
+
+  @override
+  String get recapRegenerateNoConversations => 'No hi ha converses per resumir d\'aquest dia.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'La sincronització utilitza la transcripció d\'Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d\'Omi i compten per al límit de transcripció del teu pla.';
+
+  @override
+  String get transcribeLaterTitle => 'Transcriure més tard';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Grava l\'àudio ara i transcriu-lo quan vulguis en comptes de fer-ho en directe. Les gravacions es desen al telèfon i, després, les puges per crear converses.';
+
+  @override
+  String get transcribeLaterNote =>
+      'De moment, funciona amb dispositius Omi. L\'àudio es queda al teu telèfon fins que decideixis pujar-lo.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'El telèfon té poc espai d\'emmagatzematge i la gravació s\'ha posat en pausa. Allibera espai o puja les gravacions i es reprendrà automàticament.';
+
+  @override
+  String get recordingMode => 'Mode de gravació';
+
+  @override
+  String get captureModeLater => 'Més tard';
+
+  @override
+  String get captureModeLiveDescription => 'Transcriu en temps real mentre parles.';
+
+  @override
+  String get captureModeLaterDescription => 'Desa l\'àudio ara i transcriu-lo quan vulguis.';
+
+  @override
+  String get unmute => 'Activar so';
+
+  @override
+  String get newRecording => 'Nou enregistrament';
+
+  @override
+  String get transcribeLaterPaused => 'En pausa — no s\'està gravant àudio';
+
+  @override
+  String get deviceTutorial => 'Com utilitzar l\'Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Parla a l\'Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Digues unes paraules i mira com apareixen en temps real';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Ben fet!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Comença a parlar...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Fes una pregunta a l\'Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Prem el botó una vegada, fes la pregunta i torna a prémer quan acabis';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'S\'està processant la pregunta...';
+
+  @override
+  String get deviceOnboardingListening => 'Escoltant...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Apaga';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Engega';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Mantén premut el botó 3 segons';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Prem el botó per tornar-lo a engegar';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Mantén el botó premut amb fermesa fins que el llum s\'apagui';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Connectat';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Connectat!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Desconnectat';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'S\'està apagant...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalitza el doble toc';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Finalitza la conversa';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Desa i finalitza la conversa actual';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Silencia / Activa';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Activa o desactiva el micròfon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Destaca la conversa en curs';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Marca la conversa com a important';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Això ha estat un sol toc: prova de tocar dues vegades ràpidament!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Prova-ho ara! Fes un doble toc a l\'Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continua';
+
+  @override
+  String get deviceOnboardingFinish => 'Finalitza';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Coneix el teu Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un recorregut ràpid i pràctic per tot el que pot fer el teu Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximadament 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Vés a l\'últim missatge';
+
+  @override
+  String get latest => 'Últim';
 }

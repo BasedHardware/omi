@@ -241,8 +241,7 @@ void main() {
       expect(
         sync.testWals.first.status,
         WalStatus.miss,
-        reason:
-            'a WAL whose file exists must not be corrupted by pre-upload checks; '
+        reason: 'a WAL whose file exists must not be corrupted by pre-upload checks; '
             'upload failure in this environment leaves it as miss',
       );
     });
@@ -292,8 +291,7 @@ void main() {
       expect(
         stuck.retryCount,
         0,
-        reason:
-            'syncAll() never increments retryCount, so the WAL looks brand-new '
+        reason: 'syncAll() never increments retryCount, so the WAL looks brand-new '
             'on every app open and is unconditionally re-queued',
       );
       expect(stuck.isSyncing, false, reason: 'isSyncing must be cleared so the WAL is eligible for the next attempt');
@@ -325,8 +323,7 @@ void main() {
       expect(
         sync.testWals.first.isSyncing,
         false,
-        reason:
-            'isSyncing cleared confirms syncAll processed this WAL, '
+        reason: 'isSyncing cleared confirms syncAll processed this WAL, '
             'despite retryCount=50 — no cap is enforced',
       );
     });

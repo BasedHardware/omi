@@ -10,11 +10,14 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.action_items as action_items_db
+import database.notifications as notification_db
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
     send_action_item_data_message,
+    sync_action_item_reminder,
 )
+from utils.conversations.render import resolve_display_tz
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,6 +28,18 @@ try:
 except ImportError:
     # Fallback if import fails
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+def _format_local(dt, display_tz, tz_label: str) -> str:
+    """Render a stored timestamp in the user's local timezone with a tz label.
+
+    Action-item timestamps are stored tz-aware (UTC); a naive value is treated as
+    UTC defensively so the chat model never sees an unlabeled wall-clock time and
+    mislabels the time of day (issue #4643).
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
 
 
 @tool
@@ -256,7 +271,14 @@ def get_action_items_tool(
         logger.info(f"✅ get_action_items_tool END - returning early (no items found)")
         return msg
 
-    # Format action items
+    # Format action items. Render timestamps in the user's local timezone so the
+    # chat model labels the time of day correctly (issue #4643). A timezone lookup
+    # failure must never abort retrieval, so fall back to UTC formatting.
+    try:
+        display_tz, tz_label = resolve_display_tz(notification_db.get_user_time_zone(uid))
+    except Exception as tz_error:
+        logger.warning(f"get_action_items_tool - timezone lookup failed, formatting in UTC: {tz_error}")
+        display_tz, tz_label = timezone.utc, "UTC"
     result = f"User Action Items ({len(action_items)} total):\n\n"
 
     for i, item in enumerate(action_items, 1):
@@ -266,18 +288,15 @@ def get_action_items_tool(
         # Add ID for reference in updates
         result += f"   ID: {item.get('id')}\n"
 
-        # Add dates if available
+        # Add dates if available (rendered in the user's local timezone)
         if item.get('created_at'):
-            created = item['created_at']
-            result += f"   Created: {created.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Created: {_format_local(item['created_at'], display_tz, tz_label)}\n"
 
         if item.get('due_at'):
-            due = item['due_at']
-            result += f"   Due: {due.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Due: {_format_local(item['due_at'], display_tz, tz_label)}\n"
 
         if item.get('completed_at'):
-            completed_at = item['completed_at']
-            result += f"   Completed: {completed_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Completed: {_format_local(item['completed_at'], display_tz, tz_label)}\n"
 
         if item.get('conversation_id'):
             result += f"   From conversation: {item['conversation_id']}\n"
@@ -572,6 +591,20 @@ def update_action_item_tool(
             except Exception as notif_error:
                 logger.error(f"⚠️ Failed to send completion notification: {notif_error}")
                 # Don't fail the update if notification fails
+
+        # Reconcile the scheduled reminder to match the new state — cancel on completion, (re)schedule
+        # only for an open task with a due date (#5085).
+        if 'completed' in update_data or 'due_at' in update_data:
+            try:
+                sync_action_item_reminder(
+                    uid,
+                    action_item_id,
+                    updated_item.get('description', ''),
+                    bool(updated_item.get('completed')),
+                    updated_item.get('due_at'),
+                )
+            except Exception as notif_error:
+                logger.error(f"⚠️ Failed to sync action item reminder: {notif_error}")
 
         return result
 

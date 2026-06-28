@@ -16,8 +16,16 @@ description: "Complete reference for all Omi MCP tools"
     | `categories` | array | No | Categories to filter by |
     | `limit` | number | No | Maximum number of memories (default: 100) |
     | `offset` | number | No | Offset for pagination (default: 0) |
+    | `sort` | string | No | `scoring_desc`, `created_desc`, `updated_desc`, or `manual_first` |
+    | `reviewed` | boolean | No | Filter by reviewed state |
+    | `manually_added` | boolean | No | Filter by manually-added state |
+    | `updated_after` | string | No | Only return memories updated after this ISO 8601 timestamp |
+    | `include_activity` | boolean | No | Include focus/screen/activity memories, which are excluded by default |
+    | `include_sensitive` | boolean | No | Include memories above standard data protection, default `true` for compatibility |
 
-    **Returns:** `{ "memories": [...] }`
+    **Returns:** `{ "memories": [...], "returned_count": 25, "has_more": true, "offset": 0, "limit": 25, "sort": "created_desc" }`
+
+    The response may also include scan diagnostics such as `scanned_count` and `scan_truncated`.
 
     **Example:**
     ```

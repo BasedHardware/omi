@@ -110,7 +110,7 @@ async def stream_audio_test(host: str, port: int, chunks: list, label: str, uid_
 
     try:
         t_connect_start = time.time()
-        async with websockets.connect(uri, extra_headers=headers, ping_interval=None, open_timeout=30) as ws:
+        async with websockets.connect(uri, additional_headers=headers, ping_interval=None, open_timeout=30) as ws:
             t_connected = time.time()
             logger.info(f"  [{label}] Connected ({t_connected - t_connect_start:.1f}s handshake)")
 
@@ -264,7 +264,7 @@ async def test_client_disconnect(host: str, port: int, audio_path: str):
     headers = {"Authorization": f"Bearer {auth_token}"}
 
     try:
-        async with websockets.connect(uri, extra_headers=headers, ping_interval=None, open_timeout=30) as ws:
+        async with websockets.connect(uri, additional_headers=headers, ping_interval=None, open_timeout=30) as ws:
             logger.info(f"  Connected. Sending {len(partial_chunks)} chunks (5s) then disconnecting...")
 
             for chunk in partial_chunks:

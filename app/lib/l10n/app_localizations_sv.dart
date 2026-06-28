@@ -64,6 +64,12 @@ class AppLocalizationsSv extends AppLocalizations {
   String get copySummary => 'Kopiera sammanfattning';
 
   @override
+  String get copyConversationId => 'Kopiera konversations-ID';
+
+  @override
+  String get conversationIdCopied => 'Konversations-ID kopierat till urklipp';
+
+  @override
   String get testPrompt => 'Testa prompt';
 
   @override
@@ -421,6 +427,12 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get offlineSync => 'Offlinesynkronisering';
+
+  @override
+  String get autoSync => 'Automatisk synkronisering';
+
+  @override
+  String get autoSyncDescription => 'Synkronisera offlineinspelningar automatiskt när din enhet ansluter';
 
   @override
   String get deviceSettings => 'Enhetsinställningar';
@@ -957,11 +969,6 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String insightsUsedThisMonth(String used, String limit) {
     return '$used av $limit insikter vunna denna månad';
-  }
-
-  @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used av $limit minnen skapade denna månad';
   }
 
   @override
@@ -1638,7 +1645,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get finalTouches => 'Sista finishen';
 
   @override
-  String get processing => 'Bearbetar...';
+  String get processing => 'Bearbetar';
 
   @override
   String get features => 'Funktioner';
@@ -1708,12 +1715,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ENHETER',
-      one: 'ENHET',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -4625,41 +4627,13 @@ class AppLocalizationsSv extends AppLocalizations {
       'Tack för att du är en uppskattad användare av Omi. Om du har frågor eller funderingar, kontakta oss gärna på team@basedhardware.com.';
 
   @override
-  String get wifiSyncSettings => 'WiFi-synkroniseringsinställningar';
-
-  @override
-  String get enterHotspotCredentials => 'Ange din telefons hotspot-uppgifter';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi-synkronisering använder din telefon som hotspot. Hitta namnet och lösenordet i Inställningar > Internetdelning.';
-
-  @override
-  String get hotspotNameSsid => 'Hotspotnamn (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 't.ex. iPhone Hotspot';
-
-  @override
   String get password => 'Lösenord';
-
-  @override
-  String get enterHotspotPassword => 'Ange hotspot-lösenord';
 
   @override
   String get saveCredentials => 'Spara uppgifter';
 
   @override
   String get clearCredentials => 'Rensa uppgifter';
-
-  @override
-  String get pleaseEnterHotspotName => 'Ange ett hotspotnamn';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi-uppgifter sparade';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi-uppgifter rensade';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -5806,9 +5780,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'Snabb överföring';
-
-  @override
   String get syncingStatus => 'Synkroniserar';
 
   @override
@@ -5818,15 +5789,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String etaLabel(String time) {
     return 'Beräknad tid: $time';
   }
-
-  @override
-  String get transferMethod => 'Överföringsmetod';
-
-  @override
-  String get fast => 'Snabb';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'Telefon';
@@ -5847,25 +5809,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get processedFilesDeleted => 'Behandlade filer borttagna';
 
   @override
-  String get wifiEnableFailed => 'Kunde inte aktivera WiFi på enheten. Försök igen.';
-
-  @override
-  String get deviceNoFastTransfer => 'Din enhet stöder inte snabb överföring. Använd Bluetooth istället.';
-
-  @override
-  String get enableHotspotMessage => 'Aktivera telefonens hotspot och försök igen.';
-
-  @override
-  String get transferStartFailed => 'Kunde inte starta överföringen. Försök igen.';
-
-  @override
   String get deviceNotResponding => 'Enheten svarar inte. Försök igen.';
-
-  @override
-  String get invalidWifiCredentials => 'Ogiltiga WiFi-uppgifter. Kontrollera dina hotspot-inställningar.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi-anslutningen misslyckades. Försök igen.';
 
   @override
   String get sdCardProcessing => 'SD-kortbehandling';
@@ -5877,9 +5821,6 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get process => 'Behandla';
-
-  @override
-  String get wifiSyncFailed => 'WiFi-synkronisering misslyckades';
 
   @override
   String get processingFailed => 'Behandlingen misslyckades';
@@ -6657,24 +6598,13 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi-synkronisering';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item kopierat till urklipp';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'Anslutningen misslyckades';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return 'Ansluter till $deviceName';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return 'Aktivera ${deviceName}s WiFi';
   }
 
   @override
@@ -6771,9 +6701,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get statusUnprocessed => 'Obehandlad';
 
   @override
-  String get switchedToFastTransfer => 'Bytte till snabb överföring';
-
-  @override
   String get transferCompleteMessage => 'Överföring slutförd! Du kan nu spela upp denna inspelning.';
 
   @override
@@ -6785,33 +6712,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transferCancelled => 'Överföring avbruten';
 
   @override
-  String get fastTransferEnabled => 'Snabb överföring aktiverad';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth-synkronisering aktiverad';
-
-  @override
-  String get enableFastTransfer => 'Aktivera snabb överföring';
-
-  @override
-  String get fastTransferDescription =>
-      'Snabb överföring använder WiFi för ~5x snabbare hastigheter. Din telefon ansluter tillfälligt till Omi-enhetens WiFi-nätverk under överföringen.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'Internetåtkomst pausas under överföring';
-
-  @override
-  String get chooseTransferMethodDescription => 'Välj hur inspelningar överförs från Omi-enheten till din telefon.';
-
-  @override
-  String get wifiSpeed => '~150 KB/s via WiFi';
-
-  @override
-  String get fiveTimesFaster => '5X SNABBARE';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'Skapar en direkt WiFi-anslutning till din Omi-enhet. Din telefon kopplas tillfälligt från ditt vanliga WiFi under överföringen.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6833,7 +6734,15 @@ class AppLocalizationsSv extends AppLocalizations {
   String get lowBatteryAlertTitle => 'Varning för lågt batteri';
 
   @override
-  String get lowBatteryAlertBody => 'Enhetens batteri är lågt. Dags att ladda! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'Ditt batteri är på $level%. Dags att ladda! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi är fulladdad';
+
+  @override
+  String get batteryFullyChargedBody => 'Din Omi-enhet är fulladdad. Du kan koppla ur den nu!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'Din Omi-enhet har kopplats från';
@@ -7504,13 +7413,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get voiceFailedToTranscribe => 'Kunde inte transkribera ljud';
 
   @override
-  String get locationPermissionRequired => 'Platstillstånd krävs';
-
-  @override
-  String get locationPermissionContent =>
-      'Snabb överföring kräver platstillstånd för att verifiera WiFi-anslutningen. Vänligen ge platstillstånd för att fortsätta.';
-
-  @override
   String get pdfTranscriptExport => 'Transkriptionsexport';
 
   @override
@@ -7655,12 +7557,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get dailyRecapsDescription => 'Dina dagliga sammanfattningar visas här när de har skapats';
 
   @override
-  String get chooseTransferMethod => 'Välj överföringsmetod';
-
-  @override
-  String get fastTransferSpeed => '~150 KB/s via WiFi';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'Stort tidsgap upptäckt ($gap)';
   }
@@ -7669,9 +7565,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'Stora tidsgap upptäckta ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle => 'Enheten stöder inte WiFi-synkronisering, byter till Bluetooth';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health är inte tillgängligt på denna enhet';
@@ -7870,6 +7763,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get viewAll => 'Visa alla';
+
+  @override
+  String get expand => 'Expandera';
 
   @override
   String get addTask => 'Lägg till uppgift';
@@ -8435,7 +8331,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get manageStorage => 'Hantera lagring';
 
   @override
-  String get safelyBackedUp => 'Säkerhetskopierat till din telefon';
+  String get safelyBackedUp => 'Skapade konversationer';
 
   @override
   String get notYetSynced => 'Inte synkroniserat med din telefon ännu';
@@ -9232,4 +9128,344 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'Avmarkera alla';
+
+  @override
+  String get bulkExportAlreadyExported => 'Alla valda uppgifter är redan exporterade';
+
+  @override
+  String get bulkDeleteFailed => 'Det gick inte att ta bort uppgifterna. Försök igen.';
+
+  @override
+  String get deleteRecap => 'Radera sammanfattning';
+
+  @override
+  String get deleteRecapConfirmTitle => 'Radera den här sammanfattningen?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'Sammanfattningen tas bort permanent. De ursprungliga samtalen från den dagen påverkas inte.';
+
+  @override
+  String get deleteRecapAction => 'Radera';
+
+  @override
+  String get recapDeletedSnackbar => 'Sammanfattning raderad';
+
+  @override
+  String get recapDeleteFailed => 'Det gick inte att radera sammanfattningen. Försök igen senare.';
+
+  @override
+  String get syncStatusBackedUp => 'Säkerhetskopierad';
+
+  @override
+  String get syncStatusBackingUp => 'Synkroniserar…';
+
+  @override
+  String get syncStatusWaiting => 'Väntar på synkronisering';
+
+  @override
+  String get syncStatusRetrying => 'Kunde inte bearbetas — försöker igen';
+
+  @override
+  String get syncStatusFailed => 'Misslyckades — tryck på Försök igen';
+
+  @override
+  String get syncStatusFileUnavailable => 'Filen är inte tillgänglig';
+
+  @override
+  String get noRecordingsYet => 'Inga inspelningar än';
+
+  @override
+  String get syncInProgress => 'Synkronisering pågår';
+
+  @override
+  String get syncStatusUploaded => 'Uppladdad · bearbetas på Omi';
+
+  @override
+  String get deleteWhileProcessingTitle => 'Bearbetas fortfarande';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'Den här inspelningen har laddats upp men Omi skapar fortfarande konversationen. Om du tar bort den nu och bearbetningen misslyckas kan den inte återställas. Ta bort ändå?';
+
+  @override
+  String get syncCardAllBackedUp => 'Alla inspelningar synkroniserade';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar redo att synkroniseras',
+      one: '1 inspelning redo att synkroniseras',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Bearbetar i Omi…';
+
+  @override
+  String get syncCardWaitingInternet => 'Väntar på internet';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inspelningar behöver uppmärksamhet',
+      one: '1 inspelning behöver uppmärksamhet',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'Inspelningar överförs från din enhet till den här telefonen och lagras lokalt och laddas sedan upp till Omis server, där de transkriberas och blir till samtal.';
+
+  @override
+  String get syncStepUpload => 'Synkronisera';
+
+  @override
+  String get syncStepUploadDesc => 'Din inspelning skickas till Omis server';
+
+  @override
+  String get syncStepProcess => 'Transkribera';
+
+  @override
+  String get syncStepProcessDesc => 'Omi gör om ljudet till en konversation';
+
+  @override
+  String get syncStepBackedUp => 'Konversationen är klar';
+
+  @override
+  String get syncStepBackedUpDesc => 'Hittas under Konversationer';
+
+  @override
+  String get syncFailureFootnote =>
+      'Om bearbetningen misslyckas görs ett nytt försök automatiskt vid nästa synkronisering.';
+
+  @override
+  String get syncStatusConversationCreated => 'Samtal skapat';
+
+  @override
+  String get syncCardUploadingTitle => 'Laddar upp till Omi';
+
+  @override
+  String get syncCardDownloadingTitle => 'Laddar ned från din enhet';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$current av $total';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'På din enhet';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'Laddar ned från din enhet';
+
+  @override
+  String get newestFirst => 'Nyaste först';
+
+  @override
+  String get noSyncedRecordingsYet => 'Inga synkroniserade inspelningar än';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'Fler betalningsmetoder kommer snart';
+
+  @override
+  String get syncProcessingBackgroundHint => 'Detta fortsätter i bakgrunden — du kan lämna den här skärmen.';
+
+  @override
+  String get syncCardRateLimited => 'Gränsen för skälig användning har nåtts — synkroniseringen återupptas automatiskt';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omis servrar är hårt belastade — dina inspelningar synkroniseras så snart kapacitet frigörs';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'Det gick inte att fastställa aktuell firmwareversion';
+
+  @override
+  String get promoCode => 'Kampanjkod';
+
+  @override
+  String get enterPromoCode => 'Ange kampanjkod';
+
+  @override
+  String get invalidPromotionCode => 'Ogiltig kampanjkod.';
+
+  @override
+  String get backgroundModeTitle => 'Bakgrundsläge';
+
+  @override
+  String get backgroundModeDescription => 'Håll din Omi inspelande även när appen är helt stängd.';
+
+  @override
+  String get backgroundModeNote => 'Fungerar än så länge bara med Omi-enheter och förbättras kontinuerligt.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'Bakgrundsläge är inte tillgängligt eftersom ingen kompatibel enhet är ansluten. Anslut en Omi-, OpenGlass- eller Friend Pendant-enhet för att använda den här funktionen.';
+
+  @override
+  String get regenerateRecap => 'Återskapa sammanfattningen';
+
+  @override
+  String get recapRegeneratedSnackbar => 'Sammanfattningen återskapad';
+
+  @override
+  String get recapRegenerateFailed => 'Det gick inte att återskapa sammanfattningen. Försök igen senare.';
+
+  @override
+  String get recapRegenerateCooldown => 'Vänta några sekunder innan du genererar igen.';
+
+  @override
+  String get recapRegenerateNoConversations => 'Inga samtal att sammanfatta för den här dagen.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronisering använder Omi-transkription';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du använder din egen transkriberingsleverantör. Att synkronisera dessa inspelningar transkriberar dem på Omis servrar i stället, och de räknas mot din plans transkriberingsgräns.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkribera senare';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Spela in ljud nu och transkribera det när du vill i stället för direkt. Inspelningarna sparas på din telefon, och sedan laddar du upp dem för att skapa konversationer.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Fungerar med Omi-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.';
+
+  @override
+  String get recordingMode => 'Inspelningsläge';
+
+  @override
+  String get captureModeLater => 'Senare';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribera i realtid medan du talar.';
+
+  @override
+  String get captureModeLaterDescription => 'Spara ljudet nu och transkribera när du vill.';
+
+  @override
+  String get unmute => 'Slå på ljud';
+
+  @override
+  String get newRecording => 'Ny inspelning';
+
+  @override
+  String get transcribeLaterPaused => 'Pausad – inget ljud spelas in';
+
+  @override
+  String get deviceTutorial => 'Så använder du Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Prata in i din Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Säg några ord och se dem visas i realtid';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Bra jobbat!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Börja prata...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Ställ en fråga till Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Tryck en gång på knappen, ställ din fråga och tryck igen när du är klar';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Bearbetar din fråga...';
+
+  @override
+  String get deviceOnboardingListening => 'Lyssnar...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Stäng av';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Slå på';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Håll in knappen i 3 sekunder';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tryck på knappen för att slå på den igen';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Håll in knappen ordentligt tills lampan slocknar';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Ansluten';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Ansluten!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Frånkopplad';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Stänger av...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Anpassa dubbeltryck';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Avsluta konversation';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Spara och avsluta pågående konversation';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Tysta / Slå på ljud';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Slå på eller av mikrofonen';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Stjärnmärk pågående konversation';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Markera konversationen som viktig';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Det var ett enkeltryck – prova att trycka två gånger snabbt!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Prova nu! Dubbeltryck på din Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Fortsätt';
+
+  @override
+  String get deviceOnboardingFinish => 'Slutför';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Lär känna din Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'En snabb, praktisk rundtur i allt din Omi kan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Hoppa till senaste meddelandet';
+
+  @override
+  String get latest => 'Senaste';
 }

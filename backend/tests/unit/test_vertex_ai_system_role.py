@@ -10,10 +10,35 @@ See: issue #7085, PR #7084
 
 import os
 import sys
+import types
 from unittest.mock import MagicMock, patch
 
 import pytest
-from langchain_core.messages import SystemMessage, HumanMessage
+
+try:
+    from langchain_core.messages import SystemMessage, HumanMessage
+except ModuleNotFoundError as exc:
+    if exc.name is None or exc.name not in {'langchain_core', 'langchain_core.messages'}:
+        raise
+
+    class _Message:
+        def __init__(self, content):
+            self.content = content
+
+    class SystemMessage(_Message):
+        pass
+
+    class HumanMessage(_Message):
+        pass
+
+    langchain_core = types.ModuleType('langchain_core')
+    langchain_core.__path__ = []
+    messages_mod = types.ModuleType('langchain_core.messages')
+    messages_mod.SystemMessage = SystemMessage
+    messages_mod.HumanMessage = HumanMessage
+    langchain_core.messages = messages_mod
+    sys.modules['langchain_core'] = langchain_core
+    sys.modules['langchain_core.messages'] = messages_mod
 
 # ---------------------------------------------------------------------------
 # Pre-mock heavy deps before any imports touch them (same pattern as test_omi_qos_tiers.py)
@@ -33,6 +58,8 @@ _HEAVY_MOCKS = {
     'database.llm_usage': MagicMock(),
     'database.redis_db': MagicMock(),
     'database.vector_db': MagicMock(),
+    'openai': MagicMock(),
+    'utils.llm.clients': MagicMock(),
 }
 
 for _mod, _mock in _HEAVY_MOCKS.items():
@@ -113,7 +140,7 @@ def test_apps_router_uses_langchain_messages_not_raw_dicts():
     import pathlib
 
     apps_path = pathlib.Path(__file__).resolve().parents[2] / 'routers' / 'apps.py'
-    source = apps_path.read_text()
+    source = apps_path.read_text(encoding="utf-8")
 
     # Find the generate_sample_prompts_endpoint function
     tree = ast.parse(source)

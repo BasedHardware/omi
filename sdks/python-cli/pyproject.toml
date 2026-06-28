@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "omi-cli"
-version = "0.2.0"
+# Single source of truth is ``omi_cli.__version__`` (see [tool.setuptools.dynamic]
+# below). ``omi --version`` and the client User-Agent read that same attribute,
+# so the published wheel and the runtime can never disagree again.
+dynamic = ["version"]
 description = "Command-line interface for Omi — talk to memories, conversations, action items, and goals from your terminal."
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,6 +38,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
+    "click>=8.1,<9.0",
     "typer>=0.12,<1.0",
     "rich>=13.7,<15.0",
     "httpx>=0.27,<1.0",
@@ -68,6 +72,12 @@ dev = [
     "build>=1.0,<2.0",
     "twine>=5.0,<7.0",
 ]
+
+[tool.setuptools.dynamic]
+# Resolve the package version from omi_cli/__init__.py:__version__ at build
+# time — keeps the wheel/PyPI version and the runtime ``omi --version`` in
+# lockstep from one literal.
+version = { attr = "omi_cli.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["."]

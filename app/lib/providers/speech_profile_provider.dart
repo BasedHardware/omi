@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -39,7 +38,7 @@ class SpeechProfileProvider extends ChangeNotifier
   final targetWordsCount = 70;
   final maxDuration = 150;
 
-  StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
+  StreamSubscription? connectionStateListener;
   List<TranscriptSegment> segments = [];
   double? streamStartedAtSecond;
   late WavBytesUtil audioStorage;

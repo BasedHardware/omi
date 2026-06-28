@@ -1,4 +1,9 @@
-import { findAppById, getAppsV2, transformToPlugin, type V2AppData } from '@/lib/api/public';
+import {
+  findAppById,
+  getAppsV2,
+  transformToPlugin,
+  type V2AppData,
+} from '@/lib/api/public';
 import { CompactPluginCard } from '@/components/marketplace/plugin-card/CompactPluginCard';
 import { CategoryBreadcrumb } from '@/components/marketplace/CategoryBreadcrumb';
 import { BreadcrumbJsonLd, SoftwareAppJsonLd } from '@/components/seo/JsonLd';
@@ -147,7 +152,7 @@ export default async function PluginDetailPage({ params }: Props) {
             <div className="lg:col-span-2">
               <div className="relative aspect-square overflow-hidden rounded-2xl bg-[#1A1F2E]">
                 <Image
-                  src={plugin.image}
+                  src={plugin.image || '/logo.png'}
                   alt={plugin.name}
                   className="h-full w-full object-cover transition-transform duration-300 hover:scale-105"
                   width={500}
@@ -247,7 +252,9 @@ export default async function PluginDetailPage({ params }: Props) {
           <section className="mt-16">
             <h2 className="text-2xl font-bold text-white">About</h2>
             <div className="mt-4">
-              <p className="text-lg leading-relaxed text-gray-300">{plugin.description}</p>
+              <p className="text-lg leading-relaxed text-gray-300">
+                {plugin.description}
+              </p>
             </div>
           </section>
 
@@ -328,11 +335,7 @@ export default async function PluginDetailPage({ params }: Props) {
               </h2>
               <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {relatedApps.map((app, index) => (
-                  <CompactPluginCard
-                    key={app.id}
-                    plugin={app}
-                    index={index + 1}
-                  />
+                  <CompactPluginCard key={app.id} plugin={app} index={index + 1} />
                 ))}
               </div>
             </section>

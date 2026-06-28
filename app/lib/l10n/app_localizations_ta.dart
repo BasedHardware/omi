@@ -64,6 +64,12 @@ class AppLocalizationsTa extends AppLocalizations {
   String get copySummary => 'சாரம் நகலெடுக்கவும்';
 
   @override
+  String get copyConversationId => 'உரையாடல் ID நகலெடு';
+
+  @override
+  String get conversationIdCopied => 'உரையாடல் ID கிளிப்போர்டில் நகலெடுக்கப்பட்டது';
+
+  @override
   String get testPrompt => 'தேர்வு கேட்டுகோள்';
 
   @override
@@ -422,6 +428,12 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get offlineSync => 'ஆப்லைன் ஒத்திசை';
+
+  @override
+  String get autoSync => 'தானியங்கி ஒத்திசைவு';
+
+  @override
+  String get autoSyncDescription => 'உங்கள் சாதனம் இணைக்கப்படும்போது ஆஃப்லைன் பதிவுகளைத் தானாகவே ஒத்திசைக்கவும்';
 
   @override
   String get deviceSettings => 'சாதன அமைப்புகள்';
@@ -962,11 +974,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String memoriesUsedThisMonth(String used, String limit) {
-    return '$used / $limit நினைவுகள் இந்த மாதம் உருவாக்கப்பட்டுள்ளன';
-  }
-
-  @override
   String get visibility => 'দৃশ்যমानতা';
 
   @override
@@ -1466,7 +1473,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.';
 
   @override
-  String get freeMinutesMonth => 'மாதத்திற்கு 1,200 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
+  String get freeMinutesMonth => 'மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -1645,7 +1652,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get finalTouches => 'চূড়ান்த தொடர்பு';
 
   @override
-  String get processing => 'செயல்பாட்டு மாற்றம்...';
+  String get processing => 'செயலாக்கப்படுகிறது';
 
   @override
   String get features => 'பண்புகள்';
@@ -1715,12 +1722,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -4656,41 +4658,13 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi இன் மதிப்புள்ள ব்যবহারকாரராக இருந்தமைக்கு நன்றி. உங்களுக்கு ஏதேனும் கேள்விகள் அல்லது கவலைகள் இருந்தால், team@basedhardware.com ஐக்கு தொடர்பு கொள்ளவும்.';
 
   @override
-  String get wifiSyncSettings => 'WiFi ஒத்திசைவு அமைப்புகள்';
-
-  @override
-  String get enterHotspotCredentials => 'உங்கள் ஃபோனின் ஹாட்ஸ்பாட் நற்சான்றுகளை உள்ளிடவும்';
-
-  @override
-  String get wifiSyncUsesHotspot =>
-      'WiFi ஒத்திசைவு உங்கள் ஃபோனைப் பயன்படுத்தி ஹாட்ஸ்பாட்டாக பயன்படுத்துகிறது. அமைப்புகள் > தனிப்பட்ட ஹாட்ஸ்பாட்டில் உங்கள் ஹாட்ஸ்பாட் பெயர் மற்றும் கடவுச்சொல்லைக் கண்டறியவும்.';
-
-  @override
-  String get hotspotNameSsid => 'ஹாட்ஸ்பாட் பெயர் (SSID)';
-
-  @override
-  String get exampleIphoneHotspot => 'உதாரணமாக iPhone ஹாட்ஸ்பாட்';
-
-  @override
   String get password => 'கடவுச்சொல்';
-
-  @override
-  String get enterHotspotPassword => 'ஹாட்ஸ்பாட் கடவுச்சொல்லை உள்ளிடவும்';
 
   @override
   String get saveCredentials => 'நற்சான்றுகளைச் சேமிக்கவும்';
 
   @override
   String get clearCredentials => 'நற்சான்றுகளைத் தெளிக்கவும்';
-
-  @override
-  String get pleaseEnterHotspotName => 'தயவுசெய்து ஹாட்ஸ்பாட் பெயரை உள்ளிடவும்';
-
-  @override
-  String get wifiCredentialsSaved => 'WiFi நற்சான்றுகள் சேமிக்கப்பட்டது';
-
-  @override
-  String get wifiCredentialsCleared => 'WiFi நற்சான்றுகள் தெளிக்கப்பட்டது';
 
   @override
   String summaryGeneratedForDate(String date) {
@@ -4759,7 +4733,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'குறிப்பிட்ட தரவு அணுக கட்டமைக்கப்படவில்லை.';
 
   @override
-  String get basicPlanDescription => '1,200 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
+  String get basicPlanDescription => '600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
 
   @override
   String get minutes => 'நிமிషங்கள்';
@@ -5844,9 +5818,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get limitless => 'Limitless';
 
   @override
-  String get fastTransfer => 'வேகமான பரிமாற்றம்';
-
-  @override
   String get syncingStatus => 'ஒத்திசைப்பு செய்கிறது';
 
   @override
@@ -5856,15 +5827,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String etaLabel(String time) {
     return 'ETA: $time';
   }
-
-  @override
-  String get transferMethod => 'பரிமாற்ற முறை';
-
-  @override
-  String get fast => 'வேகமான';
-
-  @override
-  String get ble => 'BLE';
 
   @override
   String get phone => 'தொலைபேசி';
@@ -5885,26 +5847,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get processedFilesDeleted => 'செயலாக்கப்பட்ட கோப்புகள் நீக்கப்பட்டன';
 
   @override
-  String get wifiEnableFailed => 'சாதனத்தில் WiFi இயக்க முடியவில்லை. மீண்டும் முயற்சி செய்யவும்.';
-
-  @override
-  String get deviceNoFastTransfer =>
-      'உங்கள் சாதனம் வேகமான பரிமாற்றம் ஆதரிக்காது. அதற்கு பதிலாக Bluetooth பயன்படுத்தவும்.';
-
-  @override
-  String get enableHotspotMessage => 'உங்கள் தொலைபேசியின் ஹாட்ஸ்பாட்டை இயக்கவும் மற்றும் மீண்டும் முயற்சி செய்யவும்.';
-
-  @override
-  String get transferStartFailed => 'பரிமாற்றத்தைத் தொடங்க முடியவில்லை. மீண்டும் முயற்சி செய்யவும்.';
-
-  @override
   String get deviceNotResponding => 'சாதனம் பதிலளிக்கவில்லை. மீண்டும் முயற்சி செய்யவும்.';
-
-  @override
-  String get invalidWifiCredentials => 'செல்லுபடியாகாத WiFi நற்சான்றுகள். உங்கள் ஹாட்ஸ்பாட் அமைப்புகளை சரிபார்க்கவும்.';
-
-  @override
-  String get wifiConnectionFailed => 'WiFi இணைப்பு தவறிவிட்டது. மீண்டும் முயற்சி செய்யவும்.';
 
   @override
   String get sdCardProcessing => 'SD கார்டு செயலாக்கம்';
@@ -5916,9 +5859,6 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get process => 'செயலாக்குங்கள்';
-
-  @override
-  String get wifiSyncFailed => 'WiFi ஒத்திசைப்பு தவறிவிட்டது';
 
   @override
   String get processingFailed => 'செயலாக்கம் தவறிவிட்டது';
@@ -6093,7 +6033,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'மாத மாதம் 1,200 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get viewUsage => 'பயன்பாட்டைக் கவனிக்கவும்';
@@ -6175,7 +6115,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'மாத மாதம் 1,200 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get audioProcessedLocally =>
@@ -6701,24 +6641,13 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get wifiSync => 'WiFi ஒத்திசைப்பு';
-
-  @override
   String itemCopiedToClipboard(String item) {
     return '$item கிளிப்பிங் பலகையில் நகலெடுக்கப்பட்டது';
   }
 
   @override
-  String get wifiConnectionFailedTitle => 'இணைப்பு தவறிவிட்டது';
-
-  @override
   String connectingToDeviceName(String deviceName) {
     return '$deviceName க்கு இணைக்கிறது';
-  }
-
-  @override
-  String enableDeviceWifi(String deviceName) {
-    return '$deviceName का WiFi இயக்கவும்';
   }
 
   @override
@@ -6815,9 +6744,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get statusUnprocessed => 'செயல்படுத்தப்படாதது';
 
   @override
-  String get switchedToFastTransfer => 'விரைவு பரிமாற்றத்திற்கு மாற்றப்பட்டது';
-
-  @override
   String get transferCompleteMessage => 'பரிமாற்றம் முடிந்தது! இப்போது இந்த பதிவை இயக்க முடியும்.';
 
   @override
@@ -6829,34 +6755,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get transferCancelled => 'பரிமாற்றம் ரத்து செய்யப்பட்டது';
 
   @override
-  String get fastTransferEnabled => 'விரைவு பரிமாற்றம் இயக்கப்பட்டது';
-
-  @override
   String get bluetoothSyncEnabled => 'Bluetooth ஒத்திசைவு இயக்கப்பட்டது';
-
-  @override
-  String get enableFastTransfer => 'விரைவு பரிமாற்றம் இயக்கவும்';
-
-  @override
-  String get fastTransferDescription =>
-      'விரைவு பரிமாற்றம் WiFi ஐ பயன்படுத்தி ~5 மடங்கு வேகமாக பரிமாற்றம் செய்கிறது. பரிமாற்றத்தின் போது உங்கள் ஃபோன் தற்காலிகமாக உங்கள் Omi சாதனத்தின் WiFi நெட்வொர்க்குடன் இணைக்கப்படும்.';
-
-  @override
-  String get internetAccessPausedDuringTransfer => 'பரிமாற்றத்தின் போது இணைய அணுகல் நிறுத்தப்பட்டது';
-
-  @override
-  String get chooseTransferMethodDescription =>
-      'உங்கள் Omi சாதனத்தில் இருந்து உங்கள் ஃபோனுக்கு பதிவுகளை எவ்வாறு பரிமாற்ற வேண்டும் என்பதைத் தேர்ந்தெடுக்கவும்.';
-
-  @override
-  String get wifiSpeed => 'WiFi வழியாக ~150 KB/s';
-
-  @override
-  String get fiveTimesFaster => '5 மடங்கு வேகமாக';
-
-  @override
-  String get fastTransferMethodDescription =>
-      'உங்கள் Omi சாதனத்திற்கு நேரடி WiFi இணைப்பை உருவாக்குகிறது. பரிமாற்றத்தின் போது உங்கள் ஃபோன் உங்கள் வழக்கமான WiFi இல் இருந்து தற்காலிகமாக துண்டிக்கப்படும்.';
 
   @override
   String get bluetooth => 'Bluetooth';
@@ -6878,8 +6777,15 @@ class AppLocalizationsTa extends AppLocalizations {
   String get lowBatteryAlertTitle => 'குறைந்த பேட்டரி எச்சரிக்கை';
 
   @override
-  String get lowBatteryAlertBody =>
-      'உங்கள் சாதனத்தின் பேட்டரி குறைந்து விட்டது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋';
+  String lowBatteryAlertBody(int level) {
+    return 'உங்கள் பேட்டரி $level% இல் உள்ளது. மீண்டும் சார்ஜ் செய்ய வேண்டிய நேரம்! 🔋';
+  }
+
+  @override
+  String get batteryFullyChargedTitle => 'Omi முழுமையாக சார்ஜ் ஆகியது';
+
+  @override
+  String get batteryFullyChargedBody => 'உங்கள் Omi சாதனம் முழுமையாக சார்ஜ் ஆகியது. அனப்ளக் செய்யலாம்!';
 
   @override
   String get deviceDisconnectedNotificationTitle => 'உங்கள் Omi சாதனம் துண்டிக்கப்பட்டது';
@@ -7557,13 +7463,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get voiceFailedToTranscribe => 'ஆடியோ மாற்றுவதில் தோல்வி';
 
   @override
-  String get locationPermissionRequired => 'இருப்பிடம் அனுமதி தேவை';
-
-  @override
-  String get locationPermissionContent =>
-      'விரைவு பரிமாற்றம் WiFi இணைப்பை சரிசெய்ய இருப்பிடம் அனுமதி தேவை. தொடர்ந்து செல்ல இருப்பிடம் அனுமதி வழங்கவும்.';
-
-  @override
   String get pdfTranscriptExport => 'மாற்றுரை ஏற்றுமதி';
 
   @override
@@ -7708,12 +7607,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get dailyRecapsDescription => 'உங்கள் தினசரி சுருக்கங்கள் உருவாக்கப்பட்ட பிறகு இங்கே தோன்றும்';
 
   @override
-  String get chooseTransferMethod => 'பரிமாற்ற முறையைத் தேர்ந்தெடுக்கவும்';
-
-  @override
-  String get fastTransferSpeed => 'WiFi வழியாக ~150 KB/s';
-
-  @override
   String largeTimeGapDetected(String gap) {
     return 'பெரிய நேர இடைவெளி கண்டறியப்பட்டது ($gap)';
   }
@@ -7722,10 +7615,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String largeTimeGapsDetected(String gaps) {
     return 'பெரிய நேர இடைவெளிகள் கண்டறியப்பட்டுள்ளன ($gaps)';
   }
-
-  @override
-  String get deviceDoesNotSupportWifiSwitchingToBle =>
-      'சாதனம் WiFi ஒத்திசைவை ஆதரிக்கவில்லை, Bluetooth இற்கு மாற்றப்படுகிறது';
 
   @override
   String get appleHealthNotAvailable => 'Apple Health இந்த சாதனத்தில் கிடைக்கவில்லை';
@@ -7924,6 +7813,9 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get viewAll => 'அனைத்தையும் பார்';
+
+  @override
+  String get expand => 'விரிவாக்கு';
 
   @override
   String get addTask => 'பணியைச் சேர்க்க';
@@ -8493,7 +8385,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get manageStorage => 'சேமிப்பகத்தை நிர்வகிக்கவும்';
 
   @override
-  String get safelyBackedUp => 'உங்கள் தொலைபேசিக்கு பாதுகாப்பாக வெச்சிவைக்கப்பட்டுள்ளது';
+  String get safelyBackedUp => 'உருவாக்கப்பட்ட உரையாடல்கள்';
 
   @override
   String get notYetSynced => 'இன்னும் உங்கள் தொலைபேசிக்கு ஒத்திசைக்கப்படவில்லை';
@@ -8618,12 +8510,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9297,4 +9184,346 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deselectAllTasksMenu => 'அனைத்தையும் தேர்வு நீக்கு';
+
+  @override
+  String get bulkExportAlreadyExported => 'தேர்ந்தெடுக்கப்பட்ட அனைத்து பணிகளும் ஏற்கனவே ஏற்றுமதி செய்யப்பட்டுள்ளன';
+
+  @override
+  String get bulkDeleteFailed => 'பணிகளை நீக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get deleteRecap => 'சுருக்கத்தை நீக்கு';
+
+  @override
+  String get deleteRecapConfirmTitle => 'இந்தச் சுருக்கத்தை நீக்கவா?';
+
+  @override
+  String get deleteRecapConfirmBody =>
+      'இந்தச் சுருக்கம் நிரந்தரமாக அகற்றப்படும். அந்த நாளின் அசல் உரையாடல்கள் பாதிக்கப்படவில்லை.';
+
+  @override
+  String get deleteRecapAction => 'நீக்கு';
+
+  @override
+  String get recapDeletedSnackbar => 'சுருக்கம் நீக்கப்பட்டது';
+
+  @override
+  String get recapDeleteFailed => 'சுருக்கத்தை நீக்க இயலவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get syncStatusBackedUp => 'காப்புப் பிரதி எடுக்கப்பட்டது';
+
+  @override
+  String get syncStatusBackingUp => 'ஒத்திசைக்கிறது…';
+
+  @override
+  String get syncStatusWaiting => 'ஒத்திசைவுக்காக காத்திருக்கிறது';
+
+  @override
+  String get syncStatusRetrying => 'செயலாக்க முடியவில்லை — மீண்டும் முயற்சிக்கிறது';
+
+  @override
+  String get syncStatusFailed => 'தோல்வி — Retry-ஐ அழுத்தவும்';
+
+  @override
+  String get syncStatusFileUnavailable => 'கோப்பு கிடைக்கவில்லை';
+
+  @override
+  String get noRecordingsYet => 'இன்னும் பதிவுகள் இல்லை';
+
+  @override
+  String get syncInProgress => 'ஒத்திசைவு நடைபெறுகிறது';
+
+  @override
+  String get syncStatusUploaded => 'பதிவேற்றப்பட்டது · Omi-இல் செயலாக்கப்படுகிறது';
+
+  @override
+  String get deleteWhileProcessingTitle => 'இன்னும் செயலாக்கப்படுகிறது';
+
+  @override
+  String get deleteWhileProcessingMessage =>
+      'இந்தப் பதிவு பதிவேற்றப்பட்டது, ஆனால் Omi இன்னும் உரையாடலை உருவாக்குகிறது. இப்போது நீக்கி செயலாக்கம் தோல்வியடைந்தால், மீட்டெடுக்க முடியாது. அப்படியும் நீக்கவா?';
+
+  @override
+  String get syncCardAllBackedUp => 'எல்லா பதிவுகளும் ஒத்திசைக்கப்பட்டன';
+
+  @override
+  String syncCardReadyCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகள் ஒத்திசைக்கத் தயார்',
+      one: '1 பதிவு ஒத்திசைக்கத் தயார்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncCardProcessing => 'Omi-யில் செயலாக்கப்படுகிறது…';
+
+  @override
+  String get syncCardWaitingInternet => 'இணையத்திற்காகக் காத்திருக்கிறது';
+
+  @override
+  String syncCardNeedsAttention(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count பதிவுகளுக்குக் கவனம் தேவை',
+      one: '1 பதிவுக்குக் கவனம் தேவை',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncFlowIntro =>
+      'பதிவுகள் உங்கள் சாதனத்திலிருந்து இந்த தொலைபேசிக்கு மாற்றப்பட்டு உள்ளூரில் சேமிக்கப்படுகின்றன, பின்னர் Omi இன் சேவையகத்திற்கு பதிவேற்றப்பட்டு, அங்கு அவை எழுத்துப்பெயர்க்கப்பட்டு உரையாடல்களாக மாற்றப்படுகின்றன.';
+
+  @override
+  String get syncStepUpload => 'ஒத்திசை';
+
+  @override
+  String get syncStepUploadDesc => 'உங்கள் பதிவு Omi இன் சேவையகத்திற்கு அனுப்பப்படுகிறது';
+
+  @override
+  String get syncStepProcess => 'எழுத்துப் பெயர்ப்பு';
+
+  @override
+  String get syncStepProcessDesc => 'Omi ஒலியை உரையாடலாக மாற்றுகிறது';
+
+  @override
+  String get syncStepBackedUp => 'உரையாடல் தயார்';
+
+  @override
+  String get syncStepBackedUpDesc => 'அதை உரையாடல்கள் பகுதியில் காணலாம்';
+
+  @override
+  String get syncFailureFootnote =>
+      'செயலாக்கம் தோல்வியடைந்தால், அடுத்த ஒத்திசைவில் பதிவு தானாகவே மீண்டும் முயற்சிக்கப்படும்.';
+
+  @override
+  String get syncStatusConversationCreated => 'உரையாடல் உருவாக்கப்பட்டது';
+
+  @override
+  String get syncCardUploadingTitle => 'Omi-க்கு பதிவேற்றப்படுகிறது';
+
+  @override
+  String get syncCardDownloadingTitle => 'உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது';
+
+  @override
+  String syncCardProgressOf(int current, int total) {
+    return '$total-இல் $current';
+  }
+
+  @override
+  String get syncStatusOnDevice => 'உங்கள் சாதனத்தில்';
+
+  @override
+  String get syncStatusDownloadingFromDevice => 'உங்கள் சாதனத்திலிருந்து பதிவிறக்கப்படுகிறது';
+
+  @override
+  String get newestFirst => 'புதியவை முதலில்';
+
+  @override
+  String get noSyncedRecordingsYet => 'ஒத்திசைக்கப்பட்ட பதிவுகள் இன்னும் இல்லை';
+
+  @override
+  String get morePaymentMethodsComingSoon => 'மேலும் கட்டண முறைகள் விரைவில்';
+
+  @override
+  String get syncProcessingBackgroundHint => 'இது பின்னணியில் தொடர்கிறது — இந்தத் திரையிலிருந்து நீங்கள் வெளியேறலாம்.';
+
+  @override
+  String get syncCardRateLimited => 'நியாயமான பயன்பாட்டு வரம்பை அடைந்தது — ஒத்திசைவு தானாகவே மீண்டும் தொடரும்';
+
+  @override
+  String get syncCardBackendBusy =>
+      'Omi சேவையகங்கள் பணிமிகுதியில் உள்ளன — திறன் கிடைத்தவுடன் உங்கள் பதிவுகள் ஒத்திசைக்கப்படும்';
+
+  @override
+  String get unableToDetermineFirmwareVersion => 'தற்போதைய ஃபார்ம்வேர் பதிப்பை தீர்மானிக்க முடியவில்லை';
+
+  @override
+  String get promoCode => 'விளம்பர குறியீடு';
+
+  @override
+  String get enterPromoCode => 'விளம்பர குறியீட்டை உள்ளிடவும்';
+
+  @override
+  String get invalidPromotionCode => 'தவறான விளம்பர குறியீடு.';
+
+  @override
+  String get backgroundModeTitle => 'பின்னணி பயன்முறை';
+
+  @override
+  String get backgroundModeDescription => 'ஆப்ஸ் முழுவதுமாக மூடப்பட்டிருந்தாலும் உங்கள் Omi பதிவைத் தொடரவும்.';
+
+  @override
+  String get backgroundModeNote => 'தற்போது Omi சாதனங்களுடன் மட்டுமே செயல்படுகிறது, தொடர்ந்து மேம்படுத்தப்படுகிறது.';
+
+  @override
+  String get backgroundModeUnavailable =>
+      'இணக்கமான சாதனம் எதுவும் இணைக்கப்படாததால் பின்னணி முறை கிடைக்கவில்லை. இந்த அம்சத்தைப் பயன்படுத்த Omi, OpenGlass அல்லது Friend Pendant சாதனத்தை இணைக்கவும்.';
+
+  @override
+  String get regenerateRecap => 'சுருக்கத்தை மீண்டும் உருவாக்கு';
+
+  @override
+  String get recapRegeneratedSnackbar => 'சுருக்கம் மீண்டும் உருவாக்கப்பட்டது';
+
+  @override
+  String get recapRegenerateFailed => 'சுருக்கத்தை மீண்டும் உருவாக்க முடியவில்லை. பிறகு மீண்டும் முயற்சிக்கவும்.';
+
+  @override
+  String get recapRegenerateCooldown => 'மீண்டும் உருவாக்குவதற்கு முன் சில வினாடிகள் காத்திருக்கவும்.';
+
+  @override
+  String get recapRegenerateNoConversations => 'இந்த நாளுக்கு சுருக்கமாக மாற்ற உரையாடல்கள் இல்லை.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'ஒத்திசைவு Omi படியெடுப்பைப் பயன்படுத்துகிறது';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'நீங்கள் உங்கள் சொந்த படியெடுப்பு வழங்குநரைப் பயன்படுத்துகிறீர்கள். இந்தப் பதிவுகளை ஒத்திசைத்தால் அவை Omi சேவையகங்களில் படியெடுக்கப்படும், மேலும் உங்கள் திட்டத்தின் படியெடுப்பு வரம்பில் கணக்கிடப்படும்.';
+
+  @override
+  String get transcribeLaterTitle => 'பின்னர் எழுத்தாக்கு';
+
+  @override
+  String get transcribeLaterDescription =>
+      'இப்போது ஆடியோவைப் பதிவுசெய்து, நேரலையாக அல்லாமல் தேவைப்படும்போது எழுத்தாக்கம் செய்யுங்கள். பதிவுகள் உங்கள் தொலைபேசியில் சேமிக்கப்படும்; பிறகு அவற்றைப் பதிவேற்றி உரையாடல்களை உருவாக்கலாம்.';
+
+  @override
+  String get transcribeLaterNote =>
+      'தற்போது Omi சாதனங்களுடன் மட்டுமே இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'உங்கள் தொலைபேசியில் இடவசதி குறைவாக உள்ளதால் பதிவு இடைநிறுத்தப்பட்டுள்ளது. இடத்தைக் காலியாக்குங்கள் அல்லது உங்கள் பதிவுகளைப் பதிவேற்றுங்கள்; பிறகு தானாகவே தொடரும்.';
+
+  @override
+  String get recordingMode => 'பதிவு பயன்முறை';
+
+  @override
+  String get captureModeLater => 'பின்னர்';
+
+  @override
+  String get captureModeLiveDescription => 'நீங்கள் பேசும்போது நிகழ்நேரத்தில் எழுத்தாக்கம் செய்யுங்கள்.';
+
+  @override
+  String get captureModeLaterDescription =>
+      'இப்போது ஆடியோவை சேமித்து, நீங்கள் விரும்பும்போது எழுத்தாக்கம் செய்யுங்கள்.';
+
+  @override
+  String get unmute => 'ஒலியை இயக்கு';
+
+  @override
+  String get newRecording => 'புதிய பதிவு';
+
+  @override
+  String get transcribeLaterPaused => 'இடைநிறுத்தப்பட்டது — ஒலி பதிவு செய்யப்படவில்லை';
+
+  @override
+  String get deviceTutorial => 'Omi ஐ எவ்வாறு பயன்படுத்துவது';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'உங்கள் Omi-யிடம் பேசுங்கள்';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'சில வார்த்தைகள் சொல்லி, அவை உடனடியாகத் தோன்றுவதைப் பாருங்கள்';
+
+  @override
+  String get deviceOnboardingGoodJob => 'அருமை!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'பேசத் தொடங்குங்கள்...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi-யிடம் ஒரு கேள்வி கேளுங்கள்';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'பொத்தானை ஒருமுறை அழுத்தி, உங்கள் கேள்வியைச் சொல்லி, முடிந்ததும் மீண்டும் அழுத்துங்கள்';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'உங்கள் கேள்வி செயலாக்கப்படுகிறது...';
+
+  @override
+  String get deviceOnboardingListening => 'கேட்கிறது...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'அணைக்கவும்';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'இயக்கவும்';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'பொத்தானை 3 வினாடிகள் அழுத்திப் பிடியுங்கள்';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'மீண்டும் இயக்க பொத்தானை அழுத்துங்கள்';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'விளக்கு அணையும் வரை பொத்தானை உறுதியாக அழுத்திப் பிடியுங்கள்';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'இணைக்கப்பட்டது';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'இணைக்கப்பட்டது!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'இணைப்பு துண்டிக்கப்பட்டது';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'அணைக்கப்படுகிறது...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'இரட்டை தட்டலைத் தனிப்பயனாக்குங்கள்';
+
+  @override
+  String get deviceOnboardingEndConversation => 'உரையாடலை முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'தற்போதைய உரையாடலைச் சேமித்து முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'முடக்கு / நீக்கு';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'மைக்ரோஃபோனை இயக்கவோ அணைக்கவோ செய்யுங்கள்';
+
+  @override
+  String get deviceOnboardingStarConversation => 'நடப்பு உரையாடலை நட்சத்திரமிடுங்கள்';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'உரையாடலை முக்கியமானதாகக் குறியிடுங்கள்';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'அது ஒற்றைத் தட்டல் — விரைவாக இருமுறை தட்டிப் பாருங்கள்!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'இப்போதே முயற்சியுங்கள்! உங்கள் Omi-யை இரட்டை தட்டுங்கள்';
+
+  @override
+  String get deviceOnboardingContinue => 'தொடரவும்';
+
+  @override
+  String get deviceOnboardingFinish => 'முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'உங்கள் Omi செய்யக்கூடிய அனைத்தையும் விரைவாக நேரடியாகப் பார்க்கும் சுற்றுலா.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'சுமார் 1 நிமிடம்';
+  @override
+  String get jumpToLatestMessage => 'சமீபத்திய செய்திக்குச் செல்';
+
+  @override
+  String get latest => 'சமீபத்தியது';
 }

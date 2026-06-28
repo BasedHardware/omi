@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -11,7 +12,6 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/connectivity_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -152,7 +152,12 @@ class MemoriesProvider extends ChangeNotifier {
     final filterList = prefs.getStringList('memories_filter_categories');
 
     if (filterList == null) {
-      _selectedCategories = {MemoryCategory.system, MemoryCategory.interesting, MemoryCategory.manual};
+      _selectedCategories = {
+        MemoryCategory.system,
+        MemoryCategory.interesting,
+        MemoryCategory.manual,
+        MemoryCategory.workflow,
+      };
     } else {
       _selectedCategories = filterList
           .map((e) => MemoryCategory.values.firstWhere((c) => c.name == e, orElse: () => MemoryCategory.system))
@@ -288,7 +293,7 @@ class MemoriesProvider extends ChangeNotifier {
     await deleteAllMemoriesServer();
     _memories.clear();
     if (countBeforeDeletion > 0) {
-      MixpanelManager().memoriesAllDeleted(countBeforeDeletion);
+      PlatformManager.instance.analytics.memoriesAllDeleted(countBeforeDeletion);
     }
     _setCategories();
   }
@@ -346,7 +351,7 @@ class MemoriesProvider extends ChangeNotifier {
       memoryToUpdate.visibility = visibility;
       _memories[idx] = memoryToUpdate;
 
-      MixpanelManager().memoryVisibilityChanged(memoryToUpdate, visibility);
+      PlatformManager.instance.analytics.memoryVisibilityChanged(memoryToUpdate, visibility);
       _setCategories();
     }
   }
@@ -394,7 +399,7 @@ class MemoriesProvider extends ChangeNotifier {
     }
 
     if (updatedCount > 0) {
-      MixpanelManager().memoriesAllVisibilityChanged(visibility, updatedCount);
+      PlatformManager.instance.analytics.memoriesAllVisibilityChanged(visibility, updatedCount);
     }
 
     _setCategories();

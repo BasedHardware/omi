@@ -5,7 +5,8 @@ export const dynamic = 'force-dynamic';
 const OMI_API_BASE_URL = process.env.NEXT_PUBLIC_OMI_API_URL;
 const OMI_API_SECRET_KEY_BASE = process.env.OMI_API_SECRET_KEY;
 
-export async function POST(req: NextRequest, { params }: { params: { app_id: string } }) {
+export async function POST(req: NextRequest, props: { params: Promise<{ app_id: string }> }) {
+  const params = await props.params;
   const authResult = await verifyAdmin(req);
   if (authResult instanceof NextResponse) return authResult;
 

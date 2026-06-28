@@ -129,5 +129,17 @@ class TestOmiToolsEnum:
     def test_search_conversations_in_enum(self):
         assert OmiTools.SEARCH_CONVERSATIONS == "search_conversations"
 
-    def test_total_tool_count(self):
-        assert len(OmiTools) == 7
+    def test_search_memories_in_enum(self):
+        assert OmiTools.SEARCH_MEMORIES == "search_memories"
+
+    def test_expected_tools(self):
+        assert {t.value for t in OmiTools} == {
+            "get_memories",
+            "search_memories",
+            "create_memory",
+            "delete_memory",
+            "edit_memory",
+            "get_conversations",
+            "get_conversation_by_id",
+            "search_conversations",
+        }

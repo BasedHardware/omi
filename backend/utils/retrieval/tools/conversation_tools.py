@@ -11,12 +11,14 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 import database.conversations as conversations_db
+import database.notifications as notification_db
 import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
+from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
 from utils.llm.clients import embeddings
 import logging
 
@@ -28,6 +30,43 @@ try:
 except ImportError:
     # Fallback if import fails
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+# A wide date range ("analyze my last 30 days") can match hundreds of conversations. Feeding all of
+# them to the chat model floods its context, so it freezes or refuses with "that's quite a bit of
+# information to process at once" (#4927). Bound both the count and the raw size of what we return.
+MAX_CONVERSATIONS_FOR_LLM = 100
+MAX_RESULT_CHARS = 60000
+
+
+def _cap_conversations_for_llm(conversations: list):
+    """Keep at most ``MAX_CONVERSATIONS_FOR_LLM`` conversations for the chat model.
+
+    The DB returns conversations newest-first, so this keeps the most recent ones. Returns
+    ``(capped_list, total_found, truncated)`` where ``truncated`` is True when some were dropped.
+    """
+    total_found = len(conversations)
+    if total_found > MAX_CONVERSATIONS_FOR_LLM:
+        return conversations[:MAX_CONVERSATIONS_FOR_LLM], total_found, True
+    return list(conversations), total_found, False
+
+
+def _bounded_result(result: str, total_found: int, truncated: bool) -> str:
+    """Apply a hard size budget and, when the range was truncated, append a note telling the model
+    to summarize what it has and offer to narrow, so it answers instead of freezing (#4927)."""
+    if len(result) > MAX_RESULT_CHARS:
+        # Cut at a conversation boundary when possible so a record is not split mid-way.
+        clipped = result[:MAX_RESULT_CHARS]
+        boundary = clipped.rfind("\nConversation #")
+        result = clipped[:boundary] if boundary > 0 else clipped
+        truncated = True
+    if truncated:
+        result += (
+            f"\n\n[This date range contains {total_found} conversations; only the most recent ones are "
+            f"shown to stay within limits. Summarize what is shown and tell the user they can narrow to a "
+            f"shorter time frame or a specific topic for more detail.]"
+        )
+    return result
 
 
 @tool
@@ -53,9 +92,9 @@ def get_conversations_tool(
 
     **IMPORTANT for summarization queries:**
     When user asks for weekly, monthly, or yearly summaries/overviews:
-    - Set limit=5000 to retrieve ALL conversations in that period
-    - Set max_transcript_segments=0 to exclude transcripts (reduce context size)
-    - This prevents missing conversations and avoids context overflow from transcripts
+    - Set a high limit (e.g. 200) and max_transcript_segments=0 to retrieve summaries without transcripts
+    - For very wide ranges the result is automatically capped to the most recent conversations so it cannot
+      overflow context; summarize what is returned and offer to narrow the range if the user needs more detail
     Examples: "summarize my week", "what did I do this month", "recap my year"
 
     Transcript retrieval guidance:
@@ -182,8 +221,13 @@ def get_conversations_tool(
     if conversations_data:
         conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
+    # Bound how many conversations are formatted for the chat model so a wide date range cannot
+    # flood its context and freeze it (#4927). Newest-first, so this keeps the most recent.
+    conversations_data, total_found, results_truncated = _cap_conversations_for_llm(conversations_data or [])
+
     logger.info(
-        f"📊 get_conversations_tool - found {len(conversations_data) if conversations_data else 0} conversations"
+        f"📊 get_conversations_tool - found {total_found} conversations"
+        + (f" (showing most recent {len(conversations_data)})" if results_truncated else "")
     )
 
     if not conversations_data:
@@ -253,10 +297,15 @@ def get_conversations_tool(
             f"📚 get_conversations_tool - Added {len(conversations)} conversations to collection (total: {len(conversations_collected)})"
         )
 
-        # Return formatted string
+        # Return formatted string (timestamps rendered in the user's timezone for correct chat answers)
         result = conversations_to_string(
-            conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+            conversations,
+            use_transcript=include_transcript,
+            include_timestamps=include_timestamps,
+            people=people,
+            tz=notification_db.get_user_time_zone(uid),
         )
+        result = _bounded_result(result, total_found, results_truncated)
         logger.info(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
         return result
 
@@ -281,10 +330,12 @@ def search_conversations_tool(
     config: RunnableConfig = None,
 ) -> str:
     """
-    Search conversations using semantic vector search - USE THIS FOR EVENTS/INCIDENTS.
+    Search conversations using hybrid keyword + semantic vector search - USE THIS FOR EVENTS/INCIDENTS.
 
-    This tool uses AI embeddings to find conversations that are semantically similar to your query,
-    even if they don't contain the exact keywords. Perfect for finding when specific events happened.
+    This tool combines exact keyword matching on conversation titles/summaries (best for proper names
+    like people or places) with AI embeddings that find semantically similar conversations even if
+    they don't contain the exact keywords. Perfect for finding when specific events happened or
+    conversations with a specific person (e.g. "When did I talk to Steph?").
 
     **CRITICAL: Use this tool for EVENT/INCIDENT questions:**
     - "When did a dog bite me?" → USE THIS TOOL
@@ -389,10 +440,18 @@ def search_conversations_tool(
     limit = min(limit, 20)
 
     try:
-        # Perform vector search
-        conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
+        # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
+        keyword_ids = keyword_search_conversation_ids(
+            uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
+        )
+        vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
 
-        logger.info(f"📊 search_conversations_tool - found {len(conversation_ids)} results for query: '{query}'")
+        logger.info(
+            f"📊 search_conversations_tool - found {len(conversation_ids)} results "
+            f"({len(keyword_ids)} keyword, {len(vector_ids)} vector) for query: '{query}'"
+        )
 
         if not conversation_ids:
             date_info = ""
@@ -477,7 +536,11 @@ def search_conversations_tool(
         # Return formatted string
         result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
         result += conversations_to_string(
-            conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+            conversations,
+            use_transcript=include_transcript,
+            include_timestamps=include_timestamps,
+            people=people,
+            tz=notification_db.get_user_time_zone(uid),
         )
 
         logger.info(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")

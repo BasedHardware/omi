@@ -464,7 +464,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                       ),
                     ),
                     child: GestureDetector(
-                      onTap: !provider.isValid
+                      onTap: (!provider.isValid || !provider.hasChanges)
                           ? null
                           : () {
                               var isValid = provider.validateForm();
@@ -492,7 +492,7 @@ class _UpdateAppPageState extends State<UpdateAppPage> {
                         padding: const EdgeInsets.all(12.0),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(12.0),
-                          color: provider.isValid ? Colors.white : Colors.grey.shade700,
+                          color: (provider.isValid && provider.hasChanges) ? Colors.white : Colors.grey.shade700,
                         ),
                         child: Text(
                           context.l10n.updateApp,

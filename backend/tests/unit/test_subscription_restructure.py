@@ -19,6 +19,10 @@ def _compare_versions(a, b):
 
 
 _announcements_mod._compare_versions = _compare_versions
+# subscription.py imports the public name `compare_versions`; expose it on the
+# mock too so this module runs standalone (not just inside the full suite where
+# the real database.announcements already loaded first).
+_announcements_mod.compare_versions = _compare_versions
 sys.modules.setdefault("database.users", types.SimpleNamespace())
 sys.modules.setdefault("database.user_usage", types.SimpleNamespace())
 sys.modules.setdefault("database.announcements", _announcements_mod)
@@ -104,6 +108,66 @@ def test_filter_plans_keeps_legacy_for_current_subscriber():
     assert 'unlimited' in plan_ids
     assert 'operator' in plan_ids
     assert 'architect' in plan_ids
+
+
+def test_filter_plans_hides_neo_on_mobile_for_new_user():
+    """New / never-paid mobile users don't see Neo (unlimited) in the catalog."""
+    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
+
+    definitions = get_paid_plan_definitions()
+    for platform in ('ios', 'android'):
+        filtered = filter_plans_for_user(definitions, PlanType.basic, platform=platform, ever_purchased=False)
+        plan_ids = [d['plan_id'] for d in filtered]
+        assert 'unlimited' not in plan_ids, platform
+        assert 'operator' in plan_ids
+        assert 'architect' in plan_ids
+
+
+def test_filter_plans_shows_neo_on_mobile_for_past_purchaser():
+    """Mobile users who have bought a plan before still see Neo (resubscribe)."""
+    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
+
+    definitions = get_paid_plan_definitions()
+    filtered = filter_plans_for_user(definitions, PlanType.basic, platform='ios', ever_purchased=True)
+    assert 'unlimited' in [d['plan_id'] for d in filtered]
+
+
+def test_filter_plans_shows_neo_on_mobile_for_current_neo_subscriber():
+    """Current Neo subscribers always see Neo even without ever_purchased flag."""
+    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
+
+    definitions = get_paid_plan_definitions()
+    filtered = filter_plans_for_user(definitions, PlanType.unlimited, platform='android', ever_purchased=False)
+    assert 'unlimited' in [d['plan_id'] for d in filtered]
+
+
+def test_filter_plans_keeps_neo_on_web_for_new_user():
+    """Web / unknown platform is unaffected — Neo stays in the catalog."""
+    from utils.subscription import get_paid_plan_definitions, filter_plans_for_user
+
+    definitions = get_paid_plan_definitions()
+    filtered = filter_plans_for_user(definitions, PlanType.basic, platform=None, ever_purchased=False)
+    assert 'unlimited' in [d['plan_id'] for d in filtered]
+
+
+def test_has_ever_purchased_signals(monkeypatch):
+    """Paid plan, stored stripe sub id, or a stripe customer id each count as purchased."""
+    import utils.subscription as sub_mod
+
+    monkeypatch.setattr(sub_mod.users_db, 'get_stripe_customer_id', lambda uid: None, raising=False)
+
+    paid = Subscription(plan=PlanType.operator, limits=PlanLimits())
+    assert sub_mod.has_ever_purchased('u', paid)
+
+    lapsed = Subscription(plan=PlanType.basic, stripe_subscription_id='sub_123', limits=PlanLimits())
+    assert sub_mod.has_ever_purchased('u', lapsed)
+
+    new_user = Subscription(plan=PlanType.basic, limits=PlanLimits())
+    assert not sub_mod.has_ever_purchased('u', new_user)
+
+    # No cheap signal on the subscription, but a stored Stripe customer id exists.
+    monkeypatch.setattr(sub_mod.users_db, 'get_stripe_customer_id', lambda uid: 'cus_123', raising=False)
+    assert sub_mod.has_ever_purchased('u', new_user)
 
 
 def test_legacy_client_adaptation():

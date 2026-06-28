@@ -689,17 +689,28 @@ async def _call_mcp_tool_sse(
 
 
 def _extract_tool_result(resp: dict) -> str:
-    """Extract text result from a JSON-RPC tool call response."""
-    result = resp.get("result", {})
+    """Extract text result from a JSON-RPC tool call response.
 
-    content = result.get("content", [])
+    Tool execution failures are reported in-band as result.isError=true (MCP
+    spec), not as JSON-RPC errors. Those must be returned with an "Error"
+    prefix: callers (utils/retrieval/tools/app_tools.py) detect failures by
+    prefix to drive circuit-breaker/webhook-health tracking, and the LLM needs
+    an explicit failure marker to avoid claiming the action succeeded.
+    """
+    result = resp.get("result", {})
+    is_error = isinstance(result, dict) and result.get("isError") is True
+
+    content = result.get("content", []) if isinstance(result, dict) else []
     texts = []
     for item in content:
         if isinstance(item, dict) and item.get("type") == "text":
             texts.append(item.get("text", ""))
     if texts:
-        return "\n".join(texts)
+        text = "\n".join(texts)
+        return f"Error: MCP tool failed: {text}" if is_error else text
 
+    if is_error:
+        return "Error: MCP tool failed with no error details."
     if result:
         return str(result)
     if resp.get("error"):

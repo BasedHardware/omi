@@ -13,15 +13,27 @@ from utils.http_client import (
     latest_wins_start,
     latest_wins_check,
 )
-from utils.executors import critical_executor
+from utils.executors import db_executor, run_blocking
+from utils.async_tasks import gather_safe
+import utils.dev_cache as dev_cache
 
 import database.notifications as notification_db
+import database.dev_api_key as dev_api_key_db
 from database import mem_db
 from database import redis_db
-from database.apps import record_app_usage
+from database.apps import get_app_by_id_db, record_app_usage
+from database.redis_db import delete_app_cache_by_id
+from database.webhook_health import (
+    record_app_webhook_failure,
+    record_app_webhook_success,
+    is_app_webhook_disabled,
+    disable_app_in_firestore,
+)
 from database.chat import add_app_message, get_app_messages
 from database.goals import get_user_goals
 from database.notifications import get_mentor_notification_frequency
+from database.users import get_user_language_preference
+from utils.subscription import is_trial_paywalled
 from database.redis_db import (
     get_generic_cache,
     set_generic_cache,
@@ -55,6 +67,48 @@ from utils.mentor_notifications import process_mentor_notification
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _notify_app_owner(app_id: str, title: str, body: str):
+    """Send a push notification to the app owner about webhook health."""
+    try:
+        app_data = get_app_by_id_db(app_id)
+        if app_data and app_data.get('uid'):
+            send_notification(app_data['uid'], title, body)
+    except Exception as e:
+        logger.warning(f'Failed to notify app owner for {app_id}: {e}')
+
+
+def _handle_webhook_health_action(app_id: str, action: int, error: str):
+    """Handle graduated response from webhook health tracking.
+    action: 0=nothing, 1=day1 warn, 2=day2 warn, 3=auto-disable
+    """
+    if action == 1:
+        logger.warning(f'Webhook health: app {app_id} failing for 24h+ (day 1 warning). Last error: {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Failing',
+            f'Your app webhook has been failing for 24+ hours. Error: {error[:100]}. '
+            'Please check your endpoint. It will be auto-disabled in 48 hours if failures continue.',
+        )
+    elif action == 2:
+        logger.warning(f'Webhook health: app {app_id} failing for 48h+ (day 2 final warning). Last error: {error}')
+        _notify_app_owner(
+            app_id,
+            'Webhook Final Warning',
+            f'Your app webhook has been failing for 48+ hours. Error: {error[:100]}. '
+            'It will be auto-disabled in 24 hours if failures continue.',
+        )
+    elif action == 3:
+        logger.error(f'Webhook health: auto-disabling app {app_id} after 72h+ of failures. Last error: {error}')
+        disable_app_in_firestore(app_id, error, 72)
+        delete_app_cache_by_id(app_id)
+        _notify_app_owner(
+            app_id,
+            'Webhook Auto-Disabled',
+            f'Your app has been auto-disabled after 72+ hours of webhook failures. Error: {error[:100]}. '
+            'Please fix your endpoint and re-enable the app from your developer dashboard.',
+        )
 
 
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
@@ -114,7 +168,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     if conversation.is_locked:
         return []
 
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
     if not filtered_apps:
         return []
@@ -123,6 +177,9 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
 
     async def _single(app: App):
         if not app.external_integration.webhook_url:
+            return
+
+        if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
         conversation_dict = conversation_to_dict(conversation)
@@ -150,14 +207,20 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                     url,
                     json=payload,
                 )
-            if response.status_code != 200:
+            if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
+                error_str = f'HTTP {response.status_code}'
+                action = await run_blocking(
+                    db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
+                )
+                await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
                 logger.info(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
                 return
 
             cb.record_success()
+            await run_blocking(db_executor, record_app_webhook_success, app.id)
 
             if app.uid is not None:
                 if app.uid != uid:
@@ -172,14 +235,20 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                     uid, app.id, UsageHistoryType.memory_created_external_integration, conversation_id=conversation.id
                 )
 
-            if message := response.json().get('message', ''):
-                results[app.id] = message
+            try:
+                if message := response.json().get('message', ''):
+                    results[app.id] = message
+            except Exception:
+                pass
         except Exception as e:
             cb.record_failure()
+            error_str = type(e).__name__
+            action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
+            await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.error(f"Plugin integration error: {e}")
             return
 
-    await asyncio.gather(*[_single(app) for app in filtered_apps], return_exceptions=True)
+    await gather_safe(*[_single(app) for app in filtered_apps], label="trigger_integrations", max_concurrency=10)
 
     messages = []
     for key, message in results.items():
@@ -189,10 +258,15 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     return messages
 
 
-async def trigger_realtime_integrations(uid: str, segments: list[dict], conversation_id: str | None):
+async def trigger_realtime_integrations(
+    uid: str,
+    segments: list[dict],
+    conversation_id: str | None,
+    source: str | None = None,
+):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
-    return await _async_trigger_realtime_integrations(uid, segments, conversation_id)
+    return await _async_trigger_realtime_integrations(uid, segments, conversation_id, source=source)
 
 
 async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
@@ -232,15 +306,43 @@ def _hit_proactive_notification_rate_limits(uid: str, app: App):
         return False
     ttl = redis_db.get_proactive_noti_sent_at_ttl(uid, app.id)
     if ttl > 0:
-        mem_db.set_proactive_noti_sent_at(uid, app.id, int(time.time() + ttl), ttl=ttl)
+        mem_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(time.time() + ttl), ttl=ttl)
 
     return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
 
 
 def _set_proactive_noti_sent_at(uid: str, app: App):
     ts = time.time()
-    mem_db.set_proactive_noti_sent_at(uid, app, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    mem_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+
+
+def _is_developer(uid: str) -> bool:
+    """A user with at least one developer API key is treated as a developer and
+    is exempt from the daily proactive-notification cap (#3346), so building and
+    testing an app is not throttled. Result is cached (in ``utils.dev_cache``, and
+    invalidated on dev-key changes) to keep the cap check off the Firestore hot
+    path. Fails closed (treats the user as a non-developer, and does not cache the
+    failure) so a lookup error never silently lifts the cap for everyone."""
+    cached = dev_cache.get_cached_developer(uid)
+    if cached is not None:
+        return cached
+    try:
+        result = bool(dev_api_key_db.get_dev_keys_for_user(uid))
+    except Exception as e:
+        logger.warning(f"proactive daily cap: developer check failed uid={uid}, applying cap: {e}")
+        return False
+    dev_cache.set_cached_developer(uid, result)
+    return result
+
+
+def _proactive_daily_cap_reached(uid: str) -> bool:
+    """True when the user has already received the day's allotment of proactive
+    notifications. Counts every proactive source together (mentor + third-party
+    apps) against one per-user daily budget, and exempts developers (#3346)."""
+    if _is_developer(uid):
+        return False
+    return (get_daily_notification_count(uid) or 0) >= MAX_DAILY_NOTIFICATIONS
 
 
 MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
@@ -276,10 +378,9 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.info(f"mentor_proactive rate_limited_remote uid={uid}")
         return None
 
-    # 3. Daily cap check
-    daily_count = get_daily_notification_count(uid) or 0
-    if daily_count >= MAX_DAILY_NOTIFICATIONS:
-        logger.info(f"mentor_proactive daily_cap_reached uid={uid} count={daily_count}")
+    # 3. Daily cap check (shared budget across all proactive sources; devs exempt)
+    if _proactive_daily_cap_reached(uid):
+        logger.info(f"mentor_proactive daily_cap_reached uid={uid}")
         return None
 
     # 4. Gather lightweight context (no vector search yet — save for step 2)
@@ -357,6 +458,14 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
     except Exception as e:
         logger.error(f"mentor_proactive past_conversations_failed uid={uid} error={e}")
 
+    # Resolve the user's output language once so the notification is generated in it, not English
+    # (the daily summary already respects this setting) (#5214).
+    try:
+        output_language = get_user_language_preference(uid) or 'en'
+    except Exception as e:
+        logger.error(f"mentor_proactive language_lookup_failed uid={uid} error={e}")
+        output_language = 'en'
+
     # ── Step 2: Generate ─────────────────────────────────────────────────
     try:
         with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
@@ -369,6 +478,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 recent_notifications=recent_notifications,
                 frequency=frequency,
                 gate_reasoning=relevance.reasoning,
+                output_language=output_language,
             )
     except Exception as e:
         logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
@@ -395,6 +505,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 draft_reasoning=draft.reasoning,
                 current_messages=conversation_messages,
                 goals=goals,
+                output_language=output_language,
             )
     except Exception as e:
         logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
@@ -419,8 +530,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # Update rate limit and daily count
     ts = int(time.time())
-    mem_db.set_proactive_noti_sent_at(uid, 'mentor', ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, 'mentor', ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
+    mem_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
     incr_daily_notification_count(uid)
 
     return notification_text
@@ -435,6 +546,13 @@ def _process_proactive_notification(uid: str, app: App, data):
     # rate limits
     if _hit_proactive_notification_rate_limits(uid, app):
         logger.info(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s {uid}")
+        return None
+
+    # Daily cap: third-party proactive notifications share the same per-user daily
+    # budget as mentor notifications, so a user with several proactive apps cannot
+    # blow past the limit. Developers are exempt (#3346).
+    if _proactive_daily_cap_reached(uid):
+        logger.info(f"App {app.id} proactive daily_cap_reached {uid}")
         return None
 
     max_prompt_char_limit = 128000
@@ -489,6 +607,9 @@ def _process_proactive_notification(uid: str, app: App, data):
     send_app_notification(uid, app.name, app.id, message)
 
     _set_proactive_noti_sent_at(uid, app)
+    # Count this against the user's daily proactive budget so mentor + app
+    # notifications share one ceiling rather than each having their own.
+    incr_daily_notification_count(uid)
     return message
 
 
@@ -507,6 +628,9 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
         if not app.external_integration.webhook_url:
             return
 
+        if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
+            return
+
         url = app.external_integration.webhook_url
         url += f'?sample_rate={sample_rate}&uid={uid}'
 
@@ -522,28 +646,48 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
                 response = await client.post(
                     url, content=bytes(data), headers={'Content-Type': 'application/octet-stream'}
                 )
+            if response.status_code >= 200 and response.status_code < 300:
+                cb.record_success()
+                await run_blocking(db_executor, record_app_webhook_success, app.id)
+            else:
+                cb.record_failure()
+                error_str = f'HTTP {response.status_code}'
+                action = await run_blocking(
+                    db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
+                )
+                await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.info(f'trigger_realtime_audio_bytes {app.id} status: {response.status_code}')
-            cb.record_success()
         except Exception as e:
             cb.record_failure()
+            error_str = type(e).__name__
+            action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
+            await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.error(f"Plugin integration error: {e}")
 
-    # Cap per-call concurrency: only fan out to 8 apps at a time to limit memory pressure
-    # from concurrent webhook calls holding references to the audio data
     chunk_size = 8
     for i in range(0, len(filtered_apps), chunk_size):
         chunk = filtered_apps[i : i + chunk_size]
-        await asyncio.gather(*[_single(app) for app in chunk], return_exceptions=True)
+        await gather_safe(*[_single(app) for app in chunk], label="realtime_audio_bytes", max_concurrency=8)
         if not latest_wins_check(uid, version):
-            break  # Newer data arrived, stop sending stale chunks
+            break
     return {}
 
 
-async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], conversation_id: str | None) -> dict:
+async def _async_trigger_realtime_integrations(
+    uid: str,
+    segments: List[dict],
+    conversation_id: str | None,
+    source: str | None = None,
+) -> dict:
+    # Paywall: skip mentor + third-party proactive notifications when this
+    # transcription session belongs to a paywalled desktop user.
+    # Reactivates automatically when the user upgrades or activates BYOK.
+    if is_trial_paywalled(uid, source):
+        return {}
+
     # Process mentor notification first (built-in feature) — sync, runs in thread
     mentor_results = {}
-    loop = asyncio.get_running_loop()
-    conversation_messages = await loop.run_in_executor(critical_executor, process_mentor_notification, uid, segments)
+    conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
             mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)
@@ -551,7 +695,7 @@ async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], c
             mentor_results['mentor'] = mentor_message
             logger.info(f"Sent mentor notification to user {uid}")
 
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
         # Return mentor results if any, even if no external apps
@@ -566,6 +710,9 @@ async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], c
 
     async def _single(app: App):
         if not app.external_integration.webhook_url:
+            return
+
+        if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
         url = app.external_integration.webhook_url
@@ -583,47 +730,61 @@ async def _async_trigger_realtime_integrations(uid: str, segments: List[dict], c
             async with get_webhook_semaphore():
                 client = get_webhook_client()
                 response = await client.post(url, json={"session_id": uid, "segments": segments})
-            if response.status_code != 200:
+            if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
+                error_str = f'HTTP {response.status_code}'
+                action = await run_blocking(
+                    db_executor, record_app_webhook_failure, app.id, response.status_code, error_str
+                )
+                await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
                 logger.info(
                     f'trigger_realtime_integrations {app.id} status: {response.status_code} results: {sanitize(response.text[:100])}'
                 )
                 return
 
             cb.record_success()
+            await run_blocking(db_executor, record_app_webhook_success, app.id)
 
             if (app.uid is None or app.uid != uid) and conversation_id is not None:
-                record_app_usage(
+                await run_blocking(
+                    db_executor,
+                    record_app_usage,
                     uid,
                     app.id,
                     UsageHistoryType.transcript_processed_external_integration,
                     conversation_id=conversation_id,
                 )
 
-            response_data = response.json()
-            if not response_data:
-                return
+            try:
+                response_data = response.json()
+                if not response_data:
+                    return
 
-            # message
-            message = response_data.get('message', '')
-            if message and len(message) > 5:
-                send_app_notification(uid, app.name, app.id, message)
-                results[app.id] = message
-
-            # proactive_notification
-            noti = response_data.get('notification', None)
-            if app.has_capability("proactive_notification"):
-                with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-                    message = _process_proactive_notification(uid, app, noti)
-                if message:
+                # message
+                message = response_data.get('message', '')
+                if message and len(message) > 5:
+                    send_app_notification(uid, app.name, app.id, message)
                     results[app.id] = message
+
+                # proactive_notification
+                noti = response_data.get('notification', None)
+                if app.has_capability("proactive_notification"):
+                    with track_usage(uid, Features.REALTIME_INTEGRATIONS):
+                        message = _process_proactive_notification(uid, app, noti)
+                    if message:
+                        results[app.id] = message
+            except Exception:
+                pass
 
         except Exception as e:
             cb.record_failure()
+            error_str = type(e).__name__
+            action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
+            await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
             logger.error(f"App integration error: {e}")
             return
 
-    await asyncio.gather(*[_single(app) for app in filtered_apps], return_exceptions=True)
+    await gather_safe(*[_single(app) for app in filtered_apps], label="realtime_integrations", max_concurrency=10)
 
     # Merge mentor results with app results
     all_results = {**mentor_results, **results}

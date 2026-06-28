@@ -151,6 +151,26 @@ Future<bool> deleteActionItem(String actionItemId) async {
   return response.statusCode == 204;
 }
 
+Future<List<String>?> bulkDeleteActionItems(List<String> ids) async {
+  if (ids.isEmpty) return const [];
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/action-items/batch-delete',
+    headers: {'Content-Type': 'application/json'},
+    method: 'POST',
+    body: jsonEncode({'ids': ids}),
+  );
+
+  if (response == null) return null;
+  if (response.statusCode != 200) {
+    Logger.debug('bulkDeleteActionItems error ${response.statusCode}');
+    return null;
+  }
+
+  final body = jsonDecode(utf8.decode(response.bodyBytes)) as Map<String, dynamic>;
+  final deleted = (body['deleted_ids'] as List?)?.cast<String>() ?? const [];
+  return deleted;
+}
+
 // Task sharing
 Future<Map<String, dynamic>?> shareActionItems(List<String> taskIds) async {
   var response = await makeApiCall(

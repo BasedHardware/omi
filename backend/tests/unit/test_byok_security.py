@@ -8,7 +8,9 @@ import hashlib
 import os
 import re
 import sys
+import types
 from contextvars import copy_context
+from datetime import timezone
 from typing import Dict
 from unittest.mock import MagicMock, patch
 
@@ -25,11 +27,152 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 
 sys.modules.setdefault('database._client', MagicMock())
 sys.modules.setdefault('database.redis_db', MagicMock())
+sys.modules.setdefault('database.conversations', MagicMock())
+sys.modules.setdefault('database.memories', MagicMock())
+sys.modules.setdefault('database.chat', MagicMock())
 sys.modules.setdefault('database.users', MagicMock())
 sys.modules.setdefault('database.user_usage', MagicMock())
 sys.modules.setdefault('database.llm_usage', MagicMock())
 sys.modules.setdefault('database.announcements', MagicMock())
+sys.modules.setdefault('database.notifications', MagicMock())
+sys.modules.setdefault('database.daily_summaries', MagicMock())
+sys.modules.setdefault('database.app_review_config', MagicMock())
+sys.modules.setdefault('database.webhook_health', MagicMock())
+sys.modules.setdefault('database.action_items', MagicMock())
 sys.modules.setdefault('utils.other.storage', MagicMock())
+utils_apps_stub = types.ModuleType('utils.apps')
+utils_apps_stub.get_available_app_by_id = MagicMock(return_value=None)
+sys.modules.setdefault('utils.apps', utils_apps_stub)
+stripe_utils_stub = types.ModuleType('utils.stripe')
+stripe_utils_stub.cancel_subscription = MagicMock(return_value=True)
+sys.modules.setdefault('utils.stripe', stripe_utils_stub)
+twilio_service_stub = types.ModuleType('utils.twilio_service')
+twilio_service_stub.delete_user_caller_ids = MagicMock()
+sys.modules.setdefault('utils.twilio_service', twilio_service_stub)
+external_integrations_stub = types.ModuleType('utils.llm.external_integrations')
+external_integrations_stub.generate_comprehensive_daily_summary = MagicMock()
+sys.modules.setdefault('utils.llm.external_integrations', external_integrations_stub)
+streaming_stub = types.ModuleType('utils.stt.streaming')
+streaming_stub.deepgram_nova3_multi_languages = ['en']
+sys.modules.setdefault('utils.stt.streaming', streaming_stub)
+
+import database
+
+for _module_name in [
+    'database._client',
+    'database.redis_db',
+    'database.conversations',
+    'database.memories',
+    'database.chat',
+    'database.users',
+    'database.user_usage',
+    'database.llm_usage',
+    'database.announcements',
+    'database.notifications',
+    'database.daily_summaries',
+    'database.app_review_config',
+    'database.webhook_health',
+    'database.action_items',
+]:
+    setattr(database, _module_name.rsplit('.', 1)[1], sys.modules[_module_name])
+
+anthropic_stub = types.ModuleType('anthropic')
+
+
+class AsyncAnthropic:
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+
+anthropic_stub.AsyncAnthropic = AsyncAnthropic
+sys.modules.setdefault('anthropic', anthropic_stub)
+
+langchain_core_stub = types.ModuleType('langchain_core')
+langchain_core_stub.__path__ = []
+langchain_callbacks_stub = types.ModuleType('langchain_core.callbacks')
+langchain_language_models_stub = types.ModuleType('langchain_core.language_models')
+langchain_output_parsers_stub = types.ModuleType('langchain_core.output_parsers')
+langchain_outputs_stub = types.ModuleType('langchain_core.outputs')
+
+
+class BaseCallbackHandler:
+    pass
+
+
+class BaseChatModel:
+    pass
+
+
+class PydanticOutputParser:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+    def get_format_instructions(self):
+        return 'format'
+
+
+class LLMResult:
+    def __init__(self, generations=None, llm_output=None, **kwargs):
+        self.generations = generations or []
+        self.llm_output = llm_output
+
+
+langchain_callbacks_stub.BaseCallbackHandler = BaseCallbackHandler
+langchain_language_models_stub.BaseChatModel = BaseChatModel
+langchain_output_parsers_stub.PydanticOutputParser = PydanticOutputParser
+langchain_outputs_stub.LLMResult = LLMResult
+sys.modules.setdefault('langchain_core', langchain_core_stub)
+sys.modules.setdefault('langchain_core.callbacks', langchain_callbacks_stub)
+sys.modules.setdefault('langchain_core.language_models', langchain_language_models_stub)
+sys.modules.setdefault('langchain_core.output_parsers', langchain_output_parsers_stub)
+sys.modules.setdefault('langchain_core.outputs', langchain_outputs_stub)
+setattr(langchain_core_stub, 'callbacks', langchain_callbacks_stub)
+setattr(langchain_core_stub, 'language_models', langchain_language_models_stub)
+setattr(langchain_core_stub, 'output_parsers', langchain_output_parsers_stub)
+setattr(langchain_core_stub, 'outputs', langchain_outputs_stub)
+
+pytz_stub = types.ModuleType('pytz')
+pytz_stub.utc = timezone.utc
+pytz_stub.timezone = lambda _name: timezone.utc
+sys.modules.setdefault('pytz', pytz_stub)
+
+tiktoken_stub = types.ModuleType('tiktoken')
+tiktoken_stub.encoding_for_model = lambda _model: MagicMock(encode=lambda text: list(range(len(text))))
+sys.modules.setdefault('tiktoken', tiktoken_stub)
+
+langchain_openai_stub = types.ModuleType('langchain_openai')
+
+
+class ChatOpenAI:
+    def __init__(self, model=None, base_url=None, openai_api_base=None, **kwargs):
+        self.model_name = model
+        self.model = model
+        self.openai_api_base = base_url or openai_api_base
+        self.base_url = base_url or openai_api_base
+        self.kwargs = kwargs
+
+
+class OpenAIEmbeddings:
+    def __init__(self, model=None, **kwargs):
+        self.model = model
+        self.kwargs = kwargs
+
+
+class ChatGoogleGenerativeAI:
+    def __init__(self, model=None, **kwargs):
+        self.model_name = model
+        self.model = model
+        self.kwargs = kwargs
+
+
+langchain_openai_stub.ChatOpenAI = ChatOpenAI
+langchain_openai_stub.OpenAIEmbeddings = OpenAIEmbeddings
+sys.modules.setdefault('langchain_openai', langchain_openai_stub)
+
+langchain_google_genai_stub = types.ModuleType('langchain_google_genai')
+langchain_google_genai_stub.ChatGoogleGenerativeAI = ChatGoogleGenerativeAI
+sys.modules.setdefault('langchain_google_genai', langchain_google_genai_stub)
 
 import warnings
 

@@ -23,6 +23,7 @@ from datetime import datetime
 from google.cloud.firestore_v1.base_query import FieldFilter
 from google.cloud import firestore
 from ._client import db
+from . import redis_db
 
 DAILY_SUMMARIES_COLLECTION = 'daily_summaries'
 
@@ -119,6 +120,23 @@ def get_daily_summaries(
     return summaries
 
 
+def update_daily_summary(uid: str, summary_id: str, summary_data: dict) -> None:
+    """
+    Overwrite an existing daily summary in place, preserving the original id.
+
+    Used by the regenerate flow so that re-running generation replaces the
+    contents of the summary the user is looking at instead of spawning a
+    duplicate doc for the same date.
+    """
+    user_ref = db.collection('users').document(uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    # Force id back to the existing doc id: the generator always allocates a
+    # fresh UUID, and we don't want that leaking into the stored payload
+    # where readers key off summary['id'].
+    payload = {**summary_data, 'id': summary_id}
+    summary_ref.set(payload)
+
+
 def delete_daily_summary(uid: str, summary_id: str) -> bool:
     """
     Delete a daily summary.
@@ -133,7 +151,14 @@ def delete_daily_summary(uid: str, summary_id: str) -> bool:
     user_ref = db.collection('users').document(uid)
     summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
     summary_ref.delete()
+    redis_db.remove_daily_summary_to_uid(summary_id)
     return True
+
+
+def set_daily_summary_visibility(uid: str, summary_id: str, visibility: str):
+    user_ref = db.collection('users').document(uid)
+    summary_ref = user_ref.collection(DAILY_SUMMARIES_COLLECTION).document(summary_id)
+    summary_ref.update({'visibility': visibility})
 
 
 def get_summaries_count(uid: str) -> int:

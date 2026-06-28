@@ -6,7 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 
-import 'package:omi/backend/http/shared.dart';
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/sockets.dart';
@@ -94,6 +93,9 @@ Future onStart(ServiceInstance service) async {
       onRecording: () {
         service.invoke("recorder.ui.stateUpdate", {"state": 'recording'});
       },
+      onStalled: () {
+        service.invoke("recorder.ui.stalled");
+      },
     );
   });
 
@@ -174,6 +176,7 @@ class BackgroundService {
 
   void stop() {
     Logger.debug("invoke stop");
+    if (_status == null) return;
     _service.invoke("stop");
   }
 
@@ -187,11 +190,18 @@ class BackgroundService {
     Function()? onRecording,
     Function()? onStop,
     Function()? onInitializing,
+    Function()? onStalled,
   }) {
     StreamSubscription? recordAudioByteStream = _service.on('recorder.ui.audioBytes').listen((event) {
       Uint8List bytes = Uint8List.fromList(event!['data'].cast<int>());
       onByteReceived(bytes);
     });
+    StreamSubscription? recordStalledStream;
+    if (onStalled != null) {
+      recordStalledStream = _service.on('recorder.ui.stalled').listen((event) {
+        onStalled();
+      });
+    }
     StreamSubscription? recordStateStream;
     recordStateStream = _service.on('recorder.ui.stateUpdate').listen((event) {
       if (event!['state'] == 'recording') {
@@ -205,6 +215,7 @@ class BackgroundService {
       } else if (event['state'] == 'stopped') {
         // Close streams
         recordAudioByteStream.cancel();
+        recordStalledStream?.cancel();
         recordStateStream?.cancel();
 
         // Callback
@@ -219,6 +230,7 @@ class BackgroundService {
   }
 
   void stopRecorder() {
+    if (_status == null) return;
     _service.invoke("recorder.stop");
   }
 }
@@ -231,6 +243,7 @@ abstract class IMicRecorderService {
     Function()? onRecording,
     Function()? onStop,
     Function()? onInitializing,
+    Function()? onStalled,
   });
   void stop();
 }
@@ -248,6 +261,7 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     Function()? onRecording,
     Function()? onStop,
     Function()? onInitializing,
+    Function()? onStalled,
   }) async {
     await _runner.ensureRunning();
 
@@ -256,6 +270,7 @@ class MicRecorderBackgroundService implements IMicRecorderService {
       onRecording: onRecording,
       onStop: onStop,
       onInitializing: onInitializing,
+      onStalled: onStalled,
     );
 
     return;
@@ -268,6 +283,13 @@ class MicRecorderBackgroundService implements IMicRecorderService {
 }
 
 class MicRecorderService implements IMicRecorderService {
+  // Window without a single audio byte that counts as a stall.
+  // Phone mic at 16 kHz/PCM16 emits ~10 buffer events per second; 3 s of silence
+  // is well past any normal jitter and comfortably covers an iOS audio-session
+  // interruption (the OS pauses the engine, bytes stop flowing immediately).
+  static const Duration _stallThreshold = Duration(seconds: 3);
+  static const Duration _stallCheckInterval = Duration(seconds: 1);
+
   RecorderServiceStatus? _status;
 
   late FlutterSoundRecorder _recorder;
@@ -276,8 +298,13 @@ class MicRecorderService implements IMicRecorderService {
   Function(Uint8List bytes)? _onByteReceived;
   Function? _onRecording;
   Function? _onStop;
+  Function? _onStalled;
 
   bool _isInBG = false;
+
+  DateTime? _lastByteAt;
+  Timer? _stallTimer;
+  bool _stallReported = false;
 
   MicRecorderService({bool isInBG = false}) {
     _recorder = FlutterSoundRecorder();
@@ -292,6 +319,7 @@ class MicRecorderService implements IMicRecorderService {
     Function()? onRecording,
     Function()? onStop,
     Function()? onInitializing,
+    Function()? onStalled,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
       throw Exception("Recorder is recording, please stop it before start new recording.");
@@ -306,6 +334,7 @@ class MicRecorderService implements IMicRecorderService {
     _onByteReceived = onByteReceived;
     _onStop = onStop;
     _onRecording = onRecording;
+    _onStalled = onStalled;
     if (_onRecording != null) {
       _onRecording!();
     }
@@ -321,10 +350,25 @@ class MicRecorderService implements IMicRecorderService {
       sampleRate: 16000,
       bufferSize: 8192,
     );
+    _lastByteAt = DateTime.now();
+    _stallReported = false;
     _controller.stream.listen((buffer) {
-      Uint8List audioBytes = buffer;
+      _lastByteAt = DateTime.now();
+      _stallReported = false;
       if (_onByteReceived != null) {
-        _onByteReceived!(audioBytes);
+        _onByteReceived!(buffer);
+      }
+    });
+
+    _stallTimer?.cancel();
+    _stallTimer = Timer.periodic(_stallCheckInterval, (_) {
+      // The stream going silent for longer than the threshold means the native
+      // audio engine has stopped delivering bytes — on iOS this happens when
+      // AVAudioSession is interrupted (incoming call) and is not resumed.
+      if (_stallReported || _lastByteAt == null) return;
+      if (DateTime.now().difference(_lastByteAt!) >= _stallThreshold) {
+        _stallReported = true;
+        _onStalled?.call();
       }
     });
 
@@ -334,6 +378,11 @@ class MicRecorderService implements IMicRecorderService {
 
   @override
   void stop() {
+    _stallTimer?.cancel();
+    _stallTimer = null;
+    _lastByteAt = null;
+    _stallReported = false;
+
     _recorder.stopRecorder();
     _recorder.closeRecorder();
     _controller.close();
@@ -347,5 +396,6 @@ class MicRecorderService implements IMicRecorderService {
     _onByteReceived = null;
     _onStop = null;
     _onRecording = null;
+    _onStalled = null;
   }
 }

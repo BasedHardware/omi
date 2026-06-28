@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -6,7 +7,6 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -35,7 +35,7 @@ class AppListItem extends StatelessWidget {
       builder: (context, state, child) {
         return GestureDetector(
           onTap: () async {
-            MixpanelManager().pageOpened('App Detail');
+            PlatformManager.instance.analytics.pageOpened('App Detail');
             await routeToPage(context, AppDetailPage(app: app));
           },
           child: Container(
@@ -140,7 +140,7 @@ class AppListItem extends StatelessWidget {
                         onTap: () {
                           if (state.enabled) {
                             // App is enabled, open app detail
-                            MixpanelManager().pageOpened('App Detail');
+                            PlatformManager.instance.analytics.pageOpened('App Detail');
                             routeToPage(context, AppDetailPage(app: app));
                             return;
                           }

@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -6,19 +7,18 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -112,21 +112,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               // big "get started" options so the home page doesn't feel
               // empty for new users.
               if (_nonDiscardedConversationCount(convoProvider) >= 3) ...[
-                SliverToBoxAdapter(
-                  child: _buildSectionHeader(
-                    context,
-                    context.l10n.conversations,
-                    onViewAll: () {
-                      // Reset the daily-summaries flag so the conversations tab
-                      // actually shows conversations (it persists from Daily
-                      // Recaps' View All otherwise).
-                      if (convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
-                      context.read<HomeProvider>().setIndex(1);
-                    },
-                  ),
-                ),
-                _buildConversationsPreview(convoProvider),
-
                 // Mind Map section — only shown for users with enough activity.
                 SliverToBoxAdapter(
                   child: _buildSectionHeader(
@@ -136,6 +121,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                       context,
                       MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
                     ),
+                    buttonLabel: context.l10n.expand,
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildMindMapPreview(context)),
@@ -172,12 +158,32 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     return provider.conversations.where((c) => !c.discarded).length;
   }
 
+  // The capturing page only renders transcript/photos that are already
+  // streaming in — it does not start the mic itself. So opening it without
+  // first kicking off phone-mic recording leaves the user stuck on the
+  // "waiting for transcript or photos" placeholder forever. Mirror the
+  // proven start path (battery_info_widget._startRecording).
+  Future<void> _startPhoneRecording(BuildContext context) async {
+    // No haptic here — the option() wrapper already fires lightImpact() on tap;
+    // a mediumImpact() on top of it double-vibrates on a single tap.
+    final captureProvider = context.read<CaptureProvider>();
+    if (captureProvider.recordingState == RecordingState.initialising) return;
+    if (captureProvider.recordingState != RecordingState.record) {
+      await captureProvider.streamRecording();
+      PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    }
+    if (!context.mounted) return;
+    final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
+        ? captureProvider.conversationProvider!.conversations.first.id
+        : null;
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
+    );
+  }
+
   Widget _buildGetStartedOptions(BuildContext context) {
-    Widget option({
-      required IconData icon,
-      required String label,
-      required VoidCallback onTap,
-    }) {
+    Widget option({required IconData icon, required String label, required VoidCallback onTap}) {
       return GestureDetector(
         onTap: () {
           HapticFeedback.lightImpact();
@@ -210,16 +216,13 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             ),
             const SizedBox(height: 10),
             SizedBox(
-              width: 96,
+              width: 120,
               child: Text(
                 label,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                  height: 1.2,
-                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500, height: 1.2),
               ),
             ),
           ],
@@ -230,31 +233,20 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final phoneOption = option(
       icon: Icons.mic_rounded,
       label: 'Record with Phone',
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ConversationCapturingPage()),
-        );
-      },
+      onTap: () => _startPhoneRecording(context),
     );
     final callOption = option(
       icon: Icons.phone_in_talk_rounded,
       label: 'Record Call',
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const PhoneCallsPage()),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const PhoneCallsPage()));
       },
     );
     final deviceOption = option(
       icon: Icons.bluetooth_searching_rounded,
       label: 'Connect Device',
       onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const DeviceSelectionPage()),
-        );
+        Navigator.push(context, MaterialPageRoute(builder: (_) => const DeviceSelectionPage()));
       },
     );
 
@@ -266,25 +258,25 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           phoneOption,
           const SizedBox(height: 22),
           // Bottom of the triangle: the other two side by side.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              callOption,
-              deviceOption,
-            ],
-          ),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceEvenly, children: [callOption, deviceOption]),
         ],
       ),
     );
   }
 
-  Widget _buildSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll}) {
+  Widget _buildSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll, String? buttonLabel}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+          GestureDetector(
+            onTap: onViewAll,
+            child: Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
+          ),
           if (onViewAll != null)
             GestureDetector(
               onTap: onViewAll,
@@ -295,7 +287,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Text(
-                  context.l10n.viewAll,
+                  buttonLabel ?? context.l10n.viewAll,
                   style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
@@ -306,7 +298,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   }
 
   Widget _buildDailyRecapsPreview(BuildContext context) {
-    final cardHeight = 130.0;
+    const cardHeight = 130.0;
     if (_loadingSummaries) {
       return Padding(
         padding: const EdgeInsets.only(top: 12),
@@ -358,12 +350,24 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final hasMap = summary.locations.isNotEmpty;
 
     return GestureDetector(
-      onTap: () {
-        MixpanelManager().dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
-        Navigator.push(
+      onTap: () async {
+        PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
+        // Detail page pops with ``{deleted: true, summaryId}`` when the user
+        // deletes from there — drop the card so the home recap row doesn't
+        // linger until the next pull-to-refresh.
+        final result = await Navigator.push<dynamic>(
           context,
-          MaterialPageRoute(builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary)),
+          MaterialPageRoute(
+            builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
+          ),
         );
+        if (!mounted) return;
+        if (result is Map && result['deleted'] == true) {
+          final deletedId = result['summaryId'] as String?;
+          if (deletedId != null) {
+            setState(() => _recentSummaries.removeWhere((s) => s.id == deletedId));
+          }
+        }
       },
       child: Container(
         width: _cardWidth,
@@ -375,14 +379,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           child: Stack(
             children: [
               // Map at bottom
-              if (hasMap)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  height: _mapHeight,
-                  child: _buildCardMap(summary),
-                ),
+              if (hasMap) Positioned(bottom: 0, left: 0, right: 0, height: _mapHeight, child: _buildCardMap(summary)),
               // Text content at top
               Positioned(
                 top: 0,
@@ -427,15 +424,17 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     final centerLng = summary.locations.map((l) => l.longitude).reduce((a, b) => a + b) / summary.locations.length;
 
     final markers = summary.locations
-        .map((loc) => Marker(
-              point: LatLng(loc.latitude, loc.longitude),
-              width: 22,
-              height: 22,
-              child: Container(
-                decoration: const BoxDecoration(color: Colors.deepPurple, shape: BoxShape.circle),
-                child: const Icon(Icons.location_on, color: Colors.white, size: 13),
-              ),
-            ))
+        .map(
+          (loc) => Marker(
+            point: LatLng(loc.latitude, loc.longitude),
+            width: 22,
+            height: 22,
+            child: Container(
+              decoration: const BoxDecoration(color: Colors.deepPurple, shape: BoxShape.circle),
+              child: const Icon(Icons.location_on, color: Colors.white, size: 13),
+            ),
+          ),
+        )
         .toList();
 
     return SizedBox(
@@ -483,6 +482,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
   Widget _buildMindMapPreview(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
@@ -491,7 +491,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
-          child: SizedBox(
+          child: const SizedBox(
             height: 180,
             child: IgnorePointer(
               child: MemoryGraphPage(
@@ -506,67 +506,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildConversationsPreview(ConversationProvider convoProvider) {
-    if (convoProvider.isLoadingConversations && convoProvider.conversations.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: List.generate(
-              2,
-              (_) => Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: ShimmerWithTimeout(
-                  baseColor: AppStyles.backgroundSecondary,
-                  highlightColor: AppStyles.backgroundTertiary,
-                  child: Container(
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundSecondary,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Use groupedConversations because it has the user's filters already applied
-    // (discarded / short / starred / date). conversations.take(3) ignores
-    // showDiscardedConversations and would show items that aren't on the
-    // conversations page.
-    final sortedDates = convoProvider.groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
-    final recent = <ServerConversation>[];
-    for (final date in sortedDates) {
-      final list = convoProvider.groupedConversations[date] ?? const [];
-      for (final c in list) {
-        recent.add(c);
-        if (recent.length >= 3) break;
-      }
-      if (recent.length >= 3) break;
-    }
-    if (recent.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        childCount: recent.length,
-        (context, index) {
-          final c = recent[index];
-          final dateKey = DateTime(c.createdAt.year, c.createdAt.month, c.createdAt.day);
-          return ConversationListItem(
-            key: ValueKey(c.id),
-            conversation: c,
-            date: dateKey,
-            conversationIdx: index,
-          );
-        },
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:collection/collection.dart';
@@ -8,7 +9,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/payments/widgets/country_bottom_sheet.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
-import 'package:omi/utils/analytics/mixpanel.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -151,12 +151,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                                   provider.selectedCountryId?.isEmpty ?? true
                                                       ? context.l10n.selectYourCountry
                                                       : ((provider.filteredCountries.firstWhereOrNull(
-                                                                      (country) =>
-                                                                          country['id'] == provider.selectedCountryId,
-                                                                    )?['name']
-                                                                    as String?)
-                                                                ?.decodeString ??
-                                                            context.l10n.selectYourCountry),
+                                                            (country) => country['id'] == provider.selectedCountryId,
+                                                          )?['name'] as String?)
+                                                              ?.decodeString ??
+                                                          context.l10n.selectYourCountry),
                                                   style: const TextStyle(color: Colors.white),
                                                 ),
                                               ],
@@ -209,11 +207,10 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             AnimatedLoadingButton(
                               text: context.l10n.connectNow,
                               loaderColor: Colors.black,
-                              onPressed:
-                                  provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                              onPressed: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                                       provider.selectedCountryId != null
                                   ? () async {
-                                      MixpanelManager().track('Stripe Connect Started');
+                                      PlatformManager.instance.analytics.track('Stripe Connect Started');
                                       var url = await provider.connectStripe();
                                       if (url != null) {
                                         provider.startStripePolling();
@@ -223,15 +220,13 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                       }
                                     }
                                   : () async {},
-                              color:
-                                  provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                              color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                                       provider.selectedCountryId != null
                                   ? Colors.white
                                   : Colors.grey,
                               textStyle: TextStyle(
                                 fontSize: 16,
-                                color:
-                                    provider.stripeConnectionState == PaymentConnectionState.inComplete ||
+                                color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
                                         provider.selectedCountryId != null
                                     ? Colors.black
                                     : Colors.grey[600],
@@ -278,7 +273,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             AnimatedLoadingButton(
                               text: context.l10n.failedTryAgain,
                               onPressed: () async {
-                                MixpanelManager().track('Stripe Connect Retry');
+                                PlatformManager.instance.analytics.track('Stripe Connect Retry');
                                 var res = await provider.connectStripe();
                                 if (res != null) {
                                   provider.startStripePolling();
@@ -294,7 +289,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             ),
                             TextButton(
                               onPressed: () {
-                                MixpanelManager().track('Stripe Connect Later');
+                                PlatformManager.instance.analytics.track('Stripe Connect Later');
                                 provider.stopStripePolling();
                                 Navigator.pop(context);
                               },
@@ -354,7 +349,7 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                             AnimatedLoadingButton(
                               text: context.l10n.updateStripeDetails,
                               onPressed: () async {
-                                MixpanelManager().track('Stripe Connect Update');
+                                PlatformManager.instance.analytics.track('Stripe Connect Update');
                                 var url = await provider.connectStripe();
                                 if (url != null) {
                                   provider.startStripePolling();

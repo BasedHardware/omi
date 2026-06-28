@@ -3,6 +3,8 @@ import sys
 import types
 from unittest.mock import MagicMock
 
+BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
@@ -14,6 +16,16 @@ def _stub_module(name):
         mod = types.ModuleType(name)
         sys.modules[name] = mod
     return sys.modules[name]
+
+
+def _ensure_package_path(name, path):
+    mod = _stub_module(name)
+    mod.__path__ = [path]
+    if '.' in name:
+        parent_name, attr_name = name.rsplit('.', 1)
+        parent = _stub_module(parent_name)
+        setattr(parent, attr_name, mod)
+    return mod
 
 
 # ---------------------------------------------------------------------------
@@ -100,6 +112,10 @@ sys.modules["utils.scopes"].validate_scopes = MagicMock()
 
 # utils.conversations.render imports database.folders and database.users
 # which are already stubbed above — no additional stubs needed.
+
+_ensure_package_path("utils", os.path.join(BACKEND_DIR, "utils"))
+_ensure_package_path("utils.conversations", os.path.join(BACKEND_DIR, "utils", "conversations"))
+sys.modules.pop("utils.conversations.render", None)
 
 _stub_module("utils.llm")
 _stub_module("utils.llm.memories")

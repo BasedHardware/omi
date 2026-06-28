@@ -230,6 +230,7 @@ _maps_client: httpx.AsyncClient | None = None
 _auth_client: httpx.AsyncClient | None = None
 _stt_client: httpx.AsyncClient | None = None
 _tts_client: httpx.AsyncClient | None = None
+_web_fetch_client: httpx.AsyncClient | None = None
 
 
 def get_webhook_client() -> httpx.AsyncClient:
@@ -259,12 +260,23 @@ def get_maps_client() -> httpx.AsyncClient:
 
 
 def get_auth_client() -> httpx.AsyncClient:
-    """Return a shared async HTTP client for OAuth/auth token exchanges."""
+    """Return a shared async HTTP client for OAuth/auth token exchanges.
+
+    Keep-alive is disabled (`max_keepalive_connections=0`) for the same reason
+    as `get_tts_client()`: in Cloud Run we observed stale keep-alive sockets
+    being reused after the remote (Google/Apple/Firebase token endpoints) or an
+    intermediate NAT silently dropped them, raising asyncio's "handler is
+    closed" RuntimeError mid-request. That surfaced as intermittent HTTP 500s
+    on `/v1/auth/callback/{google,apple}` and `/v1/auth/token`, breaking both
+    Sign in with Google and Sign in with Apple (both providers share this
+    client). Auth token-exchange volume is low, so paying a TLS handshake per
+    request is a fine trade for eliminating the stale-socket failures.
+    """
     global _auth_client
     if _auth_client is None:
         _auth_client = httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=2.0),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=8),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=0),
         )
     return _auth_client
 
@@ -299,10 +311,25 @@ def get_tts_client() -> httpx.AsyncClient:
     return _tts_client
 
 
+def get_web_fetch_client() -> httpx.AsyncClient:
+    """Return a shared async HTTP client for user-initiated URL fetches.
+
+    Isolated from the webhook pool so slow/stalled external pages don't
+    compete with partner webhook delivery slots.
+    """
+    global _web_fetch_client
+    if _web_fetch_client is None:
+        _web_fetch_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(15.0, connect=5.0),
+            limits=httpx.Limits(max_connections=16, max_keepalive_connections=4),
+        )
+    return _web_fetch_client
+
+
 async def close_all_clients():
     """Close all shared HTTP clients. Call at app shutdown."""
-    global _webhook_client, _maps_client, _auth_client, _stt_client, _tts_client
-    for client in (_webhook_client, _maps_client, _auth_client, _stt_client, _tts_client):
+    global _webhook_client, _maps_client, _auth_client, _stt_client, _tts_client, _web_fetch_client
+    for client in (_webhook_client, _maps_client, _auth_client, _stt_client, _tts_client, _web_fetch_client):
         if client is not None:
             try:
                 await client.aclose()
@@ -313,6 +340,7 @@ async def close_all_clients():
     _auth_client = None
     _tts_client = None
     _stt_client = None
+    _web_fetch_client = None
     # Reset stateful registries
     _semaphores.clear()
     _webhook_circuit_breakers.clear()

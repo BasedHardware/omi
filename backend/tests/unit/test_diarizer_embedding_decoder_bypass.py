@@ -13,7 +13,6 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import numpy as np
 
-
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 MODULE_PATH = BACKEND_DIR / "diarizer" / "embedding.py"
 

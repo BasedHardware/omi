@@ -2,7 +2,7 @@
 
 Covers input validation (voice_id, text length, empty text) by importing the
 pure helpers directly — mirrors the test pattern used by the sibling Rust
-implementation in desktop/Backend-Rust/src/routes/tts.rs.
+implementation in desktop/macos/Backend-Rust/src/routes/tts.rs.
 
 End-to-end wiring (Redis rate-limit + ElevenLabs upstream) is exercised via
 integration tests — the unit layer here is intentionally scoped to the bits
@@ -37,6 +37,15 @@ def _stub_package(name):
     mod = types.ModuleType(name)
     mod.__path__ = []
     sys.modules[name] = mod
+    return mod
+
+
+def _restore_real_package(name, path):
+    mod = sys.modules.get(name)
+    if mod is None or not getattr(mod, "__path__", None):
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    mod.__path__ = [str(path)]
     return mod
 
 
@@ -88,8 +97,12 @@ def _load_tts_router_module():
     log_sanitizer_stub.sanitize = lambda s: str(s)
     sys.modules["utils.log_sanitizer"] = log_sanitizer_stub
 
-    # Stub models.tts (real module is safe — pure pydantic)
+    # Use the real models.tts module even if an earlier test installed a package stub.
     sys.path.insert(0, str(BACKEND_DIR))
+    _restore_real_package("models", BACKEND_DIR / "models")
+    existing_tts_model = sys.modules.get("models.tts")
+    if existing_tts_model is not None and not getattr(existing_tts_model, "__file__", None):
+        del sys.modules["models.tts"]
 
     spec = importlib.util.spec_from_file_location(
         "routers.tts",

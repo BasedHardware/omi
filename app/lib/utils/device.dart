@@ -11,17 +11,17 @@ class DeviceUtils {
     required String currentFirmware,
     required Map latestFirmwareDetails,
   }) async {
-    Version currentVersion = Version.parse(currentFirmware);
-    if (latestFirmwareDetails.isEmpty) {
-      return ('Latest Version Not Available', false, '');
+    if (currentFirmware.isEmpty) {
+      return ('Unable to determine current firmware version', false, '');
     }
     if (latestFirmwareDetails.isEmpty || latestFirmwareDetails['version'] == null) {
       return ('Latest Version Not Available', false, '');
     }
-    if (latestFirmwareDetails['version'] == null || latestFirmwareDetails['draft']) {
+    if (latestFirmwareDetails['draft']) {
       return ('Latest Version Not Available', false, '');
     }
 
+    Version currentVersion = Version.parse(currentFirmware);
     String latestVersionStr = latestFirmwareDetails['version'];
     Version latestVersion = Version.parse(latestVersionStr);
     Version minVersion = Version.parse(latestFirmwareDetails['min_version']);
@@ -59,8 +59,6 @@ class DeviceUtils {
           return Assets.images.beeDevice.path;
         case DeviceType.openglass:
           return Assets.images.omiGlass.path;
-        case DeviceType.frame:
-          return Assets.images.omiDevkitWithoutRope.path;
         case DeviceType.appleWatch:
           return Assets.images.appleWatch.path;
         case DeviceType.plaud:

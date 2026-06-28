@@ -287,6 +287,22 @@ def get_cached_user_geolocation(uid: str):
     return eval(geolocation)
 
 
+# DAILY SUMMARY UID LOOKUP
+def store_daily_summary_to_uid(summary_id: str, uid: str):
+    r.set(f'daily-summary:{summary_id}', uid)
+
+
+def get_daily_summary_uid(summary_id: str) -> str:
+    uid = r.get(f'daily-summary:{summary_id}')
+    if not uid:
+        return ''
+    return uid.decode()
+
+
+def remove_daily_summary_to_uid(summary_id: str):
+    r.delete(f'daily-summary:{summary_id}')
+
+
 # VISIIBILTIY OF CONVERSATIONS
 def store_conversation_to_uid(conversation_id: str, uid: str):
     r.set(f'memories-visibility:{conversation_id}', uid)
@@ -390,7 +406,7 @@ def save_migrated_retrieval_conversation_id(conversation_id: str):
     r.expire('migrated_retrieval_memory_ids', 60 * 60 * 24 * 7)
 
 
-def set_proactive_noti_sent_at(uid: str, app_id: str, ts: int, ttl: int = 30):
+def set_proactive_noti_sent_at(uid: str, *, app_id: str, ts: int, ttl: int = 30):
     r.set(f'{uid}:{app_id}:proactive_noti_sent_at', ts, ex=ttl)
 
 
@@ -407,7 +423,7 @@ def get_proactive_noti_sent_at_ttl(uid: str, app_id: str):
 
 @try_catch_decorator
 def incr_daily_notification_count(uid: str) -> int:
-    """Atomically increment the daily mentor notification count for a user. Returns new count."""
+    """Atomically increment the daily proactive-notification count for a user (mentor + third-party apps). Returns new count."""
     from datetime import datetime, timezone
 
     key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
@@ -418,7 +434,7 @@ def incr_daily_notification_count(uid: str) -> int:
 
 @try_catch_decorator
 def get_daily_notification_count(uid: str) -> int:
-    """Get the current daily mentor notification count for a user."""
+    """Get the current daily proactive-notification count for a user (mentor + third-party apps)."""
     from datetime import datetime, timezone
 
     key = f'{uid}:daily_noti_count:{datetime.now(timezone.utc).strftime("%Y-%m-%d")}'
@@ -636,8 +652,7 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script(
-    """
+_RATE_LIMIT_LUA = r.register_script("""
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -650,8 +665,7 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-"""
-)
+""")
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -680,8 +694,7 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 # Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
 # trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
 # UTC (caller passes seconds_until_midnight_utc as the TTL).
-_TTS_RATE_LIMIT_LUA = r.register_script(
-    """
+_TTS_RATE_LIMIT_LUA = r.register_script("""
 local burst_key = KEYS[1]
 local daily_key = KEYS[2]
 local now_ms = tonumber(ARGV[1])
@@ -709,8 +722,7 @@ if new_daily == char_count then
     redis.call('EXPIRE', daily_key, daily_ttl)
 end
 return {0, 0}
-"""
-)
+""")
 
 
 def _seconds_until_midnight_utc() -> int:

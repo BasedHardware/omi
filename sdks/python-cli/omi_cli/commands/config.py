@@ -38,6 +38,8 @@ def show(typer_ctx: typer.Context) -> None:
                 "auth_method": profile.auth_method,
                 "api_base": profile.api_base,
                 "credential": profile.masked_credential(),
+                "local_api_url": profile.local_api_url,
+                "local_token": profile.masked_local_token(),
             }
         )
     payload = {
@@ -58,10 +60,10 @@ def path(typer_ctx: typer.Context) -> None:
         typer.echo(str(config.path))
 
 
-_SETTABLE_KEYS = {"api_base"}
+_SETTABLE_KEYS = {"api_base", "local_api_url", "local_token"}
 
 
-@app.command("set", help="Set a per-profile config value. Keys: api_base.")
+@app.command("set", help="Set a per-profile config value. Keys: api_base, local_api_url, local_token.")
 def set_value(
     typer_ctx: typer.Context,
     key: str = typer.Argument(..., help=f"Config key to set. One of: {sorted(_SETTABLE_KEYS)}"),
@@ -77,9 +79,16 @@ def set_value(
     profile = config.get_profile(ctx.profile_name)
     if key == "api_base":
         profile.api_base = value.rstrip("/")
+    elif key == "local_api_url":
+        profile.local_api_url = value.rstrip("/")
+    elif key == "local_token":
+        profile.local_token = value
     config.set_profile(profile)
     cfg.save(config)
-    ctx.renderer.success(f"Set [bold]{key}[/bold] = {value} on profile [bold]{profile.name}[/bold].")
+    display_value = (
+        cfg.Profile(name=profile.name, local_token=value).masked_local_token() if key == "local_token" else value
+    )
+    ctx.renderer.success(f"Set [bold]{key}[/bold] = {display_value} on profile [bold]{profile.name}[/bold].")
 
 
 @profile_app.command("list", help="List all configured profiles.")
@@ -96,9 +105,15 @@ def profile_list(typer_ctx: typer.Context) -> None:
                 "auth_method": profile.auth_method or "(none)",
                 "api_base": profile.api_base,
                 "credential": profile.masked_credential(),
+                "local_api_url": profile.local_api_url or "",
+                "local_token": profile.masked_local_token(),
             }
         )
-    ctx.renderer.emit(rows, columns=["name", "active", "auth_method", "api_base", "credential"], title="profiles")
+    ctx.renderer.emit(
+        rows,
+        columns=["name", "active", "auth_method", "api_base", "credential", "local_api_url", "local_token"],
+        title="profiles",
+    )
 
 
 @profile_app.command("use", help="Switch the active profile.")

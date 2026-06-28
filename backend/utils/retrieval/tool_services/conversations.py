@@ -8,12 +8,14 @@ from datetime import datetime, timezone
 from typing import List, Optional
 
 import database.conversations as conversations_db
+import database.notifications as notification_db
 import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
+from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
 import logging
 
 logger = logging.getLogger(__name__)
@@ -128,7 +130,11 @@ def get_conversations_text(
             continue
 
     return conversations_to_string(
-        conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+        conversations,
+        use_transcript=include_transcript,
+        include_timestamps=include_timestamps,
+        people=people,
+        tz=notification_db.get_user_time_zone(uid),
     )
 
 
@@ -142,7 +148,7 @@ def search_conversations_text(
     include_transcript: bool = True,
     include_timestamps: bool = False,
 ) -> str:
-    """Semantic vector search for conversations, formatted as LLM-ready text."""
+    """Hybrid keyword + semantic vector search for conversations, formatted as LLM-ready text."""
     logger.info(f"search_conversations_text - uid: {uid}, query: {query}, limit: {limit}")
 
     # Cap limits
@@ -174,7 +180,13 @@ def search_conversations_text(
         starts_at = 0  # epoch
 
     try:
-        conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
+        # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
+        keyword_ids = keyword_search_conversation_ids(
+            uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
+        )
+        vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
 
         if not conversation_ids:
             date_info = ""
@@ -222,9 +234,13 @@ def search_conversations_text(
                 logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
                 continue
 
-        result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
+        result = f"Found {len(conversations)} conversations matching '{query}':\n\n"
         result += conversations_to_string(
-            conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+            conversations,
+            use_transcript=include_transcript,
+            include_timestamps=include_timestamps,
+            people=people,
+            tz=notification_db.get_user_time_zone(uid),
         )
         return result
 

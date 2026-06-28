@@ -29,6 +29,12 @@ Builds the macOS app, connects to the cloud backend, and launches. No env files,
 
 > **Requirements:** macOS 14+, [Xcode](https://developer.apple.com/xcode/) (includes Swift & code signing), [Node.js](https://nodejs.org/)
 
+For development worktrees, run the cheap local setup once:
+
+```bash
+make setup
+```
+
 <details>
   <summary>Full Installation</summary>
   
@@ -55,7 +61,7 @@ cp Backend-Rust/.env.example Backend-Rust/.env
 ./run.sh
 ```
 
-See [desktop/README.md](desktop/README.md) for environment variables and credential setup.
+See [desktop/macos/README.md](desktop/macos/README.md) for environment variables and credential setup.
 
 
 ### Mobile App
@@ -109,7 +115,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 | Component | Path | Stack |
 |-----------|------|-------|
-| **macOS app** | [`desktop/`](desktop/) | Swift, SwiftUI, Rust backend |
+| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
 | Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
 | Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
@@ -124,7 +130,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 ### Getting Started
 - [Introduction](https://docs.omi.me/)
 - [Quick Start Guide](https://docs.omi.me/quickstart)
-- [macOS App Development](desktop/README.md)
+- [macOS App Development](desktop/macos/README.md)
 - [Mobile App Setup](https://docs.omi.me/doc/developer/AppSetup)
 - [Backend Setup](https://docs.omi.me/doc/developer/backend/Backend_Setup)
 - [Contributing](https://docs.omi.me/doc/developer/Contribution)
