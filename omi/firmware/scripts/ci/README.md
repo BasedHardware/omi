@@ -42,7 +42,6 @@ The firmware version is read from `CONFIG_BT_DIS_FW_REV_STR` in
      -f ota_update_steps=battery,internet
    ```
    `version` defaults to the `omi.conf` value; pass `-f version=3.0.21` to override.
-   `-f prerelease=true` marks it prerelease (the backend then will **not** serve it).
 
 The publish step refuses to overwrite an existing `Omi_CV1_v<ver>` tag — bump
 the version if you need to re-release.
