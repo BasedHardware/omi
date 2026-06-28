@@ -328,14 +328,45 @@ enum CloudConnectorFormAutomation {
     ]
 
     if submit {
-      pressTab(count: 2)
-      sendKey(49)
-      lines.append("Submitted with button: Add (keyboard fallback)")
+      lines.append(await pressClaudeConnectorAddButtonByOCR(target: target))
     } else {
       lines.append("Submit skipped by request.")
     }
 
     return lines.joined(separator: "\n")
+  }
+
+  private static func pressClaudeConnectorAddButtonByOCR(
+    target: (app: NSRunningApplication, state: ClaudeConnectorPageState)
+  ) async -> String {
+    guard CGPreflightScreenCaptureAccess() else {
+      return
+        "Error: Screen Recording permission is not available to Omi, so the native connector form filler cannot OCR Claude's hidden Add button."
+    }
+
+    let appElement = AXUIElementCreateApplication(target.app.processIdentifier)
+    let nodes = focusedAndWindowRoots(for: appElement)
+      .flatMap { collectNodes(from: $0, maxDepth: 10, maxNodes: 500) }
+    guard claudeConnectorPageState(nodes: nodes) == .addCustomConnectorModal else {
+      return "Error: Refusing Claude Add because the verified page state changed."
+    }
+
+    guard let clickPoint = await resolveClaudeConnectorAddPointByOCR(target: target, nodes: nodes) else {
+      return
+        "Error: The Claude add connector button is not exposed to Accessibility. Refusing blind coordinate or keyboard clicks."
+    }
+
+    guard let activeTarget = frontmostClaudeConnectorKeyboardTarget(),
+      activeTarget.state == .addCustomConnectorModal,
+      let refreshedPoint = await resolveClaudeConnectorAddPointByOCR(target: target, nodes: nodes),
+      pointDistance(refreshedPoint, clickPoint) <= 8
+    else {
+      return "Error: Refusing Claude Add because the OCR target was not stable."
+    }
+
+    postLeftClick(at: refreshedPoint)
+    try? await Task.sleep(nanoseconds: 700_000_000)
+    return "Submitted with button: Add (OCR)"
   }
 
   private static func pressClaudeConnectorConnectButton(
@@ -772,6 +803,34 @@ enum CloudConnectorFormAutomation {
     return point
   }
 
+  private static func resolveClaudeConnectorAddPointByOCR(
+    target: (app: NSRunningApplication, state: ClaudeConnectorPageState),
+    nodes: [AccessibleNode]
+  ) async -> CGPoint? {
+    guard target.state == .addCustomConnectorModal else { return nil }
+    guard let windowFrame = largestWindowFrame(in: nodes),
+      let windowID = frontmostWindowID(for: target.app.processIdentifier, matching: windowFrame)
+    else { return nil }
+
+    let captureService = ScreenCaptureService()
+    guard case .success(let image) = await captureService.captureWindowCGImage(windowID: windowID) else {
+      return nil
+    }
+
+    let candidates = (try? await ocrTextCandidates(in: image)) ?? []
+    guard let candidate = findClaudeAddOCRCandidate(
+      candidates,
+      imageSize: CGSize(width: image.width, height: image.height),
+      windowFrame: windowFrame
+    ) else { return nil }
+
+    let imageSize = CGSize(width: image.width, height: image.height)
+    let screenRect = imageRectToScreen(candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
+    let point = CGPoint(x: screenRect.midX, y: screenRect.midY)
+    guard pointIsInVerifiedBrowserContent(point, app: target.app, windowFrame: windowFrame) else { return nil }
+    return point
+  }
+
   nonisolated static func findClaudeConnectOCRCandidate(
     _ candidates: [OCRTextCandidate],
     imageSize: CGSize,
@@ -784,6 +843,28 @@ enum CloudConnectorFormAutomation {
       return label == "connect"
         && candidate.confidence >= 0.75
         && screenRect.midX > windowFrame.midX
+        && screenRect.midY > windowFrame.minY + safeTopInset
+        && screenRect.maxX < windowFrame.maxX - 12
+        && screenRect.minY > windowFrame.minY + 12
+        && screenRect.maxY < windowFrame.maxY - 12
+    }
+    guard matching.count == 1 else { return nil }
+    return matching[0]
+  }
+
+  nonisolated static func findClaudeAddOCRCandidate(
+    _ candidates: [OCRTextCandidate],
+    imageSize: CGSize,
+    windowFrame: CGRect
+  ) -> OCRTextCandidate? {
+    let safeTopInset = max(88, windowFrame.height * 0.08)
+    let matching = candidates.filter { candidate in
+      let label = candidate.text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      let screenRect = imageRectToScreen(candidate.imageRect, imageSize: imageSize, windowFrame: windowFrame)
+      return label == "add"
+        && candidate.confidence >= 0.75
+        && screenRect.midX > windowFrame.midX
+        && screenRect.midY > windowFrame.minY + windowFrame.height * 0.55
         && screenRect.midY > windowFrame.minY + safeTopInset
         && screenRect.maxX < windowFrame.maxX - 12
         && screenRect.minY > windowFrame.minY + 12

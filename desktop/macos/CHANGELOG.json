@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Made Claude cloud connector setup use a verified Add button target instead of a fragile keyboard submit"
+  ],
   "releases": [
     {
       "version": "0.11.552",

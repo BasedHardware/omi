@@ -289,7 +289,7 @@ final class BrowserAutomationTargetTests: XCTestCase {
       Browser/app: ChatGPT Atlas
       Filled: Name, Remote MCP server URL, OAuth Client ID, OAuth Client Secret
       Method: keyboard fallback
-      Submitted with button: Add (keyboard fallback)
+      Submitted with button: Add (OCR)
       """
 
     XCTAssertFalse(MemoryExportExecutor.cloudFormFillSucceeded(addResult))
@@ -423,6 +423,103 @@ final class BrowserAutomationTargetTests: XCTestCase {
     )
     XCTAssertNil(
       CloudConnectorFormAutomation.findClaudeConnectOCRCandidate(
+        [good, good],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+  }
+
+  func testClaudeAddOCRCandidateRequiresExactUniqueLowerRightAdd() {
+    let imageSize = CGSize(width: 1600, height: 1000)
+    let windowFrame = CGRect(x: 100, y: 100, width: 1600, height: 1000)
+    let candidate = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Add",
+      confidence: 0.92,
+      imageRect: CGRect(x: 1260, y: 855, width: 72, height: 42)
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.findClaudeAddOCRCandidate(
+        [candidate],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      ),
+      candidate
+    )
+  }
+
+  func testClaudeAddOCRCandidateRejectsUnsafeMatches() {
+    let imageSize = CGSize(width: 1600, height: 1000)
+    let windowFrame = CGRect(x: 100, y: 100, width: 1600, height: 1000)
+    let good = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Add",
+      confidence: 0.92,
+      imageRect: CGRect(x: 1260, y: 855, width: 72, height: 42)
+    )
+    let cancel = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Cancel",
+      confidence: 0.92,
+      imageRect: CGRect(x: 1140, y: 855, width: 110, height: 42)
+    )
+    let sidebar = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Add",
+      confidence: 0.92,
+      imageRect: CGRect(x: 260, y: 170, width: 72, height: 42)
+    )
+    let topBar = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Add",
+      confidence: 0.92,
+      imageRect: CGRect(x: 1260, y: 35, width: 72, height: 42)
+    )
+    let lowConfidence = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Add",
+      confidence: 0.4,
+      imageRect: CGRect(x: 1260, y: 855, width: 72, height: 42)
+    )
+    let substring = CloudConnectorFormAutomation.OCRTextCandidate(
+      text: "Added",
+      confidence: 0.92,
+      imageRect: CGRect(x: 1260, y: 855, width: 90, height: 42)
+    )
+
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeAddOCRCandidate(
+        [cancel],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeAddOCRCandidate(
+        [sidebar],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeAddOCRCandidate(
+        [topBar],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeAddOCRCandidate(
+        [lowConfidence],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeAddOCRCandidate(
+        [substring],
+        imageSize: imageSize,
+        windowFrame: windowFrame
+      )
+    )
+    XCTAssertNil(
+      CloudConnectorFormAutomation.findClaudeAddOCRCandidate(
         [good, good],
         imageSize: imageSize,
         windowFrame: windowFrame
