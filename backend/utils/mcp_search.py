@@ -116,8 +116,28 @@ def _search_memories(uid: str, query: str, limit: int) -> List[dict]:
     return results[:limit]
 
 
+def _conversation_preview(conv: dict) -> str:
+    """Short preview for a search stub: overview, else transcript, else title.
+
+    Falls back to transcript text so a conversation that has segments but no
+    overview still has a non-empty preview, matching what ``fetch`` would return.
+    """
+    structured = conv.get("structured") or {}
+    overview = structured.get("overview") if isinstance(structured, dict) else None
+    if overview and str(overview).strip():
+        return _snippet(overview, 200)
+    segments = conv.get("transcript_segments") or []
+    transcript = " ".join(str(s.get("text", "")).strip() for s in segments if s.get("text"))
+    if transcript.strip():
+        return _snippet(transcript, 200)
+    return _conversation_title(conv)
+
+
 def _search_conversations(uid: str, query: str, limit: int) -> List[dict]:
-    conversation_ids = vector_db.query_vectors(query, uid, k=limit)
+    # Over-fetch candidates so locked conversations dropped below do not under-fill
+    # the returned count, the same way _search_memories does.
+    fetch_limit = min(limit * 3, 60)
+    conversation_ids = vector_db.query_vectors(query, uid, k=fetch_limit)
     if not conversation_ids:
         return []
     conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
@@ -127,14 +147,12 @@ def _search_conversations(uid: str, query: str, limit: int) -> List[dict]:
         if conv.get("is_locked", False):
             continue
         conv_id = conv.get("id")
-        structured = conv.get("structured") or {}
-        overview = structured.get("overview") if isinstance(structured, dict) else ""
         results.append(
             {
                 "id": f"{_CONVERSATION_PREFIX}{conv_id}",
                 "title": _conversation_title(conv),
                 "url": _conversation_url(conv_id),
-                "text": _snippet(overview, 200),
+                "text": _conversation_preview(conv),
             }
         )
     return results[:limit]
@@ -181,6 +199,8 @@ def fetch(uid: str, item_id: str) -> dict:
 
     if item_id.startswith(_MEMORY_PREFIX):
         raw_id = item_id[len(_MEMORY_PREFIX) :]
+        if not raw_id:
+            raise InvalidRequest("memory id is missing in the search id")
         memory = memories_db.get_memory(uid, raw_id)
         if not memory:
             raise ItemNotFound("Memory not found")
@@ -201,6 +221,8 @@ def fetch(uid: str, item_id: str) -> dict:
 
     if item_id.startswith(_CONVERSATION_PREFIX):
         raw_id = item_id[len(_CONVERSATION_PREFIX) :]
+        if not raw_id:
+            raise InvalidRequest("conversation id is missing in the search id")
         conv = conversations_db.get_conversation(uid, raw_id)
         if not conv:
             raise ItemNotFound("Conversation not found")
