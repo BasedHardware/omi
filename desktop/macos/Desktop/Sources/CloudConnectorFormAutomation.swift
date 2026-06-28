@@ -360,7 +360,7 @@ enum CloudConnectorFormAutomation {
     CloudConnectorGuidanceOverlay.shared.presentInstructionCard(
       title: "Allow Screen Recording for \(appName)",
       subtitle:
-        "Turn on \(appName) under Screen & System Audio Recording, then return to Claude and click Add.",
+        "Flip the \(appName) toggle on under Screen & System Audio Recording, then return to Claude and click Add.",
       near: anchor
     )
   }
