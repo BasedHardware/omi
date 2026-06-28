@@ -53,6 +53,22 @@ def clean_person(person: dict) -> dict:
     }
 
 
+def clean_meeting(meeting: dict) -> dict:
+    """Shape a calendar-meeting doc for MCP output."""
+    participants = meeting.get("participants") or []
+    return {
+        "id": meeting.get("id", ""),
+        "title": meeting.get("title", "") or "",
+        "start_time": meeting.get("start_time"),
+        "duration_minutes": meeting.get("duration_minutes"),
+        "platform": meeting.get("platform"),
+        "meeting_link": meeting.get("meeting_link"),
+        "participants": [{"name": p.get("name"), "email": p.get("email")} for p in participants if isinstance(p, dict)],
+        "notes": meeting.get("notes"),
+        "calendar_source": meeting.get("calendar_source"),
+    }
+
+
 def clean_screen_activity_row(row: dict) -> dict:
     """Shape a screen_activity doc into snake_case fields."""
     return {
