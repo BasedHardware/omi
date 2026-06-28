@@ -9,6 +9,15 @@ import sys
 import httpx
 
 
+def _raise_for_status(response: httpx.Response, label: str) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError:
+        print(f'ERROR: {label} returned HTTP {response.status_code}')
+        print(response.text[:1000])
+        raise
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Smoke test the internal Omi LLM Gateway.')
     parser.add_argument(
@@ -57,9 +66,9 @@ def main() -> int:
 
     with httpx.Client(timeout=20.0) as client:
         ready = client.get(f'{base_url}/ready', headers=headers)
-        ready.raise_for_status()
+        _raise_for_status(ready, '/ready')
         response = client.post(f'{base_url}/v1/chat/completions', headers=headers, json=payload)
-        response.raise_for_status()
+        _raise_for_status(response, '/v1/chat/completions')
         body = response.json()
 
     content = (body.get('choices') or [{}])[0].get('message', {}).get('content')
