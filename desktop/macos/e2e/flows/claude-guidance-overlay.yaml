@@ -22,6 +22,7 @@ steps:
       result.detail.issues: ""
       result.detail.action: add
       result.detail.candidateSource: accessibility
+      result.detail.attachmentEdge: above
 
   - id: S2
     name: Capture Claude Add Overlay
