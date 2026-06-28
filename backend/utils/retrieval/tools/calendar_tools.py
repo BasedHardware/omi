@@ -7,17 +7,20 @@ import os
 import contextvars
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 import httpx
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.users as users_db
+import database.notifications as notification_db
 from models.calendar_mutation import (
     CalendarMutationResult,
     event_title as calendar_event_title,
     format_deleted_calendar_events,
 )
+from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
 from utils.retrieval.tools.integration_base import (
     ensure_capped,
@@ -28,6 +31,30 @@ from utils.retrieval.tools.google_utils import google_api_request, GoogleAPIErro
 
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
+
+
+def _resolve_display_tz(tz):
+    """Return ``(tzinfo, label)`` for rendering event times in the user's timezone,
+    falling back to UTC on a missing or invalid zone (issue #4643)."""
+    if tz:
+        try:
+            return ZoneInfo(tz), tz
+        except Exception:
+            pass
+    return timezone.utc, "UTC"
+
+
+def _format_event_dt(dt: datetime, display_tz, tz_label: str) -> str:
+    """Render a calendar event datetime in the user's timezone with a label.
+
+    Google event times are tz-aware; a naive value is treated as UTC so the chat
+    model never sees an unlabeled wall-clock time and mislabels the time of day.
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
 from utils.log_sanitizer import sanitize, sanitize_pii
 import logging
 
@@ -687,6 +714,10 @@ async def get_calendar_events_tool(
             return f"No calendar events found{date_info}."
 
         # Format events
+        # Render event times in the user's timezone so the chat model labels the time
+        # of day correctly (issue #4643). The tz read is sync Firestore, so offload it.
+        tz = await run_blocking(db_executor, notification_db.get_user_time_zone, uid)
+        display_tz, tz_label = _resolve_display_tz(tz)
         result = f"Calendar Events ({len(events)} found):\n\n"
 
         for i, event in enumerate(events, 1):
@@ -698,7 +729,7 @@ async def get_calendar_events_tool(
             if 'dateTime' in start:
                 try:
                     start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
-                    result += f"   Start: {start_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                    result += f"   Start: {_format_event_dt(start_dt, display_tz, tz_label)}\n"
                 except:
                     result += f"   Start: {start.get('dateTime', 'Unknown')}\n"
             elif 'date' in start:
@@ -709,7 +740,7 @@ async def get_calendar_events_tool(
             if 'dateTime' in end:
                 try:
                     end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
-                    result += f"   End: {end_dt.strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
+                    result += f"   End: {_format_event_dt(end_dt, display_tz, tz_label)}\n"
                 except:
                     result += f"   End: {end.get('dateTime', 'Unknown')}\n"
             elif 'date' in end:
