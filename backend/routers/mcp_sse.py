@@ -41,6 +41,7 @@ from utils.mcp_data import (
     clean_meeting,
     clean_person,
     clean_screen_activity_row,
+    inclusive_end_of_day,
 )
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -912,7 +913,7 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
 
     elif tool_name == "get_calendar_meetings":
         start = _parse_mcp_date(arguments.get("start_date"), "start_date")
-        end = _parse_mcp_date(arguments.get("end_date"), "end_date")
+        end = inclusive_end_of_day(_parse_mcp_date(arguments.get("end_date"), "end_date"))
         try:
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=50, minimum=1, maximum=200)
         except ValueError as e:
