@@ -669,13 +669,10 @@ function omiManifestTool(tool: OmiToolManifestEntry) {
   });
 }
 
-function schemaOptionsForInputSchema(schema: OmiToolInputSchema): Record<string, unknown> {
-  const options: Record<string, unknown> = {};
-  for (const key of ["anyOf", "allOf", "oneOf", "if", "then"] as const) {
-    const value = schema[key];
-    if (value !== undefined) options[key] = value;
-  }
-  return options;
+function schemaOptionsForInputSchema(_schema: OmiToolInputSchema): Record<string, unknown> {
+  // Keep provider-facing schemas flat. Some model providers reject root-level
+  // composite/conditional keywords even when the manifest supports them.
+  return {};
 }
 
 function loadSkillTool() {

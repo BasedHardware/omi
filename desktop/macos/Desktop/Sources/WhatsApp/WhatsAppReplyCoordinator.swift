@@ -304,7 +304,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
       let sender = WhatsAppContactResolver.shared.displayName(for: message.senderJid, fallback: message.senderName)
       lastDraftFailure = "Could not draft a WhatsApp reply for \(sender): \(reason)"
       appendAuditMessage(for: message, outcome: "draft_failed", reason: reason)
-      log("WhatsAppReplyCoordinator: failed to draft reply for \(message.chatJid): \(reason)")
+      log("WhatsAppReplyCoordinator: failed to draft reply for \(redactedJidLabel(message.chatJid)): \(reason)")
     }
   }
 
@@ -370,7 +370,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     case .draft(let reason):
       enqueueDraft(draft)
       appendAudit(for: draft, outcome: "drafted", reason: reason)
-      log("WhatsAppReplyCoordinator: drafted reply for \(message.chatJid), reason=\(reason): \(draft.text.prefix(160))")
+      log("WhatsAppReplyCoordinator: drafted reply for \(redactedJidLabel(message.chatJid)), reason=\(reason), draftBytes=\(draft.text.utf8.count)")
 
     case .auto:
       let result = await ChatToolExecutor.execute(ToolCall(
@@ -384,7 +384,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
       ))
       WhatsAppReplySettings.shared.markAutoSent(to: message.senderJid)
       appendAudit(for: draft, outcome: "auto_sent", reason: result)
-      log("WhatsAppReplyCoordinator: auto-sent reply for \(message.chatJid): \(result.prefix(200))")
+      log("WhatsAppReplyCoordinator: auto-sent reply for \(redactedJidLabel(message.chatJid)), resultBytes=\(result.utf8.count)")
     }
   }
 
@@ -491,9 +491,7 @@ final class WhatsAppReplyCoordinator: ObservableObject {
         log("WhatsAppReplyCoordinator: tool \(name) \(status)")
       },
       onThinkingDelta: { _ in },
-      onToolResultDisplay: { _, name, output in
-        log("WhatsAppReplyCoordinator: tool result \(name): \(output.prefix(200))")
-      }
+      onToolResultDisplay: { _, _, _ in }
     )
 
     let replyText = Self.visibleReplyText(from: result.text)
@@ -534,6 +532,21 @@ final class WhatsAppReplyCoordinator: ObservableObject {
     Draft the best reply as the user. Return exactly the WhatsApp message body and nothing else.
     Do not include reasoning, context summaries, labels, or explanations.
     """
+  }
+
+  private func redactedJidLabel(_ jid: String) -> String {
+    let normalized = jid.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let parts = normalized.split(separator: "@", maxSplits: 1, omittingEmptySubsequences: false)
+    let server = parts.count == 2 ? String(parts[1]) : "unknown"
+    let kind: String
+    if server == "g.us" || normalized.contains("@g.us") {
+      kind = "group"
+    } else if server == "lid" || normalized.contains("@lid") {
+      kind = "lid"
+    } else {
+      kind = "user"
+    }
+    return "\(kind)@\(server)#\(String(normalized.hashValue, radix: 16))"
   }
 
   private func recentThreadContext(for message: WAIncomingMessage) async -> String {
