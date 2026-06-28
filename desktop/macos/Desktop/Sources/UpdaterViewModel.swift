@@ -41,6 +41,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
   /// Back-reference to the view model (set after init)
   weak var viewModel: UpdaterViewModel?
+  private var deferredInstall: DeferredUpdateInstall?
 
   // NOTE: All delegate methods use logSync() to write synchronously to disk.
   // Sparkle may terminate the app immediately after willInstallUpdate / didAbortWithError,
@@ -209,7 +210,14 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         logSync(
           "Sparkle: Deferring update v\(version) — speech detected \(Int(secondsSinceSpeech))s ago (active recording)"
         )
-        return false
+        deferredInstall = DeferredUpdateInstall(
+          version: version,
+          silenceWindow: UpdaterDelegate.activeCallSilenceWindow,
+          lastSpeechProvider: { VADGateService.lastSpeechAt },
+          install: installationBlock
+        )
+        deferredInstall?.start()
+        return true
       }
     }
 
@@ -221,6 +229,78 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Minimum seconds of VAD silence required before an auto-install is allowed.
   /// Matches the typical pause threshold at which a real conversation has wound down.
   fileprivate static let activeCallSilenceWindow: TimeInterval = 120
+}
+
+final class DeferredUpdateInstall {
+  private static let minimumRetryDelay: TimeInterval = 5
+
+  private let version: String
+  private let silenceWindow: TimeInterval
+  private let lastSpeechProvider: () -> Date?
+  private let install: () -> Void
+  private var pendingWorkItem: DispatchWorkItem?
+  private var didInstall = false
+
+  init(
+    version: String,
+    silenceWindow: TimeInterval,
+    lastSpeechProvider: @escaping () -> Date?,
+    install: @escaping () -> Void
+  ) {
+    self.version = version
+    self.silenceWindow = silenceWindow
+    self.lastSpeechProvider = lastSpeechProvider
+    self.install = install
+  }
+
+  deinit {
+    pendingWorkItem?.cancel()
+  }
+
+  func start(now: Date = Date()) {
+    pendingWorkItem?.cancel()
+    scheduleNextCheck(now: now)
+  }
+
+  private func scheduleNextCheck(now: Date) {
+    guard !didInstall else { return }
+
+    if let delay = Self.nextDelay(
+      now: now,
+      lastSpeechAt: lastSpeechProvider(),
+      silenceWindow: silenceWindow,
+      minimumRetryDelay: Self.minimumRetryDelay
+    ) {
+      logSync(
+        "Sparkle: Deferred install for v\(version) will retry after \(Int(ceil(delay)))s of remaining silence"
+      )
+      let workItem = DispatchWorkItem { [weak self] in
+        self?.scheduleNextCheck(now: Date())
+      }
+      pendingWorkItem = workItem
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+      return
+    }
+
+    didInstall = true
+    pendingWorkItem = nil
+    logSync("Sparkle: Silence window satisfied, installing deferred update v\(version)")
+    install()
+  }
+
+  static func nextDelay(
+    now: Date,
+    lastSpeechAt: Date?,
+    silenceWindow: TimeInterval,
+    minimumRetryDelay: TimeInterval = minimumRetryDelay
+  ) -> TimeInterval? {
+    guard let lastSpeechAt else { return nil }
+
+    let secondsSinceSpeech = now.timeIntervalSince(lastSpeechAt)
+    guard secondsSinceSpeech < silenceWindow else { return nil }
+
+    return max(minimumRetryDelay, silenceWindow - secondsSinceSpeech)
+  }
 }
 
 /// View model for managing Sparkle auto-updates
