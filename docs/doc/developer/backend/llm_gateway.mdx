@@ -200,7 +200,7 @@ prod: based-hardware     / OMI_LLM_GATEWAY_SERVICE_TOKEN
 
 Do not use remote config for this rollout. Rotate the service token through Secret Manager and ExternalSecrets, not through app config.
 
-The chart exposes only a `ClusterIP` service. `/health` is unauthenticated. Kubernetes liveness/startup probes call `/health`; readiness uses an `exec` probe that reads `OMI_LLM_GATEWAY_SERVICE_TOKEN` from pod env and calls `/ready` with `Authorization: Bearer ...` plus `X-Omi-Service-Caller: backend`.
+The chart exposes only a `ClusterIP` service. `/health` is unauthenticated. Kubernetes liveness/startup/readiness probes call `/health`; the deployment workflow then runs an in-cluster authenticated smoke test against `/ready` and `/v1/chat/completions` with `Authorization: Bearer ...` plus `X-Omi-Service-Caller: backend`.
 
 Before any deploy, validate the values files:
 

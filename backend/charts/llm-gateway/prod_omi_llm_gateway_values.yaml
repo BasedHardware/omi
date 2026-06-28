@@ -69,22 +69,9 @@ livenessProbe:
   timeoutSeconds: 5
 
 readinessProbe:
-  exec:
-    command:
-      - python
-      - -c
-      - |
-        import os
-        import urllib.request
-
-        request = urllib.request.Request(
-            'http://127.0.0.1:8080/ready',
-            headers={
-                'Authorization': f"Bearer {os.environ['OMI_LLM_GATEWAY_SERVICE_TOKEN']}",
-                'X-Omi-Service-Caller': 'backend',
-            },
-        )
-        urllib.request.urlopen(request, timeout=4).read()
+  httpGet:
+    path: /health
+    port: 8080
   failureThreshold: 3
   periodSeconds: 10
   timeoutSeconds: 5
