@@ -5,8 +5,10 @@ import type {
   ByokChatProvider,
   ByokProvider,
   ByokProviderStatus,
-  ByokStatus
+  ByokStatus,
+  ModelPurpose
 } from '../../../../../shared/types'
+import { byokProviderFromModelId } from '../../../lib/modelSelection'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
 import { toast } from '../../../lib/toast'
 import { SettingRow } from '../SettingRow'
@@ -36,6 +38,36 @@ const EMPTY_DRAFT_KEYS: Record<ByokProvider, string> = {
   elevenlabs: ''
 }
 
+const MODEL_PURPOSES: {
+  id: ModelPurpose
+  label: string
+  defaultLabel: string
+  description: string
+  includeHosted: boolean
+}[] = [
+  {
+    id: 'chat',
+    label: 'Chat',
+    defaultLabel: 'Provider default',
+    description: 'Main window and floating chat replies.',
+    includeHosted: true
+  },
+  {
+    id: 'agent',
+    label: 'Agent',
+    defaultLabel: 'Omi agent default',
+    description: 'Action planning and tool-use decisions.',
+    includeHosted: false
+  },
+  {
+    id: 'memory',
+    label: 'Memory',
+    defaultLabel: 'Omi synthesis default',
+    description: 'Memory import, integrations, graph, and title synthesis.',
+    includeHosted: false
+  }
+]
+
 function providerLabel(provider: ByokProvider | null | undefined): string {
   return PROVIDERS.find((p) => p.id === provider)?.label ?? provider ?? 'Omi'
 }
@@ -47,23 +79,13 @@ function statusText(status: ByokProviderStatus | undefined): string {
   return `Saved (${status.maskedKey})`
 }
 
-function modelProvider(modelId: string | undefined): ByokChatProvider | 'omi' | null {
-  if (!modelId) return null
-  const [provider] = modelId.split(':', 1)
-  return provider === 'omi' || PROVIDERS.some((item) => item.id === provider && item.chat)
-    ? (provider as ByokChatProvider | 'omi')
-    : null
-}
-
 export function ByokTab(): React.JSX.Element {
   const [byokStatus, setByokStatus] = useState<ByokStatus | null>(null)
   const [draftKeys, setDraftKeys] = useState<Record<ByokProvider, string>>(EMPTY_DRAFT_KEYS)
   const [byokBusy, setByokBusy] = useState('')
   const [models, setModels] = useState<AvailableModel[]>([])
   const [modelsBusy, setModelsBusy] = useState(false)
-  const [selectedChatModel, setSelectedChatModel] = useState(
-    getPreferences().defaultModelByPurpose?.chat ?? ''
-  )
+  const [selectedModels, setSelectedModels] = useState(getPreferences().defaultModelByPurpose ?? {})
 
   const refreshByokStatus = async (): Promise<void> => {
     try {
@@ -89,20 +111,22 @@ export function ByokTab(): React.JSX.Element {
     void refreshByokStatus()
     void refreshByokModels()
     return onPreferencesChange((prefs) => {
-      setSelectedChatModel(prefs.defaultModelByPurpose?.chat ?? '')
+      setSelectedModels(prefs.defaultModelByPurpose ?? {})
     })
   }, [])
 
-  const chatModels = useMemo(() => {
-    const activeProvider = byokStatus?.activeChatProvider
-    if (!activeProvider) {
-      return models.filter((model) => model.provider === 'omi')
-    }
-    return models.filter((model) => model.provider === activeProvider && model.configured)
-  }, [byokStatus?.activeChatProvider, models])
+  const configuredModels = useMemo(
+    () => models.filter((model) => model.provider === 'omi' || model.configured),
+    [models]
+  )
 
-  const selectedModelAvailable = chatModels.some((model) => model.id === selectedChatModel)
-  const modelSelectValue = selectedModelAvailable ? selectedChatModel : ''
+  const modelsForPurpose = (purpose: (typeof MODEL_PURPOSES)[number]): AvailableModel[] =>
+    configuredModels.filter((model) => purpose.includeHosted || model.provider !== 'omi')
+
+  const modelSelectValue = (purpose: (typeof MODEL_PURPOSES)[number]): string => {
+    const modelId = selectedModels[purpose.id] ?? ''
+    return modelsForPurpose(purpose).some((model) => model.id === modelId) ? modelId : ''
+  }
 
   const saveProvider = async (provider: ByokProvider): Promise<void> => {
     const key = draftKeys[provider].trim()
@@ -146,14 +170,15 @@ export function ByokTab(): React.JSX.Element {
     try {
       setByokStatus(await window.omi.byokDelete(provider))
       setDraftKeys((current) => ({ ...current, [provider]: '' }))
-      if (modelProvider(selectedChatModel) === provider) {
-        setPreferences({
-          defaultModelByPurpose: {
-            ...getPreferences().defaultModelByPurpose,
-            chat: undefined
-          }
-        })
-      }
+      const current = getPreferences().defaultModelByPurpose ?? {}
+      setPreferences({
+        defaultModelByPurpose: Object.fromEntries(
+          Object.entries(current).map(([purpose, modelId]) => [
+            purpose,
+            byokProviderFromModelId(modelId) === provider ? undefined : modelId
+          ])
+        )
+      })
       void refreshByokModels()
       toast(`${providerLabel(provider)} key removed`, { tone: 'success' })
     } catch (e) {
@@ -167,14 +192,6 @@ export function ByokTab(): React.JSX.Element {
     setByokBusy('use')
     try {
       setByokStatus(await window.omi.byokUse({ provider }))
-      if (modelProvider(selectedChatModel) !== (provider ?? 'omi')) {
-        setPreferences({
-          defaultModelByPurpose: {
-            ...getPreferences().defaultModelByPurpose,
-            chat: undefined
-          }
-        })
-      }
       toast(provider ? 'BYOK chat provider selected' : 'Omi hosted chat selected', {
         tone: 'success'
       })
@@ -185,14 +202,14 @@ export function ByokTab(): React.JSX.Element {
     }
   }
 
-  const selectChatModel = (modelId: string): void => {
+  const selectModel = (purpose: ModelPurpose, modelId: string): void => {
     setPreferences({
       defaultModelByPurpose: {
         ...getPreferences().defaultModelByPurpose,
-        chat: modelId || undefined
+        [purpose]: modelId || undefined
       }
     })
-    toast(modelId ? 'Chat model selected' : 'Provider default model selected', {
+    toast(modelId ? 'Model selected' : 'Default model selected', {
       tone: 'success'
     })
   }
@@ -236,31 +253,42 @@ export function ByokTab(): React.JSX.Element {
       />
       <SettingRow
         icon={KeyRound}
-        title="Chat model"
-        subtitle={
-          byokStatus?.activeChatProvider
-            ? `Choose the ${providerLabel(byokStatus.activeChatProvider)} model used for BYOK chat.`
-            : 'Choose the hosted model used when BYOK chat is off.'
-        }
-        keywords="byok model picker openai anthropic gemini openrouter chat model"
-        control={
-          <select
-            value={modelSelectValue}
-            disabled={modelsBusy || chatModels.length === 0}
-            onChange={(e) => selectChatModel(e.target.value)}
-            className="max-w-[260px] rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-50"
-          >
-            <option value="" className="bg-neutral-900">
-              {modelsBusy ? 'Loading models...' : 'Provider default'}
-            </option>
-            {chatModels.map((model) => (
-              <option key={model.id} value={model.id} className="bg-neutral-900">
-                {model.providerLabel} · {model.label}
-              </option>
-            ))}
-          </select>
-        }
-      />
+        title="Models by use"
+        subtitle="Choose separate models for chat, agent planning, and memory synthesis."
+        keywords="byok model picker openai anthropic gemini openrouter chat agent memory model"
+      >
+        <div className="space-y-3">
+          {MODEL_PURPOSES.map((purpose) => {
+            const purposeModels = modelsForPurpose(purpose)
+            return (
+              <div
+                key={purpose.id}
+                className="grid gap-2 rounded-md border border-white/[0.08] bg-white/[0.03] p-3 md:grid-cols-[130px_minmax(220px,1fr)]"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-text-primary">{purpose.label}</div>
+                  <div className="text-xs text-text-tertiary">{purpose.description}</div>
+                </div>
+                <select
+                  value={modelSelectValue(purpose)}
+                  disabled={modelsBusy || purposeModels.length === 0}
+                  onChange={(e) => selectModel(purpose.id, e.target.value)}
+                  className="min-h-9 min-w-0 rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-50"
+                >
+                  <option value="" className="bg-neutral-900">
+                    {modelsBusy ? 'Loading models...' : purpose.defaultLabel}
+                  </option>
+                  {purposeModels.map((model) => (
+                    <option key={model.id} value={model.id} className="bg-neutral-900">
+                      {model.providerLabel} · {model.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )
+          })}
+        </div>
+      </SettingRow>
       <SettingRow
         icon={KeyRound}
         title="Provider keys"
