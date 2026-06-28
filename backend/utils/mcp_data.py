@@ -26,6 +26,23 @@ def clean_action_item(item: dict) -> dict:
     }
 
 
+def clean_goal(item: dict) -> dict:
+    """Shape a goal doc for MCP output."""
+    return {
+        "id": item.get("id", ""),
+        "title": item.get("title", ""),
+        "goal_type": item.get("goal_type", "scale"),
+        "target_value": item.get("target_value"),
+        "current_value": item.get("current_value"),
+        "min_value": item.get("min_value"),
+        "max_value": item.get("max_value"),
+        "unit": item.get("unit"),
+        "is_active": bool(item.get("is_active", False)),
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+    }
+
+
 def clean_chat_message(message: dict) -> dict:
     """Shape a chat message doc (drops file/conversation join noise)."""
     return {
