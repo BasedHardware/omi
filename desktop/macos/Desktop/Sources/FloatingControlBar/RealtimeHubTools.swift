@@ -69,6 +69,24 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
+  private static func currentCalendarContext(now: Date = Date(), timeZone: TimeZone = .current) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
+    formatter.timeZone = timeZone
+    let offset = timeZone.secondsFromGMT(for: now)
+    let sign = offset >= 0 ? "+" : "-"
+    let absOffset = abs(offset)
+    let hours = absOffset / 3600
+    let minutes = (absOffset % 3600) / 60
+    return String(
+      format: "Current local datetime: %@. Current timezone: %@ (UTC%@%02d:%02d).",
+      formatter.string(from: now),
+      timeZone.identifier,
+      sign,
+      hours,
+      minutes
+    )
+  }
 
   static func systemInstruction(aboutUser: String) -> String {
     """
@@ -80,6 +98,8 @@ enum RealtimeHubTools {
     Reply in the same language the user is speaking.
 
     \(aboutUser)
+
+    \(currentCalendarContext())
 
     \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)
 
@@ -153,7 +173,8 @@ enum RealtimeHubTools {
     `start_time`, and `end_time` as ISO-8601 strings WITH timezone. Include `attendees`, \
     `location`, and `description` only if the user provided them. If the user gives no end time, \
     choose a reasonable duration from context (usually 30 minutes for meetings, 1 hour otherwise) \
-    rather than spawning an agent just to ask.
+    rather than spawning an agent just to ask. Resolve relative dates like "today", "tomorrow", \
+    and weekdays from the current local datetime/timezone above.
     - DOING something else for the user in their OTHER apps (notes, emails, messages, \
     files, browser) or any multi-step work — create/send/open/edit/search/schedule/automate/ \
     "do X for me": you CANNOT do these yourself. You MUST actually EMIT the spawn_agent \

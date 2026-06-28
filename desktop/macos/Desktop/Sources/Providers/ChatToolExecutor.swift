@@ -1676,7 +1676,11 @@ class ChatToolExecutor {
         return resp.resultText
 
       case "create_calendar_event":
-        guard let title = args["title"] as? String, !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard let rawTitle = args["title"] as? String else {
+          return "Error: title is required"
+        }
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
           return "Error: title is required"
         }
         guard let startTime = args["start_time"] as? String, !startTime.isEmpty else {

@@ -17,10 +17,11 @@ Endpoints:
 """
 
 import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import database.vector_db as vector_db
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
@@ -82,11 +83,18 @@ class UpdateActionItemRequest(BaseModel):
 
 class CreateCalendarEventRequest(BaseModel):
     title: str = Field(description="Event title")
-    start_time: str = Field(description="ISO date/time with timezone")
-    end_time: str = Field(description="ISO date/time with timezone")
+    start_time: datetime = Field(description="ISO date/time with timezone")
+    end_time: datetime = Field(description="ISO date/time with timezone")
     description: Optional[str] = Field(default=None, description="Event description")
     location: Optional[str] = Field(default=None, description="Event location")
     attendees: Optional[str] = Field(default=None, description="Comma-separated attendee names or email addresses")
+
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def require_timezone(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            raise ValueError('datetime must include timezone')
+        return value
 
 
 # --------------- conversation endpoints ---------------
@@ -258,12 +266,16 @@ async def create_calendar_event(
     result = await create_calendar_event_tool.ainvoke(
         {
             "title": body.title,
-            "start_time": body.start_time,
-            "end_time": body.end_time,
+            "start_time": body.start_time.isoformat(),
+            "end_time": body.end_time.isoformat(),
             "description": body.description,
             "location": body.location,
             "attendees": body.attendees,
         },
         config={"configurable": {"user_id": uid}},
     )
-    return _ok("create_calendar_event", result)
+    return {
+        "tool_name": "create_calendar_event",
+        "result_text": result,
+        "is_error": not result.startswith("✅ Successfully created calendar event:"),
+    }

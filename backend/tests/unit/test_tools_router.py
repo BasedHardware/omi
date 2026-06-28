@@ -136,9 +136,14 @@ _stub_package("utils.other")
 class FakeCalendarEventTool:
     def __init__(self):
         self.calls = []
+        self.next_result = None
 
     async def ainvoke(self, tool_input, config=None):
         self.calls.append((tool_input, config))
+        if self.next_result is not None:
+            result = self.next_result
+            self.next_result = None
+            return result
         return f"✅ Successfully created calendar event: {tool_input['title']}"
 
 
@@ -693,6 +698,8 @@ class TestRouterEndpoints:
         action_items_db.create_action_item.return_value = "test-item-id"
         action_items_db.update_action_item.reset_mock()
         action_items_db.update_action_item.return_value = True
+        calendar_tools_mod.create_calendar_event_tool.calls.clear()
+        calendar_tools_mod.create_calendar_event_tool.next_result = None
 
     def test_get_conversations_endpoint(self):
         resp = self.client.get("/v1/tools/conversations")
@@ -762,6 +769,7 @@ class TestRouterEndpoints:
         body = resp.json()
         assert body["tool_name"] == "create_calendar_event"
         assert "Design review" in body["result_text"]
+        assert body["is_error"] is False
 
         tool_input, config = calendar_tools_mod.create_calendar_event_tool.calls[-1]
         assert tool_input["title"] == "Design review"
@@ -770,6 +778,44 @@ class TestRouterEndpoints:
         assert tool_input["location"] == "Zoom"
         assert tool_input["attendees"] == "sam@example.com"
         assert config == {"configurable": {"user_id": "test-uid"}}
+
+    def test_create_calendar_event_rejects_malformed_datetimes(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "tomorrow at 2",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_create_calendar_event_requires_timezone(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_create_calendar_event_marks_calendar_tool_failures_as_errors(self):
+        calendar_tools_mod.create_calendar_event_tool.next_result = "Google Calendar is not connected."
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00-04:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "create_calendar_event"
+        assert body["result_text"] == "Google Calendar is not connected."
+        assert body["is_error"] is True
 
     def test_get_conversations_query_params(self):
         """Query params are forwarded correctly to the service."""

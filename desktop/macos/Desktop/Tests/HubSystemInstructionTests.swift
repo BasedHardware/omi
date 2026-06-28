@@ -19,6 +19,9 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instr.contains("get_daily_recap"))
         XCTAssertTrue(instr.contains("ask_higher_model"))
         XCTAssertTrue(instr.contains("create_calendar_event"))
+        XCTAssertTrue(instr.contains("Current local datetime:"))
+        XCTAssertTrue(instr.contains("Current timezone:"))
+        XCTAssertTrue(instr.contains("Resolve relative dates"))
         XCTAssertTrue(instr.contains("ANSWER YOURSELF"))
     }
 
