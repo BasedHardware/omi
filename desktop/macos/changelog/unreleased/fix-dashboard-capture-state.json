@@ -1,0 +1,4 @@
+{
+  "title": "Fix dashboard capture button launch state",
+  "description": "The dashboard Capture button now reflects live screen capture immediately after launch."
+}
