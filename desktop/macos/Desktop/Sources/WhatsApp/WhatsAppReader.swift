@@ -2,6 +2,9 @@ import CryptoKit
 import Foundation
 
 enum WhatsAppReader {
+  private static let iso8601DateStyle = Date.ISO8601FormatStyle()
+  private static let iso8601FractionalDateStyle = Date.ISO8601FormatStyle(includingFractionalSeconds: true)
+
   static func listChats(limit: Int = 50) async -> [MessageThread] {
     let boundedLimit = max(1, min(limit, 200))
     let raw = await runWacliJSON(["chats", "list", "--limit", String(boundedLimit)])
@@ -269,7 +272,17 @@ enum WhatsAppReader {
     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
     let parts = trimmed.split(separator: "@", omittingEmptySubsequences: false)
     guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty }) else { return false }
-    return trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
+    guard trimmed.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return false }
+    return isKnownWhatsAppServer(String(parts[1]).lowercased())
+  }
+
+  private static func isKnownWhatsAppServer(_ server: String) -> Bool {
+    switch server {
+    case "s.whatsapp.net", "c.us", "g.us", "lid", "broadcast", "newsletter":
+      return true
+    default:
+      return false
+    }
   }
 
   private static func phoneNumber(from jid: String) -> String? {
@@ -338,7 +351,7 @@ enum WhatsAppReader {
         return Date(timeIntervalSince1970: seconds > 10_000_000_000 ? seconds / 1000 : seconds)
       }
       if let string = object[key] as? String {
-        if let date = ISO8601DateFormatter().date(from: string) {
+        if let date = parseISO8601Date(string) {
           return date
         }
         if let seconds = TimeInterval(string) {
@@ -347,6 +360,13 @@ enum WhatsAppReader {
       }
     }
     return nil
+  }
+
+  private static func parseISO8601Date(_ value: String) -> Date? {
+    if let date = try? iso8601FractionalDateStyle.parse(value) {
+      return date
+    }
+    return try? iso8601DateStyle.parse(value)
   }
 
   private static func stableFallbackMessageID(senderJid: String?, timestamp: Date?, text: String) -> String {

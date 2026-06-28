@@ -67,18 +67,38 @@ function stableJSONStringify(value: unknown): string {
   }
   if (value && typeof value === "object") {
     return `{${Object.entries(value as Record<string, unknown>)
-      .sort(([lhs], [rhs]) => lhs.localeCompare(rhs))
+      .sort(([lhs], [rhs]) => (lhs < rhs ? -1 : lhs > rhs ? 1 : 0))
       .map(([key, item]) => `${JSON.stringify(key)}:${stableJSONStringify(item)}`)
       .join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
-function withIdempotencyKey(name: string, input: Record<string, unknown>, context: Record<string, unknown>): Record<string, unknown> {
+function requestScopeValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value.trim() || undefined;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return undefined;
+}
+
+function withIdempotencyKey(
+  name: string,
+  input: Record<string, unknown>,
+  context: Record<string, unknown>,
+  requestScope: unknown
+): Record<string, unknown> {
   if (name !== "wa_send_message" || typeof input.client_message_id === "string" || typeof input.dedupe_id === "string") {
     return input;
   }
+  const mcpRequestId = requestScopeValue(requestScope);
+  if (!mcpRequestId) {
+    return input;
+  }
   const scope = {
+    mcpRequestId,
     requestId: context.requestId,
     clientId: context.clientId,
     sessionId: context.sessionId,
@@ -146,7 +166,8 @@ function connectToPipe(): Promise<void> {
 
 async function requestSwiftTool(
   name: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  requestScope: unknown
 ): Promise<string> {
   const callId = nextCallId();
 
@@ -170,7 +191,7 @@ async function requestSwiftTool(
       type: "tool_use",
       callId,
       name,
-      input: withIdempotencyKey(name, input, context),
+      input: withIdempotencyKey(name, input, context, requestScope),
       ...context,
     }) + "\n");
   });
@@ -308,7 +329,7 @@ async function handleJsonRpc(body: Record<string, unknown>): Promise<void> {
         return;
       }
       try {
-        const result = await requestSwiftTool(toolName, args);
+        const result = await requestSwiftTool(toolName, args, id);
         if (!isNotification) {
           send({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: result }] } });
         }

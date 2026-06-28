@@ -78,14 +78,19 @@ final class WhatsAppContactResolver: ObservableObject {
 
   func canonicalJid(for jid: String) -> String {
     var current = normalizeJid(jid)
-    var visited: Set<String> = []
+    var path: [String] = []
+    var visitedIndex: [String: Int] = [:]
     while let canonical = contactsByJid[current]?.canonicalJid?.nilIfEmpty.map(normalizeJid),
       canonical != current
     {
-      guard !visited.contains(current), !visited.contains(canonical) else {
-        return current
+      if let cycleStart = visitedIndex[current] {
+        return stableCycleRepresentative(Array(path[cycleStart...]))
       }
-      visited.insert(current)
+      if let cycleStart = visitedIndex[canonical] {
+        return stableCycleRepresentative(Array(path[cycleStart...]) + [current])
+      }
+      visitedIndex[current] = path.count
+      path.append(current)
       current = canonical
     }
     return current
@@ -95,7 +100,7 @@ final class WhatsAppContactResolver: ObservableObject {
     let normalized = normalizeJid(jid)
     let canonical = normalizeJid(canonicalJid)
     guard !normalized.isEmpty, !canonical.isEmpty, normalized != canonical else { return }
-    guard self.canonicalJid(for: canonical) != normalized else {
+    guard !aliasChain(from: canonical, contains: normalized) else {
       log("WhatsAppContactResolver: skipped cyclic alias")
       return
     }
@@ -326,7 +331,38 @@ final class WhatsAppContactResolver: ObservableObject {
     let normalized = normalizeJid(value)
     let parts = normalized.split(separator: "@", omittingEmptySubsequences: false)
     guard parts.count == 2, parts.allSatisfy({ !$0.isEmpty }) else { return false }
-    return normalized.rangeOfCharacter(from: .whitespacesAndNewlines) == nil
+    guard normalized.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return false }
+    return isKnownWhatsAppServer(String(parts[1]))
+  }
+
+  private func isKnownWhatsAppServer(_ server: String) -> Bool {
+    switch server {
+    case "s.whatsapp.net", "c.us", "g.us", "lid", "broadcast", "newsletter":
+      return true
+    default:
+      return false
+    }
+  }
+
+  private func aliasChain(from start: String, contains target: String) -> Bool {
+    var current = start
+    var visited: Set<String> = []
+    while !current.isEmpty, visited.insert(current).inserted {
+      if current == target {
+        return true
+      }
+      guard let canonical = contactsByJid[current]?.canonicalJid?.nilIfEmpty.map(normalizeJid),
+        canonical != current
+      else {
+        return false
+      }
+      current = canonical
+    }
+    return false
+  }
+
+  private func stableCycleRepresentative(_ jids: [String]) -> String {
+    jids.min() ?? ""
   }
 
   private func jidFromPhone(_ value: String) -> String? {

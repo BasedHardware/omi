@@ -130,7 +130,9 @@ final class WhatsAppMessagingProvider: MessagingProvider {
     var aliases: [String: String] = [:]
 
     for draft in drafts where draft.chatJid.contains("@lid") {
-      if let match = phoneMatchedThreadId(for: draft, in: threads) {
+      if let match = canonicalAliasMatchedThreadId(for: draft, in: threads)
+        ?? phoneMatchedThreadId(for: draft, in: threads)
+      {
         aliases[draft.chatJid] = match
         rememberAliasContact(for: draft, canonicalThreadId: match, threads: threads)
       }
@@ -197,6 +199,20 @@ final class WhatsAppMessagingProvider: MessagingProvider {
       return WhatsAppContactResolver.shared.phoneDigits(for: thread.id) == digits
     }
     return matches.count == 1 ? matches[0].id : nil
+  }
+
+  private func canonicalAliasMatchedThreadId(for draft: WhatsAppDraft, in threads: [MessageThread]) -> String? {
+    let candidates = [
+      WhatsAppContactResolver.shared.canonicalJid(for: draft.chatJid),
+      WhatsAppContactResolver.shared.canonicalJid(for: draft.senderJid),
+    ]
+    let matches = Set(candidates.compactMap { canonical -> String? in
+      guard canonical != draft.chatJid, canonical != draft.senderJid else { return nil }
+      return threads.first { thread in
+        thread.id.lowercased() == canonical && !isLinkedDeviceThread(thread.id)
+      }?.id
+    })
+    return matches.count == 1 ? matches.first : nil
   }
 
   private func rememberAliasContact(for draft: WhatsAppDraft, canonicalThreadId: String, threads: [MessageThread]) {
