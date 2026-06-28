@@ -186,7 +186,7 @@ INSTRUCTIONS:
 
 Provide:
 - folder_id: The best matching folder ID from the list above
-- confidence: Match strength (0.0-1.0). Use 0.9+ only for clear thematic matches, below 0.7 means use DEFAULT
+- confidence: Match strength (0.0-1.0). Use 0.9+ only for clear thematic matches; below 0.7 routes to the conversation's category folder if one is listed, otherwise the DEFAULT folder
 - reasoning: One sentence explaining the match
 
 {format_instructions}'''
