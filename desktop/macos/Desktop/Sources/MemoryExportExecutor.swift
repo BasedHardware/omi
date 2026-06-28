@@ -157,7 +157,10 @@ enum MemoryExportExecutor {
         } else if CloudConnectorFormAutomation.showClaudeConnectGuidanceOverlay() {
           throw ExecutorError.browserSetupRequired(cloudSetupManualClaudeConnectMessage)
         } else {
+          // We could not anchor to Claude. Send the user to grant Screen Recording, but
+          // never leave them on a bare settings pane: show an instruction card too.
           requestScreenRecordingApprovalForCloudSetup()
+          await CloudConnectorFormAutomation.showScreenRecordingSettingsInstructionOverlay()
           throw ExecutorError.browserSetupRequired(cloudSetupScreenRecordingPermissionMessage)
         }
       }
