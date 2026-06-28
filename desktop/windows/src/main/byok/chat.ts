@@ -10,6 +10,7 @@ type JsonRecord = Record<string, unknown>
 
 export type ByokChatOptions = {
   fetchImpl?: FetchLike
+  systemPrompt?: string
 }
 
 const BYOK_SYSTEM_PROMPT = [
@@ -99,10 +100,13 @@ export function buildByokChatRequest(
   provider: ByokChatProvider,
   key: string,
   messages: ChatMessage[],
-  modelId?: string
+  modelId?: string,
+  systemPrompt = BYOK_SYSTEM_PROMPT
 ): { url: string; init: RequestInit } {
   const model = modelFor(provider, modelId)
   const thread = chatMessages(messages)
+  const prompt = systemPrompt.trim()
+  const openAiMessages = prompt ? [{ role: 'system', content: prompt }, ...thread] : thread
 
   switch (provider) {
     case 'openai':
@@ -117,7 +121,7 @@ export function buildByokChatRequest(
           body: JSON.stringify({
             model,
             stream: false,
-            messages: [{ role: 'system', content: BYOK_SYSTEM_PROMPT }, ...thread]
+            messages: openAiMessages
           })
         }
       }
@@ -134,7 +138,7 @@ export function buildByokChatRequest(
           body: JSON.stringify({
             model,
             max_tokens: 1024,
-            system: BYOK_SYSTEM_PROMPT,
+            ...(prompt ? { system: prompt } : {}),
             messages: thread
           })
         }
@@ -149,9 +153,13 @@ export function buildByokChatRequest(
             'x-goog-api-key': key
           },
           body: JSON.stringify({
-            system_instruction: {
-              parts: [{ text: BYOK_SYSTEM_PROMPT }]
-            },
+            ...(prompt
+              ? {
+                  system_instruction: {
+                    parts: [{ text: prompt }]
+                  }
+                }
+              : {}),
             contents: thread.map((message) => ({
               role: message.role === 'assistant' ? 'model' : 'user',
               parts: [{ text: message.content }]
@@ -173,7 +181,7 @@ export function buildByokChatRequest(
           body: JSON.stringify({
             model,
             stream: false,
-            messages: [{ role: 'system', content: BYOK_SYSTEM_PROMPT }, ...thread]
+            messages: openAiMessages
           })
         }
       }
@@ -230,7 +238,7 @@ export async function sendByokChat(
   if (chatMessages(messages).length === 0) throw new Error('BYOK chat requires messages')
 
   const fetchImpl = options.fetchImpl ?? fetch
-  const request = buildByokChatRequest(provider, trimmed, messages, modelId)
+  const request = buildByokChatRequest(provider, trimmed, messages, modelId, options.systemPrompt)
   const response = await fetchImpl(request.url, request.init)
   if (!response.ok) {
     throw new Error(`BYOK chat request failed with HTTP ${response.status}`)
