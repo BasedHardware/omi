@@ -34,7 +34,8 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
-from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row, clean_goal
+import utils.mcp_goals as mcp_goals
 from utils.mcp_memories import (
     collect_filtered_memories,
     parse_mcp_bool,
@@ -61,6 +62,7 @@ MCP_SCOPES_SUPPORTED = [
     "conversations.read",
     "action_items.read",
     "goals.read",
+    "goals.write",
     "chat.read",
     "screen_activity.read",
     "people.read",
@@ -89,6 +91,7 @@ MEMORIES_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["memories.write"]}]
 CONVERSATIONS_READ_SECURITY = [{"type": "oauth2", "scopes": ["conversations.read"]}]
 ACTION_ITEMS_READ_SECURITY = [{"type": "oauth2", "scopes": ["action_items.read"]}]
 GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
+GOALS_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["goals.write"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
@@ -377,6 +380,91 @@ MCP_TOOLS = [
                     "default": False,
                 },
             },
+        },
+    },
+    {
+        "name": "get_goal_history",
+        "description": "Retrieve a goal's recorded progress points over recent days, to see how it is trending.",
+        "annotations": READ_ONLY_ANNOTATIONS,
+        "securitySchemes": GOALS_READ_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "goal_id": {"type": "string", "description": "The ID of the goal"},
+                "days": {"type": "integer", "description": "How many days of history to return (1-365)", "default": 30},
+            },
+            "required": ["goal_id"],
+        },
+    },
+    {
+        "name": "create_goal",
+        "description": (
+            "Create a goal for the user (a measurable objective they are working toward) — for example one they "
+            "mention wanting to achieve. Omi keeps a small number of active goals, so the oldest may be retired."
+        ),
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": GOALS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "What the user wants to achieve"},
+                "target_value": {"type": "number", "description": "The value that means the goal is achieved"},
+                "goal_type": {
+                    "type": "string",
+                    "enum": ["boolean", "scale", "numeric"],
+                    "description": "boolean (done/not done), scale (e.g. 0-10), or numeric (e.g. a count)",
+                    "default": "scale",
+                },
+                "current_value": {"type": "number", "description": "Progress so far (default 0)", "default": 0},
+                "min_value": {"type": "number", "description": "Low end of the scale (default 0)", "default": 0},
+                "max_value": {"type": "number", "description": "High end of the scale (default 10)", "default": 10},
+                "unit": {"type": "string", "description": "Optional unit label, e.g. books, miles, customers"},
+            },
+            "required": ["title", "target_value"],
+        },
+    },
+    {
+        "name": "update_goal",
+        "description": "Update a goal's definition (title, target, unit, or scale). Only the fields you pass change.",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": GOALS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "goal_id": {"type": "string", "description": "The ID of the goal"},
+                "title": {"type": "string", "description": "New title"},
+                "target_value": {"type": "number", "description": "New target value"},
+                "current_value": {"type": "number", "description": "New current value"},
+                "unit": {"type": "string", "description": "New unit label"},
+                "min_value": {"type": "number", "description": "New low end of the scale"},
+                "max_value": {"type": "number", "description": "New high end of the scale"},
+            },
+            "required": ["goal_id"],
+        },
+    },
+    {
+        "name": "update_goal_progress",
+        "description": "Log progress against a goal by setting its current value. Also recorded to the goal's history.",
+        "annotations": WRITE_ANNOTATIONS,
+        "securitySchemes": GOALS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "goal_id": {"type": "string", "description": "The ID of the goal"},
+                "current_value": {"type": "number", "description": "The new progress value"},
+            },
+            "required": ["goal_id", "current_value"],
+        },
+    },
+    {
+        "name": "delete_goal",
+        "description": "Delete a goal by ID. Use this to clean up a goal that is no longer relevant.",
+        "annotations": DESTRUCTIVE_WRITE_ANNOTATIONS,
+        "securitySchemes": GOALS_WRITE_SECURITY,
+        "inputSchema": {
+            "type": "object",
+            "properties": {"goal_id": {"type": "string", "description": "The ID of the goal to delete"}},
+            "required": ["goal_id"],
         },
     },
     {
@@ -823,6 +911,75 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
     elif tool_name == "get_goals":
         include_inactive = parse_mcp_bool(arguments.get("include_inactive"), "include_inactive", default=False)
         return {"goals": goals_db.get_all_goals(user_id, include_inactive=include_inactive)}
+
+    elif tool_name == "get_goal_history":
+        goal_id = arguments.get("goal_id")
+        if not goal_id:
+            raise ToolExecutionError("goal_id is required", code=-32602)
+        try:
+            history = mcp_goals.get_goal_history(user_id, goal_id, days=arguments.get("days", 30))
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        return {"history": history}
+
+    elif tool_name == "create_goal":
+        try:
+            goal = mcp_goals.create_goal(
+                user_id,
+                arguments.get("title"),
+                arguments.get("target_value"),
+                goal_type=arguments.get("goal_type", "scale"),
+                current_value=arguments.get("current_value", 0),
+                min_value=arguments.get("min_value", 0),
+                max_value=arguments.get("max_value", 10),
+                unit=arguments.get("unit"),
+            )
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        return {"success": True, "goal": goal}
+
+    elif tool_name == "update_goal":
+        goal_id = arguments.get("goal_id")
+        if not goal_id:
+            raise ToolExecutionError("goal_id is required", code=-32602)
+        try:
+            goal = mcp_goals.update_goal(
+                user_id,
+                goal_id,
+                title=arguments.get("title"),
+                target_value=arguments.get("target_value"),
+                current_value=arguments.get("current_value"),
+                unit=arguments.get("unit"),
+                min_value=arguments.get("min_value"),
+                max_value=arguments.get("max_value"),
+            )
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        except mcp_goals.GoalNotFound:
+            raise ToolExecutionError("Goal not found", code=-32001)
+        return {"success": True, "goal": goal}
+
+    elif tool_name == "update_goal_progress":
+        goal_id = arguments.get("goal_id")
+        if not goal_id:
+            raise ToolExecutionError("goal_id is required", code=-32602)
+        try:
+            goal = mcp_goals.update_goal_progress(user_id, goal_id, arguments.get("current_value"))
+        except ValueError as e:
+            raise ToolExecutionError(str(e), code=-32602)
+        except mcp_goals.GoalNotFound:
+            raise ToolExecutionError("Goal not found", code=-32001)
+        return {"success": True, "goal": goal}
+
+    elif tool_name == "delete_goal":
+        goal_id = arguments.get("goal_id")
+        if not goal_id:
+            raise ToolExecutionError("goal_id is required", code=-32602)
+        try:
+            mcp_goals.delete_goal(user_id, goal_id)
+        except mcp_goals.GoalNotFound:
+            raise ToolExecutionError("Goal not found", code=-32001)
+        return {"success": True}
 
     elif tool_name == "get_chat_messages":
         try:
