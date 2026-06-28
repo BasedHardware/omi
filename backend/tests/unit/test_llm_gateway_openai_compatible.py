@@ -26,7 +26,7 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     try:
         response = TestClient(app).post(
             '/v1/chat/completions',
-            json=valid_request(temperature=0, max_completion_tokens=64),
+            json=valid_request(temperature=0, max_completion_tokens=64, metadata={'omi_feature': 'smoke'}),
             headers=auth_headers(),
         )
     finally:
@@ -46,6 +46,7 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
     assert provider.calls[0].request['temperature'] == 0
     assert provider.calls[0].request['max_completion_tokens'] == 64
+    assert 'metadata' not in provider.calls[0].request
 
 
 def test_chat_completions_rejects_unknown_auto_lane(monkeypatch):

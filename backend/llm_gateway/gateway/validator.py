@@ -16,6 +16,7 @@ class ValidatedChatCompletionRequest:
 
 
 CONTROL_PARAMS = frozenset({'model', 'messages', 'response_format', 'stream', 'tools', 'tool_choice'})
+GATEWAY_LOCAL_PARAMS = frozenset({'metadata'})
 FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
     {
         'frequency_penalty',
@@ -23,7 +24,6 @@ FORWARDED_CHAT_COMPLETION_PARAMS = frozenset(
         'logprobs',
         'max_completion_tokens',
         'max_tokens',
-        'metadata',
         'n',
         'presence_penalty',
         'seed',
@@ -136,7 +136,7 @@ def _validate_response_format(value: Any, lane: LaneConfig) -> Mapping[str, Any]
 
 
 def _validate_forwarded_params(request: Mapping[str, Any]) -> Mapping[str, Any]:
-    unsupported = sorted(set(request.keys()) - CONTROL_PARAMS - FORWARDED_CHAT_COMPLETION_PARAMS)
+    unsupported = sorted(set(request.keys()) - CONTROL_PARAMS - GATEWAY_LOCAL_PARAMS - FORWARDED_CHAT_COMPLETION_PARAMS)
     if unsupported:
         raise GatewayInvalidRequestError(
             f'unsupported chat completion parameter: {unsupported[0]}',
