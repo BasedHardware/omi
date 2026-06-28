@@ -66,6 +66,11 @@ enum SpatialOverlayGeometry {
     appKitFrame(topLeftOrigin: frame.origin, size: frame.size, flipMaxY: primaryFlipMaxY)
   }
 
+  /// Convert a global top-left point to AppKit global coordinates (primary flip).
+  static func globalAppKitPoint(topLeft point: CGPoint) -> CGPoint {
+    CGPoint(x: point.x, y: primaryFlipMaxY - point.y)
+  }
+
   static func appKitFrame(topLeftOrigin: CGPoint, size: CGSize, flipMaxY: CGFloat) -> CGRect {
     CGRect(
       x: topLeftOrigin.x,
