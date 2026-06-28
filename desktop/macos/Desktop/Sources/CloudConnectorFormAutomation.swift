@@ -319,14 +319,19 @@ enum CloudConnectorFormAutomation {
     }
     let windowFrame = SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: rawWindowFrame)
 
+    let candidates = claudeAddGuidanceCandidates(
+      windowFrame: windowFrame,
+      nodes: target.nodes,
+      screen: screen
+    )
+    // Fail safe: never point at a guess. If we could not locate the Add button, the
+    // Cancel button, or even the modal body, do not show a pointing overlay.
+    guard !candidates.isEmpty else { return false }
+
     target.app.activate()
     CloudConnectorGuidanceOverlay.shared.presentClaudeAddHint(
       windowFrame: windowFrame,
-      candidates: claudeAddGuidanceCandidates(
-        windowFrame: windowFrame,
-        nodes: target.nodes,
-        screen: screen
-      )
+      candidates: candidates
     )
     return true
   }
@@ -362,18 +367,28 @@ enum CloudConnectorFormAutomation {
     if let raw = largestWindowFrame(in: target.nodes) {
       out["rawWindowFrameTopLeft"] = rectStr(raw)
     }
-    if let add = findActionNode(in: target.nodes, matching: ["add"]) {
+    let add = findActionNode(in: target.nodes, matching: ["add"])
+    let cancel = findActionNode(in: target.nodes, matching: ["cancel"])
+    if let add {
       out["addNodeTopLeft"] = rectStr(add.frame)
       out["addNodeLabel"] = bestLabel(for: add)
     } else {
       out["addNode"] = "nil"
     }
-    if let cancel = findActionNode(in: target.nodes, matching: ["cancel"]) {
+    if let cancel {
       out["cancelNodeTopLeft"] = rectStr(cancel.frame)
       out["cancelNodeLabel"] = bestLabel(for: cancel)
     } else {
       out["cancelNode"] = "nil"
     }
+    let windowTopLeft = largestWindowFrame(in: target.nodes) ?? .null
+    let modalRect = locatedClaudeModalRect(in: target.nodes, within: windowTopLeft)
+    out["locatedModalRect"] = modalRect.map(rectStr) ?? "nil"
+    // Which guidance path the live overlay would take.
+    out["chosenPath"] =
+      add != nil
+      ? "explicit-add"
+      : cancel != nil ? "cancel-inference" : modalRect != nil ? "modal-footer" : "suppressed"
     return out
   }
 
@@ -418,43 +433,147 @@ enum CloudConnectorFormAutomation {
     )
   }
 
+  /// Live Add-guidance candidates. Every candidate is anchored to an element we
+  /// actually located in the accessibility tree — the Add button, the Cancel button, or
+  /// the modal itself. We deliberately never fall back to a whole-window percentage
+  /// guess: pointing confidently at an invented coordinate (which lands below the modal
+  /// and covers the real button) is worse than not pointing. If nothing is located we
+  /// return [] and the caller suppresses the overlay.
   private static func claudeAddGuidanceCandidates(
     windowFrame: CGRect,
     nodes: [AccessibleNode],
     screen: SpatialOverlayScreen
   ) -> [SpatialOverlayAnchorCandidate] {
-    let addFrames =
-      findActionNode(in: nodes, matching: ["add"])
-      .map { [SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: $0.frame)] }
-      ?? []
-    var candidates = claudeAddGuidanceCandidates(
-      windowFrame: windowFrame,
-      explicitTargetFrames: addFrames
-    )
-    if addFrames.isEmpty,
-      let cancel = findActionNode(in: nodes, matching: ["cancel"])
-    {
-      let inferredFrame = inferredClaudeAddButtonFrameFromCancel(cancel.frame)
-      let appKitFrame = SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: inferredFrame)
-      let inferred = SpatialOverlayAnchorCandidate(
-        id: "claude-add-inferred-from-cancel",
-        targetRect: appKitFrame,
-        screen: candidates.first?.screen ?? screen,
-        window: candidates.first?.window,
-        evidence: [
-          SpatialOverlayTargetEvidence(
-            source: .layoutHeuristic,
-            confidence: 0.82,
-            label: "Claude Add inferred from Cancel button",
-            diagnostics: ["display-guidance-only", "inferred-from-cancel-button"]
-          )
-        ],
-        confidence: 0.82,
-        allowedUses: [.displayGuidance]
-      )
-      candidates.insert(inferred, at: 0)
+    let overlayScreen = SpatialOverlayScreen(
+      id: "claude-window", frame: windowFrame, visibleFrame: windowFrame)
+    let window = SpatialOverlayWindow(
+      id: "claude-window", frame: windowFrame, screenID: overlayScreen.id)
+
+    // 1) Exact Add button exposed by accessibility — the ideal case.
+    if let add = findActionNode(in: nodes, matching: ["add"]) {
+      let rect = SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: add.frame)
+      return [
+        SpatialOverlayAnchorCandidate(
+          id: "claude-add-explicit-0",
+          targetRect: rect,
+          screen: overlayScreen,
+          window: window,
+          evidence: [
+            SpatialOverlayTargetEvidence(
+              source: .accessibility, confidence: 0.95, label: "Claude Add button")
+          ],
+          confidence: 0.95,
+          allowedUses: [.displayGuidance, .performClick])
+      ]
     }
-    return candidates
+
+    // 2) Cancel is located but Add is not — infer Add to the right of Cancel.
+    if let cancel = findActionNode(in: nodes, matching: ["cancel"]) {
+      let rect = SpatialOverlayGeometry.globalAppKitFrame(
+        topLeftFrame: inferredClaudeAddButtonFrameFromCancel(cancel.frame))
+      return [
+        SpatialOverlayAnchorCandidate(
+          id: "claude-add-inferred-from-cancel",
+          targetRect: rect,
+          screen: overlayScreen,
+          window: window,
+          evidence: [
+            SpatialOverlayTargetEvidence(
+              source: .layoutHeuristic, confidence: 0.82,
+              label: "Claude Add inferred from Cancel button",
+              diagnostics: ["display-guidance-only", "inferred-from-cancel-button"])
+          ],
+          confidence: 0.82,
+          allowedUses: [.displayGuidance])
+      ]
+    }
+
+    // 3) Neither button is located, but the modal's form fields are. Point at the
+    //    located modal's footer (where Add lives) instead of guessing against the window.
+    if let modalTopLeft = locatedClaudeModalRect(in: nodes, within: windowFrame),
+      let footer = claudeAddFallbackFooterTarget(modalTopLeft: modalTopLeft, window: windowFrame)
+    {
+      // Treat the located modal as a hard exclusion zone so the bubble is placed beside
+      // it rather than on top of the form, while the arrow still reaches the footer.
+      let modalExclusion = SpatialOverlayExclusionZone(
+        rect: SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: modalTopLeft),
+        kind: .targetWindowChrome,
+        isHard: true)
+      let screenWithModal = SpatialOverlayScreen(
+        id: overlayScreen.id, frame: windowFrame, visibleFrame: windowFrame,
+        exclusionZones: [modalExclusion])
+      return [
+        SpatialOverlayAnchorCandidate(
+          id: "claude-add-modal-footer",
+          targetRect: SpatialOverlayGeometry.globalAppKitFrame(topLeftFrame: footer.rect),
+          targetPoint: SpatialOverlayGeometry.globalAppKitPoint(topLeft: footer.point),
+          screen: screenWithModal,
+          window: window,
+          evidence: [
+            SpatialOverlayTargetEvidence(
+              source: .layoutHeuristic, confidence: 0.55,
+              label: "Claude modal footer (Add button area)",
+              diagnostics: ["display-guidance-only", "anchored-to-located-modal"])
+          ],
+          confidence: 0.55,
+          allowedUses: [.displayGuidance])
+      ]
+    }
+
+    // 4) Nothing located — suppress the overlay rather than point at a guess.
+    return []
+  }
+
+  /// Bounding rect (top-left coords) of Claude's connector modal, derived from the
+  /// form-field frames we located in the accessibility tree. Returns nil if too few
+  /// fields are located to be confident. Pure and testable.
+  nonisolated static func claudeModalRect(
+    fromFieldFrames frames: [CGRect], titleFrame: CGRect? = nil
+  ) -> CGRect? {
+    let valid = frames.filter { !$0.isNull && !$0.isEmpty }
+    guard valid.count >= 2 else { return nil }
+    var rect = valid.dropFirst().reduce(valid[0]) { $0.union($1) }
+    if let titleFrame, !titleFrame.isNull, !titleFrame.isEmpty {
+      rect = rect.union(titleFrame)
+    }
+    return rect
+  }
+
+  /// Footer target (top-left coords) for the modal's Add button area, anchored to the
+  /// located modal rect. The footer band sits just below the located form content,
+  /// biased to the bottom-right where Add renders. Clamped inside the window so it can
+  /// never land in off-screen dead space. Pure and testable.
+  nonisolated static func claudeAddFallbackFooterTarget(
+    modalTopLeft modal: CGRect, window: CGRect
+  ) -> (rect: CGRect, point: CGPoint)? {
+    guard !modal.isNull, !modal.isEmpty else { return nil }
+    let footerWidth = min(240, max(120, modal.width * 0.5))
+    let footerHeight: CGFloat = 84
+    var rect = CGRect(
+      x: modal.maxX - footerWidth, y: modal.maxY, width: footerWidth, height: footerHeight)
+    // Keep the footer inside the window (top-left coords: clamp against window bounds).
+    if window.width > 0, window.height > 0 {
+      let maxY = window.maxY - footerHeight
+      rect.origin.y = Swift.min(rect.origin.y, Swift.max(window.minY, maxY))
+      rect.origin.x = Swift.min(
+        Swift.max(rect.origin.x, window.minX), Swift.max(window.minX, window.maxX - footerWidth))
+    }
+    // Aim at the upper-right of the footer, nearest the located content.
+    let point = CGPoint(x: rect.maxX - footerWidth * 0.3, y: rect.minY + 26)
+    return (rect, point)
+  }
+
+  private static func locatedClaudeModalRect(
+    in nodes: [AccessibleNode], within window: CGRect
+  ) -> CGRect? {
+    let fieldFrames =
+      nodes
+      .filter { isInputField($0) && !$0.frame.isNull && !$0.frame.isEmpty }
+      .map(\.frame)
+      .filter { window.isNull || window.isEmpty || window.intersects($0) }
+    let titleFrame =
+      nodes.first { $0.searchableText.contains("add custom connector") }?.frame
+    return claudeModalRect(fromFieldFrames: fieldFrames, titleFrame: titleFrame)
   }
 
   nonisolated static func inferredClaudeAddButtonFrameFromCancel(_ cancelFrame: CGRect) -> CGRect {
