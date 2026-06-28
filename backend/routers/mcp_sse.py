@@ -69,6 +69,12 @@ MCP_SCOPES_SUPPORTED = [
     "memories.read",
     "memories.write",
     "conversations.read",
+    "action_items.read",
+    "action_items.write",
+    "goals.read",
+    "chat.read",
+    "screen_activity.read",
+    "people.read",
 ]
 
 MCP_LEGACY_API_KEY_SCOPES = [
@@ -199,10 +205,16 @@ TOOL_REQUIRED_SCOPE = {
     "search_x_posts": "memories.read",
     "get_x_posts": "memories.read",
     "get_action_items": "action_items.read",
+    "search_action_items": "action_items.read",
+    "create_action_item": "action_items.write",
+    "complete_action_item": "action_items.write",
+    "update_action_item": "action_items.write",
+    "delete_action_item": "action_items.write",
     "get_goals": "goals.read",
     "get_chat_messages": "chat.read",
     "get_people": "people.read",
     "get_screen_activity": "screen_activity.read",
+    "get_daily_summaries": "conversations.read",
 }
 
 
@@ -210,6 +222,12 @@ SCOPE_PERMISSION_TEXT = {
     "memories.read": "Read your Omi memories",
     "memories.write": "Create, edit, and delete your Omi memories",
     "conversations.read": "Search and read your Omi conversations",
+    "action_items.read": "Read your Omi action items",
+    "action_items.write": "Create, update, and delete your Omi action items",
+    "goals.read": "Read your Omi goals",
+    "chat.read": "Read your Omi chat history",
+    "screen_activity.read": "Read your Omi screen activity",
+    "people.read": "Read people saved in your Omi account",
 }
 
 
@@ -663,7 +681,7 @@ def oauth_authorization_server_metadata():
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
-        "token_endpoint_auth_methods_supported": ["client_secret_post"],
+        "token_endpoint_auth_methods_supported": mcp_oauth_db.token_endpoint_auth_methods_supported(),
         "scopes_supported": MCP_SCOPES_SUPPORTED,
     }
 
@@ -1369,7 +1387,11 @@ async def mcp_token(request: Request):
             return _oauth_error("invalid_request", "Invalid request body")
 
     client = await run_blocking(db_executor, mcp_oauth_db.get_client, client_id or "")
-    if not client or not await run_blocking(db_executor, mcp_oauth_db.verify_client_secret, client, client_secret):
+    if (
+        not client
+        or client.get("disabled_at")
+        or not await run_blocking(db_executor, mcp_oauth_db.verify_client_auth, client, client_secret)
+    ):
         return _oauth_error("invalid_client", "Invalid client", status_code=401)
 
     if grant_type == "authorization_code":
