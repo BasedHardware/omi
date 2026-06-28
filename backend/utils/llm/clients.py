@@ -300,7 +300,12 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
     # is intentionally left on its own provider.
     custom = get_byok_custom_provider()
     if custom is not None:
-        return _create_custom_byok_client(custom['model'], custom['api_key'], custom['base_url'], streaming)
+        result = _create_custom_byok_client(custom['model'], custom['api_key'], custom['base_url'], streaming)
+        # Apply the same prompt-cache binding the default path uses, so the two do
+        # not drift (a no-op unless the user's model is one that supports it).
+        if cache_key and supports_prompt_cache(custom['model']):
+            return result.bind(prompt_cache_key=cache_key)
+        return result
 
     model, provider = _get_model_config(feature)
 
