@@ -100,8 +100,17 @@ function normalizeChatRequest(raw: unknown): ByokChatRequest {
     modelId:
       typeof record.modelId === 'string' && record.modelId.trim()
         ? record.modelId.trim()
+        : undefined,
+    systemPrompt:
+      typeof record.systemPrompt === 'string' && record.systemPrompt.trim()
+        ? record.systemPrompt.trim()
         : undefined
   }
+}
+
+function providerFromModelId(modelId: string | undefined): ByokChatProvider | null {
+  const provider = modelId?.split(':', 1)[0]
+  return isByokChatProvider(provider) ? provider : null
 }
 
 export function registerByokHandlers(): void {
@@ -137,9 +146,19 @@ export function registerByokHandlers(): void {
     'byok:chatSend',
     async (_event, rawRequest: unknown): Promise<ByokChatResponse> => {
       const request = normalizeChatRequest(rawRequest)
+      const modelProvider = providerFromModelId(request.modelId)
+      if (modelProvider) {
+        const key = loadByokKey(modelProvider)
+        if (!key) throw new Error(`No ${modelProvider} key is saved`)
+        return sendByokChat(modelProvider, key, request.messages, request.modelId, {
+          systemPrompt: request.systemPrompt
+        })
+      }
       const active = loadActiveByokChatKey()
       if (!active) throw new Error('No BYOK chat provider is active')
-      return sendByokChat(active.provider, active.key, request.messages, request.modelId)
+      return sendByokChat(active.provider, active.key, request.messages, request.modelId, {
+        systemPrompt: request.systemPrompt
+      })
     }
   )
 
