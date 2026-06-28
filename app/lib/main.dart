@@ -72,6 +72,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/cortex_agent_edge_overlay.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
@@ -401,7 +402,8 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               };
               if (Env.isUsingStagingApi) {
                 final topPadding = MediaQuery.of(context).padding.top;
-                return Column(
+                return CortexAgentEdgeOverlay(
+                    child: Column(
                   children: [
                     GestureDetector(
                       onTap: () {
@@ -429,9 +431,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                       child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
                     ),
                   ],
-                );
+                ));
               }
-              return child!;
+              return CortexAgentEdgeOverlay(child: child!);
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,
