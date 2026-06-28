@@ -38,6 +38,19 @@ describe('BYOK chat', () => {
     expect(String(request.init.body)).not.toContain('sk-or-secret')
   })
 
+  it('uses same-provider model picker overrides', () => {
+    const request = buildByokChatRequest(
+      'openai',
+      'sk-openai-secret',
+      [{ role: 'user', content: 'hello' }],
+      'openai:gpt-4o'
+    )
+
+    expect(JSON.parse(String(request.init.body))).toMatchObject({
+      model: 'gpt-4o'
+    })
+  })
+
   it('constructs direct Anthropic and Gemini requests with provider-owned credentials', () => {
     const anthropic = buildByokChatRequest('anthropic', 'sk-ant-secret', [
       { role: 'user', content: 'hello' }
