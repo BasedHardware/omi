@@ -181,6 +181,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
+  /// A Gemini active-reply barge-in replaces the whole session. Managed sessions
+  /// need a fresh one-use token first, so hold early mic chunks/commit until the
+  /// replacement session exists and can use its normal socket-open buffering.
+  private var bargeInReplacementInFlight = false
+  private var bargeInReplacementPendingTurn = false
+  private var bargeInReplacementPendingCommit = false
+  private var bargeInReplacementAudioBuffer: [Data] = []
 
   /// Failover chain: when the Auto-selected (primary) provider can't connect, the hub
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
@@ -365,6 +372,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     sessionProvider = nil
     sessionAuth = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
+    clearBargeInReplacementState()
+  }
+
+  private func clearBargeInReplacementState() {
+    bargeInReplacementInFlight = false
+    bargeInReplacementPendingTurn = false
+    bargeInReplacementPendingCommit = false
+    bargeInReplacementAudioBuffer.removeAll()
   }
 
   @discardableResult
@@ -376,8 +391,86 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     sessionProvider = nil
     sessionAuth = nil
     hubConnected = false
-    startSession(provider: provider, auth: auth)
+    bargeInReplacementInFlight = true
+    bargeInReplacementPendingTurn = true
+    bargeInReplacementPendingCommit = false
+    bargeInReplacementAudioBuffer.removeAll()
+    switch auth {
+    case .byokKey:
+      startReplacementSessionForBargeIn(provider: provider, auth: auth)
+    case .ephemeral:
+      remintReplacementSessionForBargeIn(provider: provider)
+    }
     return true
+  }
+
+  private func remintReplacementSessionForBargeIn(provider: RealtimeHubProvider) {
+    guard !minting else {
+      log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement skipped; token mint already in flight")
+      clearBargeInReplacementState()
+      return
+    }
+    minting = true
+    let providerParam = provider == .openai ? "openai" : "gemini"
+    log("RealtimeHub[\(provider.displayName)]: minting fresh token for barge-in replacement")
+    Task { [weak self] in
+      let token = await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      guard let self else { return }
+      self.minting = false
+      guard self.bargeInReplacementInFlight else { return }
+      guard self.effectiveProvider == provider, self.session == nil else {
+        self.clearBargeInReplacementState()
+        self.ensureWarm()
+        return
+      }
+      guard let token else {
+        self.failBargeInReplacement(provider: provider, reason: "token mint failed")
+        if !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
+        }
+        return
+      }
+      self.startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))
+    }
+  }
+
+  private func startReplacementSessionForBargeIn(provider: RealtimeHubProvider, auth: HubAuth) {
+    startSession(provider: provider, auth: auth)
+    bargeInReplacementInFlight = false
+    if bargeInReplacementPendingTurn {
+      bargeInReplacementPendingTurn = false
+      session?.beginInputTurn(interrupting: false)
+    }
+    if provider == .gemini, let speculativeScreenshot {
+      session?.sendVideoFrame(speculativeScreenshot, mime: "image/jpeg")
+    }
+    flushBargeInReplacementAudioBuffer()
+    if bargeInReplacementPendingCommit {
+      bargeInReplacementPendingCommit = false
+      session?.commitInputTurn()
+    }
+  }
+
+  private func failBargeInReplacement(provider: RealtimeHubProvider, reason: String) {
+    let hadCommittedTurn = bargeInReplacementPendingCommit
+    clearBargeInReplacementState()
+    guard hadCommittedTurn else { return }
+    log("RealtimeHub[\(provider.displayName)]: barge-in replacement failed after commit — \(reason)")
+    responding = false
+    realtimePlaybackActive = false
+    realtimePlaybackEpoch += 1
+    pcmPlayer?.stop()
+    responseGlowGate.clearImmediately()
+    exitVoiceUI(clearResponseGlow: true)
+  }
+
+  private func flushBargeInReplacementAudioBuffer() {
+    guard let s = session, !bargeInReplacementAudioBuffer.isEmpty else { return }
+    let bufferedChunks = bargeInReplacementAudioBuffer
+    bargeInReplacementAudioBuffer.removeAll()
+    for pcm16k in bufferedChunks {
+      sendAudio(pcm16k, to: s)
+    }
   }
 
   private func makePCMPlayer() -> StreamingPCMPlayer {
@@ -411,6 +504,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     responding = false
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
+    var replacementSessionOwnsInputTurn = false
     turnTranscript = ""
     assistantText = ""
     speculativeWarmDone = false
@@ -443,7 +537,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         // that socket can leave the next PTT turn queued behind the old generation, so
         // replace the connection and let the fresh session buffer this new turn while it opens.
         if restartSessionForBargeIn() {
-          log("RealtimeHub[\(providerTag)]: barge-in — replacing session for clean next turn")
+          replacementSessionOwnsInputTurn = true
+          log("RealtimeHub: barge-in — replacing session for clean next turn")
         } else {
           session?.cancelActiveResponse()
         }
@@ -454,7 +549,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     ensureWarm()  // (re)connect only if the socket idle-closed
     // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
     // turn on a warm session; OpenAI no-op).
-    session?.beginInputTurn(interrupting: providerResponseInFlight)
+    if !replacementSessionOwnsInputTurn {
+      session?.beginInputTurn(interrupting: providerResponseInFlight)
+    }
     // Capture the screen at turn START and, for Gemini, send it in-turn right away — early
     // enough that the ~450KB JPEG uploads/decodes during the seconds of speech, so the
     // model can see it when it answers. A frame attached at commit (PTT-up) lands too late:
@@ -473,7 +570,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
   func feedAudio(_ pcm16k: Data) {
-    guard let s = session else { return }
+    guard let s = session else {
+      if bargeInReplacementInFlight {
+        bargeInReplacementAudioBuffer.append(pcm16k)
+      }
+      return
+    }
+    sendAudio(pcm16k, to: s)
+  }
+
+  private func sendAudio(_ pcm16k: Data, to s: RealtimeHubSession) {
     let rate = s.requiredInputSampleRate
     let pcm = rate == 16000 ? pcm16k : PushToTalkManager.resamplePCM16(pcm16k, from: 16000, to: rate)
     s.sendAudio(pcm)
@@ -484,6 +590,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     responding = true
     // (The screen frame is sent at turn START — see beginTurn — so it has time to
     // upload/decode before the model answers. Nothing to attach here.)
+    guard session != nil else {
+      if bargeInReplacementInFlight {
+        bargeInReplacementPendingCommit = true
+      } else {
+        responding = false
+        exitVoiceUI(clearResponseGlow: true)
+      }
+      return
+    }
     session?.commitInputTurn()
   }
 
@@ -495,6 +610,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     realtimePlaybackEpoch += 1
     turnTranscript = ""
     assistantText = ""
+    clearBargeInReplacementState()
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
     // and leave the reply gated off so the model never answers the silence. Keeps the
     // warm session (and its context) so the next real turn is instant and in-context.

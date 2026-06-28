@@ -407,17 +407,34 @@ final class AgentPillLifecycleTests: XCTestCase {
     let sessionSource = try realtimeHubSessionSource()
 
     // OpenAI can cancel a response in-session. Gemini cannot reliably cancel a
-    // streaming reply, so barge-in must replace the session and buffer the new
-    // PTT turn on the fresh connection instead of reusing the busy socket.
+    // streaming reply, so barge-in must replace the session. Managed Gemini
+    // tokens are single-use, so the replacement session remints before it
+    // connects and holds early PTT audio/commit during that remint gap.
     XCTAssertTrue(sessionSource.contains("enum RealtimeHubBargeInStrategy"))
     XCTAssertTrue(sessionSource.contains("provider == .gemini ? .freshSession : .inSessionCancel"))
     XCTAssertTrue(hubSource.contains("private var sessionAuth: HubAuth?"))
+    XCTAssertTrue(hubSource.contains("private var bargeInReplacementInFlight = false"))
+    XCTAssertTrue(hubSource.contains("private var bargeInReplacementPendingCommit = false"))
+    XCTAssertTrue(hubSource.contains("private var bargeInReplacementAudioBuffer: [Data] = []"))
     XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn() -> Bool"))
+    XCTAssertTrue(hubSource.contains("case .ephemeral:\n      remintReplacementSessionForBargeIn(provider: provider)"))
+    XCTAssertTrue(hubSource.contains("let token = await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
+    XCTAssertTrue(hubSource.contains("startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))"))
+    XCTAssertTrue(hubSource.contains("bargeInReplacementAudioBuffer.append(pcm16k)"))
+    XCTAssertTrue(hubSource.contains("bargeInReplacementPendingCommit = true"))
+    XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: \"token mint failed\")"))
+    XCTAssertTrue(hubSource.contains("if provider == .gemini, let speculativeScreenshot"))
+    XCTAssertTrue(hubSource.contains("session?.sendVideoFrame(speculativeScreenshot, mime: \"image/jpeg\")"))
+    XCTAssertTrue(hubSource.contains("responding = false\n    realtimePlaybackActive = false"))
+    XCTAssertTrue(hubSource.contains("exitVoiceUI(clearResponseGlow: true)"))
+    XCTAssertTrue(hubSource.contains("} else {\n        responding = false\n        exitVoiceUI(clearResponseGlow: true)\n      }"))
     XCTAssertTrue(hubSource.contains("let providerResponseInFlight = responding"))
+    XCTAssertTrue(hubSource.contains("var replacementSessionOwnsInputTurn = false"))
     XCTAssertTrue(hubSource.contains("case .freshSession:"))
     XCTAssertTrue(hubSource.contains("replace the connection and let the fresh session buffer this new turn while it opens"))
     XCTAssertTrue(hubSource.contains("case .inSessionCancel:"))
     XCTAssertTrue(hubSource.contains("barge-in — stopping local playback tail"))
+    XCTAssertTrue(hubSource.contains("if !replacementSessionOwnsInputTurn"))
     XCTAssertTrue(hubSource.contains("session?.beginInputTurn(interrupting: providerResponseInFlight)"))
     XCTAssertTrue(hubSource.contains("session?.cancelActiveResponse()"))
     XCTAssertTrue(hubSource.contains("private func isCurrentSession(_ source: RealtimeHubSession) -> Bool"))
