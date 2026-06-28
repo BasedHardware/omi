@@ -64,6 +64,7 @@ def new_memories_extractor(
     user_name: Optional[str] = None,
     memories_str: Optional[str] = None,
     language: Optional[str] = None,
+    content_date: Optional[str] = None,
 ) -> List[Memory]:
     # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
     if user_name is None or memories_str is None:
@@ -89,7 +90,7 @@ def new_memories_extractor(
                 'conversation': content,
                 'memories_str': memories_str,
                 'language_instruction': language_instruction,
-                'current_date': current_date_for_uid(uid),
+                'current_date': content_date or current_date_for_uid(uid),
                 'format_instructions': parser.get_format_instructions(),
             }
         )
@@ -112,6 +113,7 @@ def extract_memories_from_text(
     user_name: Optional[str] = None,
     memories_str: Optional[str] = None,
     language: Optional[str] = None,
+    content_date: Optional[str] = None,
 ) -> List[Memory]:
     """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or memories_str is None:
@@ -132,7 +134,7 @@ def extract_memories_from_text(
                 'text_source': text_source,
                 'memories_str': memories_str,
                 'language_instruction': language_instruction,
-                'current_date': current_date_for_uid(uid),
+                'current_date': content_date or current_date_for_uid(uid),
                 'format_instructions': parser.get_format_instructions(),
             }
         )
