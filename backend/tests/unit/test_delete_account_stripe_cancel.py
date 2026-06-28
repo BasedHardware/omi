@@ -103,7 +103,7 @@ try:
     import firebase_admin.auth as _fa_auth  # stubbed
 
     _fa_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-    from routers import users as users_router  # noqa: E402  (heavy import; deps stubbed above)
+    from services.users import account_deletion as users_service  # noqa: E402  (deps stubbed above)
 finally:
     if _finder in sys.meta_path:
         sys.meta_path.remove(_finder)
@@ -119,38 +119,41 @@ def _sub(stripe_subscription_id):
 
 def test_paid_user_subscription_is_canceled_before_wipe():
     with patch.object(
-        users_router.users_db, 'get_user_subscription', return_value=_sub('sub_123')
+        users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')
     ) as get_sub, patch.object(
-        users_router.stripe_utils, 'cancel_subscription', return_value=MagicMock()
+        users_service.stripe_utils, 'cancel_subscription', return_value=MagicMock()
     ) as cancel, patch.object(
-        users_router.auth, 'delete_account'
+        users_service.auth, 'delete_account'
     ) as fb_delete, patch.object(
-        users_router, '_background_wipe_user_data'
-    ):
-        resp = users_router.delete_account(uid='uid1')
+        users_service, 'submit_with_context'
+    ) as submit:
+        resp = users_service.start_account_deletion(uid='uid1')
     get_sub.assert_called_once_with('uid1')
     cancel.assert_called_once_with('sub_123')
     fb_delete.assert_called_once()  # deletion still proceeds
+    submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'
 
 
 def test_free_user_does_not_call_stripe():
-    with patch.object(users_router.users_db, 'get_user_subscription', return_value=_sub(None)), patch.object(
-        users_router.stripe_utils, 'cancel_subscription'
-    ) as cancel, patch.object(users_router.auth, 'delete_account'), patch.object(
-        users_router, '_background_wipe_user_data'
-    ):
-        resp = users_router.delete_account(uid='uid1')
+    with patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub(None)), patch.object(
+        users_service.stripe_utils, 'cancel_subscription'
+    ) as cancel, patch.object(users_service.auth, 'delete_account'), patch.object(
+        users_service, 'submit_with_context'
+    ) as submit:
+        resp = users_service.start_account_deletion(uid='uid1')
     cancel.assert_not_called()
+    submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'
 
 
 def test_stripe_error_does_not_block_deletion():
-    with patch.object(users_router.users_db, 'get_user_subscription', return_value=_sub('sub_123')), patch.object(
-        users_router.stripe_utils, 'cancel_subscription', side_effect=Exception('stripe down')
-    ), patch.object(users_router.auth, 'delete_account') as fb_delete, patch.object(
-        users_router, '_background_wipe_user_data'
-    ):
-        resp = users_router.delete_account(uid='uid1')
+    with patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')), patch.object(
+        users_service.stripe_utils, 'cancel_subscription', side_effect=Exception('stripe down')
+    ), patch.object(users_service.auth, 'delete_account') as fb_delete, patch.object(
+        users_service, 'submit_with_context'
+    ) as submit:
+        resp = users_service.start_account_deletion(uid='uid1')
     fb_delete.assert_called_once()  # best-effort: Stripe failure must not abort deletion
+    submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
     assert resp['status'] == 'ok'

@@ -4,13 +4,22 @@ Inherits all rules from the root `../AGENTS.md`. This file adds backend-specific
 
 ## Setup
 
-Python 3.11 required (not 3.12+ — Dockerfile pins 3.11). Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
+Python 3.11 is required (not 3.12+ — Dockerfile pins 3.11). Backend local dev pins the exact interpreter in `.python-version` and uses `uv` for reproducible dependency sync. Also needs FFmpeg, Opus (`opuslib`), Redis (optional).
 
 ```bash
 cp .env.template .env          # Fill in required values (see .env.template for full list)
-pip install -r requirements.txt
+./scripts/sync-python-deps.sh  # creates .venv from .python-version + pylock.toml
+source .venv/bin/activate
 uvicorn main:app --host 0.0.0.0 --port 8080
 ```
+
+When intentionally changing backend Python dependencies, edit the relevant `requirements*.txt` input file and refresh the lock:
+
+```bash
+./scripts/update-python-lock.sh
+```
+
+By default, the lock refresh preserves already-locked package versions so unrelated transitive upgrades do not sneak into infrastructure changes. Set `PYLOCK_UPGRADE=1` only when intentionally refreshing dependency versions.
 
 Key env vars: `OPENAI_API_KEY` (LLM calls — not `OPENAI_ADMIN_KEY` which is billing-only), `DEEPGRAM_API_KEY` (STT), `ENCRYPTION_SECRET` (required for tests), `REDIS_DB_HOST` (cache/rate-limiting, fail-open without it), `ADMIN_KEY` (local dev auth bypass via token `ADMIN_KEY<uid>`), `SERVICE_ACCOUNT_JSON` (Firestore/GCS credentials).
 
@@ -73,6 +82,7 @@ backend/
                           #   - Batches + uploads audio to private cloud storage (60s batches, 3 retries)
                           #   - Queues speaker sample extraction (120s age minimum)
                           #   - 5 concurrent background tasks per WebSocket connection
+  llm_gateway/            # Subservice: internal Omi-managed LLM auto-lane gateway
   diarizer/              # Subservice: speaker audio analysis (separate Docker, GPU/CUDA)
                           #   - POST /v1/diarization — speaker boundary detection (pyannote/speaker-diarization)
                           #   - POST /v1/embedding — speaker vector extraction (pyannote/embedding)
@@ -157,7 +167,7 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
     - `stripe_executor` (4w) — Stripe API calls
     - `sync_executor` (16w) — sync endpoint pipeline work, parent calls that fan out to storage_executor
     - `postprocess_executor` (24w) — post-conversation processing, coordinator functions
-    - `storage_executor` (96w) — GCS uploads/downloads, audio chunk I/O (fan-out gated by semaphores: 32 global chunks, 8 per-call window, 4 concurrent precache files)
+    - `storage_executor` (128w) — GCS uploads/downloads, audio chunk I/O (fan-out gated by semaphores: 32 global chunks, 8 per-call window, 4 concurrent precache files)
   - **Deadlock prevention — 4 rules:**
     1. **Worker threads are leaf operations only.** Never `.result()` on another pool from inside a worker thread. If pool A thread submits to pool B and calls `.result()`, and vice versa, both pools deadlock.
     2. **Orchestration stays in async code.** The async handler coordinates via `await run_blocking(pool, fn)` — sequentially or with `asyncio.gather`. The event loop never blocks, pools stay independent.

@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin, { getDb } from "@/lib/firebase/admin";
 import { verifyAdmin } from "@/lib/auth";
-import { posthogFetch } from "@/lib/posthog";
+import { posthogResults } from "@/lib/posthog";
+import { getPayload, setPayload } from "@/lib/payload-cache";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 3600;
+
+function cacheKey(): string {
+  return `macos-versions:v1`;
+}
+
+export { cacheKey as macosVersionsCacheKey };
 
 const VERSION_COLORS = [
   "#6366f1",
@@ -32,15 +40,7 @@ type Breakdown = {
 };
 
 async function posthogQuery(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await posthogFetch(host, projectId, apiKey, query);
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PostHog API error: ${response.status} ${text}`);
-  }
-
-  const raw = await response.json();
-  return Array.isArray(raw.results) ? raw.results : [];
+  return posthogResults(host, projectId, apiKey, query);
 }
 
 function chunk<T>(items: T[], size: number) {
@@ -88,20 +88,16 @@ function formatTodayLabel() {
   }).format(new Date());
 }
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
+export async function computeMacosVersions() {
+  const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
+  const projectId = process.env.POSTHOG_PROJECT_ID;
+  const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(/\/$/, "");
 
-  try {
-    const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
-    const projectId = process.env.POSTHOG_PROJECT_ID;
-    const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(/\/$/, "");
+  if (!apiKey || !projectId) {
+    throw new Error("PostHog credentials not configured");
+  }
 
-    if (!apiKey || !projectId) {
-      return NextResponse.json({ error: "PostHog credentials not configured" }, { status: 500 });
-    }
-
-    const activeUsersQuery = `
+  const activeUsersQuery = `
       SELECT
         distinct_id AS actor_id,
         argMax(
@@ -129,12 +125,12 @@ export async function GET(request: NextRequest) {
       .filter((row) => row.userId.length > 0);
 
     if (activeUsers.length === 0) {
-      return NextResponse.json({
+      return {
         date: formatTodayLabel(),
         activeUsers: 0,
         channelBreakdown: [],
         versionBreakdown: [],
-      });
+      };
     }
 
     const channelMap = await getUserChannels(activeUsers.map((user) => user.userId));
@@ -160,12 +156,29 @@ export async function GET(request: NextRequest) {
       VERSION_COLORS
     );
 
-    return NextResponse.json({
+    return {
       date: formatTodayLabel(),
       activeUsers: activeUsers.length,
       channelBreakdown,
       versionBreakdown,
-    });
+    };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const key = cacheKey();
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeMacosVersions>>>(key);
+    if (cached) {
+      return NextResponse.json(cached.data);
+    }
+
+    const payload = await computeMacosVersions();
+    await setPayload(key, payload);
+    return NextResponse.json(payload);
   } catch (error: any) {
     console.error("macOS version stats error:", error);
     return NextResponse.json(

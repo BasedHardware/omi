@@ -268,11 +268,21 @@ class ShortcutSettings: ObservableObject {
         }
     }
 
+    static let askOmiCommandOShortcut = KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command)
+    static let askOmiCommandReturnShortcut = KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: .command)
+    static let askOmiCommandShiftReturnShortcut = KeyboardShortcut(
+        keyCode: 36,
+        keyDisplay: "↩",
+        modifiers: [.command, .shift]
+    )
+    static let askOmiCommandJShortcut = KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command)
+    static let defaultAskOmiShortcut = askOmiCommandOShortcut
+
     static let askOmiPresets: [KeyboardShortcut] = [
-        KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: .command),
-        KeyboardShortcut(keyCode: 36, keyDisplay: "↩", modifiers: [.command, .shift]),
-        KeyboardShortcut(keyCode: 38, keyDisplay: "J", modifiers: .command),
-        KeyboardShortcut(keyCode: 31, keyDisplay: "O", modifiers: .command),
+        askOmiCommandOShortcut,
+        askOmiCommandReturnShortcut,
+        askOmiCommandShiftReturnShortcut,
+        askOmiCommandJShortcut,
     ]
 
     static let pttPresets: [KeyboardShortcut] = [
@@ -313,6 +323,11 @@ class ShortcutSettings: ObservableObject {
     /// When true, the floating bar uses a solid dark background instead of semi-transparent blur.
     @Published var solidBackground: Bool {
         didSet { UserDefaults.standard.set(solidBackground, forKey: "shortcut_solidBackground") }
+    }
+
+    /// When true, the floating bar anchors to the top-center notch area and blends into it.
+    @Published var notchModeEnabled: Bool {
+        didSet { UserDefaults.standard.set(notchModeEnabled, forKey: "shortcut_notchModeEnabled") }
     }
 
     /// When true, push-to-talk plays start/end sounds.
@@ -357,15 +372,8 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(draggableBarEnabled, forKey: "shortcut_draggableBarEnabled") }
     }
 
-    /// When true, floating-bar replies are spoken aloud.
-    @Published var floatingBarVoiceAnswersEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(floatingBarVoiceAnswersEnabled, forKey: "shortcut_floatingBarVoiceAnswersEnabled")
-            if !hasAnyFloatingBarVoiceAnswersEnabled {
-                FloatingBarVoicePlaybackService.shared.stop()
-            }
-        }
-    }
+    /// Push-to-talk replies are always spoken aloud.
+    let floatingBarVoiceAnswersEnabled: Bool = true
 
     /// When true, typed floating-bar questions receive spoken replies.
     @Published var floatingBarTypedQuestionVoiceAnswersEnabled: Bool {
@@ -503,11 +511,11 @@ class ShortcutSettings: ObservableObject {
     }
 
     var hasAnyFloatingBarVoiceAnswersEnabled: Bool {
-        floatingBarVoiceAnswersEnabled || floatingBarTypedQuestionVoiceAnswersEnabled
+        true
     }
 
     func shouldSpeakFloatingBarResponse(forVoiceQuery: Bool) -> Bool {
-        forVoiceQuery ? floatingBarVoiceAnswersEnabled : floatingBarTypedQuestionVoiceAnswersEnabled
+        forVoiceQuery || floatingBarTypedQuestionVoiceAnswersEnabled
     }
 
     var askOmiUsesCustomShortcut: Bool {
@@ -530,12 +538,13 @@ class ShortcutSettings: ObservableObject {
         self.askOmiShortcut = Self.loadShortcut(
             forKey: Self.askOmiShortcutDefaultsKey,
             legacyMapper: Self.legacyAskOmiShortcut
-        ) ?? Self.askOmiPresets[0]
+        ) ?? Self.defaultAskOmiShortcut
 
         self.askOmiEnabled = UserDefaults.standard.object(forKey: "shortcut_askOmiEnabled") as? Bool ?? true
         self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
+        self.notchModeEnabled = UserDefaults.standard.object(forKey: "shortcut_notchModeEnabled") as? Bool ?? true
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
         self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
         self.selectedModel = ModelQoS.Claude.sanitizedSelection(
@@ -548,7 +557,6 @@ class ShortcutSettings: ObservableObject {
             self.pttTranscriptionMode = .batch
         }
         self.draggableBarEnabled = UserDefaults.standard.object(forKey: "shortcut_draggableBarEnabled") as? Bool ?? false
-        self.floatingBarVoiceAnswersEnabled = UserDefaults.standard.object(forKey: "shortcut_floatingBarVoiceAnswersEnabled") as? Bool ?? true
         self.floatingBarTypedQuestionVoiceAnswersEnabled =
             UserDefaults.standard.object(forKey: "shortcut_floatingBarTypedQuestionVoiceAnswersEnabled") as? Bool ?? false
         self.voicePlaybackSpeed = UserDefaults.standard.object(forKey: "shortcut_voicePlaybackSpeed") as? Float ?? 1.4
@@ -589,13 +597,13 @@ class ShortcutSettings: ObservableObject {
     private static func legacyAskOmiShortcut(_ value: String) -> KeyboardShortcut? {
         switch value {
         case "⌘ Enter":
-            return askOmiPresets[0]
+            return askOmiCommandReturnShortcut
         case "⌘⇧ Enter":
-            return askOmiPresets[1]
+            return askOmiCommandShiftReturnShortcut
         case "⌘J":
-            return askOmiPresets[2]
+            return askOmiCommandJShortcut
         case "⌘O":
-            return askOmiPresets[3]
+            return askOmiCommandOShortcut
         default:
             return nil
         }

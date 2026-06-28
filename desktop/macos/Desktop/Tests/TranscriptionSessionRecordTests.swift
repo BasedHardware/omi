@@ -51,4 +51,34 @@ final class TranscriptionSessionRecordTests: XCTestCase {
 
         XCTAssertFalse(record.canAcceptCompletion(backendId: "conversation-b"))
     }
+
+    func testLocalListConversationMarksEmptySegmentsAsOmitted() {
+        let record = TranscriptionSessionRecord(source: "desktop", backendId: "conversation-a")
+
+        let conversation = record.toServerConversation(segments: [])
+
+        XCTAssertNotNil(conversation)
+        XCTAssertFalse(conversation!.transcriptSegmentsIncluded)
+        XCTAssertEqual(conversation!.transcriptPresenceState, .omittedFromResponse)
+        XCTAssertTrue(conversation!.shouldFetchDetailForTranscript)
+    }
+
+    func testLocalConversationWithSegmentsMarksTranscriptIncluded() {
+        let record = TranscriptionSessionRecord(source: "desktop", backendId: "conversation-a")
+        let segment = TranscriptionSegmentRecord(
+            sessionId: 1,
+            speaker: 0,
+            text: "hello",
+            startTime: 0,
+            endTime: 1,
+            segmentOrder: 0
+        )
+
+        let conversation = record.toServerConversation(segments: [segment])
+
+        XCTAssertNotNil(conversation)
+        XCTAssertTrue(conversation!.transcriptSegmentsIncluded)
+        XCTAssertEqual(conversation!.transcriptPresenceState, .includedNonEmpty)
+        XCTAssertFalse(conversation!.shouldFetchDetailForTranscript)
+    }
 }

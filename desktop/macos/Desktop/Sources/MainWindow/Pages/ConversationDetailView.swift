@@ -29,6 +29,8 @@ struct ConversationDetailView: View {
     // Full conversation loaded from API (with transcript segments)
     @State private var loadedConversation: ServerConversation?
     @State private var isLoadingConversation = false
+    // True while a lazily-deferred conversation is being enriched (polled) on first open.
+    @State private var isEnrichingDeferred = false
 
     // Action states
     @State private var showDeleteConfirmation = false
@@ -173,9 +175,33 @@ struct ConversationDetailView: View {
             await onFetchPeople?()
             AnalyticsManager.shared.conversationDetailOpened(conversationId: conversation.id)
 
-            // Load segments from local database if not already present
-            // Segments are stored locally but not loaded with the list view for performance
-            if conversation.transcriptSegments.isEmpty {
+            // Lazy processing: a deferred conversation (status=processing, only its raw transcript)
+            // enriches in the background on first open. The first fetch kicks it off and returns
+            // immediately (instant open); we then poll until status flips to completed, showing a
+            // loader meanwhile. Capped at ~30s so the loader never spins forever (e.g. on error).
+            if conversation.deferred || conversation.status == .processing {
+                isEnrichingDeferred = true
+                var attempts = 0
+                while attempts < 15 {
+                    do {
+                        let fetched = try await APIClient.shared.getConversation(id: conversation.id)
+                        loadedConversation = fetched
+                        if fetched.status != .processing { break }
+                    } catch {
+                        logError("ConversationDetail: failed to enrich deferred conversation", error: error)
+                        break
+                    }
+                    attempts += 1
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                }
+                isEnrichingDeferred = false
+                return
+            }
+
+            // Load detail-only transcript data only when the list response omitted it.
+            // An explicit empty transcript means either genuinely empty or locked/redacted;
+            // do not refetch forever just because the decoded array is empty.
+            if conversation.shouldFetchDetailForTranscript {
                 isLoadingConversation = true
                 do {
                     // First try local database (faster, works offline)
@@ -186,6 +212,7 @@ struct ConversationDetailView: View {
                             let segments = segmentRecords.map { $0.toTranscriptSegment() }
                             var updatedConversation = conversation
                             updatedConversation.transcriptSegments = segments
+                            updatedConversation.transcriptSegmentsIncluded = true
                             loadedConversation = updatedConversation
                             log("ConversationDetail: Loaded \(segments.count) segments from local database")
                         } else {
@@ -408,6 +435,7 @@ struct ConversationDetailView: View {
                     )
             }
             .buttonStyle(.plain)
+            .disabled(!canCopyTranscript)
             .help("Copy transcript")
 
             // Move to folder button (menu)
@@ -466,9 +494,15 @@ struct ConversationDetailView: View {
         }
     }
 
+    private var canCopyTranscript: Bool {
+        displayConversation.transcriptPresenceState != .lockedOrRedacted
+    }
+
     // MARK: - Actions
 
     private func copyTranscript() {
+        guard canCopyTranscript else { return }
+
         let peopleDict = Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
         let transcript: String = displayConversation.transcriptSegments.map { segment -> String in
             let speakerName: String
@@ -559,6 +593,13 @@ struct ConversationDetailView: View {
 
     @ViewBuilder
     private var summaryContent: some View {
+        // Lazy processing: while the deferred conversation is being enriched (polled) on first
+        // open, show a loader where the summary will appear. Cleared when enrichment completes or
+        // the poll times out, so it never spins forever.
+        if isEnrichingDeferred {
+            deferredProcessingSection
+        }
+
         // Overview section
         if !displayConversation.overview.isEmpty {
             overviewSection
@@ -646,7 +687,18 @@ struct ConversationDetailView: View {
             .background(OmiColors.backgroundTertiary.opacity(0.5))
 
             // Drawer content
-            if displayConversation.transcriptSegments.isEmpty && !isLoadingConversation {
+            if displayConversation.transcriptPresenceState == .lockedOrRedacted && !isLoadingConversation {
+                VStack(spacing: 12) {
+                    Image(systemName: "lock")
+                        .scaledFont(size: 40)
+                        .foregroundColor(OmiColors.textTertiary.opacity(0.5))
+
+                    Text("Transcript locked")
+                        .scaledFont(size: 14)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if displayConversation.transcriptSegments.isEmpty && !isLoadingConversation {
                 // Empty state
                 VStack(spacing: 12) {
                     Image(systemName: "text.quote")
@@ -741,6 +793,29 @@ struct ConversationDetailView: View {
         } catch {
             logError("ConversationDetail: Failed to persist speaker assignment locally", error: error)
         }
+    }
+
+    // MARK: - Deferred Processing Loader
+
+    /// Shown while a lazily-deferred conversation is being enriched on first open.
+    private var deferredProcessingSection: some View {
+        HStack(spacing: 12) {
+            ProgressView()
+                .controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Processing conversation…")
+                    .scaledFont(size: 14, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                Text("Generating summary and action items")
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textSecondary)
+            }
+            Spacer()
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(OmiColors.backgroundTertiary.opacity(0.5))
+        .cornerRadius(12)
     }
 
     // MARK: - Overview Section

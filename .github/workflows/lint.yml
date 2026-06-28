@@ -33,6 +33,7 @@ jobs:
           echo "has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           # Also run the Rust check when this workflow changes so CI PRs dogfood
           # the new guard instead of only validating YAML syntax.
           echo "has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
@@ -50,6 +51,34 @@ jobs:
           if [ "$failed" -eq 1 ]; then
             echo "FAIL: unresolved merge conflict markers found in changed files"
             exit 1
+          fi
+
+      - name: Check desktop changelog data
+        run: python3 .github/scripts/desktop-changelog.py validate
+
+      - name: Check desktop changelog entry
+        if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changelog/v')
+        run: |
+          SKIP_FLAG=""
+          if [ "${{ contains(github.event.pull_request.labels.*.name, 'no-changelog-needed') }}" = "true" ]; then
+            SKIP_FLAG="--skip"
+          fi
+
+          python3 .github/scripts/check-desktop-changelog.py \
+            --base "origin/${{ github.base_ref }}" \
+            --head HEAD \
+            $SKIP_FLAG
+
+      - name: Check desktop prod promotion policy
+        run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
+
+      - name: Check GitHub Actions workflows
+        if: steps.changed.outputs.has_workflows == 'true'
+        run: |
+          GOBIN=/tmp/actionlint-bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          FILES=$(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt || true)
+          if [ -n "$FILES" ]; then
+            /tmp/actionlint-bin/actionlint -shellcheck "" $FILES
           fi
 
       # -- Dart --
@@ -122,6 +151,12 @@ jobs:
           fi
 
       # -- Desktop Rust backend --
+      - name: Set up desktop Rust toolchain
+        if: steps.changed.outputs.has_desktop_rust == 'true'
+        run: |
+          cd desktop/macos/Backend-Rust
+          rustup show
+
       - name: Cache desktop Rust backend build
         if: steps.changed.outputs.has_desktop_rust == 'true'
         uses: actions/cache@v4
@@ -137,9 +172,12 @@ jobs:
       - name: Check desktop Rust backend
         if: steps.changed.outputs.has_desktop_rust == 'true'
         run: |
-          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt || true)
+          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt | sed 's#^desktop/macos/Backend-Rust/##' || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs rustfmt --edition 2021 --check
+            (
+              cd desktop/macos/Backend-Rust
+              printf '%s\n' "$FILES" | xargs -d '\n' rustfmt --edition 2021 --check
+            )
           fi
           cd desktop/macos/Backend-Rust
           cargo check --locked

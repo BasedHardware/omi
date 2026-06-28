@@ -21,6 +21,7 @@ import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/dialog.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'firmware_update.dart';
 import 'omiglass_ota_update.dart';
 
@@ -211,6 +212,19 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
+          // How to Use Your Omi (interactive tutorial) — Omi devices only, while connected
+          if (provider.connectedDevice?.type == DeviceType.omi) ...[
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.graduationCap,
+              title: context.l10n.deviceTutorial,
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)),
+                );
+              },
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
           // Firmware Update
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.download,

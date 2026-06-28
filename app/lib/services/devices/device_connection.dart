@@ -8,7 +8,6 @@ import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/devices/bee_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
-import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
@@ -17,7 +16,6 @@ import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/devices/plaud_connection.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
-import 'package:omi/services/devices/transports/frame_transport.dart';
 import 'package:omi/services/devices/transports/watch_transport.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -100,8 +98,7 @@ class DeviceConnectionFactory {
 
     // Use name-based detection as fallback for OmiGlass devices (some advertise as DeviceType.omi).
     final deviceName = device.name.toLowerCase();
-    final isOmiGlass =
-        device.type == DeviceType.openglass ||
+    final isOmiGlass = device.type == DeviceType.openglass ||
         deviceName.contains('openglass') ||
         deviceName.contains('omiglass') ||
         deviceName.contains('glass');
@@ -136,13 +133,6 @@ class DeviceConnectionFactory {
         return BeeDeviceConnection(device, transport);
       case DeviceType.plaud:
         return PlaudDeviceConnection(device, transport);
-      case DeviceType.frame:
-        if (locator.kind == TransportKind.bluetooth) {
-          final deviceId = locator.bluetoothId;
-          if (deviceId == null) return null;
-          transport = FrameTransport(deviceId);
-        }
-        return FrameDeviceConnection(device, transport);
       case DeviceType.appleWatch:
         return AppleWatchDeviceConnection(device, transport);
       case DeviceType.fieldy:

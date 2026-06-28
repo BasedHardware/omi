@@ -1724,12 +1724,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOSITIUS',
-      one: 'DISPOSITIU',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOSITIUS', one: 'DISPOSITIU');
     return '$count $_temp0 TROBATS A PROP';
   }
 
@@ -7811,6 +7806,9 @@ class AppLocalizationsCa extends AppLocalizations {
   String get viewAll => 'Veure tot';
 
   @override
+  String get expand => 'Expandeix';
+
+  @override
   String get addTask => 'Afegir tasca';
 
   @override
@@ -9357,6 +9355,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get backgroundModeNote => 'De moment només funciona amb dispositius Omi i es millora contínuament.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'El mode en segon pla no està disponible perquè no hi ha cap dispositiu compatible connectat. Connecta un dispositiu Omi, OpenGlass o Friend Pendant per utilitzar aquesta funció.';
+
+  @override
   String get regenerateRecap => 'Regenera el resum';
 
   @override
@@ -9394,6 +9396,18 @@ class AppLocalizationsCa extends AppLocalizations {
       'El telèfon té poc espai d\'emmagatzematge i la gravació s\'ha posat en pausa. Allibera espai o puja les gravacions i es reprendrà automàticament.';
 
   @override
+  String get recordingMode => 'Mode de gravació';
+
+  @override
+  String get captureModeLater => 'Més tard';
+
+  @override
+  String get captureModeLiveDescription => 'Transcriu en temps real mentre parles.';
+
+  @override
+  String get captureModeLaterDescription => 'Desa l\'àudio ara i transcriu-lo quan vulguis.';
+
+  @override
   String get unmute => 'Activar so';
 
   @override
@@ -9401,4 +9415,106 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'En pausa — no s\'està gravant àudio';
+
+  @override
+  String get deviceTutorial => 'Com utilitzar l\'Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Parla a l\'Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Digues unes paraules i mira com apareixen en temps real';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Ben fet!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Comença a parlar...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Fes una pregunta a l\'Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Prem el botó una vegada, fes la pregunta i torna a prémer quan acabis';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'S\'està processant la pregunta...';
+
+  @override
+  String get deviceOnboardingListening => 'Escoltant...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Apaga';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Engega';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Mantén premut el botó 3 segons';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Prem el botó per tornar-lo a engegar';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Mantén el botó premut amb fermesa fins que el llum s\'apagui';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Connectat';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Connectat!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Desconnectat';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'S\'està apagant...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalitza el doble toc';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Finalitza la conversa';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Desa i finalitza la conversa actual';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Silencia / Activa';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Activa o desactiva el micròfon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Destaca la conversa en curs';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Marca la conversa com a important';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Això ha estat un sol toc: prova de tocar dues vegades ràpidament!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Prova-ho ara! Fes un doble toc a l\'Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continua';
+
+  @override
+  String get deviceOnboardingFinish => 'Finalitza';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Coneix el teu Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un recorregut ràpid i pràctic per tot el que pot fer el teu Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximadament 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Vés a l\'últim missatge';
+
+  @override
+  String get latest => 'Últim';
 }

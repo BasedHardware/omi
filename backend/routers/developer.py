@@ -1,7 +1,6 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 
-from utils.executors import db_executor, postprocess_executor
 from enum import Enum
 from typing import List, Optional
 
@@ -27,6 +26,7 @@ from models.conversation_enums import (
 )
 from models.geolocation import Geolocation
 from utils.conversations.render import populate_speaker_names, populate_folder_names
+from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     get_current_user_id,
@@ -42,10 +42,10 @@ from dependencies import (
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
-from utils.apps import update_personas_async
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.location import get_google_maps_location
+from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
 import logging
 
@@ -90,12 +90,16 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
             raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}")
 
     raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
+    # The proactive-notification cap exempts developers, so refresh that cache now
+    # that this user has a key, rather than waiting out its TTL.
+    invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
 @router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["developer"])
 def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     dev_api_key_db.delete_dev_key(uid, key_id)
+    invalidate_developer_cache(uid)
     return
 
 
@@ -310,10 +314,6 @@ def create_memory(
     # Save to database
     memories_db.create_memory(uid, memory_db.dict())
 
-    # Update personas asynchronously if visibility is public
-    if memory.visibility == 'public':
-        postprocess_executor.submit(update_personas_async, uid)
-
     return MemoryResponse(
         id=memory_db.id,
         content=memory_db.content,
@@ -386,10 +386,6 @@ def create_memories_batch(
             for mem in memory_dbs
         ],
     )
-
-    # Update personas if any memory is public
-    if has_public:
-        postprocess_executor.submit(update_personas_async, uid)
 
     # Prepare response
     created_memories = [
@@ -547,10 +543,26 @@ def get_action_items(
         offset=offset,
     )
 
-    # Filter out locked action items
-    unlocked_action_items = [item for item in action_items if not item.get('is_locked', False)]
-
-    return unlocked_action_items
+    # Validate each record individually so a single malformed/legacy doc (e.g. missing a required
+    # field like description/completed) doesn't fail the whole page with a 500. Mirrors the hardening
+    # already applied to GET /v1/dev/user/memories.
+    valid_action_items = []
+    for item in action_items:
+        if not isinstance(item, dict) or not item.get('id'):
+            logger.warning('Skipping malformed action item in Developer API action-item list')
+            continue
+        if item.get('is_locked', False):
+            continue
+        try:
+            valid_action_items.append(ActionItemResponse.model_validate(item))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid action item doc {item.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_action_items
 
 
 @router.post("/v1/dev/user/action-items", response_model=ActionItemResponse, tags=["developer"])
@@ -909,7 +921,23 @@ def get_conversations(
 
     populate_folder_names(uid, unlocked_conversations)
 
-    return unlocked_conversations
+    # Validate each record individually so a single malformed/legacy doc doesn't fail the whole page
+    # with a 500. Mirrors the hardening already applied to GET /v1/dev/user/memories.
+    valid_conversations = []
+    for conv in unlocked_conversations:
+        if not isinstance(conv, dict) or not conv.get('id'):
+            logger.warning('Skipping malformed conversation in Developer API conversation list')
+            continue
+        try:
+            valid_conversations.append(Conversation.model_validate(conv))
+        except ValidationError as e:
+            invalid_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
+            logger.warning(
+                f"Skipping invalid conversation doc {conv.get('id', 'unknown')} for uid {uid}: "
+                f"missing/invalid fields {invalid_fields}"
+            )
+            continue
+    return valid_conversations
 
 
 @router.post("/v1/dev/user/conversations", response_model=ConversationResponse, tags=["developer"])
@@ -1418,7 +1446,7 @@ def update_goal_progress(
 @router.get("/v1/dev/user/goals/{goal_id}/history", tags=["developer"])
 def get_goal_history(
     goal_id: str,
-    days: int = Query(default=30, le=365),
+    days: HistoryDays = 30,
     uid: str = Depends(get_uid_with_goals_read),
 ) -> List[dict]:
     """

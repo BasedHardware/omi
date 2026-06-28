@@ -27,7 +27,7 @@ When debugging issues for a specific user, check Sentry dashboard for crashes an
 
 ## Release Pipeline
 
-Merging `desktop/macos/**` changes to `main` triggers a fully automated release:
+Merging `desktop/macos/**` changes to `main` triggers a beta desktop release:
 
 1. **GitHub Actions** (`desktop_auto_release.yml`) — auto-increments version, pushes a `v*-macos` tag
 2. **Codemagic** (`codemagic.yaml`, workflow `omi-desktop-swift-release`) — triggered by the tag, runs on Mac mini M2:
@@ -35,15 +35,20 @@ Merging `desktop/macos/**` changes to `main` triggers a fully automated release:
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
    - Publishes GitHub release, uploads to GCS, registers in Firestore
-   - Deploys Rust backend to Cloud Run
-3. **Sparkle auto-update** delivers the new version to users
+3. **Sparkle beta update** delivers the new version to beta users
+
+Stable/prod is manual:
+- Run GitHub Actions workflow `desktop_promote_prod.yml` with `release_tag=v*-macos` and `confirm=promote-stable`.
+- The workflow runs `.github/scripts/check-desktop-release-promotion.py`, deploys the Rust backend from that exact tag, verifies `/health` reports the release tag/SHA, promotes the Firestore bridge release, marks the GitHub release `channel: stable`, then moves `desktop-backend-prod-deployed`.
+- Do not manually edit a release to stable before the backend is promoted; the promotion workflow owns that mutation.
+- The promotion workflow is roll-forward only. Stable rollback needs a newer fixed release or a separate manual infrastructure rollback plan, because both desktop feeds choose the newest stable app release.
 
 **Codemagic CLI & API:**
 - Token: `$CODEMAGIC_API_TOKEN` (set in `~/.zshrc`)
 - App ID: `66c95e6ec76853c447b8bcbb`
 - List builds: `curl -s -H "x-auth-token: $CODEMAGIC_API_TOKEN" "https://api.codemagic.io/builds?appId=66c95e6ec76853c447b8bcbb" | python3 -c "import json,sys; [print(f\"{b.get('status','?'):12} tag={b.get('tag','-'):30} start={(b.get('startedAt') or '-')[:19]}\") for b in json.load(sys.stdin).get('builds',[])[:5]]"`
 
-Promotion between channels (staging → beta → stable) is handled via the Codemagic API.
+Promotion from beta to stable is handled by `desktop_promote_prod.yml`, not Codemagic.
 
 ## Firebase Connection
 Use `/firebase` command or see `.claude/skills/firebase/SKILL.md`
@@ -137,6 +142,13 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 
+### Agent Logic Harness
+When touching desktop agent runtime, floating agent pills, realtime hub, PTT, or `pi-mono-extension`, run the focused harness before broader checks:
+```bash
+cd desktop/macos && ./scripts/agent-logic-harness.sh
+```
+It is self-driving for agents: it runs the risky Swift lifecycle/state tests, focused agent runtime tests, exact `pi-mono-extension` package tests, and prints per-step runtime. Use `--swift-only`, `--node-only`, or `--skip-install` only when narrowing a failure.
+
 ### Verifying UI Changes (agent-swift)
 
 After editing Swift UI code, verify the change programmatically using [agent-swift](https://github.com/beastoin/agent-swift) — a CLI that controls any macOS app via the Accessibility API.
@@ -168,26 +180,24 @@ agent-swift screenshot /tmp/evidence.png             # capture app window
 
 ### Changelog Entries
 
-After completing a desktop task with user-visible impact, append a one-liner to `unreleased` in `desktop/macos/CHANGELOG.json`:
+After completing a desktop task with user-visible impact, add one fragment file under `desktop/macos/changelog/unreleased/`:
 
-```python
-python3 -c "
-import json
-with open('CHANGELOG.json', 'r') as f:
-    data = json.load(f)
-data.setdefault('unreleased', []).append('Your user-facing change description')
-with open('CHANGELOG.json', 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-"
+Example `desktop/macos/changelog/unreleased/20260628-short-description.json`:
+
+```json
+{
+  "change": "Your user-facing change description"
+}
 ```
 
 Guidelines:
 - Write from the user's perspective: "Fixed X", "Added Y", "Improved Z"
 - One sentence, no period at the end
+- Use a unique kebab-case filename so parallel PRs do not conflict
 - Skip internal-only changes (refactors, CI config, code cleanup)
 - HTML is allowed for links: `<a href='...'>text</a>`
-- Commit CHANGELOG.json with your other changes (same commit is fine)
+- Do not edit `CHANGELOG.json` by hand; release automation regenerates it
+- Commit the fragment with your other changes (same commit is fine)
 
 ## User Task Completion Reporting
 

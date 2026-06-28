@@ -1721,12 +1721,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 NAHANAP SA MALAPIT';
   }
 
@@ -7835,6 +7830,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get viewAll => 'Tingnan Lahat';
 
   @override
+  String get expand => 'Palawakin';
+
+  @override
   String get addTask => 'Magdagdag ng Task';
 
   @override
@@ -8530,12 +8528,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 na ginawa';
   }
 
@@ -9388,6 +9381,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get backgroundModeNote => 'Sa ngayon ay gumagana lang sa mga Omi device at patuloy na pinapabuti.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Hindi available ang Background Mode dahil walang nakakonektang compatible na device. Magkonekta ng Omi, OpenGlass, o Friend Pendant device para magamit ang feature na ito.';
+
+  @override
   String get regenerateRecap => 'Buuin muli ang buod';
 
   @override
@@ -9425,6 +9422,18 @@ class AppLocalizationsTl extends AppLocalizations {
       'Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.';
 
   @override
+  String get recordingMode => 'Mode ng pag-record';
+
+  @override
+  String get captureModeLater => 'Mamaya';
+
+  @override
+  String get captureModeLiveDescription => 'I-transcribe nang real time habang nagsasalita ka.';
+
+  @override
+  String get captureModeLaterDescription => 'I-save ang audio ngayon at i-transcribe kahit kailan mo gusto.';
+
+  @override
   String get unmute => 'I-unmute';
 
   @override
@@ -9432,4 +9441,109 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
+
+  @override
+  String get deviceTutorial => 'Paano Gamitin ang Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Magsalita sa Iyong Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Magsabi ng ilang salita at panoorin itong lumitaw nang real-time';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Magaling!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Magsimulang magsalita...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Magtanong sa Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Pindutin ang button nang isang beses, sabihin ang iyong tanong, pagkatapos ay pindutin muli kapag tapos na';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Pinoproseso ang iyong tanong...';
+
+  @override
+  String get deviceOnboardingListening => 'Nakikinig...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Patayin';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Buksan';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Pindutin nang matagal ang button sa loob ng 3 segundo';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Pindutin ang button para muling buksan ito';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Pindutin nang matatag ang button hanggang mamatay ang ilaw';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Nakakonekta';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Nakakonekta!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Nadiskonekta';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Pinapatay...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'I-customize ang Double Tap';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Tapusin ang Usapan';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'I-save at tapusin ang kasalukuyang usapan';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'I-mute / I-unmute';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'I-on o i-off ang mikropono';
+
+  @override
+  String get deviceOnboardingStarConversation => 'I-star ang Kasalukuyang Usapan';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Markahan ang usapan bilang mahalaga';
+
+  @override
+  String get deviceOnboardingSingleTapHint =>
+      'Isang tap lang iyon — subukang mag-tap nang dalawang beses nang mabilis!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Subukan mo ngayon! I-double tap ang iyong Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Magpatuloy';
+
+  @override
+  String get deviceOnboardingFinish => 'Tapusin';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kilalanin ang Iyong Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Mga 1 minuto';
+  @override
+  String get jumpToLatestMessage => 'Tumalon sa pinakabagong mensahe';
+
+  @override
+  String get latest => 'Pinakabago';
 }

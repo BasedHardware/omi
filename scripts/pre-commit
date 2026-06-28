@@ -112,7 +112,11 @@ if [ -n "$STAGED_DESKTOP_RUST_INPUTS" ]; then
   if [ -n "$STAGED_DESKTOP_RUST_FILES" ]; then
     while IFS= read -r file; do
       [ -n "$file" ] || continue
-      if ! rustfmt --edition 2021 "$file"; then
+      rel_file=${file#desktop/macos/Backend-Rust/}
+      if ! (
+        cd desktop/macos/Backend-Rust && \
+          rustfmt --edition 2021 "$rel_file"
+      ); then
         echo "rustfmt failed for $file" >&2
         exit 1
       fi

@@ -30,6 +30,7 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -75,6 +76,7 @@ class CaptureProvider extends ChangeNotifier
   MessageProvider? messageProvider;
   PeopleProvider? peopleProvider;
   UsageProvider? usageProvider;
+  DeviceOnboardingProvider? deviceOnboardingProvider;
 
   // Cache refresh for backend-created persons
   Future<void>? _peopleRefreshFuture;
@@ -319,8 +321,6 @@ class CaptureProvider extends ChangeNotifier
         return 'bee';
       case DeviceType.plaud:
         return 'plaud';
-      case DeviceType.frame:
-        return 'frame';
       case DeviceType.appleWatch:
         return 'apple_watch';
       case DeviceType.limitless:
@@ -538,6 +538,52 @@ class CaptureProvider extends ChangeNotifier
     await _resetState();
   }
 
+  bool get deviceSupportsTranscribeLater {
+    final t = _recordingDevice?.type;
+    return t == DeviceType.omi || t == DeviceType.openglass || t == DeviceType.friendPendant;
+  }
+
+  Future<void> setBatchMode(bool enabled) async {
+    if (SharedPreferencesUtil().batchModeEnabled == enabled) return;
+    SharedPreferencesUtil().batchModeEnabled = enabled;
+    PlatformManager.instance.analytics.transcribeLaterToggled(enabled: enabled);
+    final docs = await getApplicationDocumentsDirectory();
+    await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
+    // Only re-enable native streaming when turning batch OFF, a device with a
+    // native BLE route is connected, and background mode is opted in.
+    final enableNativeStreaming = !enabled && hasNativeBleAudioRoute && SharedPreferencesUtil().backgroundModeEnabled;
+    await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
+    notifyListeners();
+    try {
+      await onRecordProfileSettingChanged();
+    } catch (_) {}
+  }
+
+  // Interactive device onboarding needs the realtime transcript + voice paths, which Transcribe
+  // Later (batch mode) disables. Flipping batchModeEnabled off also re-opens the native->Dart audio
+  // forward — the native BatchAudioWriter gate reads this same pref — so BLE audio reaches Dart again.
+  // Skips the transcribeLaterToggled analytic on purpose; the persisted flag drives a crash-safe restore.
+  Future<void> suspendBatchModeForOnboarding() async {
+    if (SharedPreferencesUtil().batchModeSuspendedForOnboarding) return;
+    if (!SharedPreferencesUtil().batchModeEnabled) return;
+    SharedPreferencesUtil().batchModeSuspendedForOnboarding = true;
+    SharedPreferencesUtil().batchModeEnabled = false;
+    notifyListeners();
+    try {
+      await onRecordProfileSettingChanged();
+    } catch (_) {}
+  }
+
+  Future<void> restoreBatchModeAfterOnboarding() async {
+    if (!SharedPreferencesUtil().batchModeSuspendedForOnboarding) return;
+    SharedPreferencesUtil().batchModeSuspendedForOnboarding = false;
+    SharedPreferencesUtil().batchModeEnabled = true;
+    notifyListeners();
+    try {
+      await onRecordProfileSettingChanged();
+    } catch (_) {}
+  }
+
   /// Called when transcription settings are changed (e.g., custom STT provider)
   /// This resets the socket connection to use the new configuration
   Future<void> onTranscriptionSettingsChanged() async {
@@ -717,6 +763,17 @@ class CaptureProvider extends ChangeNotifier
           Uint8List.fromList(snapshot.sublist(0, 4).reversed.toList()).buffer,
         ).getUint32(0);
         Logger.debug("device button $buttonState");
+
+        // Intercept for interactive device onboarding
+        if (deviceOnboardingProvider?.isOnboardingActive == true) {
+          deviceOnboardingProvider!.onButtonEvent(buttonState);
+          // For step 1 (ask question), let single-tap fall through to normal voice command handling
+          if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
+            // Fall through to normal single-tap handling below
+          } else {
+            return;
+          }
+        }
 
         // double tap
         if (buttonState == 2) {
@@ -1006,8 +1063,14 @@ class CaptureProvider extends ChangeNotifier
   Future<void> _saveNativeBleStreamConfig(BtDevice device, BleAudioCodec codec) async {
     final audioTarget = _nativeBleAudioTarget(device);
     if (audioTarget == null) {
+      // No native route — clear all background/streaming state and stale config.
+      Logger.debug(
+        '[saveNativeBleStreamConfig] no native BLE route for device ${device.id} type=${device.type} — clearing state',
+      );
       await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
       await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+      SharedPreferencesUtil().backgroundModeEnabled = false;
+      await SharedPreferencesUtil().remove('nativeBleStreamConfig');
       return;
     }
 
@@ -1032,10 +1095,14 @@ class CaptureProvider extends ChangeNotifier
     await SharedPreferencesUtil().saveString('batchAudioDir', docsDir.path);
 
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
-    await SharedPreferencesUtil()
-        .saveBool('nativeBleStreamingEnabled', !batchMode && SharedPreferencesUtil().backgroundModeEnabled);
-    Logger.debug('[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
-        'deviceId=${device.id} svc=${audioTarget.key} char=${audioTarget.value} type=${device.type.name}');
+    await SharedPreferencesUtil().saveBool(
+      'nativeBleStreamingEnabled',
+      !batchMode && SharedPreferencesUtil().backgroundModeEnabled,
+    );
+    Logger.debug(
+      '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
+      'deviceId=${device.id} svc=${audioTarget.key} char=${audioTarget.value} type=${device.type.name}',
+    );
   }
 
   MapEntry<String, String>? _nativeBleAudioTarget(BtDevice device) {
@@ -1048,11 +1115,93 @@ class CaptureProvider extends ChangeNotifier
       case DeviceType.appleWatch:
       case DeviceType.bee:
       case DeviceType.fieldy:
-      case DeviceType.frame:
       case DeviceType.limitless:
       case DeviceType.plaud:
         return null;
     }
+  }
+
+  /// Whether the currently-connected recording device has a concrete native BLE
+  /// audio route that the Background Mode / native streaming layer can use.
+  /// Returns false for device types with no native route (Apple Watch, Bee,
+  /// Fieldy, Limitless, Plaud) and for empty-device-id sentinel entries
+  /// that may linger in preferences from stale state.
+  @visibleForTesting
+  bool get hasNativeBleAudioRoute {
+    final device = _recordingDevice;
+    if (device == null) return false;
+    if (device.id.isEmpty) return false;
+    return _nativeBleAudioTarget(device) != null;
+  }
+
+  /// Enable or disable Background Mode through CaptureProvider so the provider
+  /// can validate against the actual native BLE route before committing prefs.
+  ///
+  /// Returns `true` if the change was accepted, `false` if rejected (e.g. no
+  /// connected device or the device lacks a native BLE audio route).
+  ///
+  /// When disabling: clears `backgroundModeEnabled`, `nativeBleStreamingEnabled`,
+  /// and `nativeBleForegroundReady`. It keeps `nativeBleStreamConfig` only when
+  /// batch mode is still enabled and the current device has a valid native route,
+  /// because native batch writers use the same config for offline capture.
+  ///
+  /// When enabling with no concrete device or no native route: rejects the
+  /// change and leaves all prefs false / removes stale config.
+  ///
+  /// When enabling with a valid route: sets global opt-in and enables effective
+  /// native streaming only when batch mode is off.
+  Future<bool> setBackgroundModeEnabled(bool requested) async {
+    if (!requested) {
+      // Disable realtime background streaming. Preserve nativeBleStreamConfig
+      // whenever Transcribe Later remains enabled; batch capture uses the same
+      // config for offline audio and may need it even while no route is
+      // currently live. Reconnect/setup paths will refresh it when needed.
+      final keepBatchConfig = SharedPreferencesUtil().batchModeEnabled;
+      SharedPreferencesUtil().backgroundModeEnabled = false;
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+      if (!keepBatchConfig) {
+        await SharedPreferencesUtil().remove('nativeBleStreamConfig');
+      }
+      Logger.debug('[BackgroundMode] disabled — keepBatchConfig=$keepBatchConfig');
+      notifyListeners();
+      return true;
+    }
+
+    // Enable: must have a concrete device with a native BLE audio route.
+    if (!hasNativeBleAudioRoute) {
+      Logger.debug(
+        '[BackgroundMode] enable rejected — no device with native BLE route '
+        '(device=${_recordingDevice?.id}, type=${_recordingDevice?.type})',
+      );
+      // Defensive: ensure prefs stay false and remove any stale config.
+      SharedPreferencesUtil().backgroundModeEnabled = false;
+      await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
+      await SharedPreferencesUtil().remove('nativeBleStreamConfig');
+      notifyListeners();
+      return false;
+    }
+
+    // Valid route — enable and recreate the native config immediately. A user
+    // can toggle Background Mode off and back on without reconnecting; in that
+    // case the disable/reject paths may have removed nativeBleStreamConfig and
+    // the native background streamer cannot start from nativeBleStreamingEnabled
+    // alone.
+    SharedPreferencesUtil().backgroundModeEnabled = true;
+    final device = _recordingDevice!;
+    final codec = await _getAudioCodec(device.id);
+    final wasForegroundReady = SharedPreferencesUtil().getBool('nativeBleForegroundReady');
+    await _saveNativeBleStreamConfig(device, codec);
+    if (wasForegroundReady) {
+      await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', true);
+    }
+    Logger.debug(
+      '[BackgroundMode] enabled — device ${device.id} '
+      'type=${device.type}, batchMode=${SharedPreferencesUtil().batchModeEnabled}',
+    );
+    notifyListeners();
+    return true;
   }
 
   Future<void> _initiateDevicePhotoStreaming() async {
@@ -1312,6 +1461,9 @@ class CaptureProvider extends ChangeNotifier
 
   Future streamDeviceRecording({BtDevice? device}) async {
     Logger.debug("streamDeviceRecording $device");
+    if (deviceOnboardingProvider == null && SharedPreferencesUtil().batchModeSuspendedForOnboarding) {
+      await restoreBatchModeAfterOnboarding();
+    }
     if (device != null) _updateRecordingDevice(device);
 
     bool wasPaused = _isPaused;
@@ -2018,6 +2170,10 @@ class CaptureProvider extends ChangeNotifier
 
   @override
   void onSegmentReceived(List<TranscriptSegment> newSegments) {
+    // Forward to interactive device onboarding if active on transcription step
+    if (deviceOnboardingProvider?.isOnboardingActive == true && deviceOnboardingProvider!.currentStep == 0) {
+      deviceOnboardingProvider!.onTranscriptSegments(newSegments);
+    }
     _processNewSegmentReceived(newSegments);
   }
 

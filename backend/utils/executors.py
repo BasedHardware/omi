@@ -11,6 +11,9 @@ Provides shared executors with strict separation (bulkhead pattern):
 - sync_executor: sync pipeline VAD/STT/segment processing.
 - postprocess_executor: best-effort post-processing (memories, trends, vectors,
   action items, goals, conversation processing, webhook delivery).
+- cleanup_executor: long-running account-deletion wipes (vectors, recordings,
+  Firestore subcollections). Bulkheaded so bursts of account deletions cannot
+  starve normal post-processing.
 - storage_executor: audio file precaching, GCS operations.
 
 These replace ad-hoc ThreadPoolExecutor creation throughout the codebase,
@@ -61,6 +64,7 @@ llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_nam
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
 sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_name_prefix="sync")
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
+cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
 
 _ALL_EXECUTORS = [
@@ -70,6 +74,7 @@ _ALL_EXECUTORS = [
     stripe_executor,
     sync_executor,
     postprocess_executor,
+    cleanup_executor,
     storage_executor,
 ]
 
@@ -108,15 +113,23 @@ def get_executor_metrics() -> list:
     return metrics
 
 
-async def log_executor_health(interval_seconds: int = 60, utilization_threshold_pct: float = 70.0):
-    """Periodically log pool metrics when any pool exceeds the utilization threshold."""
+async def log_executor_health(
+    interval_seconds: int = 60,
+    utilization_threshold_pct: float = 70.0,
+    queue_depth_threshold: int = 100,
+):
+    """Periodically log pool metrics when any pool exceeds a health threshold."""
     while True:
         await asyncio.sleep(interval_seconds)
         try:
             metrics = get_executor_metrics()
-            saturated = [p for p in metrics if p['utilization_pct'] > utilization_threshold_pct]
-            if saturated:
-                logger.warning('executor_pool_health: %s', saturated)
+            unhealthy = [
+                p
+                for p in metrics
+                if p['utilization_pct'] > utilization_threshold_pct or p['queue_depth'] > queue_depth_threshold
+            ]
+            if unhealthy:
+                logger.warning('executor_pool_health: %s', unhealthy)
         except Exception:
             pass
 

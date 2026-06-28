@@ -14,7 +14,6 @@ from database.vector_db import (
     upsert_memory_vectors_batch,
 )
 from models.memories import MemoryDB, Memory, MemoryCategory
-from utils.apps import update_personas_async
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -80,9 +79,6 @@ async def create_memory(
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
 
-    if memory.visibility == 'public':
-        submit_with_context(postprocess_executor, update_personas_async, uid)
-
     return memory_db
 
 
@@ -140,18 +136,19 @@ async def create_memories_batch(
 
     await run_blocking(db_executor, _persist)
 
-    if has_public:
-        submit_with_context(postprocess_executor, update_personas_async, uid)
-
     return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 
 
 @router.get('/v3/memories', tags=['memories'], response_model=List[MemoryDB])
 def get_memories(limit: int = 100, offset: int = 0, uid: str = Depends(auth.get_current_user_uid)):
+    # Clamp pagination so an out-of-range value cannot reach Firestore .limit()/.offset(), which raises
+    # on a negative argument and would otherwise 500 the request.
+    offset = max(0, offset)
     # Use high limits for the first page
     # Warn: should remove
     if offset == 0:
         limit = 5000
+    limit = max(1, min(limit, 5000))
     memories = memories_db.get_memories(uid, limit, offset)
 
     valid_memories = []
@@ -249,5 +246,4 @@ def update_memory_visibility(
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     memories_db.change_memory_visibility(uid, memory_id, value)
-    postprocess_executor.submit(update_personas_async, uid)
     return {'status': 'ok'}

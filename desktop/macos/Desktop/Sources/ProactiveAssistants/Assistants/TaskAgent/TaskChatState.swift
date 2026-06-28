@@ -3,7 +3,8 @@ import Combine
 
 /// Per-task chat state with its own bridge process and message history.
 /// Each task chat is fully independent — no shared state with the sidebar chat.
-/// Uses Claude SDK's native `resume: sessionId` for conversation persistence.
+/// Uses canonical Omi sessions for continuity and preserves legacy ACP IDs only
+/// for transitional adapter-native resume compatibility.
 @MainActor
 class TaskChatState: ObservableObject {
     let taskId: String
@@ -14,15 +15,25 @@ class TaskChatState: ObservableObject {
     @Published var draftText = ""
     @Published var errorMessage: String?
     @Published var chatMode: ChatMode = .act
+    /// Monotonic token that increments each time the local user sends a message
+    /// in this task chat. ChatMessagesView observes this for turn anchoring.
+    @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
 
     /// Own bridge process — completely independent from sidebar chat
     private var agentBridge: AgentBridge?
     private var bridgeStarted = false
 
+    /// Harness mode of the currently active bridge, set when the bridge starts.
+    /// Used to decide whether adapter-native IDs are valid for legacy resume.
+    private var currentHarness: String?
+
     /// Workspace path for file-system tools
     let workspacePath: String
 
-    @Published var currentSessionId: String?
+    /// Adapter-native ACP session used only for legacy resume/adoption.
+    /// Canonical Omi runtime sessions are tracked separately in currentOmiSessionId.
+    @Published var legacyAcpSessionId: String?
+    @Published var currentOmiSessionId: String?
 
     /// Closure to build system prompt from ChatProvider's cached data
     var systemPromptBuilder: (() -> String)?
@@ -63,8 +74,8 @@ class TaskChatState: ObservableObject {
 
             messages = records.map { $0.toChatMessage() }
 
-            if let sessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
-                currentSessionId = sessionId
+            if let legacyAcpSessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
+                self.legacyAcpSessionId = legacyAcpSessionId
             }
 
             log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
@@ -76,10 +87,10 @@ class TaskChatState: ObservableObject {
     /// Persist a message to GRDB (fire-and-forget)
     private func persistMessage(_ message: ChatMessage) {
         let taskId = self.taskId
-        let sessionId = self.currentSessionId
+        let legacyAcpSessionId = self.legacyAcpSessionId
         Task.detached {
             do {
-                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId, acpSessionId: sessionId)
+                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId, acpSessionId: legacyAcpSessionId)
             } catch {
                 logError("TaskChatState[\(taskId)]: Failed to persist message \(message.id)", error: error)
             }
@@ -129,11 +140,23 @@ class TaskChatState: ObservableObject {
         guard !bridgeStarted else { return true }
         do {
             let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-            let harness = mode == "piMono" ? "piMono" : "acp"
+            let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
             let bridge = AgentBridge(harnessMode: harness)
             try await bridge.start()
             agentBridge = bridge
             bridgeStarted = true
+            currentHarness = harness
+
+            // Legacy resume IDs are only valid for the ACP/pi-mono adapters that
+            // created them. Hermes and OpenClaw advertise native resume but would
+            // adopt a foreign session ID, causing session/resume on the wrong
+            // backend before falling back or failing. Clear it on adapter switch.
+            let supportsLegacyResume = (harness == "acp" || harness == "piMono")
+            if !supportsLegacyResume, legacyAcpSessionId != nil {
+                log("TaskChatState[\(taskId)]: clearing legacy resume ID for harness \(harness)")
+                legacyAcpSessionId = nil
+            }
+
             log("TaskChatState[\(taskId)]: agent bridge started")
             return true
         } catch {
@@ -166,6 +189,8 @@ class TaskChatState: ObservableObject {
         isSending = true
         errorMessage = nil
         TaskAgentStatusRegistry.shared.markRunning(taskId: taskId)
+        // Signal local send for turn anchoring.
+        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         // Add user message to local messages and persist
         // Skip for follow-ups — sendFollowUp() already added and persisted it
@@ -241,9 +266,15 @@ class TaskChatState: ObservableObject {
             let queryResult = try await bridge.query(
                 prompt: fullPrompt,
                 systemPrompt: systemPrompt,
+                sessionKey: taskId,
+                omiSessionId: currentOmiSessionId ?? AgentRuntimeStatusStore.shared.knownSessionId(for: .taskChat(taskId: taskId)),
+                surfaceKind: "task_chat",
+                externalRefKind: "task",
+                externalRefId: taskId,
+                legacyClientScope: "task-chat",
                 cwd: workspacePath.isEmpty ? nil : workspacePath,
                 mode: chatMode.rawValue,
-                resume: currentSessionId,
+                resume: legacyAcpSessionId,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,
@@ -253,8 +284,23 @@ class TaskChatState: ObservableObject {
                 onAuthSuccess: onAuthSuccess ?? { }
             )
 
-            // Store session ID so subsequent queries can resume
-            currentSessionId = queryResult.sessionId
+            // Store canonical and adapter-native IDs separately. The persisted
+            // acpSessionId column remains a legacy adapter binding only.
+            currentOmiSessionId = queryResult.omiSessionId
+            if let adapterSessionId = queryResult.adapterSessionId {
+                // Only persist adapter-native IDs for adapters that support the
+                // legacy resume protocol (ACP/pi-mono). Hermes/OpenClaw native IDs
+                // are not interchangeable — storing them would pollute the resume
+                // field and cause a different backend to attempt resuming the
+                // wrong session after an adapter switch.
+                let supportsLegacyResume = (currentHarness == "acp" || currentHarness == "piMono")
+                if supportsLegacyResume {
+                    legacyAcpSessionId = adapterSessionId
+                } else if legacyAcpSessionId != nil {
+                    log("TaskChatState[\(taskId)]: not persisting adapter ID \(adapterSessionId) for non-legacy harness \(currentHarness ?? "?")")
+                    legacyAcpSessionId = nil
+                }
+            }
 
             // Flush remaining streaming buffers
             streamingFlushWorkItem?.cancel()
@@ -277,17 +323,25 @@ class TaskChatState: ObservableObject {
             streamingFlushWorkItem = nil
             flushStreamingBuffer()
 
+            let failedByUserStop: Bool
+            if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+                failedByUserStop = true
+            } else {
+                failedByUserStop = false
+            }
+
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                if messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
+                if failedByUserStop && messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
                     messages.remove(at: index)
                 } else {
+                    Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
                     messages[index].isStreaming = false
                     completeRemainingToolCalls(messageId: aiMessageId)
                     persistMessage(messages[index])
                 }
             }
 
-            if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+            if failedByUserStop {
                 TaskAgentStatusRegistry.shared.markStopped(taskId: taskId)
             } else {
                 errorMessage = error.localizedDescription
@@ -307,6 +361,12 @@ class TaskChatState: ObservableObject {
     }
 
     // MARK: - Follow-Up
+
+    static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
+        if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            message.text = "Failed: \(errorDescription)"
+        }
+    }
 
     func sendFollowUp(_ text: String) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -389,6 +449,8 @@ class TaskChatState: ObservableObject {
         }
     }
 
+    // Mirrors ChatProvider.addToolActivity — kept in lockstep.
+    // TODO: DRY these two implementations into a shared helper.
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
 
@@ -398,7 +460,7 @@ class TaskChatState: ObservableObject {
             if let toolUseId = toolUseId, toolInput != nil {
                 for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
                     if case .toolCall(let id, let name, let st, let existingTuid, _, let output) = messages[index].contentBlocks[i],
-                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st == .running)) {
+                       (existingTuid == toolUseId || (existingTuid == nil && name == toolName && st.isInFlight)) {
                         messages[index].contentBlocks[i] = .toolCall(
                             id: id, name: name, status: st,
                             toolUseId: toolUseId, input: toolInput, output: output
@@ -413,7 +475,8 @@ class TaskChatState: ObservableObject {
             )
         } else {
             for i in stride(from: messages[index].contentBlocks.count - 1, through: 0, by: -1) {
-                if case .toolCall(let id, let name, .running, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i] {
+                if case .toolCall(let id, let name, let st, let existingTuid, let existingInput, let output) = messages[index].contentBlocks[i],
+                   st.isInFlight {
                     let matches = (toolUseId != nil && existingTuid == toolUseId) || (toolUseId == nil && name == toolName)
                     if matches {
                         messages[index].contentBlocks[i] = .toolCall(
@@ -457,10 +520,14 @@ class TaskChatState: ObservableObject {
         }
     }
 
+    /// Mirrors ChatProvider.completeRemainingToolCalls — matches any
+    /// in-flight state (`.running`, `.slow`, `.stalled`) so detector-
+    /// promoted blocks resolve when the turn ends.
     private func completeRemainingToolCalls(messageId: String) {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
         for i in messages[index].contentBlocks.indices {
-            if case .toolCall(let id, let name, .running, let toolUseId, let input, let output) = messages[index].contentBlocks[i] {
+            if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = messages[index].contentBlocks[i],
+               status.isInFlight {
                 messages[index].contentBlocks[i] = .toolCall(
                     id: id, name: name, status: .completed,
                     toolUseId: toolUseId, input: input, output: output

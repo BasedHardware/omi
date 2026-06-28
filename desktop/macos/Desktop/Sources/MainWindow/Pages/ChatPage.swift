@@ -131,7 +131,28 @@ struct ChatPage: View {
       // Messages area
       messagesView
 
-      // Error banner
+      // Structured ChatErrorCard for mappable BridgeError cases.
+      // Renders ABOVE the legacy errorMessage banner so its primary
+      // CTA gets the prominent slot. Only one of {card, banner} is
+      // ever active per turn — sendMessage's catch block clears the
+      // other when setting one.
+      if let cardState = chatProvider.currentError {
+        ChatErrorCard(
+          state: cardState,
+          onRecover: {
+            Task { await chatProvider.recoverFromError() }
+          },
+          onDismiss: {
+            chatProvider.dismissCurrentError()
+          }
+        )
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+      }
+
+      // Legacy error banner — fallback for unmappable BridgeError
+      // cases (encodingError, quotaExceeded, free-form .agentError
+      // messages). Stays so no error path becomes invisible.
       if let error = chatProvider.errorMessage {
         HStack(spacing: 8) {
           Image(systemName: "exclamationmark.triangle.fill")
@@ -459,6 +480,8 @@ struct ChatPage: View {
       },
       sessionsLoadError: chatProvider.sessionsLoadError,
       onRetry: { Task { await chatProvider.retryLoad() } },
+      localSendToken: chatProvider.localSendToken,
+      onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent() },
       welcomeContent: { welcomeMessage }
     )
   }
@@ -605,6 +628,10 @@ struct ChatBubble: View {
   let onRate: (Int?) -> Void
   var onCitationTap: ((Citation) -> Void)? = nil
   var isDuplicate: Bool = false
+  /// Optional cancel action for stalled tool-call banners, threaded
+  /// down to `ToolCallsGroup`. Optional so existing callers compile
+  /// without wiring cancellation.
+  var onCancelTurn: (() -> Void)? = nil
 
   @State private var isHovering = false
   @State private var isTimestampHovering = false
@@ -618,13 +645,15 @@ struct ChatBubble: View {
 
   init(
     message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
-    onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false
+    onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
+    onCancelTurn: (() -> Void)? = nil
   ) {
     self.message = message
     self.app = app
     self.onRate = onRate
     self.onCitationTap = onCitationTap
     self.isDuplicate = isDuplicate
+    self.onCancelTurn = onCancelTurn
     self._cachedGroupedBlocks = State(initialValue: ContentBlockGroup.group(message.contentBlocks))
   }
 
@@ -644,6 +673,18 @@ struct ChatBubble: View {
       ) + "…"
     }
     return message.text
+  }
+
+  private var contentBlockStatusSignature: String {
+    message.contentBlocks.map { block in
+      switch block {
+      case .toolCall(let id, _, let status, _, _, _):
+        return "\(id):\(status)"
+      default:
+        return block.id
+      }
+    }
+    .joined(separator: "|")
   }
 
   var body: some View {
@@ -697,7 +738,7 @@ struct ChatBubble: View {
                   .padding(.top, 2)
               }
             case .toolCalls(_, let calls):
-              ToolCallsGroup(calls: calls)
+              ToolCallsGroup(calls: calls, onCancel: onCancelTurn)
             case .thinking(_, let text):
               ThinkingBlock(text: text)
             case .discoveryCard(_, let title, let summary, let fullText):
@@ -705,11 +746,11 @@ struct ChatBubble: View {
             }
           }
           // Show typing indicator at end if still streaming
-          // (skip only when last group is tool calls with a running tool — it already has a spinner)
+          // (skip only when last group is tool calls with an in-flight tool — it already has a spinner)
           if message.isStreaming {
             if case .toolCalls(_, let calls) = cachedGroupedBlocks.last,
               calls.contains(where: { block in
-                if case .toolCall(_, _, .running, _, _, _) = block { return true }
+                if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
                 return false
               })
             {
@@ -807,6 +848,12 @@ struct ChatBubble: View {
       // (streaming appends to the last text block without changing count)
       cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)
     }
+    .onChange(of: contentBlockStatusSignature) {
+      // Refresh grouped blocks when only a tool-call status changes. Without
+      // this, the cached group can keep stale .running blocks and hide
+      // .slow / .stalled UI updates.
+      cachedGroupedBlocks = ContentBlockGroup.group(message.contentBlocks)
+    }
   }
 
   @ViewBuilder
@@ -889,7 +936,7 @@ struct ChatBubble: View {
   private var copyButton: some View {
     Button(action: {
       NSPasteboard.general.clearContents()
-      NSPasteboard.general.setString(message.text, forType: .string)
+      NSPasteboard.general.setString(message.copyableText, forType: .string)
       showCopied = true
       DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
         showCopied = false
@@ -1053,102 +1100,194 @@ enum ContentBlockGroup: Identifiable {
 
 // MARK: - Tool Calls Group
 
-/// Renders a group of consecutive tool calls as a single collapsed summary line
+/// Renders a group of consecutive tool calls as a single summary line with
+/// optional expanded per-step details.
 struct ToolCallsGroup: View {
   let calls: [ChatContentBlock]
+  var compact: Bool = false
+  var expandRunning: Bool = true
+  /// `ChatProvider` wires this to `agentBridge.interrupt()` via the
+  /// parent message view. If no action is available, the banner is hidden
+  /// so the UI never presents a no-op Cancel button.
+  var onCancel: (() -> Void)? = nil
 
-  @State private var isExpanded = false
+  @State private var isExpanded: Bool
 
-  /// Whether any tool in the group is still running
+  init(calls: [ChatContentBlock], compact: Bool = false, expandRunning: Bool = true, onCancel: (() -> Void)? = nil) {
+    self.calls = calls
+    self.compact = compact
+    self.expandRunning = expandRunning
+    self.onCancel = onCancel
+    self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
+  }
+
+  /// Whether any tool in the group is still running.
   private var hasRunningTool: Bool {
+    Self.hasRunningTool(in: calls)
+  }
+
+  /// True iff at least one tool in the group is `.stalled`. Drives the
+  /// message-level banner.
+  private var hasStalledTool: Bool {
     calls.contains { block in
-      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      if case .toolCall(_, _, .stalled, _, _, _) = block { return true }
       return false
     }
   }
 
-  /// Display name of the currently running tool (last running one), or last tool if all done
+  /// Most attention-worthy status across the group. Drives the header
+  /// icon. Priority: stalled > failed > slow > running > completed.
+  private var aggregateStatus: ToolCallStatus {
+    var hasStalled = false
+    var hasFailed = false
+    var hasSlow = false
+    var hasRunning = false
+    for block in calls {
+      if case .toolCall(_, _, let status, _, _, _) = block {
+        switch status {
+        case .stalled: hasStalled = true
+        case .failed: hasFailed = true
+        case .slow: hasSlow = true
+        case .running: hasRunning = true
+        case .completed: break
+        }
+      }
+    }
+    if hasStalled { return .stalled }
+    if hasFailed { return .failed }
+    if hasSlow { return .slow }
+    if hasRunning { return .running }
+    return .completed
+  }
+
+  /// Display name of the currently in-flight tool (last in-flight one), or last tool if all done.
   private var currentToolName: String {
-    // Find the last running tool
     if let lastRunning = calls.last(where: { block in
-      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
       return false
     }) {
       if case .toolCall(_, let name, _, _, _, _) = lastRunning {
         return ChatContentBlock.displayName(for: name)
       }
     }
-    // All done — show last tool name
     if case .toolCall(_, let name, _, _, _, _) = calls.last {
       return ChatContentBlock.displayName(for: name)
     }
     return "Working"
   }
 
+  private var currentToolSummary: String? {
+    if let lastRunning = calls.last(where: { block in
+      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      return false
+    }), case .toolCall(_, let name, _, _, let input, _) = lastRunning {
+      return input?.summary ?? Self.summaryEmbeddedInToolName(name)
+    }
+    if case .toolCall(_, let name, _, _, let input, _) = calls.last {
+      return input?.summary ?? Self.summaryEmbeddedInToolName(name)
+    }
+    return nil
+  }
+
   var body: some View {
-    VStack(alignment: .leading, spacing: 0) {
-      // Summary header
-      Button(action: {
-        withAnimation(.easeInOut(duration: 0.2)) {
-          isExpanded.toggle()
+    VStack(alignment: .leading, spacing: compact ? 0 : 6) {
+      if hasStalledTool, let onCancel {
+        ToolCallStalledBanner(onCancel: onCancel)
+      }
+
+      header
+
+      if isExpanded {
+        expandedToolCalls
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: compact ? 14 : 16)
+    .onChange(of: hasRunningTool) { _, isRunning in
+      guard expandRunning, isRunning else { return }
+      withAnimation(.easeInOut(duration: 0.18)) {
+        isExpanded = true
+      }
+    }
+  }
+
+  private var header: some View {
+    Button(action: {
+      withAnimation(.easeInOut(duration: 0.2)) {
+        isExpanded.toggle()
+      }
+    }) {
+      HStack(spacing: compact ? 7 : 6) {
+        statusIcon(for: aggregateStatus, size: 12)
+
+        Text(currentToolName)
+          .scaledFont(size: 12, weight: compact ? .semibold : .regular)
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(1)
+
+        if let summary = currentToolSummary, !summary.isEmpty {
+          Text(summary)
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(1)
+            .truncationMode(.middle)
         }
-      }) {
-        HStack(spacing: 6) {
-          // Status indicator
-          if hasRunningTool {
-            ProgressView()
-              .controlSize(.mini)
-              .frame(width: 12, height: 12)
-          } else {
-            Image(systemName: "checkmark.circle.fill")
-              .scaledFont(size: 12)
-              .foregroundColor(.green)
-          }
 
-          // Current/last tool action
-          Text(currentToolName)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textSecondary)
-
-          // Step count (only show when > 1)
-          if calls.count > 1 {
-            Text("·")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
+        if calls.count > 1 {
+          Text(compact ? "· \(calls.count) steps" : "·")
+            .scaledFont(size: compact ? 11 : 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(1)
+          if !compact {
             Text("\(calls.count) steps")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
           }
-
-          Spacer(minLength: 4)
-
-          // Expand chevron
-          Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-            .scaledFont(size: 9)
-            .foregroundColor(OmiColors.textTertiary)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+
+        Spacer(minLength: compact ? 0 : 4)
+
+        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+          .scaledFont(size: 9)
+          .foregroundColor(OmiColors.textTertiary)
       }
-      .buttonStyle(.plain)
+      .padding(.horizontal, 10)
+      .padding(.vertical, compact ? 0 : 6)
+      .frame(height: compact ? 34 : nil)
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
+    .buttonStyle(.plain)
+  }
 
-      // Expanded: show individual tool call cards
-      if isExpanded {
-        Divider()
-          .padding(.horizontal, 8)
+  private var expandedToolCalls: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Divider()
+        .padding(.horizontal, 8)
 
-        VStack(alignment: .leading, spacing: 4) {
-          ForEach(calls) { block in
-            if case .toolCall(_, let name, let status, _, let input, let output) = block {
-              ToolCallCard(name: name, status: status, input: input, output: output)
-            }
+      VStack(alignment: .leading, spacing: 4) {
+        ForEach(calls) { block in
+          if case .toolCall(_, let name, let status, _, let input, let output) = block {
+            ToolCallCard(name: name, status: status, input: input, output: output)
           }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 6)
       }
+      .padding(.horizontal, 6)
+      .padding(.vertical, 6)
     }
-    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.82), radius: 16)
+  }
+
+  private static func hasRunningTool(in calls: [ChatContentBlock]) -> Bool {
+    calls.contains { block in
+      if case .toolCall(_, _, .running, _, _, _) = block { return true }
+      return false
+    }
+  }
+
+  private static func summaryEmbeddedInToolName(_ name: String) -> String? {
+    guard let separator = name.firstIndex(of: ":") else { return nil }
+    let summary = name[name.index(after: separator)...]
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    return summary.isEmpty ? nil : summary
   }
 }
 
@@ -1177,16 +1316,10 @@ struct ToolCallCard: View {
         }
       }) {
         HStack(spacing: 6) {
-          // Status indicator
-          if status == .running {
-            ProgressView()
-              .controlSize(.mini)
-              .frame(width: 12, height: 12)
-          } else {
-            Image(systemName: "checkmark.circle.fill")
-              .scaledFont(size: 12)
-              .foregroundColor(.green)
-          }
+          // Status indicator — uses the shared statusIcon helper so
+          // .slow / .stalled / .failed render the same way here as in
+          // the group header.
+          statusIcon(for: status, size: 12)
 
           // Tool name
           Text(ChatContentBlock.displayName(for: name))
@@ -1259,6 +1392,81 @@ struct ToolCallCard: View {
       }
     }
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.8), radius: 16)
+  }
+}
+
+// MARK: - Tool Call Status Icon (shared by ToolCallsGroup + ToolCallCard)
+
+/// Single source of truth for how each `ToolCallStatus` value renders
+/// as a small inline icon. Used in both the group header and individual
+/// tool rows so the visual language is consistent.
+@ViewBuilder
+private func statusIcon(for status: ToolCallStatus, size: CGFloat) -> some View {
+  switch status {
+  case .running:
+    ProgressView()
+      .controlSize(.mini)
+      .frame(width: size, height: size)
+  case .slow:
+    ProgressView()
+      .controlSize(.mini)
+      .frame(width: size, height: size)
+      .tint(.orange)
+  case .stalled:
+    Image(systemName: "exclamationmark.triangle.fill")
+      .scaledFont(size: size)
+      .foregroundColor(.orange)
+  case .completed:
+    Image(systemName: "checkmark.circle.fill")
+      .scaledFont(size: size)
+      .foregroundColor(.green)
+  case .failed:
+    Image(systemName: "xmark.circle.fill")
+      .scaledFont(size: size)
+      .foregroundColor(.red)
+  }
+}
+
+// MARK: - Tool Call Stalled Banner
+
+/// Message-level banner that appears above a tool group when any of
+/// its tools is `.stalled`. Tapping Cancel triggers the `onCancel`
+/// closure passed in by `ToolCallsGroup`, which is wired to
+/// `AgentBridge.interrupt()`.
+struct ToolCallStalledBanner: View {
+  let onCancel: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .scaledFont(size: 12)
+        .foregroundColor(.orange)
+
+      Text("This is taking longer than usual.")
+        .scaledFont(size: 12)
+        .foregroundColor(OmiColors.textSecondary)
+
+      Spacer(minLength: 4)
+
+      Button(action: onCancel) {
+        Text("Cancel")
+          .scaledFont(size: 11, weight: .medium)
+          .foregroundColor(.white)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 4)
+          .background(Color.red.opacity(0.85))
+          .clipShape(RoundedRectangle(cornerRadius: 6))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 8)
+    .background(Color.orange.opacity(0.1))
+    .overlay(
+      RoundedRectangle(cornerRadius: 12)
+        .strokeBorder(Color.orange.opacity(0.4), lineWidth: 1)
+    )
+    .clipShape(RoundedRectangle(cornerRadius: 12))
   }
 }
 
@@ -1918,6 +2126,25 @@ extension Theme {
         ForegroundColor(.white.opacity(0.9))
         UnderlineStyle(.single)
       }
+      .table { configuration in
+        ScrollView(.horizontal, showsIndicators: false) {
+          configuration.label
+            .fixedSize(horizontal: true, vertical: true)
+            .markdownTableBorderStyle(.init(color: .white.opacity(0.18)))
+            .markdownTableBackgroundStyle(.alternatingRows(.white.opacity(0.06), .white.opacity(0.03)))
+        }
+        .markdownMargin(top: 0, bottom: 10)
+      }
+      .tableCell { configuration in
+        configuration.label
+          .markdownTextStyle {
+            if configuration.row == 0 {
+              FontWeight(.semibold)
+            }
+          }
+          .padding(.vertical, 5)
+          .padding(.horizontal, 9)
+      }
   }
 
   static func aiMessage(scale: CGFloat = 1.0) -> Theme {
@@ -1950,6 +2177,27 @@ extension Theme {
       }
       .link {
         ForegroundColor(OmiColors.purplePrimary)
+      }
+      .table { configuration in
+        ScrollView(.horizontal, showsIndicators: false) {
+          configuration.label
+            .fixedSize(horizontal: true, vertical: true)
+            .markdownTableBorderStyle(.init(color: Color.white.opacity(0.14)))
+            .markdownTableBackgroundStyle(
+              .alternatingRows(OmiColors.backgroundTertiary.opacity(0.92), Color.white.opacity(0.035))
+            )
+        }
+        .markdownMargin(top: 0, bottom: 10)
+      }
+      .tableCell { configuration in
+        configuration.label
+          .markdownTextStyle {
+            if configuration.row == 0 {
+              FontWeight(.semibold)
+            }
+          }
+          .padding(.vertical, 5)
+          .padding(.horizontal, 9)
       }
   }
 }

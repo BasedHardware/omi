@@ -7782,6 +7782,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get viewAll => 'Pokaż wszystko';
 
   @override
+  String get expand => 'Rozwiń';
+
+  @override
   String get addTask => 'Dodaj zadanie';
 
   @override
@@ -9328,6 +9331,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get backgroundModeNote => 'Na razie działa tylko z urządzeniami Omi i jest stale ulepszany.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Tryb w tle jest niedostępny, ponieważ nie podłączono zgodnego urządzenia. Podłącz urządzenie Omi, OpenGlass lub Friend Pendant, aby użyć tej funkcji.';
+
+  @override
   String get regenerateRecap => 'Wygeneruj podsumowanie ponownie';
 
   @override
@@ -9365,6 +9372,18 @@ class AppLocalizationsPl extends AppLocalizations {
       'W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.';
 
   @override
+  String get recordingMode => 'Tryb nagrywania';
+
+  @override
+  String get captureModeLater => 'Później';
+
+  @override
+  String get captureModeLiveDescription => 'Transkrybuj w czasie rzeczywistym podczas mówienia.';
+
+  @override
+  String get captureModeLaterDescription => 'Zapisz dźwięk teraz i transkrybuj, kiedy chcesz.';
+
+  @override
   String get unmute => 'Wyłącz wyciszenie';
 
   @override
@@ -9372,4 +9391,106 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Wstrzymano — dźwięk nie jest nagrywany';
+
+  @override
+  String get deviceTutorial => 'Jak korzystać z Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Mów do Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Powiedz kilka słów i zobacz, jak pojawiają się na żywo';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Świetna robota!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Zacznij mówić...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Zadaj Omi pytanie';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Naciśnij przycisk raz, zadaj pytanie, a po zakończeniu naciśnij ponownie';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Przetwarzanie pytania...';
+
+  @override
+  String get deviceOnboardingListening => 'Słucham...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Wyłącz';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Włącz';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Przytrzymaj przycisk przez 3 sekundy';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Naciśnij przycisk, aby włączyć ponownie';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Przytrzymaj mocno przycisk, aż zgaśnie światło';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Połączono';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Połączono!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Rozłączono';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Wyłączanie...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Dostosuj podwójne dotknięcie';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Zakończ rozmowę';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Zapisz i zakończ bieżącą rozmowę';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Wycisz / Wyłącz wyciszenie';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Włącz lub wyłącz mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Oznacz gwiazdką trwającą rozmowę';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Oznacz rozmowę jako ważną';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'To było pojedyncze dotknięcie — spróbuj dotknąć dwa razy szybko!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Spróbuj teraz! Dotknij dwukrotnie Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Kontynuuj';
+
+  @override
+  String get deviceOnboardingFinish => 'Zakończ';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Poznaj swoje Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Szybki, praktyczny przegląd wszystkiego, co potrafi Twoje Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Około 1 minuty';
+  @override
+  String get jumpToLatestMessage => 'Przejdź do najnowszej wiadomości';
+
+  @override
+  String get latest => 'Najnowsza';
 }

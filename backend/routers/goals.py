@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from database import goals as goals_db
 from utils.other import endpoints as auth
+from utils.request_validation import HistoryDays
 from utils.llm.goals import (
     suggest_goal as suggest_goal_llm,
     get_goal_advice as get_goal_advice_llm,
@@ -182,9 +183,7 @@ def update_goal_progress(
 
 
 @router.get('/v1/goals/{goal_id}/history', tags=['goals'])
-def get_goal_history(
-    goal_id: str, days: int = Query(default=30, le=365), uid: str = Depends(auth.get_current_user_uid)
-) -> List[dict]:
+def get_goal_history(goal_id: str, days: HistoryDays = 30, uid: str = Depends(auth.get_current_user_uid)) -> List[dict]:
     """Get progress history for a goal."""
     history = goals_db.get_goal_history(uid, goal_id, days)
 

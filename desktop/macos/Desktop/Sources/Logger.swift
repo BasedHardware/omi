@@ -163,7 +163,13 @@ private func isNonActionableTransient(_ error: Error?) -> Bool {
   // the Gemini proxy, surfaced by the proactive assistants (task/memory/advice/
   // insight extraction) after exhausting retries. Backend overload, not an app bug
   // (OMI-COMPUTER-6JK/6JR/6JM/6NC). Real auth/config/parse errors stay captured.
-  if let geminiError = error as? GeminiClient.GeminiClientError, geminiError.isTransient { return true }
+  if let geminiError = error as? GeminiClient.GeminiClientError,
+     geminiError.isTransient || geminiError.isExpectedProductState { return true }
+  // Embedding backfills/searches can hit expected backend/product states (trial
+  // expired/BYOK required, rate limit, 5xx). Keep those local-only so screenshot
+  // backfill loops don't create high-volume Sentry issues.
+  if let embeddingError = error as? EmbeddingService.EmbeddingError,
+     embeddingError.isNonActionableForSentry { return true }
   let nsError = error as NSError
   switch nsError.domain {
   case NSURLErrorDomain:

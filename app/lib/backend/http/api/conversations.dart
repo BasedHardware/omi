@@ -520,6 +520,7 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   int? page,
   int? limit,
   bool includeDiscarded = true,
+  String? speakerId,
 }) async {
   Logger.debug(Env.apiBaseUrl);
   var response = await makeApiCall(
@@ -531,6 +532,7 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
       'page': page ?? 1,
       'per_page': limit ?? 10,
       'include_discarded': includeDiscarded,
+      if (speakerId != null) 'speaker_id': speakerId,
     }),
   );
   if (response == null) return (<ServerConversation>[], 0, 0);

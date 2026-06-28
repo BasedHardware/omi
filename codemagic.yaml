@@ -1156,6 +1156,7 @@ workflows:
       vars:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
+        DMGBUILD_VERSION: "1.6.7"
       flutter: 3.35.3
       xcode: 26.0.1
       cocoapods: 1.16.2
@@ -1572,7 +1573,7 @@ workflows:
       - name: Create DMG installer
         script: |
           set -e
-          pip3 install --break-system-packages dmgbuild
+          pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
           APP_PATH=$(find $(pwd)/build/macos -name "Omi.app" -type d | head -1)
 
           mkdir -p build/macos/dmg
@@ -1975,6 +1976,7 @@ workflows:
         CLOUD_RUN_SERVICE: "desktop-backend"
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
+        DMGBUILD_VERSION: "1.6.7"
       xcode: 16.4
     triggering:
       events:
@@ -2052,6 +2054,7 @@ workflows:
           # by using `npx tsx` as a version-agnostic TypeScript loader that
           # still delegates to node:test.
           cd pi-mono-extension
+          npm ci --no-fund --no-audit
           if node --experimental-strip-types --test index.test.ts; then
             echo "pi-mono-extension tests passed (native Node --experimental-strip-types)"
           else
@@ -2368,6 +2371,10 @@ workflows:
             cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
             cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
+            mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
+            cp -f agent/src/runtime/control-tool-manifest.js "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+            cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+            cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"
             exit 1
@@ -2380,6 +2387,8 @@ workflows:
             mkdir -p "$APP_BUNDLE/Contents/Resources/pi-mono-extension"
             cp -f pi-mono-extension/index.ts    "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            cp -f pi-mono-extension/package-lock.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
           else
             echo "ERROR: pi-mono-extension directory not found"
             exit 1
@@ -2467,6 +2476,31 @@ workflows:
             done
           fi
 
+          # Sign pi-mono-extension native binaries, if any dependency adds Mach-O payloads.
+          PI_MONO_EXTENSION_BUNDLE="$APP_BUNDLE/Contents/Resources/pi-mono-extension"
+          if [ -d "$PI_MONO_EXTENSION_BUNDLE/node_modules" ]; then
+            # Primary pass: sign known native binary extensions
+            find "$PI_MONO_EXTENSION_BUNDLE/node_modules" -type f \
+              \( -name "*.node" -o -name "*.dylib" -o -name "*.jnilib" -o -name "*.so" -o -name "rg" \) \
+              2>/dev/null | while read native_bin; do
+              file "$native_bin" 2>/dev/null | grep -q "Mach-O" && \
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$native_bin"
+            done
+
+            # Catch-all pass: any remaining unsigned Mach-O binaries
+            find "$PI_MONO_EXTENSION_BUNDLE/node_modules" -type f \
+              ! -name "*.js"   ! -name "*.json" ! -name "*.ts"   ! -name "*.map" \
+              ! -name "*.md"   ! -name "*.txt"  ! -name "*.yml"  ! -name "*.yaml" \
+              ! -name "*.css"  ! -name "*.html" ! -name "*.jar"  ! -name "*.d.ts" \
+              ! -name "*.node" ! -name "*.dylib" ! -name "*.jnilib" ! -name "*.so" ! -name "rg" \
+              2>/dev/null | while read candidate; do
+              file "$candidate" 2>/dev/null | grep -q "Mach-O" && \
+                codesign --force --options runtime --timestamp \
+                  --sign "$SIGN_IDENTITY" "$candidate"
+            done
+          fi
+
           # Sign Sparkle components — innermost first (required order)
           SPARKLE_FW="$APP_BUNDLE/Contents/Frameworks/Sparkle.framework"
           codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" \
@@ -2538,7 +2572,7 @@ workflows:
       - name: Create DMG installer
         script: |
           set -e
-          pip3 install --break-system-packages dmgbuild
+          pip3 install --break-system-packages "dmgbuild==$DMGBUILD_VERSION"
 
           STAGING_DIR="/tmp/omi-dmg-staging-$$"
           mkdir -p "$STAGING_DIR"
@@ -2618,16 +2652,7 @@ workflows:
 
       - name: Create GitHub release
         script: |
-          CHANGELOG_MD=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            changes = data.get('releases', [{}])[0].get('changes', [])
-            print('\n'.join('- ' + c for c in changes))
-          except:
-            print('- Bug fixes and improvements')
-          ")
+          CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
           CHANGELOG_PIPE=$(echo "$CHANGELOG_MD" | sed 's/^- //' | tr '\n' '|' | sed 's/|$//')
@@ -2724,34 +2749,25 @@ workflows:
       - name: Bridge release to Firestore for old clients
         script: |
           # MIGRATION BRIDGE: Old installed clients still poll the Rust backend's
-          # /appcast.xml which reads from Firestore. This step writes the new build
-          # to Firestore so those clients receive this update (which includes the
-          # new SUFeedURL pointing to api.omi.me). After they update, they'll use
-          # the Python appcast directly. Remove this step once the Rust backend is
-          # decommissioned.
+          # /appcast.xml which reads from Firestore. Register as beta here; the
+          # manual desktop_promote_prod.yml workflow promotes this same Firestore
+          # release to stable only after the prod Rust backend is deployed and
+          # verified. Remove this step once the Rust backend is decommissioned.
           export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
 
-          export CHANGELOG_JSON=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            print(json.dumps(data.get('releases', [{}])[0].get('changes', [])))
-          except:
-            print('[]')
-          ")
+          export CHANGELOG_JSON=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format json || echo "[]")
 
           RELEASE_JSON=$(python3 -c "
           import json, os
           data = {
-            'version':      os.environ['VERSION'],
+            'version':      os.environ['BUILD_NAME'],
             'build_number': int(os.environ['BUILD_NUMBER']),
             'download_url': os.environ.get('DOWNLOAD_URL', ''),
             'ed_signature': os.environ.get('ED_SIGNATURE', ''),
             'changelog':    json.loads(os.environ.get('CHANGELOG_JSON', '[]')),
             'is_live':      True,
             'is_critical':  False,
-            'channel':      'stable',
+            'channel':      'beta',
           }
           print(json.dumps(data))
           ")
@@ -2765,7 +2781,7 @@ workflows:
 
           HTTP_CODE=$(echo "$HTTP_RESPONSE" | tail -n1)
           if [ "$HTTP_CODE" = "201" ]; then
-            echo "Bridge: Release registered in Firestore for old clients (channel: stable)"
+            echo "Bridge: Release registered in Firestore for old clients (channel: beta)"
           else
             echo "WARNING: Firestore bridge returned HTTP $HTTP_CODE (non-fatal)"
             echo "$(echo "$HTTP_RESPONSE" | head -n -1)"

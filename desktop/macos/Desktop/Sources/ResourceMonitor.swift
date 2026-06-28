@@ -151,11 +151,20 @@ class ResourceMonitor {
     components["liveNotes_notesContext"] = liveNotes.existingNotesContextCount
     components["liveNotes_notesCount"] = liveNotes.notes.count
 
-    // VideoChunkEncoder buffer (actor — await)
+    // VideoChunkEncoder buffer/lifecycle (actor — await)
     let bufferStatus = await VideoChunkEncoder.shared.getBufferStatus()
     components["videoEncoder_frameCount"] = bufferStatus.frameCount
+    components["videoEncoder_maxBufferFrames"] = bufferStatus.maxBufferFrames
+    components["videoEncoder_isFFmpegRunning"] = bufferStatus.isFFmpegRunning
+    components["videoEncoder_consecutiveWriteFailures"] = bufferStatus.consecutiveWriteFailures
+    components["videoEncoder_restartCount"] = bufferStatus.encoderRestartCount
+    components["videoEncoder_emergencyResetCount"] = bufferStatus.emergencyResetCount
+    components["videoEncoder_ffmpegNotReadyCount"] = bufferStatus.ffmpegNotReadyCount
     if let age = bufferStatus.oldestFrameAge {
       components["videoEncoder_oldestFrameAgeSec"] = Int(age)
+    }
+    if let age = bufferStatus.currentChunkAge {
+      components["videoEncoder_currentChunkAgeSec"] = Int(age)
     }
 
     // FocusAssistant pending tasks (actor — await, optional since it may not be initialized)
@@ -168,6 +177,12 @@ class ResourceMonitor {
     let plugin = ProactiveAssistantsPlugin.shared
     components["rewind_droppedFrames"] = plugin.droppedFrameCount
     components["rewind_isProcessing"] = plugin.isProcessingRewindFrame
+    components["rewind_isMonitoring"] = plugin.isMonitoring
+    components["rewind_captureIntervalSec"] = RewindSettings.shared.captureInterval
+    components["rewind_effectiveCaptureIntervalSec"] = RewindSettings.shared.effectiveCaptureInterval(
+      isOnBattery: PowerMonitor.cachedBatteryState())
+    components["rewind_retentionDays"] = RewindSettings.shared.retentionDays
+    components["system_memoryPressurePercent"] = snapshot.systemMemoryPressure
 
     // Thread count is already in snapshot
     components["threadCount"] = snapshot.threadCount
@@ -352,7 +367,9 @@ class ResourceMonitor {
     onMemoryPressureTrimTranscript?()
 
     Task {
-      // Flush VideoChunkEncoder and await completion
+      // Flush VideoChunkEncoder and await completion. If ffmpeg is wedged, the
+      // encoder's watchdog will kill it; ResourceMonitor records the reset counters
+      // in component diagnostics so hang/memory Sentry events can be correlated.
       _ = try? await VideoChunkEncoder.shared.flushCurrentChunk()
 
       // Clear focus assistant pending tasks specifically

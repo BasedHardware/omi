@@ -1717,12 +1717,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'APPARATEN',
-      one: 'APPARAAT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPARATEN', one: 'APPARAAT');
     return '$count $_temp0 GEVONDEN IN DE BUURT';
   }
 
@@ -7787,6 +7782,9 @@ class AppLocalizationsNl extends AppLocalizations {
   String get viewAll => 'Alles bekijken';
 
   @override
+  String get expand => 'Uitvouwen';
+
+  @override
   String get addTask => 'Taak toevoegen';
 
   @override
@@ -9329,6 +9327,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get backgroundModeNote => 'Werkt voorlopig alleen met Omi-apparaten en wordt voortdurend verbeterd.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Achtergrondmodus is niet beschikbaar omdat er geen compatibel apparaat is verbonden. Verbind een Omi-, OpenGlass- of Friend Pendant-apparaat om deze functie te gebruiken.';
+
+  @override
   String get regenerateRecap => 'Samenvatting opnieuw genereren';
 
   @override
@@ -9366,6 +9368,18 @@ class AppLocalizationsNl extends AppLocalizations {
       'Je telefoon heeft weinig opslagruimte, dus de opname is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder.';
 
   @override
+  String get recordingMode => 'Opnamemodus';
+
+  @override
+  String get captureModeLater => 'Later';
+
+  @override
+  String get captureModeLiveDescription => 'Transcribeer in realtime terwijl je praat.';
+
+  @override
+  String get captureModeLaterDescription => 'Sla audio nu op en transcribeer wanneer je wilt.';
+
+  @override
   String get unmute => 'Dempen opheffen';
 
   @override
@@ -9373,4 +9387,106 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Gepauzeerd — audio wordt niet opgenomen';
+
+  @override
+  String get deviceTutorial => 'Hoe je Omi gebruikt';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Spreek in je Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Zeg een paar woorden en zie ze in realtime verschijnen';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Goed gedaan!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Begin met praten...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Stel Omi een vraag';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Druk eenmaal op de knop, stel je vraag en druk nogmaals als je klaar bent';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Je vraag wordt verwerkt...';
+
+  @override
+  String get deviceOnboardingListening => 'Aan het luisteren...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Uitzetten';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Aanzetten';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Houd de knop 3 seconden ingedrukt';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Druk op de knop om hem weer aan te zetten';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Houd de knop stevig ingedrukt tot het lampje uitgaat';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Verbonden';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Verbonden!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Niet verbonden';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Aan het uitzetten...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Dubbeltik aanpassen';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Gesprek beëindigen';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Huidig gesprek opslaan en beëindigen';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Dempen / Dempen opheffen';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Microfoon aan- of uitzetten';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Lopend gesprek markeren';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Gesprek als belangrijk markeren';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Dat was één tik — probeer twee keer snel te tikken!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Probeer het nu! Dubbeltik op je Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Doorgaan';
+
+  @override
+  String get deviceOnboardingFinish => 'Voltooien';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Maak kennis met je Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Een snelle, praktische rondleiding langs alles wat je Omi kan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Ongeveer 1 minuut';
+  @override
+  String get jumpToLatestMessage => 'Naar nieuwste bericht springen';
+
+  @override
+  String get latest => 'Nieuwste';
 }

@@ -7,12 +7,25 @@
 // Issue #6594: Pi-mono harness with Omi API proxy for server-side cost control.
 
 import { ChildProcess, spawn } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { dirname, join } from "path";
 import { createInterface, Interface as ReadlineInterface } from "readline";
-import {
+import { adapterCapabilitiesFor, HarnessFeature } from "./interface.js";
+import type {
   HarnessAdapter,
+  AdapterAttemptContext,
+  AdapterAttemptResult,
+  AdapterBindingHandle,
+  AdapterCapabilities,
+  AdapterEventSink,
+  CancelAttemptContext,
+  CancelDispatchResult,
   HarnessConfig,
-  HarnessFeature,
+  OpenBindingInput,
+  OpenedBinding,
+  ResumeBindingInput,
+  RuntimeAdapter,
   SessionOpts,
   PromptBlock,
   PromptResult,
@@ -21,6 +34,10 @@ import {
   EventCallback,
 } from "./interface.js";
 import type { WarmupSessionConfig } from "../protocol.js";
+
+type PiMonoConfig = HarnessConfig & {
+  onRestart?: (reason: string) => void;
+};
 
 // Pi-mono RPC command/event types
 interface PiRpcCommand {
@@ -32,6 +49,18 @@ interface PiRpcCommand {
 interface PiRpcEvent {
   type: string;
   [key: string]: unknown;
+}
+
+interface PiMonoRelayContext {
+  protocolVersion?: 1 | 2;
+  requestId: string;
+  clientId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  adapterSessionId?: string;
+  legacyAdapterSessionId?: string;
+  disableSwiftBackedTools?: boolean;
 }
 
 interface PiAssistantMessageEvent {
@@ -150,9 +179,11 @@ function resolveBundledExtension(): string {
 }
 
 export class PiMonoAdapter implements HarnessAdapter {
+  private static nextAdapterInstanceId = 1;
+
   readonly name = "pi-mono";
 
-  private config: HarnessConfig;
+  private config: PiMonoConfig;
   private process: ChildProcess | null = null;
   private readline: ReadlineInterface | null = null;
   private sessions: Map<
@@ -182,16 +213,22 @@ export class PiMonoAdapter implements HarnessAdapter {
   private currentAbortController: AbortController | null = null;
   private piPath: string;
   private extensionPath: string;
+  private readonly contextFilePath = join(
+    tmpdir(),
+    `omi-pi-mono-context-${process.pid}-${Math.random().toString(36).slice(2)}.json`
+  );
   /** Current system prompt baked into the spawned pi process via --system-prompt.
    *  Pi has no set_system_prompt RPC, so changing this requires a subprocess restart. */
   private currentSystemPrompt: string | undefined;
+  private readonly sessionPrefix: string;
   /** True when a token refresh was deferred because a prompt was active */
   private pendingTokenRefresh = false;
   /** True when a system-prompt change was deferred because a prompt was active */
   private pendingSystemPromptRefresh = false;
 
-  constructor(config: HarnessConfig, piPath?: string, extensionPath?: string) {
+  constructor(config: PiMonoConfig, piPath?: string, extensionPath?: string) {
     this.config = config;
+    this.sessionPrefix = `pi-worker-${PiMonoAdapter.nextAdapterInstanceId++}`;
     this.piPath = piPath || process.env.PI_MONO_PATH || resolveBundledPi();
     this.extensionPath =
       extensionPath ||
@@ -262,9 +299,11 @@ export class PiMonoAdapter implements HarnessAdapter {
     if (this.config.omiApiBaseUrl) {
       env.OMI_API_BASE_URL = this.config.omiApiBaseUrl;
     }
+    env.OMI_ADAPTER_ID = "pi-mono";
+    env.OMI_CONTEXT_FILE = this.contextFilePath;
     // Forward OMI_BRIDGE_PIPE so the extension can register omi-tools
     // (execute_sql, semantic_search, etc.) that forward to Swift.
-    // The pipe is already set in process.env by runPiMonoMode().
+    // The shared runtime process sets the pipe in process.env before starting pi-mono.
 
     this.process = spawn(this.piPath, args, {
       stdio: ["pipe", "pipe", "pipe"],
@@ -302,6 +341,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       }
       this.pendingRequests.clear();
       this.activePromptGeneration = 0;
+      rmSync(this.contextFilePath, { force: true });
     });
   }
 
@@ -327,6 +367,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.sessions.clear();
     this.pendingRequests.clear();
     this.activePromptGeneration = 0;
+    rmSync(this.contextFilePath, { force: true });
   }
 
   async createSession(opts: SessionOpts): Promise<string> {
@@ -341,12 +382,14 @@ export class PiMonoAdapter implements HarnessAdapter {
       await this.setSystemPrompt(opts.systemPrompt);
     }
 
-    const sessionId = `pi-session-${this.nextSessionId++}`;
+    const sessionId = `${this.sessionPrefix}-session-${this.nextSessionId++}`;
     this.sessions.set(sessionId, {
       cwd: opts.cwd,
       model: mapped,
       systemPrompt: opts.systemPrompt,
     });
+
+    await this.start();
 
     // Set model if specified (map claude-* → omi-*)
     if (mapped) {
@@ -367,27 +410,23 @@ export class PiMonoAdapter implements HarnessAdapter {
     _mode: "ask" | "act",
     onEvent: EventCallback,
     onToolCall: ToolExecutor,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    relayContext?: PiMonoRelayContext
   ): Promise<PromptResult> {
+    if (!this.sessions.has(sessionId)) {
+      throw new Error(`pi-mono session is no longer active: ${sessionId}`);
+    }
     // Serialization invariant: pi-mono RPC only handles one prompt at a time.
-    // Any stray in-flight request here indicates a caller contract violation
-    // or a missed abort — drop it so a late turn_end can't leak into this one.
+    // Do not supersede an in-flight prompt: pi-mono turn_end events do not carry
+    // a request id, so a late completion could be misattributed to the new prompt.
     if (this.activePromptGeneration !== 0) {
-      const stale = this.pendingRequests.get(this.activePromptGeneration);
-      if (stale) {
-        this.pendingRequests.delete(this.activePromptGeneration);
-        stale.reject(
-          new Error(
-            "pi-mono prompt superseded before turn_end (previous request dropped)"
-          )
-        );
-      }
-      this.activePromptGeneration = 0;
+      throw new Error("pi-mono prompt already in flight");
     }
 
     this.eventHandler = onEvent;
     this.toolExecutor = onToolCall;
     this.currentAbortController = new AbortController();
+    this.writeRelayContext(relayContext);
 
     const generation = this.nextPromptGeneration++;
     this.activePromptGeneration = generation;
@@ -459,6 +498,10 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.activePromptGeneration = 0;
   }
 
+  clearRelayContextForAttempt(attemptId: string): void {
+    this.clearRelayContext(attemptId);
+  }
+
   async setModel(sessionId: string, model: string): Promise<void> {
     const mapped = mapModel(model);
     const session = this.sessions.get(sessionId);
@@ -485,6 +528,10 @@ export class PiMonoAdapter implements HarnessAdapter {
 
   invalidateSession(sessionKey: string): void {
     this.sessions.delete(sessionKey);
+  }
+
+  hasSession(sessionId: string): boolean {
+    return this.sessions.has(sessionId);
   }
 
   /** Update the system prompt baked into the pi subprocess.
@@ -514,6 +561,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     await this.stop();
     await this.start();
+    this.config.onRestart?.("systemPrompt");
     this.pendingSystemPromptRefresh = false;
     process.stderr.write(
       "[pi-mono] subprocess restarted with new system prompt\n"
@@ -535,6 +583,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
     await this.stop();
     await this.start();
+    this.config.onRestart?.("token_refresh");
     this.pendingTokenRefresh = false;
     process.stderr.write("[pi-mono] subprocess restarted with refreshed auth token\n");
     return true;
@@ -562,6 +611,7 @@ export class PiMonoAdapter implements HarnessAdapter {
     this.pendingSystemPromptRefresh = false;
     await this.stop();
     await this.start();
+    this.config.onRestart?.(reasons.join("+"));
     process.stderr.write(
       `[pi-mono] deferred restart executed (${reasons.join("+")}; subprocess restarted)\n`
     );
@@ -578,7 +628,7 @@ export class PiMonoAdapter implements HarnessAdapter {
       case HarnessFeature.MCP_CLIENT:
         return false; // Pi-mono doesn't use MCP
       case HarnessFeature.SESSION_RESUME:
-        return true;
+        return false;
       case HarnessFeature.OAUTH:
         return false; // Uses Firebase token, not OAuth
       default:
@@ -595,6 +645,35 @@ export class PiMonoAdapter implements HarnessAdapter {
     const id = `req-${this.nextRequestId++}`;
     cmd.id = id;
     this.process.stdin.write(JSON.stringify(cmd) + "\n");
+  }
+
+  private writeRelayContext(context: PiMonoRelayContext | undefined): void {
+    if (!context) {
+      rmSync(this.contextFilePath, { force: true });
+      return;
+    }
+    mkdirSync(dirname(this.contextFilePath), { recursive: true });
+    writeFileSync(this.contextFilePath, JSON.stringify({
+      adapterId: "pi-mono",
+      ...context,
+    }));
+  }
+
+  private clearRelayContext(expectedAttemptId?: string): void {
+    if (!expectedAttemptId) {
+      rmSync(this.contextFilePath, { force: true });
+      return;
+    }
+    if (!existsSync(this.contextFilePath)) return;
+
+    try {
+      const parsed = JSON.parse(readFileSync(this.contextFilePath, "utf8")) as Record<string, unknown>;
+      if (parsed.attemptId !== expectedAttemptId) return;
+    } catch {
+      // Invalid context is unusable by the extension; remove it as stale.
+    }
+
+    rmSync(this.contextFilePath, { force: true });
   }
 
   private handleEvent(line: string): void {
@@ -779,6 +858,22 @@ export class PiMonoAdapter implements HarnessAdapter {
     }
 
     const message = event.message as PiAssistantMessage | undefined;
+    const errorMessage = typeof message?.errorMessage === "string" && message.errorMessage.trim()
+      ? message.errorMessage.trim()
+      : undefined;
+    if (errorMessage) {
+      this.eventHandler?.({
+        type: "error",
+        message: errorMessage,
+        adapterSessionId: pending.sessionId,
+      });
+      this.pendingRequests.delete(generation);
+      this.activePromptGeneration = 0;
+      pending.reject(new Error(errorMessage));
+      this.eventHandler = null;
+      this.toolExecutor = null;
+      return;
+    }
 
     // When pi-mono stops to execute a tool, this is an intermediate turn —
     // the model will continue after the tool executes. Keep the prompt state
@@ -817,12 +912,6 @@ export class PiMonoAdapter implements HarnessAdapter {
       cacheWriteTokens: usage?.cacheWrite ?? 0,
     };
 
-    // Emit result event
-    this.eventHandler?.({
-      type: "result",
-      ...result,
-    });
-
     // Resolve + clear the in-flight state
     this.pendingRequests.delete(generation);
     this.activePromptGeneration = 0;
@@ -830,5 +919,129 @@ export class PiMonoAdapter implements HarnessAdapter {
 
     this.eventHandler = null;
     this.toolExecutor = null;
+  }
+}
+
+export class PiMonoRuntimeAdapter implements RuntimeAdapter {
+  readonly adapterId = "pi-mono";
+  readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor("pi-mono");
+
+  private readonly harness: PiMonoAdapter;
+  private readonly cancelledAttempts = new Set<string>();
+
+  constructor(harness: PiMonoAdapter) {
+    this.harness = harness;
+  }
+
+  start(): Promise<void> {
+    return this.harness.start();
+  }
+
+  stop(): Promise<void> {
+    return this.harness.stop();
+  }
+
+  async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
+    const adapterNativeSessionId = await this.harness.createSession({
+      cwd: input.cwd,
+      model: input.model,
+      systemPrompt: input.systemPrompt,
+      mcpServers: input.mcpServers,
+    });
+    return this.binding(input, adapterNativeSessionId);
+  }
+
+  async resumeBinding(input: ResumeBindingInput): Promise<OpenedBinding> {
+    await this.start();
+    // pi-mono has no native resume after daemon/process loss, but while this
+    // RuntimeAdapter instance is alive the opaque session id is still usable as
+    // process-local state. Startup reconciliation marks these bindings stale.
+    if (!this.harness.hasSession(input.adapterNativeSessionId)) {
+      throw new Error(`pi-mono binding is stale: ${input.adapterNativeSessionId}`);
+    }
+    return this.binding(input, input.adapterNativeSessionId);
+  }
+
+  async executeAttempt(
+    context: AdapterAttemptContext,
+    sink: AdapterEventSink,
+    signal: AbortSignal
+  ): Promise<AdapterAttemptResult> {
+    try {
+      const result = await this.harness.sendPrompt(
+        context.binding.adapterNativeSessionId,
+        context.prompt,
+        context.tools ?? [],
+        context.mode,
+        sink,
+        async () => "",
+        signal,
+        {
+          protocolVersion: context.metadata?.protocolVersion === 1 || context.metadata?.protocolVersion === 2
+            ? context.metadata.protocolVersion
+            : undefined,
+          requestId: context.requestId,
+          clientId: context.clientId,
+          sessionId: context.sessionId,
+          runId: context.runId,
+          attemptId: context.attemptId,
+          adapterSessionId: context.binding.adapterNativeSessionId,
+          legacyAdapterSessionId: typeof context.metadata?.legacyAdapterSessionId === "string"
+            ? context.metadata.legacyAdapterSessionId
+            : undefined,
+          disableSwiftBackedTools: context.metadata?.disableSwiftBackedTools === true,
+        }
+      );
+
+      return {
+        text: result.text,
+        costUsd: result.costUsd,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        cacheReadTokens: result.cacheReadTokens,
+        cacheWriteTokens: result.cacheWriteTokens,
+        adapterSessionId: result.sessionId,
+        terminalStatus: signal.aborted || this.cancelledAttempts.has(context.attemptId) ? "cancelled" : "succeeded",
+      };
+    } finally {
+      this.harness.clearRelayContextForAttempt(context.attemptId);
+      this.cancelledAttempts.delete(context.attemptId);
+      if (this.harness.hasPendingRestart) {
+        await this.harness.executePendingRestart();
+      }
+    }
+  }
+
+  async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {
+    const sessionId = context.binding?.adapterNativeSessionId ?? context.sessionId;
+    if (context.attemptId) {
+      this.cancelledAttempts.add(context.attemptId);
+    }
+    this.harness.abort(sessionId);
+    return {
+      accepted: true,
+      dispatchAttempted: true,
+      adapterAcknowledged: false,
+    };
+  }
+
+  async closeBinding(binding: AdapterBindingHandle): Promise<void> {
+    this.harness.invalidateSession?.(binding.adapterNativeSessionId);
+  }
+
+  private binding(
+    input: OpenBindingInput,
+    adapterNativeSessionId: string
+  ): AdapterBindingHandle {
+    return {
+      bindingId: input.metadata?.bindingId as string | undefined,
+      sessionId: input.sessionId,
+      adapterId: this.adapterId,
+      adapterNativeSessionId,
+      resumeFidelity: "none",
+      cwd: input.cwd,
+      model: input.model,
+      metadata: input.metadata,
+    };
   }
 }

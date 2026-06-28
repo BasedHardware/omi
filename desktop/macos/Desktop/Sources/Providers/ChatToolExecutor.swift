@@ -37,7 +37,11 @@ class ChatToolExecutor {
   }
 
   /// Execute a tool call and return the result as a string
-  static func execute(_ toolCall: ToolCall, originatingChatMode: ChatMode? = nil) async -> String {
+  static func execute(
+    _ toolCall: ToolCall,
+    originatingChatMode: ChatMode? = nil,
+    originatingClientScope: String? = nil
+  ) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
 
     switch toolCall.name {
@@ -48,7 +52,11 @@ class ChatToolExecutor {
       return await executeTaskAgentStatus()
 
     case "spawn_agent":
-      return await executeSpawnAgent(toolCall.arguments, originatingChatMode: originatingChatMode)
+      return await executeSpawnAgent(
+        toolCall.arguments,
+        originatingChatMode: originatingChatMode,
+        originatingClientScope: originatingClientScope
+      )
 
     case "manage_agent_pills":
       return await executeManageAgentPills(toolCall.arguments)
@@ -160,6 +168,8 @@ class ChatToolExecutor {
     case "create_action_item":
       return await executeBackendTool(toolCall)
     case "update_action_item":
+      return await executeBackendTool(toolCall)
+    case "create_calendar_event":
       return await executeBackendTool(toolCall)
 
     default:
@@ -435,9 +445,16 @@ class ChatToolExecutor {
     return TaskAgentStatusRegistry.shared.combinedSnapshotJSON()
   }
 
-  private static func executeSpawnAgent(_ args: [String: Any], originatingChatMode: ChatMode?) async -> String {
+  private static func executeSpawnAgent(
+    _ args: [String: Any],
+    originatingChatMode: ChatMode?,
+    originatingClientScope: String?
+  ) async -> String {
     if originatingChatMode == .ask {
       return "Error: spawn_agent is unavailable in Ask mode. Switch to Act mode before starting a background agent."
+    }
+    if originatingClientScope == AgentLegacyClientScope.floatingPill {
+      return "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
     }
     let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -445,13 +462,26 @@ class ChatToolExecutor {
       return "Error: Missing brief. Pass a clear, self-contained task brief."
     }
     let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let providerName = ((args["provider"] as? String) ?? "")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+      .lowercased()
+      .replacingOccurrences(of: " ", with: "")
+    let directedProvider: AgentPillsManager.DirectedProvider?
+    switch providerName {
+    case "openclaw": directedProvider = .openclaw
+    case "hermes": directedProvider = .hermes
+    case "": directedProvider = nil
+    default:
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes."
+    }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
     let pill = AgentPillsManager.shared.spawnFromUserQuery(
       brief,
       model: model,
       fromVoice: false,
-      preFetchedTitle: (title?.isEmpty == false) ? title : nil
+      preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
+      bridgeHarnessOverride: directedProvider?.harnessMode
     )
     return """
     Agent started as a floating agent pill.
@@ -1642,6 +1672,34 @@ class ChatToolExecutor {
           completed: args["completed"] as? Bool,
           description: args["description"] as? String,
           dueAt: validatedUpdateDueAt
+        )
+        return resp.resultText
+
+      case "create_calendar_event":
+        guard let rawTitle = args["title"] as? String else {
+          return "Error: title is required"
+        }
+        let title = rawTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty else {
+          return "Error: title is required"
+        }
+        guard let startTime = args["start_time"] as? String, !startTime.isEmpty else {
+          return "Error: start_time is required"
+        }
+        guard let endTime = args["end_time"] as? String, !endTime.isEmpty else {
+          return "Error: end_time is required"
+        }
+        let validatedStart = validateISODate(startTime, paramName: "start_time")
+        if let error = validatedStart.error { return error }
+        let validatedEnd = validateISODate(endTime, paramName: "end_time")
+        if let error = validatedEnd.error { return error }
+        let resp = try await api.toolCreateCalendarEvent(
+          title: title,
+          startTime: validatedStart.valid ?? startTime,
+          endTime: validatedEnd.valid ?? endTime,
+          description: args["description"] as? String,
+          location: args["location"] as? String,
+          attendees: args["attendees"] as? String
         )
         return resp.resultText
 

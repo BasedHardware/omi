@@ -49,6 +49,10 @@ let package = Package(
       path: "Sources",
       resources: [
         .process("GoogleService-Info.plist"),
+        // Bundles everything under Resources/ (incl. *_logo.png brand marks).
+        // NOTE: SwiftPM caches the resource manifest, so new files added to
+        // Resources/ are only picked up when the manifest regenerates — editing
+        // this file forces incremental builds to re-scan and include them.
         .process("Resources"),
       ]
     ),

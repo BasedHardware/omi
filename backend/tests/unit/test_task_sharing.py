@@ -669,7 +669,19 @@ class TestSyncBatchSkipsLocked:
                 {"id": "t1", "description": "OK", "is_locked": False},
                 {"id": "t2", "description": "Secret", "is_locked": True},
             ]
-            mock_db.batch_sync_update_action_items = MagicMock()
+            batch_result = types.SimpleNamespace(
+                updated_ids=["t1"],
+                missing_ids=[],
+                noop_ids=[],
+                updated_count=1,
+            )
+            batch_result.model = lambda: {
+                "updated_count": 1,
+                "updated_ids": ["t1"],
+                "missing_ids": [],
+                "noop_ids": [],
+            }
+            mock_db.batch_sync_update_action_items = MagicMock(return_value=batch_result)
 
             request = SyncBatchRequest(
                 items=[

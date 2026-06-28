@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import List, Optional
 
-from utils.executors import db_executor, postprocess_executor
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -14,6 +13,8 @@ import database.goals as goals_db
 import database.chat as chat_db
 import database.screen_activity as screen_activity_db
 import database.daily_summaries as daily_summaries_db
+import database.phone_calls as phone_calls_db
+from firebase_admin import auth as firebase_auth
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
@@ -22,13 +23,13 @@ import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
-from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
 from utils.retrieval.hybrid import rrf_rerank
 from dependencies import get_uid_from_mcp_api_key, get_current_user_id
 from utils.other.endpoints import with_rate_limit
 from utils.log_sanitizer import sanitize_pii
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
     parse_mcp_bool,
@@ -37,6 +38,7 @@ from utils.mcp_memories import (
     parse_optional_mcp_bool,
 )
 import database.mcp_api_key as mcp_api_key_db
+import database.mcp_oauth as mcp_oauth_db
 from models.mcp_api_key import McpApiKey, McpApiKeyCreate, McpApiKeyCreated
 import logging
 
@@ -65,6 +67,18 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     return
 
 
+@router.get("/v1/mcp/oauth/grants", tags=["mcp"])
+def get_oauth_grants(uid: str = Depends(get_current_user_id)):
+    return {"grants": mcp_oauth_db.list_user_grants(uid)}
+
+
+@router.delete("/v1/mcp/oauth/grants/{grant_id}", status_code=204, tags=["mcp"])
+def revoke_oauth_grant(grant_id: str, uid: str = Depends(get_current_user_id)):
+    if not mcp_oauth_db.revoke_user_grant(uid, grant_id):
+        raise HTTPException(status_code=404, detail="OAuth grant not found")
+    return
+
+
 @router.post("/v1/mcp/memories", tags=["mcp"], response_model=Memory)
 def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "memories:create"))):
     # Auto-categorize memories from external sources
@@ -75,7 +89,6 @@ def create_memory(memory: Memory, uid: str = Depends(with_rate_limit(get_uid_fro
         upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value)
     except Exception:
         logger.exception("Vector upsert failed uid=%s memory_id=%s (memory saved, vector missing)", uid, memory_db.id)
-    postprocess_executor.submit(update_personas_async, uid)
     return memory_db
 
 
@@ -111,9 +124,36 @@ def edit_memory(memory_id: str, value: str, uid: str = Depends(get_uid_from_mcp_
 
 
 class UserProfile(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+    phone_number: Optional[str] = None
     profile_text: Optional[str] = None
     generated_at: Optional[str] = None
     data_sources_used: Optional[int] = None
+
+
+def _get_user_contact(uid: str) -> dict:
+    """Best-effort name/email/phone for the profile. Never raises — a contact
+    lookup failure must not break the profile response."""
+    name = email = phone_number = None
+    try:
+        user = firebase_auth.get_user(uid)
+        name = user.display_name or None
+        email = user.email or None
+        phone_number = user.phone_number or None
+    except Exception as e:
+        # Expected for uids with no Firebase Auth record; warn (no traceback).
+        logger.warning("get_user_profile: firebase contact lookup failed uid=%s: %s", uid, e)
+    if not phone_number:
+        try:
+            # get_phone_numbers returns decrypted dicts; prefer the primary one.
+            numbers = phone_calls_db.get_phone_numbers(uid) or []
+            primary = next((n for n in numbers if n.get("is_primary")), None) or (numbers[0] if numbers else None)
+            if primary:
+                phone_number = primary.get("phone_number")
+        except Exception as e:
+            logger.warning("get_user_profile: phone_numbers lookup failed uid=%s: %s", uid, e)
+    return {"name": name, "email": email, "phone_number": phone_number}
 
 
 @router.get("/v1/mcp/profile", tags=["mcp"], response_model=UserProfile)
@@ -121,7 +161,11 @@ def get_user_profile(uid: str = Depends(get_uid_from_mcp_api_key)):
     """Omi's cached high-level user profile, if one has been generated."""
     profile = users_db.get_ai_user_profile(uid) or {}
     generated_at = profile.get("generated_at")
+    contact = _get_user_contact(uid)
     return UserProfile(
+        name=contact["name"],
+        email=contact["email"],
+        phone_number=contact["phone_number"],
         profile_text=profile.get("profile_text"),
         generated_at=str(generated_at) if generated_at is not None else None,
         data_sources_used=profile.get("data_sources_used"),
@@ -309,7 +353,15 @@ def get_conversations(
     )
 
     redact_conversations_for_list(conversations)
-    return conversations
+    # Validate each record individually so one malformed conversation (e.g. a category
+    # no longer in CategoryEnum) cannot 500 the whole page via response_model coercion.
+    valid_conversations = []
+    for conv in conversations:
+        try:
+            valid_conversations.append(SimpleConversation.model_validate(conv))
+        except Exception as e:  # noqa: BLE001 - one bad record must not 500 the page
+            logger.warning(f"Skipping malformed conversation {conv.get('id', 'unknown')} in MCP list: {e}")
+    return valid_conversations
 
 
 @router.get("/v1/mcp/conversations/search", response_model=List[SimpleConversation], tags=["mcp"])
@@ -343,7 +395,13 @@ def search_conversations(
 
     conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
     redact_conversations_for_list(conversations)
-    return conversations
+    valid = []
+    for conv in conversations:
+        try:
+            valid.append(SimpleConversation.model_validate(conv))
+        except Exception as e:  # noqa: BLE001 - one malformed record must not 500 the page
+            logger.warning(f"Skipping malformed conversation {conv.get('id', 'unknown')} in MCP search: {e}")
+    return valid
 
 
 @router.get(
@@ -401,6 +459,81 @@ def get_action_items(
         offset=offset,
     )
     return [clean_action_item(i) for i in items if not i.get("deleted", False)]
+
+
+class McpCreateActionItem(BaseModel):
+    description: str
+    due_at: Optional[datetime] = None
+    completed: bool = False
+
+
+class McpUpdateActionItem(BaseModel):
+    description: Optional[str] = None
+    due_at: Optional[datetime] = None
+
+
+def _action_item_write_error(exc: Exception) -> HTTPException:
+    """Map a shared action-item write error to the REST status the memory writes use."""
+    if isinstance(exc, mcp_action_items.ActionItemNotFound):
+        return HTTPException(status_code=404, detail="Action item not found")
+    if isinstance(exc, mcp_action_items.ActionItemLocked):
+        return HTTPException(status_code=402, detail="A paid plan is required to modify this action item.")
+    return HTTPException(status_code=500, detail="Action item write failed")
+
+
+@router.get("/v1/mcp/action-items/search", response_model=List[SimpleActionItem], tags=["mcp"])
+def search_action_items(query: str, limit: int = 10, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"search_action_items {uid} limit={limit}")
+    try:
+        return mcp_action_items.search_action_items(uid, query, limit=limit)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post("/v1/mcp/action-items", response_model=SimpleActionItem, tags=["mcp"])
+def create_action_item(
+    body: McpCreateActionItem,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
+    logger.info(f"create_action_item {uid} completed={body.completed} has_due={body.due_at is not None}")
+    try:
+        return mcp_action_items.create_action_item(uid, body.description, due_at=body.due_at, completed=body.completed)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except mcp_action_items.ActionItemError as e:
+        raise _action_item_write_error(e)
+
+
+@router.post("/v1/mcp/action-items/{action_item_id}/complete", response_model=SimpleActionItem, tags=["mcp"])
+def complete_action_item(action_item_id: str, completed: bool = True, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"complete_action_item {uid} id={action_item_id} completed={completed}")
+    try:
+        return mcp_action_items.set_completed(uid, action_item_id, completed=completed)
+    except mcp_action_items.ActionItemError as e:
+        raise _action_item_write_error(e)
+
+
+@router.patch("/v1/mcp/action-items/{action_item_id}", response_model=SimpleActionItem, tags=["mcp"])
+def update_action_item(action_item_id: str, body: McpUpdateActionItem, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"update_action_item {uid} id={action_item_id}")
+    try:
+        return mcp_action_items.update_action_item(
+            uid, action_item_id, description=body.description, due_at=body.due_at
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except mcp_action_items.ActionItemError as e:
+        raise _action_item_write_error(e)
+
+
+@router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"])
+def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+    logger.info(f"delete_action_item {uid} id={action_item_id}")
+    try:
+        mcp_action_items.delete_action_item(uid, action_item_id)
+    except mcp_action_items.ActionItemError as e:
+        raise _action_item_write_error(e)
+    return {"status": "ok"}
 
 
 # ---------------------------------------------------------------------------

@@ -1,11 +1,14 @@
-/// Minimal schema for parsing STT responses into TranscriptSegments
-/// Only contains fields required by backend: text, start, end, speaker
+/// Schema for parsing STT responses into backend TranscriptSegment payloads.
 class SttResponseSchema {
   final String? segmentsPath;
   final String segmentsTextField;
   final String? segmentsStartField;
   final String? segmentsEndField;
   final String? segmentsSpeakerField;
+  final String? segmentsSpeakerIdField;
+  final String? segmentsIsUserField;
+  final String? segmentsPersonIdField;
+  final String? segmentsTranslationsField;
   final String? textPath;
   final double defaultSegmentDuration;
 
@@ -15,6 +18,10 @@ class SttResponseSchema {
     this.segmentsStartField = 'start',
     this.segmentsEndField = 'end',
     this.segmentsSpeakerField,
+    this.segmentsSpeakerIdField,
+    this.segmentsIsUserField,
+    this.segmentsPersonIdField,
+    this.segmentsTranslationsField,
     this.textPath = 'text',
     this.defaultSegmentDuration = 5.0,
   });
@@ -117,6 +124,10 @@ class SttResponseSchema {
       segmentsStartField: json['segments_start_field'] as String?,
       segmentsEndField: json['segments_end_field'] as String?,
       segmentsSpeakerField: json['segments_speaker_field'] as String?,
+      segmentsSpeakerIdField: json['segments_speaker_id_field'] as String?,
+      segmentsIsUserField: json['segments_is_user_field'] as String?,
+      segmentsPersonIdField: json['segments_person_id_field'] as String?,
+      segmentsTranslationsField: json['segments_translations_field'] as String?,
       textPath: json['text_path'] as String?,
       defaultSegmentDuration: (json['default_segment_duration'] as num?)?.toDouble() ?? 5.0,
     );
@@ -128,6 +139,10 @@ class SttResponseSchema {
     'segments_start_field': segmentsStartField,
     'segments_end_field': segmentsEndField,
     'segments_speaker_field': segmentsSpeakerField,
+    'segments_speaker_id_field': segmentsSpeakerIdField,
+    'segments_is_user_field': segmentsIsUserField,
+    'segments_person_id_field': segmentsPersonIdField,
+    'segments_translations_field': segmentsTranslationsField,
     'text_path': textPath,
     'default_segment_duration': defaultSegmentDuration,
   };

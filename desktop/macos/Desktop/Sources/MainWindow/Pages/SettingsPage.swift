@@ -231,6 +231,7 @@ struct SettingsContentView: View {
   @State private var isLoadingChatUsage: Bool = false
   @State private var overageInfo: OverageInfoResponse?
   @State private var isLoadingOverage: Bool = false
+  @State private var planUsageDetailsRequestID: Int = 0
   @State private var showOverageExplainer: Bool = false
   @State private var fallbackPlanCatalog: [SubscriptionPlanOption] = []
   @State private var activeCheckoutPriceId: String?
@@ -511,7 +512,13 @@ struct SettingsContentView: View {
         return
       }
       if newValue == .planUsage {
+        // Refetch everything for the CURRENT account. Without the trial + limiter
+        // refresh, switching accounts leaves the previous user's "Trial Ended" /
+        // over-limit state painted here (trialMetadata + serverQuota aren't reset
+        // per-account on a section switch).
         loadSubscriptionInfo()
+        AppState.current?.fetchTrialMetadata()
+        Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
@@ -2468,6 +2475,28 @@ struct SettingsContentView: View {
         }
       }
 
+      settingsCard(settingId: "floatingbar.notch") {
+        HStack(spacing: 16) {
+          VStack(alignment: .leading, spacing: 4) {
+            Text("Notch Mode")
+              .scaledFont(size: 16, weight: .semibold)
+              .foregroundColor(OmiColors.textPrimary)
+            Text("Anchor the floating bar around the MacBook notch with agents on the left and voice controls on the right.")
+              .scaledFont(size: 13)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          Spacer()
+          Toggle("", isOn: $shortcutSettings.notchModeEnabled)
+            .toggleStyle(.switch)
+            .tint(.accentColor)
+            .onChange(of: shortcutSettings.notchModeEnabled) { _, _ in
+              if FloatingControlBarManager.shared.isEnabled {
+                FloatingControlBarManager.shared.show()
+              }
+            }
+        }
+      }
+
       settingsCard(settingId: "floatingbar.draggable") {
         HStack(spacing: 16) {
           VStack(alignment: .leading, spacing: 4) {
@@ -2480,23 +2509,6 @@ struct SettingsContentView: View {
           }
           Spacer()
           Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
-            .toggleStyle(.switch)
-            .tint(OmiColors.purplePrimary)
-        }
-      }
-
-      settingsCard(settingId: "floatingbar.voiceanswers") {
-        HStack(spacing: 16) {
-          VStack(alignment: .leading, spacing: 4) {
-            Text("Voice Questions")
-              .scaledFont(size: 16, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
-            Text("Speak answers aloud when you ask with push to talk.")
-              .scaledFont(size: 13)
-              .foregroundColor(OmiColors.textSecondary)
-          }
-          Spacer()
-          Toggle("", isOn: floatingBarVoiceAnswersBinding)
             .toggleStyle(.switch)
             .tint(OmiColors.purplePrimary)
         }
@@ -5711,20 +5723,6 @@ struct SettingsContentView: View {
     }
   }
 
-  private var floatingBarVoiceAnswersBinding: Binding<Bool> {
-    Binding(
-      get: { shortcutSettings.floatingBarVoiceAnswersEnabled },
-      set: { newValue in
-        shortcutSettings.floatingBarVoiceAnswersEnabled = newValue
-        SettingsSyncManager.shared.pushPartialUpdate(
-          AssistantSettingsResponse(
-            floatingBar: FloatingBarSettingsResponse(voiceAnswersEnabled: newValue)
-          )
-        )
-      }
-    )
-  }
-
   private var floatingBarTypedVoiceAnswersBinding: Binding<Bool> {
     Binding(
       get: { shortcutSettings.floatingBarTypedQuestionVoiceAnswersEnabled },
@@ -7241,6 +7239,7 @@ struct SettingsContentView: View {
     guard !isLoadingSubscription else { return }
     isLoadingSubscription = true
     subscriptionError = nil
+    refreshPlanUsageDetails()
 
     Task {
       do {
@@ -7276,39 +7275,73 @@ struct SettingsContentView: View {
         }
       }
     }
-    loadChatUsageQuota()
-    loadOverageInfo()
   }
 
-  private func loadChatUsageQuota() {
-    guard !isLoadingChatUsage else { return }
+  private func refreshPlanUsageDetails() {
+    planUsageDetailsRequestID += 1
+    let requestID = planUsageDetailsRequestID
     isLoadingChatUsage = true
+    isLoadingOverage = true
+    chatUsageQuota = nil
+    overageInfo = nil
+
     Task {
-      let quota = await APIClient.shared.fetchChatUsageQuota()
-      await MainActor.run {
-        chatUsageQuota = quota
-        isLoadingChatUsage = false
-      }
+      async let quota = APIClient.shared.fetchChatUsageQuota()
+      async let overageInfo = fetchOverageInfoForPlanUsage()
+      let (quotaValue, overageInfoValue) = await (quota, overageInfo)
+      applyPlanUsageDetails(
+        requestID: requestID,
+        quota: quotaValue,
+        overageInfo: overageInfoValue
+      )
     }
   }
 
-  private func loadOverageInfo() {
-    guard !isLoadingOverage else { return }
-    isLoadingOverage = true
-    Task {
-      do {
-        let info = try await APIClient.shared.getOverageInfo()
-        await MainActor.run {
-          overageInfo = info
-          isLoadingOverage = false
-        }
-      } catch {
-        logError("Failed to load overage info", error: error)
-        await MainActor.run {
-          isLoadingOverage = false
-        }
-      }
+  private func fetchOverageInfoForPlanUsage() async -> OverageInfoResponse? {
+    do {
+      return try await APIClient.shared.getOverageInfo()
+    } catch {
+      logError("Failed to load overage info", error: error)
+      return nil
     }
+  }
+
+  @MainActor
+  private func applyPlanUsageDetails(
+    requestID: Int,
+    quota: APIClient.ChatUsageQuota?,
+    overageInfo: OverageInfoResponse?
+  ) {
+    guard requestID == planUsageDetailsRequestID else { return }
+    chatUsageQuota = quota
+    if let quota {
+      FloatingBarUsageLimiter.shared.applyQuota(quota)
+    }
+    self.overageInfo = overageInfo
+    isLoadingChatUsage = false
+    isLoadingOverage = false
+  }
+
+  private func applySuccessfulSubscriptionRefresh(_ subscription: UserSubscriptionResponse) {
+    userSubscription = subscription
+    subscriptionError = nil
+    pendingSubscriptionPriceId = nil
+    pendingCheckoutSessionId = nil
+    selectedPlanIdForCheckout = nil
+
+    FloatingBarUsageLimiter.shared.applyPlan(
+      plan: subscription.subscription.plan,
+      status: subscription.subscription.status
+    )
+
+    if subscription.subscription.plan != .basic,
+       subscription.subscription.status == .active,
+       AppState.current?.isPaywalled == true {
+      AppState.current?.isPaywalled = false
+      log("Paywall: cleared sticky flag — subscription \(subscription.subscription.plan.rawValue) is active")
+    }
+
+    refreshPlanUsageDetails()
   }
 
   private func startCheckout(for priceId: String) {
@@ -7470,12 +7503,8 @@ struct SettingsContentView: View {
             subscription.subscription.plan != .basic && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
-            await FloatingBarUsageLimiter.shared.fetchPlan()
             await MainActor.run {
-              userSubscription = subscription
-              subscriptionError = nil
-              pendingSubscriptionPriceId = nil
-              pendingCheckoutSessionId = nil
+              applySuccessfulSubscriptionRefresh(subscription)
             }
             return
           }

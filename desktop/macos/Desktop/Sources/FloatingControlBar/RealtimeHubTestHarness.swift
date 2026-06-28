@@ -104,17 +104,17 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
 
   // MARK: RealtimeHubSessionDelegate
 
-  func hubDidConnect() { connected = true }
+  func hubDidConnect(source: RealtimeHubSession) { connected = true }
 
-  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool) {
+  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
     if isFinal { if !text.isEmpty { transcriptIn = text } } else { transcriptIn += text }
   }
 
-  func hubDidReceiveAudio(_ pcm24k: Data) { audioBytes += pcm24k.count }
+  func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession) { audioBytes += pcm24k.count }
 
-  func hubDidEmitText(_ text: String, isFinal: Bool) { textOut += text }
+  func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession) { textOut += text }
 
-  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String) {
+  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession) {
     toolCalls.append("\(name)(\(argumentsJSON))")
     // Return a stub result so the turn completes and we observe the full loop —
     // without spawning real agents / network calls inside the test.
@@ -129,10 +129,18 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
     case .getTaskAgentStatus: stub = #"{"task_agents":[],"floating_agent_pills":[]}"#
     case .manageAgentPills: stub = "No floating agent pills are running or recently finished."
+    case .listAgentSessions:
+      stub = "Canonical Omi agent sessions. Use agentRef values internally for follow-up tool calls; do not say them aloud.\n- agent_1: Example agent, running"
+    case .getAgentRun: stub = "The selected canonical run is running, mode ask. Attempts: 1. Events returned: 3."
+    case .cancelAgentRun: stub = "Cancel request: accepted=true, dispatched=true, acknowledged=true. Current status: cancelling."
+    case .inspectAgentArtifacts:
+      stub = "Canonical agent artifacts. Use artifactRef values internally for follow-up tool calls; do not say them aloud.\n- artifact_1: role result, state retained"
+    case .updateAgentArtifactLifecycle: stub = "Artifact lifecycle is now retained. Changed: true."
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
     case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."
     case .updateActionItem: stub = "Updated the task."
+    case .createCalendarEvent: stub = "Created calendar event: Example event."
     case .spawnAgent: stub = "Started a background agent."
     case .screenshot: stub = "Screen captured."
     case .pointClick: stub = "Clicked."
@@ -141,9 +149,9 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     session?.sendToolResult(callId: callId, name: name, output: stub)
   }
 
-  func hubDidFinishTurn() { finish(timedOut: false) }
+  func hubDidFinishTurn(source: RealtimeHubSession) { finish(timedOut: false) }
 
-  func hubDidError(_ message: String) {
+  func hubDidError(_ message: String, source: RealtimeHubSession) {
     if errorMsg == nil { errorMsg = message }
     finish(timedOut: false)
   }

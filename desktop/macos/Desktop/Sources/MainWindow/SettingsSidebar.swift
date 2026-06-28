@@ -256,11 +256,6 @@ struct SettingsSearchItem: Identifiable {
       keywords: ["drag", "move", "reposition", "draggable"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.draggable"),
     SettingsSearchItem(
-      name: "Voice Questions", subtitle: "Speak replies aloud for push-to-talk questions",
-      keywords: ["voice", "speech", "tts", "audio answers", "push to talk"],
-      section: .floatingBar,
-      icon: "sparkles", settingId: "floatingbar.voiceanswers"),
-    SettingsSearchItem(
       name: "Typed Questions", subtitle: "Speak replies aloud for typed floating-bar questions",
       keywords: ["typed", "text", "speech", "tts", "audio answers"], section: .floatingBar,
       icon: "sparkles", settingId: "floatingbar.typedvoiceanswers"),
