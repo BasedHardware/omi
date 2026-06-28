@@ -272,9 +272,13 @@ def get_action_items_tool(
         return msg
 
     # Format action items. Render timestamps in the user's local timezone so the
-    # chat model labels the time of day correctly (issue #4643).
-    tz = notification_db.get_user_time_zone(uid)
-    display_tz, tz_label = resolve_display_tz(tz)
+    # chat model labels the time of day correctly (issue #4643). A timezone lookup
+    # failure must never abort retrieval, so fall back to UTC formatting.
+    try:
+        display_tz, tz_label = resolve_display_tz(notification_db.get_user_time_zone(uid))
+    except Exception as tz_error:
+        logger.warning(f"get_action_items_tool - timezone lookup failed, formatting in UTC: {tz_error}")
+        display_tz, tz_label = timezone.utc, "UTC"
     result = f"User Action Items ({len(action_items)} total):\n\n"
 
     for i, item in enumerate(action_items, 1):
