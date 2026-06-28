@@ -20,9 +20,9 @@ import httpx
 import pytest
 
 _PLUGIN_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_SPEC = importlib.util.spec_from_file_location("main", os.path.join(_PLUGIN_ROOT, "main.py"))
-main = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(main)
+from conftest import load_main_module
+
+main = load_main_module()
 
 
 SECRET_API_KEY = "SECRET_API_KEY_DO_NOT_LOG"
@@ -30,7 +30,9 @@ SECRET_API_KEY = "SECRET_API_KEY_DO_NOT_LOG"
 
 @pytest.fixture(autouse=True)
 def _isolated_storage(tmp_path, monkeypatch):
-    import simple_storage
+    from conftest import load_simple_storage
+
+    simple_storage = load_simple_storage()
 
     monkeypatch.setattr(simple_storage, "STORAGE_DIR", str(tmp_path))
     monkeypatch.setattr(simple_storage, "USERS_FILE", os.path.join(str(tmp_path), "users_data.json"))
@@ -48,7 +50,9 @@ def client():
 
 
 def _seed_user(phone="15550001111", auto_reply=True, api_key=SECRET_API_KEY):
-    import simple_storage
+    from conftest import load_simple_storage
+
+    simple_storage = load_simple_storage()
 
     simple_storage.save_user(
         phone=phone,

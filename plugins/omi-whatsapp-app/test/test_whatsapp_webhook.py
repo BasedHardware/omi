@@ -13,17 +13,15 @@ from __future__ import annotations
 
 import hashlib
 import hmac
-import importlib.util
 import json
 import os
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-_PLUGIN_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_SPEC = importlib.util.spec_from_file_location("main", os.path.join(_PLUGIN_ROOT, "main.py"))
-main = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(main)
+from conftest import load_main_module
+
+main = load_main_module()
 
 
 SECRET = "test-app-secret-xyz"
@@ -31,7 +29,9 @@ SECRET = "test-app-secret-xyz"
 
 @pytest.fixture(autouse=True)
 def _isolated_storage(tmp_path, monkeypatch):
-    import simple_storage
+    from conftest import load_simple_storage
+
+    simple_storage = load_simple_storage()
 
     monkeypatch.setattr(simple_storage, "STORAGE_DIR", str(tmp_path))
     monkeypatch.setattr(simple_storage, "USERS_FILE", os.path.join(str(tmp_path), "users_data.json"))
@@ -44,14 +44,26 @@ def _isolated_storage(tmp_path, monkeypatch):
 @pytest.fixture
 def client_with_secret(monkeypatch):
     """Set WHATSAPP_APP_SECRET so signature verification is enforced."""
-    monkeypatch.setenv("WHATSAPP_APP_SECRET", SECRET)
-    # Reload main so the env var is picked up at module load time.
-    _SPEC2 = importlib.util.spec_from_file_location("main", os.path.join(_PLUGIN_ROOT, "main.py"))
-    main2 = importlib.util.module_from_spec(_SPEC2)
-    _SPEC2.loader.exec_module(main2)
-    from fastapi.testclient import TestClient
+    from conftest import _cached_modules
 
-    return TestClient(main2.app), main2
+    # Snapshot the cache so we can restore it after the test. We can't
+    # clear the cache globally — that would invalidate the simple_storage /
+    # whatsapp_client modules cached for the rest of the test session,
+    # causing subsequent tests to use a different module instance than main.py
+    # and miss state they saved.
+    saved_cache = dict(_cached_modules)
+    _cached_modules.clear()
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", SECRET)
+    try:
+        main2 = load_main_module()
+        from fastapi.testclient import TestClient
+
+        return TestClient(main2.app), main2
+    finally:
+        # Restore the cache to its pre-fixture state so other tests
+        # continue to use the same module instance.
+        _cached_modules.clear()
+        _cached_modules.update(saved_cache)
 
 
 @pytest.fixture
@@ -175,7 +187,9 @@ class TestWebhookSignature:
 # ---------------------------------------------------------------------------
 class TestStartHandshake:
     def test_start_with_valid_token_binds_user(self, client_no_secret):
-        import simple_storage
+        from conftest import load_simple_storage
+
+        simple_storage = load_simple_storage()
 
         simple_storage.save_pending_setup(
             "tok-1",
@@ -204,7 +218,9 @@ class TestStartHandshake:
         assert user["auto_reply_enabled"] is False
 
     def test_start_with_no_token_does_not_bind(self, client_no_secret):
-        import simple_storage
+        from conftest import load_simple_storage
+
+        simple_storage = load_simple_storage()
 
         with patch("main.whatsapp_client.send_message", new=AsyncMock(return_value={})):
             r = client_no_secret.post("/webhook", json=_meta_message("15550001111", "/start"))
@@ -218,7 +234,9 @@ class TestStartHandshake:
         If the phone is known (from a prior /setup) but token is stale, reply
         via the stored user's credentials.
         """
-        import simple_storage
+        from conftest import load_simple_storage
+
+        simple_storage = load_simple_storage()
 
         # Known user (no pending setup)
         simple_storage.save_user(
@@ -277,7 +295,9 @@ class TestNonMessagePayloads:
 
     def test_non_text_message_ignored(self, client_no_secret):
         """Image / voice / etc. \u2014 not handled in v0.1."""
-        import simple_storage
+        from conftest import load_simple_storage
+
+        simple_storage = load_simple_storage()
 
         simple_storage.save_user(
             phone="15550001111",
@@ -348,7 +368,9 @@ class TestUnknownPhone:
 class TestBatchedAndMixedPayloads:
     def test_mixed_payload_with_statuses_and_messages_processes_all_messages(self, client_no_secret):
         """A payload with both statuses AND messages must yield ALL messages, not zero."""
-        import simple_storage
+        from conftest import load_simple_storage
+
+        simple_storage = load_simple_storage()
 
         simple_storage.save_user(
             phone="15550001111",
@@ -410,7 +432,9 @@ class TestBatchedAndMixedPayloads:
 
     def test_multiple_entries_in_one_payload_all_processed(self, client_no_secret):
         """Multiple entries under the same object — all messages must be processed."""
-        import simple_storage
+        from conftest import load_simple_storage
+
+        simple_storage = load_simple_storage()
 
         simple_storage.save_user(
             phone="15550001111",

@@ -26,14 +26,16 @@ import httpx
 import pytest
 
 _PLUGIN_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-_SPEC = importlib.util.spec_from_file_location("main", os.path.join(_PLUGIN_ROOT, "main.py"))
-main = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(main)
+from conftest import load_main_module
+
+main = load_main_module()
 
 
 @pytest.fixture(autouse=True)
 def _isolated_storage(tmp_path, monkeypatch):
-    import simple_storage
+    from conftest import load_simple_storage
+
+    simple_storage = load_simple_storage()
 
     monkeypatch.setattr(simple_storage, "STORAGE_DIR", str(tmp_path))
     monkeypatch.setattr(simple_storage, "USERS_FILE", os.path.join(str(tmp_path), "users_data.json"))
@@ -141,7 +143,9 @@ class TestSetupHappyPath:
     """Verify the happy path: subscribed_apps succeeds, deep link is well-formed."""
 
     def test_setup_returns_deep_link_and_saves_pending(self, client):
-        import simple_storage
+        from conftest import load_simple_storage
+
+        simple_storage = load_simple_storage()
 
         fake_phone_info = {"display_phone_number": "15550001111", "verified_name": "Test"}
 
@@ -191,7 +195,9 @@ class TestSetupHappyPath:
         # pending_setup data on disk — the verify token would otherwise be
         # useless (no way to bind a phone to it) and could leak access_token
         # bytes to anyone who later enumerates /webhook GET verify_token.
-        import simple_storage
+        from conftest import load_simple_storage
+
+        simple_storage = load_simple_storage()
 
         assert len(simple_storage.pending_setups) == 0, (
             f"Orphaned pending_setup left on disk after /setup failure: "

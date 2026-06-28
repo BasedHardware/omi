@@ -14,19 +14,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-# Import `main` and `simple_storage` via importlib (avoiding sys.path pollution
-# that would conflict with omi-telegram-app when both plugin suites run together).
-_PLUGIN_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# Load `main` via the conftest helper, which isolates sys.modules['main'],
+# sys.modules['simple_storage'], and sys.modules['whatsapp_client'] so this
+# test file doesn't collide with omi-telegram-app when both suites run
+# together in one pytest invocation.
+from conftest import load_main_module
 
-
-def _load(name):
-    spec = importlib.util.spec_from_file_location(name, os.path.join(_PLUGIN_ROOT, f"{name}.py"))
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-main = _load("main")
+main = load_main_module()
 app = main.app
 
 
