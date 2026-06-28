@@ -4,20 +4,35 @@
 
 ### The agentic AI that lives on your PC
 
-Cortex is an AI assistant for Windows that can **control your computer** — it sees your screen, understands what you're doing, and clicks, types and acts in your apps when you ask (you approve each action). It runs on **the model you choose**: a private local model on your own machine, or any major cloud provider with your own key. Fully open source, with an optional Pro tier.
+Cortex sees your screen, understands what you're doing, and **acts on your computer** — clicking, typing and navigating your apps when you ask (you approve each action). It runs on **the model you choose**: a private local model on your own machine, or any major cloud provider with your own key. It remembers what you've seen and heard, and gives you a chat that knows your context. Fully open source, with an optional Pro tier.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-[Waitlist](https://cortex.apym.io)
+[Website / Waitlist](https://cortex.apym.io)
 
 </div>
 
+## Quick Start
+
+```bash
+git clone <your-fork-url> cortex && cd cortex/desktop/windows
+npm install
+cp .env.example .env   # ships with working public defaults
+npm run dev
+```
+
+Then open **Settings → Models** to point Cortex at a local model (Ollama / LM Studio) or a cloud provider, and **Settings → Cortex Pro** to start your trial.
+
+> **Requirements:** Windows 10/11, [Node.js](https://nodejs.org/). Packaged installer: `npm run build:win`.
+
+See [desktop/windows/README.md](desktop/windows/README.md) for environment variables, the optional Google integration, and build details.
+
 ## What Cortex does
 
-- **Controls your PC** — an agent that takes real UI actions in your apps (click, type, navigate), with per-action approval. The Windows automation layer (bridge + planner + approval dialog) lives in [`desktop/windows`](desktop/windows).
-- **Runs on your model of choice** — local (private, no key) or cloud (bring your own key), so you decide where your data is processed.
+- **Controls your PC** — an agent that takes real UI actions in your apps (click, type, navigate), each one approved by you. The Windows automation layer (bridge + planner + approval dialog) lives in [`desktop/windows`](desktop/windows).
+- **Runs on your model of choice** — local (private, no key) or cloud (bring your own key); you decide where your data is processed.
 - **Remembers** — captures screen/conversation context, builds memories and a knowledge graph, and gives you a chat that knows what you've seen.
-- **Open core** — the app is free and open source; a Pro tier (with a 14-day trial) adds cloud sync and higher automation limits.
+- **Open core** — the app is free and open source; a Pro tier (14-day trial) adds cloud sync and higher automation limits.
 
 ## AI engine — local or cloud, your choice
 
@@ -33,20 +48,42 @@ Pick your engine in **Settings → Models**. Providers are grouped by region so 
 
 Cloud providers use your own API key, stored locally on your device only.
 
-## Quick Start (Windows app)
+<details>
+  <summary>How it works</summary>
 
-```bash
-cd desktop/windows
-npm install
-cp .env.example .env   # ships with working public defaults
-npm run dev
+```
+┌──────────────────────────────────────────────────────────┐
+│                        Your PC                           │
+│                                                          │
+│   ┌──────────────────────────────────────────────────┐  │
+│   │            Cortex (Electron + React)             │  │
+│   │                                                  │  │
+│   │  Agent loop ──► Automation layer (control PC)    │  │
+│   │     │            click · type · navigate         │  │
+│   │     │            (you approve each action)       │  │
+│   │     ▼                                            │  │
+│   │  Model router                                    │  │
+│   └─────┬───────────────────────────────┬───────────┘  │
+│         │                               │              │
+│         ▼ local (private)               ▼ cloud (BYOK) │
+│   ┌────────────┐                  ┌──────────────────┐ │
+│   │ Ollama /   │                  │ OpenAI·Anthropic·│ │
+│   │ LM Studio  │                  │ Mistral·Qwed·GLM·│ │
+│   └────────────┘                  │ Kimi·Gemini·…    │ │
+│                                   └──────────────────┘ │
+└──────────────────────────────────────────────────────────┘
 ```
 
-Then open **Settings → Models** to point Cortex at a local model (Ollama / LM Studio) or a cloud provider, and **Settings → Cortex Pro** to start a trial.
+| Component | Path | Stack |
+|-----------|------|-------|
+| **Windows app** (Cortex) | [`desktop/windows/`](desktop/windows/) | Electron, React, TypeScript |
+| Desktop app (macOS) | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
+| Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
+| Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
+| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python |
+| MCP Server | [`mcp/`](mcp/) | Model Context Protocol integration |
 
-> **Requirements:** Windows 10/11, [Node.js](https://nodejs.org/). For a packaged build: `npm run build:win`.
-
-See [desktop/windows/README.md](desktop/windows/README.md) for environment variables, optional Google integration, and build details.
+</details>
 
 ## Cortex Pro
 
@@ -58,22 +95,9 @@ Cortex is open source and fully usable for free. **Pro** (14-day trial, no card)
 
 Reserve your spot at **[cortex.apym.io](https://cortex.apym.io)**.
 
-## Repository layout
-
-Cortex is built on an open-source assistant stack. The Windows app is the flagship; the other components provide the shared backend and cross-platform clients.
-
-| Component | Path | Stack |
-|-----------|------|-------|
-| **Windows app** (Cortex) | [`desktop/windows/`](desktop/windows/) | Electron, React, TypeScript |
-| Desktop app (macOS) | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
-| Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
-| Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
-| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python |
-| MCP Server | [`mcp/`](mcp/) | Model Context Protocol integration |
-
 ## Contributing
 
-Agent and contributor guidelines live in [AGENTS.md](AGENTS.md). Component-specific notes are in each component's `AGENTS.md` / `CLAUDE.md`.
+Agent and contributor guidelines live in [AGENTS.md](AGENTS.md); component-specific notes are in each component's `AGENTS.md` / `CLAUDE.md`.
 
 ## License
 
