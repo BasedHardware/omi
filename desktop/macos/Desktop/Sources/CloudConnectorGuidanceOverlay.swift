@@ -88,7 +88,7 @@ final class CloudConnectorGuidanceOverlay {
     dismissTask?.cancel()
     window?.close()
 
-    let cardSize = CGSize(width: 400, height: 110)
+    let cardSize = CGSize(width: 420, height: 118)
     let screen = Self.screen(forAnchor: anchor)
     let frame = Self.instructionCardFrame(
       anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
@@ -296,51 +296,87 @@ private struct CloudConnectorInstructionCardView: View {
   let onDismiss: () -> Void
 
   var body: some View {
-    HStack(alignment: .top, spacing: 12) {
-      ZStack {
-        Circle().fill(OmiColors.success.opacity(0.18))
-        Image(systemName: "checklist")
-          .scaledFont(size: 16, weight: .bold)
-          .foregroundColor(OmiColors.success)
-      }
-      .frame(width: 36, height: 36)
+    HStack(alignment: .top, spacing: 13) {
+      SpatialOverlayAccentIcon(systemName: "checklist", diameter: 38)
 
-      VStack(alignment: .leading, spacing: 3) {
+      VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .scaledFont(size: 13, weight: .semibold)
+          .scaledFont(size: 13.5, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
           .fixedSize(horizontal: false, vertical: true)
         Text(subtitle)
           .scaledFont(size: 12, weight: .medium)
           .foregroundColor(OmiColors.textTertiary)
+          .lineSpacing(1.5)
           .fixedSize(horizontal: false, vertical: true)
       }
 
+      Spacer(minLength: 0)
+
       Button(action: onDismiss) {
         Image(systemName: "xmark")
-          .scaledFont(size: 11, weight: .bold)
-          .foregroundColor(OmiColors.textTertiary)
+          .scaledFont(size: 10, weight: .bold)
+          .foregroundColor(OmiColors.textSecondary)
           .frame(width: 22, height: 22)
-          .contentShape(Rectangle())
+          .background(Circle().fill(Color.white.opacity(0.10)))
+          .contentShape(Circle())
       }
       .buttonStyle(.plain)
       .help("Dismiss")
     }
     .padding(.leading, 16)
-    .padding(.trailing, 10)
-    .padding(.vertical, 14)
+    .padding(.trailing, 12)
+    .padding(.vertical, 15)
     .frame(width: size.width, height: size.height, alignment: .topLeading)
-    .background(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
-        .fill(Color.black.opacity(0.9))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
-        .stroke(OmiColors.success.opacity(0.55), lineWidth: 1)
-    )
-    .shadow(color: .black.opacity(0.32), radius: 18, y: 8)
+    .background(SpatialOverlayCardBackground())
     .contentShape(Rectangle())
     .onTapGesture(perform: onDismiss)
+  }
+}
+
+/// Frosted, lightly accented surface shared by the guidance bubble and the
+/// instruction card so both read as one polished family.
+private struct SpatialOverlayCardBackground: View {
+  var cornerRadius: CGFloat = 20
+
+  var body: some View {
+    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+      .fill(.ultraThinMaterial)
+      .overlay(
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+          .fill(Color.black.opacity(0.42))
+      )
+      .overlay(
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+          .strokeBorder(
+            LinearGradient(
+              colors: [Color.white.opacity(0.24), Color.white.opacity(0.06)],
+              startPoint: .top, endPoint: .bottom),
+            lineWidth: 1)
+      )
+      .shadow(color: .black.opacity(0.42), radius: 26, y: 14)
+  }
+}
+
+/// Green gradient badge used as the leading glyph in spatial overlays.
+private struct SpatialOverlayAccentIcon: View {
+  let systemName: String
+  var diameter: CGFloat = 36
+
+  var body: some View {
+    ZStack {
+      Circle()
+        .fill(
+          LinearGradient(
+            colors: [OmiColors.success, OmiColors.success.opacity(0.72)],
+            startPoint: .topLeading, endPoint: .bottomTrailing))
+      Image(systemName: systemName)
+        .scaledFont(size: diameter * 0.42, weight: .bold)
+        .foregroundColor(.white)
+    }
+    .frame(width: diameter, height: diameter)
+    .overlay(Circle().strokeBorder(Color.white.opacity(0.18), lineWidth: 0.75))
+    .shadow(color: OmiColors.success.opacity(0.45), radius: 9, y: 2)
   }
 }
 
@@ -376,15 +412,8 @@ private struct CloudConnectorGuidanceView: View {
   }
 
   private var bubble: some View {
-    HStack(spacing: 10) {
-      ZStack {
-        Circle()
-          .fill(OmiColors.success.opacity(0.18))
-        Image(systemName: arrowIcon)
-          .scaledFont(size: 15, weight: .bold)
-          .foregroundColor(OmiColors.success)
-      }
-      .frame(width: 34, height: 34)
+    HStack(spacing: 11) {
+      SpatialOverlayAccentIcon(systemName: arrowIcon, diameter: 34)
 
       VStack(alignment: .leading, spacing: 2) {
         Text("Finish in Claude")
@@ -396,17 +425,9 @@ private struct CloudConnectorGuidanceView: View {
       }
       Spacer(minLength: 0)
     }
-    .padding(.horizontal, 14)
+    .padding(.horizontal, 15)
     .padding(.vertical, 12)
-    .background(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
-        .fill(Color.black.opacity(0.88))
-    )
-    .overlay(
-      RoundedRectangle(cornerRadius: 18, style: .continuous)
-        .stroke(OmiColors.success.opacity(0.55), lineWidth: 1)
-    )
-    .shadow(color: .black.opacity(0.32), radius: 18, y: 8)
+    .background(SpatialOverlayCardBackground(cornerRadius: 18))
   }
 }
 
