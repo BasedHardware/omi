@@ -417,6 +417,19 @@ class TestUnifiedSearchFetch:
             sse.execute_tool(UID, 'fetch', {'id': 'memory:nope'})
         assert ei.value.code == -32001
 
+    @patch('utils.mcp_search.memories_db')
+    def test_tool_fetch_hides_rejected_or_superseded_memory_like_search(self, mock_mem):
+        # search hides rejected (user_review False) and superseded (invalid_at) memories,
+        # so fetch must treat them as not-found rather than leak their full text.
+        for hidden in (
+            {'id': 'm1', 'content': 'x', 'user_review': False},
+            {'id': 'm1', 'content': 'x', 'invalid_at': NOW},
+        ):
+            mock_mem.get_memory.return_value = hidden
+            with pytest.raises(sse.ToolExecutionError) as ei:
+                sse.execute_tool(UID, 'fetch', {'id': 'memory:m1'})
+            assert ei.value.code == -32001
+
     @patch('utils.mcp_search.conversations_db')
     def test_tool_fetch_locked_is_paywall(self, mock_conv):
         mock_conv.get_conversation.return_value = {'id': 'c1', 'is_locked': True, 'structured': {'title': 'x'}}
