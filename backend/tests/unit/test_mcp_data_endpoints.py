@@ -336,3 +336,156 @@ class TestToolRegistry:
                     sse.execute_tool(UID, name, {})
                 except sse.ToolExecutionError as e:
                     assert 'Unknown tool' not in e.message
+
+
+def _folder(folder_id='f1', name='Work', is_system=False, is_default=False, count=0):
+    return {
+        'id': folder_id,
+        'name': name,
+        'description': 'desc',
+        'color': '#3B82F6',
+        'icon': '💼',
+        'is_system': is_system,
+        'is_default': is_default,
+        'conversation_count': count,
+        'created_at': NOW,
+        'updated_at': NOW,
+    }
+
+
+class TestFolders:
+    """#4862: organize conversations into folders via MCP (REST + SSE)."""
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_get_folders(self, mock_db):
+        mock_db.get_folders.return_value = [_folder(name='Work', is_system=True), _folder('f2', 'Trips')]
+        result = sse.execute_tool(UID, 'get_folders', {})
+        assert [f['name'] for f in result['folders']] == ['Work', 'Trips']
+        assert result['folders'][0]['is_system'] is True
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_rest_get_folders(self, mock_db):
+        mock_db.get_folders.return_value = [_folder()]
+        assert rest.mcp_get_folders(uid=UID)[0]['name'] == 'Work'
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_create_folder(self, mock_db):
+        mock_db.get_folders.return_value = []
+        mock_db.create_folder.return_value = _folder('f9', 'Trips')
+        result = sse.execute_tool(UID, 'create_folder', {'name': 'Trips'})
+        assert result['success'] is True and result['folder']['name'] == 'Trips'
+        mock_db.create_folder.assert_called_once()
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_create_folder_blank_name_is_invalid(self, mock_db):
+        mock_db.get_folders.return_value = []
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'create_folder', {'name': '   '})
+        assert ei.value.code == -32602
+        mock_db.create_folder.assert_not_called()
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_create_folder_limit_reached(self, mock_db):
+        mock_db.get_folders.return_value = [_folder(f'f{i}', f'C{i}') for i in range(50)]
+        with pytest.raises(sse.ToolExecutionError):
+            sse.execute_tool(UID, 'create_folder', {'name': 'OneMore'})
+        mock_db.create_folder.assert_not_called()
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_update_folder(self, mock_db):
+        mock_db.get_folder.side_effect = [_folder(), _folder(name='Renamed')]
+        result = sse.execute_tool(UID, 'update_folder', {'folder_id': 'f1', 'name': 'Renamed'})
+        assert result['folder']['name'] == 'Renamed'
+        assert mock_db.update_folder.call_args[0][2] == {'name': 'Renamed'}
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_update_folder_not_found_is_32001(self, mock_db):
+        mock_db.get_folder.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'update_folder', {'folder_id': 'x', 'name': 'New'})
+        assert ei.value.code == -32001
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_delete_folder(self, mock_db):
+        mock_db.get_folder.return_value = _folder('f2', 'Trips', is_system=False)
+        result = sse.execute_tool(UID, 'delete_folder', {'folder_id': 'f2'})
+        assert result['success'] is True
+        mock_db.delete_folder.assert_called_once_with(UID, 'f2', move_to_folder_id=None)
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_delete_system_folder_rejected(self, mock_db):
+        mock_db.get_folder.return_value = _folder('sys', 'Work', is_system=True)
+        with pytest.raises(sse.ToolExecutionError):
+            sse.execute_tool(UID, 'delete_folder', {'folder_id': 'sys'})
+        mock_db.delete_folder.assert_not_called()
+
+    @patch('utils.mcp_folders.folders_db')
+    def test_rest_delete_system_folder_is_400(self, mock_db):
+        mock_db.get_folder.return_value = _folder('sys', 'Work', is_system=True)
+        with pytest.raises(rest.HTTPException) as ei:
+            rest.mcp_delete_folder('sys', uid=UID)
+        assert ei.value.status_code == 400
+
+    @patch('utils.mcp_folders.conversations_db')
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_move_conversation(self, mock_fold, mock_conv):
+        mock_conv.get_conversation.return_value = {'id': 'c1', 'is_locked': False}
+        mock_fold.get_folder.return_value = _folder('f1')
+        result = sse.execute_tool(UID, 'move_conversation_to_folder', {'conversation_id': 'c1', 'folder_id': 'f1'})
+        assert result['success'] is True
+        mock_fold.move_conversation_to_folder.assert_called_once_with(UID, 'c1', 'f1')
+
+    @patch('utils.mcp_folders.conversations_db')
+    @patch('utils.mcp_folders.folders_db')
+    def test_tool_move_conversation_unfile(self, mock_fold, mock_conv):
+        # Omitting folder_id removes the conversation from any folder (no folder lookup).
+        mock_conv.get_conversation.return_value = {'id': 'c1', 'is_locked': False}
+        result = sse.execute_tool(UID, 'move_conversation_to_folder', {'conversation_id': 'c1'})
+        assert result['success'] is True
+        mock_fold.get_folder.assert_not_called()
+        mock_fold.move_conversation_to_folder.assert_called_once_with(UID, 'c1', None)
+
+    @patch('utils.mcp_folders.conversations_db')
+    def test_tool_move_conversation_not_found_is_32001(self, mock_conv):
+        mock_conv.get_conversation.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'move_conversation_to_folder', {'conversation_id': 'nope', 'folder_id': 'f1'})
+        assert ei.value.code == -32001
+
+    @patch('utils.mcp_folders.conversations_db')
+    def test_tool_move_locked_conversation_is_paywall(self, mock_conv):
+        mock_conv.get_conversation.return_value = {'id': 'c1', 'is_locked': True}
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'move_conversation_to_folder', {'conversation_id': 'c1', 'folder_id': 'f1'})
+        assert ei.value.code == -32002
+
+    @patch('utils.mcp_folders.conversations_db')
+    def test_rest_move_locked_conversation_is_402(self, mock_conv):
+        mock_conv.get_conversation.return_value = {'id': 'c1', 'is_locked': True}
+        with pytest.raises(rest.HTTPException) as ei:
+            rest.mcp_move_conversation_to_folder('c1', rest.McpMoveConversation(folder_id='f1'), uid=UID)
+        assert ei.value.status_code == 402
+
+    @patch('routers.mcp_sse.conversations_db')
+    def test_tool_get_conversations_passes_folder_id(self, mock_db):
+        mock_db.get_conversations.return_value = []
+        sse.execute_tool(UID, 'get_conversations', {'folder_id': 'f1'})
+        assert mock_db.get_conversations.call_args.kwargs.get('folder_id') == 'f1'
+
+    def test_clean_folder_shape(self):
+        from utils.mcp_data import clean_folder
+
+        out = clean_folder(_folder('f1', 'Work', is_system=True, count=3))
+        assert out['id'] == 'f1' and out['is_system'] is True and out['conversation_count'] == 3
+
+    def test_folder_tools_registered_and_scoped(self):
+        names = {t['name'] for t in sse.MCP_TOOLS}
+        assert {
+            'get_folders',
+            'create_folder',
+            'update_folder',
+            'delete_folder',
+            'move_conversation_to_folder',
+        } <= names
+        assert 'folders.read' in sse.MCP_SCOPES_SUPPORTED
+        assert 'folders.write' in sse.MCP_SCOPES_SUPPORTED
