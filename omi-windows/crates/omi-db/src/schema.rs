@@ -56,3 +56,46 @@ pub struct ActionItem {
     pub completed: bool,
     pub created_at: DateTime<Utc>,
 }
+
+/// A clipboard entry captured by the clipboard watcher.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClipboardEntry {
+    pub id: String,
+    pub content: String,
+    pub content_type: String,
+    pub source_app: Option<String>,
+    pub captured_at: DateTime<Utc>,
+}
+
+/// An indexed file from the filesystem.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct IndexedFile {
+    pub id: String,
+    pub file_path: String,
+    pub file_name: String,
+    pub extension: Option<String>,
+    pub size_bytes: i64,
+    pub modified_at: DateTime<Utc>,
+    pub indexed_at: DateTime<Utc>,
+}
+
+/// A daily recap summary.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DailyRecap {
+    pub id: String,
+    pub date: String,
+    pub summary: String,
+    pub stats_json: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A user goal with progress tracking.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Goal {
+    pub id: String,
+    pub content: String,
+    pub status: String,
+    pub progress_pct: i32,
+    pub created_at: DateTime<Utc>,
+    pub completed_at: Option<DateTime<Utc>>,
+}

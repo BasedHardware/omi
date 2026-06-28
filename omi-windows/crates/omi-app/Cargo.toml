@@ -46,6 +46,10 @@ winrt-notification = "0.5"
 # Temporary files for TTS audio
 tempfile = "3"
 
+# Clipboard monitoring + file indexing
+clipboard-win = "5"
+walkdir = "2"
+
 # Sibling crates
 omi-capture = { path = "../omi-capture" }
 omi-audio = { path = "../omi-audio" }

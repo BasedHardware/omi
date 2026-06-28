@@ -124,8 +124,8 @@ pub async fn ensure_started(cfg: &AppConfig) -> Result<()> {
     info!("[MCP] Starting backend: python={}", python.display());
     info!("[MCP] Working dir: {}", mcp_dir.display());
 
-    // The FastAPI app entry point: `uvicorn backend.api.main:app`
-    // We run it as `python -m uvicorn backend.api.main:app --port 8002`
+    // The FastAPI app entry point: `uvicorn api.main:app`
+    // Port 8001 matches the MCP backend's own .env PORT setting.
     let child = tokio::process::Command::new(&python)
         .args([
             "-m",
@@ -134,7 +134,7 @@ pub async fn ensure_started(cfg: &AppConfig) -> Result<()> {
             "--host",
             "127.0.0.1",
             "--port",
-            "8002",
+            "8001",
             "--log-level",
             "warning",
         ])
@@ -145,7 +145,7 @@ pub async fn ensure_started(cfg: &AppConfig) -> Result<()> {
         .context("Failed to spawn MCP backend subprocess")?;
 
     *guard = Some(child);
-    info!("[MCP] Backend subprocess started on http://127.0.0.1:8002");
+    info!("[MCP] Backend subprocess started on http://127.0.0.1:8001");
     drop(guard);
 
     let mut started = false;
@@ -170,7 +170,7 @@ async fn health_check() -> Result<bool> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))
         .build()?;
-    let resp = client.get("http://127.0.0.1:8002/api/health").send().await?;
+    let resp = client.get("http://127.0.0.1:8001/api/health").send().await?;
     Ok(resp.status().is_success())
 }
 
@@ -217,7 +217,7 @@ pub async fn query_mcp(user_query: &str, cfg: &AppConfig) -> Option<McpResponse>
 
     info!("[MCP] Sending query: {}", &user_query[..user_query.len().min(80)]);
 
-    let mut req = client.post("http://127.0.0.1:8002/api/message").json(&body);
+    let mut req = client.post("http://127.0.0.1:8001/api/message").json(&body);
     if !cfg.firebase_id_token.is_empty() {
         req = req.header("Authorization", format!("Bearer {}", cfg.firebase_id_token));
     }
@@ -298,7 +298,7 @@ pub async fn confirm_mcp(thread_id: &str, user_response: &str, cfg: &AppConfig) 
     info!("[MCP] Sending HITL confirm: {}", user_response);
 
     match client
-        .post("http://127.0.0.1:8002/api/message/confirm")
+        .post("http://127.0.0.1:8001/api/message/confirm")
         .json(&body)
         .send()
         .await

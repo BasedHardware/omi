@@ -7,5 +7,6 @@ pub mod focus;
 pub mod memories;
 pub mod persona;
 pub mod rewind;
+pub mod search;
 pub mod settings;
 pub mod tasks;

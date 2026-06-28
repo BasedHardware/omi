@@ -177,14 +177,34 @@ impl AgentRuntime {
             None
         };
 
-        // Extend the system prompt with MCP result if available
-        let extended_system_prompt = if let Some(ref mcp_result) = mcp_context_text {
-            format!(
-                "{system_prompt}\n\n## Google Workspace Data (just retrieved)\n{mcp_result}\n\nUse the above data to answer the user's question naturally and concisely."
-            )
+        // ── Knowledge base: semantic search for knowledge-related queries ────────
+        let knowledge_context = if cfg.mcp_enabled && crate::knowledge::is_knowledge_query(user_query) {
+            tracing::info!("[AGENT] Detected knowledge query — searching RAG");
+            match crate::knowledge::search_knowledge(user_query, cfg).await {
+                Ok(results) if !results.is_empty() => {
+                    let mut kb = String::from("## Knowledge Base Results\n");
+                    for r in &results {
+                        let src = r.source.as_deref().unwrap_or("unknown");
+                        kb.push_str(&format!("- [from {src}] {}\n", r.content));
+                    }
+                    Some(kb)
+                }
+                _ => None,
+            }
         } else {
-            system_prompt.to_string()
+            None
         };
+
+        // Extend the system prompt with MCP + knowledge context
+        let mut extended_system_prompt = system_prompt.to_string();
+        if let Some(ref mcp_result) = mcp_context_text {
+            extended_system_prompt.push_str(&format!(
+                "\n\n## Google Workspace Data (just retrieved)\n{mcp_result}\n\nUse the above data to answer the user's question naturally and concisely."
+            ));
+        }
+        if let Some(ref kb) = knowledge_context {
+            extended_system_prompt.push_str(&format!("\n\n{kb}\n\nUse the above knowledge base results to answer accurately."));
+        }
 
         // Build message list: system prompt first, then conversation history
         let mut llm_messages = vec![crate::llm::LlmMessage {

@@ -26,6 +26,8 @@ pub enum Route {
     #[layout(AppLayout)]
         #[route("/")]
         Dashboard {},
+        #[route("/search")]
+        Search {},
         #[route("/agent")]
         Agent {},
         #[route("/chat")]
@@ -356,6 +358,9 @@ pub fn App() -> Element {
     // Kick off periodic screen capture if enabled in config (runs once on mount)
     let capture_started = use_signal(|| false);
     let ctx_watcher_started = use_signal(|| false);
+    let clipboard_started = use_signal(|| false);
+    let file_indexer_started = use_signal(|| false);
+    let recap_started = use_signal(|| false);
     use_effect(move || {
         let cfg = config.read().clone();
         let db_snap = db.read().clone();
@@ -376,7 +381,7 @@ pub fn App() -> Element {
 
         // Spawn context watcher alongside capture (if not already started)
         if !*ctx_watcher_started.read() {
-            if let Some(Db(d)) = db_snap {
+            if let Some(Db(d)) = db_snap.clone() {
                 ctx_watcher_started.clone().set(true);
                 let pe = proactive_engine_for_effect.clone();
                 let _cfg_for_watcher = config.read().clone();
@@ -386,6 +391,51 @@ pub fn App() -> Element {
                     crate::context_watcher::run_context_watcher(
                         db_for_watcher,
                         (*pe).clone(),
+                        move || crate::config::AppConfig::load(),
+                    )
+                    .await;
+                });
+            }
+        }
+
+        // Spawn clipboard watcher
+        if !*clipboard_started.read() {
+            if let Some(Db(d)) = db_snap.clone() {
+                clipboard_started.clone().set(true);
+                tracing::info!("[APP] Spawning clipboard watcher task");
+                spawn(async move {
+                    crate::clipboard_watcher::run_clipboard_watcher(
+                        d,
+                        move || crate::config::AppConfig::load(),
+                    )
+                    .await;
+                });
+            }
+        }
+
+        // Spawn file indexer
+        if !*file_indexer_started.read() {
+            if let Some(Db(d)) = db_snap.clone() {
+                file_indexer_started.clone().set(true);
+                tracing::info!("[APP] Spawning file indexer task");
+                spawn(async move {
+                    crate::file_indexer::run_file_indexer(
+                        d,
+                        move || crate::config::AppConfig::load(),
+                    )
+                    .await;
+                });
+            }
+        }
+
+        // Spawn daily recap scheduler
+        if !*recap_started.read() {
+            if let Some(Db(d)) = db_snap {
+                recap_started.clone().set(true);
+                tracing::info!("[APP] Spawning daily recap scheduler");
+                spawn(async move {
+                    crate::daily_recap::run_daily_recap_scheduler(
+                        d,
                         move || crate::config::AppConfig::load(),
                     )
                     .await;
@@ -668,6 +718,23 @@ pub fn App() -> Element {
                         ctx.push_str("## Long-term Memories\n");
                         ctx.push_str(&memories);
                     }
+                    if let Ok(clips) = d.list_clipboard_entries(10) {
+                        if !clips.is_empty() {
+                            ctx.push_str("\n## Recent Clipboard\n");
+                            for c in &clips {
+                                let preview = if c.content.len() > 120 { &c.content[..120] } else { &c.content };
+                                ctx.push_str(&format!("[{}] ({}) {}\n", c.captured_at.format("%H:%M"), c.content_type, preview));
+                            }
+                        }
+                    }
+                    if let Ok(files) = d.list_recent_files(15) {
+                        if !files.is_empty() {
+                            ctx.push_str("\n## Recent Files\n");
+                            for f in &files {
+                                ctx.push_str(&format!("{} ({})\n", f.file_path, f.extension.as_deref().unwrap_or("?")));
+                            }
+                        }
+                    }
                 }
 
                 let system = format!(
@@ -754,6 +821,11 @@ fn Focus() -> Element {
 #[component]
 fn Persona() -> Element {
     pages::persona::PersonaPage()
+}
+
+#[component]
+fn Search() -> Element {
+    pages::search::SearchPage()
 }
 
 #[component]

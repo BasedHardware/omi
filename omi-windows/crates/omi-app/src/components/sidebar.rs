@@ -33,6 +33,10 @@ pub fn Sidebar() -> Element {
                     span { class: "nav-icon", "H" }
                     span { class: "nav-label", "Dashboard" }
                 }
+                Link { to: Route::Search {}, class: "nav-item",
+                    span { class: "nav-icon", "Q" }
+                    span { class: "nav-label", "Search" }
+                }
                 Link { to: Route::Agent {}, class: "nav-item",
                     span { class: "nav-icon", "Ω" }
                     span { class: "nav-label", "Agent" }

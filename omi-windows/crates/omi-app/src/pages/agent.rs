@@ -197,6 +197,23 @@ pub fn AgentPage() -> Element {
                 ctx.push_str("## Long-term Memories\n");
                 ctx.push_str(&memories);
             }
+            if let Ok(clips) = d.list_clipboard_entries(10) {
+                if !clips.is_empty() {
+                    ctx.push_str("\n## Recent Clipboard\n");
+                    for c in &clips {
+                        let preview = if c.content.len() > 120 { &c.content[..120] } else { &c.content };
+                        ctx.push_str(&format!("[{}] ({}) {}\n", c.captured_at.format("%H:%M"), c.content_type, preview));
+                    }
+                }
+            }
+            if let Ok(files) = d.list_recent_files(15) {
+                if !files.is_empty() {
+                    ctx.push_str("\n## Recent Files\n");
+                    for f in &files {
+                        ctx.push_str(&format!("{} ({})\n", f.file_path, f.extension.as_deref().unwrap_or("?")));
+                    }
+                }
+            }
         }
 
         ctx

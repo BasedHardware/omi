@@ -194,6 +194,24 @@ pub struct AppConfig {
     /// Whether to send Windows Toast notifications for proactive suggestions.
     #[serde(default = "default_true")]
     pub proactive_toast_notifications: bool,
+
+    // ── Second Brain ─────────────────────────────────────────────────────────
+
+    /// Whether clipboard monitoring is enabled.
+    #[serde(default = "default_true")]
+    pub clipboard_monitoring_enabled: bool,
+
+    /// Whether file system indexing is enabled.
+    #[serde(default = "default_true")]
+    pub file_indexing_enabled: bool,
+
+    /// Directories to index (empty = default: Desktop, Documents, Downloads).
+    #[serde(default)]
+    pub file_index_paths: Vec<String>,
+
+    /// Hour of day (0-23) to generate daily recaps (default: 21 = 9 PM).
+    #[serde(default = "default_recap_hour")]
+    pub daily_recap_hour: u64,
 }
 
 fn default_backend_url() -> String {
@@ -238,6 +256,10 @@ fn default_tts_voice() -> String {
 
 fn default_context_watcher_interval() -> u64 {
     15
+}
+
+fn default_recap_hour() -> u64 {
+    21
 }
 
 impl Default for AppConfig {
@@ -286,6 +308,10 @@ impl Default for AppConfig {
             context_watcher_enabled: true,
             context_watcher_interval_secs: default_context_watcher_interval(),
             proactive_toast_notifications: true,
+            clipboard_monitoring_enabled: true,
+            file_indexing_enabled: true,
+            file_index_paths: Vec::new(),
+            daily_recap_hour: default_recap_hour(),
         }
     }
 }
@@ -301,10 +327,12 @@ impl AppConfig {
         base.join(CONFIG_DIR).join(CONFIG_FILE)
     }
 
-    /// Load config from disk, or return defaults if not found.
+    /// Load config from disk, falling back to env vars for any empty key fields.
+    /// This ensures `.env` (loaded by dotenvy at startup) always seeds keys that
+    /// haven't been explicitly set via the Settings UI.
     pub fn load() -> Self {
         let path = Self::config_path();
-        match std::fs::read_to_string(&path) {
+        let mut cfg = match std::fs::read_to_string(&path) {
             Ok(contents) => {
                 serde_json::from_str(&contents).unwrap_or_else(|e| {
                     tracing::warn!("Failed to parse config at {}: {e}, using defaults", path.display());
@@ -315,7 +343,23 @@ impl AppConfig {
                 tracing::info!("No config found at {}, using defaults", path.display());
                 Self::default()
             }
+        };
+        // Fill empty API keys from env vars (set by dotenvy from omi-windows/.env)
+        macro_rules! env_fallback {
+            ($field:expr, $env:literal) => {
+                if $field.is_empty() {
+                    if let Ok(v) = std::env::var($env) {
+                        if !v.is_empty() { $field = v; }
+                    }
+                }
+            };
         }
+        env_fallback!(cfg.anthropic_api_key,   "ANTHROPIC_API_KEY");
+        env_fallback!(cfg.groq_api_key,         "GROQ_API_KEY");
+        env_fallback!(cfg.deepgram_api_key,     "DEEPGRAM_API_KEY");
+        env_fallback!(cfg.gemini_api_key,       "GEMINI_API_KEY");
+        env_fallback!(cfg.openai_api_key,       "OPENAI_API_KEY");
+        cfg
     }
 
     /// Save config to disk.
