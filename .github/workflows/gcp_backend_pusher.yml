@@ -137,8 +137,11 @@ jobs:
               echo "=== llm-gateway pods ==="
               kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-llm-gateway -o wide || true
               kubectl -n ${{ vars.ENV }}-omi-backend describe pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-llm-gateway || true
-              echo "=== llm-gateway logs ==="
-              kubectl -n ${{ vars.ENV }}-omi-backend logs -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-llm-gateway --tail=200 || true
+              # NOTE: raw `kubectl logs` is intentionally omitted here because the gateway is an
+              # OpenAI-compatible service that processes chat content and service tokens — its
+              # runtime logs may leak sensitive payloads into CI output. Use `gcloud compute ssh`,
+              # `kubectl logs` interactively from an authenticated operator shell, or structured
+              # error reporting instead of dumping raw logs in CI.
               echo "=== backend ExternalSecret status ==="
               kubectl -n ${{ vars.ENV }}-omi-backend describe externalsecret/${{ vars.ENV }}-omi-backend-external-secret || true
               echo "=== backend secret key presence ==="
