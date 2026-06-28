@@ -131,4 +131,8 @@ def get_goal_history(uid: str, goal_id: str, days: int = 30) -> List[dict]:
     except (TypeError, ValueError):
         raise ValueError("days must be an integer")
     days = max(1, min(days, 365))
+    # Raise the same not-found as the write ops (rather than returning an empty
+    # list) when the goal does not exist, so the surface stays consistent.
+    if not any(g.get('id') == goal_id for g in goals_db.get_all_goals(uid, include_inactive=True)):
+        raise GoalNotFound("Goal not found")
     return goals_db.get_goal_history(uid, goal_id, days=days)
