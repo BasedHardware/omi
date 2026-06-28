@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { auth } from '../lib/firebase'
 import { invalidateConversationsCache } from '../lib/pageCache'
 import { gatherLocalContext } from '../lib/localAgent'
+import { byokProviderFromModelId } from '../lib/modelSelection'
 import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
@@ -260,13 +261,18 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
         : userMsg.content
       const prefs = getPreferences()
       const byokStatus = await window.omi.byokStatus().catch(() => null)
-      if (
-        byokStatus?.activeChatProvider &&
-        byokStatus.providers[byokStatus.activeChatProvider]?.configured
-      ) {
+      const chatModelId = prefs.defaultModelByPurpose?.chat
+      const selectedProvider = byokProviderFromModelId(chatModelId)
+      const shouldUseByok = selectedProvider
+        ? byokStatus?.providers[selectedProvider]?.configured
+        : !!(
+            byokStatus?.activeChatProvider &&
+            byokStatus.providers[byokStatus.activeChatProvider]?.configured
+          )
+      if (shouldUseByok) {
         const result = await window.omi.byokChatSend({
           messages: [...baseHistory, { ...userMsg, content: textToSend }],
-          modelId: prefs.defaultModelByPurpose?.chat
+          modelId: chatModelId
         })
         assistantText = result.text
         setHistory((h) => {
@@ -338,7 +344,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // keyword-less follow-up like "again"). Don't render that raw in the thread.
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
-          "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
+          'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
