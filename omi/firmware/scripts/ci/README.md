@@ -43,8 +43,9 @@ The firmware version is read from `CONFIG_BT_DIS_FW_REV_STR` in
    ```
    `version` defaults to the `omi.conf` value; pass `-f version=3.0.21` to override.
 
-The publish step refuses to overwrite an existing `Omi_CV1_v<ver>` tag — bump
-the version if you need to re-release.
+Publishing is only allowed from the **`main`** branch (the build-only path runs
+from any branch). The publish step also refuses to overwrite an existing
+`Omi_CV1_v<ver>` tag — bump the version if you need to re-release.
 
 ## Scripts
 
