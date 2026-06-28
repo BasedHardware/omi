@@ -98,7 +98,7 @@ function createWindow(): BrowserWindow {
   // (transcript + screen sidebar) room without overflow; min-size prevents the
   // sidebar from clipping below a usable threshold.
   const mainWindow = new BrowserWindow({
-    title: 'omi',
+    title: 'Cortex',
     width: 1280,
     height: 820,
     minWidth: 1024,

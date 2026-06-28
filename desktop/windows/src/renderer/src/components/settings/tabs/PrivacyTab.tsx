@@ -39,13 +39,13 @@ export function PrivacyTab(): React.JSX.Element {
       <SettingRow
         icon={Zap}
         dot={automationAvailable && autoConsent ? 'on' : 'off'}
-        title="Let Omi take actions"
+        title="Let Cortex take actions"
         subtitle={
           !automationAvailable
             ? 'Disabled in this build.'
             : autoConsent
-              ? 'Omi can click and type in your apps when you ask — you approve each action first.'
-              : 'Turn on to let Omi act in your apps when you ask (you approve each action first).'
+              ? 'Cortex can click and type in your apps when you ask — you approve each action first.'
+              : 'Turn on to let Cortex act in your apps when you ask (you approve each action first).'
         }
         keywords="automation actions desktop control agent take action flaui approve"
         control={
@@ -53,7 +53,7 @@ export function PrivacyTab(): React.JSX.Element {
             on={automationAvailable && autoConsent}
             onChange={toggleAutomation}
             disabled={!automationAvailable}
-            label="Let Omi take actions"
+            label="Let Cortex take actions"
           />
         }
       />
@@ -92,7 +92,7 @@ export function PrivacyTab(): React.JSX.Element {
       <SettingRow
         icon={ShieldCheck}
         title="On-device by default"
-        subtitle="Your screen timeline, file index, and app usage stay on this PC. Only synthesized facts (memories) are sent to your Omi account, and only for features you turn on."
+        subtitle="Your screen timeline, file index, and app usage stay on this PC. Only synthesized facts (memories) are sent to your Cortex account, and only for features you turn on."
         keywords="privacy local data on-device cloud"
       />
     </>

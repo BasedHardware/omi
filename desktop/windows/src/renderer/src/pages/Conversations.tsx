@@ -59,7 +59,7 @@ function localToRow(c: LocalConversation): ConversationRow {
       : '(empty transcript)'
   return {
     id: c.id,
-    title: c.title || (isChat ? 'Chat with Omi' : 'Local recording'),
+    title: c.title || (isChat ? 'Chat with Cortex' : 'Local recording'),
     subtitle: isChat
       ? `${new Date(c.startedAt).toLocaleString()} · ${c.messages?.length ?? 0} messages`
       : `${new Date(c.startedAt).toLocaleString()} · ${Math.round(
@@ -153,7 +153,7 @@ export function Conversations(): React.JSX.Element {
     })
   }, [loadAll])
 
-  // Live refresh: when the local store changes (e.g. an Omi chat is being
+  // Live refresh: when the local store changes (e.g. an Cortex chat is being
   // saved as it streams), re-read local conversations and merge them with the
   // already-loaded cloud rows — no extra cloud fetch — so the list updates in
   // real time without waiting for a remount.

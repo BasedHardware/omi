@@ -20,9 +20,9 @@ describe('export file I/O (real disk)', () => {
   it('exportToObsidian writes <vault>/Omi/Memories.md', async () => {
     const vault = join(work, 'vault')
     const file = await exportToObsidian(vault, memories)
-    expect(file).toBe(join(vault, 'Omi', 'Memories.md'))
+    expect(file).toBe(join(vault, 'Cortex', 'Memories.md'))
     const text = await fs.readFile(file, 'utf8')
-    expect(text).toContain('# Omi Memories')
+    expect(text).toContain('# Cortex Memories')
     expect(text).toContain('## Personal')
     expect(text).toContain('- Has two cats')
     expect(text).toContain('## Work')

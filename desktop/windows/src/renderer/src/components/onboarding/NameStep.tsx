@@ -24,7 +24,7 @@ export function NameStep({
       stepIndex={stepIndex}
       totalSteps={totalSteps}
       eyebrow="NAME"
-      title="What should Omi call you?"
+      title="What should Cortex call you?"
       continueDisabled={trimmed.length === 0}
       onContinue={() => onContinue(trimmed)}
       onBack={onBack}

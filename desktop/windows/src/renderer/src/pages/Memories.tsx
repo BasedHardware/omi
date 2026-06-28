@@ -227,7 +227,7 @@ export function Memories(): React.JSX.Element {
                   }
                 }}
                 rows={3}
-                placeholder="Something Omi should remember about you…"
+                placeholder="Something Cortex should remember about you…"
                 className="input-field resize-none"
               />
               <div className="mt-3 flex items-center justify-end gap-2">
@@ -247,7 +247,7 @@ export function Memories(): React.JSX.Element {
           <EmptyState
             icon={Brain}
             title="No memories yet"
-            description="Memories are distilled insights from your conversations. They will show up here as Omi learns about you."
+            description="Memories are distilled insights from your conversations. They will show up here as Cortex learns about you."
           />
         )}
 

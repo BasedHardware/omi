@@ -43,7 +43,7 @@ export function TrustStep({
     >
       <div className="w-full">
         <p className="text-center text-sm leading-relaxed text-white">
-          Omi is open source and private by design. During setup, we’ll ask you for these
+          Cortex is open source and private by design. During setup, we’ll ask you for these
           permissions to understand your work and help in the right places.
         </p>
 

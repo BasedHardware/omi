@@ -1,10 +1,10 @@
 {
-  "name": "omi-windows",
+  "name": "cortex",
   "version": "1.0.0",
-  "description": "An Electron application with React and TypeScript",
+  "description": "Cortex — an agentic AI assistant for Windows that can control your PC. Local or cloud models, your choice.",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Cortex",
+  "homepage": "https://cortex.apym.io",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

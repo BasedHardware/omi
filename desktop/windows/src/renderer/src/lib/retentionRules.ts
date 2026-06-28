@@ -30,10 +30,10 @@ export function isEmptyConversation(transcript: string): boolean {
 
 // Self-referential meta memories the synthesis sometimes writes
 // ("The user has N memories stored…"). Anchored on the STORE phrasing
-// (stored/saved/in Omi/app/account) so substantive content like "has 5 memories of
+// (stored/saved/in Cortex/app/account) so substantive content like "has 5 memories of
 // the trip" / "from childhood" is NEVER matched.
 export function isMetaJunkMemory(content: string): boolean {
-  return /\buser has \d[\d,]* memories\s+(stored|saved|in (the )?(omi|app|application|account))\b/i.test(
+  return /\buser has \d[\d,]* memories\s+(stored|saved|in (the )?(cortex|omi|app|application|account))\b/i.test(
     content ?? ''
   )
 }
@@ -70,7 +70,13 @@ export type RetentionMemoryBreakdown = {
 }
 
 export function memoryJunkBreakdown(memories: Memory[]): RetentionMemoryBreakdown {
-  const b: RetentionMemoryBreakdown = { total: 0, screenSynth: 0, appIndex: 0, meta: 0, duplicate: 0 }
+  const b: RetentionMemoryBreakdown = {
+    total: 0,
+    screenSynth: 0,
+    appIndex: 0,
+    meta: 0,
+    duplicate: 0
+  }
   const seen = new Set<string>()
   for (const m of memories) {
     const content = (m.content ?? '').trim()

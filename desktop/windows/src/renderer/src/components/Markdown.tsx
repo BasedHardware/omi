@@ -1,5 +1,5 @@
 // Minimal, dependency-free markdown for chat bubbles. Supports the subset the
-// Omi chat actually emits — headings, bullet/numbered lists, fenced + inline
+// Cortex chat actually emits — headings, bullet/numbered lists, fenced + inline
 // code, bold, italic, and links. NOT a full CommonMark parser; anything it does
 // not recognize falls through as plain text (so a half-streamed `**` just shows
 // literally until the closing marker arrives). Renders React elements, never raw

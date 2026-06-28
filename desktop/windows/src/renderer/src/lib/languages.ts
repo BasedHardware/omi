@@ -1,5 +1,5 @@
 // Default language list offered by the startup wizard and Settings. Codes are
-// stored verbatim in preferences and passed to the Omi v4/listen URL. English is
+// stored verbatim in preferences and passed to the Cortex v4/listen URL. English is
 // the default selection.
 
 export type Language = { code: string; label: string }

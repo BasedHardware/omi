@@ -13,12 +13,12 @@ const m = (id: string, content: string, created_at = '2026-01-01T00:00:00Z'): Me
 describe('rankMemories', () => {
   it('ranks by overlap with query tokens and drops zero-overlap memories', () => {
     const mems = [
-      m('1', 'I am building the official Omi Windows desktop port'),
+      m('1', 'I am building the official Cortex Windows desktop port'),
       m('2', 'I enjoy cooking pasta on the weekends'),
-      m('3', 'The Omi knowledge graph uses local files')
+      m('3', 'The Cortex knowledge graph uses local files')
     ]
     const out = rankMemories(mems, 'omi-windows knowledge graph', 5)
-    expect(out.some((c) => c.includes('Omi Windows'))).toBe(true)
+    expect(out.some((c) => c.includes('Cortex Windows'))).toBe(true)
     expect(out).not.toContain('I enjoy cooking pasta on the weekends')
   })
 
@@ -52,7 +52,7 @@ describe('rankMemories', () => {
   })
 
   it('returns [] for an empty or all-filler query', () => {
-    const mems = [m('1', 'Omi Windows port')]
+    const mems = [m('1', 'Cortex Windows port')]
     expect(rankMemories(mems, '', 5)).toEqual([])
     expect(rankMemories(mems, 'what are the projects you have', 5)).toEqual([])
   })

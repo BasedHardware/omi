@@ -271,7 +271,7 @@ export function AdvancedTab(): React.JSX.Element {
       <SettingRow
         icon={Download}
         title="Import memories"
-        subtitle="Paste a ChatGPT/Claude “everything you remember about me” reply; Omi extracts distinct, durable facts."
+        subtitle="Paste a ChatGPT/Claude “everything you remember about me” reply; Cortex extracts distinct, durable facts."
         keywords="import chatgpt claude memories paste extract"
       >
         <div className="space-y-3">

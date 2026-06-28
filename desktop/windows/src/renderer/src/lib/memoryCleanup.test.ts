@@ -33,7 +33,7 @@ describe('isAppIndexMemory', () => {
   })
   it('does NOT match a genuine memory that merely starts with "Uses …"', () => {
     expect(isAppIndexMemory(mem('1', 'Uses Excel daily for budgeting and taxes.'))).toBe(false)
-    expect(isAppIndexMemory(mem('2', 'Used to work at Google before joining Omi'))).toBe(false)
+    expect(isAppIndexMemory(mem('2', 'Used to work at Google before joining Cortex'))).toBe(false)
   })
   it('matches file/project-index synthesis sentences (stem + a path)', () => {
     expect(

@@ -12,7 +12,7 @@ import type {
 } from '../../../../../shared/types'
 
 // Preset cadences offered for proactive insights (minutes). Each run is a Gemini
-// call via Omi's proxy, so longer intervals mean less backend cost.
+// call via Cortex's proxy, so longer intervals mean less backend cost.
 const INSIGHT_INTERVALS = [15, 20, 30, 60]
 
 export function RewindTab(): React.JSX.Element {
@@ -82,7 +82,7 @@ export function RewindTab(): React.JSX.Element {
         icon={Mic}
         dot={continuousRec ? 'on' : 'off'}
         title="Continuous recording"
-        subtitle="Always-on microphone. Omi turns what you hear into conversations automatically."
+        subtitle="Always-on microphone. Cortex turns what you hear into conversations automatically."
         keywords="continuous recording microphone audio always-on"
         control={
           <Toggle
@@ -231,7 +231,7 @@ export function RewindTab(): React.JSX.Element {
         icon={Brain}
         dot={screenSynth?.enabled ? 'on' : 'off'}
         title="Screen activity → memories"
-        subtitle="Turns recent on-screen text (from Rewind) into memories. On-device redaction first; skips private/incognito windows. Off by default — writes to your Omi account."
+        subtitle="Turns recent on-screen text (from Rewind) into memories. On-device redaction first; skips private/incognito windows. Off by default — writes to your Cortex account."
         keywords="synthesis screen memories gemini"
         control={
           <Toggle
@@ -311,7 +311,7 @@ export function RewindTab(): React.JSX.Element {
                 }
                 className="rounded-md bg-white/10 px-2 py-1.5 text-white focus:outline-none"
               >
-                <option value="omi" className="bg-neutral-900">Omi notification</option>
+                <option value="omi" className="bg-neutral-900">Cortex notification</option>
                 <option value="native" className="bg-neutral-900">Windows notification</option>
               </select>
             </label>

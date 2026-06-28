@@ -196,7 +196,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
                 }
               }}
               onKeyUp={(e) => ptt.onKeyUp(e)}
-              placeholder="Ask Omi…  ·  hold Space to talk"
+              placeholder="Ask Cortex…  ·  hold Space to talk"
               className="max-h-32 flex-1 resize-none rounded-xl bg-neutral-800/70 px-3 py-2 text-sm text-neutral-100 placeholder-neutral-500 outline-none focus:ring-1 focus:ring-neutral-500"
             />
             <button
@@ -237,12 +237,12 @@ function SignedOutPanel(): React.JSX.Element {
     <div className="overlay-panel flex flex-col text-neutral-100">
       <DragHandle />
       <div className="flex flex-col items-center gap-3 px-6 pb-6 pt-1 text-center">
-        <div className="text-sm text-neutral-300">Sign in to Omi to chat.</div>
+        <div className="text-sm text-neutral-300">Sign in to Cortex to chat.</div>
         <button
           onClick={() => window.omiOverlay.focusMain()}
           className="overlay-no-drag rounded-xl bg-neutral-200 px-4 py-2 text-sm font-medium text-neutral-900"
         >
-          Open Omi to sign in
+          Open Cortex to sign in
         </button>
       </div>
     </div>

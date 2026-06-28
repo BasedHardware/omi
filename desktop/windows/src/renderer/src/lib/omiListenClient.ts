@@ -13,7 +13,7 @@ export type OmiListenCallbacks = {
   onError: (err: Error, fatal: boolean) => void
   /**
    * Fires when the WS closes AFTER it had connected (any code — clean 1000,
-   * quota 1008, or abnormal 1005/1006). The Omi socket is dead, so no more
+   * quota 1008, or abnormal 1005/1006). The Cortex socket is dead, so no more
    * transcripts will arrive; the caller should fall back to keep recording.
    * `reason` is the backend's close text (e.g. `trial_expired`) — needed to tell
    * a quota/entitlement close apart from a generic drop. Pre-connect closes come
@@ -60,7 +60,7 @@ export async function startOmiListen(
   cb: OmiListenCallbacks
 ): Promise<OmiListenHandle> {
   const user = auth.currentUser
-  if (!user) throw new Error('Omi v4/listen requires sign-in.')
+  if (!user) throw new Error('Cortex v4/listen requires sign-in.')
   const token = await user.getIdToken()
   const sessionId = `omi-listen-${Date.now()}-${nextSessionId++}`
 

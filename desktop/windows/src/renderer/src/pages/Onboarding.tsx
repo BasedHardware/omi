@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
-import { getPreferences, setPreferences, completeOnboarding, setPendingRoute } from '../lib/preferences'
+import {
+  getPreferences,
+  setPreferences,
+  completeOnboarding,
+  setPendingRoute
+} from '../lib/preferences'
 import { syncLanguage, setDisplayName } from '../lib/userProfile'
 import { resolveLanguageCode, languageLabel } from '../lib/languages'
 import { trackHowDidYouHear } from '../lib/analytics'
 import { toast } from '../lib/toast'
+import { CortexWordmark } from '../components/ui/Brand'
 import { NameStep } from '../components/onboarding/NameStep'
 import { LanguageStep } from '../components/onboarding/LanguageStep'
 import { HowDidYouHearStep } from '../components/onboarding/HowDidYouHearStep'
@@ -77,7 +83,7 @@ export function Onboarding(): React.JSX.Element {
 
   const handleGoal = (goal: string): void => {
     setPreferences({ goal })
-    // Best-effort sync to the Omi goals backend — never block onboarding on the
+    // Best-effort sync to the Cortex goals backend — never block onboarding on the
     // network. Advance to the final "auto-created tasks" screen.
     void createGoal(goal).catch(() => {
       toast('Saved locally — goal sync will retry later', { tone: 'warn' })
@@ -180,11 +186,9 @@ export function Onboarding(): React.JSX.Element {
       )
     }
     if (step === 10) {
-      // Ask demo: type a question in the bar → Omi's answer (Mac comparison)
+      // Ask demo: type a question in the bar → Cortex's answer (Mac comparison)
       // reveals, then advances to the goal step.
-      return (
-        <AskDemoStep stepIndex={10} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
-      )
+      return <AskDemoStep stepIndex={10} totalSteps={TOTAL_STEPS} onContinue={next} onSkip={next} />
     }
     if (step === 11) {
       return (
@@ -218,11 +222,7 @@ export function Onboarding(): React.JSX.Element {
 
   return (
     <div className="app-canvas relative flex h-full">
-      <img
-        src="https://personas.omi.me/omilogo.png"
-        alt="omi"
-        className="absolute left-6 top-6 z-20 h-6 w-auto"
-      />
+      <CortexWordmark className="absolute left-6 top-6 z-20 text-xl" />
       <div className="flex flex-1 items-center justify-center p-8">{renderStep()}</div>
       <div
         className={

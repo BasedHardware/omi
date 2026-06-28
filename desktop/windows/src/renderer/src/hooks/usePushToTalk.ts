@@ -20,7 +20,7 @@ const FINALIZE_CFG: FinalizeConfig = {
   noVoiceGraceMs: 700,
   silenceMs: 350,
   settleMs: 400,
-  // Balanced: hold the commit ~1s after release so Omi's ~1.8s-late trailing
+  // Balanced: hold the commit ~1s after release so Cortex's ~1.8s-late trailing
   // segment usually lands before we send (catches the tail most of the time),
   // without making every voice message wait out the full backend lag.
   trailingGraceMs: 1000
@@ -73,7 +73,7 @@ function isSpace(e: React.KeyboardEvent): boolean {
 
 /**
  * Hold-Space-to-talk for the overlay's Ask box. A quick Space tap types a space as
- * usual; holding past HOLD_THRESHOLD_MS starts mic transcription (Omi v4/listen,
+ * usual; holding past HOLD_THRESHOLD_MS starts mic transcription (Cortex v4/listen,
  * via startTranscription) and exposes a live analyser for
  * the waveform. Releasing enters a VAD-gated finalize phase that waits until you've
  * stopped speaking and the backend's transcript has settled, then auto-sends it.

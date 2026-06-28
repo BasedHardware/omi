@@ -54,7 +54,8 @@ function focusOmi(): void {
 
 function clientId(): string {
   const id = import.meta.env.MAIN_VITE_GOOGLE_CLIENT_ID
-  if (!id) throw new Error('Google client id not configured (set MAIN_VITE_GOOGLE_CLIENT_ID in .env)')
+  if (!id)
+    throw new Error('Google client id not configured (set MAIN_VITE_GOOGLE_CLIENT_ID in .env)')
   return id
 }
 
@@ -166,7 +167,7 @@ function runLoopback(
         fail(
           new Error(
             'Timed out waiting for Google. In the browser, finish the consent: ' +
-              'Advanced → Go to Omi (unsafe) → Allow, then reconnect.'
+              'Advanced → Go to Cortex (unsafe) → Allow, then reconnect.'
           )
         )
       }, LOOPBACK_TIMEOUT_MS)

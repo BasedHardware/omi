@@ -20,7 +20,7 @@ export function AutomationPermissionStep({
   // Automation has no OS permission prompt — granting it is a local opt-in that
   // records consent. useChat's action-planner pre-step gates on this preference
   // (alongside the OMI_AUTOMATION env kill-switch), so flipping it on here is what
-  // actually lets Omi take real UI actions in your apps.
+  // actually lets Cortex take real UI actions in your apps.
   const enableAutomation = async (): Promise<void> => {
     setPreferences({ automationConsentedAt: Date.now() })
   }
@@ -31,8 +31,8 @@ export function AutomationPermissionStep({
       totalSteps={totalSteps}
       aside={aside}
       eyebrow="PERMISSION"
-      title="Let Omi act when asked"
-      subtitle="Automation lets Omi take actions for you"
+      title="Let Cortex act when asked"
+      subtitle="Automation lets Cortex take actions for you"
       icon={<Zap className="h-5 w-5 text-white/60" />}
       cardLabel="Automation"
       statusText={{

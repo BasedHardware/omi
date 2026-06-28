@@ -1,6 +1,27 @@
-# omi-windows
+# Cortex
 
-Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app.
+Cortex — an agentic AI assistant for Windows that can **control your PC**. Built
+with Electron + React + TypeScript.
+
+Cortex is **open core**: the app is open source and fully usable for free. A
+**Pro** tier (with a 14-day trial) adds cloud sync and higher automation limits.
+Join the waitlist at **[cortex.apym.io](https://cortex.apym.io)**.
+
+## AI models — local or cloud, your choice
+
+Cortex runs its agentic features against the engine you choose (Settings →
+**Models**):
+
+- **Local (private, no key):** Ollama and LM Studio.
+- **Cloud (bring your own key), grouped by region:**
+  - **North America:** OpenAI, Anthropic, xAI, Groq, Together AI
+  - **Europe:** Mistral AI
+  - **China:** Alibaba DashScope (Qwen), Zhipu/Z.ai (GLM), Moonshot (Kimi),
+    DeepSeek (text only), Tencent Hunyuan, Baidu ERNIE, Volcengine (Doubao)
+  - **Global / aggregators:** Ollama Cloud (`:cloud` models), OpenRouter,
+    Google (Gemini), and any custom OpenAI-compatible endpoint.
+
+See `src/shared/providers.ts` for the full model lineup.
 
 ## Recommended IDE Setup
 

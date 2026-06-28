@@ -18,9 +18,9 @@ export type Preferences = {
   chatHistoryMode: 'per-launch' | 'infinite'
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
-  // locally and best-effort synced to the Omi goals backend.
+  // locally and best-effort synced to the Cortex goals backend.
   goal?: string
-  // Opt-in for the desktop-automation bridge ("let Omi take actions"). Set when
+  // Opt-in for the desktop-automation bridge ("let Cortex take actions"). Set when
   // the user grants the Automation onboarding step. Undefined = not opted in, so
   // the chat action-planner pre-step stays off (in addition to the OMI_AUTOMATION
   // env kill-switch).

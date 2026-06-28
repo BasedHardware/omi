@@ -31,15 +31,15 @@ describe('parseGraphResponse', () => {
 
   it('captures aliases and sourceRefs provenance when present', () => {
     const content =
-      '{"nodes":[{"label":"Omi","type":"project","summary":"s",' +
-      '"aliases":["omi-windows",""],"sourceRefs":["C:/x","I build Omi"]}],"edges":[]}'
+      '{"nodes":[{"label":"Cortex","type":"project","summary":"s",' +
+      '"aliases":["omi-windows",""],"sourceRefs":["C:/x","I build Cortex"]}],"edges":[]}'
     const g = parseGraphResponse(content)
     expect(g.nodes[0]).toEqual({
-      label: 'Omi',
+      label: 'Cortex',
       nodeType: 'project',
       summary: 's',
       aliases: ['omi-windows'], // blank dropped
-      sourceRefs: ['C:/x', 'I build Omi']
+      sourceRefs: ['C:/x', 'I build Cortex']
     })
   })
 })

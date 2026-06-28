@@ -8,7 +8,7 @@ import type { InsightPayload } from '../../shared/types'
 export function fireNativeInsight(p: InsightPayload): void {
   try {
     if (!Notification.isSupported()) return
-    const n = new Notification({ title: p.headline || 'Omi insight', body: p.advice })
+    const n = new Notification({ title: p.headline || 'Cortex insight', body: p.advice })
     n.on('failed', (_e, e) => console.warn('[insight] native notification failed:', e))
     n.show()
   } catch {

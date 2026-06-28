@@ -285,7 +285,7 @@ export function Goals(): React.JSX.Element {
       if (!s?.suggested_title) {
         toast('No suggestion right now', {
           tone: 'info',
-          body: 'Omi needs a few memories before it can suggest a goal.'
+          body: 'Cortex needs a few memories before it can suggest a goal.'
         })
         return
       }

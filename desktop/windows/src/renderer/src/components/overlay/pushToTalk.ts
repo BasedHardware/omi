@@ -26,7 +26,7 @@ export type FinalizeConfig = {
   /** ...and no new segment for at least this long ⇒ the backend has caught up. */
   settleMs: number
   /**
-   * Minimum time since release before the silence/settle path may commit. Omi's
+   * Minimum time since release before the silence/settle path may commit. Cortex's
    * v4/listen delivers its trailing FINAL segment ~1.8s late with NO interim, so
    * a quick release can otherwise commit in the GAP before the tail lands —
    * dropping the last words. This floor holds the commit open long enough for

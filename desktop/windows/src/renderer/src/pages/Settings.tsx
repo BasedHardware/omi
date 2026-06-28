@@ -5,8 +5,10 @@ import { SettingsTabRail } from '../components/settings/SettingsTabRail'
 import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
 import { SETTINGS_TABS, type SettingsTabId } from '../components/settings/tabs'
 import { GeneralTab } from '../components/settings/tabs/GeneralTab'
+import { ModelsTab } from '../components/settings/tabs/ModelsTab'
 import { RewindTab } from '../components/settings/tabs/RewindTab'
 import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
+import { ProTab } from '../components/settings/tabs/ProTab'
 import { AccountTab } from '../components/settings/tabs/AccountTab'
 import { AdvancedTab } from '../components/settings/tabs/AdvancedTab'
 import { Memories } from './Memories'
@@ -16,8 +18,10 @@ import { Memories } from './Memories'
 // separately below and is intentionally absent from this map.
 const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = {
   general: GeneralTab,
+  models: ModelsTab,
   rewind: RewindTab,
   privacy: PrivacyTab,
+  pro: ProTab,
   account: AccountTab,
   advanced: AdvancedTab
 }

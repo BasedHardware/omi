@@ -1,6 +1,8 @@
 import axios from 'axios'
 import { desktopApi, omiApi } from './apiClient'
 import { parseMessagesSse } from './messagesSse'
+import { resolveTarget } from './modelConfig'
+import { providerChat } from './providerClient'
 
 // Non-streaming single-shot completion used by the action planner & intent gate.
 // Mirrors the model + endpoint localAgent.ts uses for its agent loop.
@@ -25,6 +27,18 @@ async function callViaMessages(prompt: string): Promise<string> {
 }
 
 export async function callAgentLLM(prompt: string): Promise<string> {
+  // When the user has configured a local/cloud provider (BYOK), route there
+  // directly. On any failure, fall through to the bundled backend so the agent
+  // keeps working.
+  const target = resolveTarget()
+  if (target) {
+    try {
+      const out = await providerChat(target, [{ role: 'user', content: prompt }])
+      if (out) return out
+    } catch {
+      /* fall back to backend below */
+    }
+  }
   try {
     const res = await desktopApi.post(
       '/v2/chat/completions',

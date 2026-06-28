@@ -31,7 +31,7 @@ export type UseChat = {
 }
 
 /**
- * Omi chat backed by streaming `/v2/messages`. The thread is persisted as a
+ * Cortex chat backed by streaming `/v2/messages`. The thread is persisted as a
  * local conversation (kind='chat') in real time — created the moment a message
  * is sent and upserted as the reply streams — so it shows up in the
  * Conversations list immediately. One conversation per hook lifetime (i.e. per
@@ -129,7 +129,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
 
     const transcript = toStore
-      .map((m) => `${m.role === 'user' ? 'You' : 'Omi'}: ${m.content}`)
+      .map((m) => `${m.role === 'user' ? 'You' : 'Cortex'}: ${m.content}`)
       .join('\n\n')
     try {
       await window.omi.insertLocalConversation({
@@ -157,8 +157,8 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   //               the planner (e.g. backend 429, snapshot failed); the caller
   //               surfaces that instead of silently answering it as chat.
   //   'chat'    — not an action (or no keyword hint) → fall through to chat.
-  // Snapshots the last non-Omi foreground window so we plan against the app the
-  // user was actually using, not Omi itself.
+  // Snapshots the last non-Cortex foreground window so we plan against the app the
+  // user was actually using, not Cortex itself.
   type PlanVerdict =
     | { kind: 'planned'; plan: AutomationPlan }
     | { kind: 'error' }

@@ -44,8 +44,8 @@ export function MicPermissionStep({
       totalSteps={totalSteps}
       aside={aside}
       eyebrow="PERMISSION"
-      title="Let Omi use your mic"
-      subtitle="This lets Omi transcribe meetings and voice notes"
+      title="Let Cortex use your mic"
+      subtitle="This lets Cortex transcribe meetings and voice notes"
       icon={<Mic className="h-5 w-5 text-white/60" />}
       cardLabel="Microphone"
       statusText={{

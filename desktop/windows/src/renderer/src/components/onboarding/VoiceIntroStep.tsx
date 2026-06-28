@@ -42,13 +42,13 @@ export function VoiceIntroStep({
 
   const subtitle = active
     ? 'Hold the Space key and speak.'
-    : 'Press your shortcut to open Omi.'
+    : 'Press your shortcut to open Cortex.'
 
   return (
     <StepScaffold
       stepIndex={stepIndex}
       totalSteps={totalSteps}
-      title="Talk to Omi"
+      title="Talk to Cortex"
       subtitle={subtitle}
       subtitleClassName="text-white"
       align="center"

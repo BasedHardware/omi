@@ -2,7 +2,7 @@
 //
 // Two pure helpers (prompt builder + target-value parser) are exported for unit
 // testing; the network-touching pieces (`generateGoal`, `createGoal`) wrap them
-// with the agent LLM and the Omi goals API respectively.
+// with the agent LLM and the Cortex goals API respectively.
 import { omiApi } from './apiClient'
 import { callAgentLLM } from './agentLLM'
 
@@ -46,7 +46,7 @@ export async function generateGoal(apps: string[]): Promise<string> {
     .trim()
 }
 
-// Best-effort: persist the chosen goal to the Omi backend so it shows up in the
+// Best-effort: persist the chosen goal to the Cortex backend so it shows up in the
 // goals dashboard. target_value is REQUIRED by POST /v1/goals (it 422s without
 // one), so we derive it from the goal text. Callers should treat failure as
 // non-fatal — onboarding must not block on the network.

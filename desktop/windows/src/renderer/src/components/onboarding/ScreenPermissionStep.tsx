@@ -39,7 +39,7 @@ export function ScreenPermissionStep({
       totalSteps={totalSteps}
       aside={aside}
       eyebrow="PERMISSION"
-      title="Let Omi read your screen"
+      title="Let Cortex read your screen"
       icon={<Monitor className="h-5 w-5 text-white/60" />}
       cardLabel="Screen Recording"
       statusText={{

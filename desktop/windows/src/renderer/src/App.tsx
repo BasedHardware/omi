@@ -131,7 +131,7 @@ function App(): React.JSX.Element {
     return (
       <div className="app-canvas flex h-full items-center justify-center">
         <SandboxBadge />
-        <Spinner label="Loading Omi…" />
+        <Spinner label="Loading Cortex…" />
       </div>
     )
   }

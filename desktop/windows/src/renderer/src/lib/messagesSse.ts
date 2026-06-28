@@ -1,4 +1,4 @@
-// Reconstruct the assistant reply from Omi's /v2/messages SSE response when it's
+// Reconstruct the assistant reply from Cortex's /v2/messages SSE response when it's
 // consumed as one buffered string (not streamed). Mirrors useChat's streaming
 // parse: each line is `data: <chunk>` (drop the prefix), `done:` marks the end,
 // `think:` payloads are ephemeral status events (drop them), and reply newlines
