@@ -3,6 +3,7 @@ import { rankApps } from './appSelection'
 import { mergeGraph, parseGraphResponse } from './kgGraph'
 import { buildSynthesisPrompt, buildOverviewPrompt } from './kgSynthesisPrompt'
 import { desktopApi, omiApi } from './apiClient'
+import { hostedModelForPurpose, tryByokCompletion } from './modelSelection'
 import type { LocalKGNode, LocalKGStatus } from '../../../shared/types'
 import type { Memory } from '../hooks/useMemories'
 
@@ -18,7 +19,9 @@ async function fetchMemoryStrings(): Promise<string[]> {
     const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset: 0 } })
     const data = r.data as { memories?: Memory[] } | Memory[]
     const list = Array.isArray(data) ? data : (data.memories ?? [])
-    return list.map((m) => m.content).filter((c): c is string => typeof c === 'string' && !!c.trim())
+    return list
+      .map((m) => m.content)
+      .filter((c): c is string => typeof c === 'string' && !!c.trim())
   } catch {
     return []
   }
@@ -62,16 +65,23 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
 
     let parsed = { nodes: [], edges: [] } as ReturnType<typeof parseGraphResponse>
     try {
-      const res = await desktopApi.post(
-        '/v2/chat/completions',
-        {
-          model: SYNTH_MODEL,
-          stream: false,
-          messages: [{ role: 'user', content: buildSynthesisPrompt(digest, memories) }]
-        },
-        { timeout: 60_000 }
-      )
-      const content = (res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? ''
+      const prompt = buildSynthesisPrompt(digest, memories)
+      const byok = await tryByokCompletion('memory', {
+        messages: [{ role: 'user', content: prompt }]
+      })
+      let content = byok ?? ''
+      if (byok === null) {
+        const res = await desktopApi.post(
+          '/v2/chat/completions',
+          {
+            model: hostedModelForPurpose('memory', SYNTH_MODEL),
+            stream: false,
+            messages: [{ role: 'user', content: prompt }]
+          },
+          { timeout: 60_000 }
+        )
+        content = (res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? ''
+      }
       parsed = parseGraphResponse(content)
     } catch (e) {
       console.warn('[kg] synthesis LLM call failed; saving deterministic floor only', e)
@@ -88,16 +98,23 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
       const entityNodes = graph.nodes.filter((n) =>
         ['project', 'person', 'org', 'interest', 'technology'].includes(n.nodeType)
       )
-      const res = await desktopApi.post(
-        '/v2/chat/completions',
-        {
-          model: SYNTH_MODEL,
-          stream: false,
-          messages: [{ role: 'user', content: buildOverviewPrompt(entityNodes, memories) }]
-        },
-        { timeout: 60_000 }
-      )
-      const text = ((res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? '').trim()
+      const prompt = buildOverviewPrompt(entityNodes, memories)
+      const byok = await tryByokCompletion('memory', {
+        messages: [{ role: 'user', content: prompt }]
+      })
+      let text = (byok ?? '').trim()
+      if (byok === null) {
+        const res = await desktopApi.post(
+          '/v2/chat/completions',
+          {
+            model: hostedModelForPurpose('memory', SYNTH_MODEL),
+            stream: false,
+            messages: [{ role: 'user', content: prompt }]
+          },
+          { timeout: 60_000 }
+        )
+        text = ((res.data as ChatCompletion)?.choices?.[0]?.message?.content ?? '').trim()
+      }
       if (text) {
         cardNode = {
           id: 'overview:card',
@@ -112,9 +129,7 @@ export async function buildLocalGraph(): Promise<LocalKGStatus> {
       console.warn('[kg] overview card synthesis failed; saving graph without it', e)
     }
 
-    const finalGraph = cardNode
-      ? { nodes: [...graph.nodes, cardNode], edges: graph.edges }
-      : graph
+    const finalGraph = cardNode ? { nodes: [...graph.nodes, cardNode], edges: graph.edges } : graph
     await window.omi.kgSaveGraph(finalGraph)
     return {
       nodeCount: finalGraph.nodes.length,
