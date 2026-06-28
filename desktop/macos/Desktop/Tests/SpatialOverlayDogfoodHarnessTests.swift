@@ -3,44 +3,32 @@ import XCTest
 @testable import Omi_Computer
 
 final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
-  private let claudeScreenshotScreen = SpatialOverlayScreen(
-    id: "claude-screenshot",
-    frame: CGRect(x: 0, y: 0, width: 1510, height: 1596),
-    visibleFrame: CGRect(x: 0, y: 0, width: 1510, height: 1596)
-  )
-
   @MainActor
   func testClaudeAddGuidanceFixtureDoesNotCoverAddButton() throws {
-    let windowFrame = claudeScreenshotScreen.frame
-    let addButton = CGRect(x: 1_124, y: 246, width: 92, height: 54)
-    let candidates = CloudConnectorFormAutomation.claudeAddGuidanceCandidates(
-      windowFrame: windowFrame,
-      explicitTargetFrames: [addButton]
-    )
+    let fixture = SpatialOverlayDogfoodFixture.claudeAddExplicit
+    let addButton = fixture.targetRect
 
     let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: windowFrame,
-      candidates: candidates
+      windowFrame: fixture.windowFrame,
+      candidates: fixture.candidates
     ))
 
     assertCallout(placement, pointsAt: addButton, doesNotCover: addButton)
+    assertTopLeftCallout(placement, fixture: fixture)
   }
 
   @MainActor
   func testClaudeAddGuidanceFixtureFallsBackWithoutCoveringEstimatedButton() throws {
-    let windowFrame = claudeScreenshotScreen.frame
-    let candidates = CloudConnectorFormAutomation.claudeAddGuidanceCandidates(
-      windowFrame: windowFrame,
-      explicitTargetFrames: []
-    )
+    let fixture = SpatialOverlayDogfoodFixture.claudeAddHeuristic
 
     let placement = try XCTUnwrap(CloudConnectorGuidanceOverlay.placementResult(
-      windowFrame: windowFrame,
-      candidates: candidates
+      windowFrame: fixture.windowFrame,
+      candidates: fixture.candidates
     ))
 
-    let estimatedButton = try XCTUnwrap(candidates.first?.targetRect)
+    let estimatedButton = try XCTUnwrap(fixture.candidates.first?.targetRect)
     assertCallout(placement, pointsAt: estimatedButton, doesNotCover: estimatedButton)
+    assertTopLeftCallout(placement, fixture: fixture)
   }
 
   func testClaudeAddDogfoodWouldFailIfOverlayCoveredTarget() {
@@ -77,5 +65,32 @@ final class SpatialOverlayDogfoodHarnessTests: XCTestCase {
     )
 
     XCTAssertTrue(issues.isEmpty, "Dogfood overlay issues: \(issues)", file: file, line: line)
+  }
+
+  private func assertTopLeftCallout(
+    _ placement: SpatialOverlayPlacementResult,
+    fixture: SpatialOverlayDogfoodFixture,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) {
+    let panel = fixture.topLeftRect(appKitRect: placement.panelFrame)
+    let arrowTip = CGPoint(
+      x: placement.globalArrowTip.x,
+      y: fixture.windowFrame.maxY - placement.globalArrowTip.y
+    )
+    let target = fixture.topLeftTargetRect
+
+    XCTAssertFalse(
+      panel.intersects(target),
+      "Expected top-left panel \(panel) not to cover target \(target)",
+      file: file,
+      line: line
+    )
+    XCTAssertTrue(
+      target.insetBy(dx: -3, dy: -3).contains(arrowTip),
+      "Expected top-left arrow tip \(arrowTip) to land on target \(target)",
+      file: file,
+      line: line
+    )
   }
 }

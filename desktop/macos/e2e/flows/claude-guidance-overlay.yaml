@@ -46,6 +46,32 @@ steps:
       result.detail.visible: "false"
 
   - id: S5
+    name: Present Claude Add Heuristic Overlay Fixture
+    bridge.action:
+      name: spatial_overlay_present_fixture
+      params:
+        fixture: claude-add-heuristic
+        settleMs: "150"
+    expect:
+      result.detail.visible: "true"
+      result.detail.issues: ""
+      result.detail.action: add
+      result.detail.candidateSource: layoutHeuristic
+
+  - id: S6
+    name: Capture Claude Add Heuristic Overlay
+    visual.export:
+      name: claude-add-heuristic-overlay
+      target: overlay
+
+  - id: S7
+    name: Dismiss Heuristic Overlay
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S8
     name: Logs Clean
     log.expect:
       absent:

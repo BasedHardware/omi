@@ -28,15 +28,28 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
   var targetRect: CGRect {
     switch self {
     case .claudeAddExplicit:
-      return CGRect(x: 1_124, y: 246, width: 92, height: 54)
+      return appKitRect(topLeftRect: CGRect(x: 1_124, y: 1_296, width: 92, height: 54))
     case .claudeAddHeuristic:
       let point = CloudConnectorFormAutomation.claudeAddGuidanceAnchor(in: windowFrame)
       return CGRect(x: point.x - 46, y: point.y - 27, width: 92, height: 54)
     case .claudeConnectExplicit:
-      return CGRect(x: 1_225, y: 385, width: 132, height: 54)
+      return appKitRect(topLeftRect: CGRect(x: 1_225, y: 641, width: 132, height: 54))
     case .claudeConnectHeuristic:
       let point = CloudConnectorFormAutomation.claudeConnectGuidanceAnchor(in: windowFrame)
       return CGRect(x: point.x - 66, y: point.y - 27, width: 132, height: 54)
+    }
+  }
+
+  var topLeftTargetRect: CGRect {
+    switch self {
+    case .claudeAddExplicit:
+      return CGRect(x: 1_124, y: 1_296, width: 92, height: 54)
+    case .claudeAddHeuristic:
+      return topLeftRect(appKitRect: targetRect)
+    case .claudeConnectExplicit:
+      return CGRect(x: 1_225, y: 641, width: 132, height: 54)
+    case .claudeConnectHeuristic:
+      return topLeftRect(appKitRect: targetRect)
     }
   }
 
@@ -63,6 +76,19 @@ enum SpatialOverlayDogfoodFixture: String, CaseIterable {
         explicitTargetFrames: []
       )
     }
+  }
+
+  func topLeftRect(appKitRect: CGRect) -> CGRect {
+    CGRect(
+      x: appKitRect.minX,
+      y: windowFrame.maxY - appKitRect.maxY,
+      width: appKitRect.width,
+      height: appKitRect.height
+    )
+  }
+
+  private func appKitRect(topLeftRect: CGRect) -> CGRect {
+    SpatialOverlayGeometry.appKitFrame(topLeftFrame: topLeftRect, screenFrame: windowFrame)
   }
 }
 
