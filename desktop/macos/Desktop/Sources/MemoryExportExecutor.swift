@@ -28,6 +28,11 @@ enum MemoryExportExecutor {
   }
 
   static func run(_ destination: MemoryExportDestination) async throws -> Outcome {
+    if requiresAccessibilityPreflight(destination), !isAccessibilityReadyForBrowserSetup() {
+      requestAccessibilityApprovalForCloudSetup()
+      throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
+    }
+
     let key = try await MemoryExportService.shared.ensureMCPKey()
 
     // OpenClaw / Hermes have no setup CLI; the agent doesn't reliably perform the
@@ -55,6 +60,18 @@ enum MemoryExportExecutor {
       await runAssisted(destination, key: key)
       return Outcome(taskTitle: task.title, mode: .assisted)
     }
+  }
+
+  static func requiresAccessibilityPreflight(_ destination: MemoryExportDestination) -> Bool {
+    destination == .claude && destination.mcpExecuteKind == .browserAutonomous
+  }
+
+  static func accessibilityPreflightMissing(for destination: MemoryExportDestination) -> Bool {
+    requiresAccessibilityPreflight(destination) && !isAccessibilityReadyForBrowserSetup()
+  }
+
+  private static func isAccessibilityReadyForBrowserSetup() -> Bool {
+    AXIsProcessTrusted()
   }
 
   private static func runBrowserAutonomous(
@@ -201,7 +218,7 @@ enum MemoryExportExecutor {
     """
     Omi needs Accessibility permission to finish Claude setup automatically.
 
-    I opened Claude in your default browser and copied the connector values. Approve Accessibility for this Omi app in System Settings, then click "Do it for me" again.
+    Approve Accessibility for this Omi app in System Settings, then click "Do it for me" again. If you do not want to grant it, use the manual installation steps below.
     """
   }
 

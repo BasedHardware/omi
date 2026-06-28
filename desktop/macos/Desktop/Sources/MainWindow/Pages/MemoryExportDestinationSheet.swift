@@ -607,8 +607,12 @@ struct MemoryExportDestinationSheet: View {
 
   private var executeButtonTitle: String {
     switch destination.mcpExecuteKind {
-    case .localAutonomous, .browserAutonomous:
+    case .localAutonomous:
       return "Do it for me"
+    case .browserAutonomous:
+      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
+        ? "Grant Accessibility"
+        : "Do it for me"
     case .assisted:
       return "Open & copy key"
     }
@@ -620,8 +624,13 @@ struct MemoryExportDestinationSheet: View {
       return
         "Omi sets up \(destination.title) for you — it runs as an Omi task you can watch in the floating bar. If it gets stuck, use the manual steps below."
     case .browserAutonomous:
-      return
-        "Omi uses your signed-in browser to set up \(destination.title). If sign-in or permissions block it, Omi will tell you exactly where it stopped."
+      if MemoryExportExecutor.requiresAccessibilityPreflight(destination) {
+        return
+          "Omi needs Accessibility permission to use your signed-in browser for \(destination.title). If you prefer not to grant it, use the manual steps below."
+      } else {
+        return
+          "Omi uses your signed-in browser to set up \(destination.title). If sign-in or permissions block it, Omi will tell you exactly where it stopped."
+      }
     case .assisted:
       return
         "Omi opens \(destination.title) and copies your key, then you confirm the quick steps below."

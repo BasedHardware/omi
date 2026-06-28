@@ -202,6 +202,10 @@ final class BrowserAutomationTargetTests: XCTestCase {
 
   @MainActor
   func testClaudeNativeSetupWaitsForAccessibilityApprovalInsteadOfAgentFallback() {
+    XCTAssertTrue(MemoryExportExecutor.requiresAccessibilityPreflight(.claude))
+    XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.chatgpt))
+    XCTAssertFalse(MemoryExportExecutor.requiresAccessibilityPreflight(.codex))
+
     XCTAssertTrue(
       MemoryExportExecutor.cloudFormFillRequiresAccessibilityApproval(
         "Error: Accessibility permission is not available to Omi, so the native connector form filler cannot inspect browser fields."

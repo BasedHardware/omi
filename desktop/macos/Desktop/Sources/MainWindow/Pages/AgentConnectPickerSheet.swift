@@ -105,8 +105,12 @@ private struct ConnectOptionCard: View {
 
   private var primaryLabel: String {
     switch destination.mcpExecuteKind {
-    case .localAutonomous, .browserAutonomous:
+    case .localAutonomous:
       return "Do it for me"
+    case .browserAutonomous:
+      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
+        ? "Grant Accessibility"
+        : "Do it for me"
     case .assisted:
       return "Open & copy key"
     }
