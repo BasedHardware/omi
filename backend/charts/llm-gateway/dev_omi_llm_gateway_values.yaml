@@ -62,6 +62,8 @@ env:
     value: "dev"
   - name: DD_TRACE_ENABLED
     value: "false"
+  - name: LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS
+    value: "true"
 
 resources:
   requests:

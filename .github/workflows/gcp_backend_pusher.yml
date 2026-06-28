@@ -71,6 +71,13 @@ jobs:
         run: |
           SECRET_NAME="OMI_LLM_GATEWAY_SERVICE_TOKEN"
           if gcloud secrets describe "$SECRET_NAME" --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            if [[ "${{ github.event.inputs.release_version }}" == "rotate-dev-token" ]]; then
+              echo "Rotating $SECRET_NAME in ${{ vars.GCP_PROJECT_ID }}."
+              openssl rand -base64 48 | gcloud secrets versions add "$SECRET_NAME" \
+                --project="${{ vars.GCP_PROJECT_ID }}" \
+                --data-file=- >/dev/null
+              exit 0
+            fi
             echo "$SECRET_NAME already exists in ${{ vars.GCP_PROJECT_ID }}."
             exit 0
           fi
@@ -171,18 +178,41 @@ jobs:
           }
           trap cleanup EXIT
 
-          TOKEN="$(kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data.OMI_LLM_GATEWAY_SERVICE_TOKEN}' | base64 -d)"
-          kubectl -n ${{ vars.ENV }}-omi-backend run "$SMOKE_POD" \
-            --restart=Never \
-            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
-            --env "SMOKE_URL=http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080" \
-            --env "SMOKE_TOKEN=$TOKEN" \
-            --command -- sh -c 'python scripts/smoke-llm-gateway.py --url "$SMOKE_URL" --token "$SMOKE_TOKEN"'
+          cat <<EOF | kubectl -n ${{ vars.ENV }}-omi-backend apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: $SMOKE_POD
+          spec:
+            restartPolicy: Never
+            containers:
+              - name: smoke
+                image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+                command: ["sh", "-c", "python scripts/smoke-llm-gateway.py --url \"\$SMOKE_URL\" --token \"\$SMOKE_TOKEN\""]
+                env:
+                  - name: SMOKE_URL
+                    value: http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080
+                  - name: SMOKE_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: ${{ vars.ENV }}-omi-backend-secrets
+                        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+          EOF
 
-          kubectl -n ${{ vars.ENV }}-omi-backend wait --for=jsonpath='{.status.phase}'=Succeeded "pod/$SMOKE_POD" --timeout=120s && exit 0
+          for _ in {1..120}; do
+            PHASE="$(kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+            if [[ "$PHASE" == "Succeeded" ]]; then
+              exit 0
+            fi
+            if [[ "$PHASE" == "Failed" ]]; then
+              break
+            fi
+            sleep 1
+          done
 
           echo "=== llm-gateway smoke pod ==="
-          kubectl -n ${{ vars.ENV }}-omi-backend describe pod "$SMOKE_POD" || true
+          kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o wide || true
+          kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o jsonpath='{.status.phase}{"\n"}{range .status.containerStatuses[*]}{.name}{" ready="}{.ready}{" state="}{.state.terminated.reason}{" exit="}{.state.terminated.exitCode}{"\n"}{end}' || true
           echo "=== llm-gateway smoke logs ==="
           kubectl -n ${{ vars.ENV }}-omi-backend logs "$SMOKE_POD" || true
           exit 1

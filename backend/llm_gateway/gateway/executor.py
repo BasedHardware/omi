@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -18,6 +19,9 @@ from llm_gateway.gateway.providers import ChatCompletionProvider, ProviderFailur
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutStage, RouteArtifact
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
+from utils.log_sanitizer import sanitize
+
+EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR = 'LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS'
 
 
 @dataclass(frozen=True)
@@ -299,24 +303,30 @@ def _unsupported_provider_error(
 def _map_provider_failure(exc: ProviderFailure, credential_context: CredentialContext) -> GatewayError:
     failure_class = exc.failure_class
     if failure_class == FailureClass.INVALID_CONFIG:
-        return GatewayInvalidRouteConfigError(_safe_failure_message(failure_class), param='provider')
+        return GatewayInvalidRouteConfigError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
     if failure_class == FailureClass.CAPABILITY_MISMATCH:
-        return GatewayCapabilityMismatchError(_safe_failure_message(failure_class), param='provider')
+        return GatewayCapabilityMismatchError(_safe_failure_message(failure_class, exc.safe_message), param='provider')
     if credential_context.mode == CredentialMode.BYOK or is_byok_failure_class(failure_class):
         return GatewayCredentialFailureError(
-            _safe_failure_message(failure_class),
+            _safe_failure_message(failure_class, exc.safe_message),
             failure_class=failure_class,
             param='provider',
         )
     return GatewayProviderFailureError(
-        _safe_failure_message(failure_class),
+        _safe_failure_message(failure_class, exc.safe_message),
         failure_class=failure_class,
         param='provider',
     )
 
 
-def _safe_failure_message(failure_class: FailureClass) -> str:
+def _safe_failure_message(failure_class: FailureClass, provider_message: str | None = None) -> str:
+    if _expose_provider_error_details() and provider_message and provider_message != 'provider request failed':
+        return sanitize(provider_message)
     return f'provider request failed: {failure_class.value}'
+
+
+def _expose_provider_error_details() -> bool:
+    return os.getenv(EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR, '').strip().lower() == 'true'
 
 
 def _can_try_next_provider(route: RouteArtifact, failure_class: FailureClass | None) -> bool:

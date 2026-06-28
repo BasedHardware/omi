@@ -11,12 +11,14 @@ import httpx
 
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
+from utils.log_sanitizer import sanitize
 
 OPENAI_API_KEY_ENV_VAR = 'OPENAI_API_KEY'
 OPENAI_BASE_URL_ENV_VAR = 'OPENAI_BASE_URL'
 DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1'
 DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 MAX_RESPONSE_BYTES_ENV_VAR = 'OPENAI_MAX_RESPONSE_BYTES'
+PROVIDER_ERROR_DETAIL_BYTES = 1000
 
 
 class ChatCompletionProvider(Protocol):
@@ -78,10 +80,9 @@ class OpenAICompatibleChatCompletionProvider:
                 },
                 timeout=timeout_ms / 1000.0,
             ) as response:
-                _raise_for_status(response.status_code)
-                parsed = _parse_limited_json_response(
-                    await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
-                )
+                body = await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
+                _raise_for_status(response.status_code, body)
+                parsed = _parse_limited_json_response(body)
         except httpx.TimeoutException as exc:
             raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
         except httpx.HTTPError as exc:
@@ -155,17 +156,28 @@ def _default_fake_response(provider_ref: ProviderRef) -> dict[str, Any]:
     return fake_success_response(provider_ref)
 
 
-def _raise_for_status(status_code: int) -> None:
+def _raise_for_status(status_code: int, body: bytes = b'') -> None:
     if status_code in {401, 403}:
-        raise ProviderFailure(FailureClass.INVALID_CONFIG)
+        raise ProviderFailure(FailureClass.INVALID_CONFIG, safe_message=_provider_error_message(status_code, body))
     if status_code == 408:
-        raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT)
+        raise ProviderFailure(
+            FailureClass.TIMEOUT_BEFORE_OUTPUT, safe_message=_provider_error_message(status_code, body)
+        )
     if status_code == 429:
-        raise ProviderFailure(FailureClass.PROVIDER_429_OMI_PAID)
+        raise ProviderFailure(
+            FailureClass.PROVIDER_429_OMI_PAID, safe_message=_provider_error_message(status_code, body)
+        )
     if status_code >= 500:
-        raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+        raise ProviderFailure(
+            FailureClass.PROVIDER_5XX_OMI_PAID, safe_message=_provider_error_message(status_code, body)
+        )
     if status_code >= 400:
-        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH, safe_message=_provider_error_message(status_code, body))
+
+
+def _provider_error_message(status_code: int, body: bytes) -> str:
+    preview = body.decode('utf-8', errors='replace')[:PROVIDER_ERROR_DETAIL_BYTES]
+    return f'provider request failed: status={status_code} body={sanitize(preview)}'
 
 
 async def _read_limited_response(response: httpx.Response, *, max_bytes: int) -> bytes:
