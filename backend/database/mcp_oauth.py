@@ -4,7 +4,7 @@ import hmac
 import os
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 import re
 from urllib.parse import urlsplit
@@ -28,7 +28,7 @@ def hash_secret(secret: str) -> str:
 
 
 def _now() -> datetime:
-    return datetime.utcnow()
+    return datetime.now(timezone.utc)
 
 
 def _csv_env(name: str) -> list[str]:
@@ -430,7 +430,12 @@ def list_user_grants(uid: str) -> list[dict]:
         data = doc.to_dict() or {}
         data.setdefault("id", doc.id)
         grants.append(data)
-    grants.sort(key=lambda grant: grant.get("updated_at") or grant.get("created_at") or datetime.min, reverse=True)
+    grants.sort(
+        key=lambda grant: grant.get("updated_at")
+        or grant.get("created_at")
+        or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
     return grants
 
 
