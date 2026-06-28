@@ -8,3 +8,12 @@ allowBuilds:
   onnxruntime-node: true
   protobufjs: true
   sharp: true
+supportedArchitectures:
+  os:
+    - current
+    - win32
+  cpu:
+    - current
+    - x64
+  libc:
+    - current
