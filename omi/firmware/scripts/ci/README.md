@@ -57,6 +57,10 @@ the version if you need to re-release.
 
 ## Notes
 
+- The Release is created by the **Omi Bot GitHub App** (`actions/create-github-app-token`,
+  secrets `OMI_BOT_APP_ID` / `OMI_BOT_PRIVATE_KEY`) so it is clearly attributed to
+  automation rather than a person — same as the desktop pipeline. The token is only
+  minted on a publish run; build-only QA runs don't need the secrets.
 - The build is heavy: ~1.5 GB NCS download + ~20-30 min on a cold cache.
 - DK2 / OmiGlass are **not** automated here yet. DK2 can be added as a second job
   (NCS 2.7.0 + `adafruit-nrfutil`); OmiGlass uses a separate ESP32/PlatformIO toolchain.
