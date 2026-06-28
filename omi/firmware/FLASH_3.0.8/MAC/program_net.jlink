@@ -1,5 +1,0 @@
-device nRF5340_xxAA_NET
-si SWD
-speed 4000
-loadfile merged_CPUNET.hex
-q

@@ -80,8 +80,6 @@ Cloud providers use your own API key, stored locally on your device only.
 | Desktop app (macOS) | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
 | Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
-| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python |
-| MCP Server | [`mcp/`](mcp/) | Model Context Protocol integration |
 
 </details>
 
