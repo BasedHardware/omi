@@ -37,6 +37,10 @@ jobs:
   android-apk:
     name: Android (.apk)
     runs-on: ubuntu-latest
+    # Best-effort: a clean CI checkout lacks the app's (gitignored) Firebase
+    # config files (lib/firebase_options_*.dart), so the Flutter compile can't
+    # complete without secrets. Don't fail the whole run on it.
+    continue-on-error: true
     defaults:
       run:
         working-directory: app
