@@ -116,7 +116,20 @@ jobs:
               ./backend/charts/llm-gateway \
               -f ./backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml \
               --set "image.tag=${GITHUB_SHA::7}"
-            kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-llm-gateway --timeout=300s
+            if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-llm-gateway --timeout=300s; then
+              echo "=== llm-gateway deployment ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend describe deploy/${{ vars.ENV }}-omi-llm-gateway || true
+              echo "=== llm-gateway pods ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-llm-gateway -o wide || true
+              kubectl -n ${{ vars.ENV }}-omi-backend describe pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-llm-gateway || true
+              echo "=== llm-gateway logs ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend logs -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-llm-gateway --tail=200 || true
+              echo "=== backend ExternalSecret status ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend describe externalsecret/${{ vars.ENV }}-omi-backend-external-secret || true
+              echo "=== backend secret key presence ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data}' | python -c 'import json,sys; print("\\n".join(sorted(json.load(sys.stdin).keys())))' || true
+              exit 1
+            fi
           else
             helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
           fi
