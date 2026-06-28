@@ -19,9 +19,13 @@ on:
         description: 'Release version (optional)'
         required: false
         default: ''
+      service:
+        description: 'Service to deploy'
+        required: false
+        default: 'pusher'
 
 env:
-  SERVICE: pusher
+  SERVICE: ${{ github.event.inputs.service || 'pusher' }}
   REGION: us-central1
 
 jobs:
@@ -37,6 +41,10 @@ jobs:
         run: |
           if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
             echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          if [[ "${{ env.SERVICE }}" != "pusher" && "${{ env.SERVICE }}" != "llm-gateway" ]]; then
+            echo "Invalid service: ${{ env.SERVICE }}. Must be 'pusher' or 'llm-gateway'."
             exit 1
           fi
 
@@ -69,7 +77,11 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
+          if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
+            docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
+          else
+            docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
+          fi
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
 
       # - name: Deploy to Cloud Run
@@ -89,7 +101,36 @@ jobs:
 
       - name: Deploy Pusher to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
+            python backend/scripts/validate-llm-gateway-env.py \
+              backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+              backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
+              ./backend/charts/backend-secrets \
+              -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
+            kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
+              ${{ vars.ENV }}-omi-backend-external-secret \
+              force-sync="$(date +%s)" --overwrite
+            sleep 10
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-llm-gateway \
+              ./backend/charts/llm-gateway \
+              -f ./backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml \
+              --set "image.tag=${GITHUB_SHA::7}"
+            kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-llm-gateway --timeout=300s
+          else
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          fi
+
+      - name: Smoke LLM Gateway
+        if: env.SERVICE == 'llm-gateway'
+        run: |
+          TOKEN="$(kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data.OMI_LLM_GATEWAY_SERVICE_TOKEN}' | base64 -d)"
+          kubectl -n ${{ vars.ENV }}-omi-backend run "llm-gateway-smoke-${GITHUB_RUN_ID}" \
+            --rm -i --restart=Never \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
+            --env "SMOKE_URL=http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080" \
+            --env "SMOKE_TOKEN=$TOKEN" \
+            --command -- sh -c 'python scripts/smoke-llm-gateway.py --url "$SMOKE_URL" --token "$SMOKE_TOKEN"'
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
