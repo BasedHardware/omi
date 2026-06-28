@@ -81,6 +81,97 @@ final class CloudConnectorGuidanceOverlay {
     }
   }
 
+  /// Non-pointing instruction card, shown when we cannot anchor to a real target (e.g.
+  /// the Screen Recording permission fallback). It explains what to do and is placed
+  /// near the relevant window (System Settings) so the user connects the dots.
+  func presentInstructionCard(title: String, subtitle: String, near anchor: CGRect?) {
+    dismissTask?.cancel()
+    window?.close()
+
+    let cardSize = CGSize(width: 400, height: 110)
+    let screen = Self.screen(forAnchor: anchor)
+    let frame = Self.instructionCardFrame(
+      anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
+
+    lastAutomationState = [
+      "visible": "true",
+      "kind": "instruction",
+      "title": title,
+      "subtitle": subtitle,
+      "panelFrame": Self.string(frame),
+    ]
+
+    let view = CloudConnectorInstructionCardView(
+      title: title, subtitle: subtitle, size: cardSize,
+      onDismiss: { [weak self] in self?.dismiss() })
+    let hostingController = NSHostingController(rootView: view)
+    hostingController.view.frame = CGRect(origin: .zero, size: cardSize)
+
+    let panel = NSPanel(
+      contentRect: frame,
+      styleMask: [.borderless, .nonactivatingPanel],
+      backing: .buffered,
+      defer: false
+    )
+    panel.contentViewController = hostingController
+    panel.isOpaque = false
+    panel.backgroundColor = .clear
+    panel.hasShadow = false
+    panel.level = .popUpMenu
+    // The card carries a close button, so it must receive clicks (the pointing overlay
+    // stays click-through).
+    panel.ignoresMouseEvents = false
+    panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    panel.animationBehavior = .none
+    panel.orderFrontRegardless()
+    window = panel
+
+    dismissTask = Task { [weak self] in
+      try? await Task.sleep(nanoseconds: 30_000_000_000)
+      await MainActor.run {
+        guard !Task.isCancelled else { return }
+        self?.dismiss()
+      }
+    }
+  }
+
+  private static func screen(forAnchor anchor: CGRect?) -> NSScreen {
+    if let anchor {
+      let overlapping = NSScreen.screens
+        .map { screen -> (NSScreen, CGFloat) in
+          let r = screen.frame.intersection(anchor)
+          let area = (r.isNull || r.isEmpty) ? 0 : r.width * r.height
+          return (screen, area)
+        }
+        .filter { $0.1 > 0 }
+        .sorted { $0.1 > $1.1 }
+      if let best = overlapping.first?.0 { return best }
+    }
+    return NSScreen.main ?? NSScreen.screens.first ?? NSScreen()
+  }
+
+  /// Pure placement: center the card horizontally on the anchor and pin it near the
+  /// anchor's top edge, clamped inside the visible frame. With no anchor, center it in
+  /// the upper third of the screen. Testable.
+  /// Parse an "x,y,w,h" anchor string (AppKit global) for the dogfood bridge action.
+  static func anchorRect(fromParam raw: String?) -> CGRect? {
+    guard let parts = raw?.split(separator: ",").map({ Double($0.trimmingCharacters(in: .whitespaces)) }),
+      parts.count == 4, let x = parts[0], let y = parts[1], let w = parts[2], let h = parts[3]
+    else { return nil }
+    return CGRect(x: x, y: y, width: w, height: h)
+  }
+
+  static func instructionCardFrame(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect)
+    -> CGRect
+  {
+    let target = anchor ?? visibleFrame
+    let x = target.midX - cardSize.width / 2
+    // AppKit: maxY is the top edge. Sit just below the top of the anchored window.
+    let y = anchor != nil ? target.maxY - cardSize.height - 24 : target.midY + target.height / 6
+    let proposed = CGRect(x: x, y: y, width: cardSize.width, height: cardSize.height)
+    return SpatialOverlayGeometry.clamped(proposed, to: visibleFrame, padding: 12)
+  }
+
   func dismiss() {
     dismissTask?.cancel()
     dismissTask = nil
@@ -195,6 +286,61 @@ final class CloudConnectorGuidanceOverlay {
 
   private static func string(_ rect: CGRect) -> String {
     "\(String(format: "%.1f", rect.minX)),\(String(format: "%.1f", rect.minY)),\(String(format: "%.1f", rect.width)),\(String(format: "%.1f", rect.height))"
+  }
+}
+
+private struct CloudConnectorInstructionCardView: View {
+  let title: String
+  let subtitle: String
+  let size: CGSize
+  let onDismiss: () -> Void
+
+  var body: some View {
+    HStack(alignment: .top, spacing: 12) {
+      ZStack {
+        Circle().fill(OmiColors.success.opacity(0.18))
+        Image(systemName: "checklist")
+          .scaledFont(size: 16, weight: .bold)
+          .foregroundColor(OmiColors.success)
+      }
+      .frame(width: 36, height: 36)
+
+      VStack(alignment: .leading, spacing: 3) {
+        Text(title)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+          .fixedSize(horizontal: false, vertical: true)
+        Text(subtitle)
+          .scaledFont(size: 12, weight: .medium)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+
+      Button(action: onDismiss) {
+        Image(systemName: "xmark")
+          .scaledFont(size: 11, weight: .bold)
+          .foregroundColor(OmiColors.textTertiary)
+          .frame(width: 22, height: 22)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help("Dismiss")
+    }
+    .padding(.leading, 16)
+    .padding(.trailing, 10)
+    .padding(.vertical, 14)
+    .frame(width: size.width, height: size.height, alignment: .topLeading)
+    .background(
+      RoundedRectangle(cornerRadius: 18, style: .continuous)
+        .fill(Color.black.opacity(0.9))
+    )
+    .overlay(
+      RoundedRectangle(cornerRadius: 18, style: .continuous)
+        .stroke(OmiColors.success.opacity(0.55), lineWidth: 1)
+    )
+    .shadow(color: .black.opacity(0.32), radius: 18, y: 8)
+    .contentShape(Rectangle())
+    .onTapGesture(perform: onDismiss)
   }
 }
 
