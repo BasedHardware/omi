@@ -1,6 +1,6 @@
 {
   "unreleased": [
-    "Made Claude cloud connector setup use a verified Add button target instead of a fragile keyboard submit"
+    "Made Claude cloud connector setup use verified button targets and show an in-browser guidance overlay when one final click is needed"
   ],
   "releases": [
     {

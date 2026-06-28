@@ -526,4 +526,14 @@ final class BrowserAutomationTargetTests: XCTestCase {
       )
     )
   }
+
+  func testClaudeConnectGuidanceAnchorStaysInRightPane() {
+    let windowFrame = CGRect(x: 80, y: 60, width: 1600, height: 1000)
+    let anchor = CloudConnectorFormAutomation.claudeConnectGuidanceAnchor(in: windowFrame)
+
+    XCTAssertGreaterThan(anchor.x, windowFrame.midX)
+    XCTAssertLessThan(anchor.x, windowFrame.maxX)
+    XCTAssertGreaterThan(anchor.y, windowFrame.minY + windowFrame.height * 0.2)
+    XCTAssertLessThan(anchor.y, windowFrame.minY + windowFrame.height * 0.5)
+  }
 }

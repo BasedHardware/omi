@@ -245,7 +245,7 @@ enum CloudConnectorFormAutomation {
     submit: Bool
   ) async -> String? {
     guard provider == "claude" else { return nil }
-    guard let target = findClaudeConnectorTarget() else {
+    guard let target = findClaudeConnectorTargetWithNodes().map({ (app: $0.app, state: $0.state) }) else {
       return nil
     }
 
@@ -280,6 +280,33 @@ enum CloudConnectorFormAutomation {
     case .other:
       return .refuse
     }
+  }
+
+  static func showClaudeConnectGuidanceOverlay() -> Bool {
+    guard let target = findClaudeConnectorTargetWithNodes(),
+      target.state == .connectorDetailNotConnected,
+      let windowFrame = largestWindowFrame(in: target.nodes)
+    else {
+      return false
+    }
+
+    target.app.activate()
+    CloudConnectorGuidanceOverlay.shared.presentClaudeConnectHint(
+      windowFrame: windowFrame,
+      targetPoint: claudeConnectGuidanceAnchor(in: windowFrame)
+    )
+    return true
+  }
+
+  static func dismissGuidanceOverlay() {
+    CloudConnectorGuidanceOverlay.shared.dismiss()
+  }
+
+  nonisolated static func claudeConnectGuidanceAnchor(in windowFrame: CGRect) -> CGPoint {
+    CGPoint(
+      x: windowFrame.minX + windowFrame.width * 0.72,
+      y: windowFrame.minY + windowFrame.height * 0.33
+    )
   }
 
   private static func fillClaudeConnectorAddModalByKeyboard(
@@ -618,8 +645,8 @@ enum CloudConnectorFormAutomation {
     return available[index]
   }
 
-  private static func findClaudeConnectorTarget() -> (
-    app: NSRunningApplication, state: ClaudeConnectorPageState
+  private static func findClaudeConnectorTargetWithNodes() -> (
+    app: NSRunningApplication, state: ClaudeConnectorPageState, nodes: [AccessibleNode]
   )? {
     let ownBundleID = Bundle.main.bundleIdentifier
     let browserApps = NSWorkspace.shared.runningApplications.filter { app in
@@ -634,7 +661,7 @@ enum CloudConnectorFormAutomation {
         let nodes = collectNodes(from: root, maxDepth: 10, maxNodes: 500)
         let state = claudeConnectorPageState(nodes: nodes)
         if state != .other {
-          return (app, state)
+          return (app, state, nodes)
         }
       }
     }

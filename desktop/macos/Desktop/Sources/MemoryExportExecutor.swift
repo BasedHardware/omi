@@ -95,6 +95,8 @@ enum MemoryExportExecutor {
     openURL: URL,
     key: String
   ) async throws -> Outcome {
+    CloudConnectorFormAutomation.dismissGuidanceOverlay()
+
     let args: [String: Any] = [
       "provider": "claude",
       "name": "Omi Memory",
@@ -121,6 +123,7 @@ enum MemoryExportExecutor {
       lastResult = await CloudConnectorFormAutomation.fill(args)
       log("Claude cloud setup: native automation attempt \(attempt) result=\(cloudFormFillResultSummary(lastResult))")
       if cloudFormFillSucceeded(lastResult) {
+        CloudConnectorFormAutomation.dismissGuidanceOverlay()
         return Outcome(
           taskTitle: "Claude connector form submitted. If Claude shows a final consent prompt, approve Omi Memory.",
           mode: .completed)
@@ -130,8 +133,12 @@ enum MemoryExportExecutor {
         throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
       }
       if cloudFormFillRequiresScreenRecordingApproval(lastResult) {
-        requestScreenRecordingApprovalForCloudSetup()
-        throw ExecutorError.browserSetupRequired(cloudSetupScreenRecordingPermissionMessage)
+        if CloudConnectorFormAutomation.showClaudeConnectGuidanceOverlay() {
+          throw ExecutorError.browserSetupRequired(cloudSetupManualClaudeConnectMessage)
+        } else {
+          requestScreenRecordingApprovalForCloudSetup()
+          throw ExecutorError.browserSetupRequired(cloudSetupScreenRecordingPermissionMessage)
+        }
       }
       if !cloudFormFillShouldRetry(lastResult) {
         break
@@ -199,6 +206,14 @@ enum MemoryExportExecutor {
     Omi needs Screen Recording permission to finish Claude setup automatically.
 
     I added the Claude connector, but Claude hides the final Connect button from Accessibility in this browser. Approve Screen Recording for this Omi app in System Settings, then click "Do it for me" again.
+    """
+  }
+
+  private static var cloudSetupManualClaudeConnectMessage: String {
+    """
+    Claude is waiting for one final click.
+
+    I added the connector and pointed to the Connect button in your browser.
     """
   }
 
