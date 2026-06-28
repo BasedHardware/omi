@@ -127,6 +127,7 @@ export type ByokValidationResult = {
 export type ByokChatRequest = {
   messages: ChatMessage[]
   modelId?: string
+  systemPrompt?: string
 }
 
 export type ByokChatResponse = {
