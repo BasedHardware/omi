@@ -569,7 +569,11 @@ class TestBYOKCustomProvider:
     @pytest.fixture(autouse=True)
     def _public_dns(self):
         # Resolve hostnames to a public IP by default so base-URL validation is
-        # offline and deterministic; the DNS-specific tests override this.
+        # offline and deterministic; the DNS-specific tests override this. Clear the
+        # resolution cache so each test's mocked getaddrinfo actually runs.
+        import utils.byok as _byok
+
+        _byok._DNS_VALIDATION_CACHE.clear()
         with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('104.18.0.1', 443))]):
             yield
 
@@ -640,6 +644,16 @@ class TestBYOKCustomProvider:
 
         with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('93.184.216.34', 443))]):
             assert validate_custom_base_url('https://api.example.com/v1') == 'https://api.example.com/v1'
+
+    def test_resolution_is_cached(self):
+        # A repeat validation of the same host is served from the cache, not a
+        # second blocking getaddrinfo.
+        from utils.byok import validate_custom_base_url
+
+        with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('93.184.216.34', 443))]) as m:
+            validate_custom_base_url('https://cached.example.com/v1')
+            validate_custom_base_url('https://cached.example.com/v1')
+            m.assert_called_once()
 
     # --- get_byok_custom_provider (per-request config) ---
     def test_returns_full_config(self):
