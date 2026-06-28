@@ -486,6 +486,20 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
     }
+
+    register(
+      name: "spatial_overlay_present_instruction",
+      summary: "Present the Screen Recording fallback instruction card (dogfood/visual)"
+    ) { params in
+      let title = params["title"] ?? "Allow Screen Recording for Omi"
+      let subtitle =
+        params["subtitle"]
+        ?? "Turn on Omi under Screen & System Audio Recording, then return to Claude and click Add."
+      let anchor = CloudConnectorGuidanceOverlay.anchorRect(fromParam: params["anchor"])
+      CloudConnectorGuidanceOverlay.shared.presentInstructionCard(
+        title: title, subtitle: subtitle, near: anchor)
+      return CloudConnectorGuidanceOverlay.shared.automationState()
+    }
   }
 }
 
