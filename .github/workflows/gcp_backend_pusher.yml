@@ -207,6 +207,11 @@ jobs:
           for _ in {1..120}; do
             PHASE="$(kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
             if [[ "$PHASE" == "Succeeded" ]]; then
+              echo "=== llm-gateway smoke pod ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o wide || true
+              kubectl -n ${{ vars.ENV }}-omi-backend get pod "$SMOKE_POD" -o jsonpath='{.status.phase}{"\n"}{range .status.containerStatuses[*]}{.name}{" ready="}{.ready}{" state="}{.state.terminated.reason}{" exit="}{.state.terminated.exitCode}{"\n"}{end}' || true
+              echo "=== llm-gateway smoke logs ==="
+              kubectl -n ${{ vars.ENV }}-omi-backend logs "$SMOKE_POD" || true
               exit 0
             fi
             if [[ "$PHASE" == "Failed" ]]; then
