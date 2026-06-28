@@ -2636,6 +2636,7 @@
     "addTask": "Feladat hozzáadása",
     "newTask": "Új feladat",
     "viewAll": "Összes megtekintése",
+    "expand": "Kibontás",
     "whatsNewInVersion": "Újdonságok a {version} verzióban",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",
@@ -3159,7 +3160,7 @@
     "captureModeLiveDescription": "Átírás valós időben, miközben beszélsz.",
     "captureModeLaterDescription": "Mentsd el a hangot most, és írd át, amikor csak akarod.",
     "backgroundModeUnavailable": "A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt.",
-    "deviceTutorial": "Eszközoktató",
+    "deviceTutorial": "Az Omi használata",
     "deviceOnboardingTranscriptionTitle": "Beszélj az Omihoz",
     "deviceOnboardingTranscriptionSubtitle": "Mondj néhány szót, és nézd, ahogy valós időben megjelennek",
     "deviceOnboardingGoodJob": "Szép munka!",
@@ -3187,5 +3188,10 @@
     "deviceOnboardingSingleTapHint": "Ez egyszeri koppintás volt – próbálj meg gyorsan kétszer koppintani!",
     "deviceOnboardingTryDoubleTap": "Próbáld ki most! Koppints duplán az Omira",
     "deviceOnboardingContinue": "Folytatás",
-    "deviceOnboardingFinish": "Befejezés"
+    "deviceOnboardingFinish": "Befejezés",
+    "deviceOnboardingIntroTitle": "Ismerd meg az Omidat",
+    "deviceOnboardingIntroSubtitle": "Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.",
+    "deviceOnboardingIntroDuration": "Körülbelül 1 perc",
+    "jumpToLatestMessage": "Ugrás a legújabb üzenethez",
+    "latest": "Legújabb"
 }

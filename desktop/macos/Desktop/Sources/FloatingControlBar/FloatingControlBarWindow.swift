@@ -1015,11 +1015,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     }
 
-    func showAgentRowsFromConversation() {
-        guard !AgentPillsManager.shared.pills.isEmpty else {
-            closeAIConversation()
-            return
+    func leaveAgentConversation() {
+        if state.usesNotchIsland, !AgentPillsManager.shared.pills.isEmpty {
+            showAgentRowsFromConversation()
+        } else {
+            showMainConversationFromAgent()
         }
+    }
+
+    private func showAgentRowsFromConversation() {
+        guard !AgentPillsManager.shared.pills.isEmpty else { return showMainConversationFromAgent() }
 
         responseHeightCancellable?.cancel()
         responseHeightCancellable = nil
@@ -1029,6 +1034,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             state.hideConversationSurface()
         }
         openNotchHoverMenuUntilExit()
+    }
+
+    private func showMainConversationFromAgent() {
+        guard state.activeAgentChatPillID != nil else {
+            closeAIConversation()
+            return
+        }
+
+        state.leaveAgentSurface()
+        if state.conversationSurface == .mainInput {
+            resizeForMainInputAfterAgentExit()
+        } else {
+            resizeForActiveAgentChatPublic(pillID: nil, animated: true)
+        }
+        focusInputField()
     }
 
     private func animateNotchReveal(from sourceSize: NSSize, to targetSize: NSSize, duration: TimeInterval) {
@@ -1056,7 +1076,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard state.showingAIConversation else { return }
 
         if state.activeAgentChatPillID != nil {
-            showAgentRowsFromConversation()
+            leaveAgentConversation()
             return
         }
 
@@ -1733,7 +1753,7 @@ class FloatingControlBarManager {
     /// chat when dismissing a pill.)
     func leaveActiveAgentSurfaceFromPillDismiss() {
         guard let window else { return }
-        window.showAgentRowsFromConversation()
+        window.leaveAgentConversation()
     }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
@@ -2138,22 +2158,26 @@ class FloatingControlBarManager {
             return ["error": "floating_bar_window_unavailable"]
         }
         let start = ContinuousClock.now
-        window.showAgentRowsFromConversation()
+        let expectsRows = window.state.usesNotchIsland && !AgentPillsManager.shared.pills.isEmpty
+        window.leaveAgentConversation()
         guard wait else {
             return [
                 "triggered": "true",
                 "active": window.state.activeAgentChatPillID?.uuidString ?? "",
+                "mode": expectsRows ? "rows" : "main",
                 "rowsOpen": window.state.isNotchHoverMenuVisible ? "true" : "false",
             ]
         }
         let backMs = await waitForAutomationCondition {
             window.state.activeAgentChatPillID == nil
-                && !window.state.showingAIConversation
-                && window.state.isNotchHoverMenuVisible
+                && (expectsRows
+                    ? (!window.state.showingAIConversation && window.state.isNotchHoverMenuVisible)
+                    : window.state.showingAIConversation)
         }
         return [
             "backMs": backMs ?? "timeout",
             "elapsedMs": start.duration(to: .now).millisecondsString,
+            "mode": expectsRows ? "rows" : "main",
             "rowsOpen": window.state.isNotchHoverMenuVisible ? "true" : "false",
             "frame": NSStringFromRect(window.frame),
         ]
@@ -2474,8 +2498,12 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         presentation: QueryPresentation
     ) async {
+        let directive = AgentPillsManager.providerDirective(
+            from: message,
+            contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)
+        )
         let handoff = AgentPillsManager.floatingAgentHandoff(for: message)
-        if provider.isSending, handoff == nil {
+        if provider.isSending, directive == nil, handoff == nil {
             pendingFollowUpQuery = PendingFollowUpQuery(text: message, presentation: presentation)
             if case .visible(let fromVoice) = presentation {
                 prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
@@ -2492,6 +2520,41 @@ class FloatingControlBarManager {
         }
 
         let routerTracer = QueryTracerContext.current
+        if let directive {
+            if provider.isSending {
+                pendingFollowUpQuery = nil
+                provider.stopAgent()
+            }
+            routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
+            let pill = AgentPillsManager.shared.spawnFromUserQuery(
+                directive.rewrittenQuery,
+                model: selectedFloatingModel,
+                fromVoice: presentation.fromVoice,
+                preFetchedTitle: directive.title,
+                preFetchedAck: directive.ack,
+                bridgeHarnessOverride: directive.provider.harnessMode
+            )
+            let assistantText = "I started \(directive.provider.displayName) in a background agent titled \"\(pill.title)\"."
+            let recordedTurn = provider.recordCompletedTurn(
+                userText: message,
+                assistantText: assistantText,
+                logLabel: "floating-agent-provider"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentHandoff(
+                    .init(originalRequest: message, agentTask: directive.rewrittenQuery),
+                    assistantMessage: recordedTurn.assistant,
+                    assistantText: assistantText,
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+            }
+            return
+        }
+
         if let handoff {
             if provider.isSending {
                 pendingFollowUpQuery = nil
@@ -2574,6 +2637,16 @@ class FloatingControlBarManager {
 
         // Chat route: continue with the requested delivery surface.
         await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+    }
+
+    private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String? {
+        let displayed = barWindow.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !displayed.isEmpty {
+            return displayed
+        }
+        return barWindow.state.chatHistory.reversed().compactMap { exchange in
+            exchange.question?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first { !$0.isEmpty }
     }
 
     private func dispatchChatQuery(
@@ -3356,6 +3429,20 @@ extension FloatingControlBarWindow {
         state.resetMeasuredContentHeight(for: .mainResponse)
         beginMainResponseHeight(animated: animated)
         orderFrontRegardless()
+    }
+
+    /// Resize the window to the normal Ask Omi input height after exiting an
+    /// agent surface to `.mainInput`. Cancels the response-height observer and
+    /// installs the input-height observer so non-Notch displays preserve the
+    /// legacy "back to Omi chat" behavior instead of using Notch row navigation.
+    func resizeForMainInputAfterAgentExit() {
+        responseHeightCancellable?.cancel()
+        responseHeightCancellable = nil
+        state.responseContentHeight = 0
+        state.inputViewHeight = inputPanelHeight
+        let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
+        resizeAnchored(to: inputSize, makeResizable: false, animated: true, anchorTop: true)
+        setupInputHeightObserver()
     }
 
     /// Save the current center point so closeAIConversation can restore position.

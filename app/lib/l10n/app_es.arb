@@ -2541,6 +2541,7 @@
     "addTask": "Añadir tarea",
     "newTask": "Nueva tarea",
     "viewAll": "Ver todo",
+    "expand": "Expandir",
     "whatsNewInVersion": "Novedades en {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",
@@ -3064,7 +3065,7 @@
     "captureModeLiveDescription": "Transcribe en tiempo real mientras hablas.",
     "captureModeLaterDescription": "Guarda el audio ahora y transcríbelo cuando quieras.",
     "backgroundModeUnavailable": "El modo en segundo plano no está disponible porque no hay ningún dispositivo compatible conectado. Conecta un dispositivo Omi, OpenGlass o Friend Pendant para usar esta función.",
-    "deviceTutorial": "Tutorial del dispositivo",
+    "deviceTutorial": "Cómo usar tu Omi",
     "deviceOnboardingTranscriptionTitle": "Háblale a tu Omi",
     "deviceOnboardingTranscriptionSubtitle": "Di unas palabras y míralas aparecer en tiempo real",
     "deviceOnboardingGoodJob": "¡Bien hecho!",
@@ -3092,5 +3093,10 @@
     "deviceOnboardingSingleTapHint": "Eso fue un solo toque, ¡intenta tocar dos veces rápido!",
     "deviceOnboardingTryDoubleTap": "¡Pruébalo ahora! Toca dos veces tu Omi",
     "deviceOnboardingContinue": "Continuar",
-    "deviceOnboardingFinish": "Finalizar"
+    "deviceOnboardingFinish": "Finalizar",
+    "deviceOnboardingIntroTitle": "Conoce tu Omi",
+    "deviceOnboardingIntroSubtitle": "Un recorrido rápido y práctico por todo lo que tu Omi puede hacer.",
+    "deviceOnboardingIntroDuration": "Aproximadamente 1 minuto",
+    "jumpToLatestMessage": "Ir al mensaje más reciente",
+    "latest": "Más reciente"
 }

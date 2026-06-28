@@ -29,6 +29,12 @@ Builds the macOS app, connects to the cloud backend, and launches. No env files,
 
 > **Requirements:** macOS 14+, [Xcode](https://developer.apple.com/xcode/) (includes Swift & code signing), [Node.js](https://nodejs.org/)
 
+For development worktrees, run the cheap local setup once:
+
+```bash
+make setup
+```
+
 <details>
   <summary>Full Installation</summary>
   

@@ -1718,12 +1718,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'PERANGKAT',
-      one: 'PERANGKAT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -7775,6 +7770,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get viewAll => 'Lihat semua';
 
   @override
+  String get expand => 'Perluas';
+
+  @override
   String get addTask => 'Tambah tugas';
 
   @override
@@ -9200,11 +9198,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rekaman siap disinkronkan',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count rekaman siap disinkronkan');
     return '$_temp0';
   }
 
@@ -9216,11 +9210,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rekaman perlu perhatian',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count rekaman perlu perhatian');
     return '$_temp0';
   }
 
@@ -9373,7 +9363,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get transcribeLaterPaused => 'Dijeda — audio tidak sedang direkam';
 
   @override
-  String get deviceTutorial => 'Tutorial Perangkat';
+  String get deviceTutorial => 'Cara Menggunakan Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Bicara ke Omi Anda';
@@ -9460,4 +9450,18 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Selesai';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kenali Omi Anda';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Tur singkat dan praktis tentang semua yang bisa dilakukan Omi Anda.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Sekitar 1 menit';
+  @override
+  String get jumpToLatestMessage => 'Lompat ke pesan terbaru';
+
+  @override
+  String get latest => 'Terbaru';
 }

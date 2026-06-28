@@ -1700,12 +1700,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'أجهزة',
-      one: 'جهاز',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -7711,6 +7706,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get viewAll => 'عرض الكل';
 
   @override
+  String get expand => 'توسيع';
+
+  @override
   String get addTask => 'إضافة مهمة';
 
   @override
@@ -9309,7 +9307,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transcribeLaterPaused => 'متوقف مؤقتًا — لا يتم تسجيل الصوت';
 
   @override
-  String get deviceTutorial => 'دليل الجهاز';
+  String get deviceTutorial => 'كيفية استخدام Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'تحدّث إلى Omi';
@@ -9394,4 +9392,18 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'إنهاء';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'تعرّف على Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'جولة سريعة وعملية على كل ما يمكن أن يفعله جهاز Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'حوالي دقيقة واحدة';
+  @override
+  String get jumpToLatestMessage => 'الانتقال إلى أحدث رسالة';
+
+  @override
+  String get latest => 'الأحدث';
 }

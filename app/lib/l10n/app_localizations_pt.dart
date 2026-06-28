@@ -7764,6 +7764,9 @@ class AppLocalizationsPt extends AppLocalizations {
   String get viewAll => 'Ver tudo';
 
   @override
+  String get expand => 'Expandir';
+
+  @override
   String get addTask => 'Adicionar tarefa';
 
   @override
@@ -9370,7 +9373,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get transcribeLaterPaused => 'Em pausa — o áudio não está a ser gravado';
 
   @override
-  String get deviceTutorial => 'Tutorial do dispositivo';
+  String get deviceTutorial => 'Como usar o Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Fale com o seu Omi';
@@ -9456,4 +9459,18 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Concluir';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Conheça o seu Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Um tour rápido e prático por tudo o que o seu Omi pode fazer.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cerca de 1 minuto';
+  @override
+  String get jumpToLatestMessage => 'Ir para a mensagem mais recente';
+
+  @override
+  String get latest => 'Mais recente';
 }

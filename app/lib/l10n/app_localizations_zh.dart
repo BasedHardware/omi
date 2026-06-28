@@ -7628,6 +7628,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewAll => '查看全部';
 
   @override
+  String get expand => '展开';
+
+  @override
   String get addTask => '添加任务';
 
   @override
@@ -8304,12 +8307,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已创建 $count 个对话',
-      one: '已创建 1 个对话',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
     return '$_temp0';
   }
 
@@ -9030,11 +9028,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音可同步',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音可同步');
     return '$_temp0';
   }
 
@@ -9046,11 +9040,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音需要关注',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音需要关注');
     return '$_temp0';
   }
 
@@ -9195,7 +9185,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterPaused => '已暂停 — 当前未在录音';
 
   @override
-  String get deviceTutorial => '设备教程';
+  String get deviceTutorial => '如何使用 Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => '对着 Omi 说话';
@@ -9280,4 +9270,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => '完成';
+
+  @override
+  String get deviceOnboardingIntroTitle => '了解你的 Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => '快速、上手地体验 Omi 的全部功能。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '大约 1 分钟';
+  @override
+  String get jumpToLatestMessage => '跳转到最新消息';
+
+  @override
+  String get latest => '最新';
 }

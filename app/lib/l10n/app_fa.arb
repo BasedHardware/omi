@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "مشاهده همه",
+    "expand": "گسترش",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10641,7 +10642,7 @@
     "captureModeLiveDescription": "رونویسی همزمان هنگام صحبت کردن.",
     "captureModeLaterDescription": "صدا را اکنون ذخیره کنید و هر وقت خواستید رونویسی کنید.",
     "backgroundModeUnavailable": "حالت پس‌زمینه در دسترس نیست چون هیچ دستگاه سازگاری متصل نیست. برای استفاده از این ویژگی، یک دستگاه Omi، OpenGlass یا Friend Pendant وصل کنید.",
-    "deviceTutorial": "آموزش دستگاه",
+    "deviceTutorial": "نحوه استفاده از Omi",
     "deviceOnboardingTranscriptionTitle": "با Omi خود صحبت کنید",
     "deviceOnboardingTranscriptionSubtitle": "چند کلمه بگویید و ظاهر شدن آن‌ها را به‌صورت لحظه‌ای ببینید",
     "deviceOnboardingGoodJob": "آفرین!",
@@ -10669,5 +10670,10 @@
     "deviceOnboardingSingleTapHint": "آن یک ضربه بود — دو بار سریع ضربه بزنید!",
     "deviceOnboardingTryDoubleTap": "همین حالا امتحان کنید! روی Omi خود دو ضربه بزنید",
     "deviceOnboardingContinue": "ادامه",
-    "deviceOnboardingFinish": "پایان"
+    "deviceOnboardingFinish": "پایان",
+    "deviceOnboardingIntroTitle": "با Omi خود آشنا شوید",
+    "deviceOnboardingIntroSubtitle": "یک گشت سریع و کاربردی در همه‌ی کارهایی که Omi شما می‌تواند انجام دهد.",
+    "deviceOnboardingIntroDuration": "حدود ۱ دقیقه",
+    "jumpToLatestMessage": "پرش به آخرین پیام",
+    "latest": "آخرین"
 }

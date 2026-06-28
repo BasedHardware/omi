@@ -1718,12 +1718,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -7810,6 +7805,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get viewAll => 'అన్నీ చూడండి';
 
   @override
+  String get expand => 'విస్తరించు';
+
+  @override
   String get addTask => 'కార్యం జోడించండి';
 
   @override
@@ -8502,12 +8500,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9414,7 +9407,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get transcribeLaterPaused => 'పాజ్ చేయబడింది — ఆడియో రికార్డ్ కావడం లేదు';
 
   @override
-  String get deviceTutorial => 'పరికర ట్యుటోరియల్';
+  String get deviceTutorial => 'Omi ని ఎలా ఉపయోగించాలి';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'మీ Omiతో మాట్లాడండి';
@@ -9499,4 +9492,18 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'ముగించు';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'మీ Omiని తెలుసుకోండి';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'మీ Omi చేయగలిగే ప్రతిదాని గురించి త్వరిత, ప్రత్యక్ష పరిచయం.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'సుమారు 1 నిమిషం';
+  @override
+  String get jumpToLatestMessage => 'తాజా సందేశానికి వెళ్ళు';
+
+  @override
+  String get latest => 'తాజా';
 }

@@ -186,7 +186,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// The app title displayed in various places
@@ -14523,6 +14523,12 @@ abstract class AppLocalizations {
   /// **'View All'**
   String get viewAll;
 
+  /// Button text to expand/open a section such as the mind map preview
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get expand;
+
   /// Menu option to add a new task
   ///
   /// In en, this message translates to:
@@ -17451,10 +17457,10 @@ abstract class AppLocalizations {
   /// **'Paused — audio isn\'t being recorded'**
   String get transcribeLaterPaused;
 
-  /// Settings row that launches the interactive device tutorial (shown only when a device is connected)
+  /// Row label that opens the interactive Omi device tutorial (Settings and the connected-device page)
   ///
   /// In en, this message translates to:
-  /// **'Device Tutorial'**
+  /// **'How to Use Your Omi'**
   String get deviceTutorial;
 
   /// Tutorial step 1 title — prompts the user to speak into the Omi device for the live-transcription demo
@@ -17624,6 +17630,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Finish'**
   String get deviceOnboardingFinish;
+
+  /// Onboarding intro screen title shown before the device tutorial steps
+  ///
+  /// In en, this message translates to:
+  /// **'Get to Know Your Omi'**
+  String get deviceOnboardingIntroTitle;
+
+  /// Onboarding intro screen subtitle explaining the tutorial
+  ///
+  /// In en, this message translates to:
+  /// **'A quick, hands-on tour of everything your Omi can do.'**
+  String get deviceOnboardingIntroSubtitle;
+
+  /// Onboarding intro screen estimated duration hint
+  ///
+  /// In en, this message translates to:
+  /// **'About 1 minute'**
+  String get deviceOnboardingIntroDuration;
+
+  /// Accessibility label and tooltip for the jump-to-latest button in chat
+  ///
+  /// In en, this message translates to:
+  /// **'Jump to latest message'**
+  String get jumpToLatestMessage;
+
+  /// Visible label for the jump-to-latest button in chat
+  ///
+  /// In en, this message translates to:
+  /// **'Latest'**
+  String get latest;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
@@ -17636,56 +17672,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'be',
-        'bg',
-        'bn',
-        'bs',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fa',
-        'fi',
-        'fr',
-        'he',
-        'hi',
-        'hr',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'kn',
-        'ko',
-        'lt',
-        'lv',
-        'mk',
-        'mr',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sl',
-        'sr',
-        'sv',
-        'ta',
-        'te',
-        'th',
-        'tl',
-        'tr',
-        'uk',
-        'ur',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'be',
+    'bg',
+    'bn',
+    'bs',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fa',
+    'fi',
+    'fr',
+    'he',
+    'hi',
+    'hr',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'ko',
+    'lt',
+    'lv',
+    'mk',
+    'mr',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'sr',
+    'sv',
+    'ta',
+    'te',
+    'th',
+    'tl',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -17794,8 +17830,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

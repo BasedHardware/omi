@@ -5,7 +5,7 @@ actor AgentRuntimeProcess {
 
   struct WarmupSessionConfig {
     let key: String
-    let model: String
+    let model: String?
     let systemPrompt: String?
   }
 
@@ -122,6 +122,13 @@ actor AgentRuntimeProcess {
 
   var isAlive: Bool { isRunning }
 
+  static func adapterId(forHarnessMode harnessMode: String) -> String? {
+    guard let harness = AgentRuntimeRouting.harnessMode(from: harnessMode) else {
+      return nil
+    }
+    return AgentRuntimeRouting.adapterId(for: harness).rawValue
+  }
+
   func registerClient(clientId: String, harnessMode: String) async throws {
     guard !isRestarting else {
       throw BridgeError.restarting
@@ -199,8 +206,10 @@ actor AgentRuntimeProcess {
     dict["sessions"] = sessions.map { session -> [String: Any] in
       var entry: [String: Any] = [
         "key": session.key,
-        "model": session.model,
       ]
+      if let model = session.model {
+        entry["model"] = model
+      }
       if let systemPrompt = session.systemPrompt {
         entry["systemPrompt"] = systemPrompt
       }
@@ -312,6 +321,9 @@ actor AgentRuntimeProcess {
     onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
   ) async throws -> AgentBridge.QueryResult {
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    guard let adapterId = Self.adapterId(forHarnessMode: harnessMode) else {
+      throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
+    }
 
     return try await withCheckedThrowingContinuation { continuation in
       let surfaceRef: AgentSurfaceReference?
@@ -352,7 +364,7 @@ actor AgentRuntimeProcess {
         "clientId": clientId,
         "prompt": prompt,
         "systemPrompt": systemPrompt,
-        "adapterId": harnessMode == "piMono" ? "pi-mono" : "acp",
+        "adapterId": adapterId,
       ]
       if let sessionKey {
         queryDict["sessionKey"] = sessionKey
@@ -392,6 +404,11 @@ actor AgentRuntimeProcess {
 
   private func startProcess(preferredHarnessMode: String) async throws {
     guard !isRunning else { return }
+    guard let preferredHarness = AgentRuntimeRouting.harnessMode(from: preferredHarnessMode) else {
+      log("AgentRuntimeProcess: refusing unknown harness mode \(preferredHarnessMode)")
+      throw BridgeError.agentError("Unknown AI runtime mode: \(preferredHarnessMode)")
+    }
+    let preferredAdapterId = AgentRuntimeRouting.adapterId(for: preferredHarness)
 
     process = nil
     closePipes()
@@ -425,11 +442,12 @@ actor AgentRuntimeProcess {
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
+    applyLocalAgentEnvironment(to: &env)
 
     let rustBase = await APIClient.shared.rustBackendURL
     if !rustBase.isEmpty {
       env["OMI_API_BASE_URL"] = rustBase.hasSuffix("/") ? "\(rustBase)v2" : "\(rustBase)/v2"
-    } else if preferredHarnessMode == "piMono" {
+    } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, OMI_DESKTOP_API_URL is not configured")
       throw BridgeError.bridgeScriptNotFound
     }
@@ -446,7 +464,7 @@ actor AgentRuntimeProcess {
     let authService = await MainActor.run { AuthService.shared }
     if let token = try? await authService.getIdToken(), !token.isEmpty {
       env["OMI_AUTH_TOKEN"] = token
-    } else if preferredHarnessMode == "piMono" {
+    } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
       throw BridgeError.authMissing
     }
@@ -525,6 +543,70 @@ actor AgentRuntimeProcess {
       await cleanupFailedStart(process: proc, error: error)
       throw error
     }
+  }
+
+  private func applyLocalAgentEnvironment(to env: inout [String: String]) {
+    // Seed auto-discovered commands for every local adapter so the shared Node
+    // process can route to Hermes or OpenClaw even when it was launched for a
+    // different adapter. registerClient returns early once isRunning, so the
+    // startup adapter's env would otherwise be the only one the process sees.
+    let home = NSHomeDirectory()
+    if env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+      env["HOME"] = home
+    }
+    if env["HERMES_HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+      env["HERMES_HOME"] = "\(home)/.hermes"
+    }
+
+    let adapterPathDirs = [
+      "\(home)/.hermes/hermes-agent/venv/bin",
+      "\(home)/.hermes/node/bin",
+      "\(home)/.hermes/hermes-agent",
+    ]
+    let adapterSearchDirs = adapterPathDirs + [
+      "\(home)/.local/bin",
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ]
+    let trustedPathDirs = [
+      "/opt/homebrew/bin",
+      "/usr/local/bin",
+    ]
+    let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+    var pathElements: [String] = []
+    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterPathDirs {
+      if !pathElements.contains(path) {
+        pathElements.append(path)
+      }
+    }
+    env["PATH"] = pathElements.joined(separator: ":")
+
+    if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
+    {
+      env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
+    }
+
+    if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+      let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
+    {
+      env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(shellQuote(openClaw)) acp"
+    }
+  }
+
+  private func shellQuote(_ value: String) -> String {
+    "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+  }
+
+  private func firstExecutable(named name: String, in directories: [String]) -> String? {
+    let fileManager = FileManager.default
+    for dir in directories {
+      let path = (dir as NSString).appendingPathComponent(name)
+      if fileManager.isExecutableFile(atPath: path) {
+        return path
+      }
+    }
+    return nil
   }
 
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {

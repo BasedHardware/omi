@@ -1722,12 +1722,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOZITIVE',
-      one: 'DISPOZITIV',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -7802,6 +7797,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get viewAll => 'Vezi tot';
 
   @override
+  String get expand => 'Extinde';
+
+  @override
   String get addTask => 'Adaugă sarcină';
 
   @override
@@ -9410,7 +9408,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
 
   @override
-  String get deviceTutorial => 'Tutorial dispozitiv';
+  String get deviceTutorial => 'Cum să folosești Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Vorbește în Omi';
@@ -9496,4 +9494,18 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Termină';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Cunoaște-ți Omi-ul';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un tur rapid și practic prin tot ce poate face Omi-ul tău.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximativ 1 minut';
+  @override
+  String get jumpToLatestMessage => 'Sari la cel mai recent mesaj';
+
+  @override
+  String get latest => 'Recent';
 }

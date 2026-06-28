@@ -10,6 +10,7 @@ import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/transcr
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/power_cycle_step.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/double_press_config_step.dart';
+import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_intro_screen.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 
@@ -29,6 +30,7 @@ class InteractiveDeviceOnboardingWrapper extends StatefulWidget {
 class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOnboardingWrapper> {
   late DeviceOnboardingProvider _onboardingProvider;
   CaptureProvider? _captureProvider;
+  bool _showIntro = true;
   bool _started = false;
   bool _completed = false;
 
@@ -43,10 +45,14 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
       _captureProvider!.deviceOnboardingProvider = _onboardingProvider;
       await _captureProvider!.suspendBatchModeForOnboarding();
       if (!mounted) return;
-      _onboardingProvider.startOnboarding();
       _started = true;
       AnalyticsManager().deviceOnboardingStarted(source: widget.allowExit ? 'settings' : 'auto');
     });
+  }
+
+  void _startTutorial() {
+    setState(() => _showIntro = false);
+    _onboardingProvider.startOnboarding();
   }
 
   @override
@@ -112,55 +118,62 @@ class _InteractiveDeviceOnboardingWrapperState extends State<InteractiveDeviceOn
               ),
             ),
             child: SafeArea(
-              child: Column(
-                children: [
-                  // Back affordance only when the flow is dismissible (re-opened
-                  // from Settings); reserves a small top gap otherwise.
-                  SizedBox(
-                    height: widget.allowExit ? 48 : 16,
-                    child: widget.allowExit
-                        ? Align(
-                            alignment: Alignment.centerLeft,
-                            child: IconButton(
-                              icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                              onPressed: () => Navigator.of(context).maybePop(),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 320),
+                child: _showIntro
+                    ? OnboardingIntroScreen(
+                        key: const ValueKey('intro'),
+                        allowExit: widget.allowExit,
+                        onStart: _startTutorial,
+                      )
+                    : Column(
+                        key: const ValueKey('steps'),
+                        children: [
+                          // Back affordance only when the flow is dismissible (re-opened
+                          // from Settings); reserves a small top gap otherwise.
+                          SizedBox(
+                            height: widget.allowExit ? 48 : 16,
+                            child: widget.allowExit
+                                ? Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                                      onPressed: () => Navigator.of(context).maybePop(),
+                                    ),
+                                  )
+                                : null,
+                          ),
+                          // Persistent progress indicator — stays fixed and animates the
+                          // active dot in place while only the content below transitions.
+                          Consumer<DeviceOnboardingProvider>(
+                            builder: (_, provider, __) => OnboardingProgressDots(currentStep: provider.currentStep),
+                          ),
+                          Expanded(
+                            child: Consumer<DeviceOnboardingProvider>(
+                              builder: (context, provider, _) => AnimatedSwitcher(
+                                duration: const Duration(milliseconds: 320),
+                                switchInCurve: Curves.easeOutCubic,
+                                switchOutCurve: Curves.easeInCubic,
+                                layoutBuilder: (currentChild, previousChildren) => Stack(
+                                  alignment: Alignment.topCenter,
+                                  children: [...previousChildren, if (currentChild != null) currentChild],
+                                ),
+                                transitionBuilder: (child, animation) {
+                                  final slide = Tween<Offset>(
+                                    begin: const Offset(0.08, 0),
+                                    end: Offset.zero,
+                                  ).animate(animation);
+                                  return FadeTransition(
+                                    opacity: animation,
+                                    child: SlideTransition(position: slide, child: child),
+                                  );
+                                },
+                                child: _buildStep(provider.currentStep),
+                              ),
                             ),
-                          )
-                        : null,
-                  ),
-                  // Persistent progress indicator — stays fixed and animates the
-                  // active dot in place while only the content below transitions.
-                  Consumer<DeviceOnboardingProvider>(
-                    builder: (_, provider, __) => OnboardingProgressDots(currentStep: provider.currentStep),
-                  ),
-                  Expanded(
-                    child: Consumer<DeviceOnboardingProvider>(
-                      builder: (context, provider, _) => AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 320),
-                        switchInCurve: Curves.easeOutCubic,
-                        switchOutCurve: Curves.easeInCubic,
-                        layoutBuilder: (currentChild, previousChildren) => Stack(
-                          alignment: Alignment.topCenter,
-                          children: [
-                            ...previousChildren,
-                            if (currentChild != null) currentChild,
-                          ],
-                        ),
-                        transitionBuilder: (child, animation) {
-                          final slide = Tween<Offset>(
-                            begin: const Offset(0.08, 0),
-                            end: Offset.zero,
-                          ).animate(animation);
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(position: slide, child: child),
-                          );
-                        },
-                        child: _buildStep(provider.currentStep),
+                          ),
+                        ],
                       ),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),

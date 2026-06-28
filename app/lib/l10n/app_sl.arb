@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Prikaži vse",
+    "expand": "Razširi",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10641,7 +10642,7 @@
     "captureModeLiveDescription": "Prepisujte v realnem času, medtem ko govorite.",
     "captureModeLaterDescription": "Shranite zvok zdaj in ga prepišite, kadar koli želite.",
     "backgroundModeUnavailable": "Način v ozadju ni na voljo, ker ni povezana nobena združljiva naprava. Za uporabo te funkcije povežite napravo Omi, OpenGlass ali Friend Pendant.",
-    "deviceTutorial": "Vodič po napravi",
+    "deviceTutorial": "Kako uporabljati Omi",
     "deviceOnboardingTranscriptionTitle": "Govorite v Omi",
     "deviceOnboardingTranscriptionSubtitle": "Izgovorite nekaj besed in opazujte, kako se sproti izpisujejo",
     "deviceOnboardingGoodJob": "Odlično!",
@@ -10669,5 +10670,10 @@
     "deviceOnboardingSingleTapHint": "To je bil enojni tap – poskusite hitro tapniti dvakrat!",
     "deviceOnboardingTryDoubleTap": "Poskusite zdaj! Dvakrat tapnite Omi",
     "deviceOnboardingContinue": "Naprej",
-    "deviceOnboardingFinish": "Končaj"
+    "deviceOnboardingFinish": "Končaj",
+    "deviceOnboardingIntroTitle": "Spoznajte svoj Omi",
+    "deviceOnboardingIntroSubtitle": "Hiter, praktičen ogled vsega, kar zmore vaš Omi.",
+    "deviceOnboardingIntroDuration": "Približno 1 minuta",
+    "jumpToLatestMessage": "Skoči na najnovejše sporočilo",
+    "latest": "Najnovejše"
 }

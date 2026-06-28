@@ -14,7 +14,7 @@ These rules apply to every AI agent working in this repository. This file is the
 
 ## Setup
 
-- **Pre-commit hook (required — verify before first commit):** `test -f .git/hooks/pre-commit || ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit` — formatting is enforced by CI.
+- **Worktree setup (required before first commit/push):** `make setup` — installs the repo Git hooks using linked-worktree-safe paths.
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`).
 
 ## Safety Rules
@@ -124,7 +124,7 @@ Key rules:
 ### Desktop (macOS — Swift app + Rust backend)
 
 The desktop app is a **Swift Package Manager** project (no Xcode project, no `.xcodeproj`). The Rust backend lives in `desktop/macos/Backend-Rust/`.
-- For user-visible desktop changes, follow `desktop/macos/AGENTS.md` → Changelog Entries and add a one-line `desktop/macos/CHANGELOG.json` `unreleased` entry.
+- For user-visible desktop changes, follow `desktop/macos/AGENTS.md` → Changelog Entries and add one `desktop/macos/changelog/unreleased/*.json` fragment.
 
 #### Building & Running
 

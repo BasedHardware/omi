@@ -180,26 +180,24 @@ agent-swift screenshot /tmp/evidence.png             # capture app window
 
 ### Changelog Entries
 
-After completing a desktop task with user-visible impact, append a one-liner to `unreleased` in `desktop/macos/CHANGELOG.json`:
+After completing a desktop task with user-visible impact, add one fragment file under `desktop/macos/changelog/unreleased/`:
 
-```python
-python3 -c "
-import json
-with open('CHANGELOG.json', 'r') as f:
-    data = json.load(f)
-data.setdefault('unreleased', []).append('Your user-facing change description')
-with open('CHANGELOG.json', 'w') as f:
-    json.dump(data, f, indent=2)
-    f.write('\n')
-"
+Example `desktop/macos/changelog/unreleased/20260628-short-description.json`:
+
+```json
+{
+  "change": "Your user-facing change description"
+}
 ```
 
 Guidelines:
 - Write from the user's perspective: "Fixed X", "Added Y", "Improved Z"
 - One sentence, no period at the end
+- Use a unique kebab-case filename so parallel PRs do not conflict
 - Skip internal-only changes (refactors, CI config, code cleanup)
 - HTML is allowed for links: `<a href='...'>text</a>`
-- Commit CHANGELOG.json with your other changes (same commit is fine)
+- Do not edit `CHANGELOG.json` by hand; release automation regenerates it
+- Commit the fragment with your other changes (same commit is fine)
 
 ## User Task Completion Reporting
 

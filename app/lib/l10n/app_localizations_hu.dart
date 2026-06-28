@@ -1724,12 +1724,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ESZKÖZ',
-      one: 'ESZKÖZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -7800,6 +7795,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get viewAll => 'Összes megtekintése';
 
   @override
+  String get expand => 'Kibontás';
+
+  @override
   String get addTask => 'Feladat hozzáadása';
 
   @override
@@ -9405,7 +9403,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
 
   @override
-  String get deviceTutorial => 'Eszközoktató';
+  String get deviceTutorial => 'Az Omi használata';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Beszélj az Omihoz';
@@ -9491,4 +9489,18 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Befejezés';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Ismerd meg az Omidat';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
+  @override
+  String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
+
+  @override
+  String get latest => 'Legújabb';
 }

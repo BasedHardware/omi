@@ -119,9 +119,12 @@ function parseJsonObject(value: string | null | undefined): Record<string, unkno
   }
 }
 
-function bindingMetadata(input: ExecuteAgentRunInput): string {
+function bindingMetadata(input: ExecuteAgentRunInput, adapter?: RuntimeAdapter): string {
+  const effectiveMcpServers = adapter?.effectiveMcpServers
+    ? adapter.effectiveMcpServers(input.mcpServers ?? [])
+    : input.mcpServers ?? [];
   return JSON.stringify({
-    mcpServersHash: stableJsonHash(stableMcpServerConfig(input.mcpServers ?? [])),
+    mcpServersHash: stableJsonHash(stableMcpServerConfig(effectiveMcpServers)),
   });
 }
 
@@ -601,6 +604,7 @@ export class AgentRuntimeKernel {
           return worker.adapter.executeAttempt(
             {
               sessionId: accepted.session.sessionId,
+              ownerId: input.ownerId,
               requestId: accepted.run.requestId,
               clientId: accepted.run.clientId,
               runId: accepted.run.runId,
@@ -715,6 +719,9 @@ export class AgentRuntimeKernel {
       try {
         dispatch = await active.adapter.cancelAttempt({
           sessionId: active.sessionId,
+          ownerId: this.readSession(run.sessionId).ownerId,
+          requestId: run.requestId,
+          clientId: run.clientId,
           runId,
           attemptId: attempt.attemptId,
           binding: active.binding,
@@ -1269,7 +1276,7 @@ export class AgentRuntimeKernel {
           cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
           modelId: input.input.model ?? null,
           systemPromptHash: stableHash(input.input.systemPrompt),
-          metadataJson: bindingMetadata(input.input),
+          metadataJson: bindingMetadata(input.input, input.adapter),
         });
         this.appendEvent({
           sessionId: input.session.sessionId,
@@ -1310,6 +1317,7 @@ export class AgentRuntimeKernel {
     input: {
       input: ExecuteAgentRunInput;
       session: AgentSession;
+      adapter?: RuntimeAdapter;
     }
   ): boolean {
     const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? process.cwd();
@@ -1325,7 +1333,10 @@ export class AgentRuntimeKernel {
       return false;
     }
     const metadata = parseJsonObject(binding.metadataJson);
-    const expectedMcpServersHash = stableJsonHash(stableMcpServerConfig(input.input.mcpServers ?? []));
+    const effectiveMcpServers = input.adapter?.effectiveMcpServers
+      ? input.adapter.effectiveMcpServers(input.input.mcpServers ?? [])
+      : input.input.mcpServers ?? [];
+    const expectedMcpServersHash = stableJsonHash(stableMcpServerConfig(effectiveMcpServers));
     if (metadata.mcpServersHash === undefined) {
       return true;
     }
@@ -1371,7 +1382,7 @@ export class AgentRuntimeKernel {
           cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? null,
           modelId: input.input.model ?? binding.modelId ?? null,
           systemPromptHash: stableHash(input.input.systemPrompt),
-          metadataJson: bindingMetadata(input.input),
+          metadataJson: bindingMetadata(input.input, input.adapter),
           lastUsedAtMs: Date.now(),
           updatedAtMs: Date.now(),
         });
@@ -1436,7 +1447,7 @@ export class AgentRuntimeKernel {
         cwd: opened.cwd,
         modelId: opened.model ?? input.input.model ?? null,
         systemPromptHash: stableHash(input.input.systemPrompt),
-        metadataJson: bindingMetadata(input.input),
+        metadataJson: bindingMetadata(input.input, input.adapter),
         lastUsedAtMs: Date.now(),
       });
       this.appendEvent({

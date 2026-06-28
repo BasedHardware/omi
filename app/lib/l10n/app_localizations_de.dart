@@ -1726,12 +1726,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'GERÄTE',
-      one: 'GERÄT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'GERÄTE', one: 'GERÄT');
     return '$count $_temp0 IN DER NÄHE GEFUNDEN';
   }
 
@@ -7827,6 +7822,9 @@ class AppLocalizationsDe extends AppLocalizations {
   String get viewAll => 'Alle anzeigen';
 
   @override
+  String get expand => 'Erweitern';
+
+  @override
   String get addTask => 'Aufgabe hinzufügen';
 
   @override
@@ -9442,7 +9440,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get transcribeLaterPaused => 'Pausiert – Audio wird nicht aufgenommen';
 
   @override
-  String get deviceTutorial => 'Geräte-Tutorial';
+  String get deviceTutorial => 'So verwendest du Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Sprich in dein Omi';
@@ -9529,4 +9527,18 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Fertig';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Lerne dein Omi kennen';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Ein kurzer, praktischer Rundgang durch alles, was dein Omi kann.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Etwa 1 Minute';
+  @override
+  String get jumpToLatestMessage => 'Zur neuesten Nachricht springen';
+
+  @override
+  String get latest => 'Neueste';
 }

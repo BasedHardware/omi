@@ -1703,12 +1703,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 נמצאו בקרבה';
   }
 
@@ -7703,6 +7698,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get viewAll => 'צפה בהכל';
 
   @override
+  String get expand => 'הרחב';
+
+  @override
   String get addTask => 'הוסף משימה';
 
   @override
@@ -8385,12 +8383,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9294,7 +9287,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcribeLaterPaused => 'מושהה — האודיו אינו מוקלט';
 
   @override
-  String get deviceTutorial => 'מדריך למכשיר';
+  String get deviceTutorial => 'איך להשתמש ב-Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'דברו אל ה-Omi שלכם';
@@ -9379,4 +9372,18 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'סיום';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'הכירו את ה-Omi שלכם';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'סיור מהיר ומעשי בכל מה שה-Omi שלכם יכול לעשות.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'כדקה אחת';
+  @override
+  String get jumpToLatestMessage => 'קפוץ להודעה האחרונה';
+
+  @override
+  String get latest => 'האחרון';
 }

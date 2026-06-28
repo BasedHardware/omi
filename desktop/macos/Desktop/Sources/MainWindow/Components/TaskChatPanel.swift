@@ -47,6 +47,7 @@ struct TaskChatPanel: View {
                     app: nil,
                     onLoadMore: { },
                     onRate: { _, _ in },
+                    localSendToken: taskState.localSendToken,
                     welcomeContent: { taskWelcome }
                 )
                 .frame(maxHeight: .infinity)

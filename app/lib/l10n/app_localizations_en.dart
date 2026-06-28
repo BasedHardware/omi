@@ -1710,12 +1710,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -7762,6 +7757,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get viewAll => 'View All';
 
   @override
+  String get expand => 'Expand';
+
+  @override
   String get addTask => 'Add Task';
 
   @override
@@ -8450,12 +8448,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9204,12 +9197,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count recording$_temp0 need attention';
   }
 
@@ -9360,7 +9348,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcribeLaterPaused => 'Paused — audio isn\'t being recorded';
 
   @override
-  String get deviceTutorial => 'Device Tutorial';
+  String get deviceTutorial => 'How to Use Your Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Speak Into Your Omi';
@@ -9446,4 +9434,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Finish';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Get to Know Your Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'A quick, hands-on tour of everything your Omi can do.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'About 1 minute';
+  @override
+  String get jumpToLatestMessage => 'Jump to latest message';
+
+  @override
+  String get latest => 'Latest';
 }

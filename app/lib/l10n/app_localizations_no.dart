@@ -1713,12 +1713,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ENHETER',
-      one: 'ENHET',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
     return '$count $_temp0 FUNNET I NÆRHETEN';
   }
 
@@ -7761,6 +7756,9 @@ class AppLocalizationsNo extends AppLocalizations {
   String get viewAll => 'Vis alle';
 
   @override
+  String get expand => 'Utvid';
+
+  @override
   String get addTask => 'Legg til oppgave';
 
   @override
@@ -9362,7 +9360,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String get transcribeLaterPaused => 'På pause – lyd tas ikke opp';
 
   @override
-  String get deviceTutorial => 'Enhetsveiledning';
+  String get deviceTutorial => 'Slik bruker du Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Snakk til Omi';
@@ -9448,4 +9446,18 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Fullfør';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Bli kjent med din Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'En rask, praktisk omvisning i alt din Omi kan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cirka 1 minutt';
+  @override
+  String get jumpToLatestMessage => 'Gå til nyeste melding';
+
+  @override
+  String get latest => 'Nyeste';
 }

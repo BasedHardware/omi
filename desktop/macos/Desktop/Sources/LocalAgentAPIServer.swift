@@ -63,11 +63,12 @@ enum LocalAgentAPISettings {
   }
 }
 
-private struct LocalAgentTool {
+struct LocalAgentTool {
   let name: String
   let description: String
   let properties: [String: Any]
   let required: [String]
+  let annotations: [String: Any]
 }
 
 final class LocalAgentAPIServer {
@@ -487,133 +488,13 @@ final class LocalAgentAPIServer {
     ]
   }
 
-  private static let tools: [LocalAgentTool] = [
-    LocalAgentTool(
-      name: "get_local_status",
-      description:
-        "Report whether local Omi Desktop context is available, including screen-history counts, indexed screenshot counts, and latest capture time. Call this before local screen-history or SQL work.",
-      properties: [:],
-      required: []
-    ),
-    LocalAgentTool(
-      name: "execute_sql",
-      description:
-        "Run read-only SQL on the local Omi Desktop SQLite database. Use SELECT or WITH queries for structured questions about screenshots, transcriptions, tasks, memories, indexed files, goals, and activity.",
-      properties: ["query": ["type": "string", "description": "SQL query to execute against the local Omi database"]],
-      required: ["query"]
-    ),
-    LocalAgentTool(
-      name: "search_screen_history",
-      description:
-        "Search local Rewind screen history using OCR and semantic similarity. Use for fuzzy questions about what the user saw or worked on. Results include screenshot IDs that can be opened with get_screenshot.",
-      properties: [
-        "query": ["type": "string", "description": "Natural language query"],
-        "days": ["type": "number", "description": "Days to search back; default 7"],
-        "app_filter": ["type": "string", "description": "Optional app name filter"],
-      ],
-      required: ["query"]
-    ),
-    LocalAgentTool(
-      name: "semantic_search",
-      description:
-        "Compatibility alias for search_screen_history.",
-      properties: [
-        "query": ["type": "string", "description": "Natural language query"],
-        "days": ["type": "number", "description": "Days to search back; default 7"],
-        "app_filter": ["type": "string", "description": "Optional app name filter"],
-      ],
-      required: ["query"]
-    ),
-    LocalAgentTool(
-      name: "get_screenshot",
-      description:
-        "Fetch a local Rewind screenshot image by screenshot_id. Use screenshot IDs returned by search_screen_history or execute_sql. Very recent captures may return screenshot_pending (still in the active, unflushed video segment) — retry shortly or pick an older id.",
-      properties: [
-        "screenshot_id": ["type": "number", "description": "Screenshot ID from search_screen_history or the screenshots table"]
-      ],
-      required: ["screenshot_id"]
-    ),
-    LocalAgentTool(
-      name: "get_work_context",
-      description:
-        "Get the user's CURRENT screen + what they were just doing, in one fast call. Returns screen_now (the latest full-screen frame as a screenshot_id + its OCR text — fetch pixels with get_screenshot) and a compressed timeline of the last N minutes of on-screen activity. CALL THIS FIRST, on any turn where seeing the user's screen or recent work would help — e.g. they say 'fix this', 'it didn't work', 'this bug', or reference something on screen — instead of asking them to screenshot or re-explain. Default window 10 minutes (minutes arg to widen/narrow). Pair with search_memories for their preferences.",
-      properties: [
-        "minutes": [
-          "type": "number",
-          "description": "Minutes of recent activity to summarize (default 10, max 120)",
-        ]
-      ],
-      required: []
-    ),
-    LocalAgentTool(
-      name: "get_daily_recap",
-      description: "Get a formatted local activity recap for today, yesterday, or a recent range.",
-      properties: ["days_ago": ["type": "number", "description": "0=today, 1=yesterday, 7=past week"]],
-      required: []
-    ),
-    LocalAgentTool(
-      name: "search_tasks",
-      description: "Semantic search over local Omi tasks and staged tasks.",
-      properties: [
-        "query": ["type": "string", "description": "Task search query"],
-        "include_completed": ["type": "boolean", "description": "Include completed tasks"],
-      ],
-      required: ["query"]
-    ),
-    LocalAgentTool(
-      name: "complete_task",
-      description: "Mark a task complete. This is idempotent; already-completed tasks stay completed. Find the task id first with execute_sql or search_tasks.",
-      properties: ["task_id": ["type": "string", "description": "Task backendId"]],
-      required: ["task_id"]
-    ),
-    LocalAgentTool(
-      name: "delete_task",
-      description: "Delete a task. Find the task id first with execute_sql or search_tasks.",
-      properties: ["task_id": ["type": "string", "description": "Task backendId"]],
-      required: ["task_id"]
-    ),
-    LocalAgentTool(
-      name: "fill_cloud_connector_form",
-      description:
-        "Fill the currently visible ChatGPT or Claude custom MCP connector form using native macOS Accessibility automation. Use first for one-click cloud connector setup after the signed-in browser is opened to the connector page.",
-      properties: [
-        "provider": [
-          "type": "string",
-          "enum": ["claude", "chatgpt"],
-          "description": "Cloud platform whose connector form is visible",
-        ],
-        "name": ["type": "string", "description": "Connector name, usually 'Omi Memory'"],
-        "server_url": [
-          "type": "string",
-          "description": "Remote MCP server URL to paste into the connector form",
-        ],
-        "oauth_client_id": ["type": "string", "description": "OAuth Client ID, usually 'omi'"],
-        "oauth_client_secret": ["type": "string", "description": "OAuth Client Secret / Omi MCP key"],
-        "authentication": ["type": "string", "description": "Authentication mode, usually 'OAuth'"],
-        "token_auth_method": [
-          "type": "string",
-          "description": "OAuth token auth method, usually 'client_secret_post'",
-        ],
-        "auth_url": ["type": "string", "description": "OAuth authorization URL when the form asks for it"],
-        "token_url": ["type": "string", "description": "OAuth token URL when the form asks for it"],
-        "submit": [
-          "type": "boolean",
-          "description": "Whether to press the visible Add/Connect/Create button after filling required fields",
-        ],
-      ],
-      required: ["provider", "server_url"]
-    ),
-  ]
+  private static let tools: [LocalAgentTool] = OmiToolManifest.localAgentAPITools
 
   private func toolJSON(_ tool: LocalAgentTool) -> [String: Any] {
     [
       "name": tool.name,
       "description": tool.description,
-      "annotations": [
-        "readOnlyHint": !["complete_task", "delete_task", "fill_cloud_connector_form"].contains(tool.name),
-        "destructiveHint": tool.name == "delete_task",
-        "openWorldHint": false,
-      ],
+      "annotations": tool.annotations,
       "inputSchema": [
         "type": "object",
         "properties": tool.properties,

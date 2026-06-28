@@ -1722,12 +1722,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -7820,6 +7815,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get viewAll => 'அனைத்தையும் பார்';
 
   @override
+  String get expand => 'விரிவாக்கு';
+
+  @override
   String get addTask => 'பணியைச் சேர்க்க';
 
   @override
@@ -8512,12 +8510,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9432,7 +9425,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get transcribeLaterPaused => 'இடைநிறுத்தப்பட்டது — ஒலி பதிவு செய்யப்படவில்லை';
 
   @override
-  String get deviceTutorial => 'சாதனப் பயிற்சி';
+  String get deviceTutorial => 'Omi ஐ எவ்வாறு பயன்படுத்துவது';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'உங்கள் Omi-யிடம் பேசுங்கள்';
@@ -9518,4 +9511,19 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'முடிக்கவும்';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'உங்கள் Omi-ஐ அறிந்துகொள்ளுங்கள்';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'உங்கள் Omi செய்யக்கூடிய அனைத்தையும் விரைவாக நேரடியாகப் பார்க்கும் சுற்றுலா.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'சுமார் 1 நிமிடம்';
+  @override
+  String get jumpToLatestMessage => 'சமீபத்திய செய்திக்குச் செல்';
+
+  @override
+  String get latest => 'சமீபத்தியது';
 }
