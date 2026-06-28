@@ -119,6 +119,16 @@ def _is_blocked_ip(ip: "ipaddress._BaseAddress") -> bool:
     return ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified
 
 
+# Cache of the per-host SSRF resolution result so a custom base URL is not
+# re-resolved (a blocking getaddrinfo) on every get_llm call. get_llm already runs
+# in a worker thread (its callers offload the blocking .invoke()), so this is not
+# on the event loop, but caching keeps the lookup off the hot path and bounds the
+# work an attacker could trigger. Short TTL bounds DNS-change staleness; value is
+# True (resolved + public) or a rejection message to re-raise.
+_DNS_VALIDATION_CACHE: TTLCache = TTLCache(maxsize=512, ttl=300)
+_dns_validation_lock = threading.Lock()
+
+
 def validate_custom_base_url(base_url: str) -> str:
     """Validate a user-supplied custom provider base URL and return it normalized.
 
@@ -156,11 +166,18 @@ def validate_custom_base_url(base_url: str) -> str:
             raise ValueError('custom base URL host is not allowed')
         return url  # literal public IP, nothing to resolve
 
-    # Hostname: resolve and reject if any resolved address is internal, so a
-    # public-looking name pointing at a private/metadata IP cannot slip through.
+    # Hostname: resolve (cached) and reject if any resolved address is internal, so
+    # a public-looking name pointing at a private/metadata IP cannot slip through.
+    with _dns_validation_lock:
+        cached = _DNS_VALIDATION_CACHE.get(lowered)
+    if cached is True:
+        return url
+    if isinstance(cached, str):
+        raise ValueError(cached)
     try:
         infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
     except socket.gaierror as e:
+        # Transient resolution failures are not cached.
         raise ValueError(f'custom base URL host did not resolve: {e}')
     for info in infos:
         addr = info[4][0]
@@ -169,7 +186,12 @@ def validate_custom_base_url(base_url: str) -> str:
         except ValueError:
             continue
         if _is_blocked_ip(resolved):
-            raise ValueError('custom base URL resolves to a non-public address')
+            msg = 'custom base URL resolves to a non-public address'
+            with _dns_validation_lock:
+                _DNS_VALIDATION_CACHE[lowered] = msg
+            raise ValueError(msg)
+    with _dns_validation_lock:
+        _DNS_VALIDATION_CACHE[lowered] = True
     return url
 
 
