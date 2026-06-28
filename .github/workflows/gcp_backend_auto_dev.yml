@@ -67,8 +67,13 @@ jobs:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: >-
+            --network=omi-dev-vpc-1
+            --subnet=omi-us-central1-dev-vpc-1-subnet-1
+            --vpc-egress=private-ranges-only
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
+            OMI_LLM_GATEWAY_URL=http://172.16.63.232
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
@@ -92,8 +97,13 @@ jobs:
           service: ${{ env.SERVICE }}-sync
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: >-
+            --network=omi-dev-vpc-1
+            --subnet=omi-us-central1-dev-vpc-1-subnet-1
+            --vpc-egress=private-ranges-only
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
+            OMI_LLM_GATEWAY_URL=http://172.16.63.232
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
@@ -124,8 +134,13 @@ jobs:
           service: ${{ env.SERVICE }}-integration
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          flags: >-
+            --network=omi-dev-vpc-1
+            --subnet=omi-us-central1-dev-vpc-1-subnet-1
+            --vpc-egress=private-ranges-only
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
+            OMI_LLM_GATEWAY_URL=http://172.16.63.232
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
