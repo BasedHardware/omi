@@ -1,11 +1,13 @@
 import { CheckCircle2, KeyRound, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type {
+  AvailableModel,
   ByokChatProvider,
   ByokProvider,
   ByokProviderStatus,
   ByokStatus
 } from '../../../../../shared/types'
+import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
 import { toast } from '../../../lib/toast'
 import { SettingRow } from '../SettingRow'
 
@@ -45,10 +47,23 @@ function statusText(status: ByokProviderStatus | undefined): string {
   return `Saved (${status.maskedKey})`
 }
 
+function modelProvider(modelId: string | undefined): ByokChatProvider | 'omi' | null {
+  if (!modelId) return null
+  const [provider] = modelId.split(':', 1)
+  return provider === 'omi' || PROVIDERS.some((item) => item.id === provider && item.chat)
+    ? (provider as ByokChatProvider | 'omi')
+    : null
+}
+
 export function ByokTab(): React.JSX.Element {
   const [byokStatus, setByokStatus] = useState<ByokStatus | null>(null)
   const [draftKeys, setDraftKeys] = useState<Record<ByokProvider, string>>(EMPTY_DRAFT_KEYS)
   const [byokBusy, setByokBusy] = useState('')
+  const [models, setModels] = useState<AvailableModel[]>([])
+  const [modelsBusy, setModelsBusy] = useState(false)
+  const [selectedChatModel, setSelectedChatModel] = useState(
+    getPreferences().defaultModelByPurpose?.chat ?? ''
+  )
 
   const refreshByokStatus = async (): Promise<void> => {
     try {
@@ -58,9 +73,36 @@ export function ByokTab(): React.JSX.Element {
     }
   }
 
+  const refreshByokModels = async (): Promise<void> => {
+    setModelsBusy(true)
+    try {
+      const result = await window.omi.byokListModels()
+      setModels(result.models)
+    } catch (e) {
+      toast('Could not load BYOK models', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setModelsBusy(false)
+    }
+  }
+
   useEffect(() => {
     void refreshByokStatus()
+    void refreshByokModels()
+    return onPreferencesChange((prefs) => {
+      setSelectedChatModel(prefs.defaultModelByPurpose?.chat ?? '')
+    })
   }, [])
+
+  const chatModels = useMemo(() => {
+    const activeProvider = byokStatus?.activeChatProvider
+    if (!activeProvider) {
+      return models.filter((model) => model.provider === 'omi')
+    }
+    return models.filter((model) => model.provider === activeProvider && model.configured)
+  }, [byokStatus?.activeChatProvider, models])
+
+  const selectedModelAvailable = chatModels.some((model) => model.id === selectedChatModel)
+  const modelSelectValue = selectedModelAvailable ? selectedChatModel : ''
 
   const saveProvider = async (provider: ByokProvider): Promise<void> => {
     const key = draftKeys[provider].trim()
@@ -72,6 +114,7 @@ export function ByokTab(): React.JSX.Element {
     try {
       setByokStatus(await window.omi.byokSave({ provider, key }))
       setDraftKeys((current) => ({ ...current, [provider]: '' }))
+      void refreshByokModels()
       toast(`${providerLabel(provider)} key saved`, { tone: 'success' })
     } catch (e) {
       toast('Could not save key', { tone: 'error', body: (e as Error).message })
@@ -103,6 +146,15 @@ export function ByokTab(): React.JSX.Element {
     try {
       setByokStatus(await window.omi.byokDelete(provider))
       setDraftKeys((current) => ({ ...current, [provider]: '' }))
+      if (modelProvider(selectedChatModel) === provider) {
+        setPreferences({
+          defaultModelByPurpose: {
+            ...getPreferences().defaultModelByPurpose,
+            chat: undefined
+          }
+        })
+      }
+      void refreshByokModels()
       toast(`${providerLabel(provider)} key removed`, { tone: 'success' })
     } catch (e) {
       toast('Could not remove key', { tone: 'error', body: (e as Error).message })
@@ -115,6 +167,14 @@ export function ByokTab(): React.JSX.Element {
     setByokBusy('use')
     try {
       setByokStatus(await window.omi.byokUse({ provider }))
+      if (modelProvider(selectedChatModel) !== (provider ?? 'omi')) {
+        setPreferences({
+          defaultModelByPurpose: {
+            ...getPreferences().defaultModelByPurpose,
+            chat: undefined
+          }
+        })
+      }
       toast(provider ? 'BYOK chat provider selected' : 'Omi hosted chat selected', {
         tone: 'success'
       })
@@ -123,6 +183,18 @@ export function ByokTab(): React.JSX.Element {
     } finally {
       setByokBusy('')
     }
+  }
+
+  const selectChatModel = (modelId: string): void => {
+    setPreferences({
+      defaultModelByPurpose: {
+        ...getPreferences().defaultModelByPurpose,
+        chat: modelId || undefined
+      }
+    })
+    toast(modelId ? 'Chat model selected' : 'Provider default model selected', {
+      tone: 'success'
+    })
   }
 
   return (
@@ -157,6 +229,33 @@ export function ByokTab(): React.JSX.Element {
                 className="bg-neutral-900"
               >
                 {provider.label}
+              </option>
+            ))}
+          </select>
+        }
+      />
+      <SettingRow
+        icon={KeyRound}
+        title="Chat model"
+        subtitle={
+          byokStatus?.activeChatProvider
+            ? `Choose the ${providerLabel(byokStatus.activeChatProvider)} model used for BYOK chat.`
+            : 'Choose the hosted model used when BYOK chat is off.'
+        }
+        keywords="byok model picker openai anthropic gemini openrouter chat model"
+        control={
+          <select
+            value={modelSelectValue}
+            disabled={modelsBusy || chatModels.length === 0}
+            onChange={(e) => selectChatModel(e.target.value)}
+            className="max-w-[260px] rounded-md bg-white/10 px-2 py-1.5 text-sm text-white focus:outline-none disabled:opacity-50"
+          >
+            <option value="" className="bg-neutral-900">
+              {modelsBusy ? 'Loading models...' : 'Provider default'}
+            </option>
+            {chatModels.map((model) => (
+              <option key={model.id} value={model.id} className="bg-neutral-900">
+                {model.providerLabel} · {model.label}
               </option>
             ))}
           </select>
