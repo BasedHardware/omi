@@ -7,7 +7,21 @@ exact same shapes without cross-importing each other (routers must never
 import from other routers).
 """
 
-from typing import List
+from datetime import datetime, time
+from typing import List, Optional
+
+
+def inclusive_end_of_day(dt: Optional[datetime]) -> Optional[datetime]:
+    """Extend a date-range end at midnight to the end of that day.
+
+    A date-only ``end_date`` parses to midnight, so a ``start_time <= end_date``
+    filter would drop everything later on the requested day. When the value has no
+    time component, bump it to 23:59:59.999999 so the day is included; a value with
+    an explicit time is left untouched.
+    """
+    if dt is not None and dt.time() == time(0, 0, 0, 0):
+        return dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+    return dt
 
 
 def clean_action_item(item: dict) -> dict:
