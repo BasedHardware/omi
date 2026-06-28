@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.557",
+      "date": "2026-06-28",
+      "changes": [
+        "Added direct calendar event creation for realtime voice requests"
+      ]
+    },
+    {
       "version": "0.11.556",
       "date": "2026-06-28",
       "changes": [
