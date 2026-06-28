@@ -402,6 +402,37 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("server turn done; waiting for local playback to drain"))
   }
 
+  func testRealtimeBargeInUsesProviderInterruptionStrategy() throws {
+    let hubSource = try realtimeHubControllerSource()
+    let sessionSource = try realtimeHubSessionSource()
+
+    // OpenAI can cancel a response in-session. Gemini cannot reliably cancel a
+    // streaming reply, so barge-in must replace the session and buffer the new
+    // PTT turn on the fresh connection instead of reusing the busy socket.
+    XCTAssertTrue(sessionSource.contains("enum RealtimeHubBargeInStrategy"))
+    XCTAssertTrue(sessionSource.contains("provider == .gemini ? .freshSession : .inSessionCancel"))
+    XCTAssertTrue(hubSource.contains("private var sessionAuth: HubAuth?"))
+    XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn() -> Bool"))
+    XCTAssertTrue(hubSource.contains("let providerResponseInFlight = responding"))
+    XCTAssertTrue(hubSource.contains("case .freshSession:"))
+    XCTAssertTrue(hubSource.contains("replace the connection and let the fresh session buffer this new turn while it opens"))
+    XCTAssertTrue(hubSource.contains("case .inSessionCancel:"))
+    XCTAssertTrue(hubSource.contains("barge-in — stopping local playback tail"))
+    XCTAssertTrue(hubSource.contains("session?.beginInputTurn(interrupting: providerResponseInFlight)"))
+    XCTAssertTrue(hubSource.contains("session?.cancelActiveResponse()"))
+    XCTAssertTrue(hubSource.contains("private func isCurrentSession(_ source: RealtimeHubSession) -> Bool"))
+    XCTAssertTrue(hubSource.contains("guard isCurrentSession(source) else { return }"))
+    XCTAssertTrue(hubSource.contains("sendToolResultIfCurrent(source: source"))
+    XCTAssertFalse(hubSource.contains("self.session?.sendToolResult(callId: callId"))
+    XCTAssertTrue(sessionSource.contains("Task { @MainActor in d?.hubDidReceiveAudio(pcm, source: self) }"))
+    XCTAssertTrue(sessionSource.contains("guard isCurrentOpenAIResponseEvent(e) else"))
+    XCTAssertTrue(sessionSource.contains("private var openAIResponseCreatePending = false"))
+    XCTAssertTrue(sessionSource.contains("guard !openAIResponseCreatePending, let expected = openAIActiveResponseID else { return false }"))
+    XCTAssertTrue(sessionSource.contains("return eventResponseID == expected"))
+    XCTAssertFalse(sessionSource.contains("guard let expected = openAIActiveResponseID else { return true }"))
+    XCTAssertTrue(sessionSource.contains("ignoring stale response.done"))
+  }
+
   func testSpeechSynthesizerDidCancelClearsGlow() throws {
     let source = try realtimeHubControllerSource()
 
@@ -636,6 +667,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeHubSessionSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSession.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
