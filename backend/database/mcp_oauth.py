@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import uuid
@@ -16,11 +17,24 @@ from database._client import db
 MCP_RESOURCE_URL = os.getenv("MCP_RESOURCE_URL", "https://api.omi.me/v1/mcp/sse")
 DEFAULT_CLIENT_ID = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_ID", "omi")
 DEFAULT_CLIENT_NAME = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_NAME", "ChatGPT")
-SUPPORTED_SCOPES = ["memories.read", "memories.write", "conversations.read"]
+DEFAULT_PUBLIC_CLIENT_ID = os.getenv("MCP_OAUTH_PUBLIC_CLIENT_ID", "omi-mcp-public")
+DEFAULT_PUBLIC_CLIENT_NAME = os.getenv("MCP_OAUTH_PUBLIC_CLIENT_NAME", "Omi MCP Public")
+SUPPORTED_SCOPES = [
+    "memories.read",
+    "memories.write",
+    "conversations.read",
+    "action_items.read",
+    "action_items.write",
+    "goals.read",
+    "chat.read",
+    "screen_activity.read",
+    "people.read",
+]
 ACCESS_TOKEN_TTL_SECONDS = int(os.getenv("MCP_OAUTH_ACCESS_TOKEN_TTL_SECONDS", "3600"))
 AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
+SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
 
 
 def hash_secret(secret: str) -> str:
@@ -35,18 +49,113 @@ def _csv_env(name: str) -> list[str]:
     return [value.strip() for value in os.getenv(name, "").split(",") if value.strip()]
 
 
-def _default_client() -> dict:
+def _csv_values(value) -> list[str]:
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    return []
+
+
+def _secret_hash_from_config(config: dict) -> str:
+    secret_hash = config.get("client_secret_hash") or config.get("secret_hash") or ""
+    secret_hash_env = config.get("client_secret_hash_env") or config.get("secret_hash_env")
+    if secret_hash_env:
+        secret_hash = os.getenv(str(secret_hash_env), secret_hash)
+    secret_env = config.get("client_secret_env") or config.get("secret_env")
+    secret = os.getenv(str(secret_env), "") if secret_env else config.get("client_secret") or config.get("secret") or ""
+    return str(secret_hash or (hash_secret(str(secret)) if secret else ""))
+
+
+def _client_from_config(config: dict) -> Optional[dict]:
+    client_id = str(config.get("client_id") or config.get("id") or "").strip()
+    if not client_id:
+        return None
+    auth_method = config.get("token_endpoint_auth_method")
+    if auth_method is None:
+        public_value = config.get("public")
+        if public_value is not None and not isinstance(public_value, bool):
+            return None
+        client_type = str(config.get("client_type") or "").lower()
+        if client_type and client_type not in ("public", "confidential"):
+            return None
+        auth_method = "none" if public_value is True or client_type == "public" else "client_secret_post"
+    auth_method = str(auth_method)
+    if auth_method not in SUPPORTED_TOKEN_AUTH_METHODS:
+        return None
+    client = {
+        "id": client_id,
+        "name": config.get("name") or client_id,
+        "registration_mode": config.get("registration_mode") or "env",
+        "allowed_redirect_uris": _csv_values(config.get("allowed_redirect_uris") or config.get("redirect_uris")),
+        "allowed_resources": _csv_values(config.get("allowed_resources") or config.get("resources"))
+        or [MCP_RESOURCE_URL],
+        "allowed_scopes": _csv_values(config.get("allowed_scopes") or config.get("scopes")) or SUPPORTED_SCOPES,
+        "token_endpoint_auth_method": auth_method,
+        "client_secret_hash": _secret_hash_from_config(config) if auth_method == "client_secret_post" else "",
+        "disabled_at": config.get("disabled_at"),
+    }
+    return client
+
+
+def _env_clients() -> dict[str, dict]:
+    raw_clients = os.getenv("MCP_OAUTH_CLIENTS_JSON", "")
+    if not raw_clients:
+        return {}
+    try:
+        parsed = json.loads(raw_clients)
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(parsed, dict):
+        entries = []
+        for client_id, config in parsed.items():
+            if isinstance(config, dict):
+                entries.append({"client_id": client_id, **config})
+    elif isinstance(parsed, list):
+        entries = [config for config in parsed if isinstance(config, dict)]
+    else:
+        entries = []
+    clients = {}
+    for entry in entries:
+        client = _client_from_config(entry)
+        if client:
+            clients[client["id"]] = client
+    return clients
+
+
+def _legacy_chatgpt_client() -> dict:
     secret = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_SECRET", "")
     secret_hash = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_SECRET_SHA256", "")
     return {
         "id": DEFAULT_CLIENT_ID,
         "name": DEFAULT_CLIENT_NAME,
-        "registration_mode": "predefined",
+        "registration_mode": "legacy_env",
         "allowed_redirect_uris": _csv_env("MCP_OAUTH_CHATGPT_REDIRECT_URIS"),
         "allowed_resources": [MCP_RESOURCE_URL],
         "allowed_scopes": SUPPORTED_SCOPES,
         "token_endpoint_auth_method": "client_secret_post",
         "client_secret_hash": secret_hash or (hash_secret(secret) if secret else ""),
+        "disabled_at": None,
+    }
+
+
+def _public_redirect_uris() -> list[str]:
+    return _csv_env("MCP_OAUTH_PUBLIC_REDIRECT_URIS") or _csv_env("MCP_OAUTH_CHATGPT_REDIRECT_URIS")
+
+
+def _default_public_client() -> Optional[dict]:
+    redirect_uris = _public_redirect_uris()
+    if not redirect_uris:
+        return None
+    return {
+        "id": DEFAULT_PUBLIC_CLIENT_ID,
+        "name": DEFAULT_PUBLIC_CLIENT_NAME,
+        "registration_mode": "public_env",
+        "allowed_redirect_uris": redirect_uris,
+        "allowed_resources": [MCP_RESOURCE_URL],
+        "allowed_scopes": SUPPORTED_SCOPES,
+        "token_endpoint_auth_method": "none",
+        "client_secret_hash": "",
         "disabled_at": None,
     }
 
@@ -60,8 +169,13 @@ def get_client(client_id: str) -> Optional[dict]:
         data.setdefault("allowed_scopes", SUPPORTED_SCOPES)
         data.setdefault("token_endpoint_auth_method", "client_secret_post")
         return data
+    env_client = _env_clients().get(client_id)
+    if env_client:
+        return env_client
     if client_id == DEFAULT_CLIENT_ID:
-        return _default_client()
+        return _legacy_chatgpt_client()
+    if client_id == DEFAULT_PUBLIC_CLIENT_ID:
+        return _default_public_client()
     return None
 
 
@@ -72,6 +186,19 @@ def verify_client_secret(client: dict, client_secret: Optional[str]) -> bool:
     if not expected_hash or not client_secret:
         return False
     return hmac.compare_digest(expected_hash, hash_secret(client_secret))
+
+
+def verify_client_auth(client: dict, client_secret: Optional[str]) -> bool:
+    auth_method = client.get("token_endpoint_auth_method") or "client_secret_post"
+    if auth_method == "none":
+        return not client_secret
+    if auth_method == "client_secret_post":
+        return verify_client_secret(client, client_secret)
+    return False
+
+
+def token_endpoint_auth_methods_supported() -> list[str]:
+    return list(SUPPORTED_TOKEN_AUTH_METHODS)
 
 
 def validate_redirect_uri(client: dict, redirect_uri: str) -> bool:
