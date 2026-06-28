@@ -671,10 +671,9 @@ function omiManifestTool(tool: OmiToolManifestEntry) {
 
 function schemaOptionsForInputSchema(schema: OmiToolInputSchema): Record<string, unknown> {
   const options: Record<string, unknown> = {};
-  for (const key of ["anyOf", "allOf", "oneOf", "if", "then"] as const) {
-    const value = schema[key];
-    if (value !== undefined) options[key] = value;
-  }
+  // Provider-facing custom tool input schemas reject root-level composite
+  // keywords. Keep selector preconditions in runtime control validation.
+  void schema;
   return options;
 }
 
