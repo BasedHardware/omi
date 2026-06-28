@@ -920,6 +920,8 @@ def execute_tool(user_id: str, tool_name: str, arguments: dict) -> dict:
             history = mcp_goals.get_goal_history(user_id, goal_id, days=arguments.get("days", 30))
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
+        except mcp_goals.GoalNotFound:
+            raise ToolExecutionError("Goal not found", code=-32001)
         return {"history": history}
 
     elif tool_name == "create_goal":
