@@ -17,6 +17,7 @@ enum ConnectorBrand: String, Sendable {
   case openclaw
   case hermes
   case x
+  case whatsapp
 
   fileprivate var appPath: String? {
     switch self {
@@ -34,7 +35,7 @@ enum ConnectorBrand: String, Sendable {
     case .codex:
       // Codex is OpenAI's CLI — reuse the ChatGPT app icon as the brand mark.
       return "/Applications/ChatGPT.app"
-    case .calendar, .gmail, .localFiles, .gemini, .agents, .openclaw, .hermes, .x:
+    case .calendar, .gmail, .localFiles, .gemini, .agents, .openclaw, .hermes, .x, .whatsapp:
       return nil
     }
   }
@@ -60,6 +61,8 @@ enum ConnectorBrand: String, Sendable {
       return "hermes_logo"
     case .openclaw:
       return "openclaw_logo"
+    case .whatsapp:
+      return "whatsapp_logo"
     default:
       return nil
     }
@@ -98,6 +101,8 @@ enum ConnectorBrand: String, Sendable {
     case .x:
       // SF Symbols has no X/Twitter mark — rendered as the 𝕏 glyph in the view.
       return "at"
+    case .whatsapp:
+      return "message.fill"
     }
   }
 }
@@ -185,12 +190,14 @@ struct ConnectorBrandIcon: View {
 
   var body: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        .fill(OmiColors.backgroundSecondary)
-        .overlay(
-          RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .stroke(Color.white.opacity(0.06), lineWidth: 1)
-        )
+      if !brand.usesFullBleedAppIcon {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+          .fill(OmiColors.backgroundSecondary)
+          .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+              .stroke(Color.white.opacity(0.06), lineWidth: 1)
+          )
+      }
 
       if brand == .agents {
         Text("🤖")
@@ -205,7 +212,8 @@ struct ConnectorBrandIcon: View {
           .resizable()
           .interpolation(.high)
           .aspectRatio(contentMode: .fit)
-          .padding(size * 0.18)
+          .padding(brand.imagePadding(for: size))
+          .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
       } else {
         Image(systemName: brand.fallbackSymbol)
           .font(.system(size: size * 0.38, weight: .semibold))
@@ -213,5 +221,15 @@ struct ConnectorBrandIcon: View {
       }
     }
     .frame(width: size, height: size)
+  }
+}
+
+private extension ConnectorBrand {
+  var usesFullBleedAppIcon: Bool {
+    self == .whatsapp
+  }
+
+  func imagePadding(for size: CGFloat) -> CGFloat {
+    usesFullBleedAppIcon ? 0 : size * 0.18
   }
 }

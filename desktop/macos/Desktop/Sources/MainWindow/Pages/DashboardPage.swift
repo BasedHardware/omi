@@ -217,6 +217,7 @@ struct DashboardPage: View {
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
     @ObservedObject private var deviceProvider = DeviceProvider.shared
+    @ObservedObject private var waCoordinator = WhatsAppReplyCoordinator.shared
     @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
@@ -474,19 +475,94 @@ struct DashboardPage: View {
             HomeMemoryBridgeBackdrop()
                 .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
 
-            HStack(alignment: .top, spacing: 28) {
-                VStack(alignment: .leading, spacing: 12) {
-                    sourceColumnHeader
-                    sourceConstellation
-                }
-                .frame(width: 320)
+            homeRoutingColumns
+                .padding(26)
+        }
+    }
 
-                centerMemoryColumn
+    private var homeRoutingColumns: some View {
+        HStack(alignment: .center, spacing: 32) {
+            homeSourceColumn
+            centerMemoryColumn
+            destinationStack
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+    }
 
-                destinationStack
-                    .frame(width: 300)
-            }
-            .padding(26)
+    private var homeSourceColumn: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sourceColumnHeader
+            sourceConstellation
+        }
+        .frame(width: 320)
+    }
+
+    private var homeCenterColumn: some View {
+        VStack(spacing: 18) {
+            centerMemoryHeader
+            homeMetricsStrip
+        }
+        .frame(width: 340, height: homeCenterColumnHeight, alignment: .center)
+    }
+
+    private var homeCenterColumnHeight: CGFloat {
+        62 + 12 + (6 * 48 + 5 * 12)
+    }
+
+    private var homeConversationsCountText: String {
+        let count = conversationCount
+            ?? appState.totalConversationsCount
+            ?? appState.conversations.count
+        return formattedCount(count)
+    }
+
+    private var homeTasksCountText: String {
+        formattedCount(taskCount ?? incompleteTaskCount)
+    }
+
+    private var homeMemoriesCountText: String {
+        let count = memoryCount
+            ?? (memoriesViewModel.totalMemoriesCount > 0
+                ? memoriesViewModel.totalMemoriesCount
+                : memoriesViewModel.memories.count)
+        return formattedCount(count)
+    }
+
+    private var homeScreenshotsCountText: String {
+        screenshotCount.map(formattedCount) ?? "—"
+    }
+
+    private var homeMetricsTopRow: some View {
+        HStack(spacing: 8) {
+            HomeCenterMetricTile(
+                title: "Conversations",
+                value: homeConversationsCountText,
+                systemImage: "text.bubble.fill",
+                action: { navigate(to: .conversations) }
+            )
+            HomeCenterMetricTile(
+                title: "Tasks",
+                value: homeTasksCountText,
+                systemImage: "checklist",
+                action: { navigate(to: .tasks) }
+            )
+        }
+    }
+
+    private var homeMetricsBottomRow: some View {
+        HStack(spacing: 8) {
+            HomeCenterMetricTile(
+                title: "Memories",
+                value: homeMemoriesCountText,
+                systemImage: "brain",
+                action: { navigate(to: .memories) }
+            )
+            HomeCenterMetricTile(
+                title: "Screenshots",
+                value: homeScreenshotsCountText,
+                systemImage: "photo.on.rectangle.angled",
+                action: { navigate(to: .rewind) }
+            )
         }
     }
 
@@ -496,10 +572,12 @@ struct DashboardPage: View {
             taskValue: taskMetricValue,
             memoryValue: memoryMetricValue,
             screenshotValue: screenshotMetricValue,
+            messageValue: messageMetricValue,
             onConversations: { navigate(to: .conversations) },
             onTasks: { navigate(to: .tasks) },
             onMemories: { navigate(to: .memories) },
-            onScreenshots: { navigate(to: .rewind) }
+            onScreenshots: { navigate(to: .rewind) },
+            onMessages: { navigate(to: .messages) }
         )
     }
 
@@ -651,6 +729,10 @@ struct DashboardPage: View {
 
     private var screenshotMetricValue: String {
         screenshotCount.map(formattedCount) ?? "—"
+    }
+
+    private var messageMetricValue: String {
+        formattedCount(waCoordinator.pendingDrafts.count)
     }
 
     private func navigate(to item: SidebarNavItem) {
@@ -2034,10 +2116,12 @@ private struct HomeCenterMemoryColumn: View {
     let taskValue: String
     let memoryValue: String
     let screenshotValue: String
+    let messageValue: String
     let onConversations: () -> Void
     let onTasks: () -> Void
     let onMemories: () -> Void
     let onScreenshots: () -> Void
+    let onMessages: () -> Void
 
     var body: some View {
         content
@@ -2050,7 +2134,7 @@ private struct HomeCenterMemoryColumn: View {
         }
         // Group the title directly above the cards and center the unit in a
         // column the same height as the side lists.
-        let columnHeight = CGFloat(422)
+        let columnHeight = CGFloat(512)
         let framed = stack.frame(width: CGFloat(340), height: columnHeight, alignment: Alignment.center)
         return AnyView(framed)
     }
@@ -2103,6 +2187,13 @@ private struct HomeCenterMemoryColumn: View {
                     action: onScreenshots
                 )
             }
+
+            HomeCenterMetricTile(
+                title: "Messages",
+                value: messageValue,
+                systemImage: "message",
+                action: onMessages
+            )
         }
         .frame(maxWidth: .infinity))
     }

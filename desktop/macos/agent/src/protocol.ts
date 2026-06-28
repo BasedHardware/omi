@@ -147,6 +147,11 @@ export interface ToolUseMessage extends QueryScopedOutbound {
   input: Record<string, unknown>;
 }
 
+export interface ToolCancelMessage extends QueryScopedOutbound {
+  type: "tool_cancel";
+  callId: string;
+}
+
 export interface ResultMessage extends QueryScopedOutbound {
   type: "result";
   text: string;
@@ -233,6 +238,7 @@ export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
   | ToolUseMessage
+  | ToolCancelMessage
   | ToolActivityMessage
   | ToolResultDisplayMessage
   | ThinkingDeltaMessage

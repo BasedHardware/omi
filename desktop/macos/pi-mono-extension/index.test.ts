@@ -1037,23 +1037,15 @@ test("OMI_TOOLS: top-level schemas keep the object contract", () => {
   }
 });
 
-test("OMI_TOOLS: agent control schemas preserve top-level composite preconditions", () => {
+test("OMI_TOOLS: provider-facing agent control schemas stay flat", () => {
   const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
-  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
-    { required: ["artifactId"] },
-    { required: ["sessionId"] },
-    { required: ["runId"] },
-    { required: ["attemptId"] },
-  ]);
+  assert.equal((inspectArtifacts?.parameters as any).anyOf, undefined);
+  assert.equal((inspectArtifacts?.parameters as any).oneOf, undefined);
   assert.match(inspectArtifacts?.description ?? "", /session, run, or attempt/);
 
   const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
-    {
-      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-      then: { required: ["childSessionId"] },
-    },
-  ]);
+  assert.equal((delegateAgent?.parameters as any).allOf, undefined);
+  assert.equal((delegateAgent?.parameters as any).oneOf, undefined);
   assert.ok(
     delegateAgent?.promptGuidelines?.some((guideline) =>
       guideline.includes("Use call for a structured child result")
@@ -1101,8 +1093,9 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
       [...manifestTool.required].sort(),
       `${manifestTool.name} required fields drifted`
     );
-    assert.deepEqual((tool!.parameters as any).anyOf, manifestTool.jsonSchemaOptions?.anyOf, `${manifestTool.name} anyOf drifted`);
-    assert.deepEqual((tool!.parameters as any).allOf, manifestTool.jsonSchemaOptions?.allOf, `${manifestTool.name} allOf drifted`);
+    assert.equal((tool!.parameters as any).anyOf, undefined, `${manifestTool.name} provider schema must not expose anyOf`);
+    assert.equal((tool!.parameters as any).allOf, undefined, `${manifestTool.name} provider schema must not expose allOf`);
+    assert.equal((tool!.parameters as any).oneOf, undefined, `${manifestTool.name} provider schema must not expose oneOf`);
 
     for (const [propertyName, manifestProperty] of Object.entries(manifestTool.properties)) {
       const property = (tool!.parameters as any).properties[propertyName];

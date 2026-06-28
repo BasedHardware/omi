@@ -436,22 +436,22 @@ class PushToTalkManager: ObservableObject {
   /// STT models hallucinate short phrases (often in random languages, e.g.
   /// "¿Qué es el número de cuenta?") when given silence instead of returning
   /// empty — so silent turns must be dropped before transcription, not after.
-  private static let minTurnAudioSeconds: Double = 0.35
-  private static let minVoicedSeconds: Double = 0.2
+  nonisolated private static let minTurnAudioSeconds: Double = 0.35
+  nonisolated private static let minVoicedSeconds: Double = 0.2
   /// RMS threshold (int16 samples) above which a 20ms frame counts as voiced.
   /// ~-41 dBFS: comfortably above quiet-room mic noise, far below soft speech.
-  private static let voicedRMSThreshold: Double = 300
+  nonisolated private static let voicedRMSThreshold: Double = 300
   // Hub silence gate is gentler than the omni gate: the realtime model tolerates a
   // little noise, and a too-strict gate that drops real speech ("not even listening")
   // is far worse than occasionally letting a marginal turn through. Lower RMS so a
   // quieter / further mic still registers, and require only a sliver of voice.
-  private static let hubVoicedRMSThreshold: Double = 170
-  private static let hubMinTurnAudioSeconds: Double = 0.2
-  private static let hubMinVoicedSeconds: Double = 0.08
+  nonisolated private static let hubVoicedRMSThreshold: Double = 170
+  nonisolated private static let hubMinTurnAudioSeconds: Double = 0.2
+  nonisolated private static let hubMinVoicedSeconds: Double = 0.08
 
   /// Returns (totalSeconds, voicedSeconds) for raw PCM16 mono 16kHz audio,
   /// where voiced = 20ms frames whose RMS exceeds `rmsThreshold`.
-  static func voicedAudioSeconds(pcm16k data: Data, rmsThreshold: Double = voicedRMSThreshold) -> (
+  nonisolated static func voicedAudioSeconds(pcm16k data: Data, rmsThreshold: Double = voicedRMSThreshold) -> (
     total: Double, voiced: Double
   ) {
     let sampleCount = data.count / 2
@@ -490,7 +490,7 @@ class PushToTalkManager: ObservableObject {
   /// Peak (0–32767) and mean RMS of a PCM16 buffer — used to log WHY a turn was
   /// dropped: peak≈0 → mic returned silence (dead capture); high peak + gate-fail →
   /// classifier misfire; low-but-nonzero → genuinely quiet/far mic.
-  static func audioEnergy(pcm16k data: Data) -> (peak: Int, rms: Int) {
+  nonisolated static func audioEnergy(pcm16k data: Data) -> (peak: Int, rms: Int) {
     let n = data.count / 2
     guard n > 0 else { return (0, 0) }
     var peak = 0

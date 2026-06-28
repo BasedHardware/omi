@@ -97,6 +97,7 @@ const playwrightCli = join(
 );
 
 const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
+const waToolsStdioScript = join(__dirname, "wa-tools-stdio.js");
 
 // --- Helpers ---
 
@@ -237,7 +238,7 @@ function startOmiToolsRelay(): Promise<string> {
             const msg = JSON.parse(line) as {
               type: string;
               callId: string;
-              name: string;
+              name?: string;
               input: Record<string, unknown>;
               protocolVersion?: number;
               requestId?: string;
@@ -250,10 +251,56 @@ function startOmiToolsRelay(): Promise<string> {
               adapterId?: string;
             };
 
-            if (msg.type === "tool_use") {
+            if (msg.type === "tool_cancel") {
               const protocolVersion: ProtocolVersion | undefined =
                 msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
-              if (isAgentControlToolName(msg.name)) {
+              const resolvedCorrelation =
+                toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
+              const messageRequestIsActive = Boolean(
+                msg.requestId &&
+                  msg.clientId &&
+                  resolvedCorrelation.requestId === msg.requestId &&
+                  resolvedCorrelation.clientId === msg.clientId
+              );
+              const correlation = {
+                ...resolvedCorrelation,
+                ...(messageRequestIsActive && msg.requestId ? { requestId: msg.requestId } : {}),
+                ...(messageRequestIsActive && msg.clientId ? { clientId: msg.clientId } : {}),
+                ...(messageRequestIsActive && protocolVersion ? { protocolVersion } : {}),
+              };
+              const pendingKey = toolCallPendingKey({
+                callId: msg.callId,
+                clientId: typeof correlation.clientId === "string" ? correlation.clientId : undefined,
+                requestId: typeof correlation.requestId === "string" ? correlation.requestId : undefined,
+              });
+              const pending = pendingToolCalls.get(pendingKey);
+              if (pending) {
+                pendingToolCalls.delete(pendingKey);
+                clearTimeout(pending.timeout);
+              }
+              send({
+                type: "tool_cancel",
+                callId: msg.callId,
+                ...correlation,
+              });
+              continue;
+            }
+
+            if (msg.type === "tool_use") {
+              if (!msg.name) {
+                client.write(
+                  JSON.stringify({
+                    type: "tool_result",
+                    callId: msg.callId,
+                    result: "Error: missing tool name",
+                  }) + "\n"
+                );
+                continue;
+              }
+              const toolName = msg.name;
+              const protocolVersion: ProtocolVersion | undefined =
+                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
+              if (isAgentControlToolName(toolName)) {
                 const resolvedCorrelation =
                   toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
                 const messageRequestIsActive = Boolean(
@@ -289,7 +336,7 @@ function startOmiToolsRelay(): Promise<string> {
                       }
                     : undefined;
                   const result = controlToolContext
-                    ? await handleAgentControlToolCall(controlToolContext, msg.name, msg.input ?? {})
+                    ? await handleAgentControlToolCall(controlToolContext, toolName, msg.input ?? {})
                     : JSON.stringify({
                         ok: false,
                         error: { code: "runtime_not_ready", message: "Agent runtime kernel is not ready" },
@@ -388,7 +435,7 @@ function startOmiToolsRelay(): Promise<string> {
               send({
                 type: "tool_use",
                 callId,
-                name: msg.name,
+                name: toolName,
                 input: msg.input,
                 ...correlation,
               });
@@ -641,6 +688,13 @@ function buildMcpServers(
       command: process.execPath,
       args: [omiToolsStdioScript],
       env: omiToolsEnv,
+    });
+
+    servers.push({
+      name: "wa-tools",
+      command: process.execPath,
+      args: [waToolsStdioScript],
+      env: [...omiToolsEnv],
     });
   }
 

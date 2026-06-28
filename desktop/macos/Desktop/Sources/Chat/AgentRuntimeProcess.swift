@@ -20,6 +20,7 @@ actor AgentRuntimeProcess {
       case textDelta
       case thinkingDelta
       case toolUse
+      case toolCancel
       case toolActivity
       case toolResultDisplay
       case result
@@ -64,6 +65,7 @@ actor AgentRuntimeProcess {
       case "text_delta": return .textDelta
       case "thinking_delta": return .thinkingDelta
       case "tool_use": return .toolUse
+      case "tool_cancel": return .toolCancel
       case "tool_activity": return .toolActivity
       case "tool_result_display": return .toolResultDisplay
       case "result": return .result
@@ -116,6 +118,7 @@ actor AgentRuntimeProcess {
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
+  private var activeToolTasks: [String: Task<Void, Never>] = [:]
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private var receivedInit = false
   private var isRestarting = false
@@ -151,6 +154,7 @@ actor AgentRuntimeProcess {
       activeRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
+    cancelActiveToolTasks(clientId: clientId)
     for (requestKey, request) in activeControlRequests where request.clientId == clientId {
       activeControlRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
@@ -690,6 +694,7 @@ actor AgentRuntimeProcess {
     closePipes()
     isRunning = false
     receivedInit = false
+    cancelActiveToolTasks()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
@@ -798,6 +803,9 @@ actor AgentRuntimeProcess {
     case .toolUse:
       handleToolUse(message)
 
+    case .toolCancel:
+      handleToolCancel(message)
+
     case .cancelAck:
       if let requestKey = message.requestKey, var request = activeRequests[requestKey] {
         request.cancelAck = message
@@ -831,6 +839,7 @@ actor AgentRuntimeProcess {
   private func handleToolUse(_ message: RuntimeMessage) {
     let callId = message.payload["callId"] as? String ?? ""
     let name = message.payload["name"] as? String ?? ""
+    let toolTaskKey = activeToolTaskKey(for: message)
     guard let request = routedRequest(for: message) else {
       if let requestKey = message.requestKey, activeControlRequests[requestKey] != nil {
         log("AgentRuntimeProcess: rejecting Swift-backed tool call from control request")
@@ -850,9 +859,43 @@ actor AgentRuntimeProcess {
       return
     }
     let input = message.payload["input"] as? [String: Any] ?? [:]
-    Task {
+    let task = Task {
       let result = await request.onToolCall(callId, name, input)
-      completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
+      finishToolCall(
+        key: toolTaskKey,
+        callId: callId,
+        result: result,
+        requestId: request.requestId,
+        clientId: request.clientId
+      )
+    }
+    activeToolTasks[toolTaskKey] = task
+  }
+
+  private func handleToolCancel(_ message: RuntimeMessage) {
+    let key = activeToolTaskKey(for: message)
+    guard let task = activeToolTasks.removeValue(forKey: key) else { return }
+    task.cancel()
+  }
+
+  private func finishToolCall(key: String, callId: String, result: String, requestId: String? = nil, clientId: String? = nil) {
+    guard activeToolTasks.removeValue(forKey: key) != nil else { return }
+    completeToolCall(callId: callId, result: result, requestId: requestId, clientId: clientId)
+  }
+
+  private func activeToolTaskKey(for message: RuntimeMessage) -> String {
+    if let requestKey = message.requestKey {
+      return "\(requestKey.clientId)\u{0}\(requestKey.requestId)\u{0}\(message.payload["callId"] as? String ?? "")"
+    }
+    return "legacy\u{0}\(message.payload["callId"] as? String ?? "")"
+  }
+
+  private func cancelActiveToolTasks(clientId: String? = nil) {
+    for key in Array(activeToolTasks.keys) {
+      if let clientId, !key.hasPrefix("\(clientId)\u{0}") {
+        continue
+      }
+      activeToolTasks.removeValue(forKey: key)?.cancel()
     }
   }
 
@@ -985,11 +1028,13 @@ actor AgentRuntimeProcess {
     isRunning = false
     receivedInit = false
     closePipes()
+    cancelActiveToolTasks()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
 
   private func resumeAllRequests(throwing error: Error) {
+    cancelActiveToolTasks()
     let requests = activeRequests.values
     activeRequests.removeAll()
     for request in requests {

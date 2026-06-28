@@ -6,6 +6,7 @@ DESKTOP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 AGENT_DIR="$DESKTOP_DIR/agent"
 PI_MONO_DIR="$DESKTOP_DIR/pi-mono-extension"
 NODE_RESOURCE="$DESKTOP_DIR/Desktop/Sources/Resources/node"
+WACLI_RESOURCE="$DESKTOP_DIR/Desktop/Sources/Resources/wacli"
 
 NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.14.0}"
 NODE_DARWIN_ARM64_SHA256="e9404633bc02a5162c5c573b1e2490f5fb44648345d64a958b17e325729a5e42"
@@ -176,8 +177,75 @@ stage_universal_node() {
   log "Staged universal Node $NODE_VERSION at $NODE_RESOURCE"
 }
 
+stage_wacli() {
+  local wacli_bin="${OMI_WACLI_BIN:-}"
+  local expected_wacli_sha="${OMI_WACLI_SHA256:-}"
+  local dev_wacli="$DESKTOP_DIR/local/whatsapp/bin/openclaw-v0.11.1/wacli"
+  if [ -n "$wacli_bin" ] && [ ! -x "$wacli_bin" ]; then
+    echo "ERROR: OMI_WACLI_BIN is not executable: $wacli_bin" >&2
+    exit 1
+  fi
+
+  if [ -z "$wacli_bin" ]; then
+    if [ -x "$dev_wacli" ]; then
+      wacli_bin="$dev_wacli"
+    else
+      wacli_bin="$(command -v wacli || true)"
+    fi
+  fi
+
+  if [ -z "$wacli_bin" ]; then
+    if [ "$MODE" = "universal" ]; then
+      echo "ERROR: wacli not found. Set OMI_WACLI_BIN to a prebuilt universal wacli binary for release packaging." >&2
+      exit 1
+    fi
+    log "wacli not found; skipping staged wacli resource for local dev"
+    rm -f "$WACLI_RESOURCE"
+    return
+  fi
+
+  local auth_help
+  local global_help
+  auth_help="$("$wacli_bin" auth --help 2>&1 || true)"
+  global_help="$("$wacli_bin" --help 2>&1 || true)"
+  if [[ "$auth_help" != *"--qr-format"* || "$global_help" != *"--events"* ]]; then
+    if [ "$MODE" = "universal" ] || [ -n "${OMI_WACLI_BIN:-}" ]; then
+      echo "ERROR: wacli is too old for WhatsApp QR auth. Use openclaw/wacli >= 0.11.1: $wacli_bin" >&2
+      exit 1
+    fi
+    log "wacli at $wacli_bin is too old; skipping staged wacli resource for local dev"
+    rm -f "$WACLI_RESOURCE"
+    return
+  fi
+
+  if [ "$MODE" = "universal" ] && [ -z "$expected_wacli_sha" ]; then
+    echo "ERROR: OMI_WACLI_SHA256 is required when staging wacli for release packaging." >&2
+    exit 1
+  fi
+  if [ -n "$expected_wacli_sha" ]; then
+    verify_sha256 "$wacli_bin" "$expected_wacli_sha"
+  fi
+
+  mkdir -p "$(dirname "$WACLI_RESOURCE")"
+  cp -f "$wacli_bin" "$WACLI_RESOURCE"
+  chmod +x "$WACLI_RESOURCE"
+  xattr -cr "$WACLI_RESOURCE" 2>/dev/null || true
+
+  if [ "$MODE" = "universal" ]; then
+    file "$WACLI_RESOURCE" | grep -q "universal binary" || {
+      echo "ERROR: staged wacli is not universal: $(file "$WACLI_RESOURCE")" >&2
+      exit 1
+    }
+  fi
+
+  log "Staged wacli from $wacli_bin"
+}
+
 validate_runtime_tree() {
   require_executable "$NODE_RESOURCE"
+  if [ "$MODE" = "universal" ]; then
+    require_executable "$WACLI_RESOURCE"
+  fi
   require_file "$AGENT_DIR/dist/index.js"
   require_file "$AGENT_DIR/dist/patched-acp-entry.mjs"
   require_file "$AGENT_DIR/src/runtime/control-tool-manifest.js"
@@ -196,9 +264,11 @@ install_agent_deps_and_build
 case "$MODE" in
   local)
     stage_local_node
+    stage_wacli
     ;;
   universal)
     stage_universal_node
+    stage_wacli
     ;;
 esac
 validate_runtime_tree

@@ -312,6 +312,8 @@ struct SettingsContentView: View {
     case account = "Account"
     case planUsage = "Plan and Usage"
     case aiChat = "AI Chat"
+    // Hidden from the Settings sidebar; Messages page opens this content from its provider gear.
+    case whatsapp = "WhatsApp"
     case floatingBar = "Floating Bar"
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
@@ -467,6 +469,8 @@ struct SettingsContentView: View {
           planUsageSection
         case .aiChat:
           aiChatSection
+        case .whatsapp:
+          WhatsAppSettingsSection(highlightedSettingId: $highlightedSettingId)
         case .floatingBar:
           floatingBarSection
         case .shortcuts:
@@ -6835,7 +6839,7 @@ struct SettingsContentView: View {
                   .textFieldStyle(.roundedBorder)
                   .scaledFont(size: 13)
                   .disabled(activeCheckoutPriceId != nil)
-                  .onChange(of: upgradePromotionCode) { _ in
+                  .onChange(of: upgradePromotionCode) { _, _ in
                     subscriptionError = nil
                   }
 

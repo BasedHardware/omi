@@ -1,5 +1,23 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Added a WhatsApp connector setup flow with QR linking and connection status",
+    "Improved WhatsApp draft failures so account limit errors show in settings and audit history",
+    "Fixed WhatsApp linking showing a store-lock error when the account was already connected",
+    "Fixed WhatsApp reconnecting events incorrectly showing reconnect required while sync was still running",
+    "Improved WhatsApp reply drafts by including the last few synced thread messages as context",
+    "Added opt-in WhatsApp brain sync, automatic tone learning, contact names, and calendar-aware reply drafting",
+    "Added a Messages page with a WhatsApp-style chat and draft inbox, opened from the new Messages tile on the dashboard; moved WhatsApp settings into the Messages page",
+    "Fixed the Messages page to sort WhatsApp threads by recent activity, show cleaner contact names, keep drafts attached to the right chats, refresh live chats, and display sent messages immediately",
+    "Fixed WhatsApp reply drafts so reasoning text is hidden and never sent as part of the message",
+    "Improved WhatsApp reliability by hardening local webhooks, message syncing, draft handling, and agent tool timeouts",
+    "Hid WhatsApp audit logs and connection diagnostics from production builds",
+    "Fixed WhatsApp unread badges clearing after opening a chat",
+    "Fixed WhatsApp settings and linking screens so disconnected accounts hide reply controls and transient sync warnings stay out of the UI",
+    "Fixed WhatsApp linked-device chats merging with their real contact thread and allowlisted contacts auto-sending from Draft mode",
+    "Fixed WhatsApp thread ordering when synced chat metadata reports newer placeholder activity than real messages",
+    "Updated WhatsApp to use the official logo instead of the generic message icon",
+    "Fixed WhatsApp link modal dismiss sending the app to the background"
+  ],
   "releases": [
     {
       "version": "0.11.555",

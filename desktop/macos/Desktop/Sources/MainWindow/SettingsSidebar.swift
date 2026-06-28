@@ -514,6 +514,7 @@ struct SettingsSidebarItem: View {
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
+    default: return "gearshape"
     }
   }
 
