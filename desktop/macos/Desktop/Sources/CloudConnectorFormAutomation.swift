@@ -143,6 +143,18 @@ enum CloudConnectorFormAutomation {
         "Error: Accessibility permission is not available to Omi, so the native connector form filler cannot inspect browser fields."
     }
 
+    if provider == "claude" {
+      if let result = await advanceClaudeConnectorStateMachine(
+        provider: provider,
+        values: values,
+        submit: submit)
+      {
+        return result
+      }
+      return
+        "Error: Could not find a visible \(provider) custom connector form. Open the add connector modal in the signed-in browser, then call this tool again."
+    }
+
     guard let form = findBestForm(provider: provider, values: values) else {
       if let result = await advanceClaudeConnectorStateMachine(
         provider: provider,
