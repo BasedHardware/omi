@@ -657,7 +657,10 @@ class BtDevice {
     return {
       'name': name,
       'id': id,
-      'type': type.index,
+      // Persist by stable name (not index): _deviceTypeFromJson reads both the
+      // new name strings and legacy integer indexes, so removing an enum value
+      // can never mis-map existing or newly-saved devices.
+      'type': type.name,
       'rssi': rssi,
       'locator': locator?.toJson(),
       'modelNumber': modelNumber,
