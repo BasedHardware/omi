@@ -58,10 +58,7 @@ final class WhatsAppContactResolver: ObservableObject {
   }
 
   func detailLabel(for jid: String) -> String {
-    let normalized = normalizeJid(jid)
-    if let canonical = contactsByJid[normalized]?.canonicalJid, canonical != normalized {
-      return detailLabel(for: canonical)
-    }
+    let normalized = canonicalJid(for: jid)
     if normalized.contains("@lid") {
       return contactsByJid[normalized] == nil ? normalized : "WhatsApp linked contact"
     }
@@ -80,17 +77,28 @@ final class WhatsAppContactResolver: ObservableObject {
   }
 
   func canonicalJid(for jid: String) -> String {
-    let normalized = normalizeJid(jid)
-    guard let canonical = contactsByJid[normalized]?.canonicalJid?.nilIfEmpty else {
-      return normalized
+    var current = normalizeJid(jid)
+    var visited: Set<String> = []
+    while let canonical = contactsByJid[current]?.canonicalJid?.nilIfEmpty.map(normalizeJid),
+      canonical != current
+    {
+      guard !visited.contains(current), !visited.contains(canonical) else {
+        return current
+      }
+      visited.insert(current)
+      current = canonical
     }
-    return normalizeJid(canonical)
+    return current
   }
 
   func rememberAlias(jid: String, canonicalJid: String) {
     let normalized = normalizeJid(jid)
     let canonical = normalizeJid(canonicalJid)
     guard !normalized.isEmpty, !canonical.isEmpty, normalized != canonical else { return }
+    guard self.canonicalJid(for: canonical) != normalized else {
+      log("WhatsAppContactResolver: skipped cyclic alias")
+      return
+    }
     var contact = contactsByJid[normalized] ?? WhatsAppContact(
       jid: normalized,
       contactName: nil,

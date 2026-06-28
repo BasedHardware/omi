@@ -9,7 +9,6 @@ final class WhatsAppMessagingProvider: MessagingProvider {
   private var backfilledThreadIds: Set<String> = []
   private var threadAliases: [String: String] = [:]
   private var draftThreadAliases: [String: String] = [:]
-  private var verifiedActivityCache: [String: (activity: Date?, checkedAt: Date)] = [:]
 
   let id = "whatsapp"
   let displayName = "WhatsApp"
@@ -21,9 +20,9 @@ final class WhatsAppMessagingProvider: MessagingProvider {
   }
 
   func loadThreads() async -> [MessageThread] {
-    let threads = await verifyRecentThreadActivity(await WhatsAppReader.listChats())
+    let threads = await WhatsAppReader.listChats()
     let pendingDrafts = WhatsAppReplyCoordinator.shared.pendingDrafts
-    threadAliases = await lidThreadAliases(in: threads)
+    threadAliases = [:]
     draftThreadAliases = draftAliases(for: pendingDrafts, in: threads)
     let draftThreadIds = Set(pendingDrafts.map { canonicalThreadId(for: $0) })
     let mappedThreads = mergeAliasedThreads(threads, draftThreadIds: draftThreadIds)
@@ -127,88 +126,16 @@ final class WhatsAppMessagingProvider: MessagingProvider {
     draftThreadAliases[draft.chatJid] ?? threadAliases[draft.chatJid] ?? draft.chatJid
   }
 
-  private func verifyRecentThreadActivity(_ threads: [MessageThread]) async -> [MessageThread] {
-    let now = Date()
-    let recentThreadIds = Set(threads.prefix(20).map(\.id))
-    var verifiedThreads: [MessageThread] = []
-    verifiedThreads.reserveCapacity(threads.count)
-
-    for thread in threads {
-      guard recentThreadIds.contains(thread.id) else {
-        verifiedThreads.append(thread)
-        continue
-      }
-
-      let activity: Date?
-      if let cached = verifiedActivityCache[thread.id], now.timeIntervalSince(cached.checkedAt) < 15 {
-        activity = cached.activity
-      } else {
-        let messages = await WhatsAppReader.listMessages(chatJid: thread.id, limit: 10)
-        activity = messages.compactMap(\.timestamp).max()
-        verifiedActivityCache[thread.id] = (activity: activity, checkedAt: now)
-      }
-
-      guard let activity else {
-        verifiedThreads.append(thread)
-        continue
-      }
-      verifiedThreads.append(MessageThread(
-        id: thread.id,
-        providerId: thread.providerId,
-        title: thread.title,
-        subtitle: thread.subtitle,
-        lastMessagePreview: thread.lastMessagePreview,
-        lastActivity: activity,
-        unreadCount: thread.unreadCount,
-        isGroup: thread.isGroup,
-        hasPendingDraft: thread.hasPendingDraft
-      ))
-    }
-
-    let activeThreadIds = Set(threads.map(\.id))
-    verifiedActivityCache = verifiedActivityCache.filter { activeThreadIds.contains($0.key) }
-    return verifiedThreads
-  }
-
   private func draftAliases(for drafts: [WhatsAppDraft], in threads: [MessageThread]) -> [String: String] {
     var aliases: [String: String] = [:]
 
     for draft in drafts where draft.chatJid.contains("@lid") {
-      if let match = threadAliases[draft.chatJid] ?? phoneMatchedThreadId(for: draft, in: threads) {
-        aliases[draft.chatJid] = match
-        rememberAliasContact(for: draft, canonicalThreadId: match, threads: threads)
-        continue
-      }
-      if let match = nameMatchedThreadId(for: draft, in: threads) {
-        aliases[draft.chatJid] = match
-        rememberAliasContact(for: draft, canonicalThreadId: match, threads: threads)
-        continue
-      }
-      if let match = previewMatchedThreadId(for: draft, in: threads) {
+      if let match = phoneMatchedThreadId(for: draft, in: threads) {
         aliases[draft.chatJid] = match
         rememberAliasContact(for: draft, canonicalThreadId: match, threads: threads)
       }
     }
 
-    return aliases
-  }
-
-  private func lidThreadAliases(in threads: [MessageThread]) async -> [String: String] {
-    var aliases: [String: String] = [:]
-    for thread in threads where isLinkedDeviceThread(thread.id) {
-      if let match = phoneMatchedThreadId(for: thread, in: threads)
-        ?? nameMatchedThreadId(for: thread, in: threads)
-        ?? previewMatchedThreadId(for: thread, in: threads)
-      {
-        aliases[thread.id] = match
-        rememberThreadAlias(thread.id, canonicalThreadId: match, threads: threads)
-        continue
-      }
-      if let match = await messageSenderMatchedThreadId(for: thread, in: threads) {
-        aliases[thread.id] = match
-        rememberThreadAlias(thread.id, canonicalThreadId: match, threads: threads)
-      }
-    }
     return aliases
   }
 
@@ -264,11 +191,6 @@ final class WhatsAppMessagingProvider: MessagingProvider {
     return uniquePhoneMatchedThreadId(digits: digits, in: threads, excluding: draft.chatJid)
   }
 
-  private func phoneMatchedThreadId(for thread: MessageThread, in threads: [MessageThread]) -> String? {
-    guard let digits = WhatsAppContactResolver.shared.phoneDigits(for: thread.id) else { return nil }
-    return uniquePhoneMatchedThreadId(digits: digits, in: threads, excluding: thread.id)
-  }
-
   private func uniquePhoneMatchedThreadId(digits: String, in threads: [MessageThread], excluding excludedThreadId: String) -> String? {
     let matches = threads.filter { thread in
       guard !thread.isGroup, thread.id != excludedThreadId, !isLinkedDeviceThread(thread.id) else { return false }
@@ -277,95 +199,12 @@ final class WhatsAppMessagingProvider: MessagingProvider {
     return matches.count == 1 ? matches[0].id : nil
   }
 
-  private func nameMatchedThreadId(for draft: WhatsAppDraft, in threads: [MessageThread]) -> String? {
-    let draftName = normalizedName(
-      WhatsAppContactResolver.shared.displayName(for: draft.senderJid, fallback: draft.senderName)
-    )
-    guard !draftName.isEmpty else { return nil }
-
-    let matches = threads.filter { thread in
-      guard !thread.isGroup else { return false }
-      let threadTitle = normalizedName(thread.title)
-      return threadTitle == draftName
-    }
-    return matches.count == 1 ? matches[0].id : nil
-  }
-
-  private func nameMatchedThreadId(for thread: MessageThread, in threads: [MessageThread]) -> String? {
-    let threadName = normalizedName(thread.title)
-    guard !threadName.isEmpty else { return nil }
-    let matches = threads.filter { candidate in
-      guard !candidate.isGroup, candidate.id != thread.id, !isLinkedDeviceThread(candidate.id) else { return false }
-      return normalizedName(candidate.title) == threadName
-    }
-    return matches.count == 1 ? matches[0].id : nil
-  }
-
-  private func previewMatchedThreadId(for draft: WhatsAppDraft, in threads: [MessageThread]) -> String? {
-    let draftText = normalizedMessageText(draft.incomingText)
-    guard !draftText.isEmpty else { return nil }
-
-    let matches = threads.filter { thread in
-      guard !thread.isGroup else { return false }
-      return normalizedMessageText(thread.lastMessagePreview ?? "") == draftText
-    }
-    return matches.count == 1 ? matches[0].id : nil
-  }
-
-  private func previewMatchedThreadId(for thread: MessageThread, in threads: [MessageThread]) -> String? {
-    let threadText = normalizedMessageText(thread.lastMessagePreview ?? "")
-    guard !threadText.isEmpty else { return nil }
-    let matches = threads.filter { candidate in
-      guard !candidate.isGroup, candidate.id != thread.id, !isLinkedDeviceThread(candidate.id) else { return false }
-      return normalizedMessageText(candidate.lastMessagePreview ?? "") == threadText
-    }
-    return matches.count == 1 ? matches[0].id : nil
-  }
-
-  private func messageSenderMatchedThreadId(for thread: MessageThread, in threads: [MessageThread]) async -> String? {
-    let messages = await WhatsAppReader.listMessages(chatJid: thread.id, limit: 20)
-    let senderNames = Set(messages.compactMap { message -> String? in
-      guard !message.isFromMe, let senderName = message.senderName else { return nil }
-      let normalized = normalizedName(senderName)
-      return normalized.isEmpty ? nil : normalized
-    })
-    guard !senderNames.isEmpty else { return nil }
-    let matches = threads.filter { candidate in
-      guard !candidate.isGroup, candidate.id != thread.id, !isLinkedDeviceThread(candidate.id) else { return false }
-      return senderNames.contains(normalizedName(candidate.title))
-    }
-    return matches.count == 1 ? matches[0].id : nil
-  }
-
-  private func normalizedName(_ value: String) -> String {
-    value
-      .lowercased()
-      .components(separatedBy: CharacterSet.alphanumerics.inverted)
-      .filter { !$0.isEmpty }
-      .joined(separator: " ")
-  }
-
-  private func normalizedMessageText(_ value: String) -> String {
-    value
-      .lowercased()
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-      .components(separatedBy: .whitespacesAndNewlines)
-      .filter { !$0.isEmpty }
-      .joined(separator: " ")
-  }
-
   private func rememberAliasContact(for draft: WhatsAppDraft, canonicalThreadId: String, threads: [MessageThread]) {
     guard let thread = threads.first(where: { $0.id == canonicalThreadId }) else { return }
     WhatsAppContactResolver.shared.remember(jid: draft.chatJid, contactName: thread.title)
     WhatsAppContactResolver.shared.remember(jid: draft.senderJid, contactName: thread.title)
     WhatsAppContactResolver.shared.rememberAlias(jid: draft.chatJid, canonicalJid: canonicalThreadId)
     WhatsAppContactResolver.shared.rememberAlias(jid: draft.senderJid, canonicalJid: canonicalThreadId)
-  }
-
-  private func rememberThreadAlias(_ threadId: String, canonicalThreadId: String, threads: [MessageThread]) {
-    guard let thread = threads.first(where: { $0.id == canonicalThreadId }) else { return }
-    WhatsAppContactResolver.shared.remember(jid: threadId, contactName: thread.title)
-    WhatsAppContactResolver.shared.rememberAlias(jid: threadId, canonicalJid: canonicalThreadId)
   }
 
   private func isLinkedDeviceThread(_ threadId: String) -> Bool {
