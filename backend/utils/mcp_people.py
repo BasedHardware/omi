@@ -8,11 +8,15 @@ conversations (rename a mislabeled speaker, register a known contact, remove a
 duplicate) for the two-way memory bank (issue #4862).
 """
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
 import database.users as users_db
+from utils.other.storage import delete_user_person_speech_samples
+
+logger = logging.getLogger(__name__)
 
 
 class PersonError(Exception):
@@ -86,3 +90,10 @@ def delete_person(uid: str, person_id: str) -> None:
     if not users_db.get_person(uid, person_id):
         raise PersonNotFound("Person not found")
     users_db.delete_person(uid, person_id)
+    # Mirror the REST people endpoint and clean up the person's GCS speech-sample
+    # blobs so deleting via MCP does not orphan storage. Best-effort: the person
+    # doc is already gone, so a storage hiccup must not fail the delete.
+    try:
+        delete_user_person_speech_samples(uid, person_id)
+    except Exception:
+        logger.warning("delete_person: speech-sample cleanup failed for uid=%s person_id=%s", uid, person_id)
