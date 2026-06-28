@@ -45,7 +45,8 @@ jobs:
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
 
       - name: Compute short SHA
-        run: echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+        id: image-tag
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
@@ -55,7 +56,7 @@ jobs:
           push: true
           tags: |
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ env.SHORT_SHA }}
+            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
@@ -65,7 +66,7 @@ jobs:
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
           secrets: |
@@ -90,7 +91,7 @@ jobs:
         with:
           service: ${{ env.SERVICE }}-sync
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
           secrets: |
@@ -113,10 +114,8 @@ jobs:
             ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
-            --set image.tag=${{ env.SHORT_SHA }}
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout status \
-            deploy/${{ vars.ENV }}-omi-backend-listen \
-            --timeout=300s
+            --set image.tag=${{ steps.image-tag.outputs.short_sha }}
+          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s
 
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
@@ -124,7 +123,7 @@ jobs:
         with:
           service: ${{ env.SERVICE }}-integration
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           env_vars: |
             GOOGLE_CLOUD_PROJECT=based-hardware
           secrets: |

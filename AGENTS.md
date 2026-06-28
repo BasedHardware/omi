@@ -236,12 +236,12 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 - Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
-- Make individual commits per file, not bulk commits.
+- Make individual commits per feature or testable surface, not per file or unrelated bulk changes.
 - If push fails (remote ahead): `git pull --rebase && git push`.
 - Never push or create PRs unless explicitly asked — commit locally by default.
 
 ### RELEASE Command
-Create a branch from `main`, individual commits per file, push and open a PR, merge without squash, then switch back to `main` and pull.
+Create a branch from `main`, make individual commits per feature or testable surface, push and open a PR, merge without squash, then switch back to `main` and pull.
 
 ### RELEASEWITHBACKEND Command
 Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
