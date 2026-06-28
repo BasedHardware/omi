@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 import httpx
@@ -15,12 +16,21 @@ def main() -> int:
         required=True,
         help='Base URL, for example http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080',
     )
-    parser.add_argument('--token', required=True, help='Service bearer token')
+    parser.add_argument(
+        '--token',
+        default=None,
+        help='Service bearer token (default: read from OMI_LLM_GATEWAY_SERVICE_TOKEN env var)',
+    )
     args = parser.parse_args()
+
+    token = args.token or os.environ.get('OMI_LLM_GATEWAY_SERVICE_TOKEN')
+    if not token:
+        print('ERROR: provide --token or set OMI_LLM_GATEWAY_SERVICE_TOKEN env var')
+        return 2
 
     base_url = args.url.rstrip('/')
     headers = {
-        'Authorization': f'Bearer {args.token}',
+        'Authorization': f'Bearer {token}',
         'X-Omi-Service-Caller': 'backend',
         'Content-Type': 'application/json',
     }
@@ -52,7 +62,7 @@ def main() -> int:
         response.raise_for_status()
         body = response.json()
 
-    content = body.get('choices', [{}])[0].get('message', {}).get('content')
+    content = (body.get('choices') or [{}])[0].get('message', {}).get('content')
     if not isinstance(content, str):
         print('ERROR: response did not contain choices[0].message.content')
         return 1

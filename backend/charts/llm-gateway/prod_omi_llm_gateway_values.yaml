@@ -9,6 +9,17 @@ imagePullSecrets: []
 nameOverride: ""
 fullnameOverride: ""
 
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
 serviceAccount:
   create: true
   automount: true

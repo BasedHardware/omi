@@ -35,17 +35,27 @@ async def create_chat_completion(
         resolved_route = resolve_chat_completion_route(config, request_body)
         credentials = build_omi_managed_credential_context(caller)
         result = await execute_chat_completion(resolved_route, credentials, provider_registry)
-        observe_success(started_at, result)
+        _safe_observe(lambda: observe_success(started_at, result))
         return JSONResponse(content=result.response)
     except GatewayError as exc:
         if resolved_route is not None:
-            observe_error(
-                started_at,
-                lane_id=resolved_route.lane.lane_id,
-                route_artifact_id=resolved_route.active_route.route_artifact_id,
-                error=exc,
+            _safe_observe(
+                lambda: observe_error(
+                    started_at,
+                    lane_id=resolved_route.lane.lane_id,
+                    route_artifact_id=resolved_route.active_route.route_artifact_id,
+                    error=exc,
+                )
             )
         return _error_response(exc)
+
+
+def _safe_observe(fn: Any) -> None:
+    """Emit metrics without risking request-handling failures."""
+    try:
+        fn()
+    except Exception:
+        pass
 
 
 async def _request_json(request: Request) -> dict[str, Any]:

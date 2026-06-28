@@ -28,12 +28,20 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "llm-gateway.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ["uvicorn"]
-          args: ["llm_gateway.main:app", "--host", "0.0.0.0", "--port", "8080", "--loop", "uvloop"]
+          args: ["llm_gateway.main:app", "--host", "0.0.0.0", "--port", "{{ .Values.service.port }}", "--loop", "uvloop"]
           env:
             {{- toYaml .Values.env | nindent 12 }}
           ports:
