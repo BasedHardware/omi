@@ -114,7 +114,7 @@
         firebase.initializeApp(firebaseConfig);
 
         let idToken = null;
-        const signInOptions = [firebase.auth.GoogleAuthProvider.PROVIDER_ID];
+        const signInOptions = [firebase.auth.EmailAuthProvider.PROVIDER_ID, firebase.auth.GoogleAuthProvider.PROVIDER_ID];
         if (/Mac|iPod|iPhone|iPad/.test(navigator.platform)) {
             signInOptions.push('apple.com');
         }
