@@ -1,13 +1,17 @@
-name: Build Cortex apps
+name: Build Cortex (Windows)
 
-# Produces installable artifacts on GitHub's runners (this repo has no local
-# build toolchain). Run manually from the Actions tab (workflow_dispatch) or on
-# pushes to the Cortex branch. Download artifacts from the run summary.
+# Builds the Windows installer (.exe) on a GitHub runner — the Windows app has no
+# other CI pipeline. Run manually from the Actions tab or on pushes to the Cortex
+# branch; download the installer from the run's Artifacts.
+#
+# Android / iOS / macOS are built by Codemagic (see codemagic.yaml), which holds
+# the Firebase config + signing secrets a clean GitHub checkout doesn't have.
 on:
   workflow_dispatch:
   push:
     branches:
       - claude/cortex-agent-pc-control-p4i3c5
+      - cortex-full
 
 jobs:
   windows-exe:
@@ -33,69 +37,3 @@ jobs:
           name: cortex-windows-exe
           path: desktop/windows/dist/*.exe
           if-no-files-found: error
-
-  android-apk:
-    name: Android (.apk)
-    runs-on: ubuntu-latest
-    # Best-effort: a clean CI checkout lacks the app's (gitignored) Firebase
-    # config files (lib/firebase_options_*.dart), so the Flutter compile can't
-    # complete without secrets. Don't fail the whole run on it.
-    continue-on-error: true
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - name: Create .env from template
-        run: cp .env.template .env || true
-      - run: flutter pub get
-      - name: Codegen (build_runner)
-        run: dart run build_runner build --delete-conflicting-outputs
-        continue-on-error: true
-      - name: Localizations
-        run: flutter gen-l10n
-        continue-on-error: true
-      # Debug signing so no keystore/secrets are required to produce an
-      # installable APK. Swap to --release with signing for store builds.
-      - name: Build APK (debug-signed, prod flavor)
-        run: flutter build apk --debug --flavor prod
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cortex-android-apk
-          path: app/build/app/outputs/flutter-apk/*.apk
-          if-no-files-found: error
-
-  ios-build:
-    name: iOS (build check, unsigned)
-    runs-on: macos-latest
-    # Best-effort: a distributable .ipa needs Apple signing certs/secrets, and the
-    # iOS workspace needs CocoaPods/SPM setup. Don't fail the whole run on it.
-    continue-on-error: true
-    defaults:
-      run:
-        working-directory: app
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-      - name: Create .env from template
-        run: cp .env.template .env || true
-      - run: flutter pub get
-      - name: Codegen (build_runner)
-        run: dart run build_runner build --delete-conflicting-outputs
-        continue-on-error: true
-      - name: Localizations
-        run: flutter gen-l10n
-        continue-on-error: true
-      # A distributable .ipa needs Apple signing certs/secrets. This step only
-      # verifies the iOS build compiles; wire signing in to emit an .ipa.
-      - name: Build iOS (no codesign)
-        run: flutter build ios --debug --no-codesign --flavor prod
