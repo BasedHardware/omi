@@ -72,7 +72,7 @@ class GPUWorker:
         self._attn_mode = os.getenv("PARAKEET_ATTENTION_MODE", "full").lower()
         if self._attn_mode not in _VALID_ATTN_MODES:
             raise ValueError(f"PARAKEET_ATTENTION_MODE must be one of {_VALID_ATTN_MODES}, got '{self._attn_mode}'")
-        self._attn_auto_threshold_sec = float(os.getenv("PARAKEET_AUTO_ATTN_THRESHOLD", "600"))
+        self._attn_auto_threshold_sec = float(os.getenv("PARAKEET_AUTO_ATTN_THRESHOLD", "300"))
         ctx_raw = os.getenv("PARAKEET_LOCAL_ATTN_CONTEXT", "128,128")
         self._attn_local_context = [int(x.strip()) for x in ctx_raw.split(",")]
         self._attn_is_local = False
