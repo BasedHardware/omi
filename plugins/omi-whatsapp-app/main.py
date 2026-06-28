@@ -420,31 +420,11 @@ async def setup(req: SetupRequest):
         logger.error("subscribe_app failed: %s", type(e).__name__)
         raise HTTPException(status_code=502, detail="WhatsApp subscribe_app failed")
 
-    # Generate a one-shot setup token. The user clicks the deep link, sends
-    # /start <token> to our WhatsApp number, and we know which phone maps
-    # to which user.
-    setup_token = secrets.token_urlsafe(16)
-
-    # We don't know the user's phone (E.164 number) until they send us the
-    # /start message. So we store the setup payload without a phone — the
-    # webhook handler will bind phone -> user when the message arrives.
-    simple_storage.save_pending_setup(
-        setup_token,
-        {
-            "omi_uid": req.omi_uid,
-            "persona_id": req.persona_id,
-            "omi_dev_api_key": req.omi_dev_api_key,
-            "access_token": req.access_token,
-            "phone_number_id": req.phone_number_id,
-            "verify_token": req.verify_token,
-        },
-    )
-
     # Deep link: https://wa.me/<E.164_phone>?text=/start%20<token>
     # The phone_number_id is an internal Meta Graph ID — NOT dialable, can't be
     # used in a wa.me link. We must fetch display_phone_number (the actual
-    # E.164 number) and normalize it. If we can't get a valid phone, we fail
-    # the setup rather than return a broken link the user can't click.
+    # E.164 number) and normalize it BEFORE saving the pending setup, so a
+    # failed phone lookup doesn't leave orphaned pending_setup data on disk.
     try:
         info = await whatsapp_client.get_phone_number_info(req.phone_number_id, req.access_token)
         display_phone = _normalize_e164(info.get("display_phone_number"))
@@ -463,6 +443,22 @@ async def setup(req: SetupRequest):
             status_code=502,
             detail="Meta returned an invalid phone number. Please contact support.",
         )
+
+    # Phone validated. NOW generate the setup token and persist the pending
+    # setup. Order matters: persisting before the phone lookup would leave
+    # orphaned pending_setup data on disk if the lookup failed.
+    setup_token = secrets.token_urlsafe(16)
+    simple_storage.save_pending_setup(
+        setup_token,
+        {
+            "omi_uid": req.omi_uid,
+            "persona_id": req.persona_id,
+            "omi_dev_api_key": req.omi_dev_api_key,
+            "access_token": req.access_token,
+            "phone_number_id": req.phone_number_id,
+            "verify_token": req.verify_token,
+        },
+    )
 
     deep_link = f"https://wa.me/{display_phone}?text={urllib.parse.quote(f'/start {setup_token}')}"
 

@@ -187,3 +187,13 @@ class TestSetupHappyPath:
         assert r.status_code == 502
         # Error message must not leak access_token
         assert SECRET_TOKEN not in r.text
+        # Maintainer follow-up: a failed phone lookup must NOT leave orphaned
+        # pending_setup data on disk — the verify token would otherwise be
+        # useless (no way to bind a phone to it) and could leak access_token
+        # bytes to anyone who later enumerates /webhook GET verify_token.
+        import simple_storage
+
+        assert len(simple_storage.pending_setups) == 0, (
+            f"Orphaned pending_setup left on disk after /setup failure: "
+            f"{list(simple_storage.pending_setups.keys())}"
+        )
