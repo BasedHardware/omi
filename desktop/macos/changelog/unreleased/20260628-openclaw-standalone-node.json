@@ -1,0 +1,3 @@
+{
+  "change": "Fixed OpenClaw agent launch so it uses the Node runtime from its own install instead of the Omi app bundle."
+}
