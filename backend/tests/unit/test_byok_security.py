@@ -645,14 +645,43 @@ class TestBYOKCustomProvider:
         with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('93.184.216.34', 443))]):
             assert validate_custom_base_url('https://api.example.com/v1') == 'https://api.example.com/v1'
 
-    def test_resolution_is_cached(self):
-        # A repeat validation of the same host is served from the cache, not a
-        # second blocking getaddrinfo.
+    def test_successful_validation_is_not_cached(self):
+        # A successful validation must NOT be cached: re-resolving on every call is
+        # what closes the DNS-rebinding window, so getaddrinfo runs each time.
+        import utils.byok as _byok
         from utils.byok import validate_custom_base_url
 
+        _byok._DNS_VALIDATION_CACHE.clear()
         with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('93.184.216.34', 443))]) as m:
-            validate_custom_base_url('https://cached.example.com/v1')
-            validate_custom_base_url('https://cached.example.com/v1')
+            validate_custom_base_url('https://repeat.example.com/v1')
+            validate_custom_base_url('https://repeat.example.com/v1')
+            assert m.call_count == 2
+
+    def test_rebound_host_is_caught_on_next_call(self):
+        # Resolve to a public IP once (accepted), then the host rebinds to an internal
+        # IP; because successes are not cached, the next validation re-resolves and rejects.
+        import utils.byok as _byok
+        from utils.byok import validate_custom_base_url
+
+        _byok._DNS_VALIDATION_CACHE.clear()
+        with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('93.184.216.34', 443))]):
+            assert validate_custom_base_url('https://rebind.example.com/v1') == 'https://rebind.example.com/v1'
+        with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('169.254.169.254', 443))]):
+            with pytest.raises(ValueError):
+                validate_custom_base_url('https://rebind.example.com/v1')
+
+    def test_rejection_is_cached(self):
+        # Rejections ARE cached so an abusive/blocked host is not re-resolved on every
+        # call; the second validation is served from the cache without a getaddrinfo.
+        import utils.byok as _byok
+        from utils.byok import validate_custom_base_url
+
+        _byok._DNS_VALIDATION_CACHE.clear()
+        with patch('utils.byok.socket.getaddrinfo', return_value=[(2, 1, 6, '', ('10.0.0.5', 443))]) as m:
+            with pytest.raises(ValueError):
+                validate_custom_base_url('https://blocked.example.com/v1')
+            with pytest.raises(ValueError):
+                validate_custom_base_url('https://blocked.example.com/v1')
             m.assert_called_once()
 
     # --- get_byok_custom_provider (per-request config) ---
