@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.553",
+      "date": "2026-06-28",
+      "changes": [
+        "Fixed delayed push-to-talk replies after interrupting a streaming voice response"
+      ]
+    },
+    {
       "version": "0.11.552",
       "date": "2026-06-28",
       "changes": [

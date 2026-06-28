@@ -1,0 +1,7 @@
+{
+  "version": "0.11.553",
+  "date": "2026-06-28",
+  "changes": [
+    "Fixed delayed push-to-talk replies after interrupting a streaming voice response"
+  ]
+}
