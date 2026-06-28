@@ -370,9 +370,17 @@ class TestCalendarMeetings:
         sse.execute_tool(
             UID, 'get_calendar_meetings', {'start_date': '2026-06-01', 'end_date': '2026-06-30', 'limit': 5}
         )
-        _, kwargs = mock_db.list_meetings.call_args
+        kwargs = mock_db.list_meetings.call_args.kwargs
         assert kwargs['limit'] == 5
-        assert kwargs['start_date'] is not None and kwargs['end_date'] is not None
+        assert kwargs['start_date'] == datetime(2026, 6, 1, 0, 0, 0)
+        # end_date is extended to end-of-day so meetings later on June 30 are still included
+        assert kwargs['end_date'] == datetime(2026, 6, 30, 23, 59, 59, 999999)
+
+    @patch('routers.mcp.calendar_meetings_db')
+    def test_rest_end_date_is_inclusive_of_day(self, mock_db):
+        mock_db.list_meetings.return_value = []
+        rest.get_calendar_meetings(end_date=datetime(2026, 6, 30), uid=UID)
+        assert mock_db.list_meetings.call_args.kwargs['end_date'] == datetime(2026, 6, 30, 23, 59, 59, 999999)
 
     @patch('routers.mcp_sse.calendar_meetings_db')
     def test_tool_rejects_bad_date(self, mock_db):
