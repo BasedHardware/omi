@@ -121,7 +121,7 @@ jobs:
       - name: Build firmware (Docker)
         run: |
           docker run --rm \
-            -v "${{ github.workspace }}/omi/firmware:/omi/firmware" \
+            -v "$GITHUB_WORKSPACE/omi/firmware:/omi/firmware" \
             -e CMAKE_PREFIX_PATH=/opt/toolchains \
             "$CI_IMAGE" \
             bash /omi/firmware/scripts/ci/build-cv1.sh
@@ -176,9 +176,11 @@ jobs:
 
       - name: Guard - publish only from main
         if: ${{ github.event.inputs.publish == 'publish' }}
+        env:
+          REF: ${{ github.ref }}
         run: |
-          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
-            echo "::error::Refusing to publish a firmware release from '${{ github.ref }}'. Dispatch the publish run from the 'main' branch only."
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Refusing to publish a firmware release from '$REF'. Dispatch the publish run from the 'main' branch only."
             exit 1
           fi
           echo "Publishing from main — OK."
