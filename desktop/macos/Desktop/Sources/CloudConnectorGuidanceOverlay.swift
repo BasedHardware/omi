@@ -47,7 +47,8 @@ final class CloudConnectorGuidanceOverlay {
     lastAutomationState = Self.stateDictionary(
       actionLabel: actionLabel,
       placement: placement,
-      candidates: candidates
+      candidates: candidates,
+      overlaySize: overlaySize
     )
 
     let view = CloudConnectorGuidanceView(actionLabel: actionLabel, placement: placement)
@@ -148,7 +149,8 @@ final class CloudConnectorGuidanceOverlay {
   private static func stateDictionary(
     actionLabel: String,
     placement: SpatialOverlayPlacementResult,
-    candidates: [SpatialOverlayAnchorCandidate]
+    candidates: [SpatialOverlayAnchorCandidate],
+    overlaySize: CGSize
   ) -> [String: String] {
     let selected = candidates.first { candidate in
       candidate.targetRect.insetBy(dx: -1, dy: -1).contains(placement.targetPoint)
@@ -161,8 +163,11 @@ final class CloudConnectorGuidanceOverlay {
       width: 2,
       height: 2
     )
+    // Validate against the actually-rendered arrow apex, not just the solver intent.
+    let render = SpatialOverlayRenderGeometry(placement: placement, panelSize: overlaySize)
     let issues = SpatialOverlayDogfoodOracle.issues(
-      placement: placement,
+      arrowTip: render.globalRenderedArrowTip,
+      panelFrame: placement.panelFrame,
       targetRect: targetRect,
       coveredTargetRect: targetRect
     )
@@ -170,9 +175,14 @@ final class CloudConnectorGuidanceOverlay {
       "visible": "true",
       "action": actionLabel.lowercased(),
       "edge": "\(placement.attachmentEdge)",
-      "panelFrame": string(placement.panelFrame),
+      "targetRect": string(targetRect),
       "targetPoint": string(placement.targetPoint),
+      "panelFrame": string(placement.panelFrame),
+      "bubbleFrame": string(render.bubbleFrame),
+      "pointerFrame": string(render.pointerFrame),
       "arrowTip": string(placement.globalArrowTip),
+      "renderedArrowTip": string(render.globalRenderedArrowTip),
+      "attachmentEdge": "\(placement.attachmentEdge)",
       "candidateId": selected?.id ?? "",
       "candidateSource": selected?.evidence.first?.source.rawValue ?? "",
       "issues": issues.map(\.description).joined(separator: "; "),
@@ -192,8 +202,6 @@ private struct CloudConnectorGuidanceView: View {
   let actionLabel: String
   let placement: SpatialOverlayPlacementResult
 
-  private let arrowSize = CGSize(width: 18, height: 13)
-
   private var arrowIcon: String {
     switch placement.attachmentEdge {
     case .above: return "arrow.down"
@@ -205,15 +213,18 @@ private struct CloudConnectorGuidanceView: View {
 
   var body: some View {
     GeometryReader { proxy in
+      let geometry = SpatialOverlayRenderGeometry(placement: placement, panelSize: proxy.size)
+      let bubbleRect = geometry.bubbleFrame
+      let pointerRect = geometry.pointerFrame
       ZStack(alignment: .topLeading) {
         bubble
-          .frame(width: bubbleFrame(in: proxy.size).width, height: bubbleFrame(in: proxy.size).height)
-          .position(x: bubbleFrame(in: proxy.size).midX, y: bubbleFrame(in: proxy.size).midY)
+          .frame(width: bubbleRect.width, height: bubbleRect.height)
+          .position(x: bubbleRect.midX, y: bubbleRect.midY)
 
         TrianglePointer(edge: placement.attachmentEdge)
           .fill(OmiColors.success)
-          .frame(width: pointerFrame(in: proxy.size).width, height: pointerFrame(in: proxy.size).height)
-          .position(x: pointerFrame(in: proxy.size).midX, y: pointerFrame(in: proxy.size).midY)
+          .frame(width: pointerRect.width, height: pointerRect.height)
+          .position(x: pointerRect.midX, y: pointerRect.midY)
       }
     }
   }
@@ -250,60 +261,6 @@ private struct CloudConnectorGuidanceView: View {
         .stroke(OmiColors.success.opacity(0.55), lineWidth: 1)
     )
     .shadow(color: .black.opacity(0.32), radius: 18, y: 8)
-  }
-
-  private func bubbleFrame(in size: CGSize) -> CGRect {
-    switch placement.attachmentEdge {
-    case .above:
-      return CGRect(x: 8, y: 8, width: size.width - 16, height: size.height - arrowSize.height - 8)
-    case .below:
-      return CGRect(x: 8, y: arrowSize.height, width: size.width - 16, height: size.height - arrowSize.height - 8)
-    case .leading:
-      return CGRect(x: 8, y: 8, width: size.width - arrowSize.height - 8, height: size.height - 16)
-    case .trailing:
-      return CGRect(x: arrowSize.height, y: 8, width: size.width - arrowSize.height - 8, height: size.height - 16)
-    }
-  }
-
-  private func pointerFrame(in size: CGSize) -> CGRect {
-    let tip = swiftUITipPoint(in: size)
-    switch placement.attachmentEdge {
-    case .above:
-      return CGRect(
-        x: tip.x - arrowSize.width / 2,
-        y: tip.y - arrowSize.height,
-        width: arrowSize.width,
-        height: arrowSize.height
-      )
-    case .below:
-      return CGRect(
-        x: tip.x - arrowSize.width / 2,
-        y: tip.y,
-        width: arrowSize.width,
-        height: arrowSize.height
-      )
-    case .leading:
-      return CGRect(
-        x: tip.x - arrowSize.height,
-        y: tip.y - arrowSize.width / 2,
-        width: arrowSize.height,
-        height: arrowSize.width
-      )
-    case .trailing:
-      return CGRect(
-        x: tip.x,
-        y: tip.y - arrowSize.width / 2,
-        width: arrowSize.height,
-        height: arrowSize.width
-      )
-    }
-  }
-
-  private func swiftUITipPoint(in size: CGSize) -> CGPoint {
-    CGPoint(
-      x: placement.arrowTipInPanel.x,
-      y: size.height - placement.arrowTipInPanel.y
-    )
   }
 }
 
