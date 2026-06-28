@@ -208,6 +208,16 @@ flutter:
         - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
           weight: 900
           style: italic
+    - family: "Oxanium"
+      fonts:
+        - asset: assets/fonts/Oxanium-400.ttf
+          weight: 400
+        - asset: assets/fonts/Oxanium-500.ttf
+          weight: 500
+        - asset: assets/fonts/Oxanium-600.ttf
+          weight: 600
+        - asset: assets/fonts/Oxanium-700.ttf
+          weight: 700
 
 flutter_gen:
   output: lib/gen/

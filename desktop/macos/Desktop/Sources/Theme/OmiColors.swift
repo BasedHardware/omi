@@ -15,10 +15,12 @@ enum OmiColors {
   static let border = Color(hex: 0x3A3940)
 
   // MARK: - Accent System
-  static let purplePrimary = Color(hex: 0x8B5CF6)
-  static let purpleSecondary = Color(hex: 0xA855F7)
-  static let purpleAccent = Color(hex: 0x7C3AED)
-  static let purpleLight = Color(hex: 0xD946EF)
+  // Cortex brand blue. Symbol names kept as `purple*` so existing call sites
+  // compile unchanged; the values are now blue (no purple anywhere).
+  static let purplePrimary = Color(hex: 0x2F6BFF)
+  static let purpleSecondary = Color(hex: 0x4F86FF)
+  static let purpleAccent = Color(hex: 0x1E54E0)
+  static let purpleLight = Color(hex: 0x6BA0FF)
 
   // MARK: - Text Colors
   static let textPrimary = Color(hex: 0xFFFFFF)
@@ -49,7 +51,7 @@ enum OmiColors {
   ]
 
   /// User bubble color: richer than the page chrome, softer than a flat primary fill.
-  static let userBubble = Color(hex: 0x43389F)
+  static let userBubble = Color(hex: 0x274598)
 
   // MARK: - Gradients
   static let purpleGradient = LinearGradient(

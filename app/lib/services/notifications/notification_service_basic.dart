@@ -19,7 +19,7 @@ class _BasicNotificationService implements NotificationInterface {
     channelKey: 'channel',
     channelName: 'Omi Notifications',
     channelDescription: 'Notification channel for Omi',
-    defaultColor: const Color(0xFF9D50DD),
+    defaultColor: const Color(0xFF2F6BFF),
     ledColor: Colors.white,
   );
 
@@ -41,7 +41,7 @@ class _BasicNotificationService implements NotificationInterface {
           channelKey: channel.channelKey,
           channelName: channel.channelName,
           channelDescription: channel.channelDescription,
-          defaultColor: const Color(0xFF9D50DD),
+          defaultColor: const Color(0xFF2F6BFF),
           ledColor: Colors.white,
         ),
       ],

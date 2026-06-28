@@ -72,6 +72,7 @@ import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/widgets/cortex_agent_edge_overlay.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
@@ -87,7 +88,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       channelKey: 'channel',
       channelName: 'Omi Notifications',
       channelDescription: 'Notification channel for Omi',
-      defaultColor: const Color(0xFF9D50DD),
+      defaultColor: const Color(0xFF2F6BFF),
       ledColor: Colors.white,
     ),
   ]);
@@ -363,9 +364,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
             supportedLocales: AppLocalizations.supportedLocales,
             theme: ThemeData(
               useMaterial3: false,
+              fontFamily: 'Oxanium',
               colorScheme: const ColorScheme.dark(
                 primary: Colors.black,
-                secondary: Colors.deepPurple,
+                secondary: Color(0xFF2F6BFF),
                 surface: Colors.black38,
               ),
               snackBarTheme: const SnackBarThemeData(
@@ -380,7 +382,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ),
               textSelectionTheme: const TextSelectionThemeData(
                 cursorColor: Colors.white,
-                selectionColor: Colors.deepPurple,
+                selectionColor: Color(0xFF2F6BFF),
                 selectionHandleColor: Colors.white,
               ),
               cupertinoOverrideTheme: const CupertinoThemeData(
@@ -400,37 +402,39 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               };
               if (Env.isUsingStagingApi) {
                 final topPadding = MediaQuery.of(context).padding.top;
-                return Column(
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        MyApp.navigatorKey.currentState?.push(
-                          MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
-                        );
-                      },
-                      child: Container(
-                        width: double.infinity,
-                        padding: EdgeInsets.only(top: topPadding + 4, bottom: 4),
-                        color: Colors.orange.shade800,
-                        child: Text(
-                          context.l10n.staging.toUpperCase(),
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.none,
+                return CortexAgentEdgeOverlay(
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        onTap: () {
+                          MyApp.navigatorKey.currentState?.push(
+                            MaterialPageRoute(builder: (context) => const DeveloperSettingsPage()),
+                          );
+                        },
+                        child: Container(
+                          width: double.infinity,
+                          padding: EdgeInsets.only(top: topPadding + 4, bottom: 4),
+                          color: Colors.orange.shade800,
+                          child: Text(
+                            context.l10n.staging.toUpperCase(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              decoration: TextDecoration.none,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    Expanded(
-                      child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
-                    ),
-                  ],
+                      Expanded(
+                        child: MediaQuery.removePadding(context: context, removeTop: true, child: child!),
+                      ),
+                    ],
+                  ),
                 );
               }
-              return child!;
+              return CortexAgentEdgeOverlay(child: child!);
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,

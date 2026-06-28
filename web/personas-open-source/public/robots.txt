@@ -1,7 +1,0 @@
-User-agent: *
-Allow: /
-Allow: /u/*
-
-User-agent: Twitterbot
-Allow: /
-Allow: /u/*

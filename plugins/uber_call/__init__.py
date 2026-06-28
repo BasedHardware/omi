@@ -1,2 +1,0 @@
-"""Uber Call Omi app."""
-

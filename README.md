@@ -1,173 +1,101 @@
 <div align="center">
 
-# **omi**
+# **Cortex**
 
-### A 2nd brain you trust more than your 1st
+### The agentic AI that lives on your PC
 
-Omi captures your screen and conversations, transcribes in real-time, generates summaries and action items, and gives you an AI chat that remembers everything you've seen and heard. Works on desktop, phone and wearables. Fully open source.
+Cortex sees your screen, understands what you're doing, and **acts on your computer** — clicking, typing and navigating your apps when you ask (you approve each action). It runs on **the model you choose**: a private local model on your own machine, or any major cloud provider with your own key. It remembers what you've seen and heard, and gives you a chat that knows your context. Fully open source, with an optional Pro tier.
 
-Trusted by 300,000+ professionals.
-
-
-[![Discord](https://img.shields.io/discord/1192313062041067520?label=Discord&logo=discord&logoColor=white&style=for-the-badge)](http://discord.omi.me)&ensp;
-[![GitHub Repo stars](https://img.shields.io/github/stars/BasedHardware/Omi?style=for-the-badge)](https://github.com/BasedHardware/Omi)&ensp;
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-[Website](https://omi.me/) · [Docs](https://docs.omi.me/) · [Discord](http://discord.omi.me) · [Twitter](https://x.com/kodjima33) · [DeepWiki](https://deepwiki.com/BasedHardware/omi)
+[Website / Waitlist](https://cortex.apym.io)
 
 </div>
 
 ## Quick Start
 
-
-
 ```bash
-git clone https://github.com/BasedHardware/omi.git && cd omi/desktop && ./run.sh --yolo
+git clone <your-fork-url> cortex && cd cortex/desktop/windows
+npm install
+cp .env.example .env   # ships with working public defaults
+npm run dev
 ```
 
-Builds the macOS app, connects to the cloud backend, and launches. No env files, no credentials, no local backend.
+Then open **Settings → Models** to point Cortex at a local model (Ollama / LM Studio) or a cloud provider, and **Settings → Cortex Pro** to start your trial.
 
-> **Requirements:** macOS 14+, [Xcode](https://developer.apple.com/xcode/) (includes Swift & code signing), [Node.js](https://nodejs.org/)
+> **Requirements:** Windows 10/11, [Node.js](https://nodejs.org/). Packaged installer: `npm run build:win`.
 
-<details>
-  <summary>Full Installation</summary>
-  
-For local development with the full backend stack:
+See [desktop/windows/README.md](desktop/windows/README.md) for environment variables, the optional Google integration, and build details.
 
-1. Install prerequisites
+## What Cortex does
 
-```bash
-xcode-select --install
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-```
+- **Controls your PC** — an agent that takes real UI actions in your apps (click, type, navigate), each one approved by you. The Windows automation layer (bridge + planner + approval dialog) lives in [`desktop/windows`](desktop/windows).
+- **Runs on your model of choice** — local (private, no key) or cloud (bring your own key); you decide where your data is processed.
+- **Remembers** — captures screen/conversation context, builds memories and a knowledge graph, and gives you a chat that knows what you've seen.
+- **Open core** — the app is free and open source; a Pro tier (14-day trial) adds cloud sync and higher automation limits.
 
-2. Clone and configure
+## AI engine — local or cloud, your choice
 
-```bash
-git clone https://github.com/BasedHardware/omi.git
-cd omi/desktop
-cp Backend-Rust/.env.example Backend-Rust/.env
-```
+Pick your engine in **Settings → Models**. Providers are grouped by region so you control where your data goes (full lineup in [`desktop/windows/src/shared/providers.ts`](desktop/windows/src/shared/providers.ts)):
 
-3. Build and run
+| Region | Providers |
+|--------|-----------|
+| **On your computer** (private, no key) | Ollama, LM Studio |
+| **North America** | OpenAI, Anthropic, xAI, Groq, Together AI |
+| **Europe** | Mistral AI |
+| **China** | Alibaba DashScope (Qwen), Zhipu/Z.ai (GLM), Moonshot (Kimi), DeepSeek *(text-only)*, Tencent Hunyuan, Baidu ERNIE, Volcengine (Doubao) |
+| **Global / aggregators** | Ollama Cloud (`-cloud` models), OpenRouter, Google (Gemini), Custom (any OpenAI-compatible endpoint) |
 
-```bash
-./run.sh
-```
-
-See [desktop/macos/README.md](desktop/macos/README.md) for environment variables and credential setup.
-
-
-### Mobile App
-
-```bash
-cd app && bash setup.sh ios    # or: bash setup.sh android
-```
-
-</details>
-
-<p align="center">
-  <a href="https://macos.omi.me"><img src="docs/assets/readme/download-macos-badge.png" alt="Download for macOS" height="50"></a>
-  <a href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"><img src="docs/assets/readme/download-appstore-badge.png" alt="Download on the App Store" height="50"></a>
-  <a href="https://play.google.com/store/apps/details?id=com.friend.ios"><img src="docs/assets/readme/download-gplay-badge.png" alt="Get it on Google Play" height="50"></a>
-</p>
-
-<p align="center">
-  <a href="https://app.omi.me">Try in Browser</a>
-</p>
+Cloud providers use your own API key, stored locally on your device only.
 
 <details>
   <summary>How it works</summary>
 
-
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      Your Devices                       │
-│                                                         │
-│  ┌──────────┐  ┌──────────────┐  ┌───────────────────┐  │
-│  │ Omi      │  │ macOS App    │  │ Mobile App        │  │
-│  │ Wearable │  │ (Swift/Rust) │  │ (Flutter)         │  │
-│  └────┬─────┘  └──────┬───────┘  └────────┬──────────┘  │
-│       │    BLE         │   HTTPS/WS        │             │
-└───────┼────────────────┼───────────────────┼─────────────┘
-        │                │                   │
-        ▼                ▼                   ▼
-┌─────────────────────────────────────────────────────────┐
-│                    Omi Backend (Python)                  │
-│                                                         │
-│  ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌──────────┐  │
-│  │ Listen  │  │ Pusher   │  │ VAD     │  │ Diarizer │  │
-│  │ (REST)  │  │ (WS)     │  │ (GPU)   │  │ (GPU)    │  │
-│  └─────────┘  └──────────┘  └─────────┘  └──────────┘  │
-│                                                         │
-│  ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌──────────┐  │
-│  │ Deepgram│  │ Firestore│  │ Redis   │  │ LLMs     │  │
-│  │ (STT)   │  │ (DB)     │  │ (Cache) │  │ (AI)     │  │
-│  └─────────┘  └──────────┘  └─────────┘  └──────────┘  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                        Your PC                           │
+│                                                          │
+│   ┌──────────────────────────────────────────────────┐  │
+│   │            Cortex (Electron + React)             │  │
+│   │                                                  │  │
+│   │  Agent loop ──► Automation layer (control PC)    │  │
+│   │     │            click · type · navigate         │  │
+│   │     │            (you approve each action)       │  │
+│   │     ▼                                            │  │
+│   │  Model router                                    │  │
+│   └─────┬───────────────────────────────┬───────────┘  │
+│         │                               │              │
+│         ▼ local (private)               ▼ cloud (BYOK) │
+│   ┌────────────┐                  ┌──────────────────┐ │
+│   │ Ollama /   │                  │ OpenAI·Anthropic·│ │
+│   │ LM Studio  │                  │ Mistral·Qwed·GLM·│ │
+│   └────────────┘                  │ Kimi·Gemini·…    │ │
+│                                   └──────────────────┘ │
+└──────────────────────────────────────────────────────────┘
 ```
 
 | Component | Path | Stack |
 |-----------|------|-------|
-| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
+| **Windows app** (Cortex) | [`desktop/windows/`](desktop/windows/) | Electron, React, TypeScript |
+| Desktop app (macOS) | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
 | Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
-| Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
-| Omi Glass | [`omiGlass/`](omiGlass/) | ESP32-S3, C |
-| SDKs | [`sdks/`](sdks/) | React Native, Swift, Python |
-| AI Personas | [`web/personas-open-source/`](web/personas-open-source/) | Next.js |
 
 </details>
 
-## Documentation
+## Cortex Pro
 
-### Getting Started
-- [Introduction](https://docs.omi.me/)
-- [Quick Start Guide](https://docs.omi.me/quickstart)
-- [macOS App Development](desktop/macos/README.md)
-- [Mobile App Setup](https://docs.omi.me/doc/developer/AppSetup)
-- [Backend Setup](https://docs.omi.me/doc/developer/backend/Backend_Setup)
-- [Contributing](https://docs.omi.me/doc/developer/Contribution)
+Cortex is open source and fully usable for free. **Pro** (14-day trial, no card) adds:
 
-### Building Apps
-- [App Development Guide](https://docs.omi.me/doc/developer/apps/Introduction)
-- [Example Apps](https://docs.omi.me/doc/developer/apps/examples/Github) — GitHub, Slack, OmiMentor
-- [Audio Streaming Apps](https://docs.omi.me/doc/developer/apps/AudioStreaming)
-- [Custom Chat Tools](https://docs.omi.me/doc/developer/apps/ChatTools)
-- [Submit to App Store](https://docs.omi.me/doc/developer/apps/Submitting)
+- **Cloud sync** — encrypted sync of conversations, memories and settings across devices
+- **Unlimited PC control** — removes the free-tier daily cap on agent actions
+- **Priority models** — pin premium cloud models with priority routing
 
-### API & SDKs
-- [API Reference](https://docs.omi.me/api-reference/introduction) — REST endpoints for memories, conversations, action items
-- [Python SDK](sdks/python/)
-- [Swift SDK](sdks/swift/)
-- [React Native SDK](sdks/react-native/)
-- [MCP Server](mcp/) — Model Context Protocol integration
+Reserve your spot at **[cortex.apym.io](https://cortex.apym.io)**.
 
-### Architecture
-- [Backend Deep Dive](https://docs.omi.me/doc/developer/backend/backend_deepdive)
-- [Transcription Pipeline](https://docs.omi.me/doc/developer/backend/transcription)
-- [Chat System](https://docs.omi.me/doc/developer/backend/chat_system)
-- [Audio Streaming Pipeline](https://docs.omi.me/doc/developer/backend/listen_pusher_pipeline)
-- [BLE Protocol](https://docs.omi.me/doc/developer/Protocol)
+## Contributing
 
-## Omi Hardware
-![Omi](https://github.com/user-attachments/assets/7a658366-9e02-4057-bde5-a510e1f0217a)
-
-Open-source AI wearables that pair with the mobile app for 24h+ continuous capture.
-
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/834d3fdb-31b5-4f22-ae35-da3d2b9a8f59" alt="Omi Wearable" width="49%" />
-  <img src="https://github.com/user-attachments/assets/fdad4226-e5ce-4c55-b547-9101edfa3203" alt="Omi Glass" width="49%" />
-</p>
-
-- [Buy Omi](https://www.omi.me/pages/product)
-- [Buy Omi Glass Dev Kit](https://www.omi.me/glass) — ESP32-S3, camera + audio
-- [Open Source Hardware Designs](https://docs.omi.me/doc/hardware/consumer/electronics)
-- [Buying Guide](https://docs.omi.me/doc/assembly/Buying_Guide)
-- [Build the Device](https://docs.omi.me/doc/assembly/Build_the_device)
-- [Flash Firmware](https://docs.omi.me/doc/get_started/Flash_device)
-- [Integrate Your Wearable](https://docs.omi.me/doc/integrations)
-- [Hardware Specs](https://docs.omi.me/doc/hardware/DevKit2)
+Agent and contributor guidelines live in [AGENTS.md](AGENTS.md); component-specific notes are in each component's `AGENTS.md` / `CLAUDE.md`.
 
 ## License
 

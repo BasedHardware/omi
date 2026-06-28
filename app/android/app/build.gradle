@@ -61,12 +61,12 @@ android {
         prod {
             dimension "flavor-type"
             applicationId "com.friend.ios"
-            resValue "string", "app_name", "Omi"
+            resValue "string", "app_name", "Cortex"
         }
         dev {
             dimension "flavor-type"
             applicationId "com.friend.ios.dev"
-            resValue "string", "app_name", "Omi Dev"
+            resValue "string", "app_name", "Cortex Dev"
         }
     }
 
@@ -103,7 +103,7 @@ android {
 
     signingConfigs {
         release {
-            if (System.getenv()["CI"]) { // CI=true is exported by Codemagic
+            if (System.getenv()["CI"] && System.getenv()["CM_KEYSTORE_PATH"]) { // Codemagic provides the keystore
                 storeFile file(System.getenv()["CM_KEYSTORE_PATH"])
                 storePassword System.getenv()["CM_KEYSTORE_PASSWORD"]
                 keyAlias System.getenv()["CM_KEY_ALIAS"]

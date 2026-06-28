@@ -1,9 +1,0 @@
----
-description: "Common implementation mistakes"
-alwaysApply: true
----
-- Verify APIs/functions exist before using them; avoid stale patterns.
-- Confirm architecture and data flow before changing behavior.
-- Test end-to-end paths, not only isolated units.
-- Avoid assumptions; validate with code and tests.
-- See AGENTS.md for full rules.

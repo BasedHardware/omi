@@ -1,0 +1,39 @@
+name: Build Cortex (Windows)
+
+# Builds the Windows installer (.exe) on a GitHub runner — the Windows app has no
+# other CI pipeline. Run manually from the Actions tab or on pushes to the Cortex
+# branch; download the installer from the run's Artifacts.
+#
+# Android / iOS / macOS are built by Codemagic (see codemagic.yaml), which holds
+# the Firebase config + signing secrets a clean GitHub checkout doesn't have.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/cortex-agent-pc-control-p4i3c5
+      - cortex-full
+
+jobs:
+  windows-exe:
+    name: Windows installer (.exe)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop/windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Create .env from public example
+        shell: bash
+        run: cp .env.example .env
+      - name: Install deps (rebuilds native modules)
+        run: npm install
+      - name: Build NSIS installer
+        run: npm run build:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cortex-windows-exe
+          path: desktop/windows/dist/*.exe
+          if-no-files-found: error

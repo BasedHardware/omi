@@ -1,6 +1,8 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { automationBridge } from '../automation/bridge'
 import { getAutomationTargetHandle } from '../automation/foregroundTarget'
+import { withAgentActive } from '../agentActivity'
+import { isPaymentSensitive } from '../../shared/paymentGuard'
 import type { AutomationPlan, AutomationStep, UiSnapshot } from '../../shared/types'
 
 // Result of the native-dialog confirm flow. `canceled` distinguishes a user
@@ -51,33 +53,42 @@ export function registerAutomationHandlers(): void {
   // input with no approval. Per-step progress events aren't needed by the
   // confirm flow (it resolves once on completion).
 
-  // Consent gate as a NATIVE Windows dialog (works identically from the main
-  // window and the floating overlay, since it lives here in main). Shows the plan
-  // and only runs it on explicit approval.
+  // Run a plan. Cortex's agent is autonomous by default: ordinary plans run in
+  // the BACKGROUND (no focus stealing) while the screen edges glow blue, without
+  // interrupting the user. The one exception is PAYMENT-sensitive plans
+  // (checkout / card / purchase) — those always stop and require explicit
+  // approval via a native dialog before anything runs.
   ipcMain.handle(
     'automation:confirmRun',
     async (e, plan: AutomationPlan): Promise<ConfirmRunResult> => {
-      const parent = BrowserWindow.fromWebContents(e.sender)
-      const detail = [
-        `In “${plan.targetWindow}”:`,
-        '',
-        ...plan.steps.map((s, i) => describeStepForDialog(s, i))
-      ].join('\n')
-      const opts = {
-        type: 'question' as const,
-        title: 'Cortex — approve action',
-        message: plan.summary || `Omi wants to do something in “${plan.targetWindow}”`,
-        detail,
-        buttons: ['Approve & run', 'Cancel'],
-        defaultId: 0,
-        cancelId: 1,
-        noLink: true
+      if (isPaymentSensitive(plan)) {
+        const parent = BrowserWindow.fromWebContents(e.sender)
+        const detail = [
+          'This looks like a payment. Cortex will not do this without you.',
+          '',
+          `In “${plan.targetWindow}”:`,
+          '',
+          ...plan.steps.map((s, i) => describeStepForDialog(s, i))
+        ].join('\n')
+        const opts = {
+          type: 'warning' as const,
+          title: 'Cortex — approve payment',
+          message: plan.summary || `Cortex wants to complete a payment in “${plan.targetWindow}”`,
+          detail,
+          buttons: ['Approve & pay', 'Cancel'],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true
+        }
+        const { response } = parent
+          ? await dialog.showMessageBox(parent, opts)
+          : await dialog.showMessageBox(opts)
+        if (response !== 0) return { ok: false, canceled: true }
       }
-      const { response } = parent
-        ? await dialog.showMessageBox(parent, opts)
-        : await dialog.showMessageBox(opts)
-      if (response !== 0) return { ok: false, canceled: true }
-      const result = await automationBridge.run(plan, () => {})
+
+      // Non-payment (or approved payment): run in the background with the blue
+      // edge glow up for the duration.
+      const result = await withAgentActive(() => automationBridge.run(plan, () => {}))
       return { ok: result.ok, message: result.message }
     }
   )
