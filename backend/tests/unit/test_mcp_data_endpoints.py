@@ -84,6 +84,7 @@ _stubs = [
     'database.mem_db',
     'database.mcp_api_key',
     'database.daily_summaries',
+    'database.calendar_meetings',
     'database.screen_activity',
     'database.x_posts',
     'database.fair_use',
@@ -336,3 +337,93 @@ class TestToolRegistry:
                     sse.execute_tool(UID, name, {})
                 except sse.ToolExecutionError as e:
                     assert 'Unknown tool' not in e.message
+
+
+def _meeting(mid='mtg1', title='Standup'):
+    return {
+        'id': mid,
+        'title': title,
+        'start_time': NOW,
+        'duration_minutes': 30,
+        'platform': 'Zoom',
+        'meeting_link': 'https://zoom.us/j/123',
+        'participants': [{'name': 'Alice', 'email': 'a@x.com'}, {'name': 'Bob', 'email': None}],
+        'notes': 'Sprint sync',
+        'calendar_source': 'google',
+    }
+
+
+class TestCalendarMeetings:
+    """#4862: expose the user's calendar meetings via MCP."""
+
+    @patch('routers.mcp_sse.calendar_meetings_db')
+    def test_tool_list(self, mock_db):
+        mock_db.list_meetings.return_value = [_meeting()]
+        result = sse.execute_tool(UID, 'get_calendar_meetings', {})
+        m = result['meetings'][0]
+        assert m['title'] == 'Standup' and m['duration_minutes'] == 30
+        assert m['participants'][0]['name'] == 'Alice'
+
+    @patch('routers.mcp_sse.calendar_meetings_db')
+    def test_tool_list_passes_dates_and_limit(self, mock_db):
+        mock_db.list_meetings.return_value = []
+        sse.execute_tool(
+            UID, 'get_calendar_meetings', {'start_date': '2026-06-01', 'end_date': '2026-06-30', 'limit': 5}
+        )
+        _, kwargs = mock_db.list_meetings.call_args
+        assert kwargs['limit'] == 5
+        assert kwargs['start_date'] is not None and kwargs['end_date'] is not None
+
+    @patch('routers.mcp_sse.calendar_meetings_db')
+    def test_tool_rejects_bad_date(self, mock_db):
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'get_calendar_meetings', {'start_date': 'nope'})
+        assert ei.value.code == -32602
+
+    @patch('routers.mcp_sse.calendar_meetings_db')
+    def test_tool_by_id(self, mock_db):
+        mock_db.get_meeting.return_value = _meeting()
+        result = sse.execute_tool(UID, 'get_calendar_meeting_by_id', {'meeting_id': 'mtg1'})
+        assert result['meeting']['id'] == 'mtg1'
+
+    @patch('routers.mcp_sse.calendar_meetings_db')
+    def test_tool_by_id_not_found_is_32001(self, mock_db):
+        mock_db.get_meeting.return_value = None
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'get_calendar_meeting_by_id', {'meeting_id': 'nope'})
+        assert ei.value.code == -32001
+
+    @patch('routers.mcp.calendar_meetings_db')
+    def test_rest_list_clamps_limit(self, mock_db):
+        mock_db.list_meetings.return_value = [_meeting()]
+        result = rest.get_calendar_meetings(limit=99999, uid=UID)
+        assert result[0]['title'] == 'Standup'
+        assert mock_db.list_meetings.call_args.kwargs['limit'] == 200
+
+    @patch('routers.mcp.calendar_meetings_db')
+    def test_rest_by_id_not_found_404(self, mock_db):
+        mock_db.get_meeting.return_value = None
+        with pytest.raises(rest.HTTPException) as ei:
+            rest.get_calendar_meeting_by_id('nope', uid=UID)
+        assert ei.value.status_code == 404
+
+    def test_tools_registered_and_scoped(self):
+        names = {t['name'] for t in sse.MCP_TOOLS}
+        assert {'get_calendar_meetings', 'get_calendar_meeting_by_id'} <= names
+        assert 'calendar.read' in sse.MCP_SCOPES_SUPPORTED
+
+    def test_clean_meeting_shape(self):
+        from utils.mcp_data import clean_meeting
+
+        out = clean_meeting(_meeting())
+        assert set(out.keys()) == {
+            'id',
+            'title',
+            'start_time',
+            'duration_minutes',
+            'platform',
+            'meeting_link',
+            'participants',
+            'notes',
+            'calendar_source',
+        }
