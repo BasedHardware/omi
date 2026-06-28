@@ -83,6 +83,7 @@ pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_retrieval_semantics.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v
+pytest tests/unit/test_folder_assignment_category.py -v
 pytest tests/unit/test_conversations_count.py -v
 pytest tests/unit/test_calendar_autolink_invalid_timestamp.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
