@@ -38,14 +38,41 @@ enum SpatialOverlayGeometry {
 
   static func screenForTopLeftFrame(_ frame: CGRect) -> SpatialOverlayScreen? {
     let screens = NSScreen.screens.map(screen(from:))
+    // Global accessibility/top-left coordinates are flipped against the *primary*
+    // display (the one carrying the menu bar), never the containing display. Using
+    // each screen's own maxY here would mis-place targets on secondary monitors.
+    let convertedFrame = globalAppKitFrame(topLeftFrame: frame)
     return screens
       .map { screen -> (SpatialOverlayScreen, CGFloat) in
-        let convertedFrame = appKitFrame(topLeftFrame: frame, screenFrame: screen.frame)
-        return (screen, screen.frame.intersection(convertedFrame).spatialOverlayArea)
+        (screen, screen.frame.intersection(convertedFrame).spatialOverlayArea)
       }
       .filter { $0.1 > 0 }
       .sorted { lhs, rhs in lhs.1 > rhs.1 }
       .first?.0
+  }
+
+  /// Max-Y of the primary display, used as the single flip reference when converting
+  /// global top-left (Quartz / accessibility) coordinates to AppKit global
+  /// (bottom-left of the primary display, +y up).
+  static var primaryFlipMaxY: CGFloat {
+    NSScreen.screens.first?.frame.maxY ?? NSScreen.main?.frame.maxY ?? 0
+  }
+
+  /// Convert a global top-left frame (accessibility / Quartz) to AppKit global
+  /// coordinates using the primary display as the flip reference. This is correct on
+  /// every display; prefer it over `appKitFrame(topLeftFrame:screenFrame:)` for any
+  /// frame that came from the accessibility API.
+  static func globalAppKitFrame(topLeftFrame frame: CGRect) -> CGRect {
+    appKitFrame(topLeftOrigin: frame.origin, size: frame.size, flipMaxY: primaryFlipMaxY)
+  }
+
+  static func appKitFrame(topLeftOrigin: CGPoint, size: CGSize, flipMaxY: CGFloat) -> CGRect {
+    CGRect(
+      x: topLeftOrigin.x,
+      y: flipMaxY - topLeftOrigin.y - size.height,
+      width: size.width,
+      height: size.height
+    )
   }
 
   static func screenFrameForTopLeftNormalization(preferredScreen: NSScreen? = NSScreen.main)
@@ -55,12 +82,7 @@ enum SpatialOverlayGeometry {
   }
 
   static func appKitFrame(topLeftOrigin: CGPoint, size: CGSize, screenFrame: CGRect) -> CGRect {
-    CGRect(
-      x: topLeftOrigin.x,
-      y: screenFrame.maxY - topLeftOrigin.y - size.height,
-      width: size.width,
-      height: size.height
-    )
+    appKitFrame(topLeftOrigin: topLeftOrigin, size: size, flipMaxY: screenFrame.maxY)
   }
 
   static func appKitFrame(topLeftFrame frame: CGRect, screenFrame: CGRect) -> CGRect {
