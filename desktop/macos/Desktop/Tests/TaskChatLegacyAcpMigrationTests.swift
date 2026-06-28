@@ -40,6 +40,31 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertTrue(source.contains("let supportsLegacyResume = (currentHarness == \"acp\" || currentHarness == \"piMono\")"))
   }
 
+  func testTaskChatFailureKeepsVisibleAssistantMessage() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
+    XCTAssertTrue(source.contains("persistMessage(messages[index])"))
+  }
+
+  @MainActor
+  func testTaskChatFailureAddsTextWhenMessageAlreadyHasBlocks() {
+    var message = ChatMessage(
+      id: "assistant-1",
+      text: "",
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .toolCall(id: "tool-1", name: "Bash", status: .running, toolUseId: "tool-use-1", input: nil, output: nil)
+      ]
+    )
+
+    TaskChatState.applyFailureTextIfNeeded(to: &message, errorDescription: "OpenClaw failed")
+
+    XCTAssertEqual(message.text, "Failed: OpenClaw failed")
+    XCTAssertFalse(message.contentBlocks.isEmpty)
+  }
+
   func testActionItemChatSessionIdLegacyMarkerStillUsesTaskId() throws {
     let coordinator = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatCoordinator.swift")
 

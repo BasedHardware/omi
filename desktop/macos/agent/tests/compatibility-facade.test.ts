@@ -9,6 +9,7 @@ import {
   selectAdapterScopedToolCallCorrelation,
   selectUnscopedToolCallCorrelation,
 } from "../src/runtime/compatibility-facade.js";
+import { AdapterRuntimeError } from "../src/runtime/failures.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
@@ -39,6 +40,45 @@ describe("JsonlCompatibilityFacade", () => {
         clientId: "client-v2",
       }),
     ).rejects.toThrow("protocol v2 query requires requestId");
+    store.close();
+  });
+
+  it("emits structured runtime failures with the legacy error message", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const sent: OutboundMessage[] = [];
+    adapter.failNextExecutionError = new AdapterRuntimeError({
+      code: "adapter_process_exited",
+      source: "adapter_process",
+      adapterId: "openclaw",
+      provider: "openai",
+      retryable: true,
+      userMessage: "OpenClaw failed: OpenAI API error: upstream unavailable",
+      technicalMessage: "OpenAI API error: upstream unavailable",
+    });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    await facade.handleQuery({
+      ...v1Query({ id: "request-failed", prompt: "fail" }),
+      protocolVersion: 2,
+      requestId: "request-failed",
+      clientId: "client-failed",
+      adapterId: "fake",
+    });
+
+    expect(sent).toContainEqual(expect.objectContaining({
+      type: "error",
+      message: "OpenClaw failed: OpenAI API error: upstream unavailable",
+      failure: expect.objectContaining({
+        code: "adapter_process_exited",
+        adapterId: "openclaw",
+        provider: "openai",
+      }),
+    }));
     store.close();
   });
 
