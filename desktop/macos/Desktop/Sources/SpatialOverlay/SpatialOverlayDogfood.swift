@@ -150,14 +150,35 @@ enum SpatialOverlayDogfoodOracle {
     maximumArrowDistance: CGFloat = 3,
     avoidTargetPadding: CGFloat = 0
   ) -> [SpatialOverlayDogfoodIssue] {
+    issues(
+      arrowTip: placement.globalArrowTip,
+      panelFrame: placement.panelFrame,
+      targetRect: targetRect,
+      coveredTargetRect: coveredTargetRect,
+      maximumArrowDistance: maximumArrowDistance,
+      avoidTargetPadding: avoidTargetPadding
+    )
+  }
+
+  /// Validate against an explicit arrow apex and panel rect. Prefer this overload with
+  /// the *rendered* apex (`SpatialOverlayRenderGeometry.globalRenderedArrowTip`) so the
+  /// check reflects the pixel the user sees, not just the solver's intent.
+  static func issues(
+    arrowTip: CGPoint,
+    panelFrame: CGRect,
+    targetRect: CGRect,
+    coveredTargetRect: CGRect? = nil,
+    maximumArrowDistance: CGFloat = 3,
+    avoidTargetPadding: CGFloat = 0
+  ) -> [SpatialOverlayDogfoodIssue] {
     var issues: [SpatialOverlayDogfoodIssue] = []
-    let distance = distanceFromRect(placement.globalArrowTip, to: targetRect)
+    let distance = distanceFromRect(arrowTip, to: targetRect)
     if distance > maximumArrowDistance {
       issues.append(.arrowMissesTarget(distance: distance))
     }
 
     let coverRect = coveredTargetRect ?? targetRect
-    if placement.panelFrame.intersects(coverRect.insetBy(dx: -avoidTargetPadding, dy: -avoidTargetPadding)) {
+    if panelFrame.intersects(coverRect.insetBy(dx: -avoidTargetPadding, dy: -avoidTargetPadding)) {
       issues.append(.panelCoversTarget)
     }
 
