@@ -71,9 +71,20 @@ livenessProbe:
 readinessProbe:
   exec:
     command:
-      - sh
+      - python
       - -c
-      - 'curl -fsS -H "Authorization: Bearer ${OMI_LLM_GATEWAY_SERVICE_TOKEN}" -H "X-Omi-Service-Caller: backend" http://127.0.0.1:8080/ready >/dev/null'
+      - |
+        import os
+        import urllib.request
+
+        request = urllib.request.Request(
+            'http://127.0.0.1:8080/ready',
+            headers={
+                'Authorization': f"Bearer {os.environ['OMI_LLM_GATEWAY_SERVICE_TOKEN']}",
+                'X-Omi-Service-Caller': 'backend',
+            },
+        )
+        urllib.request.urlopen(request, timeout=4).read()
   failureThreshold: 3
   periodSeconds: 10
   timeoutSeconds: 5
