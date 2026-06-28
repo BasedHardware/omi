@@ -392,6 +392,22 @@ class TestFolders:
         mock_db.create_folder.assert_not_called()
 
     @patch('utils.mcp_folders.folders_db')
+    def test_tool_create_folder_non_string_name_is_invalid(self, mock_db):
+        # A non-string name from the SSE transport returns a clean error, not an AttributeError.
+        mock_db.get_folders.return_value = []
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'create_folder', {'name': 123})
+        assert ei.value.code == -32602
+        mock_db.create_folder.assert_not_called()
+
+    @patch('utils.mcp_folders.conversations_db')
+    def test_tool_move_non_string_conversation_id_is_invalid(self, mock_conv):
+        with pytest.raises(sse.ToolExecutionError) as ei:
+            sse.execute_tool(UID, 'move_conversation_to_folder', {'conversation_id': 123})
+        assert ei.value.code == -32602
+        mock_conv.get_conversation.assert_not_called()
+
+    @patch('utils.mcp_folders.folders_db')
     def test_tool_update_folder(self, mock_db):
         mock_db.get_folder.side_effect = [_folder(), _folder(name='Renamed')]
         result = sse.execute_tool(UID, 'update_folder', {'folder_id': 'f1', 'name': 'Renamed'})
