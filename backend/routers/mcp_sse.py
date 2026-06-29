@@ -82,6 +82,8 @@ MCP_SCOPES_SUPPORTED = [
     "chat.read",
     "screen_activity.read",
     "people.read",
+    "folders.read",
+    "folders.write",
 ]
 
 MCP_LEGACY_API_KEY_SCOPES = [
@@ -226,6 +228,11 @@ TOOL_REQUIRED_SCOPE = {
     "get_people": "people.read",
     "get_screen_activity": "screen_activity.read",
     "get_daily_summaries": "conversations.read",
+    "get_folders": "folders.read",
+    "create_folder": "folders.write",
+    "update_folder": "folders.write",
+    "delete_folder": "folders.write",
+    "move_conversation_to_folder": "folders.write",
 }
 
 
