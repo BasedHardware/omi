@@ -102,29 +102,27 @@ final class AICloneConfig: ObservableObject {
         self.bearerToken = (try? AICloneKeychain.get(.pluginBearerToken)) ?? ""
         self.omiDevApiKey = (try? AICloneKeychain.get(.devApiKey)) ?? ""
 
-        // Zero-config: if the plugin discovery file exists (written by
-        // the plugin's FastAPI lifespan at startup), auto-fill any
-        // empty fields. This is the key UX improvement: the user starts
-        // the plugin, opens the desktop, and the AI Clone settings are
-        // pre-filled — no copy/paste needed.
-        //
-        // We only fill EMPTY fields — if the user has already
-        // configured a different URL/token manually, we don't override
-        // their choice. If the plugin restarts with a NEW token (new
-        // instance_id), the discovery file changes and we pick up the
-        // new value on next launch.
-        applyDiscoveryIfAvailable()
+        // Discovery is now applied EXPLICITLY via applyDiscovery() —
+        // called from app startup (OmiApp.swift), not from init. P2
+        // (cubic): init() previously called applyDiscoveryIfAvailable()
+        // unconditionally, which read ~/.config/omi/ai-clone-plugin.json
+        // and mutated the injected UserDefaults + Keychain. That broke
+        // the hermetic contract of `defaults` (any test using a stub
+        // UserDefaults would have its state mutated by a real file on
+        // the test machine) and made unit tests non-deterministic.
     }
 
     /// Read `~/.config/omi/ai-clone-plugin.json` and fill any empty
-    /// fields (pluginURL, bearerToken). Called once at init.
+    /// fields (pluginURL, bearerToken). Called from app startup
+    /// (OmiApp.swift), not from init, so unit tests can construct
+    /// AICloneConfig without touching the real discovery file.
     ///
     /// For the dev API key: the discovery file doesn't contain it
     /// (it's user-specific). If `devMode == true` in the discovery
     /// file, the plugin is paired with a local mock persona that
     /// doesn't validate the key — so we leave the field empty and
     /// the UI will show a lighter "optional" indicator.
-    private func applyDiscoveryIfAvailable() {
+    func applyDiscovery() {
         let path = PluginDiscovery.filePath
         log("AICloneConfig: checking discovery file at \(path)")
         guard let discovery = PluginDiscovery.read() else {
@@ -132,9 +130,13 @@ final class AICloneConfig: ObservableObject {
             return
         }
 
-        // Prefer public_url (the tunnel URL) for pluginURL — that's
-        // what Telegram needs to reach the plugin.
-        let discoveryURL = discovery.publicURL ?? discovery.pluginURL
+        // Use the LOCAL pluginURL (not the tunnel publicURL) for the
+        // desktop client's API base URL. Desktop and plugin run on the
+        // same machine, so /health, /setup, /toggle should hit the
+        // direct local URL — avoids tunnel dependency, rate limits on
+        // the tunnel, and 60s handshake polling hitting an external
+        // service. P1 (cubic).
+        let discoveryURL = discovery.pluginURL
 
         var changed = false
 

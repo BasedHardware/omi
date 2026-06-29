@@ -611,8 +611,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     log("OmiApp: triggering AICloneConfig eager init")
     DispatchQueue.main.async {
       log("OmiApp: async block running, accessing AICloneConfig.shared")
-      _ = AICloneConfig.shared
+      let config = AICloneConfig.shared
       log("OmiApp: AICloneConfig.shared init complete")
+      // Discovery is now applied EXPLICITLY here (not from init) so
+      // unit tests can construct AICloneConfig without touching the
+      // real ~/.config/omi/ai-clone-plugin.json. P2 (cubic).
+      config.applyDiscovery()
     }
   }
 
