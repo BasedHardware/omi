@@ -15,6 +15,7 @@ pytest tests/unit/test_speaker_sample_migration.py -v
 pytest tests/unit/test_short_audio_embedding.py -v
 pytest tests/unit/test_users_add_sample_transaction.py -v
 pytest tests/unit/test_users_webhook_url_validation.py -v
+pytest tests/unit/test_users_missing_doc_guards.py -v
 pytest tests/unit/test_voice_message_language.py -v
 pytest tests/unit/test_speaker_assignment.py -v
 pytest tests/unit/test_speaker_id_pipeline.py -v
@@ -77,6 +78,7 @@ pytest tests/unit/test_chat_tool_parameters_json.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
 pytest tests/unit/test_proactive_notification_language.py -v
+pytest tests/unit/test_advice_update_missing_doc_guard.py -v
 pytest tests/unit/test_notification_token_cleanup.py -v
 pytest tests/unit/test_integration_notification_validation.py -v
 pytest tests/unit/test_conversations_to_string.py -v
@@ -84,12 +86,16 @@ pytest tests/unit/test_location_maps_status_guard.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_retrieval_semantics.py -v
+pytest tests/unit/test_screen_activity_search_utc.py -v
 pytest tests/unit/test_conversation_tool_date_range_bound.py -v
 pytest tests/unit/test_screen_activity_tool_result_bound.py -v
+pytest tests/unit/test_retrieval_result_bounds.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
+pytest tests/unit/test_conversations_date_range_validation.py -v
 pytest tests/unit/test_calendar_autolink_invalid_timestamp.py -v
+pytest tests/unit/test_calendar_timezone.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_firestore_cache.py -v
@@ -132,9 +138,11 @@ pytest tests/unit/test_firestore_read_ops_cache.py -v
 pytest tests/unit/test_ws_auth_handshake.py -v
 pytest tests/unit/test_streaming_deepgram_backoff.py -v
 pytest tests/unit/test_executors.py -v
+pytest tests/unit/test_task_integrations_async_offload.py -v
 pytest tests/unit/test_modulate_stt.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_action_items_date_range_validation.py -v
 pytest tests/unit/test_action_items_timezone.py -v
 pytest tests/unit/test_request_validation_contracts.py -v
 pytest tests/unit/test_conversation_structure_timezone.py -v
@@ -199,7 +207,9 @@ pytest tests/unit/test_chat_quota.py -v
 pytest tests/unit/test_voice_message_filename_none.py -v
 pytest tests/unit/test_subscription_plans.py -v
 pytest tests/unit/test_payment_available_plans_source.py -v
+pytest tests/unit/test_payment_reactivation_billing_date_utc.py -v
 pytest tests/unit/test_payment_promotion_codes.py -v
+pytest tests/unit/test_payment_connect_account_user_guard.py -v
 pytest tests/unit/test_stripe_webhook_none_guard.py -v
 pytest tests/unit/test_stripe_webhook_behavioral.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
@@ -237,6 +247,7 @@ pytest tests/services/users/test_data_export.py -v
 pytest tests/routers/test_users.py -v
 pytest tests/unit/test_apps_review_reply_validation.py -v
 pytest tests/unit/test_apps_create_app_json.py -v
+pytest tests/unit/test_app_visibility_missing_doc_guard.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then

@@ -64,6 +64,7 @@ for _p in [
 for _name, _attrs in {
     "database.screen_activity": [],
     "database.vector_db": [],
+    "database.notifications": ["get_user_time_zone"],
     "database._client": ["db"],
     "utils.llm.clients": ["gemini_embed_query"],
     "utils.retrieval.agentic": ["agent_config_context"],

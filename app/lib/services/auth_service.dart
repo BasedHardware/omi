@@ -17,7 +17,6 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/logger.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -36,40 +35,25 @@ class AuthService {
 
   /// Google Sign In using the standard google_sign_in package (iOS, Android)
   Future<UserCredential?> signInWithGoogleMobile() async {
-    print('DEBUG_AUTH: Using standard Google Sign In for mobile');
-
     // Trigger the authentication flow
     final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
-    print('DEBUG_AUTH: Google User: $googleUser');
 
     // Obtain the auth details from the request
     final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    print(
-      'DEBUG_AUTH: Google Auth accessToken=${googleAuth?.accessToken != null}, idToken=${googleAuth?.idToken != null}',
-    );
     if (googleAuth == null) {
-      print('DEBUG_AUTH: Failed - googleAuth is NULL');
       return null;
     }
 
     // Create a new credential
     if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-      print('DEBUG_AUTH: Failed - accessToken and idToken are both NULL');
       return null;
     }
     final credential = GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
 
     // Once signed in, return the UserCredential
-    try {
-      print('DEBUG_AUTH: Calling signInWithCredential...');
-      var result = await FirebaseAuth.instance.signInWithCredential(credential);
-      print('DEBUG_AUTH: signInWithCredential SUCCESS - uid=${result.user?.uid}');
-      await _updateUserPreferences(result, 'google');
-      return result;
-    } catch (e) {
-      print('DEBUG_AUTH: signInWithCredential FAILED: $e');
-      rethrow;
-    }
+    final result = await FirebaseAuth.instance.signInWithCredential(credential);
+    await _updateUserPreferences(result, 'google');
+    return result;
   }
 
   /// Generates a cryptographically secure random nonce, to be included in a
@@ -465,12 +449,9 @@ class AuthService {
 
   Future<void> _restoreOnboardingState() async {
     try {
-      print('DEBUG _restoreOnboardingState: fetching from server...');
       final state = await getUserOnboardingState();
-      print('DEBUG _restoreOnboardingState: got state=$state');
       if (state != null) {
         if (state['completed'] == true) {
-          print('DEBUG _restoreOnboardingState: setting onboardingCompleted=true');
           SharedPreferencesUtil().onboardingCompleted = true;
         }
         final acquisitionSource = state['acquisition_source'] as String? ?? '';
@@ -483,12 +464,9 @@ class AuthService {
           SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
           SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         }
-        print(
-          'DEBUG _restoreOnboardingState: done, onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}',
-        );
       }
     } catch (e) {
-      print('DEBUG _restoreOnboardingState: error=$e');
+      Logger.debug('restoreOnboardingState failed: $e');
     }
   }
 

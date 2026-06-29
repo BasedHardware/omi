@@ -414,7 +414,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withOpacity(0.8),
+        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -443,13 +443,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: _getPermissionTypeColor(permission.type).withOpacity(0.1),
+              color: _getPermissionTypeColor(permission.type).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               permission.type,
               style: TextStyle(
-                color: _getPermissionTypeColor(permission.type).withOpacity(0.8),
+                color: _getPermissionTypeColor(permission.type).withValues(alpha: 0.8),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -503,7 +503,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
         bottom: 6,
       ),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25).withOpacity(0.8),
+        color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16.0),
       ),
       child: Column(
@@ -524,7 +524,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     final color = Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
       child: Text(
         _formatToolName(tool.name),
         style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
@@ -570,7 +570,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
               width: 36,
               height: 36,
               margin: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+              decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
               child: IconButton(
                 padding: EdgeInsets.zero,
                 onPressed: () {
@@ -586,7 +586,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   width: 36,
                   height: 36,
                   margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     onPressed: chatButtonLoading
@@ -651,7 +651,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                   width: 36,
                   height: 36,
                   margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                   child: IconButton(
                     padding: EdgeInsets.zero,
                     icon: const FaIcon(FontAwesomeIcons.gear, size: 16.0, color: Colors.white),
@@ -670,7 +670,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                           width: 36,
                           height: 36,
                           margin: const EdgeInsets.only(right: 8),
-                          decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
                           child: IconButton(
                             padding: EdgeInsets.zero,
                             icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
@@ -683,9 +683,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
                               // Get the position of the share button for iOS
                               final RenderBox? box = context.findRenderObject() as RenderBox?;
-                              final Rect? sharePositionOrigin = box != null
-                                  ? box.localToGlobal(Offset.zero) & box.size
-                                  : null;
+                              final Rect? sharePositionOrigin =
+                                  box != null ? box.localToGlobal(Offset.zero) & box.size : null;
 
                               await Share.share(
                                 'https://h.omi.me/apps/${app.id}',
@@ -699,32 +698,32 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     ),
               appProvider.isAppOwner
                   ? (isLoading
-                        ? const SizedBox.shrink()
-                        : Container(
-                            width: 36,
-                            height: 36,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), shape: BoxShape.circle),
-                            child: IconButton(
-                              padding: EdgeInsets.zero,
-                              icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
-                              onPressed: () async {
-                                HapticFeedback.mediumImpact();
-                                await showModalBottomSheet(
-                                  context: context,
-                                  shape: const RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.only(
-                                      topLeft: Radius.circular(16),
-                                      topRight: Radius.circular(16),
-                                    ),
+                      ? const SizedBox.shrink()
+                      : Container(
+                          width: 36,
+                          height: 36,
+                          margin: const EdgeInsets.only(right: 8),
+                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
+                          child: IconButton(
+                            padding: EdgeInsets.zero,
+                            icon: const FaIcon(FontAwesomeIcons.edit, size: 16.0, color: Colors.white),
+                            onPressed: () async {
+                              HapticFeedback.mediumImpact();
+                              await showModalBottomSheet(
+                                context: context,
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: Radius.circular(16),
+                                    topRight: Radius.circular(16),
                                   ),
-                                  builder: (context) {
-                                    return ShowAppOptionsSheet(app: app);
-                                  },
-                                );
-                              },
-                            ),
-                          ))
+                                ),
+                                builder: (context) {
+                                  return ShowAppOptionsSheet(app: app);
+                                },
+                              );
+                            },
+                          ),
+                        ))
                   : const SizedBox(width: 8),
             ],
           ),
@@ -841,73 +840,73 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                       color: const Color(0xFF35343B),
                                     )
                                   : app.enabled
-                                  ? AnimatedLoadingButton(
-                                      text: 'Disable',
-                                      width: 90,
-                                      height: 32,
-                                      onPressed: () => _toggleApp(app.id, false),
-                                      color: Colors.grey.shade700,
-                                    )
-                                  : (app.isPaid && !app.isUserPaid
-                                        ? AnimatedLoadingButton(
-                                            width: 100,
-                                            height: 32,
-                                            text: "Subscribe",
-                                            onPressed: () async {
-                                              // Track subscribe button clicked
-                                              PlatformManager.instance.analytics.appDetailSubscribeClicked(
-                                                appId: app.id,
-                                                appName: app.name,
-                                              );
-
-                                              if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
-                                                final uri = Uri.tryParse(app.paymentLink!);
-                                                if (uri == null) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
-                                                  );
-                                                  return;
-                                                }
-                                                _checkPaymentStatus(app.id);
-                                                await _launchUrlSafely(uri);
-                                              } else {
-                                                await _toggleApp(app.id, true);
-                                              }
-                                            },
-                                            color: const Color(0xFF8B5CF6),
-                                          )
-                                        : AnimatedLoadingButton(
-                                            width: 75,
-                                            height: 32,
-                                            text: 'Enable',
-                                            onPressed: () async {
-                                              if (app.worksExternally()) {
-                                                showDialog(
-                                                  context: context,
-                                                  builder: (ctx) {
-                                                    return StatefulBuilder(
-                                                      builder: (ctx, setState) {
-                                                        return ConfirmationDialog(
-                                                          title: context.l10n.dataAccessNotice,
-                                                          description: context.l10n.dataAccessNoticeDescription,
-                                                          onConfirm: () {
-                                                            _toggleApp(app.id, true);
-                                                            Navigator.pop(context);
-                                                          },
-                                                          onCancel: () {
-                                                            Navigator.pop(context);
-                                                          },
-                                                        );
-                                                      },
-                                                    );
-                                                  },
+                                      ? AnimatedLoadingButton(
+                                          text: 'Disable',
+                                          width: 90,
+                                          height: 32,
+                                          onPressed: () => _toggleApp(app.id, false),
+                                          color: Colors.grey.shade700,
+                                        )
+                                      : (app.isPaid && !app.isUserPaid
+                                          ? AnimatedLoadingButton(
+                                              width: 100,
+                                              height: 32,
+                                              text: "Subscribe",
+                                              onPressed: () async {
+                                                // Track subscribe button clicked
+                                                PlatformManager.instance.analytics.appDetailSubscribeClicked(
+                                                  appId: app.id,
+                                                  appName: app.name,
                                                 );
-                                              } else {
-                                                _toggleApp(app.id, true);
-                                              }
-                                            },
-                                            color: const Color(0xFF8B5CF6),
-                                          )),
+
+                                                if (app.paymentLink != null && app.paymentLink!.isNotEmpty) {
+                                                  final uri = Uri.tryParse(app.paymentLink!);
+                                                  if (uri == null) {
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(content: Text(context.l10n.invalidPaymentUrl)),
+                                                    );
+                                                    return;
+                                                  }
+                                                  _checkPaymentStatus(app.id);
+                                                  await _launchUrlSafely(uri);
+                                                } else {
+                                                  await _toggleApp(app.id, true);
+                                                }
+                                              },
+                                              color: const Color(0xFF8B5CF6),
+                                            )
+                                          : AnimatedLoadingButton(
+                                              width: 75,
+                                              height: 32,
+                                              text: 'Enable',
+                                              onPressed: () async {
+                                                if (app.worksExternally()) {
+                                                  showDialog(
+                                                    context: context,
+                                                    builder: (ctx) {
+                                                      return StatefulBuilder(
+                                                        builder: (ctx, setState) {
+                                                          return ConfirmationDialog(
+                                                            title: context.l10n.dataAccessNotice,
+                                                            description: context.l10n.dataAccessNoticeDescription,
+                                                            onConfirm: () {
+                                                              _toggleApp(app.id, true);
+                                                              Navigator.pop(context);
+                                                            },
+                                                            onCancel: () {
+                                                              Navigator.pop(context);
+                                                            },
+                                                          );
+                                                        },
+                                                      );
+                                                    },
+                                                  );
+                                                } else {
+                                                  _toggleApp(app.id, true);
+                                                }
+                                              },
+                                              color: const Color(0xFF8B5CF6),
+                                            )),
                             ],
                           ),
                         ),
@@ -1050,10 +1049,10 @@ class _AppDetailPageState extends State<AppDetailPage> {
                               bottom: 6,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1F1F25).withOpacity(0.8),
+                              color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
                               borderRadius: BorderRadius.circular(16.0),
                               border: Border.all(
-                                color: setupCompleted ? Colors.green.withOpacity(0.3) : Colors.transparent,
+                                color: setupCompleted ? Colors.green.withValues(alpha: 0.3) : Colors.transparent,
                                 width: 1,
                               ),
                             ),
@@ -1082,8 +1081,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                         height: 32,
                                         decoration: BoxDecoration(
                                           color: setupCompleted
-                                              ? Colors.green.withOpacity(0.2)
-                                              : Colors.grey.withOpacity(0.2),
+                                              ? Colors.green.withValues(alpha: 0.2)
+                                              : Colors.grey.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(8),
                                         ),
                                         child: Center(
@@ -1367,7 +1366,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                   bottom: 6,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF1F1F25).withOpacity(0.8),
+                                  color: const Color(0xFF1F1F25).withValues(alpha: 0.8),
                                   borderRadius: BorderRadius.circular(16.0),
                                 ),
                                 child: Column(
@@ -1398,10 +1397,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                                     ),
                                     const SizedBox(height: 16),
                                     RecentReviewsSection(
-                                      reviews: app.reviews
-                                          .sorted((a, b) => b.ratedAt.compareTo(a.ratedAt))
-                                          .take(3)
-                                          .toList(),
+                                      reviews:
+                                          app.reviews.sorted((a, b) => b.ratedAt.compareTo(a.ratedAt)).take(3).toList(),
                                       userReview: app.userReview,
                                       app: app,
                                       onReviewUpdated: () {
@@ -1673,8 +1670,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
       final userName = widget.userReview?.username.isNotEmpty == true
           ? widget.userReview!.username
           : prefs.fullName.isNotEmpty
-          ? prefs.fullName
-          : prefs.givenName;
+              ? prefs.fullName
+              : prefs.givenName;
 
       final rev = AppReview(
         uid: prefs.uid,
@@ -1793,9 +1790,9 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.deepPurple.withOpacity(0.1),
+        color: Colors.deepPurple.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+        border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1850,7 +1847,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
               hintText: context.l10n.writeReviewOptional,
               hintStyle: TextStyle(color: Colors.grey.shade500),
               filled: true,
-              fillColor: Colors.black.withOpacity(0.3),
+              fillColor: Colors.black.withValues(alpha: 0.3),
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
               contentPadding: const EdgeInsets.all(12),
               counterStyle: TextStyle(color: Colors.grey.shade500),
@@ -1891,9 +1888,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Widget _buildReviewItem(BuildContext context, AppReview review, {bool isUserReview = false}) {
     final l10n = AppLocalizations.of(context)!;
-    final displayName = isUserReview
-        ? l10n.yourReview
-        : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
+    final displayName =
+        isUserReview ? l10n.yourReview : (review.username.isNotEmpty ? review.username : l10n.anonymousUser);
     final avatarSeed = review.uid.isNotEmpty ? review.uid : review.username;
 
     return Padding(
@@ -1909,7 +1905,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                 seed: avatarSeed,
                 username: review.username,
                 size: 36,
-                backgroundColor: isUserReview ? Colors.deepPurple.withOpacity(0.2) : null,
+                backgroundColor: isUserReview ? Colors.deepPurple.withValues(alpha: 0.2) : null,
                 foregroundColor: isUserReview ? Colors.deepPurple : null,
               ),
               const SizedBox(width: 12),

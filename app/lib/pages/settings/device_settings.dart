@@ -489,7 +489,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         activeTrackColor: Colors.white,
                         inactiveTrackColor: Colors.grey.shade800,
                         thumbColor: Colors.white,
-                        overlayColor: Colors.white.withOpacity(0.1),
+                        overlayColor: Colors.white.withValues(alpha: 0.1),
                         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12, elevation: 2),
                         overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
                         trackHeight: 6,
@@ -598,7 +598,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                         activeTrackColor: Colors.white,
                         inactiveTrackColor: Colors.grey.shade800,
                         thumbColor: Colors.white,
-                        overlayColor: Colors.white.withOpacity(0.1),
+                        overlayColor: Colors.white.withValues(alpha: 0.1),
                         thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 12, elevation: 2),
                         overlayShape: const RoundSliderOverlayShape(overlayRadius: 24),
                         trackHeight: 6,
@@ -679,9 +679,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.white.withOpacity(0.1) : const Color(0xFF2A2A2E),
+          color: isSelected ? Colors.white.withValues(alpha: 0.1) : const Color(0xFF2A2A2E),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isSelected ? Colors.white.withOpacity(0.5) : Colors.transparent, width: 1),
+          border: Border.all(color: isSelected ? Colors.white.withValues(alpha: 0.5) : Colors.transparent, width: 1),
         ),
         child: Center(
           child: Text(

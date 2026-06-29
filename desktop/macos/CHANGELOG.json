@@ -2,6 +2,20 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.561",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed Gmail import detail panel showing \"Connect Gmail\" button when Gmail is already connected"
+      ]
+    },
+    {
+      "version": "0.11.560",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed Omi Beta desktop chat failing before answering when agent control tools are available"
+      ]
+    },
+    {
       "version": "0.11.559",
       "date": "2026-06-28",
       "changes": [
