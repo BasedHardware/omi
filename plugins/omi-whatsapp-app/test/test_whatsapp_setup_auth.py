@@ -1,0 +1,112 @@
+"""Regression tests for /setup bearer auth on the WhatsApp plugin.
+
+Mirrors plugins/omi-telegram-app/test/test_setup_auth.py but for the
+WhatsApp plugin. Identified by maintainer security review on PR #8528.
+
+The dependency `require_bearer` is defined in plugins/_shared/auth.py
+and tested in plugins/_shared/test/test_auth.py. This file is the
+integration coverage: the auth gate is actually wired into the plugin's
+/setup and /toggle routes.
+
+Loads the plugin's `main.py` via the conftest helper to avoid the bare-
+name module collision with the Telegram plugin's tests.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Path setup
+# ---------------------------------------------------------------------------
+_PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+_PLUGIN_ROOT = os.path.abspath(os.path.join(_PLUGIN_DIR, ".."))
+_SHARED = os.path.abspath(os.path.join(_PLUGIN_ROOT, "..", "_shared"))
+for p in (_PLUGIN_ROOT, _SHARED):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+from conftest import load_main_module  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _clean_env(monkeypatch):
+    """Strip token + dev mode env. Tests opt in explicitly."""
+    monkeypatch.delenv("AI_CLONE_PLUGIN_TOKEN", raising=False)
+    monkeypatch.delenv("OMI_DEV_MODE", raising=False)
+    yield
+
+
+@pytest.fixture
+def client():
+    """FastAPI TestClient against the WhatsApp plugin's main module."""
+    from fastapi.testclient import TestClient
+
+    main = load_main_module()
+    return TestClient(main.app)
+
+
+def _post_setup(client, *, token=None):
+    headers = {"Content-Type": "application/json"}
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
+    return client.post(
+        "/setup",
+        json={
+            "access_token": "fake-access",
+            "phone_number_id": "111",
+            "verify_token": "vt",
+            "omi_uid": "u",
+            "persona_id": "p",
+            "omi_dev_api_key": "k",
+            "phone": "15550001111",
+        },
+        headers=headers,
+    )
+
+
+class TestWhatsappSetupAuth:
+    def test_setup_without_token_returns_503(self, client):
+        """Production misconfig: token not set, no dev mode -> 503.
+
+        Without this gate, anyone with the plugin URL could call Meta's
+        subscribed_apps and set up webhooks for the user's WhatsApp
+        Business app — a free SSRF / quota-burn vector.
+        """
+        r = _post_setup(client)
+        assert r.status_code == 503, (
+            "Without AI_CLONE_PLUGIN_TOKEN configured, /setup must fail "
+            "closed with 503 — not silently proceed and call Meta."
+        )
+        assert "not configured" in r.json()["detail"].lower()
+
+    def test_setup_without_header_returns_401(self, client, monkeypatch):
+        monkeypatch.setenv("AI_CLONE_PLUGIN_TOKEN", "the-secret")
+        r = _post_setup(client)
+        assert r.status_code == 401
+
+    def test_setup_with_wrong_token_returns_401(self, client, monkeypatch):
+        monkeypatch.setenv("AI_CLONE_PLUGIN_TOKEN", "the-secret")
+        r = _post_setup(client, token="wrong-token")
+        assert r.status_code == 401
+
+    def test_setup_with_correct_token_passes_auth_gate(self, client, monkeypatch):
+        """A valid bearer passes the gate; the downstream Meta call
+        fails with 4xx for the fake creds (existing behavior).
+        """
+        monkeypatch.setenv("AI_CLONE_PLUGIN_TOKEN", "the-secret")
+        r = _post_setup(client, token="the-secret")
+        # Not 401/503 — proves we got past the auth gate.
+        assert r.status_code not in (401, 503), (
+            f"Correct bearer should pass auth gate. Got {r.status_code}: " f"{r.text}"
+        )
+
+    def test_setup_with_dev_mode_no_token_allows(self, client, monkeypatch):
+        """Dev mode + no token = allow. Matches the WhatsApp-webhook pattern."""
+        monkeypatch.setenv("OMI_DEV_MODE", "1")
+        r = _post_setup(client)
+        assert r.status_code != 503

@@ -28,11 +28,12 @@ if _SHARED not in sys.path:
     sys.path.insert(0, _SHARED)
 
 import httpx  # noqa: E402
-from fastapi import FastAPI, Header, HTTPException, Request  # noqa: E402
+from fastapi import Depends, FastAPI, Header, HTTPException, Request  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 import simple_storage  # noqa: E402
 import telegram_client  # noqa: E402
+from auth import require_bearer  # noqa: E402  (shared bearer-token auth — see plugins/_shared/auth.py)
 from persona_client import chat as _persona_chat  # noqa: E402  (re-export of plugins/_shared/persona_client.chat)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -94,7 +95,7 @@ class SetupResponse(BaseModel):
     setup_token: str
 
 
-@app.post("/setup", response_model=SetupResponse)
+@app.post("/setup", response_model=SetupResponse, dependencies=[Depends(require_bearer)])
 async def setup(req: SetupRequest):
     """Register the user's bot and return a one-time deep link for the user to click."""
     webhook_url = f"{req.public_base_url.rstrip('/')}/webhook"
@@ -346,7 +347,7 @@ class ToggleResponse(BaseModel):
     auto_reply_enabled: bool
 
 
-@app.post("/toggle", response_model=ToggleResponse)
+@app.post("/toggle", response_model=ToggleResponse, dependencies=[Depends(require_bearer)])
 async def toggle(req: ToggleRequest):
     """Enable or disable auto-reply for the given chat_id.
 
