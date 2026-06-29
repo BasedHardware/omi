@@ -103,69 +103,7 @@ async def _plugin_lifespan(app: FastAPI):
             dev_mode=os.getenv("OMI_DEV_MODE") == "1",
             plugin_type="telegram",
             instance_id=_PLUGIN_INSTANCE_ID,
-        )
-        logger.info("wrote plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
-    except OSError as e:
-        logger.warning("could not write plugin discovery file: %s", e)
-    try:
-        yield
-    finally:
-        try:
-            clear_discovery(instance_id=_PLUGIN_INSTANCE_ID)
-            logger.info("cleared plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
-        except OSError:
-            pass
-
-
-app = FastAPI(
-    title="OMI Telegram AI-Clone",
-    description="Self-hosted Telegram plugin that lets Omi reply on the user's behalf.",
-    version="0.1.0",
-    # Lifespan writes the plugin discovery file at startup and removes
-    # it at shutdown. The desktop reads the file on its own init and
-    # auto-fills the AI Clone settings (URL + bearer token) so the
-    # user doesn't have to copy/paste them. See plugin_discovery.py
-    # for the file format and security model.
-    lifespan=_plugin_lifespan,
-)
-
-
-import uuid
-from contextlib import asynccontextmanager
-
-
-_PLUGIN_INSTANCE_ID = str(uuid.uuid4())
-
-
-@asynccontextmanager
-async def _plugin_lifespan(app: FastAPI):
-    """Write the discovery file at startup, remove it at shutdown.
-
-    Plugin URL: prefer PUBLIC_BASE_URL if set (the tunnel URL), else
-    fall back to http://127.0.0.1:<port> where <port> comes from $PORT
-    (uvicorn sets it) or defaults to 8000 (Docker) / 18800 (dev).
-
-    Bearer token: the env var AI_CLONE_PLUGIN_TOKEN. We write it to the
-    discovery file as a bootstrap convenience; the desktop moves it
-    into the macOS Keychain on first read so it doesn't linger in a
-    plaintext file.
-
-    Dev mode: True if OMI_DEV_MODE=1. The desktop uses this flag to
-    relax the "developer API key required" check (useful when the
-    plugin is paired with the local persona mock).
-    """
-    port = os.getenv("PORT") or "8000"
-    public_url = os.getenv("PUBLIC_BASE_URL")
-    if not public_url:
-        public_url = f"http://127.0.0.1:{port}"
-    try:
-        write_discovery(
-            plugin_url=f"http://127.0.0.1:{port}",
-            bearer_token=os.getenv("AI_CLONE_PLUGIN_TOKEN", ""),
-            public_url=public_url,
-            dev_mode=os.getenv("OMI_DEV_MODE") == "1",
-            plugin_type="telegram",
-            instance_id=_PLUGIN_INSTANCE_ID,
+            omi_base_url=OMI_BASE_URL,
         )
         logger.info("wrote plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
     except OSError as e:
@@ -199,6 +137,15 @@ async def _plugin_lifespan(app: FastAPI):
 # or transmitted through chat — that keeps long-lived platform
 # credentials out of chat history, tool-call logs, traces, and model
 # context. (Identified by maintainer security review on PR #8531.)
+
+app = FastAPI(
+    title="OMI Telegram AI-Clone",
+    description="Self-hosted Telegram plugin that lets Omi reply on the user's behalf.",
+    version="0.1.0",
+    lifespan=_plugin_lifespan,
+)
+
+
 @app.get("/.well-known/omi-tools.json", include_in_schema=False)
 async def omi_tools_manifest():
     """Return the Omi Chat Tools manifest for this plugin.
@@ -220,6 +167,29 @@ async def omi_tools_manifest():
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "omi-telegram-clone", "version": "0.1.0"}
+
+
+@app.get("/status", dependencies=[Depends(require_bearer)])
+def status():
+    """Return connected chat count + auto-reply state + first chat_id.
+
+    Used by the desktop's PluginCard to show Connected/Not Connected,
+    the current auto-reply toggle state, and the chat_id to use for
+    /toggle calls. The bearer auth gates this.
+    """
+    chat_ids = list(simple_storage.users.keys())
+    chat_count = len(chat_ids)
+    any_auto_reply = any(u.get("auto_reply_enabled") for u in simple_storage.users.values())
+    # Include bot_username from the first connected user's setup record
+    first_user = simple_storage.users.get(chat_ids[0], {}) if chat_ids else {}
+    bot_username = first_user.get("bot_username", "")
+    return {
+        "connected_chats": chat_count,
+        "auto_reply_enabled": any_auto_reply,
+        "first_chat_id": chat_ids[0] if chat_ids else None,
+        "bot_username": bot_username,
+        "service": "omi-telegram-clone",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -276,12 +246,40 @@ async def setup(req: SetupRequest):
     # /start <token> to the bot, and we know which chat_id maps to which user.
     setup_token = secrets.token_urlsafe(16)
 
+    # When the plugin uses a LOCAL backend (OMI_BASE_URL is localhost),
+    # ALWAYS force the persona_id + API key from persona.json regardless
+    # of what the desktop sends. The desktop may send stale prod values
+    # (from a previous Connect) which won't work on the local backend.
+    # The local backend only has the test persona + test API key.
+    omi_base = os.getenv("OMI_BASE_URL", "https://api.omi.me")
+    is_local_backend = "localhost" in omi_base or "127.0.0.1" in omi_base
+    if is_local_backend:
+        persona_file = "/tmp/omi-py-backend/persona.json"
+        try:
+            with open(persona_file) as f:
+                pdata = json.load(f)
+            effective_persona_id = pdata.get("app_id", req.persona_id)
+            effective_dev_api_key = pdata.get("api_key", req.omi_dev_api_key)
+            logger.info(
+                "setup: local backend detected, forced persona from %s (id=%s, key=%s...)",
+                persona_file,
+                effective_persona_id,
+                effective_dev_api_key[:8],
+            )
+        except (OSError, json.JSONDecodeError):
+            effective_persona_id = req.persona_id
+            effective_dev_api_key = req.omi_dev_api_key
+            logger.warning("setup: local backend but persona.json missing, using desktop-provided values")
+    else:
+        effective_persona_id = req.persona_id
+        effective_dev_api_key = req.omi_dev_api_key
+
     simple_storage.save_pending_setup(
         setup_token,
         {
             "omi_uid": req.omi_uid,
-            "persona_id": req.persona_id,
-            "omi_dev_api_key": req.omi_dev_api_key,
+            "persona_id": effective_persona_id,
+            "omi_dev_api_key": effective_dev_api_key,
             "bot_token": req.bot_token,
             "bot_username": bot_username,
         },
@@ -386,6 +384,9 @@ async def webhook(
             bot_token=payload["bot_token"],
             auto_reply_enabled=False,
         )
+        # Store bot_username for /status display
+        simple_storage.users[str(chat_id)]["bot_username"] = payload.get("bot_username", "")
+        simple_storage._save(simple_storage.USERS_FILE, simple_storage.users)
         await telegram_client.send_message(
             payload["bot_token"],
             chat_id,
@@ -565,12 +566,22 @@ class ToggleResponse(BaseModel):
 async def toggle(req: ToggleRequest):
     """Enable or disable auto-reply for the given chat_id.
 
-    Returns 403 with a generic message for both unknown chat_id AND wrong
-    bot_token, so callers can't enumerate which chat_ids are registered by
-    distinguishing 404 (unknown) from 403 (wrong token).
+    Special case: chat_id='all' toggles ALL connected chats at once.
+    This is used by the desktop's global auto-reply toggle when the
+    user has multiple connected chats (or when the desktop doesn't
+    know which specific chat_id to target).
 
-    Called by the Chat Tools manifest entry `toggle_auto_reply` (T-008).
+    Called by the Chat Tools manifest entry `toggle_auto_reply`.
     """
+    if req.chat_id == "all":
+        # Toggle all connected chats
+        if not simple_storage.users:
+            raise HTTPException(status_code=403, detail="No connected chats")
+        for cid in list(simple_storage.users.keys()):
+            simple_storage.update_auto_reply(cid, req.enabled)
+        # Return the first chat_id as representative
+        first_cid = next(iter(simple_storage.users.keys()))
+        return ToggleResponse(chat_id=first_cid, auto_reply_enabled=req.enabled)
     user = simple_storage.get_user_by_chat_id(req.chat_id)
     # Look up the user by chat_id alone — no platform credential is
     # required because (a) the plugin bearer token already gates this

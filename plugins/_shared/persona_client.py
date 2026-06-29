@@ -103,7 +103,9 @@ async def chat(
                         # event.data is the joined payload of one SSE event — for the
                         # persona-chat endpoint that's the chunk text (the backend yields
                         # `data: <token>` per token, sometimes multi-line).
-                        if event.data:
+                        # Skip the [DONE] terminator — it signals end of stream,
+                        # not part of the reply text.
+                        if event.data and event.data.strip() != "[DONE]":
                             chunks.append(event.data)
                     return _join_chunks(chunks)
 

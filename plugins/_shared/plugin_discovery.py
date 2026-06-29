@@ -76,6 +76,7 @@ def write_discovery(
     dev_mode: bool = True,
     plugin_type: str,
     instance_id: str | None = None,
+    omi_base_url: str | None = None,
 ) -> Path:
     """Write the discovery JSON. Atomic via tmp+rename. Returns the path.
 
@@ -111,6 +112,7 @@ def write_discovery(
         "public_url": public_url,
         "dev_mode": dev_mode,
         "plugin_type": plugin_type,
+        "omi_base_url": omi_base_url,
     }
 
     # Atomic write so the desktop never reads a half-flushed file.
