@@ -9488,6 +9488,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Około 1 minuty';
+
   @override
   String get jumpToLatestMessage => 'Przejdź do najnowszej wiadomości';
 

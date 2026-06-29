@@ -27,12 +27,15 @@ jobs:
           FILES=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE"...HEAD)
           echo "$FILES"
           echo "$FILES" > /tmp/changed-files.txt
+          echo "diff_base=$DIFF_BASE" >> $GITHUB_OUTPUT
           echo "has_dart=$(echo "$FILES" | grep -q '\.dart$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_python=$(echo "$FILES" | grep -q 'backend/.*\.py$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_arb=$(echo "$FILES" | grep -q '\.arb$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           # Also run the Rust check when this workflow changes so CI PRs dogfood
           # the new guard instead of only validating YAML syntax.
           echo "has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
@@ -52,6 +55,9 @@ jobs:
             exit 1
           fi
 
+      - name: Architecture guardrail warnings
+        run: python3 .github/scripts/check_arch_guardrails.py --changed-files /tmp/changed-files.txt
+
       - name: Check desktop changelog data
         run: python3 .github/scripts/desktop-changelog.py validate
 
@@ -70,6 +76,19 @@ jobs:
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
+
+      - name: Summarize deferred-work markers
+        continue-on-error: true
+        run: python3 .github/scripts/deferred-work-marker-count.py --format github-summary >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check GitHub Actions workflows
+        if: steps.changed.outputs.has_workflows == 'true'
+        run: |
+          GOBIN=/tmp/actionlint-bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          FILES=$(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt || true)
+          if [ -n "$FILES" ]; then
+            /tmp/actionlint-bin/actionlint -shellcheck "" $FILES
+          fi
 
       # -- Dart --
       - name: Setup Flutter
@@ -100,6 +119,14 @@ jobs:
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
           fi
+
+      - name: Check backend async blockers
+        if: steps.changed.outputs.has_backend_async_gate == 'true'
+        run: |
+          python3 backend/scripts/scan_async_blockers.py \
+            --dirs backend/routers backend/utils \
+            --diff-base "${{ steps.changed.outputs.diff_base }}" \
+            --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
 
       # -- ARB --
       - name: Check ARB formatting

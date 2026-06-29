@@ -1,14 +1,11 @@
-import os
 import re
 from typing import Optional, Tuple, List, Dict
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from enum import Enum
 import ast
 
-from database.redis_db import get_generic_cache, set_generic_cache
-from utils.log_sanitizer import sanitize
+from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 import logging
 
 logger = logging.getLogger(__name__)
@@ -29,7 +26,6 @@ FIRMWARE_TAG_PATTERN = re.compile(
     r'^(?:Omi_CV1|Omi_DK2|OmiGlass|OpenGlass|Friend)_v[0-9]+(?:\.[0-9]+){1,2}$',
     re.IGNORECASE,
 )
-MAX_PAGES = 20  # Safety cap to prevent runaway pagination
 
 
 # Device Model Number
@@ -56,103 +52,6 @@ def _get_device_by_model_number(device_model: str):
         return DeviceModel.OMI_CV1
 
     return None
-
-
-async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Pattern] = None) -> Optional[List[Dict]]:
-    """Fetch releases from GitHub API with caching.
-
-    When tag_filter is provided, paginates through all pages and returns only
-    releases whose tag_name matches the filter. Without tag_filter, returns
-    the first page of releases unfiltered (sufficient for desktop releases
-    which are always recent).
-
-    Resilience: if GitHub returns errors or an empty list during an upstream
-    outage, we fall back to a longer-lived "last known good" cache so the
-    macos.omi.me download endpoint keeps serving the previous DMG link.
-    """
-
-    lkg_key = f"{cache_key}:lkg"
-
-    # Check cache first (use `is not None` so cached empty list is a hit)
-    cached_releases = get_generic_cache(cache_key)
-    if cached_releases is not None:
-        return cached_releases
-
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28",
-        "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
-    }
-
-    collected: List[Dict] = []
-    fetch_failed = False
-
-    try:
-        page = 1
-        async with httpx.AsyncClient() as client:
-            while page <= MAX_PAGES:
-                url = f"https://api.github.com/repos/BasedHardware/omi/releases?per_page=100&page={page}"
-                response = await client.get(url, headers=headers)
-                if response.status_code != 200:
-                    logger.error(
-                        "Error fetching GitHub releases page %d: %d %s",
-                        page,
-                        response.status_code,
-                        sanitize(response.text),
-                    )
-                    fetch_failed = True
-                    break
-
-                page_releases = response.json()
-                if not page_releases:
-                    break
-
-                if tag_filter:
-                    for release in page_releases:
-                        tag_name = release.get("tag_name", "")
-                        if tag_filter.match(tag_name):
-                            collected.append(release)
-                else:
-                    collected.extend(page_releases)
-
-                # Without filter, single page is enough (desktop releases are recent)
-                if not tag_filter:
-                    break
-
-                # Stop if this was the last page
-                if len(page_releases) < 100:
-                    break
-
-                page += 1
-    except Exception as exc:
-        logger.exception("Exception fetching GitHub releases: %s", sanitize(str(exc)))
-        fetch_failed = True
-
-    # If the live fetch failed or returned nothing, prefer the last-known-good
-    # cache over an empty response. Re-cache LKG under the short key with a
-    # short TTL (60s) so we retry GitHub soon without hammering it.
-    if fetch_failed or not collected:
-        last_known_good = get_generic_cache(lkg_key)
-        if last_known_good:
-            logger.warning(
-                "GitHub releases fetch %s; serving last-known-good cache for %s",
-                "failed" if fetch_failed else "returned empty",
-                cache_key,
-            )
-            set_generic_cache(cache_key, last_known_good, ttl=60)
-            return last_known_good
-
-        # No fallback — short-cache the empty result so we don't hammer
-        # GitHub, but use a shorter TTL than the success path (5min) so
-        # recovery is faster once GitHub is back.
-        set_generic_cache(cache_key, collected, ttl=60)
-        return collected
-
-    # Live fetch succeeded with data: refresh both caches. The LKG TTL is
-    # 24h so it survives multi-hour GitHub outages.
-    set_generic_cache(cache_key, collected, ttl=300)
-    set_generic_cache(lkg_key, collected, ttl=86400)
-    return collected
 
 
 def _parse_firmware_version(version_str: Optional[str]) -> Optional[Tuple[int, ...]]:
@@ -352,38 +251,3 @@ async def get_stable_version(device_model: str):
 
     candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
     return _extract_firmware_response(device, candidates[0])
-
-
-def extract_key_value_pairs(markdown_content):
-    if not markdown_content:
-        return {}
-
-    key_value_pattern = re.compile(r'<!-- KEY_VALUE_START\s*(.*?)\s*KEY_VALUE_END -->', re.DOTALL)
-    key_value_match = key_value_pattern.search(markdown_content)
-
-    if not key_value_match:
-        return {}
-
-    key_value_string = key_value_match.group(1).strip()
-    lines = key_value_string.split('\n')
-    key_value_map = {}
-
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-
-        # Use split with maxsplit=1 to handle values containing colons
-        parts = line.split(':', 1)
-        if len(parts) == 2:
-            key = parts[0].strip()
-            value = parts[1].strip()
-
-            if key == 'ota_update_steps':
-                key_value_map[key] = [step.strip() for step in value.split(',') if step.strip()]
-            elif key == 'changelog':
-                key_value_map[key] = [item.strip() for item in value.split('|') if item.strip()]
-            else:
-                key_value_map[key] = value
-
-    return key_value_map

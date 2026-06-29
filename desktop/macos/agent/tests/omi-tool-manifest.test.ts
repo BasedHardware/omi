@@ -27,6 +27,7 @@ describe("omi tool manifest", () => {
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "delegate_agent",
+      "fill_cloud_connector_form",
       "spawn_agent",
       "manage_agent_pills",
       "search_tasks",
@@ -111,6 +112,16 @@ describe("omi tool manifest", () => {
         then: { required: ["childSessionId"] },
       },
     ]);
+  });
+
+  it("keeps MCP-only schema options from overriding base tool schema fields", () => {
+    for (const tool of toolsForAdapter("omi-tools-stdio")) {
+      const mcpTool = mcpToolDefinitionsForAdapter("omi-tools-stdio").find((candidate) => candidate.name === tool.name);
+      expect(mcpTool?.inputSchema.type).toBe(tool.inputSchema.type);
+      expect(mcpTool?.inputSchema.properties).toEqual(tool.inputSchema.properties);
+      expect(mcpTool?.inputSchema.required).toEqual(tool.inputSchema.required);
+      expect(mcpTool?.inputSchema.additionalProperties).toEqual(tool.inputSchema.additionalProperties);
+    }
   });
 
   it("normalizes MCP-prefixed and explicit aliases", () => {

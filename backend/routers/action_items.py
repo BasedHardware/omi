@@ -274,6 +274,13 @@ def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth
     return ActionItemResponse(**action_item)
 
 
+def _ensure_aware(value: datetime) -> datetime:
+    # FastAPI parses a query datetime as naive or timezone-aware depending on whether the client
+    # included a UTC offset. Normalize to timezone-aware (UTC) so comparing the two ends of a date
+    # range never raises TypeError on mixed awareness (which would surface as a 500).
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 @router.get("/v1/action-items", tags=['action-items'])
 def get_action_items(
     limit: int = Query(50, ge=1, le=500, description="Maximum number of action items to return"),
@@ -287,6 +294,15 @@ def get_action_items(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get action items for the current user."""
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
+    if (
+        due_start_date is not None
+        and due_end_date is not None
+        and _ensure_aware(due_start_date) > _ensure_aware(due_end_date)
+    ):
+        raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
+
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,

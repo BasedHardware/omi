@@ -35,7 +35,11 @@ import {
 } from "./index.ts";
 import type { ToolCallEvent } from "@mariozechner/pi-coding-agent";
 import { agentControlCapabilityManifest } from "../agent/src/runtime/control-tool-manifest.ts";
-import { toolNamesForAdapter } from "../agent/src/runtime/omi-tool-manifest.ts";
+import {
+  buildToolAvailabilitySnapshot,
+  toolNamesForAdapter,
+  toolsForAdapter,
+} from "../agent/src/runtime/omi-tool-manifest.ts";
 
 // ---------------------------------------------------------------------------
 // classifyBash — allow-by-default for normal dev commands
@@ -936,8 +940,54 @@ function createMockBridge(): { server: Server; sockPath: string } {
   return { server, sockPath };
 }
 
-test("OMI_TOOLS: exactly 26 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 26);
+function firstTypedSchema(schema: any): any {
+  if (schema?.type) return schema;
+  return schema?.anyOf?.find((candidate: any) => candidate.type) ?? {};
+}
+
+function normalizeCanonicalSchema(schema: Record<string, unknown>): Record<string, unknown> {
+  const normalized: Record<string, unknown> = { type: schema.type };
+  if (schema.description !== undefined) normalized.description = schema.description;
+  if (schema.enum !== undefined) normalized.enum = schema.enum;
+  if (schema.type === "array" && schema.items && typeof schema.items === "object") {
+    normalized.items = normalizeCanonicalSchema(schema.items as Record<string, unknown>);
+  }
+  if (schema.type === "object") {
+    normalized.additionalProperties = schema.additionalProperties === true;
+    normalized.properties = Object.fromEntries(
+      Object.entries((schema.properties as Record<string, unknown>) ?? {}).map(([key, value]) => [
+        key,
+        normalizeCanonicalSchema(value as Record<string, unknown>),
+      ]),
+    );
+    normalized.required = Array.isArray(schema.required) ? [...schema.required].sort() : [];
+  }
+  return normalized;
+}
+
+function normalizeProjectedSchema(schema: any): Record<string, unknown> {
+  const typedSchema = firstTypedSchema(schema);
+  const normalized: Record<string, unknown> = { type: typedSchema.type };
+  if (typedSchema.description !== undefined) normalized.description = typedSchema.description;
+  if (typedSchema.enum !== undefined) normalized.enum = typedSchema.enum;
+  if (typedSchema.type === "array" && typedSchema.items) {
+    normalized.items = normalizeProjectedSchema(typedSchema.items);
+  }
+  if (typedSchema.type === "object") {
+    normalized.additionalProperties = typedSchema.additionalProperties === true;
+    normalized.properties = Object.fromEntries(
+      Object.entries(typedSchema.properties ?? {}).map(([key, value]) => [
+        key,
+        normalizeProjectedSchema(value),
+      ]),
+    );
+    normalized.required = Array.isArray(typedSchema.required) ? [...typedSchema.required].sort() : [];
+  }
+  return normalized;
+}
+
+test("OMI_TOOLS: exactly 27 tools defined via defineTool()", () => {
+  assert.equal(OMI_TOOLS.length, 27);
 });
 
 test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
@@ -945,6 +995,35 @@ test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
     OMI_TOOLS.map((tool) => tool.name),
     toolNamesForAdapter("pi-mono"),
   );
+});
+
+test("OMI_TOOLS: all tools preserve canonical pi-mono projection metadata and schema shape", () => {
+  const canonicalTools = toolsForAdapter("pi-mono");
+
+  for (const canonicalTool of canonicalTools) {
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === canonicalTool.name);
+    assert.ok(tool, `${canonicalTool.name} missing from OMI_TOOLS`);
+    assert.equal(tool!.label, canonicalTool.label, `${canonicalTool.name} label drifted`);
+    assert.equal(tool!.description, canonicalTool.description, `${canonicalTool.name} description drifted`);
+    assert.equal(tool!.promptSnippet, canonicalTool.promptSnippet, `${canonicalTool.name} promptSnippet drifted`);
+    assert.deepEqual(tool!.promptGuidelines ?? [], canonicalTool.promptGuidelines ?? [], `${canonicalTool.name} promptGuidelines drifted`);
+    assert.deepEqual(
+      [...((tool!.parameters as any).required ?? [])].sort(),
+      [...(canonicalTool.inputSchema.required ?? [])].sort(),
+      `${canonicalTool.name} required fields drifted`,
+    );
+
+    const projectedProperties = (tool!.parameters as any).properties ?? {};
+    for (const [propertyName, canonicalProperty] of Object.entries(canonicalTool.inputSchema.properties)) {
+      const property = projectedProperties[propertyName];
+      assert.ok(property, `${canonicalTool.name}.${propertyName} missing`);
+      assert.deepEqual(
+        normalizeProjectedSchema(property),
+        normalizeCanonicalSchema(canonicalProperty as Record<string, unknown>),
+        `${canonicalTool.name}.${propertyName} schema drifted`,
+      );
+    }
+  }
 });
 
 test("OMI_TOOLS: all tools have name, label, description, parameters, execute", () => {
@@ -983,10 +1062,13 @@ test("OMI_TOOLS: TypeBox schemas have additionalProperties=false", () => {
   }
 });
 
-test("OMI_TOOLS: provider schemas do not invent top-level oneOf", () => {
+test("OMI_TOOLS: provider schemas do not advertise unsupported top-level composites", () => {
+  const unsupportedTopLevelKeys = ["anyOf", "allOf", "oneOf", "not", "if", "then"] as const;
   for (const tool of OMI_TOOLS) {
     const parameters = tool.parameters as any;
-    assert.equal(parameters.oneOf, undefined, `${tool.name} has top-level oneOf`);
+    for (const key of unsupportedTopLevelKeys) {
+      assert.equal(parameters[key], undefined, `${tool.name} has top-level ${key}`);
+    }
   }
 });
 
@@ -996,6 +1078,7 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     semantic_search: ["query"],
     get_daily_recap: [],
     get_task_agent_status: [],
+    fill_cloud_connector_form: ["provider", "server_url", "oauth_client_secret"],
     list_agent_sessions: [],
     get_agent_run: ["runId"],
     cancel_agent_run: ["runId"],
@@ -1037,23 +1120,18 @@ test("OMI_TOOLS: top-level schemas keep the object contract", () => {
   }
 });
 
-test("OMI_TOOLS: agent control schemas preserve top-level composite preconditions", () => {
+test("OMI_TOOLS: agent control schemas keep runtime precondition guidance without top-level composites", () => {
   const inspectArtifacts = OMI_TOOLS.find((tool) => tool.name === "inspect_agent_artifacts");
-  assert.deepEqual((inspectArtifacts?.parameters as any).anyOf, [
-    { required: ["artifactId"] },
-    { required: ["sessionId"] },
-    { required: ["runId"] },
-    { required: ["attemptId"] },
-  ]);
+  assert.equal((inspectArtifacts?.parameters as any).anyOf, undefined);
   assert.match(inspectArtifacts?.description ?? "", /session, run, or attempt/);
+  assert.ok(
+    inspectArtifacts?.promptGuidelines?.some((guideline) =>
+      guideline.includes("get_agent_run")
+    ),
+  );
 
   const delegateAgent = OMI_TOOLS.find((tool) => tool.name === "delegate_agent");
-  assert.deepEqual((delegateAgent?.parameters as any).allOf, [
-    {
-      if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-      then: { required: ["childSessionId"] },
-    },
-  ]);
+  assert.equal((delegateAgent?.parameters as any).allOf, undefined);
   assert.ok(
     delegateAgent?.promptGuidelines?.some((guideline) =>
       guideline.includes("Use call for a structured child result")
@@ -1101,8 +1179,8 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
       [...manifestTool.required].sort(),
       `${manifestTool.name} required fields drifted`
     );
-    assert.deepEqual((tool!.parameters as any).anyOf, manifestTool.jsonSchemaOptions?.anyOf, `${manifestTool.name} anyOf drifted`);
-    assert.deepEqual((tool!.parameters as any).allOf, manifestTool.jsonSchemaOptions?.allOf, `${manifestTool.name} allOf drifted`);
+    assert.equal((tool!.parameters as any).anyOf, undefined, `${manifestTool.name} should not advertise top-level anyOf`);
+    assert.equal((tool!.parameters as any).allOf, undefined, `${manifestTool.name} should not advertise top-level allOf`);
 
     for (const [propertyName, manifestProperty] of Object.entries(manifestTool.properties)) {
       const property = (tool!.parameters as any).properties[propertyName];
@@ -1113,6 +1191,51 @@ test("OMI_TOOLS: agent control tools match canonical capability manifest", () =>
       assert.equal(typedSchema.description, manifestProperty.description, `${manifestTool.name}.${propertyName} description drifted`);
       assert.deepEqual(typedSchema.enum, manifestProperty.enum, `${manifestTool.name}.${propertyName} enum drifted`);
     }
+  }
+});
+
+test("registerOmiTools: writes availability snapshot matching canonical pi-mono projection", async () => {
+  __resetOmiPipeForTest();
+  const { server, sockPath } = createMockBridge();
+  const dir = await mkdtemp(pathJoin(tmpdir(), "omi-pi-snapshot-success-"));
+  const snapshotPath = pathJoin(dir, "tools.json");
+  const previousPipe = process.env.OMI_BRIDGE_PIPE;
+  const previousSnapshotPath = process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH;
+  const registeredTools: string[] = [];
+
+  process.env.OMI_BRIDGE_PIPE = sockPath;
+  process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH = snapshotPath;
+
+  try {
+    await new Promise<void>((resolve) => server.listen(sockPath, resolve));
+    await __registerOmiToolsForTest({
+      registerTool(tool: { name: string }) {
+        registeredTools.push(tool.name);
+      },
+    } as any);
+
+    const snapshot = JSON.parse(await readFile(snapshotPath, "utf8"));
+    const expected = buildToolAvailabilitySnapshot("pi-mono");
+    assert.deepEqual(registeredTools, toolNamesForAdapter("pi-mono"));
+    assert.deepEqual(snapshot.advertisedToolNames, expected.advertisedToolNames);
+    assert.equal(snapshot.advertisedToolCount, expected.advertisedToolCount);
+    assert.deepEqual(snapshot.aliases, expected.aliases);
+    assert.deepEqual(snapshot.disabled, expected.disabled);
+  } finally {
+    __resetOmiPipeForTest();
+    if (previousPipe === undefined) {
+      delete process.env.OMI_BRIDGE_PIPE;
+    } else {
+      process.env.OMI_BRIDGE_PIPE = previousPipe;
+    }
+    if (previousSnapshotPath === undefined) {
+      delete process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH;
+    } else {
+      process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH = previousSnapshotPath;
+    }
+    await rm(dir, { recursive: true, force: true });
+    server.close();
+    try { await unlink(sockPath); } catch {}
   }
 });
 
@@ -1207,6 +1330,24 @@ test("OMI_TOOLS: semantic_search optional fields exist and are not required", ()
   // Verify required field
   assert.ok(required.includes("query"), "query should be required");
   assert.ok(props.query, "query property must exist in schema");
+});
+
+test("OMI_TOOLS: cloud connector form filler is registered for pi-mono agents", () => {
+  const tool = OMI_TOOLS.find(t => t.name === "fill_cloud_connector_form")!;
+  assert.ok(tool, "fill_cloud_connector_form must be available to pi-mono task agents");
+  assert.match(tool.description, /custom MCP connector form/);
+  assert.ok(
+    tool.promptGuidelines?.some(g => g.includes("Call this first")),
+    "tool should instruct agents to use it before browser-extension fallbacks",
+  );
+
+  const props = (tool.parameters as any).properties;
+  const required = (tool.parameters as any).required ?? [];
+  assert.deepEqual(required.sort(), ["provider", "server_url", "oauth_client_secret"].sort());
+  assert.deepEqual(props.provider.enum, ["claude", "chatgpt"]);
+  assert.equal(props.server_url.type, "string");
+  assert.equal(props.oauth_client_secret.type, "string");
+  assert.equal(props.submit.type, "boolean");
 });
 
 // ---------------------------------------------------------------------------

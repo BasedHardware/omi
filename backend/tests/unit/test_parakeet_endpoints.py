@@ -6,7 +6,9 @@ import sys
 import wave
 from unittest.mock import MagicMock, AsyncMock, patch
 
+import numpy as np
 import pytest
+import soundfile as sf
 
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
@@ -33,7 +35,8 @@ sys.modules["nemo"] = _nemo
 sys.modules["nemo.collections"] = _nemo.collections
 sys.modules["nemo.collections.asr"] = _nemo_asr
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
+PARAKEET_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../parakeet"))
+sys.path.insert(0, PARAKEET_DIR)
 
 import importlib
 
@@ -48,7 +51,8 @@ if "transcribe" in sys.modules:
 
 if "main" in sys.modules:
     _existing_main = sys.modules["main"]
-    if not hasattr(_existing_main, "__file__") or _existing_main.__file__ is None:
+    _existing_main_file = os.path.abspath(getattr(_existing_main, "__file__", "") or "")
+    if _existing_main_file != os.path.join(PARAKEET_DIR, "main.py"):
         del sys.modules["main"]
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
@@ -58,7 +62,16 @@ from fastapi.testclient import TestClient
 
 
 def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
-    import main as parakeet_main
+    import importlib.util
+
+    parakeet_main = sys.modules.get("main")
+    if parakeet_main is None or os.path.abspath(getattr(parakeet_main, "__file__", "") or "") != os.path.join(
+        PARAKEET_DIR, "main.py"
+    ):
+        spec = importlib.util.spec_from_file_location("main", os.path.join(PARAKEET_DIR, "main.py"))
+        parakeet_main = importlib.util.module_from_spec(spec)
+        sys.modules["main"] = parakeet_main
+        spec.loader.exec_module(parakeet_main)
 
     os.makedirs("_temp", exist_ok=True)
     parakeet_main.start_time = 0.0
@@ -240,6 +253,22 @@ class TestAudioDurationFromBytes:
 
         assert _get_audio_duration_from_bytes(b"") == 0.0
 
+    def test_invalid_bytes_return_inf_when_guard_enabled(self):
+        _, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            assert mod._get_audio_duration_from_bytes(b"not audio") == float('inf')
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_flac_returns_positive_duration(self):
+        from main import _get_audio_duration_from_bytes
+
+        buf = io.BytesIO()
+        sf.write(buf, np.zeros(16000 * 3, dtype='float32'), 16000, format='FLAC')
+        dur = _get_audio_duration_from_bytes(buf.getvalue())
+        assert abs(dur - 3.0) < 0.01
+
     def test_v1_with_real_wav_observes_audio_duration(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
@@ -279,6 +308,65 @@ class TestDurationGuardHTTP413:
         assert resp.status_code == 413
         assert "exceeds limit" in resp.json()["detail"].lower()
         mod._max_file_duration_sec = 0.0
+
+    def test_v1_returns_413_for_oversized_flac(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            buf = io.BytesIO()
+            sf.write(buf, np.zeros(16000 * 10, dtype='float32'), 16000, format='FLAC')
+            flac_data = buf.getvalue()
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("long.flac", flac_data, "audio/flac")})
+            assert resp.status_code == 413
+            assert "exceeds limit" in resp.json()["detail"].lower()
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_v1_rejects_unprobeable_audio_before_batch(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("bad.bin", b"not audio", "application/octet-stream")})
+            assert resp.status_code == 413
+            assert "cannot determine audio duration" in resp.json()["detail"].lower()
+            engine.submit.assert_not_called()
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_v2_rejects_unprobeable_audio_before_batch(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post(
+                "/v2/transcribe",
+                files={"file": ("bad.bin", b"not audio", "application/octet-stream")},
+                data={"diarize": "true"},
+            )
+            assert resp.status_code == 413
+            assert "cannot determine audio duration" in resp.json()["detail"].lower()
+            engine.submit.assert_not_called()
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_unprobeable_upload_does_not_poison_audio_duration_metric(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            audio_dur_hist = mod.AUDIO_DURATION
+            before_sum = audio_dur_hist._sum.get()
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("bad.bin", b"not audio", "application/octet-stream")})
+            assert resp.status_code == 413
+            after_sum = audio_dur_hist._sum.get()
+            assert after_sum == before_sum, f"AUDIO_DURATION sum changed from {before_sum} to {after_sum}"
+            import math
+
+            assert math.isfinite(after_sum), "AUDIO_DURATION sum is not finite"
+        finally:
+            mod._max_file_duration_sec = 0.0
 
     def test_v1_passes_when_under_limit(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
