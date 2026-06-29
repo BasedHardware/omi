@@ -192,7 +192,10 @@ def collect_py_files(dirs):
 
 
 def _line_span(node):
-    return node.lineno, getattr(node, "end_lineno", node.lineno)
+    start_line = node.lineno
+    if node.decorator_list:
+        start_line = min(dec.lineno for dec in node.decorator_list)
+    return start_line, getattr(node, "end_lineno", node.lineno)
 
 
 def scan_dirs(dirs):
@@ -307,8 +310,8 @@ def _diff_paths(dirs):
     return [_normalize_path(d.rstrip("/")) for d in dirs]
 
 
-def changed_line_ranges(diff_base, dirs):
-    """Return changed new-file line ranges keyed by repo-relative path."""
+def changed_scope(diff_base, dirs):
+    """Return changed line ranges and import-changed files for diff-scoped failures."""
     cmd = [
         "git",
         "diff",
@@ -320,6 +323,7 @@ def changed_line_ranges(diff_base, dirs):
     ]
     proc = subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE)
     ranges_by_file = {}
+    import_changed_files = set()
     current_file = None
     hunk_re = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
@@ -328,22 +332,33 @@ def changed_line_ranges(diff_base, dirs):
             current_file = line.removeprefix("+++ b/")
             ranges_by_file.setdefault(current_file, [])
             continue
-        if current_file is None or not line.startswith("@@"):
+        if current_file is None:
             continue
-        match = hunk_re.match(line)
-        if not match:
+        if line.startswith("@@"):
+            match = hunk_re.match(line)
+            if not match:
+                continue
+            start = int(match.group(1))
+            count = int(match.group(2) or "1")
+            if count == 0:
+                continue
+            ranges_by_file[current_file].append((start, start + count - 1))
             continue
-        start = int(match.group(1))
-        count = int(match.group(2) or "1")
-        if count == 0:
+        if not line.startswith(("+", "-")) or line.startswith(("+++", "---")):
             continue
-        ranges_by_file[current_file].append((start, start + count - 1))
+        changed_source = line[1:].strip()
+        if changed_source.startswith(("import ", "from ")):
+            import_changed_files.add(current_file)
 
-    return ranges_by_file
+    return {"ranges": ranges_by_file, "import_changed_files": import_changed_files}
 
 
-def finding_touches_changed_lines(finding, changed_ranges):
-    file_ranges = changed_ranges.get(_normalize_path(finding["file"]), [])
+def finding_in_changed_scope(finding, scope):
+    file_path = _normalize_path(finding["file"])
+    if file_path in scope["import_changed_files"]:
+        return True
+
+    file_ranges = scope["ranges"].get(file_path, [])
     if not file_ranges:
         return False
     start = finding["line"]
@@ -353,7 +368,7 @@ def finding_touches_changed_lines(finding, changed_ranges):
 
 def _finding_qualifies(category, finding):
     if category == "no_await_should_be_def":
-        return finding.get("all_calls_are_blocking", False)
+        return bool(finding.get("all_blocking"))
     return True
 
 
@@ -372,13 +387,13 @@ def normalize_fail_on(values):
     return tuple(dict.fromkeys(categories))
 
 
-def selected_failures(results, fail_on, changed_ranges=None):
+def selected_failures(results, fail_on, scope=None):
     failures = []
     for category in fail_on:
         for finding in results.get(category, []):
             if not _finding_qualifies(category, finding):
                 continue
-            if changed_ranges is not None and not finding_touches_changed_lines(finding, changed_ranges):
+            if scope is not None and not finding_in_changed_scope(finding, scope):
                 continue
             failures.append((category, finding))
     return failures
@@ -464,8 +479,8 @@ def main():
     parser.add_argument(
         "--diff-base",
         help=(
-            "Only fail findings whose function line range intersects lines changed since this git ref. "
-            "The full report is still printed."
+            "Only fail findings whose function/decorator line range intersects lines changed since this git ref, "
+            "or findings in files with changed imports. The full report is still printed."
         ),
     )
     args = parser.parse_args()
@@ -477,17 +492,21 @@ def main():
             sys.exit(2)
 
     results = scan_dirs(args.dirs)
-    changed_ranges = changed_line_ranges(args.diff_base, args.dirs) if args.diff_base else None
-    failures = selected_failures(results, fail_on, changed_ranges)
+    scope = changed_scope(args.diff_base, args.dirs) if args.diff_base else None
+    failures = selected_failures(results, fail_on, scope)
 
     if args.json:
         json.dump(results, sys.stdout, indent=2)
         print()
     else:
         print_report(results)
-        scope = f"changed function ranges since {args.diff_base}" if args.diff_base else "all scanned functions"
+        scope_label = (
+            f"changed function/decorator ranges and import-changed files since {args.diff_base}"
+            if args.diff_base
+            else "all scanned functions"
+        )
         print(f"Fail-on policy: {', '.join(fail_on) if fail_on else '(none)'}")
-        print(f"Fail-on scope: {scope}")
+        print(f"Fail-on scope: {scope_label}")
         print(f"Selected blocking findings: {len(failures)}")
         for category, finding in failures:
             label = finding.get("endpoint") or finding.get("function") or "async def"
