@@ -1,3 +1,0 @@
-{
-  "change": "Claude connector setup now actually requests Screen Recording, so Omi shows up in the Screen & System Audio Recording list with a toggle to flip on instead of an empty Settings pane"
-}

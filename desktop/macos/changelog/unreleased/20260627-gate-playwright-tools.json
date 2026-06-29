@@ -1,3 +1,0 @@
-{
-  "change": "Agent browser tools now expose Playwright only when the user has an existing configured Playwright bridge installed"
-}
