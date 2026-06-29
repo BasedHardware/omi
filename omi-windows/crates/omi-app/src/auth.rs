@@ -19,6 +19,8 @@ pub enum AuthStatus {
 struct TokenResponse {
     id_token: String,
     #[serde(default)]
+    access_token: Option<String>,
+    #[serde(default)]
     provider_id: String,
     #[serde(default)]
     provider: String,
@@ -60,17 +62,18 @@ pub async fn start_google_sign_in(
             // Exchange code for token
             match exchange_code(&backend_url, &code, &redirect_uri).await {
                 Ok(token_resp) => {
+                    let (email, name) = extract_email_name_from_id_token(&token_resp.id_token)
+                        .unwrap_or_else(|| (token_resp.provider_id.clone(), token_resp.provider.clone()));
+
                     let mut cfg = config.write();
                     cfg.firebase_id_token = token_resp.id_token;
-                    cfg.user_email = token_resp.provider_id.clone();
-                    cfg.user_display_name = token_resp.provider.clone();
+                    cfg.google_access_token = token_resp.access_token.unwrap_or_default();
+                    cfg.user_email = email.clone();
+                    cfg.user_display_name = name.clone();
 
                     if let Err(e) = cfg.save() {
                         tracing::warn!("Failed to save config after sign-in: {e}");
                     }
-
-                    let email = cfg.user_email.clone();
-                    let name = cfg.user_display_name.clone();
                     drop(cfg);
 
                     auth_status.set(AuthStatus::SignedIn { email, name });
@@ -138,6 +141,21 @@ fn extract_query_param(request: &str, param: &str) -> Option<String> {
         }
     }
     None
+}
+
+/// Extract email and name from a JWT id_token payload (no signature verification).
+fn extract_email_name_from_id_token(id_token: &str) -> Option<(String, String)> {
+    let parts: Vec<&str> = id_token.split('.').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    use base64::Engine;
+    let engine = base64::engine::general_purpose::URL_SAFE_NO_PAD;
+    let payload = engine.decode(parts[1]).ok()?;
+    let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+    let email = claims.get("email")?.as_str()?.to_string();
+    let name = claims.get("name").and_then(|v| v.as_str()).unwrap_or("").to_string();
+    Some((email, name))
 }
 
 /// Exchange an auth code for tokens via Backend-Rust.
