@@ -3,6 +3,7 @@ Dropbox Integration App for Omi.
 
 Automatically saves conversation summaries, transcripts, and audio to Dropbox.
 """
+
 import io
 import os
 import secrets
@@ -82,6 +83,7 @@ def get_and_clear_audio(uid: str) -> Optional[bytes]:
 
 # ============== Helper Functions ==============
 
+
 def get_valid_access_token(uid: str) -> Optional[str]:
     """Get a valid access token, refreshing if needed."""
     tokens = get_dropbox_tokens(uid)
@@ -144,11 +146,12 @@ def generate_summary_markdown(conversation: Conversation) -> str:
     finished_at = conversation.finished_at or conversation.created_at
 
     date_str = finished_at.strftime("%Y-%m-%d %H:%M")
+    category = getattr(structured.category, "value", structured.category)
 
     content = f"""# {structured.title} {structured.emoji}
 
 **Date**: {date_str}
-**Category**: {structured.category}
+**Category**: {category}
 
 ## Summary
 
@@ -207,7 +210,10 @@ def create_folder_name(title: str, finished_at: datetime) -> str:
 
 # ============== HTML Templates ==============
 
-def get_home_page_html(uid: str, connected: bool, display_name: str = "", email: str = "", settings: dict = None) -> str:
+
+def get_home_page_html(
+    uid: str, connected: bool, display_name: str = "", email: str = "", settings: dict = None
+) -> str:
     """Generate home page HTML."""
     if settings is None:
         settings = get_user_settings(uid)
@@ -312,24 +318,29 @@ def get_home_page_html(uid: str, connected: bool, display_name: str = "", email:
 
 # ============== Endpoints ==============
 
+
 @app.get("/", response_class=HTMLResponse)
 async def home(uid: str = Query(None)):
     """Home page - shows connection status and settings."""
     if not uid:
-        return JSONResponse({
-            "app": "Dropbox Omi Integration",
-            "version": "1.0.0",
-            "description": "Automatically save Omi conversations to Dropbox",
-        })
+        return JSONResponse(
+            {
+                "app": "Dropbox Omi Integration",
+                "version": "1.0.0",
+                "description": "Automatically save Omi conversations to Dropbox",
+            }
+        )
 
     tokens = get_dropbox_tokens(uid)
     if tokens:
-        return HTMLResponse(get_home_page_html(
-            uid=uid,
-            connected=True,
-            display_name=tokens.get("display_name", ""),
-            email=tokens.get("email", ""),
-        ))
+        return HTMLResponse(
+            get_home_page_html(
+                uid=uid,
+                connected=True,
+                display_name=tokens.get("display_name", ""),
+                email=tokens.get("email", ""),
+            )
+        )
     else:
         return HTMLResponse(get_home_page_html(uid=uid, connected=False))
 
@@ -348,6 +359,7 @@ async def check_setup(uid: str = Query(...)):
 
 
 # ============== OAuth Endpoints ==============
+
 
 @app.get("/auth/dropbox")
 async def auth_dropbox(uid: str = Query(...)):
@@ -379,7 +391,8 @@ async def auth_callback(
     """Handle Dropbox OAuth callback."""
     # Handle errors
     if error:
-        return HTMLResponse(f"""
+        return HTMLResponse(
+            f"""
 <!DOCTYPE html>
 <html>
 <head><title>Authorization Failed</title></head>
@@ -388,7 +401,9 @@ async def auth_callback(
     <p>{error_description or error}</p>
 </body>
 </html>
-""", status_code=400)
+""",
+            status_code=400,
+        )
 
     if not code or not state:
         return HTMLResponse("Missing code or state", status_code=400)
@@ -472,6 +487,7 @@ async def disconnect(uid: str = Query(...)):
 
 # ============== Settings Endpoint ==============
 
+
 @app.post("/settings")
 async def update_settings(request: Request, uid: str = Query(...)):
     """Update user settings."""
@@ -489,6 +505,7 @@ async def update_settings(request: Request, uid: str = Query(...)):
 
 
 # ============== Webhook Endpoint ==============
+
 
 @app.post("/conversation", response_model=EndpointResponse)
 async def on_conversation_created(
@@ -528,7 +545,9 @@ async def on_conversation_created(
     save_summary = settings.get("save_summary", True)
     save_transcript = settings.get("save_transcript", True)
     save_audio = settings.get("save_audio", True)
-    print(f"[WEBHOOK] Settings: folder={folder_name}, summary={save_summary}, transcript={save_transcript}, audio={save_audio}")
+    print(
+        f"[WEBHOOK] Settings: folder={folder_name}, summary={save_summary}, transcript={save_transcript}, audio={save_audio}"
+    )
 
     # Nothing to save
     if not save_summary and not save_transcript and not save_audio:
@@ -616,6 +635,7 @@ async def on_conversation_created(
 
 
 # ============== Chat Tools ==============
+
 
 @app.get("/.well-known/omi-tools.json")
 async def get_omi_tools_manifest():
@@ -821,6 +841,7 @@ async def tool_read_dropbox_file(request: Request):
             # Extract text from PDF
             try:
                 import pypdf
+
                 pdf_buffer = io.BytesIO(file_bytes)
                 reader = pypdf.PdfReader(pdf_buffer)
                 pages_text = []
@@ -836,7 +857,22 @@ async def tool_read_dropbox_file(request: Request):
             except Exception as e:
                 return {"error": f"Error reading PDF: {str(e)}"}
 
-        elif file_ext in ["txt", "md", "json", "csv", "xml", "html", "htm", "py", "js", "ts", "yaml", "yml", "ini", "log"]:
+        elif file_ext in [
+            "txt",
+            "md",
+            "json",
+            "csv",
+            "xml",
+            "html",
+            "htm",
+            "py",
+            "js",
+            "ts",
+            "yaml",
+            "yml",
+            "ini",
+            "log",
+        ]:
             # Text-based files
             try:
                 text_content = file_bytes.decode("utf-8")
@@ -868,7 +904,9 @@ async def tool_read_dropbox_file(request: Request):
         # Truncate if too long (keep under ~15k chars for reasonable response)
         max_chars = 15000
         if len(text_content) > max_chars:
-            text_content = text_content[:max_chars] + f"\n\n... [Truncated - file has {len(text_content)} characters total]"
+            text_content = (
+                text_content[:max_chars] + f"\n\n... [Truncated - file has {len(text_content)} characters total]"
+            )
 
         # Format output
         output = f"**Contents of `{file_name}`:**\n\n{text_content}"
@@ -880,6 +918,7 @@ async def tool_read_dropbox_file(request: Request):
 
 
 # ============== Audio Streaming Endpoint ==============
+
 
 @app.post("/audio")
 async def receive_audio(
@@ -909,5 +948,6 @@ async def receive_audio(
 
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", 8080))
     uvicorn.run(app, host="0.0.0.0", port=port)

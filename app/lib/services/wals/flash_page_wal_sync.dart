@@ -256,7 +256,9 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
-    var walToSync = _wals.where((w) => w == wal).toList().first;
+    final matches = _wals.where((w) => w == wal).toList();
+    if (matches.isEmpty) return null;
+    final walToSync = matches.first;
 
     walToSync.isSyncing = true;
     walToSync.syncStartedAt = DateTime.now();

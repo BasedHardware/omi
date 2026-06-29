@@ -64,10 +64,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
-        var topConvoId = (provider.conversationProvider?.conversations ?? []).isNotEmpty
-            ? provider.conversationProvider!.conversations.first.id
-            : null;
-
         var header = _getConversationHeader(context);
         if (header == null) {
           return const SizedBox.shrink();
@@ -95,7 +91,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               segmentCount: provider.segments.length,
               photoCount: provider.photos.length,
             );
-            routeToPage(context, ConversationCapturingPage(topConversationId: topConvoId));
+            routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
           },
           child: Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -111,9 +107,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildUnifiedRecordingUI(provider, header),
-                ],
+                children: [_buildUnifiedRecordingUI(provider, header)],
               ),
             ),
           ),
@@ -535,10 +529,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF35343B),
-                  borderRadius: BorderRadius.circular(20),
-                ),
+                decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -620,7 +611,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             children: [
               Icon(icon, size: 16, color: color),
               const SizedBox(width: 6),
-              Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(
+                label,
+                style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
+              ),
             ],
           ),
         ),
