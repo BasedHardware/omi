@@ -38,6 +38,11 @@ def main() -> int:
         help='Fetch Cloud Run service state with gcloud and validate required env/secrets.',
     )
     parser.add_argument(
+        '--check-workflows',
+        action='store_true',
+        help='Validate checked-in Cloud Run workflow env_vars blocks against the manifest.',
+    )
+    parser.add_argument(
         '--strict-provisional',
         action='store_true',
         help='Require provisional manifest values to match exactly. By default they only require presence.',
@@ -49,6 +54,7 @@ def main() -> int:
         manifest_path=args.manifest,
         cloud_run_state_path=args.cloud_run_state,
         check_live_cloud_run=args.check_live_cloud_run,
+        check_workflows=args.check_workflows,
         strict_provisional=args.strict_provisional,
     )
     for error in errors:
@@ -65,6 +71,7 @@ def validate_runtime_env(
     manifest_path: Path = DEFAULT_MANIFEST,
     cloud_run_state_path: Path | None = None,
     check_live_cloud_run: bool = False,
+    check_workflows: bool = False,
     strict_provisional: bool = False,
 ) -> list[ValidationError]:
     manifest = _load_yaml(manifest_path)
@@ -74,6 +81,8 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    if check_workflows:
+        errors.extend(_validate_cloud_run_workflows(env_config, strict_provisional=strict_provisional))
 
     cloud_run_state = None
     if cloud_run_state_path is not None:
@@ -175,6 +184,43 @@ def _validate_cloud_run(
     return errors
 
 
+def _validate_cloud_run_workflows(
+    env_config: dict[str, Any],
+    *,
+    strict_provisional: bool,
+) -> list[ValidationError]:
+    errors: list[ValidationError] = []
+    workflow_files = env_config.get('cloud_run', {}).get('workflow_files', [])
+    if not isinstance(workflow_files, list):
+        return [ValidationError('cloud_run/workflows', 'workflow_files must be a list')]
+
+    expected_services = env_config['cloud_run']['services']
+    workflow_services: dict[str, dict[str, Any]] = {}
+    for workflow_file in workflow_files:
+        if not isinstance(workflow_file, str):
+            errors.append(ValidationError('cloud_run/workflows', 'workflow file paths must be strings'))
+            continue
+        workflow_path = ROOT / workflow_file
+        workflow = _load_yaml(workflow_path)
+        workflow_services.update(_extract_workflow_cloud_run_services(workflow))
+
+    for service, service_config in expected_services.items():
+        service_state = workflow_services.get(service)
+        if service_state is None:
+            errors.append(ValidationError(f'cloud_run_workflow/{service}', 'missing deploy-cloudrun env_vars block'))
+            continue
+        actual_env = _literal_env_entries_by_name(service_state.get('env_vars', {}))
+        errors.extend(
+            _validate_env_entries(
+                scope=f'cloud_run_workflow/{service}',
+                expected=service_config.get('env', {}),
+                actual=actual_env,
+                strict_provisional=strict_provisional,
+            )
+        )
+    return errors
+
+
 def _validate_env_entries(
     *,
     scope: str,
@@ -234,6 +280,72 @@ def _env_entries_by_name(raw_env: Any) -> dict[str, dict[str, Any]]:
     for entry in raw_env:
         if isinstance(entry, dict) and isinstance(entry.get('name'), str):
             result[entry['name']] = entry
+    return result
+
+
+def _literal_env_entries_by_name(raw_env: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw_env, dict):
+        return {}
+    return {name: {'name': name, 'value': str(value)} for name, value in raw_env.items()}
+
+
+def _extract_workflow_cloud_run_services(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    workflow_env = workflow.get('env', {})
+    if not isinstance(workflow_env, dict):
+        workflow_env = {}
+    result: dict[str, dict[str, Any]] = {}
+    jobs = workflow.get('jobs', {})
+    if not isinstance(jobs, dict):
+        return result
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        steps = job.get('steps', [])
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not _is_cloud_run_deploy_step(step):
+                continue
+            step_with = step.get('with', {})
+            service = _resolve_workflow_string(step_with.get('service'), workflow_env)
+            if service is None:
+                continue
+            env_vars = _parse_workflow_env_vars(step_with.get('env_vars'))
+            if env_vars:
+                result[service] = {'env_vars': env_vars}
+    return result
+
+
+def _is_cloud_run_deploy_step(step: Any) -> bool:
+    if not isinstance(step, dict):
+        return False
+    uses = step.get('uses')
+    return isinstance(uses, str) and uses.startswith('google-github-actions/deploy-cloudrun@')
+
+
+def _resolve_workflow_string(value: Any, workflow_env: dict[str, Any]) -> str | None:
+    if not isinstance(value, str):
+        return None
+    resolved = value
+    for env_name, env_value in workflow_env.items():
+        resolved = resolved.replace('${{ env.' + str(env_name) + ' }}', str(env_value))
+    return resolved
+
+
+def _parse_workflow_env_vars(raw_env_vars: Any) -> dict[str, str]:
+    if raw_env_vars is None:
+        return {}
+    if isinstance(raw_env_vars, dict):
+        return {str(name): str(value) for name, value in raw_env_vars.items()}
+    if not isinstance(raw_env_vars, str):
+        return {}
+    result: dict[str, str] = {}
+    for raw_line in raw_env_vars.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        name, value = line.split('=', 1)
+        result[name.strip()] = value.strip()
     return result
 
 

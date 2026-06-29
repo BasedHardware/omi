@@ -35,6 +35,7 @@ jobs:
           echo "has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/validate-backend-runtime-env\.py$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           # Also run the Rust check when this workflow changes so CI PRs dogfood
           # the new guard instead of only validating YAML syntax.
@@ -76,6 +77,13 @@ jobs:
 
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
+
+      - name: Check backend runtime env manifest
+        if: steps.changed.outputs.has_backend_runtime_env == 'true'
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
+          python3 backend/scripts/validate-backend-runtime-env.py --env prod
 
       - name: Summarize deferred-work markers
         continue-on-error: true
