@@ -30,17 +30,36 @@ from unittest.mock import patch
 import pytest
 
 
+# Make sure no stale webhook secret leaks from a prior dev session —
+# the resolver has a legacy fallback that reads /tmp/omi-tg-e2e/
+# webhook_secret and migrates it to the active path. Tests that
+# expect a clean state would otherwise pick up the leftover file.
+@pytest.fixture(autouse=True)
+def _clean_legacy_secret():
+    legacy = "/tmp/omi-tg-e2e/webhook_secret"
+    existed = os.path.exists(legacy)
+    if existed:
+        os.remove(legacy)
+    yield
+    # Don't restore the deleted file — the test produced a fresh one
+    # in tmp_path, which is the persistent store going forward.
+
+
 # ---------------------------------------------------------------------------
 # Path setup: load the helper from main.py without going through the
 # full module import (which requires httpx, FastAPI, etc.).
 # ---------------------------------------------------------------------------
 def _load_resolver():
-    """Read the _resolve_webhook_secret() source out of main.py and
-    exec it in an isolated namespace. Returns a callable.
+    """Read the _resolve_webhook_secret() + helper functions out of
+    main.py and exec them in an isolated namespace. Returns a callable.
 
     The function is a closure inside main.py (not exported), so we
     can't import it directly. Parsing the source lets us test the
     behavior without spinning up the whole FastAPI app.
+
+    The function calls two helpers (_read_secret_safely,
+    _write_secret_atomically) defined later in main.py, so we
+    extract ALL THREE in source order.
     """
     import re
 
@@ -49,23 +68,50 @@ def _load_resolver():
     )
     src = open(main_path).read()
 
-    # Extract the function definition (the docstring + body).
+    # Extract _resolve_webhook_secret() first. Stop at the call site
+    # ('WEBHOOK_SECRET, _webhook_source = ...') rather than the next
+    # function — the function is the LAST thing in the webhook-secret
+    # block before the module-level assignment.
     m = re.search(
-        r"def _resolve_webhook_secret\(.*?(?=^WEBHOOK_SECRET, _webhook_source =)",
+        r"def _resolve_webhook_secret\(.*?(?=^WEBHOOK_SECRET, _webhook_source)",
         src,
         re.DOTALL | re.MULTILINE,
     )
     assert m, "could not find _resolve_webhook_secret() in main.py"
-    func_src = m.group(0).rstrip()
+    resolve_src = m.group(0).rstrip()
 
-    # Execute in an isolated namespace with the deps the function uses.
+    # Extract _read_secret_safely and _write_secret_atomically. Each
+    # function is followed by a blank line + the NEXT def OR by the
+    # call site at module level. Use the call site as the stop pattern
+    # for the last function (avoids matching the whole rest of the file
+    # via the \Z end-of-file alternative).
+    helpers = []
+    for name in ("_read_secret_safely", "_write_secret_atomically"):
+        # Stop at the next def OR at the WEBHOOK_SECRET call site
+        m = re.search(
+            rf"def {name}\(.*?(?=\n\ndef |^WEBHOOK_SECRET, _webhook_source|\Z)",
+            src,
+            re.DOTALL | re.MULTILINE,
+        )
+        assert m, f"could not find {name}() in main.py"
+        helpers.append(m.group(0).rstrip())
+
+    # Execute in an isolated namespace with the deps the functions use.
+    # __file__ is referenced by the default-storage-dir fallback
+    # ('os.path.dirname(os.path.abspath(__file__)) + "data"'); without
+    # it the resolver NameErrors on first run.
+    # Use the same logger name as main.py ('omi-telegram-clone') so
+    # caplog captures the warnings the real code emits.
     namespace: dict = {
         "__name__": "_webhook_secret_test",
+        "__file__": main_path,
         "os": os,
         "secrets": secrets,
-        "logger": logging.getLogger("test"),
+        "errno": __import__("errno"),
+        "fcntl": __import__("fcntl"),
+        "logger": logging.getLogger("omi-telegram-clone"),
     }
-    exec(func_src, namespace)
+    exec(resolve_src + "\n\n" + "\n\n".join(helpers), namespace)
     return namespace["_resolve_webhook_secret"]
 
 
@@ -104,7 +150,10 @@ class TestWebhookSecretPersistence:
 
         result, source = _resolve_webhook_secret()
         assert result == persisted
-        assert source == "loaded from $STORAGE_DIR/webhook_secret"
+        # The source string includes the actual path (more useful for
+        # debugging than a literal "$STORAGE_DIR/webhook_secret").
+        assert source.startswith("loaded from "), f"unexpected source: {source!r}"
+        assert str(secret_path) in source
 
     def test_first_run_generates_and_persists(self, tmp_path, monkeypatch):
         """No env, no file: generate a random secret AND write it to
@@ -115,7 +164,9 @@ class TestWebhookSecretPersistence:
 
         # First call: generate
         first, first_source = _resolve_webhook_secret()
-        assert first_source == "auto-generated and persisted to $STORAGE_DIR/webhook_secret"
+        assert first_source.startswith("auto-generated and persisted to "), \
+            f"unexpected source: {first_source!r}"
+        assert str(tmp_path / "webhook_secret") in first_source
         assert len(first) >= 32  # token_urlsafe(32) is 43 chars but allow tolerance
 
         # File should exist with mode 0o600 (owner read/write only)
@@ -127,7 +178,7 @@ class TestWebhookSecretPersistence:
         # Second call: returns the persisted value, NOT a new one
         second, second_source = _resolve_webhook_secret()
         assert second == first, "second call should return the persisted secret, not generate a new one"
-        assert second_source == "loaded from $STORAGE_DIR/webhook_secret"
+        assert second_source.startswith("loaded from ")
 
     def test_corrupted_persisted_file_falls_back_to_generate(self, tmp_path, monkeypatch):
         """A persisted file with whitespace-only or empty content
@@ -142,13 +193,12 @@ class TestWebhookSecretPersistence:
 
         result, source = _resolve_webhook_secret()
         assert result, "generated secret must be non-empty"
-        # Source should be 'loaded' if the whitespace was treated as content
-        # OR 'auto-generated' if it was treated as missing — both are
-        # acceptable as long as the function doesn't return empty.
-        assert source in (
-            "loaded from $STORAGE_DIR/webhook_secret",
-            "auto-generated and persisted to $STORAGE_DIR/webhook_secret",
-        )
+        # Whitespace-only content is treated as missing, so the source
+        # is 'auto-generated'. (The old code might have treated the
+        # whitespace as a 'loaded' value, but the new code strips
+        # before returning and returns None on empty.)
+        assert source.startswith("auto-generated and persisted to "), \
+            f"expected auto-generated, got: {source!r}"
 
     def test_unreadable_persisted_file_falls_back_to_generate(self, tmp_path, monkeypatch, caplog):
         """If the persisted file exists but can't be read (permission
@@ -179,7 +229,8 @@ class TestWebhookSecretPersistence:
 
         # Should fall back to generating a new secret
         assert result, "fallback secret must be non-empty"
-        assert source == "auto-generated and persisted to $STORAGE_DIR/webhook_secret"
+        assert source.startswith("auto-generated and persisted to "), \
+            f"expected auto-generated, got: {source!r}"
         # Warning was logged
         assert any("unreadable" in record.message for record in caplog.records), \
             f"expected 'unreadable' warning, got {[r.message for r in caplog.records]}"
