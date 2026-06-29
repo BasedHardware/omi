@@ -45,6 +45,15 @@ jobs:
         working-directory: backend
         run: uv pip sync pylock.toml --system
 
+      - name: Prewarm tokenizer cache
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import tiktoken
+
+          tiktoken.encoding_for_model('gpt-4')
+          PY
+
       - name: Check committed OpenAPI contract
         working-directory: backend
         run: python scripts/export_openapi.py --check ../docs/api-reference/openapi.json

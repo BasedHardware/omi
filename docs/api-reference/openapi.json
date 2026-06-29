@@ -1239,6 +1239,11 @@
             ],
             "title": "Created At"
           },
+          "edited": {
+            "default": false,
+            "title": "Edited",
+            "type": "boolean"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1247,6 +1252,22 @@
             "default": false,
             "title": "Manually Added",
             "type": "boolean"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "scoring": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring"
           },
           "tags": {
             "items": {
@@ -1266,6 +1287,17 @@
               }
             ],
             "title": "Updated At"
+          },
+          "user_review": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Review"
           },
           "visibility": {
             "anyOf": [

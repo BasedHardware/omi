@@ -151,6 +151,10 @@ class DeveloperMemory(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     manually_added: bool = False
+    reviewed: bool = False
+    user_review: Optional[bool] = None
+    edited: bool = False
+    scoring: Optional[str] = None
 
     @field_validator('id', mode='before')
     def coerce_id(cls, value):
@@ -185,7 +189,7 @@ class DeveloperMemory(BaseModel):
     def coerce_datetime(cls, value):
         return _coerce_optional_memory_datetime(value)
 
-    @field_validator('manually_added', mode='before')
+    @field_validator('manually_added', 'reviewed', 'edited', mode='before')
     def coerce_bool(cls, value):
         if isinstance(value, bool):
             return value
@@ -194,6 +198,26 @@ class DeveloperMemory(BaseModel):
         if isinstance(value, str):
             return value.lower() in ['true', '1', 'yes']
         return bool(value)
+
+    @field_validator('user_review', mode='before')
+    def coerce_optional_bool(cls, value):
+        if value in [None, '']:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ['true', '1', 'yes']
+        return bool(value)
+
+    @field_validator('scoring', mode='before')
+    def coerce_scoring(cls, value):
+        if value is None:
+            return None
+        return str(value)
+
+
+# Backward-compatible name used by unit tests and older docs.
+CleanerMemory = DeveloperMemory
 
 
 class CreateMemoryRequest(BaseModel):
