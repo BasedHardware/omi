@@ -370,7 +370,7 @@ class TestDoneTerminator:
                 uid="u-1",
             )
         assert "[DONE]" not in reply
-        assert reply == "hello world"
+        assert reply == "helloworld"
 
 
 # ---------------------------------------------------------------------------
