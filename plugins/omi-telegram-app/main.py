@@ -171,14 +171,24 @@ async def omi_tools_manifest():
 # exactly match the plugin's /toggle ToggleRequest field names — the chat
 # assistant will faithfully build the request from this schema.
 # Unauthenticated — manifest discovery is public; the underlying /toggle
-# endpoint is auth-gated separately by the bot_token parameter.
+# endpoint is auth-gated by the plugin bearer token (sent via the
+# `Authorization: Bearer` header, enforced by the shared
+# plugins/_shared/auth.require_bearer dependency). The request body
+# carries only the chat_id (a NON-SECRET identifier the plugin uses
+# to look up the user bound during the /start handshake); the bot
+# token stays in the plugin's storage and is NEVER requested from
+# or transmitted through chat — that keeps long-lived platform
+# credentials out of chat history, tool-call logs, traces, and model
+# context. (Identified by maintainer security review on PR #8531.)
 @app.get("/.well-known/omi-tools.json", include_in_schema=False)
 async def omi_tools_manifest():
     """Return the Omi Chat Tools manifest for this plugin.
 
     No auth: the manifest is public metadata. Each tool declared here
-    has its own `auth_required` flag and uses request-body credentials for
-    actual authorization.
+    is gated by the plugin bearer token (Authorization: Bearer header)
+    at call time, NOT by request-body credentials — that's the entire
+    reason `chat_messages.enabled` is False in v0.1: long-lived
+    platform secrets must never transit through chat.
     """
     from fastapi.responses import JSONResponse
 
