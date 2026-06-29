@@ -277,9 +277,15 @@ class GPUWorker:
 
         self._load_embedding_model()
 
-        self._vram_baseline_mb = torch.cuda.memory_allocated() / 1024**2
-        self._vram_total_mb = torch.cuda.get_device_properties(0).total_memory / 1024**2
-        logger.info(f"VRAM after model load: {self._vram_baseline_mb:.0f}MiB / {self._vram_total_mb:.0f}MiB")
+        device = os.getenv("PARAKEET_DEVICE", "cuda:0")
+        dev_idx = int(device.split(":")[-1]) if ":" in device else 0
+        free_bytes, total_bytes = torch.cuda.mem_get_info(dev_idx)
+        self._vram_total_mb = total_bytes / (1024 * 1024)
+        self._vram_baseline_mb = (total_bytes - free_bytes) / (1024 * 1024)
+        logger.info(
+            f"VRAM after model load: {self._vram_baseline_mb:.0f}MiB used / "
+            f"{self._vram_total_mb:.0f}MiB total ({free_bytes / (1024 * 1024):.0f}MiB free)"
+        )
         logger.info("Batch model loaded and ready")
 
     def _load_embedding_model(self) -> None:
@@ -362,7 +368,11 @@ class GPUWorker:
                     )
 
         if self._attn_mode == "auto":
-            max_dur = max((self._get_audio_duration_sec(p) for p in audio_paths), default=0.0)
+            durations_from_batcher = payload.get("durations")
+            if durations_from_batcher:
+                max_dur = max(durations_from_batcher)
+            else:
+                max_dur = max((self._get_audio_duration_sec(p) for p in audio_paths), default=0.0)
             need_local = max_dur >= self._attn_auto_threshold_sec
             if need_local != self._attn_is_local:
                 mode_name = "local" if need_local else "full"
