@@ -103,6 +103,7 @@ for _attr in [
     "get_default_payment_method",
     "set_default_payment_method",
     "get_paypal_payment_details",
+    "get_user_profile",
 ]:
     setattr(_users_mod, _attr, MagicMock())
 # has_ever_purchased() (via the available-plans endpoint) reads the Stripe

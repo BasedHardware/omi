@@ -35,6 +35,8 @@ for mod_name in [
     'firebase_admin',
     'firebase_admin.auth',
     'google',
+    'google.api_core',
+    'google.api_core.exceptions',
     'google.cloud',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
@@ -67,6 +69,7 @@ sys.modules['google.cloud.firestore'].FieldFilter = _FieldFilter
 sys.modules['google.cloud.firestore_v1'].FieldFilter = _FieldFilter
 sys.modules['google.cloud.firestore_v1.base_query'].FieldFilter = _FieldFilter
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+sys.modules['google.api_core.exceptions'].NotFound = type('NotFound', (Exception,), {})
 
 # Stub the firestore client singleton so importing the modules doesn't try
 # to authenticate against real Firestore.

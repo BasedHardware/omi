@@ -87,7 +87,16 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         return _AutoMock(spec.name)
 
     def exec_module(self, module):
-        pass
+        if module.__name__ == 'utils.request_validation':
+            module.NonNegativeOffset = int
+            module.PositiveLimit = int
+        elif module.__name__ == 'utils.other':
+            endpoints = types.ModuleType('utils.other.endpoints')
+            endpoints.get_current_user_uid = lambda: 'uid1'
+            endpoints.timeit = lambda fn: fn
+            endpoints.with_rate_limit = lambda dependency, _policy: dependency
+            module.endpoints = endpoints
+            sys.modules['utils.other.endpoints'] = endpoints
 
 
 _finder = _Finder()
