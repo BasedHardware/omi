@@ -175,13 +175,15 @@ final class DesktopDiagnosticsManager {
     }
   }
 
+  #if DEBUG
   func resetForTests() {
     lock.lock()
     snapshots.removeAll()
-    lock.unlock()
     consecutiveNearZeroPTTTurns = 0
     lastPTTWatchdogIncidentAt = nil
+    lock.unlock()
   }
+  #endif
 
   private func record(
     _ event: DesktopHealthEventName,
