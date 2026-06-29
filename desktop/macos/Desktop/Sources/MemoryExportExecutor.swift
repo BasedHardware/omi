@@ -150,7 +150,7 @@ enum MemoryExportExecutor {
         throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
       }
       if cloudFormFillRequiresScreenRecordingApproval(lastResult) {
-        if lastResult.contains("hidden Add button"),
+        if cloudFormFillNeedsManualClaudeAdd(lastResult),
           CloudConnectorFormAutomation.showClaudeAddGuidanceOverlay()
         {
           throw ExecutorError.browserSetupRequired(cloudSetupManualClaudeAddMessage)
@@ -170,7 +170,7 @@ enum MemoryExportExecutor {
     }
 
     log("Claude cloud setup: stopping without agent fallback result=\(cloudFormFillResultSummary(lastResult))")
-    throw ExecutorError.browserSetupRequired(cloudSetupNativeAutomationBlockedMessage(lastResult))
+    throw ExecutorError.browserSetupRequired(cloudSetupNativeAutomationBlockedMessage)
   }
 
   nonisolated static func cloudFormFillSucceeded(_ result: String) -> Bool {
@@ -206,14 +206,21 @@ enum MemoryExportExecutor {
     return String(sanitized.prefix(500))
   }
 
-  private static func cloudSetupNativeAutomationBlockedMessage(_ result: String) -> String {
+  static func cloudFormFillNeedsManualClaudeAdd(_ result: String) -> Bool {
+    let lower = result.lowercased()
+    return lower.contains("hidden add button")
+      || lower.contains("claude add connector button is not exposed")
+      || (lower.contains("claude add") && lower.contains("not exposed to accessibility"))
+      || (lower.contains("add connector button") && lower.contains("refusing blind"))
+  }
+
+  private static var cloudSetupNativeAutomationBlockedMessage: String {
     """
-    Omi opened Claude in your default browser and tried the native setup path first, but stopped before using the generic browser agent.
+    Omi opened Claude in your default browser, but Claude still needs one manual step.
 
-    Native setup result:
-    \(cloudFormFillResultSummary(result))
+    Finish the connector setup in the Claude window that is already open. If the connector form is filled, click Add. If Claude asks for permission, approve Omi Memory.
 
-    I did not start the Playwright/browser-agent fallback because Claude setup should stay in your signed-in default browser. If this looks like a permissions issue, approve the requested macOS permission and click "Do it for me" again.
+    If nothing is waiting in Claude, click "Do it for me" again or use the manual installation steps below.
     """
   }
 

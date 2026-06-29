@@ -200,6 +200,14 @@ final class BrowserAutomationTargetTests: XCTestCase {
       source.contains("MemoryExportDestination.claude.guidedBrowserSetupTask"),
       "Claude Cloud should stop with the deterministic native result instead of spawning the Playwright-capable generic browser agent."
     )
+    XCTAssertFalse(
+      source.contains("Native setup result:"),
+      "Cloud setup cards should show user guidance, not raw native automation diagnostics."
+    )
+    XCTAssertFalse(
+      source.contains("I did not start the Playwright/browser-agent fallback"),
+      "Cloud setup cards should not mention internal fallback implementation details."
+    )
   }
 
   func testAgentRuntimeOnlyEnablesPlaywrightWhenBridgeIsConfigured() throws {
@@ -247,6 +255,16 @@ final class BrowserAutomationTargetTests: XCTestCase {
     )
     XCTAssertFalse(
       MemoryExportExecutor.cloudFormFillRequiresScreenRecordingApproval(
+        "Error: Claude connector is added, but the Connect button is not exposed to Accessibility."
+      )
+    )
+    XCTAssertTrue(
+      MemoryExportExecutor.cloudFormFillNeedsManualClaudeAdd(
+        "Error: The Claude add connector button is not exposed to Accessibility. Refusing blind coordinate or keyboard clicks."
+      )
+    )
+    XCTAssertFalse(
+      MemoryExportExecutor.cloudFormFillNeedsManualClaudeAdd(
         "Error: Claude connector is added, but the Connect button is not exposed to Accessibility."
       )
     )
