@@ -97,10 +97,6 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
             endpoints.with_rate_limit = lambda dependency, _policy: dependency
             module.endpoints = endpoints
             sys.modules['utils.other.endpoints'] = endpoints
-        elif module.__name__ == 'utils.other.endpoints':
-            module.get_current_user_uid = lambda: 'uid1'
-            module.timeit = lambda fn: fn
-            module.with_rate_limit = lambda dependency, _policy: dependency
 
 
 _finder = _Finder()
