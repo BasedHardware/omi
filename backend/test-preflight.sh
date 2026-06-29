@@ -132,19 +132,12 @@ else
   bad "No unit test files found in tests/unit/"
 fi
 
-# Check if test.sh test files all exist
-missing_tests=()
-while IFS= read -r line; do
-  test_file=$(echo "$line" | awk '{print $2}')
-  if [[ ! -f "$test_file" ]]; then
-    missing_tests+=("$test_file")
-  fi
-done < <(grep -E '^(pytest|run_pytest) tests/' test.sh 2>/dev/null)
-
-if [[ ${#missing_tests[@]} -gt 0 ]]; then
-  bad "test.sh references missing files: ${missing_tests[*]}"
+# Check if the discovered full unit suite resolves cleanly.
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" scripts/select_backend_unit_tests.py --all >/tmp/backend-unit-tests-preflight.txt; then
+  selected_test_count=$(wc -l </tmp/backend-unit-tests-preflight.txt | tr -d ' ')
+  ok "$selected_test_count backend unit test files selected"
 else
-  ok "All test.sh references resolve to existing files"
+  bad "backend unit test selection failed"
 fi
 
 # ── Summary ──
