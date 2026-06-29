@@ -400,6 +400,9 @@ struct MemoryExportDestinationSheet: View {
 
   @StateObject private var model = MemoryExportDestinationSheetModel()
   @State private var showManualSetup = false
+  @State private var permissionRefreshID = 0
+
+  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
@@ -455,6 +458,17 @@ struct MemoryExportDestinationSheet: View {
         await model.generateMCPKey()
       }
     }
+    .onReceive(permissionRefreshTimer) { _ in
+      refreshPermissionStateIfNeeded()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      refreshPermissionStateIfNeeded()
+    }
+  }
+
+  private func refreshPermissionStateIfNeeded() {
+    guard MemoryExportExecutor.requiresAccessibilityPreflight(destination) else { return }
+    permissionRefreshID += 1
   }
 
   @ViewBuilder
@@ -606,14 +620,32 @@ struct MemoryExportDestinationSheet: View {
   }
 
   private var executeButtonTitle: String {
-    destination.mcpExecuteKind == .autonomous ? "Do it for me" : "Open & copy key"
+    _ = permissionRefreshID
+    switch destination.mcpExecuteKind {
+    case .localAutonomous:
+      return "Do it for me"
+    case .browserAutonomous:
+      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
+        ? "Grant Accessibility"
+        : "Do it for me"
+    case .assisted:
+      return "Open & copy key"
+    }
   }
 
   private var executeBlockSubtitle: String {
     switch destination.mcpExecuteKind {
-    case .autonomous:
+    case .localAutonomous:
       return
         "Omi sets up \(destination.title) for you — it runs as an Omi task you can watch in the floating bar. If it gets stuck, use the manual steps below."
+    case .browserAutonomous:
+      if MemoryExportExecutor.accessibilityPreflightMissing(for: destination) {
+        return
+          "Omi needs Accessibility permission to use your signed-in browser for \(destination.title). If you prefer not to grant it, use the manual steps below."
+      } else {
+        return
+          "Omi uses your signed-in browser to set up \(destination.title). If sign-in or permissions block it, Omi will tell you exactly where it stopped."
+      }
     case .assisted:
       return
         "Omi opens \(destination.title) and copies your key, then you confirm the quick steps below."

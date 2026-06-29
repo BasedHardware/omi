@@ -1,4 +1,5 @@
 pytest==8.4.1
+pytest-asyncio==1.3.0
 fake-firestore==0.13.1
 fakeredis[lua]==2.36.2
 pytest-httpserver==1.1.5

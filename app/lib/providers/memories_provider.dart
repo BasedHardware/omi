@@ -129,6 +129,8 @@ class MemoriesProvider extends ChangeNotifier {
 
   /// Set the connectivity provider to listen for connection changes
   void setConnectivityProvider(ConnectivityProvider provider) {
+    if (identical(_connectivityProvider, provider)) return;
+    _connectivityProvider?.removeListener(_onConnectivityChanged);
     _connectivityProvider = provider;
     _connectivityProvider?.addListener(_onConnectivityChanged);
   }

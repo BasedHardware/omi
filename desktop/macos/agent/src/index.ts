@@ -644,24 +644,28 @@ function buildMcpServers(
     });
   }
 
-  // Playwright MCP server
-  const playwrightArgs = [playwrightCli];
-  if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
-    playwrightArgs.push("--extension");
-  }
-  const playwrightEnv: Array<{ name: string; value: string }> = [];
-  if (process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN) {
-    playwrightEnv.push({
-      name: "PLAYWRIGHT_MCP_EXTENSION_TOKEN",
-      value: process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN,
+  // Playwright MCP server. Only expose it when the desktop app has verified
+  // the user already configured the Playwright bridge; otherwise the agent
+  // must use app-native tools instead of opening a fresh Playwright browser.
+  if (process.env.PLAYWRIGHT_MCP_ENABLED === "true") {
+    const playwrightArgs = [playwrightCli];
+    if (process.env.PLAYWRIGHT_USE_EXTENSION === "true") {
+      playwrightArgs.push("--extension");
+    }
+    const playwrightEnv: Array<{ name: string; value: string }> = [];
+    if (process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN) {
+      playwrightEnv.push({
+        name: "PLAYWRIGHT_MCP_EXTENSION_TOKEN",
+        value: process.env.PLAYWRIGHT_MCP_EXTENSION_TOKEN,
+      });
+    }
+    servers.push({
+      name: "playwright",
+      command: process.execPath,
+      args: playwrightArgs,
+      env: playwrightEnv,
     });
   }
-  servers.push({
-    name: "playwright",
-    command: process.execPath,
-    args: playwrightArgs,
-    env: playwrightEnv,
-  });
 
   return servers;
 }
