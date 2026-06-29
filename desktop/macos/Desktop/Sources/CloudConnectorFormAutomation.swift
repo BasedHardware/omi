@@ -325,11 +325,17 @@ enum CloudConnectorFormAutomation {
       nodes: target.nodes,
       screen: screen
     )
-    // Fail safe: never point at a guess. If we could not locate the Add button, the
-    // Cancel button, or even the modal body, do not show a pointing overlay.
-    guard !candidates.isEmpty else { return false }
 
     target.app.activate()
+    guard !candidates.isEmpty else {
+      CloudConnectorGuidanceOverlay.shared.presentInstructionCard(
+        title: "Finish in Claude",
+        subtitle: "Click Add in the connector window to finish creating the Omi connector.",
+        near: windowFrame
+      )
+      return true
+    }
+
     CloudConnectorGuidanceOverlay.shared.presentClaudeAddHint(
       windowFrame: windowFrame,
       candidates: candidates

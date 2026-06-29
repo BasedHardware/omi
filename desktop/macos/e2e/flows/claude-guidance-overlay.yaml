@@ -100,6 +100,32 @@ steps:
       result.detail.visible: "false"
 
   - id: S11
+    name: Present Claude Add Instruction Card
+    bridge.action:
+      name: spatial_overlay_present_instruction
+      params:
+        title: Finish in Claude
+        subtitle: Click Add in the connector window to finish creating the Omi connector.
+        anchor: "200,80,1100,820"
+    expect:
+      result.detail.visible: "true"
+      result.detail.kind: instruction
+      result.detail.title: Finish in Claude
+
+  - id: S12
+    name: Capture Claude Add Instruction Card
+    visual.export:
+      name: claude-add-instruction-card
+      target: overlay
+
+  - id: S13
+    name: Dismiss Instruction Card
+    bridge.action:
+      name: spatial_overlay_dismiss
+    expect:
+      result.detail.visible: "false"
+
+  - id: S14
     name: Logs Clean
     log.expect:
       absent:
