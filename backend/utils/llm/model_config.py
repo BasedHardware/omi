@@ -321,7 +321,11 @@ def get_active_dynamic_routes() -> Dict[str, Dict[str, Any]]:
 
 
 def get_dynamic_route_info(feature: str) -> Optional[Dict[str, Any]]:
-    _maybe_refresh_dynamic_routes()
+    # Read only the in-memory route table. The background refresh loop
+    # (routers/auto_model.py: start_model_auto_router -> set_dynamic_model_routes) keeps it current,
+    # so this hot path must NOT trigger a synchronous Firestore load: get_model()/get_llm() run inside
+    # async request and agent paths, and a blocking read here would stall the event loop every cache
+    # interval. An empty table simply falls back to the static profile.
     with _dynamic_routes_lock:
         _prune_expired_dynamic_routes()
         route = _dynamic_routes.get(feature)
@@ -425,12 +429,34 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+_known_route_models_cache: Optional[frozenset] = None
+
+
+def _known_route_models() -> frozenset:
+    # Models the dynamic router is allowed to select: every model that appears in any static QoS
+    # profile. The auto-router's candidates are all drawn from these, so a persisted route document
+    # is validated against this allowlist and fails closed -- a corrupted, stale, or hand-edited
+    # route cannot redirect a feature to an arbitrary model within an allowed provider class.
+    global _known_route_models_cache
+    if _known_route_models_cache is None:
+        models = set()
+        for profile in MODEL_QOS_PROFILES.values():
+            for entry in profile.values():
+                model = entry[0] if isinstance(entry, (tuple, list)) and entry else None
+                if isinstance(model, str) and model:
+                    models.add(model)
+        _known_route_models_cache = frozenset(models)
+    return _known_route_models_cache
+
+
 def _is_dynamic_route_allowed(feature: str, model: Any, provider: Any) -> bool:
     if feature in _PINNED_FEATURES:
         return False
     if feature not in _active_profile:
         return False
     if not isinstance(model, str) or not model.strip():
+        return False
+    if model not in _known_route_models():
         return False
     if provider not in _SUPPORTED_PROVIDERS:
         return False

@@ -17,6 +17,7 @@ from utils.llm.auto_router import (
     AUTO_ROUTER_TTL_SECONDS,
     build_auto_route_table,
 )
+from utils.executors import db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
 
 router = APIRouter()
@@ -169,7 +170,7 @@ async def refresh_model_routes(force: bool = False, persist: bool = True) -> Dic
             return cached
 
         if not force:
-            persisted = _load_persisted_route_table(profile)
+            persisted = await run_blocking(db_executor, _load_persisted_route_table, profile)
             if _is_table_current(persisted):
                 model_config.set_dynamic_model_routes(persisted)
                 _route_cache.update(payload=persisted, ts=now)
@@ -198,8 +199,8 @@ async def refresh_model_routes(force: bool = False, persist: bool = True) -> Dic
         _route_cache.update(payload=route_table, ts=now)
 
         if persist and benchmark_payload is not None:
-            model_routes_db.set_active_model_routes(profile, route_table)
-            model_routes_db.record_model_route_run(profile, route_table)
+            await run_blocking(db_executor, model_routes_db.set_active_model_routes, profile, route_table)
+            await run_blocking(db_executor, model_routes_db.record_model_route_run, profile, route_table)
 
         return route_table
 
@@ -260,8 +261,12 @@ async def auto_model_pick(uid: str = Depends(get_current_user_uid)):
 
 
 @router.get("/v1/auto/model-routes")
-async def auto_model_routes(uid: str = Depends(get_current_user_uid)):
-    """Current backend LLM feature route table, without triggering refresh side effects."""
+def auto_model_routes(uid: str = Depends(get_current_user_uid)):
+    """Current backend LLM feature route table, without triggering refresh side effects.
+
+    Declared as a sync ``def`` so FastAPI runs it in a threadpool: ``_read_model_route_snapshot`` does
+    a synchronous Firestore read, which must not run on the event loop.
+    """
     return _read_model_route_snapshot()
 
 
