@@ -69,18 +69,50 @@ describe('ocrLayout', () => {
   it('stores only valid OCR lines and tolerates bad stored JSON', () => {
     const stored = serializeOcrLinesForStorage([
       line({ text: 'Keep me', x: 1.4, y: 2.6 }),
+      line({ text: 'Tiny but valid', x: 20, y: 20, w: 0.4, h: 0.4 }),
       line({ text: '   ' }),
       line({ text: 'bad size', w: 0 })
     ])
 
     expect(stored).not.toBeNull()
     expect(parseStoredOcrLines(stored)).toEqual([
-      { text: 'Keep me', x: 1, y: 3, w: 20, h: 10, confidence: 0.9 }
+      { text: 'Keep me', x: 1, y: 3, w: 20, h: 10, confidence: 0.9 },
+      { text: 'Tiny but valid', x: 20, y: 20, w: 1, h: 1, confidence: 0.9 }
     ])
     expect(parseStoredOcrLines('{not json')).toEqual([])
   })
 
   it('falls back to plain OCR text when no stored layout is available', () => {
     expect(buildOcrContextText('plain text', null)).toBe('plain text')
+  })
+
+  it('builds layout-aware context when stored lines cover the OCR text', () => {
+    const stored = serializeOcrLinesForStorage([
+      line({ text: 'Visible', x: 10, y: 50, w: 50 }),
+      line({ text: 'text', x: 70, y: 50, w: 40 })
+    ])
+
+    expect(
+      buildOcrContextText('Visible\ntext', stored, {
+        width: 200,
+        height: 100
+      })
+    ).toBe('- top 50%, left 5%: Visible text')
+  })
+
+  it('builds layout-aware context without dropping the full OCR text', () => {
+    const stored = serializeOcrLinesForStorage([
+      line({ text: 'Visible', x: 10, y: 50, w: 50 }),
+      line({ text: 'text', x: 70, y: 50, w: 40 })
+    ])
+
+    expect(
+      buildOcrContextText('Visible text\nExtra uncaptured text', stored, {
+        width: 200,
+        height: 100
+      })
+    ).toBe(
+      '- top 50%, left 5%: Visible text\n\nFull OCR text:\nVisible text\nExtra uncaptured text'
+    )
   })
 })

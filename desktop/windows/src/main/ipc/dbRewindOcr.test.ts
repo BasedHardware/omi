@@ -40,15 +40,16 @@ vi.mock('better-sqlite3', () => ({
             ]
           }
           if (sql.includes('FROM rewind_frames WHERE ts BETWEEN')) {
-            return [
-              {
-                id: 7,
-                ...dbState.inserted,
-                ocrText: dbState.update?.[0] ?? '',
-                ocrLinesJson: dbState.update?.[1] ?? null,
-                indexed: 1
-              }
-            ]
+            const row: Record<string, unknown> = {
+              id: 7,
+              ...dbState.inserted,
+              ocrText: dbState.update?.[0] ?? '',
+              indexed: 1
+            }
+            if (sql.includes('ocr_lines_json AS ocrLinesJson')) {
+              row.ocrLinesJson = dbState.update?.[1] ?? null
+            }
+            return [row]
           }
           return []
         },
@@ -89,7 +90,12 @@ describe('rewind OCR db wiring', () => {
     dbState.inserted = null
     dbState.update = null
     vi.resetModules()
-    const { insertRewindFrame, listRewindFrames, setRewindFrameOcr } = await import('./db')
+    const {
+      insertRewindFrame,
+      listRewindFrames,
+      listRewindFramesWithOcrLayout,
+      setRewindFrameOcr
+    } = await import('./db')
 
     const id = insertRewindFrame(frame())
     setRewindFrameOcr(id, 'Hello world', [
@@ -101,7 +107,10 @@ describe('rewind OCR db wiring', () => {
     expect(rows).toHaveLength(1)
     expect(rows[0].ocrText).toBe('Hello world')
     expect(rows[0].indexed).toBe(1)
-    expect(JSON.parse(rows[0].ocrLinesJson ?? '[]')).toEqual([
+    expect('ocrLinesJson' in rows[0]).toBe(false)
+
+    const internalRows = listRewindFramesWithOcrLayout(0, 2000)
+    expect(JSON.parse(internalRows[0].ocrLinesJson ?? '[]')).toEqual([
       { text: 'Hello', x: 10, y: 10, w: 40, h: 12, confidence: 0.99 },
       { text: 'world', x: 56, y: 10, w: 40, h: 12, confidence: 0.98 }
     ])
