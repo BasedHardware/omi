@@ -55,12 +55,12 @@ def test_chat_completions_forwards_action_item_extraction_strict_schema(monkeypa
     monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
     provider = FakeChatCompletionProvider()
     app.dependency_overrides[dependencies.get_provider_registry] = lambda: ProviderRegistry({'openai': provider})
-    request = _chat_structured_payload(
-        'Extract action items.',
-        ActionItemsExtraction,
-        feature='conversation_action_items.extract.shadow',
-    )
     try:
+        request = _chat_structured_payload(
+            'Extract action items.',
+            ActionItemsExtraction,
+            feature='conversation_action_items.extract.shadow',
+        )
         response = TestClient(app).post('/v1/chat/completions', json=request, headers=auth_headers())
     finally:
         app.dependency_overrides.clear()

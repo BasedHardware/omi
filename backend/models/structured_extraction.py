@@ -31,6 +31,13 @@ class ExtractedEvent(BaseModel):
     start: datetime = Field(description="The start date and time of the event")
     duration: int = Field(description="The duration of the event in minutes", default=30)
 
+    @field_validator('duration')
+    @classmethod
+    def duration_must_be_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError('duration must be a positive number of minutes')
+        return v
+
     def to_event(self) -> Event:
         return Event(
             title=self.title,
