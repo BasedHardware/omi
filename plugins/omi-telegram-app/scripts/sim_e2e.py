@@ -20,7 +20,7 @@ Usage:
     # 2. In another terminal, seed a user file (the /start handshake does
     #    this in production; we skip it here):
     echo '{"999001":{"chat_id":"999001","omi_uid":"test-uid-e2e","persona_id":"test-persona-e2e","omi_dev_api_key":"placeholder-key","bot_token":"placeholder-token","auto_reply_enabled":true,"created_at":"2026-06-29T00:00:00","updated_at":"2026-06-29T00:00:00"}}' \
-      > /tmp/omi-tg-e2e/users_data.json
+      > $STORAGE_DIR/users_data.json
 
     # 3. Bounce the plugin so it loads the file (storage is module-cached)
     #    (kill the uvicorn process, restart it as in step 1)
@@ -28,59 +28,102 @@ Usage:
     # 4. Run this script:
     python plugins/omi-telegram-app/scripts/sim_e2e.py
 
-    # It will hit /health, /, /.well-known/omi-tools.json, /setup (expect
-    # 4xx — invalid bot_token), /webhook (regular, /start, group, malformed
-    # JSON), and /toggle (right/wrong token, unknown chat). Asserts each step.
-
 Why this script exists:
 - The unit tests cover individual functions, but a single end-to-end pass
   catches refactor regressions that break the wiring between pieces.
-- Specifically, it would have caught the T-007 refactor bug where the
-  send_message call was accidentally dropped from _dispatch_auto_reply.
+- The dispatch assertion (step: regular-message webhook) tails the plugin
+  log and asserts that BOTH the persona call AND the send_message call
+  fired. Without the log check, a regression that drops the send_message
+  call (cc95e155d was exactly this) would slip past, because /webhook
+  still returns 200. Reviewers identified this gap (cubic); the log check
+  is what makes the assertion real.
+
+The script uses explicit sys.exit() instead of `assert` because
+`python -O` strips assertions and would cause silent false passes.
 """
 
 import json
 import os
+import re
 import sys
+import time
 
 import requests
 
 BASE = os.environ.get("PLUGIN_URL", "http://127.0.0.1:18800")
 SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "test-secret-e2e")
 BOUND_CHAT_ID = "999001"
-
-# Path to the storage file. Must match STORAGE_DIR passed to uvicorn.
 STORAGE_DIR = os.environ.get("STORAGE_DIR", "/tmp/omi-tg-e2e")
+PLUGIN_LOG = os.environ.get("PLUGIN_LOG", f"{STORAGE_DIR}/plugin.log")
+
+# Exit codes (independent of assert so they survive `python -O`).
+EXIT_OK = 0
+EXIT_STEP_FAIL = 1
+EXIT_DISPATCH_FAIL = 2
 
 
 def step(label):
     print(f"\n── {label} ──")
 
 
-def assert_eq(actual, expected, label):
-    assert actual == expected, f"FAIL {label}: expected {expected!r}, got {actual!r}"
+def check(actual, expected, label):
+    """Equality check that exits with a clear message on mismatch."""
+    if actual != expected:
+        print(f"   ✗ FAIL {label}: expected {expected!r}, got {actual!r}", file=sys.stderr)
+        sys.exit(EXIT_STEP_FAIL)
     print(f"   ✓ {label}: {actual!r}")
+
+
+def tail_log_for(predicate, *, timeout=15.0, poll=0.5, since=None):
+    """Block until `predicate(line)` returns True for some new log line.
+
+    Returns the matching line (or None if timeout). `since` is the byte
+    offset to start reading from — pass the file size from before the
+    action you want to observe.
+    """
+    if not os.path.exists(PLUGIN_LOG):
+        return None
+    with open(PLUGIN_LOG, "rb") as f:
+        if since is not None:
+            f.seek(since)
+        else:
+            f.seek(0, os.SEEK_END)
+        end_at = time.monotonic() + timeout
+        buf = b""
+        while time.monotonic() < end_at:
+            chunk = f.read()
+            if chunk:
+                buf += chunk
+                for line in buf.splitlines():
+                    if predicate(line.decode("utf-8", errors="replace")):
+                        return line.decode("utf-8", errors="replace")
+                # keep tail of partial last line
+                buf = buf.split(b"\n", -1)[-1] if b"\n" in buf else buf
+            time.sleep(poll)
+    return None
 
 
 def main():
     # /health
     step("GET /health")
     r = requests.get(f"{BASE}/health", timeout=5)
-    assert_eq(r.status_code, 200, "status")
-    assert_eq(r.json()["status"], "ok", "body.status")
+    check(r.status_code, 200, "status")
+    check(r.json()["status"], "ok", "body.status")
 
     # /.well-known/omi-tools.json — T-007 manifest endpoint
     step("GET /.well-known/omi-tools.json")
     r = requests.get(f"{BASE}/.well-known/omi-tools.json", timeout=5)
-    assert_eq(r.status_code, 200, "status")
+    check(r.status_code, 200, "status")
     manifest = r.json()
-    assert_eq(manifest["tools"][0]["name"], "toggle_auto_reply", "tool name")
-    assert_eq(manifest["tools"][0]["endpoint"], "/toggle", "tool endpoint")
-    assert_eq(
-        set(manifest["tools"][0]["parameters"]["required"]), {"chat_id", "enabled", "bot_token"}, "tool required params"
+    check(manifest["tools"][0]["name"], "toggle_auto_reply", "tool name")
+    check(manifest["tools"][0]["endpoint"], "/toggle", "tool endpoint")
+    check(
+        set(manifest["tools"][0]["parameters"]["required"]),
+        {"chat_id", "enabled", "bot_token"},
+        "tool required params",
     )
-    assert_eq(manifest["chat_messages"]["enabled"], False, "chat_messages.enabled")
-    assert_eq(manifest["chat_messages"]["target"], "app", "chat_messages.target")
+    check(manifest["chat_messages"]["enabled"], False, "chat_messages.enabled")
+    check(manifest["chat_messages"]["target"], "app", "chat_messages.target")
 
     # /setup with an obviously invalid bot_token — expect 4xx (the plugin
     # calls Telegram's getMe which 404s for an invalid token).
@@ -97,7 +140,9 @@ def main():
         timeout=10,
     )
     print(f"   HTTP {r.status_code} body={r.text[:80]!r}")
-    assert r.status_code >= 400, f"expected 4xx, got {r.status_code}"
+    if r.status_code < 400:
+        print(f"   ✗ FAIL expected 4xx, got {r.status_code}", file=sys.stderr)
+        sys.exit(EXIT_STEP_FAIL)
 
     # /webhook with bad secret
     step("POST /webhook with bad secret (expect 401)")
@@ -107,75 +152,149 @@ def main():
         json={"update_id": 1, "message": {"chat": {"id": 1}}},
         timeout=5,
     )
-    assert_eq(r.status_code, 401, "status")
+    check(r.status_code, 401, "status")
 
-    # /webhook with a regular text message from the bound user. The persona
-    # call will fail (api.omi.me returns 404 because the persona doesn't
-    # exist), but the dispatch path itself should fire — that proves the
-    # bug fixed in cc95e155d (the missing send_message call) hasn't come
-    # back.
-    step("POST /webhook — regular text from bound user (expect persona call)")
+    # ------------------------------------------------------------------
+    # Dispatch path — THE critical regression check.
+    #
+    # We have to verify TWO things, not one:
+    #   (a) the persona call fires
+    #   (b) the send_message call fires
+    #
+    # (a) without (b) is exactly the regression fixed in cc95e155d —
+    # _dispatch_auto_reply returned silently without calling
+    # send_message. (b) without (a) would mean the plugin sent a reply
+    # without consulting the persona. We need both.
+    #
+    # HTTP 200 from /webhook is NOT a sufficient check — the webhook
+    # returns 200 in every success path, including when the dispatch
+    # function is broken. So we additionally tail the plugin log and
+    # assert that BOTH:
+    #   - "POST .../v2/integrations/.../persona-chat" appears, AND
+    #   - "POST .../api.telegram.org/bot.../sendMessage" appears
+    #
+    # If send_message is missing from _dispatch_auto_reply, the second
+    # pattern won't appear and this step exits non-zero.
+    # ------------------------------------------------------------------
+    step("POST /webhook — regular text from bound user (assert dispatch fires)")
+    log_offset = os.path.getsize(PLUGIN_LOG) if os.path.exists(PLUGIN_LOG) else 0
     r = requests.post(
         f"{BASE}/webhook",
-        headers={"X-Telegram-Bot-Api-Secret-Token": SECRET, "Content-Type": "application/json"},
+        headers={
+            "X-Telegram-Bot-Api-Secret-Token": SECRET,
+            "Content-Type": "application/json",
+        },
         json={
             "update_id": 2,
             "message": {
                 "message_id": 2,
                 "chat": {"id": int(BOUND_CHAT_ID), "type": "private"},
-                "from": {"id": int(BOUND_CHAT_ID), "is_bot": False, "first_name": "Alice"},
+                "from": {
+                    "id": int(BOUND_CHAT_ID),
+                    "is_bot": False,
+                    "first_name": "Alice",
+                },
                 "text": "what's my favorite coffee?",
             },
         },
         timeout=15,
     )
-    assert_eq(r.status_code, 200, "status")
+    check(r.status_code, 200, "/webhook status")
+
+    # Now wait for the persona POST and the sendMessage POST to appear in
+    # the log. We give it 15s — the persona call is the slow one.
+    persona_match = tail_log_for(
+        lambda line: "/user/persona-chat" in line,
+        timeout=15.0,
+        since=log_offset,
+    )
+    send_match = tail_log_for(
+        lambda line: re.search(r"/bot\S+/sendMessage", line) is not None,
+        timeout=10.0,
+        since=log_offset,
+    )
+
+    if persona_match is None:
+        print(
+            "   ✗ FAIL persona call never appeared in plugin log — "
+            "_dispatch_auto_reply didn't run (or persona endpoint is wrong)",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_DISPATCH_FAIL)
+    print(f"   ✓ persona call observed: {persona_match.strip()[:90]}…")
+
+    if send_match is None:
+        print(
+            "   ✗ FAIL sendMessage never appeared in plugin log — "
+            "this is the regression fixed in cc95e155d. "
+            "_dispatch_auto_reply returned without calling send_message.",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_DISPATCH_FAIL)
+    print(f"   ✓ sendMessage observed: {send_match.strip()[:90]}…")
 
     # /webhook with /start <bogus-token>
     step("POST /webhook — /start <bogus> from unknown chat (expect silent drop)")
     r = requests.post(
         f"{BASE}/webhook",
-        headers={"X-Telegram-Bot-Api-Secret-Token": SECRET, "Content-Type": "application/json"},
+        headers={
+            "X-Telegram-Bot-Api-Secret-Token": SECRET,
+            "Content-Type": "application/json",
+        },
         json={
             "update_id": 3,
             "message": {
                 "message_id": 3,
                 "chat": {"id": 999002, "type": "private"},
-                "from": {"id": 999002, "is_bot": False, "first_name": "Bob"},
+                "from": {
+                    "id": 999002,
+                    "is_bot": False,
+                    "first_name": "Bob",
+                },
                 "text": "/start deadbeef",
             },
         },
         timeout=10,
     )
-    assert_eq(r.status_code, 200, "status")
+    check(r.status_code, 200, "status")
 
     # /webhook from a group chat — should be silently dropped
     step("POST /webhook from group chat (expect silent drop)")
     r = requests.post(
         f"{BASE}/webhook",
-        headers={"X-Telegram-Bot-Api-Secret-Token": SECRET, "Content-Type": "application/json"},
+        headers={
+            "X-Telegram-Bot-Api-Secret-Token": SECRET,
+            "Content-Type": "application/json",
+        },
         json={
             "update_id": 4,
             "message": {
                 "message_id": 4,
                 "chat": {"id": -1001234567890, "type": "supergroup"},
-                "from": {"id": 999001, "is_bot": False, "first_name": "Alice"},
+                "from": {
+                    "id": 999001,
+                    "is_bot": False,
+                    "first_name": "Alice",
+                },
                 "text": "hello",
             },
         },
         timeout=5,
     )
-    assert_eq(r.status_code, 200, "status")
+    check(r.status_code, 200, "status")
 
     # /webhook with malformed JSON — silently dropped
     step("POST /webhook with malformed JSON (expect silent drop)")
     r = requests.post(
         f"{BASE}/webhook",
-        headers={"X-Telegram-Bot-Api-Secret-Token": SECRET, "Content-Type": "application/json"},
+        headers={
+            "X-Telegram-Bot-Api-Secret-Token": SECRET,
+            "Content-Type": "application/json",
+        },
         data="not json",
         timeout=5,
     )
-    assert_eq(r.status_code, 200, "status")
+    check(r.status_code, 200, "status")
 
     # /toggle with right token, wrong token, unknown chat_id
     step("POST /toggle — right token (expect 200)")
@@ -184,7 +303,7 @@ def main():
         json={"chat_id": BOUND_CHAT_ID, "enabled": False, "bot_token": "placeholder-token"},
         timeout=5,
     )
-    assert_eq(r.status_code, 200, "status")
+    check(r.status_code, 200, "status")
 
     step("POST /toggle — wrong token (expect 403)")
     r = requests.post(
@@ -192,7 +311,7 @@ def main():
         json={"chat_id": BOUND_CHAT_ID, "enabled": True, "bot_token": "WRONG"},
         timeout=5,
     )
-    assert_eq(r.status_code, 403, "status")
+    check(r.status_code, 403, "status")
 
     step("POST /toggle — unknown chat_id (expect 403, enumeration-safe)")
     r = requests.post(
@@ -200,16 +319,19 @@ def main():
         json={"chat_id": "999999", "enabled": True, "bot_token": "placeholder-token"},
         timeout=5,
     )
-    assert_eq(r.status_code, 403, "status")
+    check(r.status_code, 403, "status")
 
     print("\n✓ All steps passed. Layer 1 E2E verified.")
     print(f"  Storage dir: {STORAGE_DIR}")
     print(f"  Plugin URL:  {BASE}")
+    print(f"  Plugin log:  {PLUGIN_LOG}")
 
 
 if __name__ == "__main__":
     try:
         main()
-    except AssertionError as e:
-        print(f"\n✗ {e}", file=sys.stderr)
-        sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as e:
+        print(f"\n✗ UNCAUGHT: {e!r}", file=sys.stderr)
+        sys.exit(EXIT_STEP_FAIL)
