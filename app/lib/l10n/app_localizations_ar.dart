@@ -1700,7 +1700,12 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'أجهزة',
+      one: 'جهاز',
+    );
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -7556,6 +7561,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get removeFilter => 'إزالة الفلتر';
 
   @override
+  String get filterByDate => 'تصفية حسب التاريخ';
+
+  @override
   String get categoryConversationAnalysis => 'تحليل المحادثة';
 
   @override
@@ -9401,6 +9409,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'حوالي دقيقة واحدة';
+
   @override
   String get jumpToLatestMessage => 'الانتقال إلى أحدث رسالة';
 

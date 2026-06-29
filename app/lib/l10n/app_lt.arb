@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Aptikti dideli laiko tarpai ({gaps})",
     "dailyRecaps": "Dienos Apžvalgos",
     "removeFilter": "Pašalinti Filtrą",
+    "filterByDate": "Filtruoti pagal datą",
     "appleHealthNotAvailable": "Apple Health nepasiekiama šiame įrenginyje",
     "downloadAudio": "Atsisiųsti garsą",
     "audioDownloadSuccess": "Garsas sėkmingai atsisiųstas",

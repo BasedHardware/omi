@@ -542,9 +542,14 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   /// Set search date range (start and end). Null = no limit on that side.
+  ///
+  /// Dates are normalized to day boundaries so the selected final calendar day
+  /// is included: [start] is set to the start of its day (00:00:00) and [end]
+  /// is set to the end of its day (23:59:59.999), matching how the server
+  /// interprets the ISO-8601 bounds.
   void setSearchDateRange(DateTime? start, DateTime? end) {
-    searchStartDate = start;
-    searchEndDate = end;
+    searchStartDate = start != null ? DateTime(start.year, start.month, start.day) : null;
+    searchEndDate = end != null ? DateTime(end.year, end.month, end.day, 23, 59, 59, 999) : null;
     notifyListeners();
   }
 

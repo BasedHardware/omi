@@ -7487,6 +7487,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get removeFilter => 'フィルターを削除';
 
   @override
+  String get filterByDate => '日付でフィルター';
+
+  @override
   String get categoryConversationAnalysis => '会話分析';
 
   @override
@@ -8318,7 +8321,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count件の会話を作成',
+      one: '1件の会話を作成',
+    );
     return '$_temp0';
   }
 
@@ -9042,7 +9050,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 件の録音を同期できます');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件の録音を同期できます',
+    );
     return '$_temp0';
   }
 
@@ -9054,7 +9066,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '確認が必要な録音が$count件');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '確認が必要な録音が$count件',
+    );
     return '$_temp0';
   }
 
@@ -9295,6 +9311,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => '約1分';
+
   @override
   String get jumpToLatestMessage => '最新のメッセージにジャンプ';
 

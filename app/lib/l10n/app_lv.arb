@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Konstatētas lielas laika starpības ({gaps})",
     "dailyRecaps": "Dienas Kopsavilkumi",
     "removeFilter": "Noņemt Filtru",
+    "filterByDate": "Filtrēt pēc datuma",
     "appleHealthNotAvailable": "Apple Health nav pieejams šajā ierīcē",
     "downloadAudio": "Lejupielādēt audio",
     "audioDownloadSuccess": "Audio veiksmīgi lejupielādēts",

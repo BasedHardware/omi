@@ -7478,6 +7478,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get removeFilter => '移除筛选';
 
   @override
+  String get filterByDate => '按日期筛选';
+
+  @override
   String get categoryConversationAnalysis => '对话分析';
 
   @override
@@ -8307,7 +8310,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '已创建 $count 个对话',
+      one: '已创建 1 个对话',
+    );
     return '$_temp0';
   }
 
@@ -9028,7 +9036,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音可同步');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音可同步',
+    );
     return '$_temp0';
   }
 
@@ -9040,7 +9052,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音需要关注');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 条录音需要关注',
+    );
     return '$_temp0';
   }
 
@@ -9279,6 +9295,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => '大约 1 分钟';
+
   @override
   String get jumpToLatestMessage => '跳转到最新消息';
 

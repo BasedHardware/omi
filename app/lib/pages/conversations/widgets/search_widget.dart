@@ -122,7 +122,7 @@ class _SearchWidgetState extends State<SearchWidget> {
                           style: const TextStyle(color: Colors.white, fontSize: 16),
                         ),
                       ),
-                      Text('Filter by date', style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                      Text(context.l10n.filterByDate, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
                       CupertinoButton(
                         padding: EdgeInsets.zero,
                         onPressed: () async {

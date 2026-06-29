@@ -1715,7 +1715,12 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ПРИСТРОЇВ', one: 'ПРИСТРІЙ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ПРИСТРОЇВ',
+      one: 'ПРИСТРІЙ',
+    );
     return '$count $_temp0 ЗНАЙДЕНО ПОБЛИЗУ';
   }
 
@@ -7622,6 +7627,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get removeFilter => 'Видалити фільтр';
 
   @override
+  String get filterByDate => 'Фільтрувати за датою';
+
+  @override
   String get categoryConversationAnalysis => 'Аналіз розмов';
 
   @override
@@ -9477,6 +9485,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Близько 1 хвилини';
+
   @override
   String get jumpToLatestMessage => 'Перейти до останнього повідомлення';
 

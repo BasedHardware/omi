@@ -9494,6 +9494,10 @@
     "audioShareFailed": "Share Failed",
     "dailyRecaps": "Daily Recaps",
     "removeFilter": "Remove Filter",
+    "filterByDate": "Filter by date",
+    "@filterByDate": {
+        "description": "Header label for the date range filter sheet in conversation search"
+    },
     "categoryConversationAnalysis": "Conversation Analysis",
     "categoryHealth": "Health",
     "categoryEducation": "Education",

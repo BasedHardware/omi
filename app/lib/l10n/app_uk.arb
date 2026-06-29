@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Виявлено великі часові розриви ({gaps})",
     "dailyRecaps": "Щоденні підсумки",
     "removeFilter": "Видалити фільтр",
+    "filterByDate": "Фільтрувати за датою",
     "appleHealthNotAvailable": "Apple Health недоступний на цьому пристрої",
     "downloadAudio": "Завантажити аудіо",
     "audioDownloadSuccess": "Аудіо успішно завантажено",

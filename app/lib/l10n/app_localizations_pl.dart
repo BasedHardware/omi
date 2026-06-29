@@ -7632,6 +7632,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get removeFilter => 'Usuń Filtr';
 
   @override
+  String get filterByDate => 'Filtruj według daty';
+
+  @override
   String get categoryConversationAnalysis => 'Analiza rozmów';
 
   @override
@@ -9488,6 +9491,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Około 1 minuty';
+
   @override
   String get jumpToLatestMessage => 'Przejdź do najnowszej wiadomości';
 

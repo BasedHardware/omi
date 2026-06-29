@@ -7639,6 +7639,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get removeFilter => 'Удалить фильтр';
 
   @override
+  String get filterByDate => 'Фильтр по дате';
+
+  @override
   String get categoryConversationAnalysis => 'Анализ разговоров';
 
   @override
@@ -9497,6 +9500,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Около 1 минуты';
+
   @override
   String get jumpToLatestMessage => 'Перейти к последнему сообщению';
 

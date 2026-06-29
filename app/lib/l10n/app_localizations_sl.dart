@@ -1713,7 +1713,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'DEVICES',
+      one: 'DEVICE',
+    );
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -7632,6 +7637,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get removeFilter => 'Odstrani Filter';
 
   @override
+  String get filterByDate => 'Filtriraj po datumu';
+
+  @override
   String get categoryConversationAnalysis => 'Analiza Pogovora';
 
   @override
@@ -8474,7 +8482,12 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 's',
+      one: '',
+    );
     return '$count conversation$_temp0 created';
   }
 
@@ -9480,6 +9493,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Približno 1 minuta';
+
   @override
   String get jumpToLatestMessage => 'Skoči na najnovejše sporočilo';
 

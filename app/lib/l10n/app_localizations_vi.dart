@@ -1718,7 +1718,12 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'THIẾT BỊ',
+      one: 'THIẾT BỊ',
+    );
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -7611,6 +7616,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get removeFilter => 'Xóa bộ lọc';
 
   @override
+  String get filterByDate => 'Lọc theo ngày';
+
+  @override
   String get categoryConversationAnalysis => 'Phân tích cuộc trò chuyện';
 
   @override
@@ -9189,7 +9197,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count bản ghi sẵn sàng để đồng bộ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi sẵn sàng để đồng bộ',
+    );
     return '$_temp0';
   }
 
@@ -9201,7 +9213,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count bản ghi cần chú ý');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count bản ghi cần chú ý',
+    );
     return '$_temp0';
   }
 
@@ -9447,6 +9463,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
+
   @override
   String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
 

@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Εντοπίστηκαν μεγάλα χρονικά κενά ({gaps})",
     "dailyRecaps": "Ημερήσιες Περιλήψεις",
     "removeFilter": "Κατάργηση Φίλτρου",
+    "filterByDate": "Φιλτράρισμα κατά ημερομηνία",
     "appleHealthNotAvailable": "Το Apple Health δεν είναι διαθέσιμο σε αυτήν τη συσκευή",
     "downloadAudio": "Λήψη ήχου",
     "audioDownloadSuccess": "Ο ήχος λήφθηκε επιτυχώς",

@@ -1724,7 +1724,12 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ESZKÖZ',
+      one: 'ESZKÖZ',
+    );
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -7645,6 +7650,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get removeFilter => 'Szűrő Eltávolítása';
 
   @override
+  String get filterByDate => 'Szűrés dátum szerint';
+
+  @override
   String get categoryConversationAnalysis => 'Beszélgetéselemzés';
 
   @override
@@ -9498,6 +9506,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
+
   @override
   String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
 

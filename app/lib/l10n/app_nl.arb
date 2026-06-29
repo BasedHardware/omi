@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Grote tijdsverschillen gedetecteerd ({gaps})",
     "dailyRecaps": "Dagelijkse Samenvattingen",
     "removeFilter": "Filter Verwijderen",
+    "filterByDate": "Filteren op datum",
     "appleHealthNotAvailable": "Apple Health is niet beschikbaar op dit apparaat",
     "downloadAudio": "Audio downloaden",
     "audioDownloadSuccess": "Audio succesvol gedownload",

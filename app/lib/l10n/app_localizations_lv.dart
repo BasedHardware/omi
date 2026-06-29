@@ -1716,7 +1716,12 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'IERĪCES', one: 'IERĪCE');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'IERĪCES',
+      one: 'IERĪCE',
+    );
     return '$count $_temp0 ATRASTAS TUVUMĀ';
   }
 
@@ -7628,6 +7633,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get removeFilter => 'Noņemt Filtru';
 
   @override
+  String get filterByDate => 'Filtrēt pēc datuma';
+
+  @override
   String get categoryConversationAnalysis => 'Sarunu analīze';
 
   @override
@@ -9480,6 +9488,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Apmēram 1 minūte';
+
   @override
   String get jumpToLatestMessage => 'Pārlēkt uz jaunāko ziņojumu';
 
