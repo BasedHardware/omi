@@ -31,14 +31,14 @@ import utils.llm.model_config as mc  # noqa: E402
 # --- Issue 1: dynamic routes are model-allowlisted (fail closed) ---
 
 
-def test_known_route_models_includes_profile_models_and_excludes_unknown():
-    known = mc._known_route_models()
-    assert 'gpt-5.4-mini' in known
-    assert 'gpt-4.1-mini' in known
-    assert 'totally-made-up-model-9000' not in known
+def test_known_route_pairs_includes_profile_pairs_and_excludes_unknown():
+    pairs = mc._known_route_pairs()
+    assert ('gpt-5.4-mini', 'openai') in pairs
+    assert ('gpt-4.1-mini', 'openai') in pairs
+    assert ('totally-made-up-model-9000', 'openai') not in pairs
 
 
-def test_dynamic_route_allowed_for_known_model():
+def test_dynamic_route_allowed_for_known_pair():
     with patch.object(mc, '_active_profile', {'feat_x': ('gpt-4.1-mini', 'openai')}), patch.object(
         mc, '_PINNED_FEATURES', {}
     ):
@@ -51,6 +51,14 @@ def test_dynamic_route_rejected_for_unknown_model():
         mc, '_PINNED_FEATURES', {}
     ):
         assert mc._is_dynamic_route_allowed('feat_x', 'evil-model-9000', 'openai') is False
+
+
+def test_dynamic_route_rejected_for_known_model_wrong_provider():
+    # A known model paired with a provider it is never used with must also fail closed.
+    with patch.object(mc, '_active_profile', {'feat_x': ('gpt-4.1-mini', 'openai')}), patch.object(
+        mc, '_PINNED_FEATURES', {}
+    ):
+        assert mc._is_dynamic_route_allowed('feat_x', 'gpt-4.1-mini', 'gemini') is False
 
 
 # --- Issue 2: the hot path performs no synchronous Firestore load ---

@@ -195,12 +195,14 @@ async def refresh_model_routes(force: bool = False, persist: bool = True) -> Dic
             disabled_reason=disabled_reason,
         )
 
-        model_config.set_dynamic_model_routes(route_table)
-        _route_cache.update(payload=route_table, ts=now)
-
         if persist and benchmark_payload is not None:
             await run_blocking(db_executor, model_routes_db.set_active_model_routes, profile, route_table)
             await run_blocking(db_executor, model_routes_db.record_model_route_run, profile, route_table)
+
+        # Publish to live in-memory state only after persistence completes, so a concurrent request
+        # never starts routing through a table that failed to persist.
+        model_config.set_dynamic_model_routes(route_table)
+        _route_cache.update(payload=route_table, ts=now)
 
         return route_table
 
@@ -261,13 +263,13 @@ async def auto_model_pick(uid: str = Depends(get_current_user_uid)):
 
 
 @router.get("/v1/auto/model-routes")
-def auto_model_routes(uid: str = Depends(get_current_user_uid)):
+async def auto_model_routes(uid: str = Depends(get_current_user_uid)):
     """Current backend LLM feature route table, without triggering refresh side effects.
 
-    Declared as a sync ``def`` so FastAPI runs it in a threadpool: ``_read_model_route_snapshot`` does
-    a synchronous Firestore read, which must not run on the event loop.
+    ``_read_model_route_snapshot`` does a synchronous Firestore read, so offload it to the dedicated
+    ``db_executor`` (rather than FastAPI's shared threadpool) to keep the DB bulkhead intact.
     """
-    return _read_model_route_snapshot()
+    return await run_blocking(db_executor, _read_model_route_snapshot)
 
 
 @router.post("/v1/admin/auto/model-routes/refresh", tags=["admin"])

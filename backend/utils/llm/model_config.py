@@ -429,24 +429,26 @@ def _parse_datetime(value: Any) -> Optional[datetime]:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
-_known_route_models_cache: Optional[frozenset] = None
+_known_route_pairs_cache: Optional[frozenset] = None
 
 
-def _known_route_models() -> frozenset:
-    # Models the dynamic router is allowed to select: every model that appears in any static QoS
-    # profile. The auto-router's candidates are all drawn from these, so a persisted route document
-    # is validated against this allowlist and fails closed -- a corrupted, stale, or hand-edited
-    # route cannot redirect a feature to an arbitrary model within an allowed provider class.
-    global _known_route_models_cache
-    if _known_route_models_cache is None:
-        models = set()
+def _known_route_pairs() -> frozenset:
+    # The (model, provider) pairs the dynamic router may select: every model/provider pair used by any
+    # static QoS profile (the auto-router's candidates are all drawn from these). A persisted route is
+    # validated against these pairs -- not just the model name -- and fails closed, so a corrupted,
+    # stale, or hand-edited route cannot redirect a feature to an arbitrary model, or pair an otherwise
+    # known model with an incompatible provider.
+    global _known_route_pairs_cache
+    if _known_route_pairs_cache is None:
+        pairs = set()
         for profile in MODEL_QOS_PROFILES.values():
             for entry in profile.values():
-                model = entry[0] if isinstance(entry, (tuple, list)) and entry else None
-                if isinstance(model, str) and model:
-                    models.add(model)
-        _known_route_models_cache = frozenset(models)
-    return _known_route_models_cache
+                if isinstance(entry, (tuple, list)) and len(entry) >= 2:
+                    model, provider = entry[0], entry[1]
+                    if isinstance(model, str) and model and isinstance(provider, str) and provider:
+                        pairs.add((model, provider))
+        _known_route_pairs_cache = frozenset(pairs)
+    return _known_route_pairs_cache
 
 
 def _is_dynamic_route_allowed(feature: str, model: Any, provider: Any) -> bool:
@@ -456,7 +458,7 @@ def _is_dynamic_route_allowed(feature: str, model: Any, provider: Any) -> bool:
         return False
     if not isinstance(model, str) or not model.strip():
         return False
-    if model not in _known_route_models():
+    if (model, provider) not in _known_route_pairs():
         return False
     if provider not in _SUPPORTED_PROVIDERS:
         return False
