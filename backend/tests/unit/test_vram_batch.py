@@ -58,6 +58,7 @@ def _make_engine(
     vram_safety_factor=0.8,
     vram_bytes_per_t2=136.6,
     starvation_timeout_sec=5.0,
+    max_inflight=1,
 ):
     gpu = MagicMock()
     gpu.vram_info = {
@@ -72,6 +73,7 @@ def _make_engine(
         vram_safety_factor=vram_safety_factor,
         vram_bytes_per_t2=vram_bytes_per_t2,
         starvation_timeout_sec=starvation_timeout_sec,
+        max_inflight=max_inflight,
     )
     return engine
 
@@ -169,6 +171,18 @@ class TestEstimateMaxBatch(unittest.TestCase):
         engine._vram_available_mb = 0.0
         result = engine._estimate_max_batch(300.0)
         self.assertEqual(result, 1)
+
+    def test_budget_divided_by_max_inflight(self):
+        engine_1 = _make_engine(max_inflight=1)
+        engine_2 = _make_engine(max_inflight=2)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(engine_1.start())
+        loop.run_until_complete(engine_2.start())
+        loop.close()
+        self.assertAlmostEqual(engine_1._vram_available_mb, engine_2._vram_available_mb * 2, places=0)
+        limit_1 = engine_1._estimate_max_batch(250.0)
+        limit_2 = engine_2._estimate_max_batch(250.0)
+        self.assertGreater(limit_1, limit_2)
 
 
 class TestFormVramSafeBatch(unittest.TestCase):

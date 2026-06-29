@@ -82,17 +82,18 @@ class BatchEngine:
             return
         self._attention_mode = vram.get("attention_mode", "full")
         self._auto_threshold_sec = vram.get("auto_threshold_sec", 300.0)
-        budget = vram["total_mb"] * self._vram_safety_factor - vram["baseline_mb"]
-        self._vram_available_mb = max(budget, 0)
+        total_budget = vram["total_mb"] * self._vram_safety_factor - vram["baseline_mb"]
+        self._vram_available_mb = max(total_budget / self._max_inflight, 0)
         self._vram_enabled = True
-        if budget <= 0:
+        if total_budget <= 0:
             logger.warning(
-                f"VRAM budget is non-positive ({budget:.0f} MB) — "
+                f"VRAM budget is non-positive ({total_budget:.0f} MB) — "
                 f"baseline exceeds safety cap. All batches capped to 1."
             )
         logger.info(
-            f"VRAM-aware batching enabled: {self._vram_available_mb:.0f} MB budget "
-            f"(total={vram['total_mb']:.0f}, baseline={vram['baseline_mb']:.0f}, "
+            f"VRAM-aware batching enabled: {self._vram_available_mb:.0f} MB per-batch budget "
+            f"({total_budget:.0f} MB total / {self._max_inflight} inflight, "
+            f"gpu_total={vram['total_mb']:.0f}, baseline={vram['baseline_mb']:.0f}, "
             f"safety={self._vram_safety_factor}, coeff={self._vram_bytes_per_t2})"
         )
 
