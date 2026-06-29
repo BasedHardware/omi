@@ -604,6 +604,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     log("AppDelegate: applicationDidFinishLaunching completed")
+
+    // Trigger AICloneConfig.shared init eagerly so the plugin discovery
+    // file (~/.config/omi/ai-clone-plugin.json) is read at startup rather
+    // than when the user first opens Settings → AI Clone.
+    log("OmiApp: triggering AICloneConfig eager init")
+    DispatchQueue.main.async {
+      log("OmiApp: async block running, accessing AICloneConfig.shared")
+      _ = AICloneConfig.shared
+      log("OmiApp: AICloneConfig.shared init complete")
+    }
   }
 
   /// Start a timer that sends Sentry session snapshots every 5 minutes
