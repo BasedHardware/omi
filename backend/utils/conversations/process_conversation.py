@@ -10,6 +10,7 @@ from typing import Union, Tuple, List, Optional
 
 from fastapi import HTTPException
 
+import database._client as db_client_module
 from database import redis_db
 from database.auth import get_user_name
 import database.memories as memories_db
@@ -45,6 +46,7 @@ from models.conversation import (
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.subjects import infer_subject_from_segments
+from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import memory_system_request_scope
@@ -453,9 +455,9 @@ def _extract_memories(uid: str, conversation: Conversation):
         _extract_memories_inner(uid, conversation)
 
 
-def _extract_memories_canonical(uid: str, conversation: Conversation):
+def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_client):
     """Canonical-cohort extraction: retract-then-write to memory_items only (Q1/Q7)."""
-    memory_service = MemoryService()
+    memory_service = MemoryService(db_client=db_client)
     memory_service.retract_conversation_memories(uid, conversation.id)
 
     language = users_db.get_user_language_preference(uid)
@@ -512,8 +514,9 @@ def _extract_memories_canonical(uid: str, conversation: Conversation):
 
 def _extract_memories_inner(uid: str, conversation: Conversation):
     with memory_system_request_scope(uid) as memory_system:
-        if memory_system == MemorySystem.CANONICAL:
-            _extract_memories_canonical(uid, conversation)
+        db_client = getattr(db_client_module, 'db', None)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+            _extract_memories_canonical(uid, conversation, db_client=db_client)
             return
 
         _extract_memories_legacy(uid, conversation)

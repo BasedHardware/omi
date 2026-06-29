@@ -61,7 +61,6 @@ import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     McpVerifiedAuth,
     build_mcp_default_memory_read_context,
-    build_mcp_default_memory_write_context,
     collect_filtered_memories,
     list_default_mcp_memories,
     parse_mcp_bool,
@@ -156,8 +155,35 @@ class MCPAuthContext:
     client_id: Optional[str] = None
     resource: Optional[str] = None
     grant_id: Optional[str] = None
-    memory_read_context: Optional[ProductAuthorizationContext] = None
-    memory_write_context: Optional[ProductAuthorizationContext] = None
+    memory_context: Optional[ProductAuthorizationContext] = None
+
+
+def _mcp_memory_context_from_api_key_user_data(user_data: dict) -> ProductAuthorizationContext:
+    verified_auth = McpVerifiedAuth(
+        uid=user_data["user_id"],
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+        scopes=tuple(user_data.get("scopes") or ()),
+    )
+    return build_mcp_default_memory_read_context(verified_auth)
+
+
+def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[ProductAuthorizationContext]:
+    """Validate an MCP API key and return its memory product auth context."""
+    if not authorization:
+        return None
+
+    token = authorization
+    if authorization.startswith("Bearer "):
+        token = authorization[7:]
+
+    if not token.startswith("omi_mcp_"):
+        return None
+
+    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    if not user_data or not user_data.get("user_id"):
+        return None
+    return _mcp_memory_context_from_api_key_user_data(user_data)
 
 
 def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:
@@ -173,18 +199,11 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
         if not user_data or not user_data.get("user_id"):
             return None
-        verified_auth = McpVerifiedAuth(
-            uid=user_data["user_id"],
-            app_id=user_data.get("app_id"),
-            key_id=user_data.get("key_id"),
-            scopes=tuple(user_data.get("scopes") or ()),
-        )
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
             scopes=list(user_data.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
-            memory_read_context=build_mcp_default_memory_read_context(verified_auth),
-            memory_write_context=build_mcp_default_memory_write_context(verified_auth),
+            memory_context=_mcp_memory_context_from_api_key_user_data(user_data),
         )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
@@ -753,7 +772,7 @@ def execute_tool(
     user_id: str,
     tool_name: str,
     arguments: dict,
-    auth_context: Optional[MCPAuthContext] = None,
+    auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> dict:
     """Execute an MCP tool and return the result. Raises ToolExecutionError on failure."""
     memory_system = pin_memory_system(user_id, db_client=db)
@@ -795,9 +814,9 @@ def execute_tool(
             except ValueError:
                 raise ToolExecutionError(f"Invalid memory category: '{cat}'", code=-32602)
 
-        if auth_context is None or auth_context.memory_read_context is None:
+        if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
-        app_key_grant = authorize_memory_external_default_memory_read(auth_context.memory_read_context, db_client=db)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
             raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
 
@@ -866,9 +885,9 @@ def execute_tool(
         if not content:
             raise ToolExecutionError("Content is required")
 
-        if auth_context is None or auth_context.memory_write_context is None:
+        if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
-        write_grant = authorize_memory_external_default_memory_write(auth_context.memory_write_context, db_client=db)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
@@ -899,9 +918,9 @@ def execute_tool(
         if not memory_id:
             raise ToolExecutionError("memory_id is required")
 
-        if auth_context is None or auth_context.memory_write_context is None:
+        if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
-        write_grant = authorize_memory_external_default_memory_write(auth_context.memory_write_context, db_client=db)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
@@ -931,9 +950,9 @@ def execute_tool(
         if not memory_id or not content:
             raise ToolExecutionError("memory_id and content are required")
 
-        if auth_context is None or auth_context.memory_write_context is None:
+        if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory write authorization", code=-32009)
-        write_grant = authorize_memory_external_default_memory_write(auth_context.memory_write_context, db_client=db)
+        write_grant = authorize_memory_external_default_memory_write(auth_context, db_client=db)
         if not write_grant.allowed:
             raise ToolExecutionError(str(write_grant.observability), code=-32009)
 
@@ -1042,9 +1061,9 @@ def execute_tool(
             raise ToolExecutionError(str(e), code=-32602)
         fetch_limit = min(limit * 3, 60)
 
-        if auth_context is None or auth_context.memory_read_context is None:
+        if auth_context is None:
             raise ToolExecutionError("Missing MCP API app/key identity for memory read authorization", code=-32009)
-        app_key_grant = authorize_memory_external_default_memory_read(auth_context.memory_read_context, db_client=db)
+        app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
         if not app_key_grant.allowed:
             raise ToolExecutionError(str(app_key_grant.observability), code=-32009)
 
@@ -1377,8 +1396,10 @@ def handle_mcp_message(
             return create_mcp_error(msg_id, -32602, "Tool name is required"), None
 
         try:
-            _require_tool_scope(auth_context, tool_name)
-            result = execute_tool(auth_context.uid, tool_name, arguments, auth_context=auth_context)
+            mcp_auth_context = auth_context
+            _require_tool_scope(mcp_auth_context, tool_name)
+            auth_context = mcp_auth_context.memory_context
+            result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
@@ -1611,9 +1632,10 @@ async def mcp_streamable_http(
     auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
     if not auth_context:
         raise invalid_mcp_auth_exception()
+    user_id = auth_context.uid
 
     # Rate limit per-user
-    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
+    await run_blocking(critical_executor, check_rate_limit_inline, user_id, "mcp:sse")
 
     # Parse request body
     try:
@@ -1628,7 +1650,7 @@ async def mcp_streamable_http(
             raise HTTPException(status_code=404, detail="Session not found")
         session = active_sessions[mcp_session_id]
         # Verify session belongs to this user
-        if session.user_id != auth_context.uid:
+        if session.user_id != user_id:
             raise HTTPException(status_code=403, detail="Session does not belong to this user")
 
     # Handle batch requests (array of messages)

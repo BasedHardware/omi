@@ -6,6 +6,8 @@ Replaces fragmented memory rollout flags with one explicit server-owned selector
 
 from enum import Enum
 
+from config.memory_rollout import MemoryRolloutConfig
+
 MEMORY_SYSTEM_FIELD = "memory_system"
 
 # Code-as-config canonical cohort whitelist (reviewable, diff-able, test-guarded).
@@ -37,21 +39,31 @@ def resolve_memory_system(uid: str, *, db_client=None) -> MemorySystem:
     """Return the server-owned memory cohort for ``uid``.
 
     Precedence (authoritative):
-      1. ``CANONICAL_MEMORY_USERS`` in this module — sole source of canonical cohort membership.
-      2. Absence from the whitelist → ``MemorySystem.LEGACY`` (explicit default; no implicit None).
+      1. ``CANONICAL_MEMORY_USERS`` in this module — code-reviewed cohort membership.
+      2. ``MEMORY_ENABLED_USERS`` + ``MEMORY_MODE`` — environment-specific activation.
+      3. Absence from either list, or ``MEMORY_MODE=off`` → ``MemorySystem.LEGACY``.
 
     A stale persisted ``memory_control/state.memory_system=canonical`` does **not** override
     whitelist removal — clearing the code whitelist is the global kill-switch (everyone legacy).
 
-    Transitional memory rollout controls (``MEMORY_MODE``, ``MEMORY_ENABLED_USERS``, stage gates,
-    global read gates) select memory read/write adapters — they do **not** imply ``MemorySystem.CANONICAL``.
+    UID membership alone never activates canonical memory. This keeps the same
+    branch deployable to dev or prod while requiring each GCP/Firebase
+    environment to opt in explicitly through its own runtime env.
     """
     del db_client  # reserved for callers/tests; cohort is code-defined today
 
     if not uid:
         return MemorySystem.LEGACY
 
-    if uid in _canonical_cohort_uids():
-        return MemorySystem.CANONICAL
+    if uid not in _canonical_cohort_uids():
+        return MemorySystem.LEGACY
 
-    return MemorySystem.LEGACY
+    try:
+        rollout = MemoryRolloutConfig.from_env()
+    except ValueError:
+        return MemorySystem.LEGACY
+
+    if rollout.mode.value == "off" or uid not in rollout.enabled_users:
+        return MemorySystem.LEGACY
+
+    return MemorySystem.CANONICAL

@@ -328,6 +328,8 @@ def main():
     )
     parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
     args = parser.parse_args()
+    if args.dirs == ["backend/routers", "backend/utils"] and not os.path.isdir("backend/routers"):
+        args.dirs = ["routers", "utils"]
 
     for d in args.dirs:
         if not os.path.isdir(d):

@@ -43,7 +43,6 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryAccessPolicy, MemoryItemStatus, MemoryLayer, MemoryItem
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.retrieval.hybrid import rrf_rerank
-from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 from utils.memory.v3_account_generation_source import read_memory_v3_trusted_account_generation
@@ -621,6 +620,8 @@ def update_canonical_memory_content(uid: str, memory_id: str, content: str, *, d
         invalidate_kg_for_memory_retraction(uid, [memory_id], db_client=client)
         updated = updated.model_copy(update={"kg_extracted": False})
         client.document(item_path).set({"kg_extracted": False, "updated_at": now}, merge=True)
+        from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
+
         if extract_kg_for_promoted_memory(uid, updated, db_client=client):
             updated = updated.model_copy(update={"kg_extracted": True})
     sync_atom_keyword_index_for_item(updated, db_client=client)
@@ -732,7 +733,7 @@ def _tombstone_memory_item(uid: str, item: MemoryItem, *, db_client, reason: str
         db_client.document(record["outbox_path"]).set(record)
 
     delete_atom_keyword_doc(uid, item.memory_id)
-    purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason)
+    purge_stale_review_conflicts_for_memories(uid, [item.memory_id], reason=reason, db_client=db_client)
 
 
 def retract_conversation_sourced_memories(uid: str, conversation_id: str, *, db_client=None) -> Dict[str, Any]:

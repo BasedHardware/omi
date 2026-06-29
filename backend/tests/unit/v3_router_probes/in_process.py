@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+import sys
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -15,8 +16,34 @@ MEMORY_ADAPTER_MODULES = [
     "utils.memory.v3_response_adapter",
 ]
 
+_STUB_MODULE_PREFIXES = (
+    "database",
+    "models",
+    "routers.memories",
+    "utils",
+)
+
+
+def _snapshot_router_import_modules() -> dict[str, object]:
+    return {
+        name: module
+        for name, module in sys.modules.items()
+        if name == "routers.memories"
+        or any(name == prefix or name.startswith(f"{prefix}.") for prefix in _STUB_MODULE_PREFIXES)
+    }
+
+
+def _restore_router_import_modules(previous: dict[str, object]) -> None:
+    for name in list(sys.modules):
+        if name == "routers.memories" or any(
+            name == prefix or name.startswith(f"{prefix}.") for prefix in _STUB_MODULE_PREFIXES
+        ):
+            sys.modules.pop(name, None)
+    sys.modules.update(previous)
+
 
 def probe_real_router_get_testclient_under_stubs() -> dict[str, Any]:
+    previous_modules = _snapshot_router_import_modules()
     mutation_flags = {
         "create_memory": False,
         "save_memories": False,
@@ -85,9 +112,12 @@ def probe_real_router_get_testclient_under_stubs() -> dict[str, Any]:
         }
     except Exception as exc:
         return {"testclient_ok": False, "blocked_reason": f"in-process GET TestClient probe failed: {exc}"}
+    finally:
+        _restore_router_import_modules(previous_modules)
 
 
 def probe_get_dependency_auth_under_stubs() -> dict[str, Any]:
+    previous_modules = _snapshot_router_import_modules()
     mutation_flags = {
         "create_memory": False,
         "save_memories": False,
@@ -188,9 +218,12 @@ def probe_get_dependency_auth_under_stubs() -> dict[str, Any]:
         }
     except Exception as exc:
         return {"testclient_ok": False, "blocked_reason": f"in-process GET dependency/auth probe failed: {exc}"}
+    finally:
+        _restore_router_import_modules(previous_modules)
 
 
 def probe_real_router_import_under_stubs() -> dict[str, Any]:
+    previous_modules = _snapshot_router_import_modules()
     try:
         install_router_import_stubs(auth_raises=True)
         module = import_memories_router()
@@ -215,3 +248,5 @@ def probe_real_router_import_under_stubs() -> dict[str, Any]:
         return {"import_ok": True, "pinned_routes": sorted(pinned, key=lambda item: item["route"])}
     except Exception as exc:
         return {"import_ok": False, "blocked_reason": f"in-process router import probe failed: {exc}"}
+    finally:
+        _restore_router_import_modules(previous_modules)

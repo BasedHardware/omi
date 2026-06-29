@@ -22,6 +22,7 @@ from models.conversation_enums import ConversationStatus
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.other.storage import (
@@ -491,7 +492,7 @@ def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> Non
 
     try:
         memory_system = pin_memory_system(uid, db_client=firestore_db)
-        if memory_system == MemorySystem.CANONICAL:
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=firestore_db):
             MemoryService(db_client=firestore_db).retract_conversation_memories(uid, conversation_id)
         else:
             memories_db.delete_memories_for_conversation(uid, conversation_id)

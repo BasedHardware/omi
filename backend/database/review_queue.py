@@ -90,6 +90,7 @@ def purge_stale_review_conflicts_for_memories(
     memory_ids: List[str],
     *,
     reason: str = "source_memory_deleted",
+    db_client=None,
 ) -> List[str]:
     """Drop pending review items that reference tombstoned/superseded/deleted memories."""
     target_ids = {memory_id for memory_id in memory_ids if memory_id}
@@ -98,7 +99,12 @@ def purge_stale_review_conflicts_for_memories(
 
     now = datetime.now(timezone.utc)
     purged: List[str] = []
-    queue_ref = db.collection(users_collection).document(uid).collection(review_queue_collection)
+    client = db_client if db_client is not None else db
+    users_ref = client.collection(users_collection)
+    if hasattr(users_ref, 'document'):
+        queue_ref = users_ref.document(uid).collection(review_queue_collection)
+    else:
+        queue_ref = client.collection(f'{users_collection}/{uid}/{review_queue_collection}')
     for doc in queue_ref.stream():
         item = doc.to_dict() or {}
         if item.get('status') not in ('pending', 'pending_review'):

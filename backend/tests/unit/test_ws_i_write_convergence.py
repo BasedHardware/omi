@@ -70,6 +70,7 @@ from models.memories import Memory, MemoryDB, MemoryCategory
 from models.memory_apply import ApplyStatus, MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
 from database.memory_apply_store import apply_long_term_patch_firestore
+import utils.memory.canonical_memory_adapter as canonical_memory_adapter_module
 from utils.memory.canonical_memory_adapter import (
     extraction_memory_id,
     memory_item_to_memorydb,
@@ -274,8 +275,10 @@ def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        canonical_memory_adapter_module,
+        "read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
+        raising=False,
     )
     _install_heavy_import_stubs()
     legacy_save = sys.modules["database.memories"].save_memories
@@ -371,7 +374,7 @@ def test_canonical_extract_uses_memory_service_not_legacy_save():
     start = source.index("def _extract_memories_canonical")
     end = source.index("\ndef _extract_memories_inner", start)
     canonical_body = source[start:end]
-    assert "MemoryService()" in canonical_body
+    assert "MemoryService(db_client=db_client)" in canonical_body
     assert "retract_conversation_memories" in canonical_body
     assert "memory_service.write" in canonical_body
     assert "memories_db.delete_memories_for_conversation" not in canonical_body
@@ -395,8 +398,10 @@ def test_reprocess_retract_then_rewrite_restores_active_memory(monkeypatch):
     )
 
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        canonical_memory_adapter_module,
+        "read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
+        raising=False,
     )
 
     write_canonical_extraction_memory(uid, payload, db_client=db)
@@ -437,6 +442,10 @@ def test_extract_memories_inner_legacy_calls_save_memories(monkeypatch):
     _patch_cohort_resolver(monkeypatch, MemorySystem.LEGACY)
     monkeypatch.setattr(pc, "new_memories_extractor", lambda *args, **kwargs: [memory])
     monkeypatch.setattr(pc, "record_usage", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
+    kg_module = ModuleType("utils.llm.knowledge_graph")
+    kg_module.extract_knowledge_from_memory = lambda *args, **kwargs: None
+    monkeypatch.setitem(sys.modules, "utils.llm.knowledge_graph", kg_module)
 
     conversation = SimpleNamespace(
         id="conv-legacy",
@@ -467,8 +476,10 @@ def test_extract_memories_inner_canonical_uses_memory_service(monkeypatch):
     service.retract_conversation_memories = retract_mock
 
     _patch_cohort_resolver(monkeypatch, MemorySystem.CANONICAL)
+    monkeypatch.setattr(pc, "canonical_write_enabled", lambda *args, **kwargs: True)
     monkeypatch.setattr(pc, "new_memories_extractor", lambda *args, **kwargs: [memory])
     monkeypatch.setattr(pc, "record_usage", lambda *args, **kwargs: None)
+    monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
     monkeypatch.setattr(pc, "MemoryService", lambda **_: service)
 
     conversation = SimpleNamespace(
@@ -504,8 +515,8 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
 
     monkeypatch.setattr(
         memories_router,
-        "pin_memory_system",
-        lambda uid, **_: MemorySystem.CANONICAL if uid == "uid-canonical" else MemorySystem.LEGACY,
+        "canonical_read_enabled",
+        lambda uid, **_: uid == "uid-canonical",
     )
     monkeypatch.setattr(memories_router, "MemoryService", lambda **_: SimpleNamespace(read=service_read))
     monkeypatch.setattr(memories_router, "_legacy_get_memories", legacy_get)
@@ -529,7 +540,7 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
 
     service_read.assert_called_once_with(
         "uid-canonical",
-        limit=10,
+        limit=5000,
         offset=0,
         device_scope_request=DeviceScopeRequest(device_scope="all", client_device_id=None),
     )
@@ -552,7 +563,7 @@ def test_v3_get_keeps_legacy_path_for_non_canonical(monkeypatch):
     legacy_get = MagicMock(return_value=legacy_memories)
     service_read = MagicMock()
 
-    monkeypatch.setattr(memories_router, "pin_memory_system", lambda uid, **_: MemorySystem.LEGACY)
+    monkeypatch.setattr(memories_router, "canonical_read_enabled", lambda uid, **_: False)
     monkeypatch.setattr(memories_router, "MemoryService", lambda **_: SimpleNamespace(read=service_read))
     monkeypatch.setattr(memories_router, "_legacy_get_memories", legacy_get)
 
@@ -615,8 +626,10 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
         }
     )
     monkeypatch.setattr(
-        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        canonical_memory_adapter_module,
+        "read_memory_v3_trusted_account_generation",
         lambda **_: _trusted_account_generation(),
+        raising=False,
     )
 
     with patch(
@@ -690,6 +703,7 @@ _COHORT_GATE_MARKERS = (
     "pin_memory_system",
     "resolve_memory_system",
     "MemorySystem.CANONICAL",
+    "canonical_write_enabled",
 )
 
 
@@ -754,10 +768,10 @@ def test_offline_rag_script_excluded_from_live_writer_guard():
 
 def test_memories_router_routes_canonical_create_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
-    assert "pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL" in source
+    assert "canonical_write_enabled(uid, db_client=db_client)" in source
     assert "run_blocking(db_executor, memory_service.write, uid, payload)" in source
     create_section = source.split("async def create_memory", 1)[1].split("@router.post", 1)[0]
-    canonical_pos = create_section.find("MemorySystem.CANONICAL")
+    canonical_pos = create_section.find("canonical_write_enabled")
     legacy_pos = create_section.find("memories_db.create_memory")
     assert canonical_pos != -1 and legacy_pos != -1
     assert canonical_pos < legacy_pos
@@ -766,9 +780,9 @@ def test_memories_router_routes_canonical_create_through_memory_service():
 def test_review_memory_routes_canonical_cohort_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
     section = source.split("def review_memory", 1)[1].split("@router.patch", 1)[0]
-    assert "MemorySystem.CANONICAL" in section
+    assert "canonical_write_enabled(uid, db_client=db_client)" in section
     assert ".review(uid, memory_id, value)" in section
-    canonical_pos = section.find("MemorySystem.CANONICAL")
+    canonical_pos = section.find("canonical_write_enabled")
     legacy_pos = section.find("memories_db.review_memory")
     assert canonical_pos != -1 and legacy_pos != -1
     assert canonical_pos < legacy_pos
@@ -776,8 +790,9 @@ def test_review_memory_routes_canonical_cohort_through_memory_service():
 
 def test_preference_tools_routes_canonical_cohort_through_memory_service():
     source = (BACKEND_DIR / "utils" / "retrieval" / "tools" / "preference_tools.py").read_text(encoding="utf-8")
-    assert "resolve_memory_system(uid) == MemorySystem.CANONICAL" in source
-    assert "MemoryService().write(uid, memory_data)" in source
+    assert "resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL" in source
+    assert "canonical_write_enabled(" in source
+    assert "MemoryService(db_client=db).write(uid, memory_data)" in source
     canonical_pos = source.find("MemorySystem.CANONICAL")
     legacy_pos = source.find("memory_db.create_memory")
     assert canonical_pos != -1 and legacy_pos != -1

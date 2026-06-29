@@ -64,7 +64,7 @@ Gate 2 GO means **dev-cloud functional proof passed**. It does not approve produ
 
 The canonical memory path is selected only when the server observes all of:
 
-1. `V3_GET_ENABLED=true` exactly;
+1. `MEMORY_V3_GET_ENABLED=true` exactly;
 2. `MEMORY_MODE=read` exactly;
 3. a valid authenticated UID present in the server-side allowlist.
 
@@ -87,7 +87,7 @@ Gate 3 is limited to production-specific deltas:
 - approved tiny canary;
 - production rollback execution and observation.
 
-A production deployment with `V3_GET_ENABLED` absent or false is a dark deployment only. It does not satisfy Gate 2 and must not be cited as functional proof. Production index deployment while the runtime remains default-off may occur only under separate approval and also does not satisfy Gate 2.
+A production deployment with `MEMORY_V3_GET_ENABLED` absent or false is a dark deployment only. It does not satisfy Gate 2 and must not be cited as functional proof. Production index deployment while the runtime remains default-off may occur only under separate approval and also does not satisfy Gate 2.
 
 ## Evidence validity
 

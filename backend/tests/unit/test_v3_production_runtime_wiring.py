@@ -281,6 +281,24 @@ def test_real_router_actual_builder_fail_closed_does_not_call_legacy(monkeypatch
     assert db.writes == []
 
 
+def test_real_router_cursor_read_requires_cursor_secret_and_never_calls_legacy(monkeypatch):
+    monkeypatch.setenv('MEMORY_MODE', 'read')
+    monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
+    monkeypatch.setenv('MEMORY_V3_GET_ENABLED', 'true')
+    monkeypatch.delenv('MEMORY_V3_CURSOR_SECRET', raising=False)
+    db = _ready_db()
+    legacy_calls = []
+    client = _route_client(monkeypatch, db, legacy_calls)
+
+    response = client.get('/v3/memories?cursor=opaque')
+
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'infrastructure_failure'
+    assert legacy_calls == []
+    assert db.streams == []
+    assert db.writes == []
+
+
 def test_default_env_stays_disabled_and_does_not_read_firestore(monkeypatch):
     monkeypatch.delenv('MEMORY_MODE', raising=False)
     monkeypatch.delenv('MEMORY_ENABLED_USERS', raising=False)

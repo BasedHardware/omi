@@ -70,7 +70,9 @@ def test_mcp_rest_uid_only_routes_keep_legacy_mcp_api_key_dependency():
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in profile_route
     assert 'uid: str = Depends(get_uid_from_mcp_api_key)' in list_route
     assert 'get_mcp_memory_default_memory_read_context' not in profile_route
-    assert 'get_mcp_memory_default_memory_read_context' not in list_route
+    assert (
+        'auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context)' in list_route
+    )
 
 
 def test_mcp_sse_search_tool_wires_app_key_scope_grant_before_memory_vector_adapter_and_legacy_search():
@@ -126,10 +128,12 @@ def test_mcp_sse_transport_authenticates_full_mcp_api_key_context_without_inferr
         'def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[ProductAuthorizationContext]:'
         in contents
     )
+    assert 'def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:' in contents
     assert 'mcp_api_key_db.get_user_and_scopes_by_api_key(token)' in contents
     assert 'McpVerifiedAuth(' in contents
     assert 'scopes=tuple(user_data.get("scopes") or ())' in contents
-    assert 'auth_context = authenticate_api_key_auth_context(authorization)' in contents
+    assert 'memory_context=_mcp_memory_context_from_api_key_user_data(user_data)' in contents
+    assert 'auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)' in contents
     assert 'user_id = auth_context.uid' in contents
     assert (
         'user_id = authenticate_api_key(authorization)'

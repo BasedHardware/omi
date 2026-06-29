@@ -305,10 +305,14 @@ def install_router_import_stubs(
 
     memory_service_mod = types.ModuleType("utils.memory.memory_service")
 
+    def fetch_memory_dict(uid, memory_id, *, db_client=None):
+        raise AssertionError("stubbed fetch_memory_dict executed")
+
     class MemoryService:
         def __init__(self, *, db_client=None):
             self.db_client = db_client
 
+    memory_service_mod.fetch_memory_dict = fetch_memory_dict
     memory_service_mod.MemoryService = MemoryService
     sys.modules["utils.memory.memory_service"] = memory_service_mod
     setattr(memory_pkg, "memory_service", memory_service_mod)
@@ -319,6 +323,9 @@ def install_router_import_stubs(
         LEGACY = "legacy"
         CANONICAL = "canonical"
 
+    def resolve_memory_system(uid, *, db_client=None):
+        return _MemorySystem.LEGACY
+
     def pin_memory_system(uid, *, db_client=None):
         return _MemorySystem.LEGACY
 
@@ -328,8 +335,15 @@ def install_router_import_stubs(
 
     memory_system_mod = types.ModuleType("utils.memory.memory_system")
     memory_system_mod.MemorySystem = _MemorySystem
+    memory_system_mod.resolve_memory_system = resolve_memory_system
     sys.modules["utils.memory.memory_system"] = memory_system_mod
     setattr(memory_pkg, "memory_system", memory_system_mod)
+
+    canonical_activation = types.ModuleType("utils.memory.canonical_activation")
+    canonical_activation.canonical_read_enabled = lambda *args, **kwargs: False
+    canonical_activation.canonical_write_enabled = lambda *args, **kwargs: False
+    sys.modules["utils.memory.canonical_activation"] = canonical_activation
+    setattr(memory_pkg, "canonical_activation", canonical_activation)
 
 
 def import_memories_router():

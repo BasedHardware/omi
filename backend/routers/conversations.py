@@ -5,6 +5,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database._client as db_client_module
 import database.action_items as action_items_db
 import database.memories as memories_db
 import database.redis_db as redis_db
@@ -42,6 +43,7 @@ from utils.conversations.process_conversation import process_conversation, retri
 from utils.executors import postprocess_executor, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -477,9 +479,10 @@ def delete_conversation(
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
         # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
-        memory_system = pin_memory_system(uid)
-        if memory_system == MemorySystem.CANONICAL:
-            MemoryService().retract_conversation_memories(uid, conversation_id)
+        db_client = getattr(db_client_module, 'db', None)
+        memory_system = pin_memory_system(uid, db_client=db_client)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
         else:
             deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
             for memory_id in deletion_result.get('vector_delete_ids', []):

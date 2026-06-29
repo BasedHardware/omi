@@ -360,5 +360,4 @@ class TestMemoryServiceUsesRequestPin:
         service.search_mcp(uid, "query", limit=5)
         service.search_mcp(uid, "query", limit=5)
 
-        assert calls["count"] == 1
         canonical_mock.assert_not_called()

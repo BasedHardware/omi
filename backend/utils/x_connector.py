@@ -35,6 +35,7 @@ from database._client import db
 from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
+from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils import social
@@ -348,8 +349,10 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
             mdb.app_id = INTEGRATION_KEY
             memory_dbs.append(mdb)
         # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
-            memory_service = MemoryService()
+        if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL and canonical_write_enabled(
+            uid, db_client=db
+        ):
+            memory_service = MemoryService(db_client=db)
             for mdb in memory_dbs:
                 memory_service.write(uid, mdb.dict())
         else:

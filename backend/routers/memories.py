@@ -20,12 +20,11 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3_production_runtime import build_v3_production_runtime
+from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_enabled
 from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
-from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import pin_memory_system
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -202,6 +201,15 @@ def _validate_memory(uid: str, memory_id: str) -> dict:
     return fetch_memory_dict(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
 
 
+def _validate_mutable_memory(uid: str, memory_id: str, *, db_client) -> dict:
+    if canonical_write_enabled(uid, db_client=db_client):
+        item = _read_canonical_memory_item(uid, memory_id, db_client=db_client)
+        if item is None:
+            raise HTTPException(status_code=404, detail='Memory not found')
+        return memory_item_to_memorydb(item).model_dump()
+    return fetch_memory_dict(uid, memory_id, db_client=db_client)
+
+
 @router.post('/v3/memories', tags=['memories'], response_model=MemoryDB)
 async def create_memory(
     memory: Memory,
@@ -221,7 +229,7 @@ async def create_memory(
     payload = memory_db.dict()
 
     db_client = getattr(db_client_module, 'db', None)
-    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+    if canonical_write_enabled(uid, db_client=db_client):
         try:
             memory_service = MemoryService(db_client=db_client)
             committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
@@ -298,7 +306,7 @@ async def create_memories_batch(
             has_public = True
 
     db_client = getattr(db_client_module, 'db', None)
-    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+    if canonical_write_enabled(uid, db_client=db_client):
         memory_service = MemoryService(db_client=db_client)
         # Pre-validate the entire batch so a whitespace-only (or otherwise
         # canonical-rejected) item fails fast *before* any per-item write
@@ -370,7 +378,13 @@ def get_memories(
         x_app_platform=x_app_platform,
         x_device_id_hash=x_device_id_hash,
     )
-    is_canonical = pin_memory_system(uid, db_client=getattr(db_client_module, 'db', None)) == MemorySystem.CANONICAL
+    db_client = getattr(db_client_module, 'db', None)
+    is_canonical = canonical_read_enabled(
+        uid,
+        db_client=db_client,
+        source_decision=memory_runtime.source_decision,
+        cursor_memory_read_requested=bool(cursor),
+    )
 
     if scope_request.device_scope != 'all' and not is_canonical:
         raise HTTPException(
@@ -394,7 +408,7 @@ def get_memories(
         # more than 100 memories do not silently see only the newest 100.
         if clamped_offset == 0:
             clamped_limit = 5000
-        return MemoryService(db_client=getattr(db_client_module, 'db', None)).read(
+        return MemoryService(db_client=db_client).read(
             uid,
             limit=clamped_limit,
             offset=clamped_offset,
@@ -464,7 +478,7 @@ def delete_memory(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
 ):
     db_client = getattr(db_client_module, 'db', None)
-    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+    if canonical_write_enabled(uid, db_client=db_client):
         try:
             MemoryService(db_client=db_client).delete(uid, memory_id)
         except ValueError:
@@ -485,7 +499,7 @@ def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
     db_client = getattr(db_client_module, 'db', None)
-    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+    if canonical_write_enabled(uid, db_client=db_client):
         MemoryService(db_client=db_client).delete_all(uid)
         return {'status': 'ok'}
 
@@ -518,10 +532,11 @@ def review_memory(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
     db_client = getattr(db_client_module, 'db', None)
-    _validate_memory(uid, memory_id)
-    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+    if canonical_write_enabled(uid, db_client=db_client):
+        _validate_mutable_memory(uid, memory_id, db_client=db_client)
         MemoryService(db_client=db_client).review(uid, memory_id, value)
         return {'status': 'ok'}
+    _validate_mutable_memory(uid, memory_id, db_client=db_client)
     memories_db.review_memory(uid, memory_id, value)
     return {'status': 'ok'}
 
@@ -533,12 +548,12 @@ def edit_memory(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
     db_client = getattr(db_client_module, 'db', None)
-    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
-        _validate_memory(uid, memory_id)
+    if canonical_write_enabled(uid, db_client=db_client):
+        _validate_mutable_memory(uid, memory_id, db_client=db_client)
         MemoryService(db_client=db_client).update_content(uid, memory_id, value)
         return {'status': 'ok'}
 
-    memory = _validate_memory(uid, memory_id)
+    memory = _validate_mutable_memory(uid, memory_id, db_client=db_client)
     memories_db.edit_memory(uid, memory_id, value)
     # Re-embed so semantic search reflects the new content. Without this the Pinecone
     # vector keeps matching the OLD text — a silent staleness bug that breaks the
@@ -558,13 +573,14 @@ def update_memory_visibility(
     value: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
-    _validate_memory(uid, memory_id)
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     db_client = getattr(db_client_module, 'db', None)
-    if pin_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+    if canonical_write_enabled(uid, db_client=db_client):
+        _validate_mutable_memory(uid, memory_id, db_client=db_client)
         MemoryService(db_client=db_client).update_visibility(uid, memory_id, value)
         postprocess_executor.submit(update_personas_async, uid)
         return {'status': 'ok'}
+    _validate_mutable_memory(uid, memory_id, db_client=db_client)
     memories_db.change_memory_visibility(uid, memory_id, value)
     return {'status': 'ok'}

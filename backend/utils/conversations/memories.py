@@ -1,11 +1,13 @@
 import hashlib
 from typing import Any, Dict, List, Optional, Tuple
 
+import database._client as db_client_module
 import database.memories as memories_db
 import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
+from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 import logging
@@ -118,8 +120,11 @@ def process_external_integration_memory(
     # Save all memories to the database if any were created
     if saved_memories:
         # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
-            memory_service = MemoryService()
+        db_client = getattr(db_client_module, 'db', None)
+        if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL and canonical_write_enabled(
+            uid, db_client=db_client
+        ):
+            memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
                 memory_service.write(uid, memory_db.dict())
         else:
@@ -159,8 +164,11 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
     # Save all memories in batch
     if saved_memories:
         # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-        if resolve_memory_system(uid) == MemorySystem.CANONICAL:
-            memory_service = MemoryService()
+        db_client = getattr(db_client_module, 'db', None)
+        if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL and canonical_write_enabled(
+            uid, db_client=db_client
+        ):
+            memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
                 memory_service.write(uid, memory_db.dict())
         else:
