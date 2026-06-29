@@ -115,6 +115,10 @@ struct FloatingControlBarView: View {
         state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation
     }
 
+    private var shouldUseOmiChatOverlayHitTarget: Bool {
+        shouldShowNotchHoverMenu && !showingNotchWaveform
+    }
+
     private var notchModeBody: some View {
         VStack(spacing: 0) {
             notchChrome
@@ -124,7 +128,7 @@ struct FloatingControlBarView: View {
                     notchOmiChatRow
                         .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
                         .opacity(notchSwitcherProgress)
-                        .allowsHitTesting(false)
+                        .allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)
 
                     Color.clear
                         .frame(
@@ -153,13 +157,8 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if shouldShowNotchHoverMenu && !showingNotchWaveform {
+            if shouldUseOmiChatOverlayHitTarget {
                 ZStack(alignment: .top) {
-                    notchOmiChatOverlayHitTarget
-                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
-                        .opacity(notchSwitcherProgress)
-                        .allowsHitTesting(notchSwitcherProgress > 0.6)
-
                     if !agentPills.pills.isEmpty {
                         NotchAgentMorphField(
                             manager: agentPills,
@@ -176,6 +175,13 @@ struct FloatingControlBarView: View {
                         notchAgentLogoHitTarget
                             .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight)
                     }
+
+                    notchOmiChatOverlayHitTarget
+                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+                        .offset(y: FloatingControlBarWindow.notchChromeHeight)
+                        .opacity(notchSwitcherProgress)
+                        .allowsHitTesting(notchSwitcherProgress > 0.6)
+                        .zIndex(2)
                 }
                 .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
                 .onHover { setAgentSwitcherHovering($0) }
