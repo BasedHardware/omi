@@ -685,6 +685,97 @@ pub fn SettingsPage() -> Element {
                 }
             }
 
+            // ── Second Brain section ──────────────────────────────────────────
+            section { class: "settings-section",
+                h2 { "Second Brain" }
+                p { class: "settings-desc",
+                    "Clipboard monitoring, file indexing, and daily recaps make Omi \
+                     remember everything you do."
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Clipboard Monitoring" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().clipboard_monitoring_enabled,
+                            onchange: move |e| {
+                                config.write().clipboard_monitoring_enabled = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "" }
+                    span { class: "settings-hint",
+                        "Captures everything you copy. Searchable via the Search page and available to the AI."
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "File Indexing" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().file_indexing_enabled,
+                            onchange: move |e| {
+                                config.write().file_indexing_enabled = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "" }
+                    span { class: "settings-hint",
+                        "Indexes Desktop, Documents, Downloads, and project folders. \"Find that PDF from last week.\""
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "App Usage Tracking" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().app_usage_tracking_enabled,
+                            onchange: move |e| {
+                                config.write().app_usage_tracking_enabled = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "" }
+                    span { class: "settings-hint",
+                        "Tracks which apps you use and for how long. Powers app usage stats in Focus page."
+                    }
+                }
+                div { class: "settings-row",
+                    label { class: "settings-label", "Daily Recap Hour" }
+                    input {
+                        class: "settings-input settings-input-sm",
+                        r#type: "number",
+                        min: "0",
+                        max: "23",
+                        value: "{config.read().daily_recap_hour}",
+                        onchange: move |e| {
+                            if let Ok(v) = e.value().parse::<u64>() {
+                                config.write().daily_recap_hour = v.min(23);
+                                let _ = config.read().save();
+                            }
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "" }
+                    span { class: "settings-hint",
+                        "Hour (0-23) when the AI generates your daily summary. Default: 21 (9 PM)."
+                    }
+                }
+            }
+
             // ── Google MCP Tools section ───────────────────────────────────────
             section { class: "settings-section",
                 h2 { "🔗 Google MCP Tools" }

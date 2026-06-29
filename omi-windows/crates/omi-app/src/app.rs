@@ -361,6 +361,7 @@ pub fn App() -> Element {
     let clipboard_started = use_signal(|| false);
     let file_indexer_started = use_signal(|| false);
     let recap_started = use_signal(|| false);
+    let tracker_started = use_signal(|| false);
     use_effect(move || {
         let cfg = config.read().clone();
         let db_snap = db.read().clone();
@@ -430,11 +431,26 @@ pub fn App() -> Element {
 
         // Spawn daily recap scheduler
         if !*recap_started.read() {
-            if let Some(Db(d)) = db_snap {
+            if let Some(Db(d)) = db_snap.clone() {
                 recap_started.clone().set(true);
                 tracing::info!("[APP] Spawning daily recap scheduler");
                 spawn(async move {
                     crate::daily_recap::run_daily_recap_scheduler(
+                        d,
+                        move || crate::config::AppConfig::load(),
+                    )
+                    .await;
+                });
+            }
+        }
+
+        // Spawn app usage tracker
+        if !*tracker_started.read() {
+            if let Some(Db(d)) = db_snap {
+                tracker_started.clone().set(true);
+                tracing::info!("[APP] Spawning app usage tracker");
+                spawn(async move {
+                    crate::app_tracker::run_app_tracker_with_db(
                         d,
                         move || crate::config::AppConfig::load(),
                     )

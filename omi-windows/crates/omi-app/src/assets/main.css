@@ -1571,3 +1571,113 @@ body {
   white-space: pre-wrap;
 }
 
+/* ── Knowledge Base ──────────────────────────────────────────────── */
+.kb-upload-row,
+.kb-search-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.kb-upload-row .search-input,
+.kb-search-row .search-input {
+  flex: 1;
+}
+
+.kb-results {
+  margin-top: 12px;
+}
+
+.kb-result-card {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.kb-result-idx {
+  color: var(--accent);
+  font-weight: 600;
+  min-width: 20px;
+}
+
+.kb-resources {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.kb-resources h3 {
+  font-size: 14px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.kb-resource-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--bg-tertiary);
+}
+
+.kb-resource-name {
+  font-weight: 500;
+}
+
+.kb-resource-type {
+  font-size: 11px;
+}
+
+.text-success {
+  color: var(--success);
+}
+
+.text-error {
+  color: var(--error);
+}
+
+/* ── App Usage ───────────────────────────────────────────────────── */
+.app-usage-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.app-usage-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.app-usage-name {
+  min-width: 120px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.app-usage-bar-container {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.app-usage-bar {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.app-usage-time {
+  min-width: 50px;
+  text-align: right;
+  font-size: 12px;
+}
+

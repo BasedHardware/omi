@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 
 use crate::app::Db;
 use crate::config::AppConfig;
+use omi_db::app_usage::AppUsageRow;
 use omi_db::schema::{DailyRecap, Goal};
 
 #[component]
@@ -18,6 +19,7 @@ pub fn FocusPage() -> Element {
     let mut stats_tasks = use_signal(|| 0i64);
     let mut stats_clipboard = use_signal(|| 0i64);
     let mut stats_apps = use_signal(|| 0usize);
+    let mut app_usage = use_signal(Vec::<AppUsageRow>::new);
 
     use_effect(move || {
         let db_snap = db.read().clone();
@@ -27,6 +29,10 @@ pub fn FocusPage() -> Element {
             }
             if let Ok(r) = d.list_recaps(7) {
                 recaps.set(r);
+            }
+            if let Ok(usage) = d.get_today_app_usage() {
+                stats_apps.set(usage.len());
+                app_usage.set(usage);
             }
             if let Ok(s) = d.get_today_stats() {
                 stats_conversations.set(s.conversations);
@@ -68,6 +74,40 @@ pub fn FocusPage() -> Element {
                 div { class: "stat-card",
                     span { class: "stat-value", "{stats_apps}" }
                     span { class: "stat-label text-muted", "Apps Used" }
+                }
+            }
+
+            // ── App Usage Breakdown ────────────────────────────────
+            if !app_usage.read().is_empty() {
+                div { class: "section",
+                    h2 { class: "section-title", "App Usage Today" }
+                    div { class: "app-usage-list",
+                        for entry in app_usage.read().iter().take(10) {
+                            {
+                                let hours = entry.total_seconds / 3600;
+                                let mins = (entry.total_seconds % 3600) / 60;
+                                let time_str = if hours > 0 {
+                                    format!("{hours}h {mins}m")
+                                } else {
+                                    format!("{mins}m")
+                                };
+                                let max_secs = app_usage.read().first().map(|a| a.total_seconds).unwrap_or(1).max(1);
+                                let pct = (entry.total_seconds as f64 / max_secs as f64 * 100.0) as i32;
+                                rsx! {
+                                    div { class: "app-usage-row",
+                                        span { class: "app-usage-name", "{entry.app_name}" }
+                                        div { class: "app-usage-bar-container",
+                                            div {
+                                                class: "app-usage-bar",
+                                                style: "width: {pct}%",
+                                            }
+                                        }
+                                        span { class: "app-usage-time text-muted", "{time_str}" }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 

@@ -2,6 +2,7 @@ use dioxus::prelude::*;
 
 mod agent_runtime;
 mod app;
+mod app_tracker;
 mod auth;
 mod capture;
 mod clipboard_watcher;
