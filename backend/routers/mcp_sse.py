@@ -241,6 +241,7 @@ SCOPE_PERMISSION_TEXT = {
     "chat.read": "Read your Omi chat history",
     "screen_activity.read": "Read your Omi screen activity",
     "people.read": "Read people saved in your Omi account",
+    "calendar.read": "Read your Omi calendar meetings",
 }
 
 
