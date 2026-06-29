@@ -77,6 +77,7 @@ pytest tests/unit/test_chat_tool_parameters_json.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
 pytest tests/unit/test_proactive_notification_language.py -v
+pytest tests/unit/test_advice_update_missing_doc_guard.py -v
 pytest tests/unit/test_notification_token_cleanup.py -v
 pytest tests/unit/test_integration_notification_validation.py -v
 pytest tests/unit/test_conversations_to_string.py -v
