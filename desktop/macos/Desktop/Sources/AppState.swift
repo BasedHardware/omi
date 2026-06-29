@@ -1785,8 +1785,19 @@ class AppState: ObservableObject {
           guard let self = self, self.isTranscribing else { return }
           log("Transcription: 4-hour limit reached - restarting session")
           let sessionId = self.currentSessionId
+          let wasLocalSTT = self.useLocalSTT
+          let mic = self.localMicService
+          let sys = self.localSystemService
+          if wasLocalSTT {
+            self.localMicService = nil
+            self.localSystemService = nil
+          }
           // Stop, durably queue finalization, and restart.
           self.stopAudioCapture()
+          if wasLocalSTT {
+            await mic?.finish()
+            await sys?.finish()
+          }
           if let sessionId {
             try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
           }
@@ -2349,7 +2360,18 @@ class AppState: ObservableObject {
         guard let self = self, self.isTranscribing else { return }
         log("Transcription: 4-hour limit reached — stopping and restarting")
         let sessionId = self.currentSessionId
+        let wasLocalSTT = self.useLocalSTT
+        let mic = self.localMicService
+        let sys = self.localSystemService
+        if wasLocalSTT {
+          self.localMicService = nil
+          self.localSystemService = nil
+        }
         self.stopAudioCapture()
+        if wasLocalSTT {
+          await mic?.finish()
+          await sys?.finish()
+        }
         if let sessionId {
           try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
         }

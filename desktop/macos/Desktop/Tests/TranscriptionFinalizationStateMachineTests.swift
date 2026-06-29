@@ -159,6 +159,31 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         )
     }
 
+    func testFreshUploadingSessionCannotBeReclaimedImmediately() async throws {
+        let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
+        try await TranscriptionStorage.shared.finishSession(
+            id: sessionId,
+            reason: .userStop
+        )
+
+        let firstClaim = try await TranscriptionStorage.shared.markSessionUploading(id: sessionId)
+        let secondClaim = try await TranscriptionStorage.shared.markSessionUploading(id: sessionId)
+
+        XCTAssertTrue(firstClaim)
+        XCTAssertFalse(secondClaim)
+    }
+
+    func testProcessingServerConversationDoesNotStampFinalizationCompletedAt() async throws {
+        let conversation = makeServerConversation(status: .processing)
+
+        let sessionId = try await TranscriptionStorage.shared.syncServerConversation(conversation)
+        let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let unwrappedSession = try XCTUnwrap(session)
+
+        XCTAssertEqual(unwrappedSession.conversationStatus, .processing)
+        XCTAssertNil(unwrappedSession.finalizationCompletedAt)
+    }
+
     func testEmptyLocalSegmentsSessionIsDiscardedInsteadOfRetriedForever() async throws {
         let sessionId = try await TranscriptionStorage.shared.startSession(
             source: "desktop",
@@ -176,5 +201,38 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
 
         let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
         XCTAssertNil(session)
+    }
+
+    private func makeServerConversation(status: ConversationStatus) -> ServerConversation {
+        let createdAt = Date(timeIntervalSince1970: 1_000)
+        return ServerConversation(
+            id: "server-\(status.rawValue)",
+            createdAt: createdAt,
+            startedAt: createdAt,
+            finishedAt: createdAt.addingTimeInterval(60),
+            structured: Structured(
+                title: "Title",
+                overview: "Overview",
+                emoji: "chat",
+                category: "other",
+                actionItems: [],
+                events: []
+            ),
+            transcriptSegments: [],
+            transcriptSegmentsIncluded: true,
+            geolocation: nil,
+            photos: [],
+            appsResults: [],
+            source: .desktop,
+            language: "en",
+            status: status,
+            discarded: false,
+            deleted: false,
+            isLocked: false,
+            starred: false,
+            folderId: nil,
+            inputDeviceName: nil,
+            deferred: false
+        )
     }
 }

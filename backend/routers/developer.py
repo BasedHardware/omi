@@ -1197,6 +1197,14 @@ def _create_conversation_from_segments(
 
     # Process conversation
     conversation = process_conversation(uid, language_code, create_conversation_obj)
+    if request.client_session_id and not conversations_db.get_conversation(uid, conversation.id):
+        logger.info(
+            "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
+            uid,
+            request.client_session_id,
+            conversation.id,
+        )
+        conversations_db.upsert_conversation(uid, conversation.dict())
 
     return ConversationResponse(
         id=conversation.id,

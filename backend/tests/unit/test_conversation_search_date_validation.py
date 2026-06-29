@@ -10,7 +10,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from types import ModuleType
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault(
@@ -261,7 +261,10 @@ def test_finalize_conversation_processes_target_id_and_clears_matching_redis_poi
         response = conv.finalize_conversation('conv-1', uid='test-uid')
 
     remove_pointer.assert_called_once_with('test-uid')
-    update_status.assert_called_once_with('test-uid', 'conv-1', ConversationStatus.processing)
+    assert update_status.call_args_list == [
+        call('test-uid', 'conv-1', ConversationStatus.processing),
+        call('test-uid', 'conv-1', ConversationStatus.completed),
+    ]
     process.assert_called_once_with('test-uid', 'en', target, force_process=True)
     assert response.conversation.id == 'conv-1'
     assert response.conversation.status == ConversationStatus.completed

@@ -151,14 +151,21 @@ actor TranscriptionStorage {
                 throw TranscriptionStorageError.sessionNotFound
             }
 
+            let now = Date()
+            let staleUploadingCutoff = now.addingTimeInterval(-300)
+            guard record.status != .uploading || record.updatedAt < staleUploadingCutoff else {
+                log("TranscriptionStorage: Skipping markSessionUploading for in-progress session \(id)")
+                return false
+            }
+
             guard record.status != .completed && !record.backendSynced else {
                 log("TranscriptionStorage: Skipping markSessionUploading for completed backend-synced session \(id)")
                 return false
             }
 
             record.status = .uploading
-            record.finalizationStartedAt = Date()
-            record.updatedAt = Date()
+            record.finalizationStartedAt = now
+            record.updatedAt = now
             try record.update(database)
             return true
         }

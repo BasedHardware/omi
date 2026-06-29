@@ -179,6 +179,8 @@ def finalize_conversation(
 
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    if conversation.status:
+        conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)

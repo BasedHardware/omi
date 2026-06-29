@@ -373,7 +373,7 @@ extension TranscriptionSessionRecord {
             finalizationStrategy: nil,
             finalizationReason: nil,
             finalizationStartedAt: nil,
-            finalizationCompletedAt: conversation.finishedAt ?? Date(),
+            finalizationCompletedAt: localStatus == .completed ? (conversation.finishedAt ?? Date()) : nil,
             title: conversation.structured.title,
             overview: conversation.structured.overview,
             emoji: conversation.structured.emoji,
