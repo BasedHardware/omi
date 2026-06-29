@@ -102,11 +102,47 @@ async def send_message(
 async def subscribe_app(phone_number_id: str, access_token: str) -> dict:
     """Register the app subscription so Meta delivers webhook updates to us.
 
-    Returns the parsed JSON response. Raises httpx.HTTPStatusError on failure.
+    The Meta Graph API `subscribed_apps` edge lives on the WhatsApp
+    Business Account (WABA), NOT directly on the phone number. Posting
+    to /{phone_number_id}/subscribed_apps returns a 400 / "no edge
+    found" error from Meta — the correct URL is
+    /{waba_id}/subscribed_apps.
+
+    We resolve waba_id from the phone number first via the
+    `?fields=whatsapp_business_account{id}` lookup (one extra round
+    trip, but keeps the SetupRequest API stable — the user still
+    only provides a phone_number_id, not a separate WABA id).
+
+    Returns the parsed JSON response. Raises httpx.HTTPStatusError on
+    failure (e.g. if the access_token doesn't have the right scopes
+    or the phone number isn't on a WABA the token can manage).
     """
     client = _get_client()
+
+    # Step 1: resolve WABA id from phone number.
+    lookup = await client.get(
+        f"{META_GRAPH_BASE}/{phone_number_id}",
+        params={"fields": "whatsapp_business_account{id}"},
+        headers=_auth_headers(access_token),
+    )
+    lookup.raise_for_status()
+    waba = (lookup.json().get("whatsapp_business_account") or {}).get("id")
+    if not waba:
+        # Meta returns "whatsapp_business_account": {"id": "..."} on success;
+        # an empty/missing value means the token can't see the WABA for
+        # this phone (wrong scopes or phone not on any WABA the token
+        # manages). Surface a 502 with a helpful message — the
+        # caller maps this to a generic 502; the log carries the detail.
+        raise httpx.HTTPStatusError(
+            "phone number is not linked to a WhatsApp Business Account "
+            "the access_token can manage",
+            request=lookup.request,
+            response=lookup,
+        )
+
+    # Step 2: subscribe to the WABA's webhook edge.
     resp = await client.post(
-        f"{META_GRAPH_BASE}/{phone_number_id}/subscribed_apps",
+        f"{META_GRAPH_BASE}/{waba}/subscribed_apps",
         headers=_auth_headers(access_token),
     )
     resp.raise_for_status()
