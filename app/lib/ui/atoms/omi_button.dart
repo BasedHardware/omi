@@ -5,13 +5,34 @@ import 'package:omi/utils/responsive/responsive_helper.dart';
 
 enum OmiButtonType { primary, text, neutral }
 
+/// Shared label/icon button.
+///
+/// The [primary] variant matches the app's canonical white call-to-action
+/// (white background, black label, 28px pill, 18/w600 Manrope, no elevation) —
+/// the same style used across onboarding. On brand: white/neutral, never purple.
+/// Sizing ([width]/[height]) and geometry ([borderRadius]/[fontSize]) are
+/// overridable so existing call sites can be matched exactly.
 class OmiButton extends AdaptiveWidget {
   final String label;
   final VoidCallback? onPressed;
   final OmiButtonType type;
   final bool enabled;
+  final bool isLoading;
   final IconData? icon;
+
+  /// When true the [icon] is rendered after the label (e.g. a trailing arrow).
+  final bool trailingIcon;
+
+  /// Background color override (primary/neutral). Defaults to white for primary.
   final Color? color;
+
+  /// Foreground (label/icon) color override. Defaults to black for primary.
+  final Color? textColor;
+
+  final double? width;
+  final double? height;
+  final double? borderRadius;
+  final double? fontSize;
 
   const OmiButton({
     super.key,
@@ -19,9 +40,18 @@ class OmiButton extends AdaptiveWidget {
     required this.onPressed,
     this.type = OmiButtonType.primary,
     this.enabled = true,
+    this.isLoading = false,
     this.icon,
+    this.trailingIcon = false,
     this.color,
+    this.textColor,
+    this.width,
+    this.height,
+    this.borderRadius,
+    this.fontSize,
   });
+
+  bool get _active => enabled && !isLoading && onPressed != null;
 
   @override
   Widget buildDesktop(BuildContext context) => _base();
@@ -31,101 +61,94 @@ class OmiButton extends AdaptiveWidget {
 
   Widget _base() {
     switch (type) {
-      case OmiButtonType.text:
-        return TextButton(
-          onPressed: enabled ? onPressed : null,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 18, color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary),
-                const SizedBox(width: 4),
-              ],
-              Text(
-                label,
-                style: TextStyle(
-                  color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textTertiary,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        );
       case OmiButtonType.primary:
-        final primaryColor = color ?? ResponsiveHelper.purplePrimary;
-        final primaryAccent = color ?? ResponsiveHelper.purpleAccent;
-
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: enabled ? onPressed : null,
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: enabled
-                    ? LinearGradient(
-                        colors: [primaryColor, primaryAccent],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      )
-                    : LinearGradient(
-                        colors: [ResponsiveHelper.backgroundTertiary, ResponsiveHelper.backgroundTertiary],
-                      ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: enabled
-                    ? [BoxShadow(color: primaryColor.withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))]
-                    : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (icon != null) ...[Icon(icon, size: 18, color: Colors.white), const SizedBox(width: 6)],
-                  Text(
-                    label,
-                    style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
+        return _primary();
+      case OmiButtonType.text:
+        return _text();
       case OmiButtonType.neutral:
-        return Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: enabled ? onPressed : null,
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (icon != null) ...[
-                    Icon(
-                      icon,
-                      size: 12,
-                      color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textQuaternary,
-                    ),
-                    const SizedBox(width: 6),
-                  ],
-                  Text(
-                    label,
-                    style: TextStyle(
-                      color: enabled ? ResponsiveHelper.textSecondary : ResponsiveHelper.textQuaternary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
+        return _neutral();
     }
+  }
+
+  Widget _primary() {
+    final radius = borderRadius ?? 28;
+    final bg = color ?? Colors.white;
+    final fg = textColor ?? Colors.black;
+    final size = fontSize ?? 18;
+
+    final button = ElevatedButton(
+      onPressed: _active ? onPressed : null,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: bg,
+        foregroundColor: fg,
+        disabledBackgroundColor: ResponsiveHelper.backgroundTertiary,
+        disabledForegroundColor: ResponsiveHelper.textQuaternary,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
+      ),
+      child: isLoading
+          ? SizedBox(
+              width: size + 4,
+              height: size + 4,
+              child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation<Color>(fg)),
+            )
+          : _labelRow(size: size, weight: FontWeight.w600, color: fg, iconSize: size + 2),
+    );
+
+    if (width != null || height != null) {
+      return SizedBox(width: width, height: height, child: button);
+    }
+    return button;
+  }
+
+  Widget _text() {
+    final fg = enabled ? (textColor ?? ResponsiveHelper.textSecondary) : ResponsiveHelper.textTertiary;
+    final size = fontSize ?? 14;
+    return TextButton(
+      onPressed: _active ? onPressed : null,
+      child: _labelRow(size: size, weight: FontWeight.normal, color: fg, iconSize: 18, iconGap: 4),
+    );
+  }
+
+  Widget _neutral() {
+    final radius = borderRadius ?? 8;
+    final fg = enabled ? (textColor ?? ResponsiveHelper.textSecondary) : ResponsiveHelper.textQuaternary;
+    final size = fontSize ?? 12;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _active ? onPressed : null,
+        borderRadius: BorderRadius.circular(radius),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: (color ?? ResponsiveHelper.backgroundTertiary).withValues(alpha: 0.6),
+            borderRadius: BorderRadius.circular(radius),
+          ),
+          child: _labelRow(size: size, weight: FontWeight.w500, color: fg, iconSize: 12, iconGap: 6),
+        ),
+      ),
+    );
+  }
+
+  Widget _labelRow({
+    required double size,
+    required FontWeight weight,
+    required Color color,
+    required double iconSize,
+    double iconGap = 8,
+  }) {
+    final text = Text(
+      label,
+      style: TextStyle(fontSize: size, fontWeight: weight, fontFamily: 'Manrope', color: color),
+    );
+    if (icon == null) return text;
+    final iconWidget = Icon(icon, size: iconSize, color: color);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children:
+          trailingIcon ? [text, SizedBox(width: iconGap), iconWidget] : [iconWidget, SizedBox(width: iconGap), text],
+    );
   }
 }
