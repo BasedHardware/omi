@@ -7,23 +7,25 @@ import AppKit
 ///
 /// Design notes
 ///
-/// We use NSPasteboard.changeCount() (incremented by AppKit on every
-/// clipboard mutation) rather than polling the contents every tick.
-/// changeCount is O(1) and side-effect-free, so we can poll it cheaply
-/// (every 1s) without copying the clipboard data on every tick —
-/// only when it changes. Some password managers / clipboard managers
-/// spam changeCount to obscure which apps are reading; we treat any
-/// string-content change as a candidate for auto-fill.
+/// The watcher is split into TWO injectable sources: a cheap
+/// change-count reader and an expensive string reader. The
+/// change-count reader runs every tick; the string reader only
+/// runs when the count has moved. P1 (cubic follow-up): the
+/// previous single-source design read the string on every tick,
+/// wasting CPU and triggering unnecessary pasteboard reads.
 ///
-/// Testability
+/// NSPasteboard.changeCount is O(1) and side-effect-free. Reading
+/// the string content has measurable cost (NSPasteboard round-trips
+/// through the pasteboard service and copies the data into the
+/// caller's address space). For a 1s poll interval on a steady-state
+/// clipboard (no changes), this matters — we burn zero CPU per
+/// tick instead of one string-read per second.
 ///
-/// The pasteboard source is injected as a closure rather than the
-/// NSPasteboard instance directly. Reason: xctest runs in a sandbox
-/// that doesn't have access to the system pasteboard — changeCount
-/// is pinned at startup and never bumps, so the production code
-/// path is untestable as-is. The injected closure can be a fake in
-/// tests (increment-on-write) or the real NSPasteboard.general in
-/// production.
+/// Some password managers / clipboard managers spam changeCount to
+/// obscure which apps are reading. We treat any string-content
+/// change as a candidate for auto-fill; the watcher's job is just
+/// "tell me when the string content changes", not "verify the
+/// origin".
 ///
 /// Thread safety
 ///
@@ -37,49 +39,58 @@ final class ClipboardWatcher {
     /// the new string content.
     typealias ChangeHandler = (String) -> Void
 
-    /// Snapshot of clipboard state at one moment in time.
-    struct Snapshot {
-        let changeCount: Int
-        let string: String?
+    /// Cheap, side-effect-free read of the current clipboard change
+    /// count. Default reads NSPasteboard.general.changeCount (O(1)
+    /// integer, no data copy). Override in tests to inject a fake
+    /// change count without touching the real pasteboard.
+    typealias ChangeCountSource = () -> Int
+
+    /// Reads the current clipboard string content. Expensive
+    /// (NSPasteboard round-trip + data copy). Only called AFTER the
+    /// change count has moved. Override in tests.
+    typealias StringSource = () -> String?
+
+    /// Default change-count source.
+    static let systemChangeCountSource: ChangeCountSource = {
+        NSPasteboard.general.changeCount
     }
 
-    /// Reads the current clipboard state. Default uses NSPasteboard.general.
-    /// Override in tests to use a fake pasteboard.
-    typealias Source = () -> Snapshot
+    /// Default string source.
+    static let systemStringSource: StringSource = {
+        NSPasteboard.general.string(forType: .string)
+    }
 
-    private let source: Source
+    private let changeCountSource: ChangeCountSource
+    private let stringSource: StringSource
     private let pollInterval: TimeInterval
     private let handler: ChangeHandler
     private var timer: Timer?
     private var lastChangeCount: Int
 
-    /// Default source — reads NSPasteboard.general on the main thread.
-    /// NSPasteboard reads are main-thread only, so this is a
-    /// synchronous read (the caller's tick already happens on main).
-    static let systemPasteboardSource: Source = {
-        let pb = NSPasteboard.general
-        return Snapshot(changeCount: pb.changeCount, string: pb.string(forType: .string))
-    }
-
     /// Start watching the clipboard.
     ///
     /// - Parameters:
-    ///   - source: A closure that returns the current clipboard snapshot.
-    ///     Default: reads NSPasteboard.general. Override in tests.
+    ///   - changeCountSource: Cheap O(1) read of the clipboard
+    ///     change count. Default: NSPasteboard.general.changeCount.
+    ///   - stringSource: Expensive read of the clipboard string
+    ///     content. Only called after changeCountSource reports a
+    ///     change. Default: NSPasteboard.general.string(forType:).
     ///   - pollInterval: Seconds between checks. Default 1.0s.
     ///   - handler: Called on the main actor whenever the clipboard
     ///     string content changes.
     init(
-        source: @escaping Source = ClipboardWatcher.systemPasteboardSource,
+        changeCountSource: @escaping ChangeCountSource = ClipboardWatcher.systemChangeCountSource,
+        stringSource: @escaping StringSource = ClipboardWatcher.systemStringSource,
         pollInterval: TimeInterval = 1.0,
         handler: @escaping ChangeHandler
     ) {
-        self.source = source
+        self.changeCountSource = changeCountSource
+        self.stringSource = stringSource
         self.pollInterval = pollInterval
         self.handler = handler
         // Seed with the current changeCount so the very first tick
         // doesn't fire if the clipboard hasn't changed since startup.
-        self.lastChangeCount = source().changeCount
+        self.lastChangeCount = changeCountSource()
     }
 
     /// Begin polling. Safe to call repeatedly — only the first call
@@ -112,15 +123,18 @@ final class ClipboardWatcher {
     /// Check whether the clipboard changed since the last tick. If yes,
     /// emit the new string content (if any). Public so unit tests can
     /// drive the check synchronously without spinning up a real timer.
+    ///
+    /// Two-step read: first the cheap change-count, then the string
+    /// only if the count moved. P1 (cubic follow-up): pre-fix version
+    /// read the string on every tick.
     func checkClipboard() {
-        let snapshot = source()
-        guard snapshot.changeCount != lastChangeCount else { return }
-        lastChangeCount = snapshot.changeCount
+        let currentCount = changeCountSource()
+        guard currentCount != lastChangeCount else { return }
+        lastChangeCount = currentCount
 
-        // changeCount going up doesn't mean it's a string — the user
-        // might have copied an image or file URL. Only emit if we got
-        // actual string content.
-        guard let newContent = snapshot.string, !newContent.isEmpty else {
+        // Now that we know the count changed, pay the cost of reading
+        // the string content.
+        guard let newContent = stringSource(), !newContent.isEmpty else {
             return
         }
         handler(newContent)
