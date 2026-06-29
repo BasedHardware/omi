@@ -131,13 +131,18 @@ async def subscribe_app(phone_number_id: str, access_token: str) -> dict:
         # Meta returns "whatsapp_business_account": {"id": "..."} on success;
         # an empty/missing value means the token can't see the WABA for
         # this phone (wrong scopes or phone not on any WABA the token
-        # manages). Surface a 502 with a helpful message — the
-        # caller maps this to a generic 502; the log carries the detail.
-        raise httpx.HTTPStatusError(
+        # manages).
+        #
+        # P2 (cubic follow-up on PR #8528): don't raise HTTPStatusError
+        # here — the response was 2xx, so HTTPStatusError would be
+        # misleading for downstream error handling and logging. Use the
+        # base HTTPError which is what generic transport failures raise;
+        # the caller's `except httpx.HTTPError` branch picks it up
+        # cleanly and logs the type name ("HTTPError"), not a fake
+        # status code.
+        raise httpx.HTTPError(
             "phone number is not linked to a WhatsApp Business Account "
-            "the access_token can manage",
-            request=lookup.request,
-            response=lookup,
+            "the access_token can manage"
         )
 
     # Step 2: subscribe to the WABA's webhook edge.
