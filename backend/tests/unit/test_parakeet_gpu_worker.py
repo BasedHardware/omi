@@ -902,3 +902,91 @@ class TestDurationGuardBoundary:
             with pytest.raises(AudioDurationExceededError):
                 worker._batch_transcribe({"audio_paths": ["/tmp/over.wav"], "timestamps": True, "batch_size": 1})
             worker.stop()
+
+
+class TestMemGetInfoGuard:
+
+    def test_mem_get_info_not_called_when_cuda_unavailable(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = False
+        torch_mod.cuda.mem_get_info.reset_mock()
+
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false"}):
+            worker._load_model()
+
+        torch_mod.cuda.mem_get_info.assert_not_called()
+        assert worker._vram_total_mb == 0.0
+        assert worker._vram_baseline_mb == 0.0
+
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
+    def test_mem_get_info_called_when_cuda_available(self):
+        import gpu_worker as gw_mod
+
+        torch_mod = gw_mod.torch
+        orig_avail = torch_mod.cuda.is_available.return_value
+        torch_mod.cuda.is_available.return_value = True
+        torch_mod.cuda.mem_get_info.reset_mock()
+        torch_mod.cuda.mem_get_info.return_value = (10 * 1024**3, 22 * 1024**3)
+
+        nemo_asr = _get_nemo_asr()
+        mock_model = _make_mock_model()
+        nemo_asr.models.ASRModel.from_pretrained.return_value = mock_model
+        nemo_asr.models.ASRModel.from_pretrained.side_effect = None
+
+        worker = GPUWorker()
+        with patch.dict(os.environ, {"PARAKEET_TORCH_COMPILE": "false"}):
+            worker._load_model()
+
+        torch_mod.cuda.mem_get_info.assert_called_once()
+        assert worker._vram_total_mb > 0
+        assert worker._vram_baseline_mb > 0
+
+        torch_mod.cuda.is_available.return_value = orig_avail
+        worker.stop()
+
+
+class TestDurationPassthroughInGPUWorker:
+
+    def test_durations_from_batcher_used_instead_of_file_probe(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_AUTO_ATTN_THRESHOLD": "300"}):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=100.0)
+
+            worker._batch_transcribe(
+                {
+                    "audio_paths": ["/tmp/a.wav"],
+                    "timestamps": True,
+                    "batch_size": 1,
+                    "durations": [100.0],
+                }
+            )
+
+            worker._get_audio_duration_sec.assert_not_called()
+            worker.stop()
+
+    def test_file_probe_fallback_when_no_durations(self):
+        with patch.dict(os.environ, {"PARAKEET_ATTENTION_MODE": "auto", "PARAKEET_AUTO_ATTN_THRESHOLD": "300"}):
+            worker = _start_worker_with_mock()
+            worker._get_audio_duration_sec = MagicMock(return_value=100.0)
+
+            worker._batch_transcribe(
+                {
+                    "audio_paths": ["/tmp/a.wav"],
+                    "timestamps": True,
+                    "batch_size": 1,
+                }
+            )
+
+            worker._get_audio_duration_sec.assert_called()
+            worker.stop()
