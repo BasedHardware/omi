@@ -235,6 +235,7 @@ SCOPE_PERMISSION_TEXT = {
     "action_items.read": "Read your Omi action items",
     "action_items.write": "Create, update, and delete your Omi action items",
     "goals.read": "Read your Omi goals",
+    "goals.write": "Create, update, log progress on, and delete your Omi goals",
     "chat.read": "Read your Omi chat history",
     "screen_activity.read": "Read your Omi screen activity",
     "people.read": "Read people saved in your Omi account",
