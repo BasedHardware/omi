@@ -24,7 +24,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -247,7 +247,7 @@ workflows:
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -473,7 +473,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -659,7 +659,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -851,7 +851,7 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -1025,7 +1025,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1157,7 +1157,7 @@ workflows:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
         DMGBUILD_VERSION: "1.6.7"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1765,7 +1765,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -2043,25 +2043,9 @@ workflows:
         script: |
           scripts/prepare-agent-runtime.sh --universal-node
 
-      - name: Test pi-mono-extension denylist classifier
+      - name: Test desktop tool surfaces
         script: |
-          # Run the pi-mono-extension unit tests so a `classifyBash()` /
-          # `classifyFileWrite()` / audit-log fail-safe regression fails the
-          # Mac app build before the tagged release is cut. The tests live
-          # in `pi-mono-extension/index.test.ts` and use node:test + the
-          # `--experimental-strip-types` flag that ships in Node 22+. We
-          # avoid a hard dependency on the codemagic runner's Node version
-          # by using `npx tsx` as a version-agnostic TypeScript loader that
-          # still delegates to node:test.
-          cd pi-mono-extension
-          npm ci --no-fund --no-audit
-          if node --experimental-strip-types --test index.test.ts; then
-            echo "pi-mono-extension tests passed (native Node --experimental-strip-types)"
-          else
-            echo "Falling back to npx tsx for older Node versions..."
-            npx --yes tsx@4.19.2 --test index.test.ts
-          fi
-          cd ..
+          scripts/test-tool-surfaces.sh
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
         script: |
@@ -2372,7 +2356,10 @@ workflows:
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
             cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
+            cp -f agent/src/runtime/control-tool-manifest.js "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+            cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+            cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"
             exit 1
@@ -2650,16 +2637,7 @@ workflows:
 
       - name: Create GitHub release
         script: |
-          CHANGELOG_MD=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            changes = data.get('releases', [{}])[0].get('changes', [])
-            print('\n'.join('- ' + c for c in changes))
-          except:
-            print('- Bug fixes and improvements')
-          ")
+          CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
           CHANGELOG_PIPE=$(echo "$CHANGELOG_MD" | sed 's/^- //' | tr '\n' '|' | sed 's/|$//')
@@ -2762,15 +2740,7 @@ workflows:
           # verified. Remove this step once the Rust backend is decommissioned.
           export DOWNLOAD_URL="https://github.com/$GITHUB_REPO/releases/download/$CM_TAG/Omi.zip"
 
-          export CHANGELOG_JSON=$(python3 -c "
-          import json
-          try:
-            with open('CHANGELOG.json') as f:
-              data = json.load(f)
-            print(json.dumps(data.get('releases', [{}])[0].get('changes', [])))
-          except:
-            print('[]')
-          ")
+          export CHANGELOG_JSON=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format json || echo "[]")
 
           RELEASE_JSON=$(python3 -c "
           import json, os

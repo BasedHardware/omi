@@ -7783,6 +7783,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get viewAll => 'Skatīt visu';
 
   @override
+  String get expand => 'Izvērst';
+
+  @override
   String get addTask => 'Pievienot uzdevumu';
 
   @override
@@ -9385,4 +9388,107 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Apturēts — audio netiek ierakstīts';
+
+  @override
+  String get deviceTutorial => 'Kā lietot Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Runā savā Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Pasaki dažus vārdus un vēro, kā tie parādās reāllaikā';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Lieliski!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Sāc runāt...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Uzdod Omi jautājumu';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Nospied pogu vienu reizi, uzdod jautājumu un beigās nospied vēlreiz';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Apstrādā tavu jautājumu...';
+
+  @override
+  String get deviceOnboardingListening => 'Klausās...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Izslēgt';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Ieslēgt';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Turi pogu 3 sekundes';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Nospied pogu, lai to atkal ieslēgtu';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Stingri turi pogu, līdz gaismiņa nodziest';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Savienots';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Savienots!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Atvienots';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Izslēdzas...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Pielāgo dubultpieskārienu';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Beigt sarunu';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Saglabā un beidz pašreizējo sarunu';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Izslēgt / ieslēgt skaņu';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Ieslēdz vai izslēdz mikrofonu';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Atzīmēt notiekošo sarunu';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Atzīmē sarunu kā svarīgu';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Tas bija viens pieskāriens — pamēģini ātri pieskarties divreiz!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Pamēģini tagad! Dubultpieskaries savai Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Turpināt';
+
+  @override
+  String get deviceOnboardingFinish => 'Pabeigt';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Iepazīsti savu Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Ātrs, praktisks ieskats visā, ko spēj tavs Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Apmēram 1 minūte';
+
+  @override
+  String get jumpToLatestMessage => 'Pārlēkt uz jaunāko ziņojumu';
+
+  @override
+  String get latest => 'Jaunākais';
 }

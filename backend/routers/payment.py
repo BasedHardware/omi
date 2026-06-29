@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 from google.api_core.exceptions import NotFound as FirestoreNotFound
@@ -39,6 +39,7 @@ from database.users import (
     get_default_payment_method,
     set_default_payment_method,
     get_paypal_payment_details,
+    get_user_profile,
 )
 from utils import stripe as stripe_utils
 from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id
@@ -130,6 +131,29 @@ def _build_subscription_from_stripe_object(stripe_sub: dict) -> Subscription | N
     )
 
 
+def _has_current_paid_subscription_for_different_stripe_sub(
+    current_subscription: Subscription | None, event_subscription_id: str | None, now: int | None = None
+) -> bool:
+    """True when a stale inactive event should not overwrite stored paid access."""
+    if not current_subscription or not event_subscription_id:
+        return False
+    if current_subscription.stripe_subscription_id == event_subscription_id:
+        return False
+    if current_subscription.status != SubscriptionStatus.active or not is_paid_plan(current_subscription.plan):
+        return False
+    # Require a valid, unexpired period end before preserving paid access.
+    # A missing or zero current_period_end means the stored paid row is not
+    # provably valid, so we do NOT let it shield a downgrade from a stale
+    # inactive event. This mirrors reconcile_basic_plan_with_stripe, which
+    # only treats a paid subscription as usable when current_period_end is
+    # present and still in the future.
+    if not current_subscription.current_period_end:
+        return False
+    if current_subscription.current_period_end < (now or int(time.time())):
+        return False
+    return True
+
+
 def _update_subscription_from_session(uid: str, session: stripe.checkout.Session):
     customer_id = session.get('customer')
     subscription_id = session.get('subscription')
@@ -180,7 +204,9 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 users_db.update_user_subscription(uid, current_subscription.dict())
 
                 # Calculate next billing date
-                next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end']).strftime('%B %d, %Y')
+                next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end'], tz=timezone.utc).strftime(
+                    '%B %d, %Y'
+                )
 
                 return {
                     "status": "reactivated",
@@ -834,6 +860,13 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                 adopted_active_paid = False
                 if not is_paid_plan(new_subscription.plan):
                     event_sub_id = subscription_obj.get('id')
+                    current_subscription = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+                    if _has_current_paid_subscription_for_different_stripe_sub(current_subscription, event_sub_id):
+                        logger.info(
+                            f"Ignoring downgrade from {event['type']} (sub {event_sub_id}) for user {uid}: "
+                            f"stored paid sub {current_subscription.stripe_subscription_id} is still valid."
+                        )
+                        return {"status": "success"}
                     active_paid = await run_blocking(stripe_executor, find_active_paid_subscription_for_user, uid)
                     if active_paid and active_paid.stripe_subscription_id != event_sub_id:
                         logger.info(
@@ -996,6 +1029,11 @@ def create_connect_account_endpoint(
         if account_id:
             account = refresh_connect_account_link(account_id)
         else:
+            # Require a real user record before creating a Stripe Connect account, so a UID that is
+            # valid in auth but missing from Firestore surfaces as a 404 rather than leaving an
+            # orphaned Stripe account (cubic on #8567).
+            if not get_user_profile(uid):
+                raise HTTPException(status_code=404, detail="User not found")
             if country is None or country.strip() == "":
                 raise HTTPException(status_code=400, detail="Country is required")
             account = create_connect_account(uid, country)

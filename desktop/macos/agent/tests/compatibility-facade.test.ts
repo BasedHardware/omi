@@ -9,6 +9,7 @@ import {
   selectAdapterScopedToolCallCorrelation,
   selectUnscopedToolCallCorrelation,
 } from "../src/runtime/compatibility-facade.js";
+import { AdapterRuntimeError } from "../src/runtime/failures.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
@@ -39,6 +40,45 @@ describe("JsonlCompatibilityFacade", () => {
         clientId: "client-v2",
       }),
     ).rejects.toThrow("protocol v2 query requires requestId");
+    store.close();
+  });
+
+  it("emits structured runtime failures with the legacy error message", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    const sent: OutboundMessage[] = [];
+    adapter.failNextExecutionError = new AdapterRuntimeError({
+      code: "adapter_process_exited",
+      source: "adapter_process",
+      adapterId: "openclaw",
+      provider: "openai",
+      retryable: true,
+      userMessage: "OpenClaw failed: OpenAI API error: upstream unavailable",
+      technicalMessage: "OpenAI API error: upstream unavailable",
+    });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    await facade.handleQuery({
+      ...v1Query({ id: "request-failed", prompt: "fail" }),
+      protocolVersion: 2,
+      requestId: "request-failed",
+      clientId: "client-failed",
+      adapterId: "fake",
+    });
+
+    expect(sent).toContainEqual(expect.objectContaining({
+      type: "error",
+      message: "OpenClaw failed: OpenAI API error: upstream unavailable",
+      failure: expect.objectContaining({
+        code: "adapter_process_exited",
+        adapterId: "openclaw",
+        provider: "openai",
+      }),
+    }));
     store.close();
   });
 
@@ -207,6 +247,90 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
+  it("routes simultaneous Hermes and OpenClaw relay contexts by clientId plus requestId", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const hermes = new FakeRuntimeAdapter("hermes");
+    const openclaw = new FakeRuntimeAdapter("openclaw");
+    hermes.deferResult();
+    openclaw.deferResult();
+    const registry = new AdapterRegistry();
+    registry.register("hermes", () => hermes, 1);
+    registry.register("openclaw", () => openclaw, 1);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "hermes",
+      suppressToolUseEvents: false,
+    });
+
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "shared-request",
+      clientId: "client-hermes",
+      ownerId: "owner",
+      adapterId: "hermes",
+    });
+    facade.registerExternalRequestContext({
+      protocolVersion: 2,
+      requestId: "shared-request",
+      clientId: "client-openclaw",
+      ownerId: "owner",
+      adapterId: "openclaw",
+    });
+
+    const hermesRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "hermes",
+      defaultAdapterId: "hermes",
+      requestId: "shared-request",
+      clientId: "client-hermes",
+      externalRefId: "task-hermes",
+    });
+    const openclawRun = kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "openclaw",
+      defaultAdapterId: "openclaw",
+      requestId: "shared-request",
+      clientId: "client-openclaw",
+      externalRefId: "task-openclaw",
+    });
+    await waitUntil(() => hermes.executed.length === 1 && openclaw.executed.length === 1);
+
+    expect(facade.toolCallCorrelationForRequest("shared-request", "client-hermes")).toMatchObject({
+      requestId: "shared-request",
+      clientId: "client-hermes",
+      runId: hermes.executed[0].runId,
+      attemptId: hermes.executed[0].attemptId,
+    });
+    expect(facade.toolCallCorrelationForRequest("shared-request", "client-openclaw")).toMatchObject({
+      requestId: "shared-request",
+      clientId: "client-openclaw",
+      runId: openclaw.executed[0].runId,
+      attemptId: openclaw.executed[0].attemptId,
+    });
+    expect(facade.toolCallCorrelationForAdapter("hermes")).toMatchObject({
+      clientId: "client-hermes",
+      runId: hermes.executed[0].runId,
+    });
+    expect(facade.toolCallCorrelationForAdapter("openclaw")).toMatchObject({
+      clientId: "client-openclaw",
+      runId: openclaw.executed[0].runId,
+    });
+    expect(facade.legacyUnscopedToolCallCorrelationForRequest("shared-request")).toEqual({});
+
+    hermes.resolveDeferred({
+      adapterSessionId: hermes.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    openclaw.resolveDeferred({
+      adapterSessionId: openclaw.executed[0].binding.adapterNativeSessionId,
+      terminalStatus: "succeeded",
+    });
+    await Promise.all([hermesRun, openclawRun]);
+    store.close();
+  });
+
   it("does not infer unscoped v2 tool-call correlation when v1 concurrency makes routing ambiguous", () => {
     expect(
       selectUnscopedToolCallCorrelation([
@@ -303,6 +427,7 @@ describe("JsonlCompatibilityFacade", () => {
       clientId: "client-mcp",
       protocolVersion: 2,
       sessionId: "session-mcp",
+      adapterId: "fake",
     });
     store.close();
   });
@@ -490,6 +615,58 @@ describe("JsonlCompatibilityFacade", () => {
     adapter.resolveDeferred({
       text: "cancelled by run id",
       terminalStatus: "cancelled",
+      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
+    });
+    await running;
+    store.close();
+  });
+
+  it("rejects runId-only v2 interrupts without active context or explicit owner guard", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.deferResult();
+    const sent: OutboundMessage[] = [];
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: (message) => sent.push(message),
+      defaultAdapterId: "fake",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    const running = facade.handleQuery({
+      ...v1Query({ prompt: "reject bare run id cancel" }),
+      protocolVersion: 2,
+      requestId: "request-bare-run-cancel",
+      clientId: "client-bare-run-cancel",
+      ownerId: "owner-bare-run-cancel",
+      legacySessionKey: "bare-run-cancel-key",
+    });
+    await waitUntil(() => adapter.executed.length === 1);
+
+    await facade.handleInterrupt({
+      protocolVersion: 2,
+      runId: adapter.executed[0].runId,
+      attemptId: adapter.executed[0].attemptId,
+      requestId: "external-cancel-request",
+      clientId: "external-client",
+    });
+
+    expect(adapter.cancelled).toHaveLength(0);
+    const cancelAck = sent.find((message): message is Extract<OutboundMessage, { type: "cancel_ack" }> =>
+      message.type === "cancel_ack" && message.requestId === "external-cancel-request"
+    );
+    expect(cancelAck).toMatchObject({
+      protocolVersion: 2,
+      requestId: "external-cancel-request",
+      clientId: "external-client",
+      runId: adapter.executed[0].runId,
+      accepted: false,
+      dispatchAttempted: false,
+      adapterAcknowledged: false,
+    });
+
+    adapter.resolveDeferred({
+      text: "done",
+      terminalStatus: "succeeded",
       adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
     });
     await running;
@@ -1041,6 +1218,35 @@ describe("JsonlCompatibilityFacade", () => {
 
     expect(adapter.opened[0].model).toBe("omi-sonnet");
     expect(store.getRow("SELECT default_adapter_id FROM sessions").default_adapter_id).toBe("pi-mono");
+    store.close();
+  });
+
+  it("does not apply the process default model to per-query local adapters", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const piMonoAdapter = new FakeRuntimeAdapter("pi-mono");
+    const openclawAdapter = new FakeRuntimeAdapter("openclaw");
+    const registry = new AdapterRegistry();
+    registry.register("pi-mono", () => piMonoAdapter, 1);
+    registry.register("openclaw", () => openclawAdapter, 1);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+    const facade = new JsonlCompatibilityFacade({
+      kernel,
+      send: () => {},
+      defaultAdapterId: "pi-mono",
+      defaultCwd: () => "/tmp/default",
+    });
+
+    await facade.handleQuery(v1Query({
+      id: "request-openclaw",
+      adapterId: "openclaw",
+      sessionKey: undefined,
+      model: undefined,
+    }));
+
+    expect(openclawAdapter.opened[0].model).toBeUndefined();
+    expect(openclawAdapter.executed[0].model).toBeUndefined();
+    expect(store.getRow("SELECT default_adapter_id FROM sessions").default_adapter_id).toBe("openclaw");
+    expect(store.getRow("SELECT adapter_id FROM adapter_bindings").adapter_id).toBe("openclaw");
     store.close();
   });
 

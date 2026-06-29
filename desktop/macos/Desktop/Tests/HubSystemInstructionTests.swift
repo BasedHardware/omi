@@ -18,6 +18,10 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instr.contains("subagents"))
         XCTAssertTrue(instr.contains("get_daily_recap"))
         XCTAssertTrue(instr.contains("ask_higher_model"))
+        XCTAssertTrue(instr.contains("create_calendar_event"))
+        XCTAssertTrue(instr.contains("Current local datetime:"))
+        XCTAssertTrue(instr.contains("Current timezone:"))
+        XCTAssertTrue(instr.contains("Resolve relative dates"))
         XCTAssertTrue(instr.contains("ANSWER YOURSELF"))
     }
 
@@ -40,6 +44,21 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertNotNil(manageTool)
         XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("dismiss"))
         XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("clear completed"))
+    }
+
+    func testRealtimeCreateCalendarEventToolIsExposedWithRequiredArguments() {
+        let tools = RealtimeHubTools.openAITools
+        let calendarTool = tools.first { ($0["name"] as? String) == HubTool.createCalendarEvent.rawValue }
+        XCTAssertNotNil(calendarTool)
+        XCTAssertTrue((calendarTool?["description"] as? String ?? "").contains("Google Calendar"))
+
+        let parameters = calendarTool?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+        XCTAssertNotNil(properties?["title"])
+        XCTAssertNotNil(properties?["start_time"])
+        XCTAssertNotNil(properties?["end_time"])
+        XCTAssertNotNil(properties?["attendees"])
+        XCTAssertEqual(parameters?["required"] as? [String], ["title", "start_time", "end_time"])
     }
 
     func testRealtimeCanonicalAgentControlToolsAreExposed() {

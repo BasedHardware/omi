@@ -181,6 +181,7 @@ class CreateConversation(BaseModel):
     processing_conversation_id: Optional[str] = None
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
     is_locked: bool = False
+    private_cloud_sync_enabled: bool = False
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
@@ -273,12 +274,13 @@ class UpdateActionItemDescriptionRequest(BaseModel):
 
 
 class SearchRequest(BaseModel):
-    query: str
+    query: str = ''
     page: Optional[int] = 1
     per_page: Optional[int] = 10
     include_discarded: Optional[bool] = True
     start_date: Optional[str] = None  # ISO format datetime string
     end_date: Optional[str] = None  # ISO format datetime string
+    speaker_id: Optional[str] = None
 
 
 class TestPromptRequest(BaseModel):

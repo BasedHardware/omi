@@ -6,7 +6,9 @@ import sys
 import wave
 from unittest.mock import MagicMock, AsyncMock, patch
 
+import numpy as np
 import pytest
+import soundfile as sf
 
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
 os.environ.setdefault("PARAKEET_DEVICE", "cpu")
@@ -51,7 +53,7 @@ if "main" in sys.modules:
     if not hasattr(_existing_main, "__file__") or _existing_main.__file__ is None:
         del sys.modules["main"]
 
-from gpu_worker import GPUWorker
+from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
 
 from fastapi.testclient import TestClient
@@ -240,6 +242,22 @@ class TestAudioDurationFromBytes:
 
         assert _get_audio_duration_from_bytes(b"") == 0.0
 
+    def test_invalid_bytes_return_inf_when_guard_enabled(self):
+        _, mod, _, _ = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            assert mod._get_audio_duration_from_bytes(b"not audio") == float('inf')
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_flac_returns_positive_duration(self):
+        from main import _get_audio_duration_from_bytes
+
+        buf = io.BytesIO()
+        sf.write(buf, np.zeros(16000 * 3, dtype='float32'), 16000, format='FLAC')
+        dur = _get_audio_duration_from_bytes(buf.getvalue())
+        assert abs(dur - 3.0) < 0.01
+
     def test_v1_with_real_wav_observes_audio_duration(self):
         app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
 
@@ -254,6 +272,167 @@ class TestAudioDurationFromBytes:
         assert resp.status_code == 200
         after = mod.AUDIO_DURATION._sum.get()
         assert after - before >= 1.4
+
+
+class TestDurationGuardHTTP413:
+
+    def test_v1_returns_413_for_oversized_wav(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        wav_data = _make_wav_bytes(duration_s=10.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("long.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 413
+        assert "exceeds limit" in resp.json()["detail"].lower()
+        mod._max_file_duration_sec = 0.0
+
+    def test_v2_returns_413_for_oversized_wav(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        wav_data = _make_wav_bytes(duration_s=10.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe", files={"file": ("long.wav", wav_data, "audio/wav")}, data={"diarize": "true"}
+        )
+        assert resp.status_code == 413
+        assert "exceeds limit" in resp.json()["detail"].lower()
+        mod._max_file_duration_sec = 0.0
+
+    def test_v1_returns_413_for_oversized_flac(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            buf = io.BytesIO()
+            sf.write(buf, np.zeros(16000 * 10, dtype='float32'), 16000, format='FLAC')
+            flac_data = buf.getvalue()
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("long.flac", flac_data, "audio/flac")})
+            assert resp.status_code == 413
+            assert "exceeds limit" in resp.json()["detail"].lower()
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_v1_rejects_unprobeable_audio_before_batch(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("bad.bin", b"not audio", "application/octet-stream")})
+            assert resp.status_code == 413
+            assert "cannot determine audio duration" in resp.json()["detail"].lower()
+            engine.submit.assert_not_called()
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_v2_rejects_unprobeable_audio_before_batch(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post(
+                "/v2/transcribe",
+                files={"file": ("bad.bin", b"not audio", "application/octet-stream")},
+                data={"diarize": "true"},
+            )
+            assert resp.status_code == 413
+            assert "cannot determine audio duration" in resp.json()["detail"].lower()
+            engine.submit.assert_not_called()
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_unprobeable_upload_does_not_poison_audio_duration_metric(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+        try:
+            audio_dur_hist = mod.AUDIO_DURATION
+            before_sum = audio_dur_hist._sum.get()
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post("/v1/transcribe", files={"file": ("bad.bin", b"not audio", "application/octet-stream")})
+            assert resp.status_code == 413
+            after_sum = audio_dur_hist._sum.get()
+            assert after_sum == before_sum, f"AUDIO_DURATION sum changed from {before_sum} to {after_sum}"
+            import math
+
+            assert math.isfinite(after_sum), "AUDIO_DURATION sum is not finite"
+        finally:
+            mod._max_file_duration_sec = 0.0
+
+    def test_v1_passes_when_under_limit(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 60.0
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        wav_data = _make_wav_bytes(duration_s=5.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("short.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 200
+        mod._max_file_duration_sec = 0.0
+
+    def test_v1_returns_413_on_AudioDurationExceededError(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(side_effect=AudioDurationExceededError("too long"))
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")})
+        assert resp.status_code == 413
+        assert "too long" in resp.json()["detail"]
+
+    def test_v2_returns_413_on_AudioDurationExceededError(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        engine.submit = AsyncMock(side_effect=AudioDurationExceededError("too long"))
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post(
+            "/v2/transcribe", files={"file": ("test.wav", b"fake", "audio/wav")}, data={"diarize": "true"}
+        )
+        assert resp.status_code == 413
+        assert "too long" in resp.json()["detail"]
+
+    def test_v1_guard_disabled_when_zero(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 0.0
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        wav_data = _make_wav_bytes(duration_s=3600.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("huge.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 200
+
+    def test_v2_passes_when_under_limit(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 60.0
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        with patch("main.transcribe_file_v2") as mock_v2:
+            mock_v2.return_value = {"text": "ok", "segments": [], "detected_language": "en"}
+            wav_data = _make_wav_bytes(duration_s=5.0, sample_rate=16000)
+            client = TestClient(app, raise_server_exceptions=False)
+            resp = client.post(
+                "/v2/transcribe", files={"file": ("short.wav", wav_data, "audio/wav")}, data={"diarize": "false"}
+            )
+        assert resp.status_code == 200
+        mod._max_file_duration_sec = 0.0
+
+    def test_v1_boundary_exact_limit_passes(self):
+        app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+        mod._max_file_duration_sec = 5.0
+
+        async def fake_submit(path, timestamps=True, owns_file=False):
+            return {"text": "ok", "timestamp": {"segment": [{"segment": "ok", "start": 0.0, "end": 1.0}]}}
+
+        engine.submit = AsyncMock(side_effect=fake_submit)
+        wav_data = _make_wav_bytes(duration_s=5.0, sample_rate=16000)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.post("/v1/transcribe", files={"file": ("exact.wav", wav_data, "audio/wav")})
+        assert resp.status_code == 200
+        mod._max_file_duration_sec = 0.0
 
 
 class TestMetricsEndpoint:

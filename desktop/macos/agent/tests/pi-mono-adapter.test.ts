@@ -58,6 +58,7 @@ function makeAttemptContext(overrides: AttemptContextOverrides = {}): AdapterAtt
   const adapterNativeSessionId = overrides.binding?.adapterNativeSessionId ?? "session-1";
   return {
     sessionId,
+    ownerId: overrides.ownerId ?? "owner-runtime",
     requestId: overrides.requestId ?? "request-runtime",
     clientId: overrides.clientId ?? "client-runtime",
     runId: overrides.runId ?? "run_runtime",

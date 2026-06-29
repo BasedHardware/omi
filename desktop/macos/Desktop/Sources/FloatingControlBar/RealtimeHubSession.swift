@@ -17,8 +17,8 @@ import Network
 //               Transport: URLSession WebSocket (HTTP/1.1-friendly endpoint).
 //
 //   • Gemini  — wss://generativelanguage.googleapis.com/ws/…BidiGenerateContent?key=…
-//               half-cascade Live model, response modality TEXT + function calling.
-//               Text out is spoken by the caller via AVSpeechSynthesizer.
+//               Live model, response modality AUDIO + function calling.
+//               Native spoken audio out (PCM) + output transcription.
 //               Transport: Network.framework WebSocket with ALPN pinned to
 //               http/1.1 — Gemini's endpoint upgrades URLSession's WS to HTTP/2
 //               and resets it (the documented reason the legacy path needed a
@@ -29,16 +29,16 @@ import Network
 
 @MainActor
 protocol RealtimeHubSessionDelegate: AnyObject {
-  func hubDidConnect()
-  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool)
+  func hubDidConnect(source: RealtimeHubSession)
+  func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession)
   /// OpenAI native spoken audio (PCM16 mono 24 kHz).
-  func hubDidReceiveAudio(_ pcm24k: Data)
+  func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession)
   /// Assistant text to display / speak. Gemini emits its whole reply here;
   /// OpenAI emits its spoken transcript here (for the on-screen bubble).
-  func hubDidEmitText(_ text: String, isFinal: Bool)
-  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String)
-  func hubDidFinishTurn()
-  func hubDidError(_ message: String)
+  func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession)
+  func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession)
+  func hubDidFinishTurn(source: RealtimeHubSession)
+  func hubDidError(_ message: String, source: RealtimeHubSession)
 }
 
 /// How the client authenticates to the realtime provider:
@@ -59,6 +59,11 @@ enum HubAuth {
   var isEphemeral: Bool { if case .ephemeral = self { return true } else { return false } }
 }
 
+enum RealtimeHubBargeInStrategy {
+  case inSessionCancel
+  case freshSession
+}
+
 final class RealtimeHubSession: NSObject {
   private let provider: RealtimeHubProvider
   private let auth: HubAuth
@@ -67,6 +72,10 @@ final class RealtimeHubSession: NSObject {
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
   var requiredInputSampleRate: Int { provider == .openai ? 24000 : 16000 }
+  /// Provider-specific interruption contract for a new PTT turn while a reply is still streaming.
+  var bargeInStrategy: RealtimeHubBargeInStrategy {
+    provider == .gemini ? .freshSession : .inSessionCancel
+  }
 
   // All socket + state access is serialized here (audio arrives on the capture
   // thread; receives on the URLSession/NW queue). Delegate calls hop to main.
@@ -98,6 +107,8 @@ final class RealtimeHubSession: NSObject {
   /// OpenAI: a response is mid-flight — don't create a second one (the realtime
   /// API rejects "Conversation already has an active response in progress").
   private var openAIResponseActive = false
+  private var openAIResponseCreatePending = false
+  private var openAIActiveResponseID: String?
   /// Gemini: a committed turn is awaiting its spoken reply. Gates BOTH audio
   /// playback and turn completion to the CURRENT turn, so an interrupted/abandoned
   /// turn's trailing audio + bookkeeping `turnComplete` can't leak into the next
@@ -182,6 +193,8 @@ final class RealtimeHubSession: NSObject {
       self.activityOpen = false
       self.pendingActivityStart = false
       self.openAIResponseActive = false
+      self.openAIResponseCreatePending = false
+      self.openAIActiveResponseID = nil
       self.geminiResponsePending = false
     }
   }
@@ -190,7 +203,7 @@ final class RealtimeHubSession: NSObject {
     guard !terminated else { return }
     terminated = true
     let d = delegate
-    Task { @MainActor in d?.hubDidError(message) }
+    Task { @MainActor in d?.hubDidError(message, source: self) }
   }
 
   // MARK: Public stream API
@@ -206,6 +219,8 @@ final class RealtimeHubSession: NSObject {
         if self.openAIResponseActive {
           self.send(json: ["type": "response.cancel"])
           self.openAIResponseActive = false
+          self.openAIResponseCreatePending = false
+          self.openAIActiveResponseID = nil
         }
         // Drop any uncommitted mic input so it can't leak into the next turn.
         self.send(json: ["type": "input_audio_buffer.clear"])
@@ -256,10 +271,9 @@ final class RealtimeHubSession: NSObject {
     guard provider == .gemini else { return }
     q.async { [weak self] in
       guard let self else { return }
-      // Barge-in: abandon the previous turn's still-pending reply so its trailing
-      // audio + bookkeeping turnComplete are ignored. A fresh activityStart on the
-      // SAME socket cancels the in-flight generation server-side (it replies with
-      // serverContent.interrupted) — no teardown, so conversation context survives.
+      // Barge-in on a live Gemini generation uses a fresh session at the controller
+      // boundary. This same-session flag is only a local gate for abandoned/stale
+      // Gemini events that arrive before replacement or on non-provider interruptions.
       if interrupting {
         self.geminiResponsePending = false
       }
@@ -360,6 +374,8 @@ final class RealtimeHubSession: NSObject {
       return
     }
     openAIResponseActive = true
+    openAIResponseCreatePending = true
+    openAIActiveResponseID = nil
     send(json: ["type": "response.create", "response": ["output_modalities": [audio ? "audio" : "text"]]])
   }
 
@@ -483,7 +499,7 @@ final class RealtimeHubSession: NSObject {
       }
     }
     let d = delegate
-    Task { @MainActor in d?.hubDidConnect() }
+    Task { @MainActor in d?.hubDidConnect(source: self) }
   }
 
   // Send buffered audio after open (already on q).
@@ -531,31 +547,31 @@ final class RealtimeHubSession: NSObject {
   private func emitText(_ text: String, isFinal: Bool) {
     guard !text.isEmpty || isFinal else { return }
     let d = delegate
-    Task { @MainActor in d?.hubDidEmitText(text, isFinal: isFinal) }
+    Task { @MainActor in d?.hubDidEmitText(text, isFinal: isFinal, source: self) }
   }
 
   private func emitTranscript(_ text: String, isFinal: Bool) {
     let d = delegate
-    Task { @MainActor in d?.hubDidReceiveInputTranscript(text, isFinal: isFinal) }
+    Task { @MainActor in d?.hubDidReceiveInputTranscript(text, isFinal: isFinal, source: self) }
   }
 
   private func emitAudio(_ pcm: Data) {
     let d = delegate
-    Task { @MainActor in d?.hubDidReceiveAudio(pcm) }
+    Task { @MainActor in d?.hubDidReceiveAudio(pcm, source: self) }
   }
 
   private func emitTool(name: String, callId: String, argumentsJSON: String) {
     log("\(tag): tool_call \(name)(\(argumentsJSON.prefix(160)))")
     let d = delegate
     Task { @MainActor in
-      d?.hubDidRequestTool(name: name, callId: callId, argumentsJSON: argumentsJSON)
+      d?.hubDidRequestTool(name: name, callId: callId, argumentsJSON: argumentsJSON, source: self)
     }
   }
 
   private func finishTurn() {
     reportUsageIfNeeded()
     let d = delegate
-    Task { @MainActor in d?.hubDidFinishTurn() }
+    Task { @MainActor in d?.hubDidFinishTurn(source: self) }
   }
 
   // MARK: - Usage (client-reported billing, managed sessions only)
@@ -633,9 +649,18 @@ final class RealtimeHubSession: NSObject {
     switch type {
     case "session.created", "session.updated":
       markReady()
+    case "response.created":
+      if openAIResponseActive,
+        let response = e["response"] as? [String: Any], let id = response["id"] as? String
+      {
+        openAIActiveResponseID = id
+        openAIResponseCreatePending = false
+      }
     case "response.output_audio.delta":
+      guard isCurrentOpenAIResponseEvent(e) else { return }
       if let b64 = e["delta"] as? String, let d = Data(base64Encoded: b64) { emitAudio(d) }
     case "response.output_audio_transcript.delta":
+      guard isCurrentOpenAIResponseEvent(e) else { return }
       if let t = e["delta"] as? String { emitText(t, isFinal: false) }
     case "conversation.item.input_audio_transcription.delta":
       if let t = e["delta"] as? String { emitTranscript(t, isFinal: false) }
@@ -645,6 +670,7 @@ final class RealtimeHubSession: NSObject {
         emitTranscript(t, isFinal: true)
       }
     case "response.output_item.added":
+      guard isCurrentOpenAIResponseEvent(e) else { return }
       // Record function-call name keyed by call_id for the done parse below.
       if let item = e["item"] as? [String: Any], (item["type"] as? String) == "function_call",
         let callId = item["call_id"] as? String, let name = item["name"] as? String
@@ -655,6 +681,8 @@ final class RealtimeHubSession: NSObject {
       handleOpenAIResponseDone(e)
     case "error":
       openAIResponseActive = false
+      openAIResponseCreatePending = false
+      openAIActiveResponseID = nil
       let msg = (e["error"] as? [String: Any])?["message"] as? String ?? "OpenAI realtime error"
       notifyError(msg)
     default:
@@ -662,8 +690,22 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
+  private func isCurrentOpenAIResponseEvent(_ e: [String: Any]) -> Bool {
+    guard openAIResponseActive else { return false }
+    guard !openAIResponseCreatePending, let expected = openAIActiveResponseID else { return false }
+    let eventResponseID = (e["response_id"] as? String)
+      ?? ((e["response"] as? [String: Any])?["id"] as? String)
+    return eventResponseID == expected
+  }
+
   private func handleOpenAIResponseDone(_ e: [String: Any]) {
+    guard isCurrentOpenAIResponseEvent(e) else {
+      log("\(tag): ignoring stale response.done")
+      return
+    }
     openAIResponseActive = false  // this response finished — a new one may be created
+    openAIResponseCreatePending = false
+    openAIActiveResponseID = nil
     if let usage = (e["response"] as? [String: Any])?["usage"] as? [String: Any] {
       accumulateOpenAIUsage(usage)
     }

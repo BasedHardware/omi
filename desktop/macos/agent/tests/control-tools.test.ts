@@ -767,6 +767,42 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("validates artifact inspection selectors before control tool dispatch", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const invalid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "inspect_agent_artifacts", {}),
+    );
+
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_tool_input",
+      },
+    });
+    expect(invalid.error.message).toContain("artifactId, sessionId, runId, or attemptId");
+    store.close();
+  });
+
+  it("rejects extra top-level control tool keys to match advertised schemas", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const invalid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        unexpected: "drift",
+      }),
+    );
+
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_tool_input",
+      },
+    });
+    expect(invalid.error.message).toContain("Unrecognized key");
+    store.close();
+  });
+
   it("filters persisted artifacts by session, run, attempt, and role", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const first = await kernel.executeRun(baseRunInput);
@@ -1167,6 +1203,7 @@ describe("agent control tools", () => {
       ownerId: "owner",
       requestId: "delegate-tools-1",
       clientId: "delegate-client",
+      adapterId: "fake",
       protocolVersion: 2,
       includeSwiftBackedTools: false,
     });
@@ -1179,6 +1216,41 @@ describe("agent control tools", () => {
       },
     ]);
     expect(adapter.executed.at(-1)?.metadata).toMatchObject({ disableSwiftBackedTools: true });
+    store.close();
+  });
+
+  it("routes delegated child runs through the resolved adapter override", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const parent = await kernel.executeRun(baseRunInput);
+    const buildMcpServers = vi.fn(() => []);
+
+    const delegated = parseToolResult(
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "delegate_agent", {
+        mode: "call",
+        parentRunId: parent.run.runId,
+        objective: "use OpenClaw for this child",
+        defaultAdapterId: "openclaw",
+        requestId: "delegate-openclaw-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(delegated.ok).toBe(true);
+    expect(delegated.childSession.defaultAdapterId).toBe("openclaw");
+    expect(delegated.childRun).toMatchObject({
+      status: "failed",
+      errorCode: "adapter_not_registered",
+    });
+    expect(delegated.childRun.errorMessage).toContain("Adapter not registered: openclaw");
+    expect(buildMcpServers).toHaveBeenCalledWith("ask", undefined, undefined, {
+      ownerId: "owner",
+      requestId: "delegate-openclaw-1",
+      clientId: "delegate-client",
+      adapterId: "openclaw",
+      protocolVersion: 2,
+      includeSwiftBackedTools: false,
+    });
     store.close();
   });
 

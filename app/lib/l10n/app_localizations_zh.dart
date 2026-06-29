@@ -7628,6 +7628,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewAll => '查看全部';
 
   @override
+  String get expand => '展开';
+
+  @override
   String get addTask => '添加任务';
 
   @override
@@ -9193,4 +9196,106 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => '已暂停 — 当前未在录音';
+
+  @override
+  String get deviceTutorial => '如何使用 Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => '对着 Omi 说话';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => '说几句话，看它们实时显示出来';
+
+  @override
+  String get deviceOnboardingGoodJob => '做得好！';
+
+  @override
+  String get deviceOnboardingStartSpeaking => '开始说话…';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => '向 Omi 提问';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => '按一下按钮，说出你的问题，说完后再按一下';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => '正在处理你的问题…';
+
+  @override
+  String get deviceOnboardingListening => '正在聆听…';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => '关机';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => '开机';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => '长按按钮 3 秒';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => '按下按钮重新开机';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => '用力长按按钮，直到指示灯熄灭';
+
+  @override
+  String get deviceOnboardingStatusConnected => '已连接';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => '已连接！';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => '已断开';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => '正在关机…';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => '自定义双击';
+
+  @override
+  String get deviceOnboardingEndConversation => '结束对话';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => '保存并结束当前对话';
+
+  @override
+  String get deviceOnboardingMuteUnmute => '静音 / 取消静音';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => '开启或关闭麦克风';
+
+  @override
+  String get deviceOnboardingStarConversation => '收藏进行中的对话';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => '将对话标记为重要';
+
+  @override
+  String get deviceOnboardingSingleTapHint => '那是单击——试着快速点击两次！';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => '现在就试试！双击你的 Omi';
+
+  @override
+  String get deviceOnboardingContinue => '继续';
+
+  @override
+  String get deviceOnboardingFinish => '完成';
+
+  @override
+  String get deviceOnboardingIntroTitle => '了解你的 Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => '快速、上手地体验 Omi 的全部功能。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '大约 1 分钟';
+
+  @override
+  String get jumpToLatestMessage => '跳转到最新消息';
+
+  @override
+  String get latest => '最新';
 }

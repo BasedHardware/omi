@@ -31,6 +31,38 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertTrue(source.contains("resume: legacyAcpSessionId"))
     XCTAssertTrue(source.contains("legacyAcpSessionId = adapterSessionId"))
     XCTAssertFalse(source.contains("legacyAcpSessionId = queryResult.omiSessionId"))
+
+    // Adapter-namespacing guard: adapterSessionId must only be stored into
+    // legacyAcpSessionId when the active harness supports legacy resume
+    // (ACP/pi-mono), preventing cross-adapter resume ID pollution.
+    XCTAssertTrue(source.contains("private var currentHarness: String?"))
+    XCTAssertTrue(source.contains("currentHarness = harness"))
+    XCTAssertTrue(source.contains("let supportsLegacyResume = (currentHarness == \"acp\" || currentHarness == \"piMono\")"))
+  }
+
+  func testTaskChatFailureKeepsVisibleAssistantMessage() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
+    XCTAssertTrue(source.contains("persistMessage(messages[index])"))
+  }
+
+  @MainActor
+  func testTaskChatFailureAddsTextWhenMessageAlreadyHasBlocks() {
+    var message = ChatMessage(
+      id: "assistant-1",
+      text: "",
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .toolCall(id: "tool-1", name: "Bash", status: .running, toolUseId: "tool-use-1", input: nil, output: nil)
+      ]
+    )
+
+    TaskChatState.applyFailureTextIfNeeded(to: &message, errorDescription: "OpenClaw failed")
+
+    XCTAssertEqual(message.text, "Failed: OpenClaw failed")
+    XCTAssertFalse(message.contentBlocks.isEmpty)
   }
 
   func testActionItemChatSessionIdLegacyMarkerStillUsesTaskId() throws {

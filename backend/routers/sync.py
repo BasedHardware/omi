@@ -94,7 +94,7 @@ from utils.fair_use import (
     record_speech_ms,
     get_rolling_speech_ms,
     check_soft_caps,
-    is_hard_restricted,
+    get_hard_restriction_status,
     trigger_classifier_if_needed,
     is_dg_budget_exhausted,
     get_enforcement_stage,
@@ -128,6 +128,13 @@ def _get_opus_decoder_class():
             'Install the OS-level Opus package before processing .opus sync files.'
         ) from _OPUS_IMPORT_ERROR
     return Decoder
+
+
+def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
+    headers = dict(base_headers or {})
+    if retry_after is not None:
+        headers['Retry-After'] = str(retry_after)
+    return headers
 
 
 @router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
@@ -847,6 +854,7 @@ def process_segment(
                 transcript_segments=transcript_segments,
                 source=source,
                 is_locked=is_locked,
+                private_cloud_sync_enabled=private_cloud_sync_enabled,
             )
             created = process_conversation(uid, language, create_memory)
             with lock:
@@ -1034,11 +1042,12 @@ async def sync_local_files(
     response.headers.update(_V1_DEPRECATION_HEADERS)
 
     # Pre-check gates (#5854)
-    if is_hard_restricted(uid):
+    hard_restricted, retry_after = get_hard_restriction_status(uid)
+    if hard_restricted:
         raise HTTPException(
             status_code=429,
             detail="Account temporarily restricted due to fair-use policy",
-            headers=_V1_DEPRECATION_HEADERS,
+            headers=_hard_restriction_headers(retry_after, _V1_DEPRECATION_HEADERS),
         )
 
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
@@ -1133,6 +1142,14 @@ async def sync_local_files(
 
         # Fetch user transcription preferences once before spawning threads
         transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
+        private_cloud_sync_enabled = bool(
+            await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
+        )
+        data_protection_level = (
+            await run_blocking(db_executor, users_db.get_data_protection_level, uid)
+            if private_cloud_sync_enabled
+            else None
+        )
 
         # Build speaker embeddings cache once for all segments (voice + text identification)
         try:
@@ -1164,12 +1181,16 @@ async def sync_local_files(
                     person_embeddings_cache,
                     conversation_id,
                     assignment_turnstile,
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
+                    data_protection_level=data_protection_level,
                 )
                 for path in ordered_paths
             ]
         )
 
         await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
+        if private_cloud_sync_enabled:
+            await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1440,8 +1461,8 @@ async def _run_full_pipeline_background_async(
             # --- Phase 4: Fetch prefs & embeddings ---
             transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
             # Mirror realtime: store conversation audio only when private cloud sync is on.
-            private_cloud_sync_enabled = await run_blocking(
-                db_executor, users_db.get_user_private_cloud_sync_enabled, uid
+            private_cloud_sync_enabled = bool(
+                await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
             )
             data_protection_level = (
                 await run_blocking(db_executor, users_db.get_data_protection_level, uid)
@@ -1496,8 +1517,8 @@ async def _run_full_pipeline_background_async(
                     person_embeddings_cache,
                     target_conversation_id,
                     assignment_turnstile,
-                    private_cloud_sync_enabled,
-                    data_protection_level,
+                    private_cloud_sync_enabled=private_cloud_sync_enabled,
+                    data_protection_level=data_protection_level,
                 )
                 if ok and task_mode:
                     add_processed_segment(job_id, path)
@@ -1653,8 +1674,14 @@ async def sync_local_files_v2(
     an async background task. The app polls GET /v2/sync-local-files/{job_id}.
     """
     # Pre-check gates (same as v1)
-    if await run_blocking(critical_executor, is_hard_restricted, uid):
-        raise HTTPException(status_code=429, detail="Account temporarily restricted due to fair-use policy")
+    hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
+    if hard_restricted:
+        headers = _hard_restriction_headers(retry_after)
+        raise HTTPException(
+            status_code=429,
+            detail="Account temporarily restricted due to fair-use policy",
+            headers=headers,
+        )
 
     should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 

@@ -188,7 +188,6 @@ def _clients_subprocess_script(assertion: str) -> str:
 from utils.llm.clients import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
-    _CACHE_KEY_MODELS,
     _PERPLEXITY_ONLY_FEATURES,
     _PINNED_FEATURES,
     _STRUCTURED_OUTPUT_FEATURES,
@@ -205,6 +204,7 @@ from utils.llm.clients import (
     get_model,
     get_provider,
     get_qos_info,
+    supports_prompt_cache,
 )
 from utils.llm import model_config as model_config_module
 
@@ -623,16 +623,16 @@ class TestGetLlm:
         assert hasattr(llm, 'invoke')
 
     def test_cache_key_applied_for_cacheable_model(self):
-        # conv_structure uses gpt-5.4-mini (premium) or gpt-5.4 (max), both in _CACHE_KEY_MODELS
+        # conv_structure uses gpt-5.4-mini (premium) or gpt-5.4 (max); both support prompt cache
         llm_with_key = get_llm('conv_structure', cache_key='omi-test-key')
         llm_without_key = get_llm('conv_structure')
         assert llm_with_key is not llm_without_key
         assert hasattr(llm_with_key, 'invoke')
 
     def test_cache_key_ignored_for_non_cacheable_model(self):
-        # memories uses gpt-4.1-mini which is not in _CACHE_KEY_MODELS
-        llm_with_key = get_llm('memories', cache_key='omi-test-key')
-        llm_without_key = get_llm('memories')
+        # session_titles uses gemini-2.5-flash-lite, which does not support OpenAI prompt cache
+        llm_with_key = get_llm('session_titles', cache_key='omi-test-key')
+        llm_without_key = get_llm('session_titles')
         assert llm_with_key is llm_without_key
 
     def test_new_features_return_clients(self):
@@ -772,9 +772,11 @@ class TestOpenRouterClient:
 class TestCacheKeySafety:
     """Verify cache_key is only applied when the model supports it."""
 
-    def test_cache_key_models_contains_expected(self):
-        assert 'gpt-5.4' in _CACHE_KEY_MODELS
-        assert 'gpt-5.4-mini' in _CACHE_KEY_MODELS
+    def test_cacheable_models_supported(self):
+        # Caching is gated by model-family capability (supports_prompt_cache) rather than an
+        # exact-name set; the premium/max tier models must still be recognized as cacheable.
+        assert supports_prompt_cache('gpt-5.4')
+        assert supports_prompt_cache('gpt-5.4-mini')
 
 
 class TestGetQosInfo:

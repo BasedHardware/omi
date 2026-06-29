@@ -126,6 +126,17 @@ enum DesktopCapabilityRegistry {
         "Find the task first, then update the matching id. Do not guess task ids."
       ]),
     Capability(
+      toolName: "create_calendar_event",
+      title: "Create Calendar Event",
+      latency: .fastNetwork,
+      surfaces: [.realtimeHub],
+      summary: "Create a new Google Calendar event.",
+      bullets: [
+        "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
+        "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
+        "Use spawn_agent for multi-step calendar work such as finding availability or coordinating with people."
+      ]),
+    Capability(
       toolName: "complete_task",
       title: "Complete Task",
       latency: .fastLocal,
@@ -284,6 +295,7 @@ enum DesktopCapabilityRegistry {
       bullets: [
         "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
         "The only way to start a floating-bar subagent is to call spawn_agent; saying you will start one does not start it.",
+        "If the user asks to use OpenClaw or Hermes, call spawn_agent with provider set to openclaw or hermes.",
         "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."
       ]),
     Capability(
@@ -329,10 +341,30 @@ enum DesktopCapabilityRegistry {
     capabilities.filter { $0.supports(surface) }
   }
 
-  static var desktopToolPrompt: String {
+  static func scopedDesktopToolPrompt(excluding excludedToolNames: Set<String>) -> String {
     let docs = capabilities(for: .desktopChat)
+      .filter { !excludedToolNames.contains($0.toolName) }
       .map(toolDoc)
       .joined(separator: "\n\n")
+    let canDelegate = !excludedToolNames.contains("delegate_agent")
+    let canSpawnFloatingPills = !excludedToolNames.contains("spawn_agent")
+    let delegationGuidance: String
+    if canDelegate && canSpawnFloatingPills {
+      delegationGuidance = """
+      - Delegate to a distinct canonical child Omi agent session -> delegate_agent.
+      - Stop a canonical Omi agent run -> cancel_agent_run.
+      - Agent output references/artifacts -> inspect_agent_artifacts.
+      - Start a visible floating-bar subagent/background agent -> spawn_agent.
+      - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
+      - delegate_agent records durable child sessions/runs/delegations; spawn_agent creates the legacy floating-pill UI workflow. Do not treat one as an alias for the other.
+      """
+    } else {
+      delegationGuidance = """
+      - Stop a canonical Omi agent run -> cancel_agent_run.
+      - Agent output references/artifacts -> inspect_agent_artifacts.
+      - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
+      """
+    }
     return """
     These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, or task-agent state. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data.
 
@@ -363,20 +395,20 @@ enum DesktopCapabilityRegistry {
     - Subagents/task-agent status -> get_task_agent_status.
     - Canonical Omi-managed agent sessions/runs -> list_agent_sessions, get_agent_run.
     - Continue an existing canonical Omi agent session -> send_agent_message.
-    - Delegate to a distinct canonical child Omi agent session -> delegate_agent.
-    - Stop a canonical Omi agent run -> cancel_agent_run.
-    - Agent output references/artifacts -> inspect_agent_artifacts.
-    - Start a visible floating-bar subagent/background agent -> spawn_agent.
-    - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
-    - delegate_agent records durable child sessions/runs/delegations; spawn_agent creates the legacy floating-pill UI workflow. Do not treat one as an alias for the other.
+    \(delegationGuidance)
     - Onboarding knowledge graph -> save_knowledge_graph.
     """
+  }
+
+  static var desktopToolPrompt: String {
+    scopedDesktopToolPrompt(excluding: [])
   }
 
   static var realtimeSelfModelPrompt: String {
     """
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
+    - You can create a straightforward calendar event with create_calendar_event when the user gives the event details.
     - You can inspect your local task-chat agents/subagents and floating agent pills with get_task_agent_status. If the user asks about your subagents, background agents, running agents, finished agents, or task-agent errors/timeouts, call it before answering.
     - You can inspect and stop canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run. Use these for agents created in chat, PTT/realtime, task chat, or any other Omi surface when a canonical run id is available.
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
