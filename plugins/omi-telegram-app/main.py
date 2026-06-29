@@ -331,6 +331,13 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
         logger.error("persona chat timeout for chat %s: %s", chat_id, type(e).__name__)
         return
 
+    if not reply:
+        logger.info("persona chat returned empty reply for chat %s (skipping send)", chat_id)
+        return
+
+    await telegram_client.send_message(user["bot_token"], chat_id, reply)
+    logger.info("auto-reply sent to chat %s (%d chars)", chat_id, len(reply))
+
 
 # ---------------------------------------------------------------------------
 # Omi Chat Tools manifest — served at `GET /.well-known/omi-tools.json`.
