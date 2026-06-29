@@ -72,3 +72,15 @@ def test_get_user_goals_handles_non_datetime_created_at():
     ]
     _set_docs(docs)
     assert [g['id'] for g in goals.get_user_goals('uid1')] == ['g_str', 'g_dt']
+
+
+def test_coerce_created_at_is_crash_safe_for_all_types():
+    # The shared sort-key coercion is used by both get_user_goals and create_goal's max-goals pruning,
+    # so it must always return a comparable timezone-aware datetime.
+    aware = BASE.replace(day=5)
+    naive = datetime(2026, 1, 5)
+    floor = datetime.min.replace(tzinfo=timezone.utc)
+    assert goals._coerce_created_at(aware) == aware
+    assert goals._coerce_created_at(naive) == naive.replace(tzinfo=timezone.utc)
+    assert goals._coerce_created_at(None) == floor
+    assert goals._coerce_created_at('2026-01-05T00:00:00Z') == floor
