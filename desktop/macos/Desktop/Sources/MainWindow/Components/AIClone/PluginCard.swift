@@ -10,7 +10,6 @@ struct PluginCard: View {
     @State private var showingConnect = false
     @State private var connectionState: ConnectionState = .notConnected
     @State private var autoReplyEnabled = false
-    @State private var toggleInFlight = false
 
     enum ConnectionState: Equatable {
         case notConnected
@@ -99,26 +98,30 @@ struct PluginCard: View {
 
     private var connectedControls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Auto-reply toggle row
+            // Auto-reply toggle row \u2014 disabled for v0.1.
+            //
+            // The desktop doesn't know the user's chat_id/phone (those
+            // are bound on the plugin side after the user sends /start
+            // from their phone). Toggling requires a real chatId, not
+            // the placeholder "global" sentinel we used to send \u2014
+            // both /toggle endpoints (Telegram + WhatsApp) return 403
+            // for unknown chat_id. P1 (cubic).
+            //
+            // Per-chat toggles ship in a follow-up once the plugin
+            // exposes a chat list API the desktop can enumerate.
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Auto-reply")
                         .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
-                    Text(autoReplyEnabled ? "Omi replies to messages automatically" : "Omi won't reply until you enable this")
+                    Text("Manage from your phone — send /start in Telegram or the connected WhatsApp chat")
                         .scaledFont(size: 11)
-                        .foregroundColor(autoReplyEnabled ? OmiColors.success : OmiColors.textTertiary)
+                        .foregroundColor(OmiColors.textTertiary)
                 }
                 Spacer()
-                if toggleInFlight {
-                    ProgressView().controlSize(.small)
-                }
                 Toggle("", isOn: $autoReplyEnabled)
                     .labelsHidden()
-                    .disabled(toggleInFlight)
-                    .onChange(of: autoReplyEnabled) { _, newValue in
-                        Task { await flipAutoReply(enabled: newValue) }
-                    }
+                    .disabled(true)
             }
 
             Divider()
@@ -150,35 +153,6 @@ struct PluginCard: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return formatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    private func flipAutoReply(enabled: Bool) async {
-        toggleInFlight = true
-        defer { toggleInFlight = false }
-        // Toggle via the plugin's /toggle endpoint using the new
-        // credential-free schema (chat_id + enabled only, bearer auth
-        // via the plugin service header). The chat_id for the connected
-        // chat is stored in simple_storage after the /start handshake.
-        // For v0.1 the toggle is global per-plugin; per-chat toggles
-        // ship in a follow-up once the plugin exposes a chat list.
-        do {
-            let body = plugin.toggleRequestBody(
-                chatId: "global",
-                credentialForAuth: config.bearerToken,
-                enabled: enabled
-            )
-            _ = try await AICloneClient.shared.toggle(
-                baseURL: config.pluginURL,
-                bearerToken: config.bearerToken,
-                plugin: plugin,
-                body: body
-            )
-            log("PluginCard: toggle auto-reply \(enabled ? "ON" : "OFF") for \(plugin.displayName)")
-        } catch {
-            log("PluginCard: toggle failed: \(error)")
-            // Revert the toggle on failure
-            await MainActor.run { autoReplyEnabled = !enabled }
-        }
     }
 }
 
