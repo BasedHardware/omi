@@ -61,12 +61,11 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
     await captureProvider.streamRecording();
     PlatformManager.instance.analytics.phoneMicRecordingStarted();
     if (context.mounted) {
-      final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
-          ? captureProvider.conversationProvider!.conversations.first.id
-          : null;
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
+        MaterialPageRoute(
+          builder: (context) => ConversationCapturingPage(topConversationId: captureProvider.topConversationId),
+        ),
       );
     }
   }

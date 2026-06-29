@@ -17,17 +17,26 @@ import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/people_provider.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/enums.dart';
 
-/// Mock PeopleProvider that tracks setPeople calls
-class MockPeopleProvider extends PeopleProvider {
+/// Fake external actions that tracks people-refresh calls.
+class MockCaptureExternalActions extends NoopCaptureExternalActions {
   int setPeopleCallCount = 0;
+  int fetchSubscriptionCallCount = 0;
   Completer<void>? _setPeopleCompleter;
+  bool? outOfCreditsOverride;
+  String? topConversationIdOverride;
 
   @override
-  Future<void> setPeople() async {
+  bool? get isOutOfCredits => outOfCreditsOverride;
+
+  @override
+  String? get topConversationId => topConversationIdOverride;
+
+  @override
+  Future<void> refreshPeople() async {
     setPeopleCallCount++;
     if (_setPeopleCompleter != null) {
       // Simulate async work - wait for completer
@@ -38,6 +47,11 @@ class MockPeopleProvider extends PeopleProvider {
   /// Set a completer to control when setPeople completes
   void setSetPeopleCompleter(Completer<void> completer) {
     _setPeopleCompleter = completer;
+  }
+
+  @override
+  Future<void> fetchSubscription() async {
+    fetchSubscriptionCallCount++;
   }
 }
 
@@ -405,8 +419,8 @@ void main() {
 
     test('triggers setPeople when segment has unknown personId', () {
       final provider = CaptureProvider();
-      final mockPeopleProvider = MockPeopleProvider();
-      provider.peopleProvider = mockPeopleProvider;
+      final mockExternalActions = MockCaptureExternalActions();
+      provider.updateExternalActions(mockExternalActions);
 
       // Pre-populate segments to skip platform-specific initialization code
       provider.segments = [_segmentWithPerson('seed', null)];
@@ -417,13 +431,13 @@ void main() {
       provider.onSegmentReceived(segments);
 
       // Should have triggered setPeople
-      expect(mockPeopleProvider.setPeopleCallCount, 1);
+      expect(mockExternalActions.setPeopleCallCount, 1);
     });
 
     test('does not trigger refresh for segments without personId', () {
       final provider = CaptureProvider();
-      final mockPeopleProvider = MockPeopleProvider();
-      provider.peopleProvider = mockPeopleProvider;
+      final mockExternalActions = MockCaptureExternalActions();
+      provider.updateExternalActions(mockExternalActions);
 
       // Pre-populate segments to skip platform-specific initialization code
       provider.segments = [_segmentWithPerson('seed', null)];
@@ -433,18 +447,18 @@ void main() {
       provider.onSegmentReceived(segments);
 
       // Should NOT trigger setPeople (no personId to check)
-      expect(mockPeopleProvider.setPeopleCallCount, 0);
+      expect(mockExternalActions.setPeopleCallCount, 0);
     });
 
     test('does not trigger multiple refreshes while one is in-flight', () async {
       final provider = CaptureProvider();
-      final mockPeopleProvider = MockPeopleProvider();
+      final mockExternalActions = MockCaptureExternalActions();
 
       // Set up a completer to control when setPeople completes
       final completer = Completer<void>();
-      mockPeopleProvider.setSetPeopleCompleter(completer);
+      mockExternalActions.setSetPeopleCompleter(completer);
 
-      provider.peopleProvider = mockPeopleProvider;
+      provider.updateExternalActions(mockExternalActions);
 
       // Pre-populate segments to skip platform-specific initialization code
       provider.segments = [_segmentWithPerson('seed', null)];
@@ -454,14 +468,14 @@ void main() {
       provider.onSegmentReceived(segments1);
 
       // Should trigger first call
-      expect(mockPeopleProvider.setPeopleCallCount, 1);
+      expect(mockExternalActions.setPeopleCallCount, 1);
 
       // Second segment with different unknown personId while first is still in-flight
       final segments2 = [_segmentWithPerson('seg-b', 'unknown-2')];
       provider.onSegmentReceived(segments2);
 
       // Should NOT trigger another call (first is still in-flight)
-      expect(mockPeopleProvider.setPeopleCallCount, 1);
+      expect(mockExternalActions.setPeopleCallCount, 1);
 
       // Complete the first call
       completer.complete();
@@ -472,7 +486,44 @@ void main() {
       provider.onSegmentReceived(segments3);
 
       // Should trigger a new call
-      expect(mockPeopleProvider.setPeopleCallCount, 2);
+      expect(mockExternalActions.setPeopleCallCount, 2);
+    });
+  });
+
+  group('external actions port', () {
+    test('topConversationId delegates through external actions', () {
+      final provider = CaptureProvider();
+      final mockExternalActions = MockCaptureExternalActions()..topConversationIdOverride = 'conversation-1';
+
+      provider.updateExternalActions(mockExternalActions);
+
+      expect(provider.topConversationId, 'conversation-1');
+    });
+
+    test('bare provider does not reset freemium threshold when usage state is unknown', () async {
+      final provider = CaptureProvider();
+      provider.onMessageEventReceived(
+        FreemiumThresholdReachedEvent(remainingSeconds: 120, action: FreemiumAction.setupOnDeviceStt),
+      );
+
+      expect(provider.freemiumThresholdReached, isTrue);
+      await provider.checkCreditsAndResetThresholdIfNeeded();
+
+      expect(provider.freemiumThresholdReached, isTrue);
+    });
+
+    test('resets freemium threshold when wired usage state reports credits restored', () async {
+      final provider = CaptureProvider();
+      final mockExternalActions = MockCaptureExternalActions()..outOfCreditsOverride = false;
+      provider.updateExternalActions(mockExternalActions);
+      provider.onMessageEventReceived(
+        FreemiumThresholdReachedEvent(remainingSeconds: 120, action: FreemiumAction.setupOnDeviceStt),
+      );
+
+      await provider.checkCreditsAndResetThresholdIfNeeded();
+
+      expect(mockExternalActions.fetchSubscriptionCallCount, 1);
+      expect(provider.freemiumThresholdReached, isFalse);
     });
   });
 
