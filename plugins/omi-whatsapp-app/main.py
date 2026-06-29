@@ -14,9 +14,12 @@ swapped for the Meta WhatsApp Business Cloud API (graph.facebook.com/v22.0).
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
+import secrets
 import sys
 import urllib.parse
 from collections import OrderedDict
@@ -129,8 +132,6 @@ async def webhook_verify(
     Meta retries verification indefinitely on non-2xx, so 403 is the right
     response to a wrong token (lets the user know their config is bad).
     """
-    import simple_storage  # local import to avoid pulling storage into /health
-
     if hub_mode != "subscribe":
         # Not a verification request — could be a manual GET. Treat as 404.
         raise HTTPException(status_code=404, detail="Not Found")
@@ -171,9 +172,6 @@ async def webhook_delivery(
     # Optional HMAC verification. If WHATSAPP_APP_SECRET is set, we verify the
     # signature. If unset (dev), we skip — production must set this.
     if _WHATSAPP_APP_SECRET:
-        import hmac
-        import hashlib
-
         if not x_hub_signature_256:
             raise HTTPException(status_code=401, detail="Missing X-Hub-Signature-256")
         # Header format: "sha256=<hex>"
