@@ -101,6 +101,23 @@
                 {% endif %}
 
                 <div class="oauth-actions">
+                    <form class="email-sign-in-form" id="email-sign-in-form" novalidate>
+                        <div class="oauth-field">
+                            <label for="email-input">Email</label>
+                            <input id="email-input" name="email" type="email" autocomplete="email"
+                                autocapitalize="none" autocorrect="off" spellcheck="false" inputmode="email"
+                                placeholder="you@example.com" required>
+                        </div>
+                        <div class="oauth-field">
+                            <label for="password-input">Password</label>
+                            <input id="password-input" name="password" type="password" autocomplete="current-password"
+                                placeholder="••••••••" required>
+                        </div>
+                        <button class="email-sign-in-button" id="email-sign-in-button" type="submit">
+                            Sign in
+                        </button>
+                    </form>
+                    <div class="oauth-divider" id="social-sign-in-divider">or continue with</div>
                     <div id="firebaseui-auth-container"></div>
                     <div class="loader" id="loader" role="status" aria-live="polite">
                         <span class="spinner" aria-hidden="true"></span>
@@ -124,7 +141,7 @@
                         stroke-linejoin="round" />
                 </svg>
                 <span>Only continue if you trust <strong>{{ app_name }}</strong>. By authorizing, you allow it to use
-                    your data under Omi's <a href="https://www.omi.me/pages/privacy">Terms of Service</a> and <a
+                    your data under Omi's <a href="https://www.omi.me/pages/terms-of-service">Terms of Service</a> and <a
                         href="https://www.omi.me/pages/privacy">Privacy Policy</a>.</span>
             </div>
         </div>
@@ -148,10 +165,18 @@
         const loader = document.getElementById('loader');
         const errorMessage = document.getElementById('error-message');
         const errorText = document.getElementById('error-text');
+        const emailSignInForm = document.getElementById('email-sign-in-form');
+        const emailInput = document.getElementById('email-input');
+        const passwordInput = document.getElementById('password-input');
+        const emailSignInButton = document.getElementById('email-sign-in-button');
+        const socialSignInDivider = document.getElementById('social-sign-in-divider');
         const firebaseUiContainer = document.getElementById('firebaseui-auth-container');
 
         function setLoading(isLoading) {
             loader.classList.toggle('is-visible', isLoading);
+            emailInput.disabled = isLoading;
+            passwordInput.disabled = isLoading;
+            emailSignInButton.disabled = isLoading;
         }
 
         function clearError() {
@@ -163,7 +188,60 @@
             errorText.textContent = message;
             errorMessage.classList.add('is-visible');
             setLoading(false);
-            firebaseUiContainer.style.display = 'block'; // Show login again
+            emailSignInForm.style.display = 'grid';
+            socialSignInDivider.style.display = 'flex';
+            firebaseUiContainer.style.display = 'block';
+        }
+
+        function showSignInError() {
+            showError('We could not sign in with that email and password. Check the credentials and try again.');
+        }
+
+        function hideSignInOptions() {
+            emailSignInForm.style.display = 'none';
+            socialSignInDivider.style.display = 'none';
+            firebaseUiContainer.style.display = 'none';
+        }
+
+        function exchangeFirebaseToken(idToken) {
+            const formData = new FormData();
+            formData.append('firebase_id_token', idToken);
+            formData.append('app_id', appId);
+            if (state) {
+                formData.append('state', state);
+            }
+
+            fetch('/v1/oauth/token', {
+                method: 'POST',
+                body: formData
+            })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(err => { throw new Error(err.detail || 'Authentication failed'); });
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    let finalRedirectUrl = data.redirect_url + "?uid=" + data.uid;
+                    if (data.state) {
+                        finalRedirectUrl += "&state=" + data.state;
+                    }
+                    window.location.href = finalRedirectUrl;
+                })
+                .catch(error => {
+                    showError(error.message);
+                });
+        }
+
+        function finishSignIn(user) {
+            setLoading(true);
+            hideSignInOptions();
+            clearError();
+            user.getIdToken()
+                .then(exchangeFirebaseToken)
+                .catch(function () {
+                    showError('We could not complete sign-in. Please try again.');
+                });
         }
 
         function isAppleDevice() {
@@ -178,55 +256,37 @@
             signInOptions.push('apple.com');
         }
 
+        emailSignInForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+            clearError();
+
+            if (!emailInput.value.trim() || !passwordInput.value) {
+                showError('Enter your email and password to continue.');
+                return;
+            }
+
+            setLoading(true);
+            firebase.auth()
+                .signInWithEmailAndPassword(emailInput.value.trim(), passwordInput.value)
+                .then(function (result) {
+                    finishSignIn(result.user);
+                })
+                .catch(function () {
+                    passwordInput.value = '';
+                    showSignInError();
+                });
+        });
+
         const uiConfig = {
             signInFlow: 'popup', // Use popup flow instead of redirect
             signInSuccessUrl: null, // We will handle redirect manually
             signInOptions: signInOptions,
             callbacks: {
                 signInSuccessWithAuthResult: function (authResult, redirectUrlParam) {
-                    setLoading(true);
-                    firebaseUiContainer.style.display = 'none';
-                    clearError();
-
-                    authResult.user.getIdToken().then(function (idToken) {
-                        // Send ID token to backend /oauth/token
-                        const formData = new FormData();
-                        formData.append('firebase_id_token', idToken);
-                        formData.append('app_id', appId);
-                        if (state) {
-                            formData.append('state', state);
-                        }
-
-                        fetch('/v1/oauth/token', {
-                            method: 'POST',
-                            body: formData
-                        })
-                            .then(response => {
-                                if (!response.ok) {
-                                    return response.json().then(err => {throw new Error(err.detail || 'Authentication failed');});
-                                }
-                                return response.json();
-                            })
-                            .then(data => {
-                                let finalRedirectUrl = data.redirect_url + "?uid=" + data.uid;
-                                if (data.state) {
-                                    finalRedirectUrl += "&state=" + data.state;
-                                }
-                                window.location.href = finalRedirectUrl;
-                            })
-                            .catch(error => {
-                                console.error('Error during token exchange:', error);
-                                showError(error.message);
-                            });
-                    }).catch(function (error) {
-                        console.error('Error getting ID token:', error);
-                        showError('We could not complete sign-in. Please try again.');
-                    });
-
+                    finishSignIn(authResult.user);
                     return false;
                 },
                 signInFailure: function (error) {
-                    console.error('FirebaseUI signInFailure error:', error);
                     showError('Sign-in failed. Please try again.');
                 },
                 uiShown: function () {

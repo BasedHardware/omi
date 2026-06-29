@@ -243,14 +243,19 @@
                 .catch(showError);
         }
 
-        function finishSignIn(user) {
+        function finishSignIn(user, autoSubmitConsent) {
             setLoading(true);
             clearError();
             signedInEmail = user.email || null;
             user.getIdToken().then(function (token) {
                 idToken = token;
                 hideSignInOptions();
-                submitConsent();
+                if (autoSubmitConsent) {
+                    submitConsent();
+                    return;
+                }
+                setLoading(false);
+                showConsentRetry();
             }).catch(showError);
         }
 
@@ -267,7 +272,7 @@
             firebase.auth()
                 .signInWithEmailAndPassword(emailInput.value.trim(), passwordInput.value)
                 .then(function (result) {
-                    finishSignIn(result.user);
+                    finishSignIn(result.user, true);
                 })
                 .catch(function () {
                     passwordInput.value = '';
@@ -282,7 +287,7 @@
             signInOptions: signInOptions,
             callbacks: {
                 signInSuccessWithAuthResult: function (authResult) {
-                    finishSignIn(authResult.user);
+                    finishSignIn(authResult.user, false);
                     return false;
                 },
                 signInFailure: function (error) {
