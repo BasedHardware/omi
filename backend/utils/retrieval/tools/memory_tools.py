@@ -157,10 +157,14 @@ def get_memories_tool(
 
     # Bound how many memories are formatted for the chat model so a broad question cannot flood
     # its context and freeze it (#4927). The DB returns newest-first, so this keeps the most recent.
-    memories, total_found, results_truncated = cap_items_for_llm(memories or [], MAX_MEMORIES_FOR_LLM)
+    # A full DB page (len >= limit) means more memories likely exist beyond it, so flag that too so
+    # the note is not silently dropped when the model requested a small limit (cubic on #8527).
+    db_page = memories or []
+    more_in_db = len(db_page) >= limit
+    memories, page_count, capped = cap_items_for_llm(db_page, MAX_MEMORIES_FOR_LLM)
+    results_truncated = capped or more_in_db
     logger.info(
-        f"📊 get_memories_tool - found {total_found} memories"
-        + (f" (formatting the most recent {len(memories)})" if results_truncated else "")
+        f"📊 get_memories_tool - page {page_count} memories, showing {len(memories)}, truncated={results_truncated}"
     )
 
     if not memories:
@@ -188,11 +192,12 @@ def get_memories_tool(
     if not memory_objects:
         return "Error: Could not parse memories data"
 
-    # Format memories using the Memory model's string formatter
-    result = f"User Memories ({total_found} total):\n\n"
+    # Format memories using the Memory model's string formatter. Label the count as "shown" rather
+    # than "total": it is the displayed page, which may be a subset of all the user's memories.
+    result = f"User Memories ({len(memory_objects)} shown):\n\n"
     result += MemoryDB.get_memories_as_str(memory_objects)
 
-    return bounded_result(result.strip(), total_found, results_truncated, noun="memories")
+    return bounded_result(result.strip(), results_truncated, noun="memories")
 
 
 @tool
