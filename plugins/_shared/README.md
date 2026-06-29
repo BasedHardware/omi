@@ -5,20 +5,19 @@ Code shared by the AI Clone plugins (Telegram, WhatsApp, iMessage).
 ## Contents
 
 - `persona_client.py` — async HTTP client for the Omi persona-chat API.
-  Imports: `from persona_client import chat`. Signature:
+  Imports: `from persona_client import chat`. Call shape:
   ```python
   reply = await chat(
-      app_id,           # Omi persona app id (e.g. "persona_abc")
-      api_key,          # user's app API key ("omi_dev_...")
-      omi_base,         # backend base URL (e.g. "https://api.omi.me")
-      text,             # inbound message text
-      *,
-      uid,              # REQUIRED: Omi user id the persona reply is generated for.
-                       # The backend uses this to verify the API key was issued
-                       # for this exact uid (auth boundary — an app-level key
-                       # cannot impersonate arbitrary users).
-      timeout_seconds=30.0,
-      context=None,
+      app_id="persona_abc",          # Omi persona app id
+      api_key="omi_dev_...",          # user's app API key
+      omi_base="https://api.omi.me",  # backend base URL
+      text="hi",                     # inbound message text
+      uid="<user uid>",              # REQUIRED: Omi user id the persona reply is generated for.
+                                     # The backend uses this to verify the API key was
+                                     # issued for this exact uid (auth boundary — an
+                                     # app-level key cannot impersonate arbitrary users).
+      timeout_seconds=30.0,           # optional; default 30
+      context=None,                   # optional; platform context forwarded to the persona
   )
   ```
   - `reply == ""` on timeout/connect error (logged at ERROR, includes uid).
@@ -28,10 +27,10 @@ Code shared by the AI Clone plugins (Telegram, WhatsApp, iMessage).
 
 ## Running the tests
 
-The async tests (`test_persona_client.py`, `test_contract.py`) require `pytest-asyncio` and the module's runtime deps (`httpx`, `httpx-sse`). Install the dev requirements (which list both) and run:
+The async tests (`test_persona_client.py`, `test_contract.py`) require `pytest-asyncio` and the module's runtime deps (`httpx`, `httpx-sse`). Install the dev requirements and run pytest from the repo root:
 
 ```bash
-pip install -r requirements-dev.txt
+pip install -r plugins/_shared/requirements-dev.txt
 pytest plugins/_shared/test/ -v
 ```
 

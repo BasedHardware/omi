@@ -10,10 +10,9 @@ __pycache__/
 *.pyo
 
 # Local environment files — may contain real bot tokens / API keys and
-# must NEVER ship into the image. Identified by cubic (P1): without this
+# must NEVER ship into the image. Identified by cubic (P2): without this
 # rule a developer who ran the plugin locally and committed .env would
-# leak their real Telegram bot token / WhatsApp access token into the
-# image registry / layers.
+# leak their real Telegram bot token into the image registry / layers.
 .env
 .env.*
 !.env.example
@@ -37,3 +36,7 @@ pending_setups.json
 
 # Test requirements (only useful at test time)
 requirements-dev.txt
+
+# Local E2E scripts and runbook (dev-only, not part of the runtime image)
+scripts/
+E2E_RUNBOOK.md
