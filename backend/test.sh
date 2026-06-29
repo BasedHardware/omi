@@ -247,6 +247,7 @@ pytest tests/routers/test_users.py -v
 pytest tests/unit/test_apps_review_reply_validation.py -v
 pytest tests/unit/test_apps_create_app_json.py -v
 pytest tests/unit/test_app_visibility_missing_doc_guard.py -v
+pytest tests/unit/test_app_visibility_cache_invalidation.py -v
 
 # Fair-use integration tests (require Redis; skip gracefully if unavailable)
 if redis-cli ping >/dev/null 2>&1; then
