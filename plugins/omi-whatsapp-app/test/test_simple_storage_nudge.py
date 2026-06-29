@@ -6,27 +6,20 @@ Python that includes 'Z' suffix or an explicit offset), subtracting it
 from datetime.utcnow() (naive) raises TypeError in production webhooks.
 
 should_nudge() must normalize both sides to naive UTC before subtracting.
+
+P2 (cubic follow-up): use the shared conftest's load_simple_storage()
+helper instead of duplicating the module-loading helper + mutating
+sys.path at module level. The conftest already handles sys.modules
+isolation via an autouse fixture so this test doesn't pollute other
+tests' sys.path.
 """
 
-import importlib.util
-import os
-import sys
-
-_PLUGIN_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, _PLUGIN_ROOT)
-
-
-def _load_simple_storage():
-    spec = importlib.util.spec_from_file_location("simple_storage", os.path.join(_PLUGIN_ROOT, "simple_storage.py"))
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["simple_storage"] = mod
-    spec.loader.exec_module(mod)
-    return mod
+from conftest import load_simple_storage
 
 
 class TestShouldNudgeTzAware:
     def setup_method(self):
-        self.mod = _load_simple_storage()
+        self.mod = load_simple_storage()
 
     def test_naive_isoformat_does_not_crash(self):
         # Old format (datetime.utcnow().isoformat() — no tz suffix).
@@ -47,7 +40,7 @@ class TestShouldNudgeTzAware:
 
     def test_future_aware_timestamp_returns_false(self):
         """A timestamp in the future should always be 'too recent to nudge'."""
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
 
         future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
         user = {"last_nudge_at": future}
