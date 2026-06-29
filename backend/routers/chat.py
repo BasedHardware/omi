@@ -38,19 +38,19 @@ from models.chat import (
     MessageConversation,
     FileChat,
 )
-from routers.sync import retrieve_file_paths, decode_files_to_wav
 from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids
 from utils.chat import (
+    acquire_chat_session,
+    initial_message_util,
     process_voice_message_segment,
     process_voice_message_segment_stream,
     resolve_voice_message_language,
     transcribe_voice_message_segment,
     transcribe_pcm_bytes,
 )
+from utils.sync.files import retrieve_file_paths, decode_files_to_wav
 from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
-from utils.llm.persona import initial_persona_chat_message
-from utils.llm.chat import initial_chat_message
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
@@ -113,14 +113,6 @@ def filter_messages(messages, app_id):
         collected.append(message)
     logger.info(f'filter_messages output: {len(collected)}')
     return collected
-
-
-def acquire_chat_session(uid: str, app_id: Optional[str] = None):
-    chat_session = chat_db.get_chat_session(uid, app_id=app_id)
-    if chat_session is None:
-        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
-        chat_session = chat_db.add_chat_session(uid, cs.dict())
-    return chat_session
 
 
 def _build_quota_exceeded_reply(
@@ -381,55 +373,6 @@ def clear_chat_messages(
         chat_db.delete_chat_session(uid, chat_session_id)
 
     return initial_message_util(uid, compat_app_id)
-
-
-def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
-    logger.info(f'initial_message_util {app_id}')
-
-    # init chat session — use provided session_id if available, otherwise acquire by app_id
-    if chat_session_id:
-        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
-        if chat_session is None:
-            raise HTTPException(status_code=404, detail='Chat session not found')
-    else:
-        chat_session = acquire_chat_session(uid, app_id=app_id)
-
-    # Load previous messages — session-scoped when session_id is provided, app-scoped otherwise
-    if chat_session_id:
-        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, chat_session_id=chat_session_id)))
-    else:
-        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
-    logger.info(f'initial_message_util returned {len(prev_messages)} prev messages for {app_id}')
-
-    app = get_available_app_by_id(app_id, uid)
-    app = App(**app) if app else None
-
-    # persona
-    text: str
-    if app and app.is_a_persona():
-        text = initial_persona_chat_message(uid, app, prev_messages)
-    else:
-        prev_messages_str = ''
-        if prev_messages:
-            prev_messages_str = 'Previous conversation history:\n'
-            prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
-        logger.info(f'initial_message_util {len(prev_messages_str)} {app_id}')
-        text = initial_chat_message(uid, app, prev_messages_str)
-
-    ai_message = Message(
-        id=str(uuid.uuid4()),
-        text=text,
-        created_at=datetime.now(timezone.utc),
-        sender='ai',
-        app_id=app_id,
-        from_external_integration=False,
-        type='text',
-        memories_id=[],
-        chat_session_id=chat_session['id'],
-    )
-    chat_db.add_message(uid, ai_message.dict())
-    chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
-    return ai_message
 
 
 @router.post('/v2/initial-message', tags=['chat'], response_model=Message)

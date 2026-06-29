@@ -215,12 +215,8 @@ sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
-    from routers.sync import (  # noqa: E402
-        decode_opus_file_to_wav,
-        decode_files_to_wav,
-        _merge_and_cap_vad_segments,
-        MAX_VAD_SEGMENT_SECONDS,
-    )
+    from routers.sync import _merge_and_cap_vad_segments, MAX_VAD_SEGMENT_SECONDS  # noqa: E402
+    from utils.sync.files import decode_files_to_wav, decode_opus_file_to_wav  # noqa: E402
 finally:
     if _remove_python_multipart_stub:
         sys.modules.pop('python_multipart', None)
@@ -283,7 +279,7 @@ class TestDecodeOpusFileToWav:
     def test_valid_file_returns_true_and_creates_wav(self):
         """All frames decode → True, WAV file created."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 5)
@@ -296,7 +292,7 @@ class TestDecodeOpusFileToWav:
     def test_correct_frame_count_in_wav(self):
         """Five decoded frames of 160 samples each → 800 WAV frames."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 5)
@@ -317,7 +313,7 @@ class TestDecodeOpusFileToWav:
         After the fix (continue), frames 0-1 and 3-4 are decoded → True.
         """
         klass, _ = _failing_decoder(fail_on={2})
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 5)
@@ -331,7 +327,7 @@ class TestDecodeOpusFileToWav:
     def test_first_frame_corrupt_rest_valid(self):
         """Frame 0 is corrupt → skipped, frames 1-4 decoded → True."""
         klass, _ = _failing_decoder(fail_on={0})
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 5)
@@ -345,7 +341,7 @@ class TestDecodeOpusFileToWav:
     def test_last_frame_corrupt_prior_frames_preserved(self):
         """Frame 4 is corrupt → skipped, frames 0-3 decoded → True."""
         klass, _ = _failing_decoder(fail_on={4})
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 5)
@@ -359,7 +355,7 @@ class TestDecodeOpusFileToWav:
     def test_multiple_non_contiguous_corrupt_frames_skipped(self):
         """Frames 1 and 3 corrupt → both skipped, frames 0, 2, 4 decoded → True."""
         klass, _ = _failing_decoder(fail_on={1, 3})
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 5)
@@ -375,7 +371,7 @@ class TestDecodeOpusFileToWav:
     def test_all_frames_corrupt_returns_false(self):
         """Every frame raises → frame_count stays 0 → False, no WAV created."""
         klass, _ = _failing_decoder(fail_on={0, 1, 2, 3, 4})
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 5)
@@ -388,7 +384,7 @@ class TestDecodeOpusFileToWav:
     def test_all_corrupt_single_frame_file_returns_false(self):
         """File with one frame that fails → False."""
         klass, _ = _failing_decoder(fail_on={0})
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'test.bin')
             wav_path = os.path.join(d, 'test.wav')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME])
@@ -403,7 +399,7 @@ class TestDecodeOpusFileToWav:
     def test_empty_file_returns_false(self):
         """Zero-byte file → no frames → False."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'empty.bin')
             wav_path = os.path.join(d, 'empty.wav')
             open(bin_path, 'wb').close()  # touch
@@ -415,7 +411,7 @@ class TestDecodeOpusFileToWav:
     def test_file_not_found_returns_false(self):
         """Non-existent input path → False without exception."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             result = decode_opus_file_to_wav(
                 os.path.join(d, 'missing.bin'),
                 os.path.join(d, 'missing.wav'),
@@ -427,7 +423,7 @@ class TestDecodeOpusFileToWav:
     def test_truncated_frame_data_stops_cleanly(self):
         """Length prefix says N bytes but file ends early → break, prior frames kept."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'truncated.bin')
             wav_path = os.path.join(d, 'truncated.wav')
             with open(bin_path, 'wb') as f:
@@ -447,7 +443,7 @@ class TestDecodeOpusFileToWav:
     def test_truncated_frame_as_first_entry_returns_false(self):
         """Truncated data with no prior valid frames → False."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'trunc_first.bin')
             wav_path = os.path.join(d, 'trunc_first.wav')
             with open(bin_path, 'wb') as f:
@@ -462,7 +458,7 @@ class TestDecodeOpusFileToWav:
     def test_incomplete_length_prefix_at_eof_stops_cleanly(self):
         """Only 2 bytes remain for the 4-byte length prefix → break, prior frames kept."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'partial_prefix.bin')
             wav_path = os.path.join(d, 'partial_prefix.wav')
             with open(bin_path, 'wb') as f:
@@ -479,7 +475,7 @@ class TestDecodeOpusFileToWav:
     def test_gigantic_length_prefix_treated_as_truncation(self):
         """0xFFFFFFFF frame length → read returns far fewer bytes → truncation break → prior frames kept."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'giant_prefix.bin')
             wav_path = os.path.join(d, 'giant_prefix.wav')
             with open(bin_path, 'wb') as f:
@@ -518,7 +514,7 @@ class TestDecodeFilesToWavOpus:
     def test_valid_opus_file_included_in_output(self):
         """Valid Opus file with > 1 s of audio → wav path included."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = self._opus_filename(d)
             self._write_valid_opus_bin(bin_path)
 
@@ -531,7 +527,7 @@ class TestDecodeFilesToWavOpus:
     def test_frame_size_parsed_from_filename(self):
         """_fs320 in filename → frame_size=320 passed to decoder."""
         klass, instance = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             # fs320 filename
             bin_path = os.path.join(d, f'audio_omi_opus_16000_1_fs320_1710000000.bin')
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * self.ENOUGH_FRAMES)
@@ -547,7 +543,7 @@ class TestDecodeFilesToWavOpus:
     def test_all_corrupt_frames_file_excluded_from_output(self):
         """Decode returns False → wav not included, bin cleaned up."""
         klass, _ = _failing_decoder(fail_on=set(range(self.ENOUGH_FRAMES)))
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = self._opus_filename(d)
             self._write_valid_opus_bin(bin_path)
 
@@ -559,7 +555,7 @@ class TestDecodeFilesToWavOpus:
     def test_bin_file_deleted_after_successful_decode(self):
         """Successful decode → .bin removed (not left as an orphan)."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = self._opus_filename(d)
             self._write_valid_opus_bin(bin_path)
 
@@ -572,7 +568,7 @@ class TestDecodeFilesToWavOpus:
     def test_too_short_audio_excluded(self):
         """< 1 s of decoded audio → excluded from output, wav cleaned up."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = self._opus_filename(d)
             # 5 frames × 160 samples = 800 samples = 0.05 s → below 1 s threshold
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 5)
@@ -586,7 +582,7 @@ class TestDecodeFilesToWavOpus:
     def test_exactly_one_second_included(self):
         """Exactly 1.0 s decoded (100 frames × 160 samples at 16 kHz) → included."""
         klass, _ = _good_decoder()
-        with tempfile.TemporaryDirectory() as d, patch('routers.sync.Decoder', klass):
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = self._opus_filename(d)
             # 100 frames × 160 samples / 16000 Hz = 1.0 s
             _write_opus_bin(bin_path, [FAKE_OPUS_FRAME] * 100)
@@ -617,7 +613,7 @@ class TestDecodeFilesToWavOpus:
                     inst.decode.side_effect = Exception("corrupt")
                 return inst
 
-            with patch('routers.sync.Decoder', side_effect=_make_instance):
+            with patch('utils.sync.files.Decoder', side_effect=_make_instance):
                 self._write_valid_opus_bin(valid_bin)
                 _write_opus_bin(corrupt_bin, [FAKE_OPUS_FRAME] * 5)
 
