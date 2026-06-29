@@ -1,4 +1,27 @@
 import SwiftUI
+import os.log
+
+// Allowlist of URL schemes the plugin's deep link is permitted to use.
+// A plugin service returning any other scheme is treated as a compromise
+// signal — `NSWorkspace.shared.open` would happily launch `file://`,
+// `ssh://`, or any custom scheme, so we must gate this client-side.
+private enum DeepLinkSafeScheme: String { case https, http }
+
+// Allowlist of expected deep-link hostnames. The plugin deep links are
+// `https://t.me/<bot>?start=<token>` (Telegram) or `https://wa.me/<phone>?text=…`
+// (WhatsApp). Anything else is rejected.
+//
+// (P1 fix verification by sub-agent: `URL(string: "https://t.me/…")?.host`
+// returns the literal substring `t.me` — not the registrable suffix `me` —
+// so a naive `RawRepresentable.init(rawValue: host)` match would reject every
+// legitimate link. We use a `Set<String>` of literal hostnames instead.)
+private enum DeepLinkSafeHost {
+    static let telegram = "t.me"
+    static let whatsapp = "wa.me"
+    static let allowed: Set<String> = [telegram, whatsapp]
+}
+
+private let logger = Logger(subsystem: "omi.desktop", category: "ai-clone")
 
 /// Shared "connect this plugin" sheet — handles credential entry, POST /setup,
 /// deep-link display, and handshake polling.
@@ -84,7 +107,7 @@ struct ConnectSheet: View {
 
     private var formBody: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Enter the credentials for your \(plugin.displayName) integration. They are sent to your self-hosted plugin service over HTTPS.")
+            Text("Enter the credentials for your \(plugin.displayName) integration. They are sent to the plugin service URL you configured (HTTPS recommended for production; the URL must be http or https).")
                 .scaledFont(size: 13)
                 .foregroundColor(OmiColors.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -276,9 +299,31 @@ struct ConnectSheet: View {
     }
 
     private func openURL(_ s: String) {
+        // P1 fix (cubic): a compromised plugin service could return a deep link
+        // with a hostile scheme/host (e.g. `file://`, `ssh://`, or a phishing
+        // domain) and `NSWorkspace.shared.open` would happily launch it.
+        // The actual safety check is in `isSafeDeepLink` below so it can be
+        // unit-tested without going through NSWorkspace.
+        guard ConnectSheet.isSafeDeepLink(s) else {
+            logger.warning("Refusing to open deep link with unsafe URL: \(s)")
+            return
+        }
         guard let url = URL(string: s) else { return }
         #if os(macOS)
         NSWorkspace.shared.open(url)
         #endif
+    }
+
+    /// Returns true iff the URL is one we're willing to hand to
+    /// `NSWorkspace.shared.open`. Pure function — extracted so the gate can
+    /// be unit-tested without launching any actual application.
+    static func isSafeDeepLink(_ s: String) -> Bool {
+        guard let url = URL(string: s),
+              let scheme = url.scheme?.lowercased(),
+              DeepLinkSafeScheme(rawValue: scheme) != nil,
+              let host = url.host?.lowercased(),
+              DeepLinkSafeHost.allowed.contains(host)
+        else { return false }
+        return true
     }
 }

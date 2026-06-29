@@ -114,17 +114,31 @@ final class AICloneClientTests: XCTestCase {
     func testTelegramToggleBodyUsesBotTokenForAuth() {
         let body = AIPlugin.telegram.toggleRequestBody(
             chatId: "12345",
-            credentialForAuth: "TELEGRAM_TOKEN"
+            credentialForAuth: "TELEGRAM_TOKEN",
+            enabled: true
         )
         XCTAssertEqual(body["chat_id"] as? String, "12345")
         XCTAssertEqual(body["bot_token"] as? String, "TELEGRAM_TOKEN")
         XCTAssertEqual(body["enabled"] as? Bool, true)
     }
 
+    func testTelegramToggleBodySupportsDisable() {
+        // P2 fix: the previous implementation hardcoded enabled=true, so the
+        // toggle could only ever be turned on. Verify the disable path now
+        // works.
+        let body = AIPlugin.telegram.toggleRequestBody(
+            chatId: "12345",
+            credentialForAuth: "T",
+            enabled: false
+        )
+        XCTAssertEqual(body["enabled"] as? Bool, false)
+    }
+
     func testWhatsAppToggleBodyUsesAccessTokenForAuth() {
         let body = AIPlugin.whatsapp.toggleRequestBody(
             chatId: "15550001111",
-            credentialForAuth: "WA_TOKEN"
+            credentialForAuth: "WA_TOKEN",
+            enabled: true
         )
         XCTAssertEqual(body["phone"] as? String, "15550001111")
         XCTAssertEqual(body["access_token"] as? String, "WA_TOKEN")
@@ -157,5 +171,56 @@ final class AICloneClientTests: XCTestCase {
         // M1 fix: card icons should use semantic color tokens, not raw .blue/.green.
         XCTAssertEqual(AIPlugin.telegram.accentColor, OmiColors.info)
         XCTAssertEqual(AIPlugin.whatsapp.accentColor, OmiColors.success)
+    }
+}
+
+// MARK: - Deep link allowlist (P1 security gate)
+
+/// Regression coverage for the host/scheme allowlist that gates which deep
+/// links the desktop will hand to `NSWorkspace.shared.open`. A bug in this
+/// check either lets a malicious deep link through (P1 risk) or rejects
+/// every legitimate link (P0 usability regression — see code-review
+/// finding that originally used `t.me` vs `me` mismatch).
+final class ConnectSheetDeepLinkSafetyTests: XCTestCase {
+    private typealias Safe = ConnectSheet
+
+    func testAllowsTelegramDeepLink() {
+        XCTAssertTrue(Safe.isSafeDeepLink("https://t.me/mybot?start=abc123"))
+    }
+
+    func testAllowsWhatsAppDeepLink() {
+        XCTAssertTrue(Safe.isSafeDeepLink("https://wa.me/15550001111?text=/start%20token"))
+    }
+
+    func testAllowsHttpForDev() {
+        // http is in the scheme allowlist (validation lives in AICloneConfig
+        // for the *plugin URL*; the deep-link allowlist is intentionally
+        // permissive for http because dev environments use it).
+        XCTAssertTrue(Safe.isSafeDeepLink("http://t.me/mybot?start=token"))
+    }
+
+    func testRejectsEvilHost() {
+        // https is the right scheme, but the host isn't in the allowlist.
+        XCTAssertFalse(Safe.isSafeDeepLink("https://evil.com/phishing"))
+    }
+
+    func testRejectsFileScheme() {
+        XCTAssertFalse(Safe.isSafeDeepLink("file:///etc/passwd"))
+    }
+
+    func testRejectsSSHScheme() {
+        XCTAssertFalse(Safe.isSafeDeepLink("ssh://attacker.example"))
+    }
+
+    func testRejectsJavaScriptScheme() {
+        XCTAssertFalse(Safe.isSafeDeepLink("javascript:alert(1)"))
+    }
+
+    func testRejectsMalformedURL() {
+        XCTAssertFalse(Safe.isSafeDeepLink("not a url at all"))
+    }
+
+    func testRejectsEmptyString() {
+        XCTAssertFalse(Safe.isSafeDeepLink(""))
     }
 }
