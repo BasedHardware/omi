@@ -46,14 +46,30 @@ def load_storage() -> None:
 
 
 def _save(path: str, payload: dict) -> None:
-    """Atomically write payload to path. Write to <path>.tmp, fsync, then os.replace."""
+    """Atomically write payload to path. Write to <path>.tmp, fsync, then os.replace.
+
+    Files are written with mode 0o600 (owner read/write only) because they
+    contain user access_tokens and verify_tokens. Identified by cubic (P1):
+    without explicit restrictive perms, a shared host or permissive umask
+    leaves the JSON readable by other users on the box.
+
+    Also ensures the parent directory exists before opening the tmp file —
+    without this the first save after a fresh STORAGE_DIR change fails with
+    FileNotFoundError and the user is silently never persisted. (cubic P1.)
+    """
     tmp = path + ".tmp"
     try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            # Non-POSIX filesystem (e.g. some volumes); don't fail the save.
+            pass
     except Exception as e:
         print(f"⚠️  Could not save {path}: {e}", flush=True)
         try:

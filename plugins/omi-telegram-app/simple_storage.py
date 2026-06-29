@@ -45,14 +45,28 @@ def _save(path: str, payload: dict) -> None:
 
     A process crash mid-write leaves the original file untouched and a stray
     .tmp on disk for the next startup to clean up.
+
+    Files are written with mode 0o600 (owner read/write only) because they
+    contain user tokens and API keys. Identified by cubic (P1): without
+    explicit restrictive perms, a shared host or permissive umask leaves
+    the JSON readable by other users on the box.
     """
     tmp = path + ".tmp"
     try:
+        # Ensure parent directory exists. Without this, the first save after
+        # STORAGE_DIR change raises FileNotFoundError and the user is silently
+        # never persisted. (cubic P1 on WhatsApp variant — same shape here.)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            # Non-POSIX filesystem (e.g. some volumes); don't fail the save.
+            pass
     except Exception as e:
         print(f"⚠️  Could not save {path}: {e}", flush=True)
         try:
