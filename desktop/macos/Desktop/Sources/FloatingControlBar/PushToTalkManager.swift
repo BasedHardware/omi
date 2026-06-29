@@ -91,6 +91,7 @@ class PushToTalkManager: ObservableObject {
   private var audioCaptureService: AudioCaptureService?
   private var micCaptureStartInFlight = false
   private var silentMicRecoveryPolicy = PTTSilentMicRecoveryPolicy()
+  private var micCaptureGeneration: UInt64 = 0
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
   private var finalizeWorkItem: DispatchWorkItem?
@@ -357,8 +358,7 @@ class PushToTalkManager: ObservableObject {
     guard state == .listening else { return }
 
     state = .pendingLockDecision
-    audioCaptureService?.stopCapture()
-    micCaptureStartInFlight = false
+    stopMicCapture()
     updateBarState()
 
     let workItem = DispatchWorkItem { [weak self] in
@@ -584,7 +584,7 @@ class PushToTalkManager: ObservableObject {
     finalizeWorkItem = nil
 
     // Stop mic immediately — no more audio capture
-    audioCaptureService?.stopCapture()
+    stopMicCapture()
     activeTracer?.end("audio_capture")
     activeTracer?.end("ptt_recording")
 
@@ -1070,14 +1070,10 @@ class PushToTalkManager: ObservableObject {
       return
     }
     micCaptureStartInFlight = true
-    if audioCaptureService == nil {
-      if let override = overrideDeviceID {
-        audioCaptureService = AudioCaptureService(overrideDeviceID: override)
-      } else {
-        audioCaptureService = AudioCaptureService()
-      }
-    }
-    guard let capture = audioCaptureService else { return }
+    micCaptureGeneration &+= 1
+    let generation = micCaptureGeneration
+    let capture = overrideDeviceID.map(AudioCaptureService.init(overrideDeviceID:)) ?? AudioCaptureService()
+    audioCaptureService = capture
 
     // Silent-mic watchdog: Bluetooth inputs can return zeros during A2DP/HFP conflicts,
     // and stale CoreAudio routes can do the same even when the selected device is built-in.
@@ -1085,7 +1081,8 @@ class PushToTalkManager: ObservableObject {
     capture.detectSilentMicOnAnyTransport = true
     capture.onSilentMicDetected = { [weak self] detection in
       Task { @MainActor in
-        self?.handleSilentMicDetection(detection, batchMode: batchMode)
+        guard let self, self.micCaptureGeneration == generation else { return }
+        self.handleSilentMicDetection(detection, batchMode: batchMode)
       }
     }
 
@@ -1095,6 +1092,7 @@ class PushToTalkManager: ObservableObject {
         try await capture.startCapture(
           onAudioChunk: { [weak self] audioData in
             guard let self else { return }
+            guard self.micCaptureGeneration == generation, self.shouldKeepMicCaptureAlive else { return }
             if self.isHubMode {
               // Realtime hub owns this turn — stream mic PCM straight to it, and
               // retain it so finalize() can silence-gate the turn.
@@ -1126,15 +1124,32 @@ class PushToTalkManager: ObservableObject {
               self.transcriptionService?.sendAudio(audioData)
             }
           },
-          onAudioLevel: { level in
+          onAudioLevel: { [weak self] level in
+            guard let self, self.micCaptureGeneration == generation, self.shouldKeepMicCaptureAlive else { return }
             // Feed the floating-bar mic waveform (VoiceWaveformBars). Throttled to ~5 Hz
             // inside the monitor; used only for visualization.
             AudioLevelMonitor.shared.updateMicrophoneLevel(level)
           }
         )
+        let isCurrentGeneration = self.micCaptureGeneration == generation
+        guard isCurrentGeneration, self.shouldKeepMicCaptureAlive else {
+          capture.stopCapture()
+          if self.audioCaptureService === capture {
+            self.audioCaptureService = nil
+          }
+          if isCurrentGeneration {
+            self.micCaptureStartInFlight = false
+          }
+          log("PushToTalkManager: mic capture start completed after turn ended — stopped")
+          return
+        }
         self.micCaptureStartInFlight = false
         log("PushToTalkManager: mic capture started (batch=\(batchMode))")
       } catch {
+        guard self.micCaptureGeneration == generation else {
+          log("PushToTalkManager: stale mic capture start failed after turn ended: \(error.localizedDescription)")
+          return
+        }
         self.micCaptureStartInFlight = false
         logError("PushToTalkManager: mic capture failed", error: error)
         self.stopListening()
@@ -1156,8 +1171,7 @@ class PushToTalkManager: ObservableObject {
        builtInID != detection.deviceID {
       log("PushToTalkManager: silent-mic fallback — switching to built-in mic (deviceID=\(builtInID))")
       silentMicRecoveryPolicy.recordCaptureRebuild()
-      audioCaptureService?.stopCapture()
-      audioCaptureService = nil
+      stopMicCapture()
       clearBufferedTurnAudio()
       startMicCapture(batchMode: batchMode, overrideDeviceID: builtInID)
       return
@@ -1177,8 +1191,7 @@ class PushToTalkManager: ObservableObject {
   private func requestCoreAudioCaptureRecovery(reason: String, restartPTT: Bool, batchMode: Bool) {
     log("PushToTalkManager: requesting CoreAudio capture rebuild — \(reason)")
     silentMicRecoveryPolicy.recordCaptureRebuild()
-    audioCaptureService?.stopCapture()
-    audioCaptureService = nil
+    stopMicCapture()
     clearBufferedTurnAudio()
     NotificationCenter.default.post(
       name: .coreAudioCaptureRecoveryRequested,
@@ -1205,12 +1218,22 @@ class PushToTalkManager: ObservableObject {
     batchAudioLock.unlock()
   }
 
+  private var shouldKeepMicCaptureAlive: Bool {
+    state == .listening || state == .lockedListening
+  }
+
+  private func stopMicCapture() {
+    micCaptureGeneration &+= 1
+    micCaptureStartInFlight = false
+    audioCaptureService?.stopCapture()
+    audioCaptureService = nil
+  }
+
   private func stopAudioTranscription() {
     hubWaitTask?.cancel()
     hubWaitTask = nil
     isWaitingForHub = false
-    audioCaptureService?.stopCapture()
-    micCaptureStartInFlight = false
+    stopMicCapture()
     transcriptionService?.stop()
     transcriptionService = nil
     realtimeOmniService?.stop()
