@@ -1,5 +1,23 @@
 # Telegram AI Clone — local E2E test runbook
 
+> **Process artifact — verify before following.** This file was written
+> during the AI Clone v0.1 implementation. It describes the local-test
+> setup the original author used, but:
+> - Commands, env-var names, and ports may have drifted from the current
+>   plugin source. Always cross-check against `plugins/omi-telegram-app/main.py`
+>   and `run.sh` before executing.
+> - Anything labeled "current gap" was a gap at the time of writing and
+>   may already be closed — verify with `git log -- plugins/omi-telegram-app/`
+>   and the latest PRs against `BasedHardware/omi`.
+> - The "future work" hints at the bottom are hints, not commitments.
+>
+> Coding/review agents should NOT follow this file blindly. Use it as
+> context, but verify each step against current code state.
+>
+> Identified by maintainer review on PR #8528.
+
+---
+
 Three layers. Run them in order; each layer builds on the previous.
 
 | Layer | What it proves | Time | Requires |
