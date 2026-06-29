@@ -198,12 +198,19 @@ final class AICloneConfigTests: XCTestCase {
         config.bearerToken = "secret-bearer-xyz"
         config.omiDevApiKey = "secret-dev-abc"
 
-        // The legacy keys must be absent. We don't just check that the
-        // value isn't there — we explicitly check that the keys
+        // The legacy keys must be absent. We don't just check that
+        // the value isn't there — we explicitly check that the keys
         // themselves were removed (any value, including an empty
         // string, would be a regression).
-        XCTAssertNil(customDefaults.data(forKey: "ai_clone_plugin_bearer_token"))
-        XCTAssertNil(customDefaults.data(forKey: "ai_clone_omi_dev_api_key"))
+        //
+        // Identified by cubic P1: `customDefaults.data(forKey:)`
+        // only returns Data-typed values — a String-typed regression
+        // would silently pass the assertion (nil != "string"). Use
+        // `object(forKey:)` which returns Any? and catches strings,
+        // data, ints, etc. — any value under the legacy key is a
+        // regression.
+        XCTAssertNil(customDefaults.object(forKey: "ai_clone_plugin_bearer_token"))
+        XCTAssertNil(customDefaults.object(forKey: "ai_clone_omi_dev_api_key"))
     }
 
     func testStoredSecretIsRetrievableViaKeychain() {
@@ -233,8 +240,11 @@ final class AICloneConfigTests: XCTestCase {
         customDefaults.set("legacy-value", forKey: "ai_clone_plugin_bearer_token")
         let _ = AICloneConfig(defaults: customDefaults)
         // Migration copied the value to Keychain and removed the
-        // UserDefaults copy.
-        XCTAssertNil(customDefaults.string(forKey: "ai_clone_plugin_bearer_token"))
+        // UserDefaults copy. Use object(forKey:) so the assertion
+        // catches ANY value (string, Data, int, etc.) under the
+        // legacy key — string(forKey:) would silently miss a
+        // Data-typed value (cubic P1).
+        XCTAssertNil(customDefaults.object(forKey: "ai_clone_plugin_bearer_token"))
         // The Keychain now holds it.
         XCTAssertEqual(
             try? AICloneKeychain.get(.pluginBearerToken),
