@@ -27,3 +27,31 @@ _PLUGIN_ROOT = os.path.abspath(os.path.join(_HERE, ".."))
 for p in (_SHARED, _PLUGIN_ROOT):
     if p not in sys.path:
         sys.path.insert(0, p)
+
+
+def load_main_module():
+    """Load WhatsApp's main.py and return the loaded module.
+
+    Used by test_whatsapp_setup_auth.py and any other test that needs
+    to mount the WhatsApp FastAPI app without colliding with Telegram's
+    bare-name `main` module. The loaded module is cached so the second
+    call is a dict lookup.
+
+    For the desktop branch (this branch), the test suite doesn't run
+    alongside Telegram's in a single pytest invocation, so the sys.modules
+    swap dance that chat-tools uses isn't needed. A plain importlib load
+    of the local main.py works.
+    """
+    import importlib.util
+
+    if "whatsapp_main" in sys.modules:
+        return sys.modules["whatsapp_main"]
+    spec = importlib.util.spec_from_file_location(
+        "whatsapp_main", os.path.join(_PLUGIN_ROOT, "main.py")
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError("Could not load WhatsApp main.py spec")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["whatsapp_main"] = module
+    spec.loader.exec_module(module)
+    return module
