@@ -246,7 +246,7 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
           description: "Whether to press the visible Add/Connect/Create button after filling required fields.",
         },
       },
-      ["provider", "server_url"],
+      ["provider", "server_url", "oauth_client_secret"],
     ),
     annotations: openWorldWrite,
     timeoutClass: "normal",

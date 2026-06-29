@@ -355,8 +355,10 @@ enum SpatialOverlayPlacementSolver {
     edge: SpatialOverlayAttachmentEdge,
     spec: SpatialOverlayPlacementSpec
   ) -> CGPoint {
-    let horizontalInset = max(spec.minimumArrowInset, spec.arrowSize.width / 2)
-    let verticalInset = max(spec.minimumArrowInset, spec.arrowSize.height / 2)
+    let horizontalInset = min(
+      max(spec.minimumArrowInset, spec.arrowSize.width / 2), frame.width / 2)
+    let verticalInset = min(
+      max(spec.minimumArrowInset, spec.arrowSize.height / 2), frame.height / 2)
     switch edge {
     case .above:
       return CGPoint(

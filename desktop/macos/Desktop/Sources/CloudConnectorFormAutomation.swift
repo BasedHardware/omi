@@ -381,13 +381,15 @@ enum CloudConnectorFormAutomation {
     let appElement = AXUIElementCreateApplication(app.processIdentifier)
     var windowElement: AXUIElement?
     var focused: CFTypeRef?
-    if AXUIElementCopyAttributeValue(appElement, "AXFocusedWindow" as CFString, &focused) == .success,
+    if AXUIElementCopyAttributeValue(appElement, "AXFocusedWindow" as CFString, &focused)
+      == .success,
       let focused
     {
       windowElement = (focused as! AXUIElement)
     } else {
       var windowsRef: CFTypeRef?
-      if AXUIElementCopyAttributeValue(appElement, "AXWindows" as CFString, &windowsRef) == .success,
+      if AXUIElementCopyAttributeValue(appElement, "AXWindows" as CFString, &windowsRef)
+        == .success,
         let windows = windowsRef as? [AXUIElement], let first = windows.first
       {
         windowElement = first
@@ -655,7 +657,8 @@ enum CloudConnectorFormAutomation {
     heuristicPoint: CGPoint,
     heuristicTargetSize: CGSize
   ) -> [SpatialOverlayAnchorCandidate] {
-    let screen = SpatialOverlayScreen(id: "claude-window", frame: windowFrame, visibleFrame: windowFrame)
+    let screen = SpatialOverlayScreen(
+      id: "claude-window", frame: windowFrame, visibleFrame: windowFrame)
     let window = SpatialOverlayWindow(
       id: "claude-window",
       frame: windowFrame,
@@ -668,7 +671,8 @@ enum CloudConnectorFormAutomation {
         screen: screen,
         window: window,
         evidence: [
-          SpatialOverlayTargetEvidence(source: .accessibility, confidence: 0.95, label: "Claude action button")
+          SpatialOverlayTargetEvidence(
+            source: .accessibility, confidence: 0.95, label: "Claude action button")
         ],
         confidence: 0.95 - Double(index) * 0.01,
         allowedUses: [.displayGuidance, .performClick]
@@ -1184,7 +1188,18 @@ enum CloudConnectorFormAutomation {
     NSPasteboard.general.setString(value, forType: .string)
     sendKey(0, flags: .maskCommand)
     sendKey(9, flags: .maskCommand)
-    return true
+    Thread.sleep(forTimeInterval: 0.12)
+    return fieldValueMatches(element, expected: value)
+  }
+
+  private static func fieldValueMatches(_ element: AXUIElement, expected: String) -> Bool {
+    var rawValue: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, "AXValue" as CFString, &rawValue) == .success
+    else {
+      return false
+    }
+    guard let actual = rawValue as? String else { return false }
+    return actual == expected
   }
 
   private static func pasteIntoFocusedField(_ value: String) {

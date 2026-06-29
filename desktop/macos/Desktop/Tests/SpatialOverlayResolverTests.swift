@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class SpatialOverlayResolverTests: XCTestCase {
@@ -23,11 +24,13 @@ final class SpatialOverlayResolverTests: XCTestCase {
       confidence: 0.99,
       uses: [.displayGuidance]
     )
-    let snapshot = SpatialOverlayDesktopSnapshot(screens: [screen], candidates: [heuristic, explicit])
+    let snapshot = SpatialOverlayDesktopSnapshot(
+      screens: [screen], candidates: [heuristic, explicit])
 
     let resolution = try SpatialOverlayAnchorResolver()
       .resolve(
-        SpatialOverlayAnchorSpec(id: "claude.add.guidance", use: .displayGuidance, minimumConfidence: 0.5),
+        SpatialOverlayAnchorSpec(
+          id: "claude.add.guidance", use: .displayGuidance, minimumConfidence: 0.5),
         in: snapshot
       )
       .get()
@@ -50,11 +53,13 @@ final class SpatialOverlayResolverTests: XCTestCase {
       confidence: 0.9,
       uses: [.displayGuidance]
     )
-    let snapshot = SpatialOverlayDesktopSnapshot(screens: [screen], candidates: [lowConfidenceAX, goodHeuristic])
+    let snapshot = SpatialOverlayDesktopSnapshot(
+      screens: [screen], candidates: [lowConfidenceAX, goodHeuristic])
 
     let resolution = try SpatialOverlayAnchorResolver()
       .resolve(
-        SpatialOverlayAnchorSpec(id: "claude.add.guidance", use: .displayGuidance, minimumConfidence: 0.5),
+        SpatialOverlayAnchorSpec(
+          id: "claude.add.guidance", use: .displayGuidance, minimumConfidence: 0.5),
         in: snapshot
       )
       .get()
@@ -74,11 +79,40 @@ final class SpatialOverlayResolverTests: XCTestCase {
 
     let result = SpatialOverlayAnchorResolver()
       .resolve(
-        SpatialOverlayAnchorSpec(id: "claude.add.click", use: .performClick, minimumConfidence: 0.95),
+        SpatialOverlayAnchorSpec(
+          id: "claude.add.click", use: .performClick, minimumConfidence: 0.95),
         in: snapshot
       )
 
     XCTAssertEqual(result.failure, .noCandidateAllowedForUse(.performClick))
+  }
+
+  func testStaticProviderFiltersCandidatesByRequestedAnchorTokenBeforeRanking() throws {
+    let connect = candidate(
+      id: "claude-connect-ocr",
+      rect: CGRect(x: 1020, y: 260, width: 120, height: 44),
+      source: .ocr,
+      confidence: 0.97,
+      uses: [.displayGuidance, .performClick]
+    )
+    let add = candidate(
+      id: "claude-add-explicit-0",
+      rect: CGRect(x: 1180, y: 160, width: 80, height: 36),
+      source: .accessibility,
+      confidence: 0.91,
+      uses: [.displayGuidance, .performClick]
+    )
+    let snapshot = SpatialOverlayDesktopSnapshot(screens: [screen], candidates: [connect, add])
+
+    let resolution = try SpatialOverlayAnchorResolver()
+      .resolve(
+        SpatialOverlayAnchorSpec(
+          id: "claude.add.guidance", use: .displayGuidance, minimumConfidence: 0.5),
+        in: snapshot
+      )
+      .get()
+
+    XCTAssertEqual(resolution.candidate.id, "claude-add-explicit-0")
   }
 
   func testReplayFixturePlacesCalloutWithArrowTipOnResolvedTarget() throws {
@@ -100,7 +134,8 @@ final class SpatialOverlayResolverTests: XCTestCase {
     )
 
     let placement = try fixture.place(
-      SpatialOverlayAnchorSpec(id: "claude.connect.guidance", use: .displayGuidance, minimumConfidence: 0.5)
+      SpatialOverlayAnchorSpec(
+        id: "claude.connect.guidance", use: .displayGuidance, minimumConfidence: 0.5)
     ).get()
 
     XCTAssertEqual(placement.globalArrowTip.x, target.targetPoint.x, accuracy: 3)
@@ -127,8 +162,8 @@ final class SpatialOverlayResolverTests: XCTestCase {
   }
 }
 
-private extension Result {
-  var failure: Failure? {
+extension Result {
+  fileprivate var failure: Failure? {
     if case .failure(let failure) = self {
       return failure
     }

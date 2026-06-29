@@ -74,7 +74,33 @@ struct SpatialOverlayStaticTargetProvider: SpatialOverlayTargetProvider {
   func candidates(in snapshot: SpatialOverlayDesktopSnapshot, for spec: SpatialOverlayAnchorSpec)
     -> [SpatialOverlayAnchorCandidate]
   {
-    snapshot.candidates
+    snapshot.candidates.filter { candidateMatches($0, spec: spec) }
+  }
+
+  private func candidateMatches(
+    _ candidate: SpatialOverlayAnchorCandidate, spec: SpatialOverlayAnchorSpec
+  )
+    -> Bool
+  {
+    let specTokens = Set(
+      spec.id
+        .split(separator: ".")
+        .map(String.init)
+        .filter { token in
+          !["claude", "chatgpt", "guidance", "click", "display", "perform", "anchor", "target"]
+            .contains(token)
+        })
+    guard !specTokens.isEmpty else { return true }
+
+    let searchable =
+      ([candidate.id]
+      + candidate.evidence.flatMap { evidence in
+        [evidence.label ?? ""] + evidence.diagnostics
+      })
+      .joined(separator: " ")
+      .lowercased()
+
+    return specTokens.contains { searchable.contains($0.lowercased()) }
   }
 }
 
@@ -102,7 +128,8 @@ struct SpatialOverlayAnchorResolver {
     let confident = allowed.filter { $0.confidence >= spec.minimumConfidence }
     guard !confident.isEmpty else {
       let bestConfidence = allowed.map(\.confidence).max() ?? 0
-      return .failure(.belowConfidenceThreshold(required: spec.minimumConfidence, best: bestConfidence))
+      return .failure(
+        .belowConfidenceThreshold(required: spec.minimumConfidence, best: bestConfidence))
     }
 
     let ranked = confident.sorted { lhs, rhs in
@@ -124,7 +151,9 @@ struct SpatialOverlayAnchorResolver {
     return .success(SpatialOverlayAnchorResolution(spec: spec, candidate: best))
   }
 
-  private func sourceRank(_ candidate: SpatialOverlayAnchorCandidate, spec: SpatialOverlayAnchorSpec)
+  private func sourceRank(
+    _ candidate: SpatialOverlayAnchorCandidate, spec: SpatialOverlayAnchorSpec
+  )
     -> Int
   {
     let sources = candidate.evidence.map(\.source)
@@ -164,7 +193,8 @@ struct SpatialOverlayReplayFixture: Equatable {
     let resolver = SpatialOverlayAnchorResolver()
     switch resolver.resolve(anchorSpec, in: snapshot) {
     case .success(let resolution):
-      switch SpatialOverlayPlacementSolver.place(target: resolution.candidate, spec: placementSpec) {
+      switch SpatialOverlayPlacementSolver.place(target: resolution.candidate, spec: placementSpec)
+      {
       case .success(let placement):
         return .success(placement)
       case .failure(let failure):

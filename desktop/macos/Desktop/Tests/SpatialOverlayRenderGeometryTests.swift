@@ -78,6 +78,33 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
     XCTAssertEqual(render.bubbleFrame.height, 88, accuracy: 0.001)
   }
 
+  func testPlacementCapsArrowInsetForTinyPanels() throws {
+    let screen = SpatialOverlayScreen(
+      id: "tiny", frame: CGRect(x: 0, y: 0, width: 320, height: 240),
+      visibleFrame: CGRect(x: 0, y: 0, width: 320, height: 240))
+    let candidate = SpatialOverlayAnchorCandidate(
+      id: "tiny-add",
+      targetRect: CGRect(x: 110, y: 100, width: 20, height: 20),
+      screen: screen,
+      evidence: [SpatialOverlayTargetEvidence(source: .layoutHeuristic, confidence: 0.9)],
+      confidence: 0.9,
+      allowedUses: [.displayGuidance])
+
+    let placement = try SpatialOverlayPlacementSolver.place(
+      target: candidate,
+      spec: SpatialOverlayPlacementSpec(
+        overlaySize: CGSize(width: 42, height: 34),
+        preferredEdges: [.above],
+        margin: 0,
+        arrowSize: CGSize(width: 96, height: 28),
+        minimumArrowInset: 60,
+        canCoverTarget: true)
+    ).get()
+
+    XCTAssertGreaterThanOrEqual(placement.arrowTipInPanel.x, 0)
+    XCTAssertLessThanOrEqual(placement.arrowTipInPanel.x, placement.panelFrame.width)
+  }
+
   /// Mirrors `TrianglePointer.path(in:)` — the vertex that should land on the target.
   private func apexVertex(of rect: CGRect, edge: SpatialOverlayAttachmentEdge) -> CGPoint {
     switch edge {
@@ -108,7 +135,8 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
     XCTAssertEqual(correct.minY, primaryMaxY - 300 - 40, accuracy: 0.001)
     XCTAssertNotEqual(
       correct.minY, buggyContainingScreenFlip.minY,
-      "primary-reference flip must differ from the old containing-screen flip on a secondary display")
+      "primary-reference flip must differ from the old containing-screen flip on a secondary display"
+    )
   }
 
   // MARK: Full pipeline against an independent, screenshot-derived Add rect
@@ -216,7 +244,8 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
       placement: placement, panelSize: CGSize(width: 330, height: 118))
 
     // Apex back in top-left space.
-    let apex = CGPoint(x: render.globalRenderedArrowTip.x, y: flip - render.globalRenderedArrowTip.y)
+    let apex = CGPoint(
+      x: render.globalRenderedArrowTip.x, y: flip - render.globalRenderedArrowTip.y)
     XCTAssertTrue(
       footer.rect.insetBy(dx: -3, dy: -3).contains(apex),
       "apex \(apex) must land on the located modal footer \(footer.rect)")
@@ -294,7 +323,9 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
       targetRect: scene.addButtonAppKit
     )
     XCTAssertTrue(
-      issues.contains(where: { if case .arrowMissesTarget = $0 { return true } else { return false } }),
+      issues.contains(where: {
+        if case .arrowMissesTarget = $0 { return true } else { return false }
+      }),
       "an apex below the button must be flagged as arrowMissesTarget")
   }
 }

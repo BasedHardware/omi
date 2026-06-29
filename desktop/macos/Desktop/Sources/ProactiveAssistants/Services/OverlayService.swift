@@ -212,10 +212,8 @@ class OverlayService {
       return nil
     }
 
-    return SpatialOverlayGeometry.appKitFrame(
-      topLeftOrigin: CGPoint(x: largest.x, y: largest.y),
-      size: CGSize(width: largest.width, height: largest.height),
-      screenFrame: SpatialOverlayGeometry.screenFrameForTopLeftNormalization()
+    return SpatialOverlayGeometry.globalAppKitFrame(
+      topLeftFrame: CGRect(x: largest.x, y: largest.y, width: largest.width, height: largest.height)
     )
   }
 }
