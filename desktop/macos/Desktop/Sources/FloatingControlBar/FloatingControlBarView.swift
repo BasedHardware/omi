@@ -661,7 +661,7 @@ struct FloatingControlBarView: View {
     }
 
     private func showAgentListFromConversation() {
-        (window as? FloatingControlBarWindow)?.showAgentRowsFromConversation() ?? onCloseAI()
+        (window as? FloatingControlBarWindow)?.leaveAgentConversation() ?? onCloseAI()
     }
 
     private func handleBarHover(_ hovering: Bool) {
@@ -1290,14 +1290,22 @@ private struct AgentMainChatView: View {
         }
     }
 
-    private var outputText: String {
+    private var displayedMessages: [ChatMessage] {
+        if !pill.conversationMessages.isEmpty {
+            return pill.conversationMessages
+        }
+        var fallback = [ChatMessage(id: "\(pill.id.uuidString)-query", text: pill.query, sender: .user)]
         if let message = pill.aiMessage {
             let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty {
-                return text
+            if !text.isEmpty || !message.contentBlocks.isEmpty {
+                fallback.append(message)
             }
         }
-        return ""
+        return fallback
+    }
+
+    private var hasAssistantTurn: Bool {
+        displayedMessages.contains { $0.sender == .ai }
     }
 
     private var activityText: String {
@@ -1311,9 +1319,7 @@ private struct AgentMainChatView: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        questionBubble
-
-                        responseContent
+                        conversationContent
                             .id(pill.contentRevision)
 
                         if isRecording {
@@ -1337,7 +1343,7 @@ private struct AgentMainChatView: View {
                 .onChange(of: pill.latestActivity) {
                     scrollToBottom(proxy)
                 }
-                .onChange(of: pill.aiMessage?.text) {
+                .onChange(of: pill.conversationMessages.map(\.text).joined(separator: "\n")) {
                     scrollToBottom(proxy)
                 }
                 .onChange(of: pill.contentRevision) {
@@ -1432,28 +1438,53 @@ private struct AgentMainChatView: View {
         }
     }
 
-    private var questionBubble: some View {
-        Text(pill.query)
-            .scaledFont(size: 13, weight: .semibold)
-            .foregroundColor(.white)
-            .textSelection(.enabled)
-            .lineLimit(4)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 9)
-            .background(Color.white.opacity(0.10))
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .contextMenu {
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(pill.query, forType: .string)
-                }
+    @ViewBuilder
+    private var conversationContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(displayedMessages) { message in
+                agentMessageBubble(message)
             }
+
+            if isRunning && !hasAssistantTurn {
+                runningActivityView
+            }
+        }
+    }
+
+    private var runningActivityView: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TypingIndicator()
+                .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+            if !activityText.isEmpty {
+                Text(activityText)
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white.opacity(0.62))
+                    .textSelection(.enabled)
+            }
+        }
     }
 
     @ViewBuilder
-    private var responseContent: some View {
-        if isRunning && outputText.isEmpty {
+    private func agentMessageBubble(_ message: ChatMessage) -> some View {
+        let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if message.sender == .user {
+            Text(trimmed)
+                .scaledFont(size: 13, weight: .semibold)
+                .foregroundColor(.white)
+                .textSelection(.enabled)
+                .lineLimit(nil)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(Color.white.opacity(0.10))
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                .contextMenu {
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(message.copyableText, forType: .string)
+                    }
+                }
+        } else if trimmed.isEmpty && message.isStreaming {
             VStack(alignment: .leading, spacing: 8) {
                 TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
@@ -1462,26 +1493,52 @@ private struct AgentMainChatView: View {
                         .scaledFont(size: 12, weight: .semibold)
                         .foregroundColor(.white.opacity(0.62))
                         .textSelection(.enabled)
+                    }
+            }
+        } else {
+            agentAssistantContent(message)
+                .padding(.horizontal, 4)
+                .contextMenu {
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(message.copyableText, forType: .string)
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private func agentAssistantContent(_ message: ChatMessage) -> some View {
+        if !message.contentBlocks.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(ContentBlockGroup.group(message.contentBlocks)) { group in
+                    switch group {
+                    case .text(_, let text):
+                        if !text.isEmpty {
+                            SelectableMarkdown(text: text, sender: .ai)
+                                .environment(\.colorScheme, .dark)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    case .toolCalls(_, let calls):
+                        ToolCallsGroup(calls: calls, compact: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    case .thinking(_, let text):
+                        ThinkingBlock(text: text)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    case .discoveryCard(_, let title, let summary, let fullText):
+                        DiscoveryCard(title: title, summary: summary, fullText: fullText)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         } else {
-            VStack(alignment: .leading, spacing: 8) {
-                if outputText.isEmpty {
-                    EmptyView()
-                } else {
-                    Markdown(outputText)
-                        .markdownTheme(.aiMessage(scale: 0.88))
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(.horizontal, 4)
-            .contextMenu {
-                Button("Copy") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(outputText, forType: .string)
-                }
+            let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                Markdown(trimmed)
+                    .markdownTheme(.aiMessage(scale: 0.88))
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
@@ -1547,7 +1604,11 @@ private struct AgentMainChatView: View {
         guard !trimmed.isEmpty else { return }
         followUpText = ""
         if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed) {
-            let sibling = manager.spawnFromHandoff(handoff, model: pill.model)
+            let sibling = manager.spawnFromHandoff(
+                handoff,
+                model: pill.model,
+                bridgeHarnessOverride: pill.bridgeHarnessOverride
+            )
             state.present(.agent(sibling.id))
             // Route through the window resize/observer setup so the new
             // sibling's reportContentHeight(.agent(sibling.id)) updates are
@@ -1761,7 +1822,8 @@ private struct NotchAgentMorphField: View {
                         .position(rowCenter)
                         .help(pill.title)
 
-                        NotchMorphDot(
+                        notchAgentIdentityMark(
+                            provider: pill.bridgeHarnessOverride,
                             color: group.color,
                             isActive: pill.id == activePillID,
                             progress: progress
@@ -1790,6 +1852,28 @@ private struct NotchAgentMorphField: View {
                 .sink { _ in
                     pillStatusChangeToken &+= 1
                 }
+        }
+    }
+
+    @ViewBuilder
+    private func notchAgentIdentityMark(
+        provider: AgentHarnessMode?,
+        color: Color,
+        isActive: Bool,
+        progress: CGFloat
+    ) -> some View {
+        if provider.rendersProviderMark {
+            let scale = NotchAgentStackMetrics.logoDotScale + (1 - NotchAgentStackMetrics.logoDotScale) * progress
+            AgentProviderLogoMark(provider: provider, statusColor: color, size: NotchAgentStackMetrics.listOrbSize + 5)
+                .shadow(color: color.opacity(0.55), radius: isActive ? 9 : 5)
+                .scaleEffect(scale)
+                .frame(width: 18, height: 22)
+        } else {
+            NotchMorphDot(
+                color: color,
+                isActive: isActive,
+                progress: progress
+            )
         }
     }
 }
@@ -1838,8 +1922,12 @@ private struct NotchAgentListRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            // The identity mark (Omi dot or provider logo) is rendered by the
+            // traveling `notchAgentIdentityMark` that morphs from the collapsed
+            // logo ring and lands on this slot. The row only reserves the space —
+            // drawing a logo here too would double it up under the morph mark.
             Color.clear
-                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 1)
+                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 18)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)

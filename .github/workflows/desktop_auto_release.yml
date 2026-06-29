@@ -6,6 +6,7 @@ on:
     paths:
       - 'desktop/macos/**'
       - '!desktop/macos/CHANGELOG.json'
+      - '!desktop/macos/changelog/**'
   schedule:
     # Pick up desktop merges that accumulated while Codemagic was busy.
     - cron: '*/5 * * * *'
@@ -128,33 +129,12 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
-          # Consolidate unreleased changelog entries into a versioned release
+          # Consolidate unreleased changelog fragments into a versioned release
           TODAY=$(date -u +%Y-%m-%d)
-          python3 -c "
-          import json, sys
-
-          with open('desktop/macos/CHANGELOG.json', 'r') as f:
-              data = json.load(f)
-
-          unreleased = data.get('unreleased', [])
-          if not unreleased:
-              unreleased = ['Bug fixes and improvements']
-
-          new_release = {
-              'version': '$VERSION',
-              'date': '$TODAY',
-              'changes': unreleased
-          }
-
-          data.setdefault('releases', []).insert(0, new_release)
-          data['unreleased'] = []
-
-          with open('desktop/macos/CHANGELOG.json', 'w') as f:
-              json.dump(data, f, indent=2)
-              f.write('\n')
-
-          print(f'Consolidated {len(unreleased)} changelog entries for v$VERSION')
-          "
+          python3 .github/scripts/desktop-changelog.py consolidate \
+            --version "$VERSION" \
+            --date "$TODAY" \
+            --write
 
       - name: Commit changelog and create tag
         if: steps.recheck.outputs.should_release == 'true'
@@ -164,7 +144,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add desktop/macos/CHANGELOG.json
+          git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
           # Tag the changelog commit first; Codemagic uses this tag to trigger builds.
@@ -197,8 +177,8 @@ jobs:
 
           if [ -z "$PR_NUMBER" ]; then
             PR_URL=$(gh pr create \
-              --title "Update CHANGELOG.json for v${VERSION} [skip ci]" \
-              --body "Auto-generated: consolidates unreleased entries into v${VERSION} and clears the unreleased array." \
+              --title "Update desktop changelog for v${VERSION} [skip ci]" \
+              --body "Auto-generated: consolidates unreleased changelog fragments into v${VERSION} and regenerates CHANGELOG.json." \
               --base main \
               --head "$BRANCH")
             PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')

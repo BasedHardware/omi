@@ -1717,12 +1717,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'УСТРОЙСТВА',
-      one: 'УСТРОЙСТВО',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -7794,6 +7789,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get viewAll => 'Виж всички';
 
   @override
+  String get expand => 'Разгъни';
+
+  @override
   String get addTask => 'Добавяне на задача';
 
   @override
@@ -9400,7 +9398,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcribeLaterPaused => 'На пауза — звукът не се записва';
 
   @override
-  String get deviceTutorial => 'Урок за устройството';
+  String get deviceTutorial => 'Как да използвате Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Говорете към вашето Omi';
@@ -9486,4 +9484,18 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Готово';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Опознайте своя Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Бърза практическа обиколка на всичко, което вашият Omi може да прави.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Около 1 минута';
+  @override
+  String get jumpToLatestMessage => 'Отиди до последното съобщение';
+
+  @override
+  String get latest => 'Последно';
 }

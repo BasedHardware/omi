@@ -9537,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Преглед на сите",
+    "expand": "Прошири",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10641,7 +10642,7 @@
     "captureModeLiveDescription": "Транскрибирајте во реално време додека зборувате.",
     "captureModeLaterDescription": "Зачувајте го звукот сега и транскрибирајте кога сакате.",
     "backgroundModeUnavailable": "Режимот во заднина не е достапен бидејќи не е поврзан компатибилен уред. Поврзете Omi, OpenGlass или Friend Pendant уред за да ја користите оваа функција.",
-    "deviceTutorial": "Упатство за уредот",
+    "deviceTutorial": "Како да го користите Omi",
     "deviceOnboardingTranscriptionTitle": "Зборувајте во вашиот Omi",
     "deviceOnboardingTranscriptionSubtitle": "Кажете неколку зборови и гледајте како се појавуваат во реално време",
     "deviceOnboardingGoodJob": "Браво!",
@@ -10669,5 +10670,10 @@
     "deviceOnboardingSingleTapHint": "Тоа беше еден допир — обидете се да допрете двапати брзо!",
     "deviceOnboardingTryDoubleTap": "Обидете се сега! Допрете двапати на вашиот Omi",
     "deviceOnboardingContinue": "Продолжи",
-    "deviceOnboardingFinish": "Заврши"
+    "deviceOnboardingFinish": "Заврши",
+    "deviceOnboardingIntroTitle": "Запознајте се со вашиот Omi",
+    "deviceOnboardingIntroSubtitle": "Брза, практична прошетка низ сè што може да направи вашиот Omi.",
+    "deviceOnboardingIntroDuration": "Околу 1 минута",
+    "jumpToLatestMessage": "Оди до последната порака",
+    "latest": "Најново"
 }

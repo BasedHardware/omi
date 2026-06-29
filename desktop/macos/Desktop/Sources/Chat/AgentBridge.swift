@@ -30,7 +30,7 @@ actor AgentBridge {
 
   struct WarmupSessionConfig {
     let key: String
-    let model: String
+    let model: String?
     let systemPrompt: String?
   }
 
@@ -54,6 +54,10 @@ actor AgentBridge {
     self.runtime = runtime
   }
 
+  private var isPiMonoHarness: Bool {
+    AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue
+  }
+
   func setGlobalAuthHandlers(
     onAuthRequired: AuthRequiredHandler?,
     onAuthSuccess: AuthSuccessHandler?
@@ -70,7 +74,7 @@ actor AgentBridge {
     try await runtime.registerClient(clientId: clientId, harnessMode: harnessMode)
     registered = true
 
-    if harnessMode == "piMono", tokenRefreshTask == nil {
+    if isPiMonoHarness, tokenRefreshTask == nil {
       tokenRefreshTask = Task { [weak self] in
         while !Task.isCancelled {
           try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
@@ -178,20 +182,22 @@ actor AgentBridge {
       throw BridgeError.requestAlreadyActive
     }
 
-    if let cached = lastKnownQuota, !cached.allowed {
-      QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
-      throw BridgeError.quotaExceeded(
-        plan: cached.plan,
-        unit: cached.unit,
-        used: cached.used,
-        limit: cached.limit,
-        resetAtUnix: cached.resetAt
-      )
-    }
-    QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
-    Task { [weak self] in
-      if let quota = await APIClient.shared.fetchChatUsageQuota() {
-        await self?.cacheQuota(quota)
+    if isPiMonoHarness {
+      if let cached = lastKnownQuota, !cached.allowed {
+        QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
+        throw BridgeError.quotaExceeded(
+          plan: cached.plan,
+          unit: cached.unit,
+          used: cached.used,
+          limit: cached.limit,
+          resetAtUnix: cached.resetAt
+        )
+      }
+      QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
+      Task { [weak self] in
+        if let quota = await APIClient.shared.fetchChatUsageQuota() {
+          await self?.cacheQuota(quota)
+        }
       }
     }
 
@@ -234,7 +240,7 @@ actor AgentBridge {
   }
 
   func refreshAuthToken() async {
-    guard harnessMode == "piMono" else { return }
+    guard isPiMonoHarness else { return }
     let authService = await MainActor.run { AuthService.shared }
     let token: String
     do {

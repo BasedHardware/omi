@@ -2509,6 +2509,7 @@
     "addTask": "Добавяне на задача",
     "newTask": "Нова задача",
     "viewAll": "Виж всички",
+    "expand": "Разгъни",
     "whatsNewInVersion": "Какво ново във {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",
@@ -3032,7 +3033,7 @@
     "captureModeLiveDescription": "Транскрибиране в реално време, докато говорите.",
     "captureModeLaterDescription": "Запазете звука сега и го транскрибирайте, когато пожелаете.",
     "backgroundModeUnavailable": "Фоновият режим не е наличен, защото няма свързано съвместимо устройство. Свържете устройство Omi, OpenGlass или Friend Pendant, за да използвате тази функция.",
-    "deviceTutorial": "Урок за устройството",
+    "deviceTutorial": "Как да използвате Omi",
     "deviceOnboardingTranscriptionTitle": "Говорете към вашето Omi",
     "deviceOnboardingTranscriptionSubtitle": "Кажете няколко думи и ги вижте как се появяват в реално време",
     "deviceOnboardingGoodJob": "Браво!",
@@ -3060,5 +3061,10 @@
     "deviceOnboardingSingleTapHint": "Това беше единично докосване — опитайте да докоснете два пъти бързо!",
     "deviceOnboardingTryDoubleTap": "Опитайте сега! Докоснете два пъти вашето Omi",
     "deviceOnboardingContinue": "Продължи",
-    "deviceOnboardingFinish": "Готово"
+    "deviceOnboardingFinish": "Готово",
+    "deviceOnboardingIntroTitle": "Опознайте своя Omi",
+    "deviceOnboardingIntroSubtitle": "Бърза практическа обиколка на всичко, което вашият Omi може да прави.",
+    "deviceOnboardingIntroDuration": "Около 1 минута",
+    "jumpToLatestMessage": "Отиди до последното съобщение",
+    "latest": "Последно"
 }

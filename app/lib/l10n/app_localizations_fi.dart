@@ -1712,12 +1712,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'LAITETTA',
-      one: 'LAITE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -7764,6 +7759,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get viewAll => 'Näytä kaikki';
 
   @override
+  String get expand => 'Laajenna';
+
+  @override
   String get addTask => 'Lisää tehtävä';
 
   @override
@@ -9365,7 +9363,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
 
   @override
-  String get deviceTutorial => 'Laitteen opastus';
+  String get deviceTutorial => 'Näin käytät Omia';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Puhu Omi-laitteeseesi';
@@ -9451,4 +9449,18 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Valmis';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutustu Omiisi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Nopea ja käytännönläheinen kierros kaikkeen, mitä Omisi osaa.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Noin 1 minuutti';
+  @override
+  String get jumpToLatestMessage => 'Siirry uusimpaan viestiin';
+
+  @override
+  String get latest => 'Uusin';
 }

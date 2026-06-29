@@ -7789,6 +7789,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get viewAll => 'Показать все';
 
   @override
+  String get expand => 'Развернуть';
+
+  @override
   String get addTask => 'Добавить задачу';
 
   @override
@@ -9398,7 +9401,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get transcribeLaterPaused => 'Пауза — аудио не записывается';
 
   @override
-  String get deviceTutorial => 'Обучение работе с устройством';
+  String get deviceTutorial => 'Как пользоваться Omi';
 
   @override
   String get deviceOnboardingTranscriptionTitle => 'Говорите в Omi';
@@ -9485,4 +9488,18 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceOnboardingFinish => 'Готово';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Знакомство с Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Быстрый практический обзор всего, что умеет ваш Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Около 1 минуты';
+  @override
+  String get jumpToLatestMessage => 'Перейти к последнему сообщению';
+
+  @override
+  String get latest => 'Последнее';
 }

@@ -2540,6 +2540,7 @@
     "addTask": "Pievienot uzdevumu",
     "newTask": "Jauns uzdevums",
     "viewAll": "Skatīt visu",
+    "expand": "Izvērst",
     "whatsNewInVersion": "Kas jauns {version}",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",
@@ -3063,7 +3064,7 @@
     "captureModeLiveDescription": "Transkribējiet reāllaikā, kamēr runājat.",
     "captureModeLaterDescription": "Saglabājiet audio tagad un transkribējiet, kad vēlaties.",
     "backgroundModeUnavailable": "Fona režīms nav pieejams, jo nav pievienota saderīga ierīce. Pievienojiet Omi, OpenGlass vai Friend Pendant ierīci, lai izmantotu šo funkciju.",
-    "deviceTutorial": "Ierīces pamācība",
+    "deviceTutorial": "Kā lietot Omi",
     "deviceOnboardingTranscriptionTitle": "Runā savā Omi",
     "deviceOnboardingTranscriptionSubtitle": "Pasaki dažus vārdus un vēro, kā tie parādās reāllaikā",
     "deviceOnboardingGoodJob": "Lieliski!",
@@ -3091,5 +3092,10 @@
     "deviceOnboardingSingleTapHint": "Tas bija viens pieskāriens — pamēģini ātri pieskarties divreiz!",
     "deviceOnboardingTryDoubleTap": "Pamēģini tagad! Dubultpieskaries savai Omi",
     "deviceOnboardingContinue": "Turpināt",
-    "deviceOnboardingFinish": "Pabeigt"
+    "deviceOnboardingFinish": "Pabeigt",
+    "deviceOnboardingIntroTitle": "Iepazīsti savu Omi",
+    "deviceOnboardingIntroSubtitle": "Ātrs, praktisks ieskats visā, ko spēj tavs Omi.",
+    "deviceOnboardingIntroDuration": "Apmēram 1 minūte",
+    "jumpToLatestMessage": "Pārlēkt uz jaunāko ziņojumu",
+    "latest": "Jaunākais"
 }

@@ -2540,6 +2540,7 @@
     "addTask": "작업 추가",
     "newTask": "새 작업",
     "viewAll": "모두 보기",
+    "expand": "펼치기",
     "whatsNewInVersion": "{version}의 새로운 기능",
     "@whatsNewInVersion": {
         "description": "Title for changelog with version number",
@@ -3063,7 +3064,7 @@
     "captureModeLiveDescription": "말하는 동안 실시간으로 변환합니다.",
     "captureModeLaterDescription": "지금 오디오를 저장하고 원할 때 변환하세요.",
     "backgroundModeUnavailable": "호환되는 기기가 연결되어 있지 않아 백그라운드 모드를 사용할 수 없습니다. 이 기능을 사용하려면 Omi, OpenGlass 또는 Friend Pendant 기기를 연결하세요.",
-    "deviceTutorial": "기기 튜토리얼",
+    "deviceTutorial": "Omi 사용법",
     "deviceOnboardingTranscriptionTitle": "Omi에 대고 말해보세요",
     "deviceOnboardingTranscriptionSubtitle": "몇 마디 말하면 실시간으로 텍스트가 나타나요",
     "deviceOnboardingGoodJob": "잘했어요!",
@@ -3091,5 +3092,10 @@
     "deviceOnboardingSingleTapHint": "방금 한 번 탭했어요 — 빠르게 두 번 탭해보세요!",
     "deviceOnboardingTryDoubleTap": "지금 해보세요! Omi를 더블 탭하세요",
     "deviceOnboardingContinue": "계속",
-    "deviceOnboardingFinish": "완료"
+    "deviceOnboardingFinish": "완료",
+    "deviceOnboardingIntroTitle": "Omi 알아보기",
+    "deviceOnboardingIntroSubtitle": "Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.",
+    "deviceOnboardingIntroDuration": "약 1분",
+    "jumpToLatestMessage": "최신 메시지로 이동",
+    "latest": "최신"
 }

@@ -26,6 +26,12 @@ PUSHER_SESSION_DEGRADED = Gauge(
     'Number of sessions currently in degraded mode (pusher unavailable)',
 )
 
+LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
+    'llm_gateway_chat_extraction_requests_total',
+    'Chat extraction requests routed through or around the LLM gateway',
+    ['feature', 'outcome', 'reason'],
+)
+
 
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

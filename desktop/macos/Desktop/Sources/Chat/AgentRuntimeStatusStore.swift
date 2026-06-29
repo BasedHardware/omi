@@ -92,6 +92,7 @@ struct AgentRunProjection: Identifiable, Sendable {
   var status: AgentRunProjectionStatus
   var statusText: String?
   var errorMessage: String?
+  var failure: AgentRuntimeFailure?
   var updatedAt: Date
   var completedAt: Date?
   var costUsd: Double?
@@ -141,7 +142,16 @@ final class AgentRuntimeStatusStore: ObservableObject {
   }
 
   func recordLocalFailure(surface: AgentSurfaceReference, error: String) {
-    update(surface: surface, status: .failed, statusText: nil, errorMessage: error, terminal: true)
+    let failure = AgentRuntimeFailure(
+      code: "local_failure",
+      userMessage: error,
+      technicalMessage: nil,
+      source: "runtime",
+      adapterId: nil,
+      provider: nil,
+      retryable: nil
+    )
+    update(surface: surface, status: .failed, statusText: nil, errorMessage: error, failure: failure, terminal: true)
   }
 
   func recordLocalCancellation(surface: AgentSurfaceReference, message: String? = nil) {
@@ -161,29 +171,43 @@ final class AgentRuntimeStatusStore: ObservableObject {
       let status = message.payload["status"] as? String
       let text = status == "completed" ? nil : name.map { ChatContentBlock.displayName(for: $0) }
       update(surface: surface, status: .running, statusText: text, terminal: false, payload: message.payload)
+    case .toolResultDisplay:
+      let name = message.payload["name"] as? String
+      let displayName = name.map { ChatContentBlock.displayName(for: $0) }
+      if projectionsBySurface[surface.key]?.status == .cancelling {
+        return
+      }
+      // Ambient status surfaces are visible outside the chat transcript; never
+      // echo raw tool output here because it may contain secrets or local paths.
+      update(surface: surface, status: .running, statusText: displayName, terminal: false, payload: message.payload)
     case .cancelAck:
       let accepted = message.payload["accepted"] as? Bool ?? false
       update(surface: surface, status: accepted ? .cancelling : .running, statusText: nil, terminal: false, payload: message.payload)
     case .result:
       let terminalStatus = AgentRunProjectionStatus.fromWire(message.payload["terminalStatus"] as? String) ?? .succeeded
       let text = (message.payload["text"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
       update(
         surface: surface,
         status: terminalStatus,
         statusText: text?.isEmpty == false ? text : nil,
+        errorMessage: failure?.displayMessage,
+        failure: failure,
         terminal: true,
         payload: message.payload
       )
     case .error:
+      let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
       update(
         surface: surface,
         status: .failed,
         statusText: nil,
-        errorMessage: message.payload["message"] as? String,
+        errorMessage: failure?.displayMessage ?? message.payload["message"] as? String,
+        failure: failure,
         terminal: true,
         payload: message.payload
       )
-    case .initMessage, .toolUse, .toolResultDisplay, .authRequired, .authSuccess, .controlToolResult, .unknown:
+    case .initMessage, .toolUse, .authRequired, .authSuccess, .controlToolResult, .unknown:
       break
     }
   }
@@ -205,6 +229,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
     status: AgentRunProjectionStatus,
     statusText: String?,
     errorMessage: String? = nil,
+    failure: AgentRuntimeFailure? = nil,
     terminal: Bool,
     payload: [String: Any] = [:]
   ) {
@@ -221,6 +246,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
       status: .idle,
       statusText: nil,
       errorMessage: nil,
+      failure: nil,
       updatedAt: Date(),
       completedAt: nil,
       costUsd: nil,
@@ -237,7 +263,8 @@ final class AgentRuntimeStatusStore: ObservableObject {
       ?? projection.adapterSessionId
     projection.status = status
     projection.statusText = statusText
-    projection.errorMessage = errorMessage ?? (terminal || status.isActive ? nil : projection.errorMessage)
+    projection.failure = failure ?? (terminal || status.isActive ? nil : projection.failure)
+    projection.errorMessage = projection.failure?.displayMessage ?? errorMessage ?? (terminal || status.isActive ? nil : projection.errorMessage)
     projection.updatedAt = Date()
     projection.completedAt = terminal ? projection.updatedAt : nil
     projection.costUsd = (payload["costUsd"] as? Double) ?? projection.costUsd
