@@ -33,12 +33,18 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version-file: backend/.python-version
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
 
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Install Python contract dependencies
-        run: python -m pip install -r backend/requirements.txt
+        working-directory: backend
+        run: uv pip sync pylock.toml --system
 
       - name: Run Python desktop backend contracts
         run: python -m pytest backend/testing/contracts -v
