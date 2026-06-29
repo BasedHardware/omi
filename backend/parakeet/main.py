@@ -141,6 +141,7 @@ async def lifespan(app: FastAPI):
             vram_safety_factor=float(os.getenv("PARAKEET_VRAM_SAFETY_FACTOR", "0.8")),
             vram_bytes_per_t2=float(os.getenv("PARAKEET_VRAM_BYTES_PER_T2", "136.6")),
             starvation_timeout_sec=float(os.getenv("PARAKEET_STARVATION_TIMEOUT", "5.0")),
+            max_inflight=int(os.getenv("PARAKEET_MAX_INFLIGHT", "2")),
         )
         await batch_engine.start()
         logger.info("Server started, GPU model loading in background...")
