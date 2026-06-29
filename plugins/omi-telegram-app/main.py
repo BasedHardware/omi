@@ -44,13 +44,68 @@ logger = logging.getLogger("omi-telegram-clone")
 # Webhook secret
 # ---------------------------------------------------------------------------
 # WEBHOOK_SECRET is the value Telegram sends back in X-Telegram-Bot-Api-Secret-Token
-# on every webhook delivery. Set via env in production (so it survives restarts);
-# fall back to a fresh random value at startup so dev installs work out of the box.
-WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET") or secrets.token_urlsafe(32)
-if os.getenv("TELEGRAM_WEBHOOK_SECRET"):
+# on every webhook delivery. Resolution order:
+#   1. TELEGRAM_WEBHOOK_SECRET env var (production — operator-managed)
+#   2. $STORAGE_DIR/webhook_secret (auto-generated, persisted on first run;
+#      survives restarts so Telegram's stored secret stays in sync)
+#   3. secrets.token_urlsafe(32) (first run, dev installs) — and immediately
+#      written to $STORAGE_DIR/webhook_secret so the next start picks it up.
+#
+# P1 (cubic): previously, when TELEGRAM_WEBHOOK_SECRET was unset, the plugin
+# generated a fresh random secret on every startup. Telegram's stored
+# webhook secret (set via setWebhook) then no longer matched incoming
+# deliveries' X-Telegram-Bot-Api-Secret-Token header, and every webhook
+# request got a 401 until the user re-ran /setup. Persisting the auto-
+# generated secret to a file makes the first-run experience stable
+# across restarts; production still has the option of env-var override.
+def _resolve_webhook_secret():
+    """Return (secret, source_description). Side effect: may write the
+    freshly generated secret to $STORAGE_DIR/webhook_secret with mode
+    0o600 (best-effort; logged on failure)."""
+    env_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+    if env_secret:
+        return env_secret, "configured via env"
+
+    storage_dir = os.getenv("STORAGE_DIR", "/tmp/omi-tg-e2e")
+    secret_path = os.path.join(storage_dir, "webhook_secret")
+    if os.path.exists(secret_path):
+        try:
+            with open(secret_path, "r") as f:
+                persisted = f.read().strip()
+            if persisted:
+                return persisted, "loaded from $STORAGE_DIR/webhook_secret"
+        except OSError as e:
+            logger.warning("webhook secret file %s unreadable: %s", secret_path, e)
+
+    # First run: generate + persist. Open with O_CREAT|O_WRONLY|O_TRUNC
+    # + explicit 0o600 so the file never briefly exists with the default
+    # umask (which on most systems would be 0o644 — world-readable).
+    secret = secrets.token_urlsafe(32)
+    try:
+        os.makedirs(storage_dir, exist_ok=True)
+        fd = os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(secret)
+        # Tighten parent dir perms too, best-effort.
+        try:
+            os.chmod(storage_dir, 0o700)
+        except OSError:
+            pass
+    except OSError as e:
+        logger.warning("could not persist webhook secret to %s: %s", secret_path, e)
+    return secret, "auto-generated and persisted to $STORAGE_DIR/webhook_secret"
+
+
+WEBHOOK_SECRET, _webhook_source = _resolve_webhook_secret()
+if _webhook_source == "configured via env":
     logger.info("Webhook secret: configured via env")
+elif _webhook_source == "loaded from $STORAGE_DIR/webhook_secret":
+    logger.info("Webhook secret: loaded from $STORAGE_DIR/webhook_secret")
 else:
-    logger.warning("Webhook secret: auto-generated (set TELEGRAM_WEBHOOK_SECRET to persist across restarts)")
+    logger.warning(
+        "Webhook secret: auto-generated and persisted "
+        "(set TELEGRAM_WEBHOOK_SECRET to override)"
+    )
 
 # Base URL of the Omi backend that the persona API lives on. Defaults to prod.
 OMI_BASE_URL = os.getenv("OMI_BASE_URL", "https://api.omi.me")
