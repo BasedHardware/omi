@@ -67,7 +67,7 @@ enum AIPlugin: String, CaseIterable, Identifiable {
                     key: "verify_token",
                     label: "Verify Token",
                     placeholder: "The token you entered in Meta webhook config",
-                    isSecure: false
+                    isSecure: true
                 )
             ]
         }
@@ -95,18 +95,21 @@ enum AIPlugin: String, CaseIterable, Identifiable {
     }
 
     /// Returns the JSON request body for `POST /toggle`.
-    func toggleRequestBody(chatId: String, credentialForAuth: String) -> [String: Any] {
+    /// The `enabled` parameter controls the target state — callers must
+    /// pass the desired value, not assume "true". (P2 fix: previously
+    /// hardcoded true, preventing disable operations.)
+    func toggleRequestBody(chatId: String, credentialForAuth: String, enabled: Bool) -> [String: Any] {
         switch self {
         case .telegram:
             return [
                 "chat_id": chatId,
-                "enabled": true,
+                "enabled": enabled,
                 "bot_token": credentialForAuth,
             ]
         case .whatsapp:
             return [
                 "phone": chatId,
-                "enabled": true,
+                "enabled": enabled,
                 "access_token": credentialForAuth,
             ]
         }
