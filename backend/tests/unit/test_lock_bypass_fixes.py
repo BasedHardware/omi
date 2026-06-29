@@ -632,7 +632,7 @@ class TestMemoryToolFiltering:
         # Only unlocked memory content should appear; locked must be filtered
         assert 'UNLOCKED_VISIBLE_CONTENT' in result
         assert 'LOCKED_SECRET_CONTENT' not in result
-        assert '1 total' in result  # Only 1 memory should appear
+        assert '1 shown' in result  # Only 1 memory should appear
 
     def test_search_memories_filters_locked(self):
         """search_memories_tool must exclude locked memories from results."""

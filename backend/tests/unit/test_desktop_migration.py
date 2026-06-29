@@ -92,11 +92,14 @@ for mod_name in [
     "database.redis_db",
     "database.auth",
     "utils.chat",
+    "utils.llm",
+    "utils.llm.clients",
 ]:
     if mod_name not in sys.modules:
         _stub_module(mod_name)
 
 sys.modules["utils.chat"].initial_message_util = MagicMock()
+sys.modules["utils.llm.clients"].get_llm = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]

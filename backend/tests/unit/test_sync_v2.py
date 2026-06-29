@@ -1548,6 +1548,7 @@ class TestAsyncCoordinatorBehavioral:
             module.users_db = MagicMock()
             module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
             module.build_person_embeddings_cache = MagicMock(return_value={})
+            module._reprocess_merged_conversations = MagicMock()
             module.record_usage = MagicMock()
             call_count = [0]
 

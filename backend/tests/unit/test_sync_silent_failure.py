@@ -1053,6 +1053,7 @@ _CHAT_STUB_MODULES = [
     'database.apps',
     'database.redis_db',
     'firebase_admin',
+    'utils.apps',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.notifications',
@@ -1108,6 +1109,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['database.users'].get_user_store_recording_permission = MagicMock(return_value=False)
         sys.modules['database.users'].get_user_transcription_preferences = MagicMock(return_value={})
         sys.modules['database.apps'].record_app_usage = MagicMock()
+        sys.modules['utils.apps'].get_available_app_by_id = MagicMock(return_value=None)
 
         # Model stubs
         sys.modules['models.chat'].ChatSession = MagicMock()
