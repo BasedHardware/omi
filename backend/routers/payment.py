@@ -987,7 +987,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
 
 @router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'])
-async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
+async def stripe_connect_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 
     try:
@@ -1171,7 +1171,8 @@ def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user
 @router.get("/v1/payments/success", response_class=HTMLResponse)
 def stripe_success(session_id: str = Query(...)):
     # The subscription is updated via webhook. This page is just for user feedback.
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Success</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1179,12 +1180,14 @@ def stripe_success(session_id: str = Query(...)):
                 <p>Your subscription is now active. You can close this window and return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.get("/v1/payments/cancel", response_class=HTMLResponse)
 def stripe_cancel():
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Cancelled</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1192,7 +1195,8 @@ def stripe_cancel():
                 <p>Your payment process was cancelled. You can return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.post('/v1/payments/customer-portal')
@@ -1225,7 +1229,8 @@ def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid
 
 @router.get("/v1/payments/portal-return", response_class=HTMLResponse)
 def portal_return():
-    return HTMLResponse(content="""
+    return HTMLResponse(
+        content="""
         <html>
             <head><title>Portal Complete</title></head>
             <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; flex-direction: column;">
@@ -1233,7 +1238,8 @@ def portal_return():
                 <p>Your payment settings have been updated. You can close this window and return to the app.</p>
             </body>
         </html>
-    """)
+    """
+    )
 
 
 @router.get("/v1/payment-methods/status")
