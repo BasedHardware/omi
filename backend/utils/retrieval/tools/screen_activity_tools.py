@@ -42,13 +42,14 @@ def _get_uid(config: RunnableConfig) -> Optional[str]:
 def _resolve_display_tz(uid: str):
     # Render timestamps in the user's timezone so a chat answer shows screen-activity matches in the
     # same timezone as conversation matches (conversation_tools renders in the user's timezone too).
-    # Fall back to UTC when the user has no timezone set or it is not a valid IANA name.
-    tz_name = notification_db.get_user_time_zone(uid)
-    if tz_name:
-        try:
+    # Fall back to UTC on any failure: no timezone set, an invalid IANA name, or a Firestore error
+    # reading it (a transient lookup error must not fail an otherwise successful search).
+    try:
+        tz_name = notification_db.get_user_time_zone(uid)
+        if tz_name:
             return ZoneInfo(tz_name)
-        except Exception:
-            logger.warning(f"search_screen_activity_tool - invalid user timezone {tz_name!r}, using UTC")
+    except Exception:
+        logger.warning("search_screen_activity_tool - could not resolve user timezone, using UTC")
     return timezone.utc
 
 

@@ -90,6 +90,15 @@ def test_resolve_display_tz_falls_back_to_utc_on_invalid():
         assert sat._resolve_display_tz("u1") is timezone.utc
 
 
+def test_resolve_display_tz_falls_back_to_utc_when_lookup_raises():
+    # A transient Firestore/network error reading the user's timezone must not crash the search.
+    def _boom(uid):
+        raise RuntimeError("firestore unavailable")
+
+    with patch.object(sat.notification_db, "get_user_time_zone", _boom):
+        assert sat._resolve_display_tz("u1") is timezone.utc
+
+
 def test_search_tool_renders_in_resolved_timezone():
     source = SOURCE.read_text(encoding="utf-8")
     func = source[source.index("def search_screen_activity_tool") :]
