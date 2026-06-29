@@ -200,6 +200,7 @@ pytest tests/unit/test_voice_message_filename_none.py -v
 pytest tests/unit/test_subscription_plans.py -v
 pytest tests/unit/test_payment_available_plans_source.py -v
 pytest tests/unit/test_payment_promotion_codes.py -v
+pytest tests/unit/test_payment_connect_account_user_guard.py -v
 pytest tests/unit/test_stripe_webhook_none_guard.py -v
 pytest tests/unit/test_stripe_webhook_behavioral.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
