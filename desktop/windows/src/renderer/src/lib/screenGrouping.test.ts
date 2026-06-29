@@ -1,12 +1,20 @@
 import { describe, it, expect } from 'vitest'
 import { groupFrames, budgetSegments, type ScreenSegment } from './screenGrouping'
+import type { ScreenFrameLite } from '../../../shared/types'
 
-const f = (ts: number, app: string, windowTitle: string, ocrText: string) => ({
+const f = (
+  ts: number,
+  app: string,
+  windowTitle: string,
+  ocrText: string,
+  over: Partial<ScreenFrameLite> = {}
+): ScreenFrameLite => ({
   ts,
   app,
   windowTitle,
   processName: app.toLowerCase() + '.exe',
-  ocrText
+  ocrText,
+  ...over
 })
 
 describe('groupFrames', () => {
@@ -25,6 +33,34 @@ describe('groupFrames', () => {
   })
   it('drops empty-OCR frames', () => {
     expect(groupFrames([f(1, 'Code', 'x', '   ')])).toEqual([])
+  })
+  it('uses layout-aware OCR context when present', () => {
+    const segs = groupFrames([
+      f(1, 'Code', 'plan.md', 'plain text', { ocrContext: '- top 10%, left 5%: layout text' })
+    ])
+    expect(segs[0].text).toBe('- top 10%, left 5%: layout text')
+  })
+  it('dedupes near-identical long OCR contexts at the same app/window', () => {
+    const segs = groupFrames([
+      f(
+        1,
+        'Code',
+        'plan.md',
+        'Project Alpha roadmap Q2 launch risk checklist owner Junius status green'
+      ),
+      f(
+        2,
+        'Code',
+        'plan.md',
+        'Project Alpha roadmap Q2 launch risk checklist owner Junius status green.'
+      ),
+      f(3, 'Code', 'plan.md', 'Now adding the Windows OCR layout serialization tests')
+    ])
+
+    expect(segs).toHaveLength(1)
+    expect(segs[0].text).toContain('status green')
+    expect(segs[0].text).not.toContain('status green.')
+    expect(segs[0].text).toContain('layout serialization tests')
   })
 })
 

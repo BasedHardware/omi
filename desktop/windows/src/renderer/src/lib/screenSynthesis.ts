@@ -1,7 +1,7 @@
 // src/renderer/src/lib/screenSynthesis.ts
 import { omiApi } from './apiClient'
 import { generate } from './geminiClient'
-import { redact, isPrivateWindow, isDeniedContext } from './screenRedact'
+import { isPrivateWindow, isDeniedContext, redactFrameFields } from './screenRedact'
 import { groupFrames, budgetSegments } from './screenGrouping'
 import {
   buildScreenPrompt,
@@ -56,7 +56,7 @@ export async function runScreenSynthesisOnce(): Promise<number> {
     }
 
     // Redact on-device BEFORE building the prompt (nothing un-redacted leaves).
-    const redacted = allowed.map((f) => ({ ...f, ocrText: redact(f.ocrText) }))
+    const redacted = allowed.map(redactFrameFields)
     const segments = budgetSegments(groupFrames(redacted), PROMPT_BUDGET_CHARS)
     if (segments.length === 0) {
       await window.omi.screenSynthAdvanceWatermark(maxTs)

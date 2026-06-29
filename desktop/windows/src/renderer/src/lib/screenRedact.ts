@@ -1,8 +1,21 @@
 // src/renderer/src/lib/screenRedact.ts
 export const DEFAULT_DENYLIST: string[] = [
-  '1password', 'bitwarden', 'keepass', 'lastpass', 'dashlane',
-  'windows security', 'windows hello', 'log in', 'login', 'sign in',
-  'password', 'bank', 'chase', 'wells fargo', 'paypal', 'coinbase'
+  '1password',
+  'bitwarden',
+  'keepass',
+  'lastpass',
+  'dashlane',
+  'windows security',
+  'windows hello',
+  'log in',
+  'login',
+  'sign in',
+  'password',
+  'bank',
+  'chase',
+  'wells fargo',
+  'paypal',
+  'coinbase'
 ]
 
 const PRIVATE_MARKERS = ['incognito', 'inprivate', 'private browsing']
@@ -39,6 +52,13 @@ export function redact(text: string): string {
 // Redact the frame fields that get sent to the LLM — the OCR body AND the window
 // title (titles often carry emails/subjects/PII). Generic so it doesn't couple to
 // the RewindFrame type.
-export function redactFrameFields<T extends { ocrText: string; windowTitle: string }>(f: T): T {
-  return { ...f, ocrText: redact(f.ocrText), windowTitle: redact(f.windowTitle) }
+export function redactFrameFields<
+  T extends { ocrText: string; windowTitle: string; ocrContext?: string }
+>(f: T): T {
+  return {
+    ...f,
+    ocrText: redact(f.ocrText),
+    ocrContext: f.ocrContext ? redact(f.ocrContext) : f.ocrContext,
+    windowTitle: redact(f.windowTitle)
+  }
 }

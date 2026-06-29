@@ -304,6 +304,8 @@ export type ScreenFrameLite = {
   windowTitle: string
   processName: string
   ocrText: string
+  /** Layout-aware OCR context for synthesis. Falls back to ocrText when absent. */
+  ocrContext?: string
 }
 
 // Persisted synthesis state (main owns it; default OFF / opt-in).
@@ -589,6 +591,7 @@ export type RewindFrame = {
   windowTitle: string
   processName: string
   ocrText: string
+  ocrLinesJson?: string | null
   imagePath: string
   width: number
   height: number
