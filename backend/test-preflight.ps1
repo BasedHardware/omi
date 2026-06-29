@@ -9,6 +9,7 @@ $PassCount = 0
 $WarnCount = 0
 $FailCount = 0
 $Script:PythonLauncher = $null
+$Script:PythonLauncherArgs = @()
 
 function Add-Pass {
     param([string]$Message)
@@ -30,10 +31,33 @@ function Add-Fail {
 
 function Invoke-SelectedPython {
     param([string[]]$Arguments)
-    if ($Script:PythonLauncher -eq "py") {
-        & py -3 @Arguments
-    } else {
-        & $Script:PythonLauncher @Arguments
+    $allArgs = @()
+    $allArgs += $Script:PythonLauncherArgs
+    $allArgs += $Arguments
+    & $Script:PythonLauncher @allArgs
+}
+
+function Invoke-PythonCandidate {
+    param(
+        [pscustomobject]$Candidate,
+        [string[]]$Arguments
+    )
+    $allArgs = @()
+    $allArgs += $Candidate.Args
+    $allArgs += $Arguments
+    & $Candidate.Command @allArgs
+}
+
+function Test-PythonCandidate {
+    param(
+        [pscustomobject]$Candidate,
+        [string[]]$Arguments
+    )
+    try {
+        Invoke-PythonCandidate $Candidate $Arguments *> $null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
     }
 }
 
@@ -41,14 +65,46 @@ try {
 
 Write-Host "Tools:"
 
-$pythonCommand = Get-Command python -ErrorAction SilentlyContinue
-if ($pythonCommand) {
-    $Script:PythonLauncher = $pythonCommand.Source
-    $pythonVersion = (& $Script:PythonLauncher --version 2>&1)
-    Add-Pass "python $pythonVersion"
-} elseif (Get-Command py -ErrorAction SilentlyContinue) {
-    $Script:PythonLauncher = "py"
-    $pythonVersion = (& py -3 --version 2>&1)
+$pythonCandidates = @()
+if ($env:PYTHON) {
+    $pythonEnvCommand = Get-Command $env:PYTHON -ErrorAction SilentlyContinue
+    if ($pythonEnvCommand) {
+        $pythonCandidates += [pscustomobject]@{ Name = $env:PYTHON; Command = $pythonEnvCommand.Source; Args = @() }
+    }
+}
+foreach ($commandName in @("python3", "python")) {
+    $command = Get-Command $commandName -ErrorAction SilentlyContinue
+    if ($command) {
+        $pythonCandidates += [pscustomobject]@{ Name = $commandName; Command = $command.Source; Args = @() }
+    }
+}
+$pyCommand = Get-Command py -ErrorAction SilentlyContinue
+if ($pyCommand) {
+    $pythonCandidates += [pscustomobject]@{ Name = "py -3"; Command = $pyCommand.Source; Args = @("-3") }
+}
+
+$firstRunnablePython = $null
+foreach ($candidate in $pythonCandidates) {
+    if (-not (Test-PythonCandidate $candidate @("-c", "import sys"))) {
+        continue
+    }
+    if (-not $firstRunnablePython) {
+        $firstRunnablePython = $candidate
+    }
+    if (Test-PythonCandidate $candidate @("-m", "pytest", "--version")) {
+        $Script:PythonLauncher = $candidate.Command
+        $Script:PythonLauncherArgs = $candidate.Args
+        break
+    }
+}
+
+if (-not $Script:PythonLauncher -and $firstRunnablePython) {
+    $Script:PythonLauncher = $firstRunnablePython.Command
+    $Script:PythonLauncherArgs = $firstRunnablePython.Args
+}
+
+if ($Script:PythonLauncher) {
+    $pythonVersion = Invoke-SelectedPython @("--version") 2>&1
     Add-Pass "python $pythonVersion"
 } else {
     Add-Fail "python not found"
@@ -59,7 +115,7 @@ if ($Script:PythonLauncher) {
     if ($LASTEXITCODE -eq 0) {
         Add-Pass $pytestOutput
     } else {
-        Add-Fail "pytest not installed (pip install pytest)"
+        Add-Fail "pytest not installed (python -m pip install pytest)"
     }
 } else {
     Add-Fail "pytest not checked because python is missing"
