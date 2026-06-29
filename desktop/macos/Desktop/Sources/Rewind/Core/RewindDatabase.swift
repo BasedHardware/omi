@@ -1298,6 +1298,15 @@ actor RewindDatabase {
             try db.create(index: "idx_segments_session", on: "transcription_segments", columns: ["sessionId"])
         }
 
+        migrator.registerMigration("addTranscriptionFinalizationMetadata") { db in
+            try db.alter(table: "transcription_sessions") { t in
+                t.add(column: "finalizationStrategy", .text)
+                t.add(column: "finalizationReason", .text)
+                t.add(column: "finalizationStartedAt", .datetime)
+                t.add(column: "finalizationCompletedAt", .datetime)
+            }
+        }
+
         // Migration 11: Create live_notes table for AI-generated notes during recording
         migrator.registerMigration("createLiveNotes") { db in
             try db.create(table: "live_notes") { t in

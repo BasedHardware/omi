@@ -325,11 +325,6 @@ class ShortcutSettings: ObservableObject {
         didSet { UserDefaults.standard.set(solidBackground, forKey: "shortcut_solidBackground") }
     }
 
-    /// When true, the floating bar anchors to the top-center notch area and blends into it.
-    @Published var notchModeEnabled: Bool {
-        didSet { UserDefaults.standard.set(notchModeEnabled, forKey: "shortcut_notchModeEnabled") }
-    }
-
     /// When true, push-to-talk plays start/end sounds.
     @Published var pttSoundsEnabled: Bool {
         didSet { UserDefaults.standard.set(pttSoundsEnabled, forKey: "shortcut_pttSoundsEnabled") }
@@ -544,7 +539,6 @@ class ShortcutSettings: ObservableObject {
         self.pttEnabled = UserDefaults.standard.object(forKey: "shortcut_pttEnabled") as? Bool ?? true
         self.doubleTapForLock = UserDefaults.standard.object(forKey: "shortcut_doubleTapForLock") as? Bool ?? true
         self.solidBackground = UserDefaults.standard.object(forKey: "shortcut_solidBackground") as? Bool ?? false
-        self.notchModeEnabled = UserDefaults.standard.object(forKey: "shortcut_notchModeEnabled") as? Bool ?? true
         self.pttSoundsEnabled = UserDefaults.standard.object(forKey: "shortcut_pttSoundsEnabled") as? Bool ?? true
         self.pttMuteSystemAudio = UserDefaults.standard.object(forKey: "shortcut_pttMuteSystemAudio") as? Bool ?? true
         self.selectedModel = ModelQoS.Claude.sanitizedSelection(

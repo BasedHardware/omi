@@ -201,6 +201,7 @@ def _setup_payment_module():
 
     users_db_mod = sys.modules["database.users"]
     users_db_mod.get_stripe_connect_account_id = MagicMock()
+    users_db_mod.get_user_profile = MagicMock(return_value={})
     users_db_mod.set_stripe_connect_account_id = MagicMock()
     users_db_mod.set_paypal_payment_details = MagicMock()
     users_db_mod.get_default_payment_method = MagicMock()

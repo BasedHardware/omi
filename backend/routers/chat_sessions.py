@@ -16,6 +16,8 @@ from pydantic import BaseModel, Field
 
 import database.chat as chat_db
 from database.users import set_chat_message_rating_score
+from utils.chat import initial_message_util
+from utils.llm.clients import get_llm
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -194,11 +196,9 @@ def create_initial_message(
 ):
     """Generate an initial greeting message for a chat session.
 
-    Delegates to the existing initial_message_util in routers/chat.py which
+    Delegates to the shared chat helper which
     handles persona detection, previous message context, and LLM generation.
     """
-    from routers.chat import initial_message_util
-
     ai_message = initial_message_util(uid, request.app_id, chat_session_id=request.session_id)
     return {'message': ai_message.text, 'message_id': ai_message.id}
 
@@ -209,8 +209,6 @@ def generate_session_title(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "chat:initial")),
 ):
     """Generate a title for a chat session based on its messages."""
-    from utils.llm.clients import get_llm
-
     conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
     prompt = (
         "Generate a short, descriptive title (max 6 words) for this chat conversation. "
