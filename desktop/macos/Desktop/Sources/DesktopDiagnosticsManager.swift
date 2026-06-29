@@ -44,6 +44,7 @@ final class DesktopDiagnosticsManager {
   private var lastPTTWatchdogIncidentAt: Date?
   private let pttWatchdogThreshold = 3
   private let pttWatchdogDedupWindow: TimeInterval = 15 * 60
+  private let pttWatchdogMinimumAudioSeconds: Double = 0.35
 
   private init() {}
 
@@ -70,7 +71,8 @@ final class DesktopDiagnosticsManager {
     hubActive: Bool
   ) {
     let nearZero = peak <= 5 && rms <= 5
-    if nearZero && micPermissionGranted {
+    let watchdogEligible = audioSeconds >= pttWatchdogMinimumAudioSeconds
+    if nearZero && micPermissionGranted && watchdogEligible {
       consecutiveNearZeroPTTTurns += 1
     } else if peak > 50 || rms > 20 {
       consecutiveNearZeroPTTTurns = 0
@@ -84,6 +86,7 @@ final class DesktopDiagnosticsManager {
       "peak": peak,
       "rms": rms,
       "is_near_zero": nearZero,
+      "watchdog_eligible": watchdogEligible,
       "consecutive_silent_turns": consecutiveNearZeroPTTTurns,
       "tcc_microphone_granted": micPermissionGranted,
       "input_device_class": classifyInputDevice(deviceDescription),
@@ -96,7 +99,7 @@ final class DesktopDiagnosticsManager {
 
     record(.pttAudioCaptureSilentTurn, properties: properties)
 
-    guard nearZero && micPermissionGranted && consecutiveNearZeroPTTTurns >= pttWatchdogThreshold
+    guard nearZero && micPermissionGranted && watchdogEligible && consecutiveNearZeroPTTTurns >= pttWatchdogThreshold
     else { return }
     recordPTTWatchdogTriggered(latestProperties: properties)
   }
@@ -170,6 +173,14 @@ final class DesktopDiagnosticsManager {
       log("DesktopDiagnostics: failed to write diagnostics attachment")
       return nil
     }
+  }
+
+  func resetForTests() {
+    lock.lock()
+    snapshots.removeAll()
+    lock.unlock()
+    consecutiveNearZeroPTTTurns = 0
+    lastPTTWatchdogIncidentAt = nil
   }
 
   private func record(

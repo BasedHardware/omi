@@ -309,17 +309,17 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
-    let isFollowUp = isCurrentSessionFollowUp
-    AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
+    let mode = currentPTTMode()
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: mode)
     DesktopDiagnosticsManager.shared.recordPTTStarted(
-      mode: isFollowUp ? "follow_up_hold" : "hold",
+      mode: mode,
       hubActive: RealtimeHubController.shared.isActive,
-      micPermissionGranted: hasMicPermission)
+      micPermissionGranted: refreshedMicPermission())
     let preOverlayImage = ScreenCaptureManager.captureScreenImage()
     updateBarState()
 
     captureContextAndStartAudio(preOverlayImage: preOverlayImage)
-    log("PushToTalkManager: started listening (hold mode, followUp=\(isFollowUp))")
+    log("PushToTalkManager: started listening (mode=\(mode))")
   }
 
   private func enterLockedListening() {
@@ -340,12 +340,12 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
-    let isFollowUp = isCurrentSessionFollowUp
-    AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_locked" : "locked")
+    let mode = currentPTTMode()
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: mode)
     DesktopDiagnosticsManager.shared.recordPTTStarted(
-      mode: isFollowUp ? "follow_up_locked" : "locked",
+      mode: mode,
       hubActive: RealtimeHubController.shared.isActive,
-      micPermissionGranted: hasMicPermission)
+      micPermissionGranted: refreshedMicPermission())
 
     // If we were already listening from the first tap, keep going.
     // Otherwise start fresh.
@@ -359,7 +359,7 @@ class PushToTalkManager: ObservableObject {
     }
 
     updateBarState()
-    log("PushToTalkManager: entered locked listening mode (followUp=\(isFollowUp))")
+    log("PushToTalkManager: entered locked listening mode (mode=\(mode))")
   }
 
   private func enterPendingLockDecision() {
@@ -453,6 +453,16 @@ class PushToTalkManager: ObservableObject {
   }
 
   private var finalizedMode: String = "hold"
+
+  private func currentPTTMode() -> String {
+    let baseMode = state == .lockedListening ? "locked" : "hold"
+    return isCurrentSessionFollowUp ? "follow_up_\(baseMode)" : baseMode
+  }
+
+  private func refreshedMicPermission() -> Bool {
+    hasMicPermission = AudioCaptureService.checkPermission()
+    return hasMicPermission
+  }
 
   // MARK: - QueryTracer
 
@@ -586,7 +596,7 @@ class PushToTalkManager: ObservableObject {
     lastOptionUpTime = 0
     // Dictation is over — restore any audio we muted so the track resumes immediately.
     SystemAudioMuteController.shared.restore()
-    finalizedMode = state == .lockedListening ? "locked" : "hold"
+    finalizedMode = currentPTTMode()
     state = .finalizing
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
@@ -1119,9 +1129,18 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  private func startMicCapture(batchMode: Bool = false, overrideDeviceID: AudioDeviceID? = nil) {
+  private func startMicCapture(
+    batchMode: Bool = false,
+    overrideDeviceID: AudioDeviceID? = nil,
+    diagnosticRecoveryAction: String? = nil
+  ) {
     guard !micCaptureStartInFlight && !(audioCaptureService?.capturing ?? false) else {
       log("PushToTalkManager: mic capture start ignored — already active")
+      if let diagnosticRecoveryAction {
+        DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+          recoveryAction: diagnosticRecoveryAction,
+          recoveryResult: "ignored_already_active")
+      }
       return
     }
     micCaptureStartInFlight = true
@@ -1195,10 +1214,20 @@ class PushToTalkManager: ObservableObject {
           if isCurrentGeneration {
             self.micCaptureStartInFlight = false
           }
+          if let diagnosticRecoveryAction {
+            DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+              recoveryAction: diagnosticRecoveryAction,
+              recoveryResult: "ignored_turn_ended")
+          }
           log("PushToTalkManager: mic capture start completed after turn ended — stopped")
           return
         }
         self.micCaptureStartInFlight = false
+        if let diagnosticRecoveryAction {
+          DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+            recoveryAction: diagnosticRecoveryAction,
+            recoveryResult: "succeeded")
+        }
         log("PushToTalkManager: mic capture started (batch=\(batchMode))")
       } catch {
         guard self.micCaptureGeneration == generation else {
@@ -1206,6 +1235,11 @@ class PushToTalkManager: ObservableObject {
           return
         }
         self.micCaptureStartInFlight = false
+        if let diagnosticRecoveryAction {
+          DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+            recoveryAction: diagnosticRecoveryAction,
+            recoveryResult: "failed")
+        }
         logError("PushToTalkManager: mic capture failed", error: error)
         self.stopListening()
       }
@@ -1228,12 +1262,18 @@ class PushToTalkManager: ObservableObject {
       silentMicRecoveryPolicy.recordCaptureRebuild()
       stopMicCapture()
       clearBufferedTurnAudio()
-      startMicCapture(batchMode: batchMode, overrideDeviceID: builtInID)
+      startMicCapture(
+        batchMode: batchMode,
+        overrideDeviceID: builtInID,
+        diagnosticRecoveryAction: "switch_to_built_in_mic")
       return
     }
 
     if detection.suggestedAction == .fallbackToBuiltIn {
       log("PushToTalkManager: silent-mic detected but no built-in mic to fall back to")
+      DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+        recoveryAction: "switch_to_built_in_mic",
+        recoveryResult: "no_built_in_mic")
     }
 
     requestCoreAudioCaptureRecovery(
