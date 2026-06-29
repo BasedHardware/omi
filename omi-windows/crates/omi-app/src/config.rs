@@ -115,6 +115,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub firebase_refresh_token: String,
 
+    /// Google OAuth access token (for Gmail, Calendar, Drive APIs)
+    #[serde(default)]
+    pub google_access_token: String,
+
     /// User display name
     #[serde(default)]
     pub user_display_name: String,
@@ -212,6 +216,10 @@ pub struct AppConfig {
     /// Hour of day (0-23) to generate daily recaps (default: 21 = 9 PM).
     #[serde(default = "default_recap_hour")]
     pub daily_recap_hour: u64,
+
+    /// Whether active window / app usage tracking is enabled.
+    #[serde(default = "default_true")]
+    pub app_usage_tracking_enabled: bool,
 }
 
 fn default_backend_url() -> String {
@@ -292,6 +300,7 @@ impl Default for AppConfig {
             diarize_speakers: false,
             firebase_id_token: String::new(),
             firebase_refresh_token: String::new(),
+            google_access_token: String::new(),
             user_display_name: String::new(),
             user_email: String::new(),
             agent_enabled: false,
@@ -312,6 +321,7 @@ impl Default for AppConfig {
             file_indexing_enabled: true,
             file_index_paths: Vec::new(),
             daily_recap_hour: default_recap_hour(),
+            app_usage_tracking_enabled: true,
         }
     }
 }
@@ -383,6 +393,7 @@ impl AppConfig {
     pub fn sign_out(&mut self) {
         self.firebase_id_token.clear();
         self.firebase_refresh_token.clear();
+        self.google_access_token.clear();
         self.user_display_name.clear();
         self.user_email.clear();
     }
