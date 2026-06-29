@@ -14,12 +14,6 @@ logger = logging.getLogger(__name__)
 # Collection name
 action_items_collection = 'action_items'
 
-# Hard ceiling on rows scanned for a single list query. Pagination runs over the fully sorted set
-# (the final order differs from any single Firestore order_by), so this caps reads and memory instead
-# of streaming an unbounded collection. Real action-item collections are far smaller, so it stays
-# correct for live data; only pathological collections beyond this size lose items at the deep tail.
-_MAX_ACTION_ITEMS_SCAN = 1000
-
 
 @dataclass
 class BatchMutationResult:
@@ -291,10 +285,6 @@ def get_action_items(
             query = query.where(filter=FieldFilter('created_at', '<=', end_date))
 
         query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
-
-    # Bound the scan: pagination runs over the fully sorted set below (the final order differs from
-    # the Firestore order_by), so cap how many rows are materialized to keep reads and memory bounded.
-    query = query.limit(_MAX_ACTION_ITEMS_SCAN)
 
     # Execute query
     docs = query.stream()
