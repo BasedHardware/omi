@@ -101,3 +101,10 @@ def test_first_page_returns_soonest_due_not_newest_created():
 def test_second_page_continues_final_order():
     # offset=2, limit=2 -> the next two of the final order.
     assert _ids(limit=2, offset=2) == ['B', 'A']
+
+
+def test_non_positive_limit_does_not_truncate():
+    # A defensive guard: limit <= 0 must not silently return an empty/garbage slice (e.g. [:0] or a
+    # negative slice). Such a limit means "no page cap", so the full sorted order is returned.
+    assert _ids(limit=0) == ['C', 'D', 'B', 'A', 'E']
+    assert _ids(limit=-5) == ['C', 'D', 'B', 'A', 'E']
