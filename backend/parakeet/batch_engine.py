@@ -74,28 +74,34 @@ class BatchEngine:
             "vram_limited_batches": 0,
         }
 
+    def _try_init_vram(self) -> None:
+        if self._vram_enabled or self._vram_safety_factor <= 0:
+            return
+        vram = self._gpu_worker.vram_info
+        if vram.get("total_mb", 0) <= 0:
+            return
+        self._attention_mode = vram.get("attention_mode", "full")
+        self._auto_threshold_sec = vram.get("auto_threshold_sec", 300.0)
+        budget = vram["total_mb"] * self._vram_safety_factor - vram["baseline_mb"]
+        self._vram_available_mb = max(budget, 0)
+        self._vram_enabled = True
+        if budget <= 0:
+            logger.warning(
+                f"VRAM budget is non-positive ({budget:.0f} MB) — "
+                f"baseline exceeds safety cap. All batches capped to 1."
+            )
+        logger.info(
+            f"VRAM-aware batching enabled: {self._vram_available_mb:.0f} MB budget "
+            f"(total={vram['total_mb']:.0f}, baseline={vram['baseline_mb']:.0f}, "
+            f"safety={self._vram_safety_factor}, coeff={self._vram_bytes_per_t2})"
+        )
+
     async def start(self) -> None:
         self._loop = asyncio.get_running_loop()
         self._inflight_sem = asyncio.Semaphore(self._max_inflight)
-        vram = self._gpu_worker.vram_info
-        self._attention_mode = vram.get("attention_mode", "full")
-        self._auto_threshold_sec = vram.get("auto_threshold_sec", 300.0)
-        if self._vram_safety_factor > 0 and vram.get("total_mb", 0) > 0:
-            budget = vram["total_mb"] * self._vram_safety_factor - vram["baseline_mb"]
-            self._vram_available_mb = max(budget, 0)
-            self._vram_enabled = True
-            if budget <= 0:
-                logger.warning(
-                    f"VRAM budget is non-positive ({budget:.0f} MB) — "
-                    f"baseline exceeds safety cap. All batches capped to 1."
-                )
-            logger.info(
-                f"VRAM-aware batching enabled: {self._vram_available_mb:.0f} MB budget "
-                f"(total={vram['total_mb']:.0f}, baseline={vram['baseline_mb']:.0f}, "
-                f"safety={self._vram_safety_factor}, coeff={self._vram_bytes_per_t2})"
-            )
-        else:
-            logger.info("VRAM-aware batching disabled (safety_factor=0 or no VRAM info)")
+        self._try_init_vram()
+        if not self._vram_enabled:
+            logger.info("VRAM-aware batching deferred (GPU worker still loading or safety_factor=0)")
         self._flush_task = asyncio.create_task(self._flush_loop())
 
     async def stop(self) -> None:
@@ -255,6 +261,7 @@ class BatchEngine:
     async def _flush_batch(self) -> None:
         await self._inflight_sem.acquire()
         try:
+            self._try_init_vram()
             async with self._lock:
                 if not self._pending:
                     return

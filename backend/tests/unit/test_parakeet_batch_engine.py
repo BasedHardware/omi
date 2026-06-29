@@ -651,6 +651,54 @@ class TestDurationPassthrough:
         assert len(payload["durations"]) == payload["batch_size"]
 
 
+class TestLazyVramInit:
+
+    def test_vram_init_deferred_until_worker_ready(self):
+        """VRAM info is zero at start() time, populated later — lazy init picks it up."""
+        submitted_payloads = []
+
+        def mock_submit(payload, loop):
+            submitted_payloads.append(payload)
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            fut.set_result([{"text": "ok"} for _ in range(payload["batch_size"])])
+            item.inference_seconds = 0.01
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=32, max_wait_seconds=0.01, vram_safety_factor=0.8)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                assert not engine._vram_enabled, "VRAM should be deferred when total_mb=0"
+
+                gpu.vram_info = {
+                    "total_mb": 22563,
+                    "baseline_mb": 5709,
+                    "attention_mode": "auto",
+                    "auto_threshold_sec": 300,
+                }
+
+                try:
+                    fut = asyncio.ensure_future(engine.submit("/tmp/lazy.wav", owns_file=False))
+                    await asyncio.wait_for(fut, timeout=5)
+                finally:
+                    await engine.stop()
+
+                assert engine._vram_enabled, "VRAM should be enabled after lazy init"
+                assert engine._vram_available_mb > 0
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+
 class TestUnlinkSafe:
 
     def test_unlink_existing(self):
