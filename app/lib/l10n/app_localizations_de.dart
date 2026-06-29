@@ -1726,7 +1726,12 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'GERÄTE', one: 'GERÄT');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'GERÄTE',
+      one: 'GERÄT',
+    );
     return '$count $_temp0 IN DER NÄHE GEFUNDEN';
   }
 
@@ -9536,6 +9541,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Etwa 1 Minute';
+
   @override
   String get jumpToLatestMessage => 'Zur neuesten Nachricht springen';
 
