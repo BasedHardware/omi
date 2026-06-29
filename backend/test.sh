@@ -169,6 +169,7 @@ run_pytest tests/unit/test_ws_auth_handshake.py -v
 run_pytest tests/unit/test_streaming_deepgram_backoff.py -v
 run_pytest tests/unit/test_executors.py -v
 run_pytest tests/unit/test_task_integrations_async_offload.py -v
+run_pytest tests/unit/test_task_integrations_oauth_atomic.py -v
 run_pytest tests/unit/test_modulate_stt.py -v
 run_pytest tests/unit/test_batch_upload_storage.py -v
 run_pytest tests/unit/test_action_item_date_validation.py -v
