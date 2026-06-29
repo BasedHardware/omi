@@ -15,6 +15,7 @@ import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
+from utils.executors import db_executor, run_blocking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -418,7 +419,7 @@ async def handle_oauth_callback(
         return render_oauth_response(request, app_key, success=False, error_type='missing_code')
 
     # Validate state token
-    state_data = validate_and_consume_oauth_state(state)
+    state_data = await run_blocking(db_executor, validate_and_consume_oauth_state, state)
     if not state_data or state_data.get('app_key') != app_key:
         return render_oauth_response(request, app_key, success=False, error_type='invalid_state')
 
@@ -479,7 +480,7 @@ async def handle_oauth_callback(
 
             # Store in Firebase
             try:
-                users_db.set_integration(uid, app_key, integration_data)
+                await run_blocking(db_executor, users_db.set_integration, uid, app_key, integration_data)
             except Exception as e:
                 logger.error(f'{app_key}: Error storing tokens in Firebase: {e}')
                 return render_oauth_response(request, app_key, success=False, error_type='server_error')
