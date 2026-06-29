@@ -278,7 +278,14 @@ impl IntegrationService {
             let app = app.clone();
 
             let handle = tokio::spawn(async move {
-                Self::call_realtime_webhook(&client, &uid, &segments, conversation_id.as_deref(), &app).await
+                Self::call_realtime_webhook(
+                    &client,
+                    &uid,
+                    &segments,
+                    conversation_id.as_deref(),
+                    &app,
+                )
+                .await
             });
 
             handles.push(handle);
