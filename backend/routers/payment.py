@@ -39,6 +39,7 @@ from database.users import (
     get_default_payment_method,
     set_default_payment_method,
     get_paypal_payment_details,
+    get_user_profile,
 )
 from utils import stripe as stripe_utils
 from utils.apps import find_app_subscription, get_is_user_paid_app, paid_app, set_user_app_sub_customer_id
@@ -1026,6 +1027,11 @@ def create_connect_account_endpoint(
         if account_id:
             account = refresh_connect_account_link(account_id)
         else:
+            # Require a real user record before creating a Stripe Connect account, so a UID that is
+            # valid in auth but missing from Firestore surfaces as a 404 rather than leaving an
+            # orphaned Stripe account (cubic on #8567).
+            if not get_user_profile(uid):
+                raise HTTPException(status_code=404, detail="User not found")
             if country is None or country.strip() == "":
                 raise HTTPException(status_code=400, detail="Country is required")
             account = create_connect_account(uid, country)

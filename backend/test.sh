@@ -15,6 +15,7 @@ pytest tests/unit/test_speaker_sample_migration.py -v
 pytest tests/unit/test_short_audio_embedding.py -v
 pytest tests/unit/test_users_add_sample_transaction.py -v
 pytest tests/unit/test_users_webhook_url_validation.py -v
+pytest tests/unit/test_users_missing_doc_guards.py -v
 pytest tests/unit/test_voice_message_language.py -v
 pytest tests/unit/test_speaker_assignment.py -v
 pytest tests/unit/test_speaker_id_pipeline.py -v
@@ -202,6 +203,7 @@ pytest tests/unit/test_voice_message_filename_none.py -v
 pytest tests/unit/test_subscription_plans.py -v
 pytest tests/unit/test_payment_available_plans_source.py -v
 pytest tests/unit/test_payment_promotion_codes.py -v
+pytest tests/unit/test_payment_connect_account_user_guard.py -v
 pytest tests/unit/test_stripe_webhook_none_guard.py -v
 pytest tests/unit/test_stripe_webhook_behavioral.py -v
 pytest tests/unit/test_voice_duration_limiter.py -v
