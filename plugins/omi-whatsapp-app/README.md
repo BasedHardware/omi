@@ -37,7 +37,7 @@ Self-hosted FastAPI service. Receives WhatsApp Cloud API webhook updates, calls 
 - `GET /webhook` — Meta webhook verification handshake (`hub.mode=subscribe`).
 - `POST /webhook` — receives WhatsApp webhook deliveries. Verifies `X-Hub-Signature-256` HMAC when `WHATSAPP_APP_SECRET` is set, handles `/start` handshake and auto-reply dispatch.
 - `POST /setup` — registers the user's WhatsApp Business API creds, returns `{deep_link, phone_number_id, setup_token}`.
-- `POST /toggle` — flips `auto_reply_enabled` for a given phone. Requires the user's `access_token` for auth (pair: phone + access_token).
+- `POST /toggle` — flips `auto_reply_enabled` for a given phone. Auth is the shared plugin bearer token (`Authorization: Bearer <AI_CLONE_PLUGIN_TOKEN>`); the request body is only `phone` + `enabled`. The Meta access_token is held by the plugin and NEVER requested over the chat tool surface.
 
 ## Architecture
 
@@ -48,9 +48,9 @@ Self-hosted FastAPI service. Receives WhatsApp Cloud API webhook updates, calls 
 
 ## Security notes
 
-- The Meta access token has full read/write access to your Meta Business portfolio, not just one bot — treat it as a top-tier secret. Never log it (full or partial), never include it in URLs, never echo it back to clients.
+- The Meta access token has full read/write access to your Meta Business portfolio, not just one bot — treat it as a top-tier secret. Never log it (full or partial), never include it in URLs, never echo it back to clients. The plugin holds it in storage; the chat tool surface (manifest + `/toggle` request body) deliberately does NOT include it.
 - The webhook signature (`X-Hub-Signature-256`) must be verified in production by setting `WHATSAPP_APP_SECRET`. Without it, anyone who knows your webhook URL can forge messages.
-- The `/toggle` endpoint requires the user's `access_token` paired with the phone — returning the same 403 for unknown phone AND wrong token to prevent phone enumeration.
+- The `/toggle` endpoint is gated by the shared `AI_CLONE_PLUGIN_TOKEN` bearer (set via the plugin's env / `OMI_DEV_MODE=1` in dev). It returns the same 403 for unknown phone to prevent phone enumeration, even though the bearer holder is already authenticated.
 
 ## Tests
 

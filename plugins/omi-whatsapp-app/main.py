@@ -90,8 +90,15 @@ app = FastAPI(
 # can discover the tools on install. Each plugin owns its own manifest
 # (TOOLS_MANIFEST in main.py) because the JSON-Schema properties must
 # exactly match the plugin's /toggle ToggleRequest field names.
+#
 # Unauthenticated — manifest discovery is public; the underlying /toggle
-# endpoint is auth-gated separately by the access_token parameter.
+# endpoint is auth-gated by the SHARED plugin bearer token
+# (`Authorization: Bearer`, enforced by
+# plugins/_shared/auth.require_bearer). The ManifestRequest body for
+# `toggle_auto_reply` deliberately omits any access_token / bot_token
+# field: long-lived platform credentials are held by the plugin and
+# must NEVER be requested from or transmitted through chat. (Identified
+# by maintainer security review on PR #8531.)
 @app.get("/.well-known/omi-tools.json", include_in_schema=False)
 async def omi_tools_manifest():
     """Return the Omi Chat Tools manifest for this plugin.
@@ -640,14 +647,22 @@ class ToggleResponse(BaseModel):
 async def toggle(req: ToggleRequest):
     """Enable or disable auto-reply for the given phone.
 
-    Auth: requires the access_token that was registered for that phone. The
-    access_token is a real secret (only the user has it; calling Meta's API
-    with the wrong token fails at Meta). Phone alone is NOT sufficient — phone
-    numbers are exposed in Meta update payloads and could be guessed.
+    Auth: enforced upstream by the shared plugin bearer dependency
+    (plugins/_shared/auth.require_bearer, applied via
+    `dependencies=[Depends(require_bearer)]`). The request body is
+    ONLY `phone` + `enabled` — no access_token field — because the
+    WhatsApp access_token is a long-lived Meta secret held by the
+    plugin, and chat tools MUST NEVER echo it back through chat
+    history, tool-call logs, traces, or model context. (Identified
+    by maintainer security review on PR #8531; see the block comment
+    above the `ToggleRequest` model for the full threat model.)
 
-    Returns 403 with a generic message for both unknown phone AND wrong
-    access_token, so callers can't enumerate which phones are registered by
-    distinguishing 404 (unknown) from 403 (wrong token).
+    Phone acts as an authorization hint: the bearer holder is
+    already authenticated, and the phone identifies which user
+    state to flip. Returning 403 with a generic message on unknown
+    phone prevents bearer holders from enumerating which phones
+    are registered, even though phone numbers aren't strictly
+    secret (they appear in Meta webhook payloads).
     """
     # Identified by cubic (P2): the previous version did an exact string
     # match on `req.phone`, so users passing an E.164 variant (`+15550001111`,
@@ -656,12 +671,17 @@ async def toggle(req: ToggleRequest):
     # normalized form is too short to be a real number, reject with 403.
     normalized = _normalize_e164(req.phone)
     if not normalized:
-        raise HTTPException(status_code=403, detail="Invalid phone or access_token")
+        # Auth is already enforced upstream by the bearer dependency, so
+        # this is purely a request-validation 403 — no enumeration signal,
+        # no credential wording to leak the actual auth model.
+        raise HTTPException(status_code=403, detail="Invalid phone")
     user = simple_storage.get_user_by_phone(normalized)
-    # Same response for both 'unknown phone' and 'wrong access_token' so the
-    # endpoint doesn't leak which phones exist (phone numbers are exposed in
-    # Meta update payloads and could be enumerated otherwise).
+    # 403 (not 404) on unknown phone so the endpoint doesn't leak which
+    # phones are registered. The bearer holder is already authenticated;
+    # the message hides whether the phone was the failure point. (Phone
+    # numbers are exposed in Meta webhook payloads and could be enumerated
+    # otherwise.)
     if user is None:
-        raise HTTPException(status_code=403, detail="Invalid phone or access_token")
+        raise HTTPException(status_code=403, detail="Unknown phone")
     simple_storage.update_auto_reply(normalized, req.enabled)
     return ToggleResponse(phone=normalized, auto_reply_enabled=req.enabled)
