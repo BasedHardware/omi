@@ -174,6 +174,23 @@ def test_every_supported_scope_has_consent_permission_text():
     assert not missing, f"scopes missing SCOPE_PERMISSION_TEXT entries: {missing}"
 
 
+def test_every_supported_scope_is_registered_in_central_oauth_list():
+    # The OAuth authorize flow intersects requested scopes against database.mcp_oauth.SUPPORTED_SCOPES
+    # via normalize_scopes(); a scope advertised in MCP_SCOPES_SUPPORTED but missing there is rejected
+    # as "Unsupported scope" and the tool becomes unreachable over OAuth/SSE, the primary MCP client
+    # path (David on #8493). Load the real module (the heavy leaves it imports are already stubbed).
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        'mcp_oauth_under_test', os.path.join(_BACKEND_DIR, 'database', 'mcp_oauth.py')
+    )
+    oauth = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(oauth)
+
+    missing = [scope for scope in sse.MCP_SCOPES_SUPPORTED if scope not in oauth.SUPPORTED_SCOPES]
+    assert not missing, f"scopes missing from mcp_oauth.SUPPORTED_SCOPES: {missing}"
+
+
 def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     response, _ = sse.handle_mcp_message(
