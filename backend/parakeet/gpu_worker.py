@@ -277,15 +277,16 @@ class GPUWorker:
 
         self._load_embedding_model()
 
-        device = os.getenv("PARAKEET_DEVICE", "cuda:0")
-        dev_idx = int(device.split(":")[-1]) if ":" in device else 0
-        free_bytes, total_bytes = torch.cuda.mem_get_info(dev_idx)
-        self._vram_total_mb = total_bytes / (1024 * 1024)
-        self._vram_baseline_mb = (total_bytes - free_bytes) / (1024 * 1024)
-        logger.info(
-            f"VRAM after model load: {self._vram_baseline_mb:.0f}MiB used / "
-            f"{self._vram_total_mb:.0f}MiB total ({free_bytes / (1024 * 1024):.0f}MiB free)"
-        )
+        if torch.cuda.is_available():
+            device = os.getenv("PARAKEET_DEVICE", "cuda:0")
+            dev_idx = int(device.split(":")[-1]) if ":" in device else 0
+            free_bytes, total_bytes = torch.cuda.mem_get_info(dev_idx)
+            self._vram_total_mb = total_bytes / (1024 * 1024)
+            self._vram_baseline_mb = (total_bytes - free_bytes) / (1024 * 1024)
+            logger.info(
+                f"VRAM after model load: {self._vram_baseline_mb:.0f}MiB used / "
+                f"{self._vram_total_mb:.0f}MiB total ({free_bytes / (1024 * 1024):.0f}MiB free)"
+            )
         logger.info("Batch model loaded and ready")
 
     def _load_embedding_model(self) -> None:
