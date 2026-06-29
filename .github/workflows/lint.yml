@@ -72,6 +72,10 @@ jobs:
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
 
+      - name: Summarize deferred-work markers
+        continue-on-error: true
+        run: python3 .github/scripts/deferred-work-marker-count.py --format github-summary >> "$GITHUB_STEP_SUMMARY"
+
       - name: Check GitHub Actions workflows
         if: steps.changed.outputs.has_workflows == 'true'
         run: |

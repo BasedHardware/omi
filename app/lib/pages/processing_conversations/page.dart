@@ -40,12 +40,6 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
   Widget build(BuildContext context) {
     return Consumer<ConversationProvider>(
       builder: (context, provider, child) {
-        // Track memory // FIXME
-        // if (widget.memory.status == ServerProcessingMemoryStatus.done &&
-        //     provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId) != null) {
-        //   _pushNewMemory(context, provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId));
-        // }
-
         // Conversation source
         var convoSource = widget.conversation.source;
         bool hasPhotos = (widget.conversation.photos ?? []).isNotEmpty;
