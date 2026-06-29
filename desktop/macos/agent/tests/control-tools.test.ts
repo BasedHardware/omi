@@ -767,6 +767,23 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("validates artifact inspection selectors before control tool dispatch", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const invalid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "inspect_agent_artifacts", {}),
+    );
+
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_tool_input",
+      },
+    });
+    expect(invalid.error.message).toContain("artifactId, sessionId, runId, or attemptId");
+    store.close();
+  });
+
   it("filters persisted artifacts by session, run, attempt, and role", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const first = await kernel.executeRun(baseRunInput);

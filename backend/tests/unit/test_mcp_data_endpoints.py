@@ -83,6 +83,7 @@ _stubs = [
     'database.notifications',
     'database.mem_db',
     'database.mcp_api_key',
+    'database.mcp_oauth',
     'database.daily_summaries',
     'database.screen_activity',
     'database.x_posts',
@@ -144,6 +145,54 @@ from routers import mcp_sse as sse  # noqa: E402
 
 NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
+
+
+def test_sse_tools_list_filters_by_oauth_scopes():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'tools/list'})
+    names = {tool['name'] for tool in response['result']['tools']}
+
+    assert session_id is None
+    assert 'get_memories' in names
+    assert 'search_memories' in names
+    assert 'create_memory' not in names
+    assert 'get_conversations' not in names
+
+
+def test_sse_tool_security_schemes_match_runtime_scope_map():
+    for tool in sse.MCP_TOOLS:
+        advertised_scopes = tool['securitySchemes'][0]['scopes']
+        assert advertised_scopes == [sse.TOOL_REQUIRED_SCOPE[tool['name']]]
+
+
+def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    response, _ = sse.handle_mcp_message(
+        auth_context, {'id': 1, 'method': 'tools/call', 'params': {'name': 'create_memory', 'arguments': {}}}
+    )
+
+    assert response['error']['code'] == -32003
+    assert 'memories.write' in response['error']['data']['_meta']['mcp/www_authenticate']
+
+
+def test_authorize_redirect_builder_preserves_existing_query():
+    redirect_uri = sse._redirect_with_code(
+        'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt', 'code-1', 's1'
+    )
+    assert redirect_uri == 'https://chatgpt.com/connector_platform_oauth_redirect?client=chatgpt&code=code-1&state=s1'
+
+
+def test_legacy_api_key_helper_rejects_oauth_tokens():
+    with patch('routers.mcp_sse.mcp_oauth_db.validate_access_token') as validate_access_token:
+        validate_access_token.return_value = {
+            'uid': UID,
+            'scopes': ['memories.read'],
+            'client_id': 'omi',
+            'resource': sse.MCP_RESOURCE_URL,
+            'grant_id': 'grant-1',
+        }
+
+        assert sse.authenticate_api_key('Bearer omi_oat_test') is None
 
 
 def _action_item(item_id='a1', desc='Email Bob', completed=False, deleted=False, locked=False):

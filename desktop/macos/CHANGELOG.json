@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.559",
+      "date": "2026-06-28",
+      "changes": [
+        "Fixed Omi Beta desktop chat failing before answering when agent control tools are available."
+      ]
+    },
+    {
+      "version": "0.11.558",
+      "date": "2026-06-28",
+      "changes": [
+        "Improved automatic updates so the main window only reopens when omi was already in the foreground"
+      ]
+    },
+    {
+      "version": "0.11.557",
+      "date": "2026-06-28",
+      "changes": [
+        "Added direct calendar event creation for realtime voice requests"
+      ]
+    },
+    {
+      "version": "0.11.556",
+      "date": "2026-06-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.555",
+      "date": "2026-06-28",
+      "changes": [
+        "Fixed automatic desktop updates getting stuck after they were deferred during active conversations"
+      ]
+    },
+    {
       "version": "0.11.554",
       "date": "2026-06-28",
       "changes": [

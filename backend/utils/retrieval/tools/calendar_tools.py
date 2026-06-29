@@ -19,6 +19,7 @@ from models.calendar_mutation import (
     format_deleted_calendar_events,
 )
 from utils.http_client import get_auth_client
+from utils.executors import db_executor, run_blocking
 from utils.retrieval.tools.integration_base import (
     ensure_capped,
     parse_iso_with_tz,
@@ -484,7 +485,9 @@ async def get_calendar_events_tool(
     Returns:
         Formatted list of calendar events with their details.
     """
-    uid, integration, access_token, access_err = prepare_access(
+    uid, integration, access_token, access_err = await run_blocking(
+        db_executor,
+        prepare_access,
         config,
         'google_calendar',
         'Google Calendar',
@@ -781,7 +784,9 @@ async def create_calendar_event_tool(
         f"start_time: {start_time}, end_time: {end_time}, location: {location}"
     )
 
-    uid, integration, access_token, access_err = prepare_access(
+    uid, integration, access_token, access_err = await run_blocking(
+        db_executor,
+        prepare_access,
         config,
         'google_calendar',
         'Google Calendar',

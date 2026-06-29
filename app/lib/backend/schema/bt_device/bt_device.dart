@@ -6,7 +6,6 @@ import 'package:omi/services/devices/bee_connection.dart';
 import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/fieldy_connection.dart';
-import 'package:omi/services/devices/frame_connection.dart';
 import 'package:omi/services/devices/friend_pendant_connection.dart';
 import 'package:omi/services/devices/limitless_connection.dart';
 import 'package:omi/services/devices/omi_connection.dart';
@@ -185,7 +184,30 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
   }
 }
 
-enum DeviceType { omi, openglass, frame, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
+enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
+
+// Legacy index order (before Frame was removed) — keep for backward-compatible deserialization.
+const List<String> _legacyDeviceTypeNames = [
+  'omi',
+  'openglass',
+  'frame',
+  'appleWatch',
+  'plaud',
+  'bee',
+  'fieldy',
+  'friendPendant',
+  'limitless',
+];
+
+DeviceType _deviceTypeFromJson(dynamic raw) {
+  String? name;
+  if (raw is int) {
+    if (raw >= 0 && raw < _legacyDeviceTypeNames.length) name = _legacyDeviceTypeNames[raw];
+  } else if (raw is String) {
+    name = raw;
+  }
+  return DeviceType.values.firstWhere((e) => e.name == name, orElse: () => DeviceType.omi);
+}
 
 Map<String, DeviceType> cachedDevicesMap = {};
 
@@ -327,8 +349,6 @@ class BtDevice {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.openglass) {
       return await _getDeviceInfoFromOmi(conn);
-    } else if (type == DeviceType.frame) {
-      return await _getDeviceInfoFromFrame(conn as FrameDeviceConnection);
     } else if (type == DeviceType.appleWatch) {
       return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
     } else {
@@ -381,32 +401,6 @@ class BtDevice {
       manufacturerName: manufacturerName,
       serialNumber: serialNumber,
       type: t,
-    );
-  }
-
-  Future _getDeviceInfoFromFrame(FrameDeviceConnection conn) async {
-    var modelNumber = 'Frame';
-    var firmwareRevision = 'Unknown';
-    var hardwareRevision = 'Brilliant Labs Frame';
-    var manufacturerName = 'Brilliant Labs';
-
-    try {
-      final deviceInfo = await conn.getDeviceInfo();
-
-      modelNumber = deviceInfo['modelNumber'] ?? modelNumber;
-      firmwareRevision = deviceInfo['firmwareRevision'] ?? firmwareRevision;
-      hardwareRevision = deviceInfo['hardwareRevision'] ?? hardwareRevision;
-      manufacturerName = deviceInfo['manufacturerName'] ?? manufacturerName;
-    } catch (e) {
-      Logger.error('Error getting Frame device info: $e');
-    }
-
-    return copyWith(
-      modelNumber: modelNumber,
-      firmwareRevision: firmwareRevision,
-      hardwareRevision: hardwareRevision,
-      manufacturerName: manufacturerName,
-      type: DeviceType.frame,
     );
   }
 
@@ -600,7 +594,6 @@ class BtDevice {
         return isBeeFirmwareUnsupported ? 'Firmware Not Supported' : 'Compatibility Note';
       case DeviceType.omi:
       case DeviceType.openglass:
-      case DeviceType.frame:
       case DeviceType.appleWatch:
         return ''; // No warning needed
     }
@@ -638,7 +631,6 @@ class BtDevice {
 
       case DeviceType.omi:
       case DeviceType.openglass:
-      case DeviceType.frame:
       case DeviceType.appleWatch:
         return ''; // No warning needed
     }
@@ -649,7 +641,7 @@ class BtDevice {
     return BtDevice(
       name: json['name'],
       id: json['id'],
-      type: DeviceType.values[json['type']],
+      type: _deviceTypeFromJson(json['type']),
       rssi: json['rssi'],
       locator: json['locator'] != null ? DeviceLocator.fromJson(json['locator']) : null,
       modelNumber: json['modelNumber'],
@@ -665,7 +657,10 @@ class BtDevice {
     return {
       'name': name,
       'id': id,
-      'type': type.index,
+      // Persist by stable name (not index): _deviceTypeFromJson reads both the
+      // new name strings and legacy integer indexes, so removing an enum value
+      // can never mis-map existing or newly-saved devices.
+      'type': type.name,
       'rssi': rssi,
       'locator': locator?.toJson(),
       'modelNumber': modelNumber,
