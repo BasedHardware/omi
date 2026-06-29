@@ -8,6 +8,7 @@ pub mod files;
 pub mod recaps;
 pub mod goals;
 pub mod unified_search;
+pub mod app_usage;
 pub mod migrations;
 
 use anyhow::{Context, Result};
