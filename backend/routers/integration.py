@@ -784,8 +784,25 @@ async def persona_chat_via_integration(
         try:
             app = App(**app_dict)
         except Exception as e:
-            logger.error(f"Failed to parse app {app_id} into App model: {e}")
+            # Identified by cubic (P1): str(e) on a Pydantic ValidationError
+            # includes the raw document field values, which can contain OAuth
+            # tokens, emails, and webhook URLs. Log only the exception type
+            # to keep sensitive app data out of server logs.
+            logger.error(
+                "Failed to parse app %s into App model: %s",
+                app_id,
+                type(e).__name__,
+            )
             raise HTTPException(status_code=502, detail="App data is malformed")
+
+    # Identified by cubic (P2): the capability gate above only verifies the
+    # `persona_chat` external-integration action, but execute_chat_stream
+    # dispatches to the persona handler only when app.is_a_persona() is true.
+    # A non-persona app with the action enabled would fall through to the
+    # general agentic chat path. Add an explicit check here so the endpoint
+    # contract matches the dispatch contract.
+    if not app.is_a_persona():
+        raise HTTPException(status_code=403, detail="App is not a persona")
 
     # Build a single HumanMessage and stream the persona reply via the
     # existing execute_chat_stream (which dispatches to the persona handler
@@ -804,9 +821,16 @@ async def persona_chat_via_integration(
     ]
 
     async def _stream():
+        # Identified by cubic (P2): the original implementation passed
+        # execute_chat_stream chunks directly to StreamingResponse without the
+        # newline sanitization, SSE terminators, or the __CRLF__ escape that
+        # the existing chat route applies (see routers/chat.py:323). The
+        # plugins' httpx_sse.EventSource consumer expects the same wire format
+        # as the regular chat SSE, so we mirror it here.
         async for chunk in execute_chat_stream(uid, messages, app=app):
             if chunk is None:
                 continue
-            yield chunk
+            msg = chunk.replace("\n", "__CRLF__")
+            yield f"{msg}\n\n"
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
