@@ -821,16 +821,19 @@ async def persona_chat_via_integration(
     ]
 
     async def _stream():
-        # Identified by cubic (P2): the original implementation passed
-        # execute_chat_stream chunks directly to StreamingResponse without the
-        # newline sanitization, SSE terminators, or the __CRLF__ escape that
-        # the existing chat route applies (see routers/chat.py:323). The
-        # plugins' httpx_sse.EventSource consumer expects the same wire format
-        # as the regular chat SSE, so we mirror it here.
+        # SSE wire format: each event is "data: <content>\n\n".
+        # execute_chat_stream yields chunks already prefixed with "data: "
+        # (both the persona path and agentic path produce this format via
+        # AsyncStreamingCallback.put_data). We add the \n\n terminator +
+        # newline escape (matching routers/chat.py:323's format). The only
+        # addition beyond chat.py is the explicit "data: [DONE]" terminator
+        # at the end — needed because the plugin's EventSource consumer
+        # blocks until it sees [DONE] or a closed connection.
         async for chunk in execute_chat_stream(uid, messages, app=app):
             if chunk is None:
                 continue
             msg = chunk.replace("\n", "__CRLF__")
             yield f"{msg}\n\n"
+        yield "data: [DONE]\n\n"
 
     return StreamingResponse(_stream(), media_type="text/event-stream")

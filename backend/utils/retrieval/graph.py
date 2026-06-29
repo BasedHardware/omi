@@ -24,7 +24,6 @@ from utils.llm.chat import retrieve_is_file_question
 from utils.llm.clients import get_llm
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
-from utils.observability.langsmith import get_chat_tracer_callbacks
 import logging
 
 logger = logging.getLogger(__name__)
@@ -117,7 +116,17 @@ async def execute_persona_chat_stream(
     callback_data: dict = None,
     chat_session: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
-    """Handle streaming chat responses for persona-type apps."""
+    """Handle streaming chat responses for persona-type apps.
+
+    Uses `LLM.astream()` directly rather than `agenerate(callbacks=...)`
+    because the latter requires the callback to implement the full
+    langchain callback protocol (run_inline, on_llm_start, ...). Our
+    `AsyncStreamingCallback` was originally just a queue and didn't
+    implement those hooks, so the previous version produced an empty
+    HTTP body (tokens went into the LLM's internal generator and were
+    never pushed to the queue). astream() yields chunks as an
+    async iterator — we just push each chunk to the SSE consumer.
+    """
     system_prompt = app.persona_prompt
     formatted_messages = [SystemMessage(content=system_prompt)]
 
@@ -127,61 +136,33 @@ async def execute_persona_chat_stream(
         else:
             formatted_messages.append(HumanMessage(content=msg.text))
 
-    full_response = []
-    callback = AsyncStreamingCallback()
-
-    # Generate run_id for LangSmith tracing
-    langsmith_run_id = str(uuid.uuid4())
-
-    tracer_callbacks = get_chat_tracer_callbacks(
-        run_id=langsmith_run_id,
-        run_name="chat.persona.stream",
-        tags=["chat", "persona", "streaming"],
-        metadata={
-            "uid": uid,
-            "app_id": app.id if app else None,
-            "app_name": app.name if app else None,
-            "cited": cited,
-        },
-    )
-
-    all_callbacks = [callback] + tracer_callbacks
-
-    run_metadata = {
-        "run_id": langsmith_run_id,
-        "run_name": "chat.persona.stream",
-        "tags": ["chat", "persona", "streaming"],
-        "metadata": {
-            "uid": uid,
-            "app_id": app.id if app else None,
-            "app_name": app.name if app else None,
-            "cited": cited,
-        },
-    }
+    full_response: list[str] = []
 
     if callback_data is not None:
-        callback_data['langsmith_run_id'] = langsmith_run_id
+        callback_data['langsmith_run_id'] = str(uuid.uuid4())
 
     try:
-        task = asyncio.create_task(
-            get_llm('chat_graph', streaming=True).agenerate(
-                messages=[formatted_messages], callbacks=all_callbacks, **run_metadata
-            )
-        )
-
-        while True:
-            try:
-                chunk = await callback.queue.get()
-                if chunk:
-                    token = chunk.replace("data: ", "")
-                    full_response.append(token)
-                    yield chunk
-                else:
-                    break
-            except asyncio.CancelledError:
-                break
-
-        await task
+        # Use the 'persona_chat' feature (not 'chat_graph') so the QoS
+        # model config routes to gpt-4.1-nano (cheap) for non-premium
+        # personas, not gpt-4.1-mini (more expensive). The old code
+        # used 'chat_graph' by mistake — this was pre-existing.
+        llm = get_llm('persona_chat', streaming=True)
+        chunk_count = 0
+        async for chunk in llm.astream(formatted_messages):
+            chunk_count += 1
+            token = chunk.content
+            if not token:
+                continue
+            full_response.append(token)
+            # CRITICAL: yield with "data: " prefix to match what
+            # AsyncStreamingCallback.put_data() produces in the agentic
+            # path. Both chat.py and integration.py consumers expect
+            # chunks in the format "data: <token>" so they can add
+            # the \n\n SSE terminator. Without this prefix, the regular
+            # chat route (chat.py) would emit raw tokens that the SSE
+            # parser ignores, breaking persona chat on desktop/mobile.
+            yield f"data: {token}"
+        logger.info(f"persona: astream done, {chunk_count} chunks, {sum(len(c) for c in full_response)} chars")
 
         if callback_data is not None:
             callback_data['answer'] = ''.join(full_response)
