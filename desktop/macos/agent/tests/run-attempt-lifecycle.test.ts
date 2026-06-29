@@ -193,6 +193,44 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
+  it("preserves binding when adapter strips MCP servers and only query-mode env changes", async () => {
+    // Regression: OpenClaw (sessionMcpServersMode: "empty") always passes []
+    // to its session, so switching Ask/Act must not invalidate the binding.
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
+    adapter.effectiveMcpServersOverride = [];
+
+    await kernel.executeRun({
+      ...baseRunInput,
+      mcpServers: [
+        {
+          name: "omi-tools",
+          command: "node",
+          args: ["tools.js"],
+          env: [{ name: "OMI_QUERY_MODE", value: "ask" }],
+        },
+      ],
+    });
+    await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "request-mode-switch",
+      mcpServers: [
+        {
+          name: "omi-tools",
+          command: "node",
+          args: ["tools.js"],
+          env: [{ name: "OMI_QUERY_MODE", value: "act" }],
+        },
+      ],
+    });
+
+    expect(adapter.opened).toHaveLength(1);
+    expect(adapter.resumed).toHaveLength(1);
+    const bindings = store.allRows("SELECT binding_generation, status, metadata_json FROM adapter_bindings ORDER BY binding_generation");
+    expect(bindings).toHaveLength(1);
+    expect(bindings[0]).toMatchObject({ binding_generation: 1, status: "active" });
+    store.close();
+  });
+
   it("does not allow another non-terminal attempt for the same run", () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const session = store.insertSession({

@@ -10,8 +10,9 @@ const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
 const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
+const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 
-const listAgentSessionsSchema = z.object({
+const listAgentSessionsSchema = strictObject({
   ownerId: z.string().min(1).optional(),
   status: sessionStatusSchema.optional(),
   surfaceKind: agentSurfaceKindSchema.optional(),
@@ -19,20 +20,20 @@ const listAgentSessionsSchema = z.object({
   beforeUpdatedAtMs: z.coerce.number().int().positive().optional(),
 });
 
-const getAgentRunSchema = z.object({
+const getAgentRunSchema = strictObject({
   runId: z.string().min(1),
   ownerId: z.string().min(1).optional(),
   includeEvents: z.boolean().default(true),
   eventLimit: z.coerce.number().int().positive().max(500).default(100),
 });
 
-const cancelAgentRunSchema = z.object({
+const cancelAgentRunSchema = strictObject({
   runId: z.string().min(1),
   ownerId: z.string().min(1).optional(),
 });
 
 const inspectAgentArtifactsSchema = z
-  .object({
+  .strictObject({
     artifactId: z.string().min(1).optional(),
     sessionId: z.string().min(1).optional(),
     runId: z.string().min(1).optional(),
@@ -45,7 +46,7 @@ const inspectAgentArtifactsSchema = z
     message: "Provide artifactId, sessionId, runId, or attemptId",
   });
 
-const updateAgentArtifactLifecycleSchema = z.object({
+const updateAgentArtifactLifecycleSchema = strictObject({
   artifactId: z.string().min(1),
   state: artifactLifecycleStateSchema,
   sessionId: z.string().min(1).optional(),
@@ -56,7 +57,7 @@ const updateAgentArtifactLifecycleSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
-const sendAgentMessageSchema = z.object({
+const sendAgentMessageSchema = strictObject({
   sessionId: z.string().min(1),
   ownerId: z.string().min(1).optional(),
   prompt: z.string().min(1),
@@ -70,7 +71,7 @@ const sendAgentMessageSchema = z.object({
 });
 
 const delegateAgentSchema = z
-  .object({
+  .strictObject({
     mode: delegationModeSchema,
     parentRunId: z.string().min(1),
     objective: z.string().min(1),
@@ -329,6 +330,7 @@ export async function handleAgentControlToolCall(
             ownerId,
             requestId,
             clientId: parsed.clientId,
+            adapterId,
           }),
         });
         return stringifyToolResult({
@@ -351,8 +353,11 @@ export async function handleAgentControlToolCall(
         }
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
         const result = await context.kernel.delegateAgent({
           ...parsed,
+          adapterId,
+          defaultAdapterId: adapterId,
           ownerId,
           requestId,
           metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
@@ -362,6 +367,7 @@ export async function handleAgentControlToolCall(
             ownerId,
             requestId,
             clientId: parsed.clientId,
+            adapterId,
           }),
         });
         return stringifyToolResult({
@@ -399,6 +405,7 @@ function buildControlRunMcpServers(
     ownerId: string;
     requestId: string;
     clientId: string;
+    adapterId: string;
   }
 ): Record<string, unknown>[] | undefined {
   if (!context.buildMcpServers) {
@@ -408,6 +415,7 @@ function buildControlRunMcpServers(
     ownerId: input.ownerId,
     requestId: input.requestId,
     clientId: input.clientId,
+    adapterId: input.adapterId,
     protocolVersion: context.getProtocolVersion?.(),
     includeSwiftBackedTools: false,
   });

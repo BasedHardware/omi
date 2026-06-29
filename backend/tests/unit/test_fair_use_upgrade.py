@@ -32,6 +32,19 @@ sys.modules.setdefault('database.redis_db', _redis_mod)
 sys.modules.setdefault('google.cloud.firestore', MagicMock())
 sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
 
+_firebase_admin = types.ModuleType('firebase_admin')
+_firebase_auth = types.ModuleType('firebase_admin.auth')
+_firebase_auth.get_user = MagicMock()
+_firebase_admin.auth = _firebase_auth
+sys.modules.setdefault('firebase_admin', _firebase_admin)
+sys.modules.setdefault('firebase_admin.auth', _firebase_auth)
+
+sys.modules.setdefault('stripe', types.ModuleType('stripe'))
+
+_announcements = types.ModuleType('database.announcements')
+_announcements.compare_versions = MagicMock(return_value=0)
+sys.modules.setdefault('database.announcements', _announcements)
+
 # Stub database.fair_use
 _fair_use_db = types.ModuleType('database.fair_use')
 _fair_use_db.get_fair_use_state = MagicMock(return_value={})

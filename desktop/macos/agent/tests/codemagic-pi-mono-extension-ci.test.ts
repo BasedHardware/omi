@@ -2,23 +2,33 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("macOS release CI", () => {
-  it("installs pi-mono-extension dependencies before running extension tests", () => {
+  it("runs the shared desktop tool-surface guardrail before packaging", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
-    const stepStart = codemagic.indexOf("name: Test pi-mono-extension denylist classifier");
+    const stepStart = codemagic.indexOf("name: Test desktop tool surfaces");
     expect(stepStart).toBeGreaterThanOrEqual(0);
 
     const step = codemagic.slice(stepStart, codemagic.indexOf("- name:", stepStart + 1));
-    expect(step).toContain("cd pi-mono-extension");
-    expect(step).toContain("npm ci --no-fund --no-audit");
-    expect(step.indexOf("npm ci --no-fund --no-audit")).toBeLessThan(
-      step.indexOf("node --experimental-strip-types --test index.test.ts")
-    );
+    expect(step).toContain("scripts/test-tool-surfaces.sh");
+    expect(stepStart).toBeLessThan(codemagic.indexOf("name: Prepare universal ffmpeg"));
   });
 
   it("bundles pi-mono-extension dependencies into release and local app resources", () => {
     const codemagic = readFileSync(new URL("../../../../codemagic.yaml", import.meta.url), "utf8");
     const runScript = readFileSync(new URL("../../run.sh", import.meta.url), "utf8");
 
+    for (const manifestFile of [
+      "control-tool-manifest.js",
+      "control-tool-manifest.ts",
+      "node-tools.ts",
+      "omi-tool-manifest.ts",
+    ]) {
+      expect(codemagic).toContain(
+        `cp -f agent/src/runtime/${manifestFile} "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
+      );
+      expect(runScript).toContain(
+        `cp -f "$AGENT_DIR/src/runtime/${manifestFile}" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"`
+      );
+    }
     expect(codemagic).toContain(
       'cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"'
     );

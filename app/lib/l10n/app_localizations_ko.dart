@@ -7639,6 +7639,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get viewAll => '모두 보기';
 
   @override
+  String get expand => '펼치기';
+
+  @override
   String get addTask => '작업 추가';
 
   @override
@@ -9210,4 +9213,106 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => '일시중지됨 — 오디오가 녹음되지 않고 있습니다';
+
+  @override
+  String get deviceTutorial => 'Omi 사용법';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Omi에 대고 말해보세요';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => '몇 마디 말하면 실시간으로 텍스트가 나타나요';
+
+  @override
+  String get deviceOnboardingGoodJob => '잘했어요!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => '말해보세요...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi에게 질문하기';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => '버튼을 한 번 누르고 질문한 뒤, 끝나면 다시 누르세요';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => '질문을 처리하는 중...';
+
+  @override
+  String get deviceOnboardingListening => '듣는 중...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => '전원 끄기';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => '전원 켜기';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => '버튼을 3초간 길게 누르세요';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => '버튼을 눌러 다시 켜세요';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => '불이 꺼질 때까지 버튼을 꾹 누르세요';
+
+  @override
+  String get deviceOnboardingStatusConnected => '연결됨';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => '연결되었어요!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => '연결 끊김';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => '끄는 중...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => '더블 탭 설정하기';
+
+  @override
+  String get deviceOnboardingEndConversation => '대화 종료';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => '현재 대화를 저장하고 종료해요';
+
+  @override
+  String get deviceOnboardingMuteUnmute => '음소거 / 해제';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => '마이크를 켜거나 꺼요';
+
+  @override
+  String get deviceOnboardingStarConversation => '진행 중인 대화 즐겨찾기';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => '대화를 중요로 표시해요';
+
+  @override
+  String get deviceOnboardingSingleTapHint => '방금 한 번 탭했어요 — 빠르게 두 번 탭해보세요!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => '지금 해보세요! Omi를 더블 탭하세요';
+
+  @override
+  String get deviceOnboardingContinue => '계속';
+
+  @override
+  String get deviceOnboardingFinish => '완료';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi 알아보기';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.';
+
+  @override
+  String get deviceOnboardingIntroDuration => '약 1분';
+
+  @override
+  String get jumpToLatestMessage => '최신 메시지로 이동';
+
+  @override
+  String get latest => '최신';
 }

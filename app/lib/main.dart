@@ -168,18 +168,13 @@ Future _init() async {
     }
   }
 
-  // DEBUG: Log Firebase Auth state before getIdToken
-  print('DEBUG main: Before getIdToken - currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   bool isAuth = (await AuthService.instance.getIdToken()) != null;
-  print('DEBUG main: After getIdToken - isAuth=$isAuth, currentUser=${FirebaseAuth.instance.currentUser?.uid}');
   if (isAuth) {
     PlatformManager.instance.analytics.identify();
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
-      print('DEBUG main: Restoring onboarding state from server...');
       await AuthService.instance.restoreOnboardingState();
-      print('DEBUG main: After restore - onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}');
     }
   }
   initOpus(await opus_flutter.load());

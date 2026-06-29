@@ -1,0 +1,167 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+REMOTE="${1:-origin}"
+BASE_BRANCH="${PRE_PUSH_BASE_BRANCH:-main}"
+BASE_REMOTE_REF="refs/remotes/${REMOTE}/${BASE_BRANCH}"
+
+if ! git rev-parse --verify "$BASE_REMOTE_REF" >/dev/null 2>&1; then
+  BASE_REMOTE_REF="refs/remotes/origin/${BASE_BRANCH}"
+fi
+
+if ! git rev-parse --verify "$BASE_REMOTE_REF" >/dev/null 2>&1; then
+  echo "FAIL: cannot find ${REMOTE}/${BASE_BRANCH} or origin/${BASE_BRANCH}. Run git fetch origin ${BASE_BRANCH}." >&2
+  exit 1
+fi
+
+BASE_REF=$(git merge-base "$BASE_REMOTE_REF" HEAD)
+CURRENT_BRANCH=$(git symbolic-ref --short -q HEAD || true)
+
+echo "Running fast pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+
+declare -a CHANGED_FILES=()
+while IFS= read -r file; do
+  [ -n "$file" ] && CHANGED_FILES+=("$file")
+done < <(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
+
+run_step() {
+  echo "==> $*"
+  "$@"
+}
+
+check_merge_conflicts() {
+  local failed=0
+  local file
+
+  for file in "${CHANGED_FILES[@]}"; do
+    [ -n "$file" ] || continue
+    if git cat-file -e "HEAD:$file" 2>/dev/null && git grep -n -I -E '^(<<<<<<<|>>>>>>>)' HEAD -- "$file"; then
+      failed=1
+    fi
+  done
+
+  if [ "$failed" -eq 1 ]; then
+    echo "FAIL: unresolved merge conflict markers found in changed files" >&2
+    return 1
+  fi
+}
+
+check_optional_formatters() {
+  local -a dart_files=()
+  local -a python_files=()
+  local -a arb_files=()
+  local -a firmware_files=()
+  local file
+  local -a black_cmd=()
+
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      *.dart)
+        if [[ "$file" != *.gen.dart && "$file" != *.g.dart ]]; then
+          dart_files+=("$file")
+        fi
+        ;;
+      backend/*.py|backend/**/*.py)
+        python_files+=("$file")
+        ;;
+      *.arb)
+        arb_files+=("$file")
+        ;;
+      omi/*.c|omi/*.cc|omi/*.cpp|omi/*.cxx|omi/*.h|omi/*.hpp|omiGlass/*.c|omiGlass/*.cc|omiGlass/*.cpp|omiGlass/*.cxx|omiGlass/*.h|omiGlass/*.hpp)
+        firmware_files+=("$file")
+        ;;
+    esac
+  done
+
+  if [ "${#dart_files[@]}" -gt 0 ]; then
+    if command -v dart >/dev/null 2>&1; then
+      echo "==> dart format --set-exit-if-changed (${#dart_files[@]} file(s))"
+      dart format --line-length 120 --set-exit-if-changed --output=none "${dart_files[@]}"
+    else
+      echo "Skipping Dart format check; dart is not installed."
+    fi
+  fi
+
+  if [ "${#python_files[@]}" -gt 0 ]; then
+    if command -v black >/dev/null 2>&1; then
+      black_cmd=(black)
+    elif python3 -m black --version >/dev/null 2>&1; then
+      black_cmd=(python3 -m black)
+    fi
+
+    if [ "${#black_cmd[@]}" -gt 0 ]; then
+      echo "==> black --check (${#python_files[@]} file(s))"
+      "${black_cmd[@]}" --check --line-length 120 --skip-string-normalization "${python_files[@]}"
+    else
+      echo "Skipping Python format check; black is not installed."
+    fi
+  fi
+
+  if [ "${#arb_files[@]}" -gt 0 ]; then
+    echo "==> ARB JSON formatting (${#arb_files[@]} file(s))"
+    python3 - "${arb_files[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+failed = False
+for raw_path in sys.argv[1:]:
+    path = Path(raw_path)
+    try:
+        original = path.read_text()
+        formatted = json.dumps(json.loads(original), indent=4, ensure_ascii=False) + "\n"
+    except json.JSONDecodeError as exc:
+        print(f"FAIL: {path} is not valid JSON: {exc}", file=sys.stderr)
+        failed = True
+        continue
+    if original != formatted:
+        print(f"FAIL: {path} not formatted with 4-space indent", file=sys.stderr)
+        failed = True
+
+if failed:
+    print("Fix: jq --indent 4 '.' <file> > tmp && mv tmp <file>", file=sys.stderr)
+    sys.exit(1)
+PY
+  fi
+
+  if [ "${#firmware_files[@]}" -gt 0 ]; then
+    if command -v clang-format >/dev/null 2>&1; then
+      echo "==> clang-format --dry-run (${#firmware_files[@]} file(s))"
+      clang-format --dry-run --Werror "${firmware_files[@]}"
+    else
+      echo "Skipping C/C++ format check; clang-format is not installed."
+    fi
+  fi
+}
+
+check_desktop_tool_surfaces_if_needed() {
+  local file
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      desktop/macos/agent/*|desktop/macos/agent/**/*|desktop/macos/pi-mono-extension/*|desktop/macos/pi-mono-extension/**/*|desktop/macos/run.sh|desktop/macos/scripts/prepare-agent-runtime.sh|desktop/macos/scripts/test-tool-surfaces.sh|codemagic.yaml)
+        desktop/macos/scripts/test-tool-surfaces.sh
+        return
+        ;;
+    esac
+  done
+}
+
+run_step check_merge_conflicts
+run_step python3 .github/scripts/desktop-changelog.py validate
+
+if [[ "$CURRENT_BRANCH" == changelog/v* ]]; then
+  echo "Skipping desktop changelog entry check on release changelog branch $CURRENT_BRANCH."
+elif [ "${PRE_PUSH_SKIP_DESKTOP_CHANGELOG:-}" = "1" ]; then
+  echo "Skipping desktop changelog entry check because PRE_PUSH_SKIP_DESKTOP_CHANGELOG=1."
+else
+  run_step python3 .github/scripts/check-desktop-changelog.py --base "$BASE_REF" --head HEAD
+fi
+
+run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
+run_step check_desktop_tool_surfaces_if_needed
+run_step check_optional_formatters
+
+echo "Fast pre-push checks passed."

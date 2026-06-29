@@ -7774,6 +7774,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get viewAll => 'সব দেখুন';
 
   @override
+  String get expand => 'প্রসারিত করুন';
+
+  @override
   String get addTask => 'কাজ যোগ করুন';
 
   @override
@@ -9370,4 +9373,106 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
+
+  @override
+  String get deviceTutorial => 'Omi কীভাবে ব্যবহার করবেন';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'আপনার Omi-তে কথা বলুন';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'কয়েকটি শব্দ বলুন এবং রিয়েল-টাইমে সেগুলো ভেসে উঠতে দেখুন';
+
+  @override
+  String get deviceOnboardingGoodJob => 'দারুণ!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'কথা বলা শুরু করুন...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi-কে একটি প্রশ্ন করুন';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'একবার বোতাম চাপুন, আপনার প্রশ্ন বলুন, তারপর শেষ হলে আবার চাপুন';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'আপনার প্রশ্ন প্রসেস করা হচ্ছে...';
+
+  @override
+  String get deviceOnboardingListening => 'শুনছি...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'বন্ধ করুন';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'চালু করুন';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => '৩ সেকেন্ড বোতামটি চেপে ধরে রাখুন';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'আবার চালু করতে বোতামটি চাপুন';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'আলো নিভে না যাওয়া পর্যন্ত বোতামটি শক্ত করে চেপে ধরে রাখুন';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'সংযুক্ত';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'সংযুক্ত হয়েছে!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'সংযোগ বিচ্ছিন্ন';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'বন্ধ করা হচ্ছে...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'ডাবল ট্যাপ কাস্টমাইজ করুন';
+
+  @override
+  String get deviceOnboardingEndConversation => 'কথোপকথন শেষ করুন';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'বর্তমান কথোপকথন সংরক্ষণ করে শেষ করুন';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'মিউট / আনমিউট';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'মাইক্রোফোন চালু বা বন্ধ করুন';
+
+  @override
+  String get deviceOnboardingStarConversation => 'চলমান কথোপকথন স্টার করুন';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'কথোপকথনটি গুরুত্বপূর্ণ হিসেবে চিহ্নিত করুন';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'এটি একবার ট্যাপ ছিল — দ্রুত দুবার ট্যাপ করে দেখুন!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'এখনই করে দেখুন! আপনার Omi-তে ডাবল ট্যাপ করুন';
+
+  @override
+  String get deviceOnboardingContinue => 'চালিয়ে যান';
+
+  @override
+  String get deviceOnboardingFinish => 'সম্পন্ন করুন';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'আপনার Omi-কে জানুন';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'আপনার Omi যা যা করতে পারে তার একটি দ্রুত, হাতে-কলমে ভ্রমণ।';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'প্রায় ১ মিনিট';
+
+  @override
+  String get jumpToLatestMessage => 'সর্বশেষ বার্তায় যান';
+
+  @override
+  String get latest => 'সর্বশেষ';
 }

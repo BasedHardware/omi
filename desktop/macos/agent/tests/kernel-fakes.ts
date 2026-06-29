@@ -49,6 +49,8 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   failNextExecutionAsStale = false;
   deferOnlyPromptIncludes: string | undefined;
   nextArtifacts: AdapterArtifactReference[] | undefined;
+  /** When set, FakeRuntimeAdapter reports this as the adapter-effective MCP set. */
+  effectiveMcpServersOverride: Record<string, unknown>[] | null = null;
   pendingResult:
     | {
         promise: Promise<AdapterAttemptResult>;
@@ -150,6 +152,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
       dispatchAttempted: true,
       adapterAcknowledged: false,
     };
+  }
+
+  effectiveMcpServers(_mcpServers: Record<string, unknown>[]): Record<string, unknown>[] {
+    return this.effectiveMcpServersOverride ?? _mcpServers;
   }
 
   deferResult(): void {

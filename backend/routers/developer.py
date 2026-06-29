@@ -26,6 +26,7 @@ from models.conversation_enums import (
 )
 from models.geolocation import Geolocation
 from utils.conversations.render import populate_speaker_names, populate_folder_names
+from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     get_current_user_id,
@@ -89,12 +90,16 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
             raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}")
 
     raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
+    # The proactive-notification cap exempts developers, so refresh that cache now
+    # that this user has a key, rather than waiting out its TTL.
+    invalidate_developer_cache(uid)
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
 @router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["developer"])
 def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     dev_api_key_db.delete_dev_key(uid, key_id)
+    invalidate_developer_cache(uid)
     return
 
 

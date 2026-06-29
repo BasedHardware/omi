@@ -7766,6 +7766,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get viewAll => 'Xem tất cả';
 
   @override
+  String get expand => 'Mở rộng';
+
+  @override
   String get addTask => 'Thêm nhiệm vụ';
 
   @override
@@ -9361,4 +9364,106 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcribeLaterPaused => 'Đã tạm dừng — không ghi lại âm thanh';
+
+  @override
+  String get deviceTutorial => 'Cách sử dụng Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Nói vào Omi của bạn';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Nói vài câu và xem chúng hiện ra theo thời gian thực';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Tuyệt vời!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Bắt đầu nói...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Hỏi Omi một câu';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'Nhấn nút một lần, nói câu hỏi của bạn, rồi nhấn lại khi xong';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Đang xử lý câu hỏi của bạn...';
+
+  @override
+  String get deviceOnboardingListening => 'Đang lắng nghe...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Tắt thiết bị';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Bật thiết bị';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Giữ nút trong 3 giây';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Nhấn nút để bật lại';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Giữ chặt nút cho đến khi đèn tắt';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Đã kết nối';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Đã kết nối!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Đã ngắt kết nối';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Đang tắt...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Tùy chỉnh nhấn đúp';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Kết thúc cuộc trò chuyện';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Lưu và kết thúc cuộc trò chuyện hiện tại';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Tắt / Bật tiếng';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Bật hoặc tắt micrô';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Gắn sao cuộc trò chuyện đang diễn ra';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Đánh dấu cuộc trò chuyện là quan trọng';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Đó là nhấn một lần — hãy thử nhấn hai lần thật nhanh!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Thử ngay! Nhấn đúp lên Omi của bạn';
+
+  @override
+  String get deviceOnboardingContinue => 'Tiếp tục';
+
+  @override
+  String get deviceOnboardingFinish => 'Hoàn tất';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tìm hiểu về Omi của bạn';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Một chuyến tham quan nhanh, thực tế về mọi điều Omi của bạn có thể làm.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
+
+  @override
+  String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
+
+  @override
+  String get latest => 'Mới nhất';
 }

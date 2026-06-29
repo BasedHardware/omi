@@ -14,6 +14,7 @@ import type {
   WarmupSessionConfig,
 } from "../protocol.js";
 import { requestIdFor } from "../protocol.js";
+import type { RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 
@@ -27,6 +28,7 @@ export interface McpServerBuildContext {
   sessionId?: string;
   runId?: string;
   attemptId?: string;
+  adapterId?: string;
   includeSwiftBackedTools?: boolean;
 }
 export type McpServerBuilder = (
@@ -223,9 +225,12 @@ export class JsonlCompatibilityFacade {
       context.adapterSessionId = result.adapterSessionId ?? undefined;
 
       if (result.terminalStatus === "failed") {
+        const failure = failureFromResultJson(result.run.resultJson);
+        const message = failure?.userMessage ?? result.run.errorMessage ?? "Agent run failed";
         const errorMessage: ErrorMessage = {
           type: "error",
-          message: result.run.errorMessage ?? "Agent run failed",
+          message,
+          failure,
         };
         this.send(this.withCorrelation(errorMessage, context));
         return;
@@ -237,6 +242,7 @@ export class JsonlCompatibilityFacade {
         sessionId: this.compatibilityResultSessionId(context, result.session.sessionId),
         adapterSessionId: result.adapterSessionId ?? undefined,
         terminalStatus: result.terminalStatus,
+        failure: failureFromResultJson(result.run.resultJson),
         costUsd: result.run.costUsd ?? 0,
         inputTokens: result.run.inputTokens ?? Math.ceil(input.prompt.length / 4),
         outputTokens: result.run.outputTokens ?? Math.ceil(result.text.length / 4),
@@ -300,6 +306,25 @@ export class JsonlCompatibilityFacade {
           : this.legacyUnscopedActiveRequestContext(requestId))
       : undefined;
     const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
+    if (message.protocolVersion === 2 && explicitRunId && !activeRequestContext && !message.ownerId?.trim()) {
+      const cancelAck: CancelAckMessage = {
+        type: "cancel_ack",
+        accepted: false,
+        dispatchAttempted: false,
+        adapterAcknowledged: false,
+      };
+      this.send(this.withCorrelation(cancelAck, {
+        protocolVersion: message.protocolVersion,
+        requestId: requestId ?? randomUUID(),
+        clientId: effectiveClientId,
+        ownerId,
+        adapterId: this.defaultAdapterId,
+        runId: explicitRunId,
+        sessionId: message.sessionId,
+        attemptId: message.attemptId,
+      }));
+      return;
+    }
     if (message.protocolVersion === 2 && requestId && !activeRequestContext && !message.runId && !message.attemptId) {
       const cancelAck: CancelAckMessage = {
         type: "cancel_ack",
@@ -416,7 +441,8 @@ export class JsonlCompatibilityFacade {
     }
     const clientId = message.clientId ?? this.defaultClientId;
     const mode = message.mode ?? "act";
-    const requestedModel = message.model ?? this.defaultModel();
+    const requestedAdapterId = message.adapterId ?? this.defaultAdapterId;
+    const requestedModel = message.model ?? this.defaultModel(requestedAdapterId);
     const legacySessionKey = message.legacySessionKey ?? message.sessionKey ?? requestedModel;
     const hint = legacySessionKey ? this.warmupHints.get(legacySessionKey) : undefined;
     const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
@@ -430,10 +456,10 @@ export class JsonlCompatibilityFacade {
       surfaceKind: message.surfaceKind ?? "legacy_jsonl",
       externalRefKind: message.externalRefKind,
       externalRefId: message.externalRefId,
-      legacyClientScope: this.legacyClientScope(message),
+      legacyClientScope: legacySessionKey ? this.legacyClientScope(message) : undefined,
       legacySessionKey,
-      defaultAdapterId: message.adapterId ?? this.defaultAdapterId,
-      adapterId: message.adapterId ?? this.defaultAdapterId,
+      defaultAdapterId: requestedAdapterId,
+      adapterId: requestedAdapterId,
       clientId,
       requestId,
       prompt: message.prompt,
@@ -448,6 +474,7 @@ export class JsonlCompatibilityFacade {
         clientId,
         protocolVersion: message.protocolVersion,
         sessionId,
+        adapterId: requestedAdapterId,
       }),
       legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
@@ -638,7 +665,11 @@ export class JsonlCompatibilityFacade {
     if (message.sessions && message.sessions.length > 0) {
       return message.sessions;
     }
-    const models = message.models ?? (message.model ? [message.model] : [this.defaultModel()]);
+    const defaultModel = this.defaultModel();
+    const models = message.models ?? (message.model ? [message.model] : defaultModel ? [defaultModel] : []);
+    if (models.length === 0) {
+      return [{ key: "default" }];
+    }
     return models.map((model) => ({ key: model, model }));
   }
 
@@ -646,8 +677,10 @@ export class JsonlCompatibilityFacade {
     return message?.legacyClientScope ?? "default";
   }
 
-  private defaultModel(): string {
-    return this.defaultAdapterId === "pi-mono" ? "omi-sonnet" : "claude-sonnet-4-6";
+  private defaultModel(adapterId = this.defaultAdapterId): string | undefined {
+    if (adapterId === "pi-mono") return "omi-sonnet";
+    if (adapterId === "acp") return "claude-sonnet-4-6";
+    return undefined;
   }
 
   private recoverAfterError(): ExecuteAgentRunInput["recoverAfterError"] | undefined {
@@ -664,6 +697,19 @@ export class JsonlCompatibilityFacade {
       return true;
     };
   }
+}
+
+function failureFromResultJson(resultJson: string | null): RuntimeFailure | undefined {
+  if (!resultJson) return undefined;
+  try {
+    const parsed = JSON.parse(resultJson) as { failure?: RuntimeFailure };
+    if (parsed.failure?.code && parsed.failure.userMessage) {
+      return parsed.failure;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
 }
 
 function parsePayload(payloadJson: string): Record<string, unknown> {

@@ -35,7 +35,7 @@ class ResizeHandleNSView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        (targetWindow as? FloatingControlBarWindow)?.isUserResizing = false
+        (targetWindow as? FloatingControlBarWindow)?.finishUserResponseResize()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -44,15 +44,15 @@ class ResizeHandleNSView: NSView {
         let deltaX = current.x - initialMouseLocation.x
         let deltaY = current.y - initialMouseLocation.y
 
-        // Anchor top-left: keep frame.maxY fixed, expand right and down.
         let minW: CGFloat = 430
         let minH: CGFloat = 250
-        let newWidth  = max(minW, initialWindowFrame.width  + deltaX)
+        let newWidth = max(minW, initialWindowFrame.width + deltaX * 2)
         let newHeight = max(minH, initialWindowFrame.height - deltaY) // screen-y up = drag down = height grows
 
+        let newOriginX = initialWindowFrame.midX - newWidth / 2
         let newOriginY = initialWindowFrame.maxY - newHeight
         window.setFrame(
-            NSRect(x: initialWindowFrame.minX, y: newOriginY, width: newWidth, height: newHeight),
+            NSRect(x: newOriginX, y: newOriginY, width: newWidth, height: newHeight),
             display: true
         )
     }

@@ -17,7 +17,6 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/logger.dart';
 
 class AuthService {
   static final AuthService _instance = AuthService._internal();
@@ -27,46 +26,34 @@ class AuthService {
 
   bool isSignedIn() => FirebaseAuth.instance.currentUser != null && !FirebaseAuth.instance.currentUser!.isAnonymous;
 
+  static const _pkceCodeVerifierLength = 64;
+  static const _pkceCharset = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+
   getFirebaseUser() {
     return FirebaseAuth.instance.currentUser;
   }
 
   /// Google Sign In using the standard google_sign_in package (iOS, Android)
   Future<UserCredential?> signInWithGoogleMobile() async {
-    print('DEBUG_AUTH: Using standard Google Sign In for mobile');
-
     // Trigger the authentication flow
     final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
-    print('DEBUG_AUTH: Google User: $googleUser');
 
     // Obtain the auth details from the request
     final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    print(
-      'DEBUG_AUTH: Google Auth accessToken=${googleAuth?.accessToken != null}, idToken=${googleAuth?.idToken != null}',
-    );
     if (googleAuth == null) {
-      print('DEBUG_AUTH: Failed - googleAuth is NULL');
       return null;
     }
 
     // Create a new credential
     if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-      print('DEBUG_AUTH: Failed - accessToken and idToken are both NULL');
       return null;
     }
     final credential = GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
 
     // Once signed in, return the UserCredential
-    try {
-      print('DEBUG_AUTH: Calling signInWithCredential...');
-      var result = await FirebaseAuth.instance.signInWithCredential(credential);
-      print('DEBUG_AUTH: signInWithCredential SUCCESS - uid=${result.user?.uid}');
-      await _updateUserPreferences(result, 'google');
-      return result;
-    } catch (e) {
-      print('DEBUG_AUTH: signInWithCredential FAILED: $e');
-      rethrow;
-    }
+    final result = await FirebaseAuth.instance.signInWithCredential(credential);
+    await _updateUserPreferences(result, 'google');
+    return result;
   }
 
   /// Generates a cryptographically secure random nonce, to be included in a
@@ -209,14 +196,21 @@ class AuthService {
   Future<UserCredential?> authenticateWithProvider(String provider) async {
     try {
       final state = _generateState();
+      final codeVerifier = _generateCodeVerifier();
+      final codeChallenge = _codeChallengeForVerifier(codeVerifier);
       const redirectUri = 'omi://auth/callback';
 
       Logger.debug('Starting OAuth flow for provider: $provider');
 
-      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
-          '?provider=$provider'
-          '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
-          '&state=$state';
+      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -292,7 +286,7 @@ class AuthService {
       }
 
       // Exchange the code for OAuth credentials
-      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri);
+      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri, codeVerifier);
 
       if (oauthCredentials == null) {
         throw Exception('Failed to exchange code for OAuth credentials');
@@ -313,7 +307,11 @@ class AuthService {
     }
   }
 
-  Future<Map<String, dynamic>?> _exchangeCodeForOAuthCredentials(String code, String redirectUri) async {
+  Future<Map<String, dynamic>?> _exchangeCodeForOAuthCredentials(
+    String code,
+    String redirectUri,
+    String codeVerifier,
+  ) async {
     try {
       final useCustomToken = Env.useAuthCustomToken;
 
@@ -325,13 +323,14 @@ class AuthService {
           'code': code,
           'redirect_uri': redirectUri,
           'use_custom_token': useCustomToken.toString(),
+          'code_verifier': codeVerifier,
         },
       );
 
       Logger.debug('Token exchange response status: ${response.statusCode}');
-      Logger.debug('Token exchange response body: ${response.body}');
 
       if (response.statusCode == 200) {
+        Logger.debug('Token exchange succeeded');
         return json.decode(response.body);
       } else {
         Logger.debug('Token exchange failed: ${response.body}');
@@ -450,12 +449,9 @@ class AuthService {
 
   Future<void> _restoreOnboardingState() async {
     try {
-      print('DEBUG _restoreOnboardingState: fetching from server...');
       final state = await getUserOnboardingState();
-      print('DEBUG _restoreOnboardingState: got state=$state');
       if (state != null) {
         if (state['completed'] == true) {
-          print('DEBUG _restoreOnboardingState: setting onboardingCompleted=true');
           SharedPreferencesUtil().onboardingCompleted = true;
         }
         final acquisitionSource = state['acquisition_source'] as String? ?? '';
@@ -468,12 +464,9 @@ class AuthService {
           SharedPreferencesUtil().userPrimaryLanguage = serverLanguage;
           SharedPreferencesUtil().hasSetPrimaryLanguage = true;
         }
-        print(
-          'DEBUG _restoreOnboardingState: done, onboardingCompleted=${SharedPreferencesUtil().onboardingCompleted}',
-        );
       }
     } catch (e) {
-      print('DEBUG _restoreOnboardingState: error=$e');
+      Logger.debug('restoreOnboardingState failed: $e');
     }
   }
 
@@ -539,6 +532,16 @@ class AuthService {
     return base64Url.encode(bytes);
   }
 
+  String _generateCodeVerifier([int length = _pkceCodeVerifierLength]) {
+    final random = Random.secure();
+    return List.generate(length, (_) => _pkceCharset[random.nextInt(_pkceCharset.length)]).join();
+  }
+
+  String _codeChallengeForVerifier(String verifier) {
+    final digest = sha256.convert(utf8.encode(verifier));
+    return base64Url.encode(digest.bytes).replaceAll('=', '');
+  }
+
   Future<UserCredential?> linkWithProvider(String provider) async {
     try {
       final currentUser = FirebaseAuth.instance.currentUser;
@@ -547,14 +550,21 @@ class AuthService {
       }
 
       final state = _generateState();
+      final codeVerifier = _generateCodeVerifier();
+      final codeChallenge = _codeChallengeForVerifier(codeVerifier);
       const redirectUri = 'omi://auth/callback';
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
-      final authUrl = '${Env.apiBaseUrl}v1/auth/authorize'
-          '?provider=$provider'
-          '&redirect_uri=${Uri.encodeComponent(redirectUri)}'
-          '&state=$state';
+      final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
+        queryParameters: {
+          'provider': provider,
+          'redirect_uri': redirectUri,
+          'state': state,
+          'code_challenge': codeChallenge,
+          'code_challenge_method': 'S256',
+        },
+      ).toString();
 
       Logger.debug('Authorization URL: $authUrl');
 
@@ -605,7 +615,7 @@ class AuthService {
       }
 
       // Exchange the code for OAuth credentials
-      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri);
+      final oauthCredentials = await _exchangeCodeForOAuthCredentials(code, redirectUri, codeVerifier);
 
       if (oauthCredentials == null) {
         throw Exception('Failed to exchange code for OAuth credentials');

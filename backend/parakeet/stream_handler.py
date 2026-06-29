@@ -23,7 +23,7 @@ import numpy as np
 import torch
 from langdetect import detect as langdetect_detect
 from langdetect.lang_detect_exception import LangDetectException
-from scipy.spatial.distance import cdist
+from speaker_math import cosine_distance
 import transcribe as _transcribe_mod
 
 try:
@@ -37,7 +37,6 @@ except ImportError:
     ContextSize = None
     StreamingBatchedAudioBuffer = None
     open_dict = None
-
 from transcribe import (
     transcribe_file,
     _stream_model as _asr_model,
@@ -673,7 +672,7 @@ class StreamSession:
 
             best_i, best_dist = -1, 1e9
             for i, c in enumerate(self._spk_centroids):
-                d = float(cdist(emb, c, metric="cosine")[0, 0])
+                d = cosine_distance(emb, c)
                 if d < best_dist:
                     best_i, best_dist = i, d
 

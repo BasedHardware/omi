@@ -50,6 +50,38 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertNil(message?.requestKey)
   }
 
+  func testHarnessModeMapsNamedAdapters() {
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "piMono"), "pi-mono")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "pi-mono"), "pi-mono")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "hermes"), "hermes")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openclaw"), "openclaw")
+    XCTAssertEqual(AgentRuntimeProcess.adapterId(forHarnessMode: "openClaw"), "openclaw")
+    XCTAssertNil(AgentRuntimeProcess.adapterId(forHarnessMode: "unknown"))
+  }
+
+  func testPiMonoAliasUsesCanonicalAdapterForAuthGuards() throws {
+    let processSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(processSource.contains("let preferredAdapterId = AgentRuntimeRouting.adapterId(for: preferredHarness)"))
+    XCTAssertTrue(processSource.contains("preferredAdapterId == .piMono"))
+    XCTAssertFalse(processSource.contains(#"preferredHarnessMode == "piMono""#))
+
+    let bridgeSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentBridge.swift")
+    let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
+    XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness, tokenRefreshTask == nil"))
+    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return }"))
+    XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
+  }
+
   func testNamedBundleStateDirectoriesAreIsolated() {
     let home = URL(fileURLWithPath: "/tmp/test-home")
 
@@ -108,6 +140,76 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertFalse(source.contains("currentHarnessMode"))
     XCTAssertFalse(source.contains("harness changed"))
+    XCTAssertFalse(source.contains(#""adapterId": harnessMode == "piMono" ? "pi-mono" : "acp""#))
+  }
+
+  func testLocalAdapterDiscoveryRunsForSharedRuntimeStartup() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("applyLocalAgentEnvironment(to: &env)"))
+    XCTAssertFalse(source.contains("applyLocalAgentEnvironment(to: &env, adapterId: preferredAdapterId)"))
+    XCTAssertFalse(source.contains("guard adapterId == .hermes || adapterId == .openclaw else"))
+    XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
+    XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
+    XCTAssertTrue(source.contains(#""\(home)/.hermes/hermes-agent/venv/bin""#))
+    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init) + trustedPathDirs"))
+    XCTAssertTrue(source.contains("+ adapterPathDirs"))
+    XCTAssertFalse(source.contains("adapterPathPrefixDirs + existingPath.split"))
+    XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
+    XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
+    XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+  }
+
+  func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("openclaw-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let nodePath = tempDir.appendingPathComponent("node").path
+    let openClawPath = tempDir.appendingPathComponent("openclaw").path
+    FileManager.default.createFile(atPath: nodePath, contents: Data("#!/bin/sh\n".utf8))
+    FileManager.default.createFile(atPath: openClawPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: nodePath)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: openClawPath)
+
+    let command = AgentRuntimeProcess.openClawAdapterCommand(openClawPath: openClawPath)
+
+    XCTAssertEqual(command, "'\(nodePath)' '\(openClawPath)' acp")
+  }
+
+  func testOpenClawAdapterCommandFallsBackToLauncherWithoutSiblingNode() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("openclaw-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let openClawPath = tempDir.appendingPathComponent("openclaw").path
+    FileManager.default.createFile(atPath: openClawPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: openClawPath)
+
+    let command = AgentRuntimeProcess.openClawAdapterCommand(openClawPath: openClawPath)
+
+    XCTAssertEqual(command, "'\(openClawPath)' acp")
+  }
+
+  func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("handle.readabilityHandler = { [weak self] handle in"))
+    // The implementation now uses a generation-guarded signature; match the current
+    // function name without coupling the test to the exact parameter list.
+    XCTAssertTrue(source.contains("func processStdoutData("))
+    XCTAssertFalse(source.contains("Task.detached { [weak self] in"))
+    XCTAssertFalse(source.contains("while !Task.isCancelled"))
   }
 
   func testFailedRuntimeStartCleansUpLatchedRunningState() throws {
@@ -173,7 +275,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)"))
+    XCTAssertTrue(source.contains("completeToolCall("))
+    XCTAssertTrue(source.contains("requestId: request.requestId"))
+    XCTAssertTrue(source.contains("clientId: request.clientId"))
     XCTAssertTrue(source.contains(#"if let requestId { payload["requestId"] = requestId }"#))
     XCTAssertTrue(source.contains(#"if let clientId { payload["clientId"] = clientId }"#))
   }

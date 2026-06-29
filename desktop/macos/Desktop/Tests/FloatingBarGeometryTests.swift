@@ -95,4 +95,80 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertEqual(collapsedFrame.midY, shiftedVoiceFrame.midY)
         XCTAssertEqual(collapsedFrame.size, compactSize)
     }
+
+    func testNotchChromeActivationIgnoresTransparentBottomOutset() {
+        let windowFrame = NSRect(x: 500, y: 800, width: 360, height: 58)
+
+        XCTAssertTrue(FloatingControlBarGeometry.notchChromeActivationContains(
+            mouseLocation: NSPoint(x: 680, y: 850),
+            windowFrame: windowFrame,
+            chromeHeight: 17,
+            horizontalOutset: 24
+        ))
+        XCTAssertFalse(FloatingControlBarGeometry.notchChromeActivationContains(
+            mouseLocation: NSPoint(x: 680, y: 838),
+            windowFrame: windowFrame,
+            chromeHeight: 17,
+            horizontalOutset: 24
+        ))
+    }
+
+    func testNotchChromeActivationLocalIgnoresTransparentBottomOutset() {
+        let windowSize = NSSize(width: 360, height: 58)
+
+        XCTAssertTrue(FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+            localPoint: NSPoint(x: 180, y: 50),
+            windowSize: windowSize,
+            chromeHeight: 17,
+            horizontalOutset: 24
+        ))
+        XCTAssertFalse(FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+            localPoint: NSPoint(x: 180, y: 40),
+            windowSize: windowSize,
+            chromeHeight: 17,
+            horizontalOutset: 24
+        ))
+    }
+
+    func testNotchOpenMenuRetentionIncludesRowsButNotBottomGlow() {
+        let windowSize = NSSize(width: 430, height: 34 + 96 + 24)
+        let visibleSurfaceHeight: CGFloat = 34 + 96
+
+        XCTAssertTrue(FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+            localPoint: NSPoint(x: 215, y: windowSize.height - visibleSurfaceHeight + 6),
+            windowSize: windowSize,
+            chromeHeight: visibleSurfaceHeight,
+            horizontalOutset: 24
+        ))
+        XCTAssertFalse(FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+            localPoint: NSPoint(x: 215, y: 8),
+            windowSize: windowSize,
+            chromeHeight: visibleSurfaceHeight,
+            horizontalOutset: 24
+        ))
+    }
+
+    func testNotchHoverMenuKeepsBottomMarginWithoutSubagents() {
+        XCTAssertEqual(
+            FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0),
+            FloatingControlBarWindow.notchAgentListRowHeight + FloatingControlBarWindow.notchHoverMenuBottomMargin
+        )
+    }
+
+    func testNotchChromeActivationIgnoresHorizontalGlowOutsets() {
+        let windowFrame = NSRect(x: 500, y: 800, width: 360, height: 58)
+
+        XCTAssertFalse(FloatingControlBarGeometry.notchChromeActivationContains(
+            mouseLocation: NSPoint(x: 512, y: 850),
+            windowFrame: windowFrame,
+            chromeHeight: 17,
+            horizontalOutset: 24
+        ))
+        XCTAssertFalse(FloatingControlBarGeometry.notchChromeActivationContains(
+            mouseLocation: NSPoint(x: 848, y: 850),
+            windowFrame: windowFrame,
+            chromeHeight: 17,
+            horizontalOutset: 24
+        ))
+    }
 }
