@@ -1969,7 +1969,7 @@ async def _stream_handler(
 
             socket_dead = stt_socket is not None and stt_socket.is_connection_dead
             decision = decide_stt_buffer_flush(
-                buffer=bytes(stt_audio_buffer),
+                buffer_len=len(stt_audio_buffer),
                 flush_size=stt_buffer_flush_size,
                 force=force,
                 socket_dead=socket_dead,
@@ -1981,6 +1981,7 @@ async def _stream_handler(
             if not decision.should_flush:
                 return
 
+            chunk = bytes(stt_audio_buffer)
             stt_audio_buffer.clear()
 
             if decision.socket_dead:
@@ -1994,7 +1995,7 @@ async def _stream_handler(
                 stt_socket = None
 
             if decision.send_to_stt:
-                stt_socket.send(decision.chunk)
+                stt_socket.send(chunk)
                 dg_usage_ms_pending += decision.dg_usage_ms
 
         try:

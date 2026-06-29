@@ -201,7 +201,7 @@ def test_stt_buffer_flush_waits_for_budget_and_force_flushes():
     assert flush_size == 960
 
     small = decide_stt_buffer_flush(
-        buffer=b'a' * (flush_size - 1),
+        buffer_len=flush_size - 1,
         flush_size=flush_size,
         force=False,
         socket_dead=False,
@@ -211,10 +211,9 @@ def test_stt_buffer_flush_waits_for_budget_and_force_flushes():
         sample_rate=16000,
     )
     assert small.should_flush is False
-    assert small.chunk == b''
 
     forced = decide_stt_buffer_flush(
-        buffer=b'a' * 100,
+        buffer_len=100,
         flush_size=flush_size,
         force=True,
         socket_dead=False,
@@ -225,13 +224,26 @@ def test_stt_buffer_flush_waits_for_budget_and_force_flushes():
     )
     assert forced.should_flush is True
     assert forced.send_to_stt is True
-    assert forced.chunk == b'a' * 100
     assert forced.dg_usage_ms == 100 * 1000 // (16000 * 2)
+
+
+def test_stt_buffer_flush_empty_buffer_is_noop():
+    empty = decide_stt_buffer_flush(
+        buffer_len=0,
+        flush_size=960,
+        force=False,
+        socket_dead=False,
+        socket_available=True,
+        fair_use_dg_budget_exhausted=False,
+        fair_use_track_dg_usage=True,
+        sample_rate=16000,
+    )
+    assert empty.should_flush is False
 
 
 def test_stt_buffer_flush_dead_socket_and_budget_do_not_send_or_bill():
     dead = decide_stt_buffer_flush(
-        buffer=b'a' * 960,
+        buffer_len=960,
         flush_size=960,
         force=False,
         socket_dead=True,
@@ -246,7 +258,7 @@ def test_stt_buffer_flush_dead_socket_and_budget_do_not_send_or_bill():
     assert dead.dg_usage_ms == 0
 
     exhausted = decide_stt_buffer_flush(
-        buffer=b'a' * 960,
+        buffer_len=960,
         flush_size=960,
         force=False,
         socket_dead=False,

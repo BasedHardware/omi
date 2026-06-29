@@ -25,7 +25,6 @@ class CodecFrameDecision:
 @dataclass(frozen=True)
 class SttBufferFlushDecision:
     should_flush: bool
-    chunk: bytes
     socket_dead: bool
     send_to_stt: bool
     dg_usage_ms: int
@@ -160,7 +159,7 @@ def stt_buffer_flush_size(sample_rate: int) -> int:
 
 def decide_stt_buffer_flush(
     *,
-    buffer: bytes,
+    buffer_len: int,
     flush_size: int,
     force: bool,
     socket_dead: bool,
@@ -169,16 +168,16 @@ def decide_stt_buffer_flush(
     fair_use_track_dg_usage: bool,
     sample_rate: int,
 ) -> SttBufferFlushDecision:
-    if not buffer:
-        return SttBufferFlushDecision(False, b'', False, False, 0)
-    if not force and len(buffer) < flush_size:
-        return SttBufferFlushDecision(False, b'', False, False, 0)
+    if buffer_len == 0:
+        return SttBufferFlushDecision(False, False, False, 0)
+    if not force and buffer_len < flush_size:
+        return SttBufferFlushDecision(False, False, False, 0)
 
     send_to_stt = socket_available and not socket_dead and not fair_use_dg_budget_exhausted
     dg_usage_ms = 0
     if send_to_stt and fair_use_track_dg_usage:
-        dg_usage_ms = len(buffer) * 1000 // (sample_rate * 2)
-    return SttBufferFlushDecision(True, buffer, socket_dead, send_to_stt, dg_usage_ms)
+        dg_usage_ms = buffer_len * 1000 // (sample_rate * 2)
+    return SttBufferFlushDecision(True, socket_dead, send_to_stt, dg_usage_ms)
 
 
 def decide_multi_channel_stt_send(
