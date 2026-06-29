@@ -186,6 +186,24 @@ final class AgentPillsManager: ObservableObject {
             case .openclaw: return .openclaw
             }
         }
+
+        var executableName: String {
+            switch self {
+            case .hermes: return "hermes"
+            case .openclaw: return "openclaw"
+            }
+        }
+
+        var commandEnvironmentName: String {
+            switch self {
+            case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
+            case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+            }
+        }
+
+        var setupNeededStatus: String {
+            "\(displayName) needs setup"
+        }
     }
 
     struct ProviderDirective: Equatable {

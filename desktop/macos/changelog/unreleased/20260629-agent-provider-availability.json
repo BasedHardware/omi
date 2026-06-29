@@ -1,0 +1,3 @@
+{
+  "change": "Improved OpenClaw and Hermes agent handoff so unavailable local providers prompt for setup instead of creating failed pills"
+}
