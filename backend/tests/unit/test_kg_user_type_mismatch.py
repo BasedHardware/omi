@@ -214,6 +214,7 @@ for attr in ["send_notification", "send_important_conversation_message", "send_a
 
 utils_subscription = sys.modules["utils.subscription"]
 utils_subscription.is_trial_paywalled = MagicMock(return_value=False)
+utils_subscription.should_defer_desktop_processing = MagicMock(return_value=False)
 
 utils_hume = sys.modules["utils.other.hume"]
 for attr in ["get_hume", "HumeJobCallbackModel", "HumeJobModelPredictionResponseModel"]:

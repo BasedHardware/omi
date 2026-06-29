@@ -24,7 +24,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -247,7 +247,7 @@ workflows:
         APP_ID: 6502156163
         JAVA_TOOL_OPTIONS: "-Xmx8g"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -473,7 +473,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -659,7 +659,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -851,7 +851,7 @@ workflows:
         PACKAGE_NAME: "com.friend.ios"
         JAVA_TOOL_OPTIONS: "-Xmx8g"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21
@@ -1025,7 +1025,7 @@ workflows:
       vars:
         APP_ID: 6502156163
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1157,7 +1157,7 @@ workflows:
         PLATFORM: "macos"
         BUNDLE_ID: "com.friend-app-with-wearable.ios12"
         DMGBUILD_VERSION: "1.6.7"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 26.0.1
       cocoapods: 1.16.2
     cache:
@@ -1765,7 +1765,7 @@ workflows:
       vars:
         PACKAGE_NAME: "com.friend.ios"
         STAGING_API_URL: "https://api.omiapi.com/"
-      flutter: 3.35.3
+      flutter: 3.41.9
       xcode: 16.4
       cocoapods: 1.16.2
       java: 21

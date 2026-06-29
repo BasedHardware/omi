@@ -6,8 +6,8 @@ from xml.sax.saxutils import escape as xml_escape
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
 
-from routers.firmware import get_omi_github_releases, extract_key_value_pairs
 from database.redis_db import delete_generic_cache
+from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 
 router = APIRouter()
 

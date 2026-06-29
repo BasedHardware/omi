@@ -13,6 +13,7 @@ import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
+from utils.executors import db_executor, run_blocking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -389,7 +390,7 @@ async def refresh_oauth_token(
             if expires_in:
                 expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
                 updated_integration['expires_at'] = expires_at.isoformat()
-            users_db.set_task_integration(uid, app_key, updated_integration)
+            await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, updated_integration)
             return updated_integration
         else:
             error_text = token_response.text
@@ -419,7 +420,7 @@ async def refresh_oauth_token(
                 if should_disconnect:
                     updated_integration = integration.copy()
                     updated_integration['connected'] = False
-                    users_db.set_task_integration(uid, app_key, updated_integration)
+                    await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, updated_integration)
             raise HTTPException(status_code=401, detail=f"Failed to refresh {name} token")
     except HTTPException:
         raise
@@ -451,7 +452,7 @@ async def ensure_valid_oauth_token(
                 return await refresh_oauth_token(uid, app_key, integration, client=client)
             updated_integration = integration.copy()
             updated_integration['connected'] = False
-            users_db.set_task_integration(uid, app_key, updated_integration)
+            await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, updated_integration)
             return updated_integration
     except Exception:
         if integration.get('refresh_token'):
@@ -556,7 +557,7 @@ async def _create_task_internal(
             else:
                 if response.status_code == 401:
                     integration['connected'] = False
-                    users_db.set_task_integration(uid, 'todoist', integration)
+                    await run_blocking(db_executor, users_db.set_task_integration, uid, 'todoist', integration)
                 return {
                     "success": False,
                     "error": f"Todoist API error: {response.status_code}",
@@ -682,7 +683,7 @@ async def create_task_via_integration(
     """Create a task in the specified integration using stored credentials."""
 
     # Get integration details
-    integration = users_db.get_task_integration(uid, app_key)
+    integration = await run_blocking(db_executor, users_db.get_task_integration, uid, app_key)
     if not integration or not integration.get('connected'):
         raise HTTPException(status_code=404, detail=f"Not connected to {app_key}")
 
@@ -729,7 +730,7 @@ async def create_task_via_integration(
 @router.get("/v1/task-integrations/asana/workspaces", tags=['task-integrations'])
 async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     """Get user's Asana workspaces"""
-    data = users_db.get_task_integration(uid, 'asana')
+    data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'asana')
 
     if not data:
         raise HTTPException(status_code=404, detail="Asana integration not found")
@@ -769,7 +770,7 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
 @router.get("/v1/task-integrations/asana/projects/{workspace_gid}", tags=['task-integrations'])
 async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get projects in an Asana workspace"""
-    data = users_db.get_task_integration(uid, 'asana')
+    data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'asana')
 
     if not data:
         raise HTTPException(status_code=404, detail="Asana integration not found")
@@ -809,7 +810,7 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
 @router.get("/v1/task-integrations/clickup/teams", tags=['task-integrations'])
 async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     """Get user's ClickUp teams"""
-    data = users_db.get_task_integration(uid, 'clickup')
+    data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
 
     if not data:
         raise HTTPException(status_code=404, detail="ClickUp integration not found")
@@ -849,7 +850,7 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
 @router.get("/v1/task-integrations/clickup/spaces/{team_id}", tags=['task-integrations'])
 async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get spaces in a ClickUp team"""
-    data = users_db.get_task_integration(uid, 'clickup')
+    data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
 
     if not data:
         raise HTTPException(status_code=404, detail="ClickUp integration not found")
@@ -889,7 +890,7 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
 @router.get("/v1/task-integrations/clickup/lists/{space_id}", tags=['task-integrations'])
 async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get lists in a ClickUp space"""
-    data = users_db.get_task_integration(uid, 'clickup')
+    data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
 
     if not data:
         raise HTTPException(status_code=404, detail="ClickUp integration not found")
@@ -1025,7 +1026,7 @@ async def handle_oauth_callback(
 
             # Store in Firebase
             try:
-                users_db.set_task_integration(uid, app_key, integration_data)
+                await run_blocking(db_executor, users_db.set_task_integration, uid, app_key, integration_data)
                 logger.info(f'{app_key}: Successfully stored tokens for user {uid}')
             except Exception as e:
                 logger.error(f'{app_key}: Error storing tokens in Firebase: {e}')
