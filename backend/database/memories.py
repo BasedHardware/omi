@@ -2,6 +2,7 @@ import copy
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
+from google.api_core.exceptions import NotFound as FirestoreNotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -17,7 +18,27 @@ users_collection = 'users'
 
 
 def _get_db(firestore_client=None):
-    return firestore_client or get_firestore_client()
+    return firestore_client if firestore_client is not None else get_firestore_client()
+
+
+def _update_memory_if_exists(
+    uid: str,
+    memory_id: str,
+    update_payload: Dict[str, Any],
+    operation: str,
+    *,
+    firestore_client=None,
+) -> bool:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    try:
+        memory_ref.update(update_payload)
+        return True
+    except FirestoreNotFound:
+        logger.warning('Skipping stale memory %s update: memory document no longer exists uid=%s', operation, uid)
+        return False
 
 
 def get_memory_ids(uid: str, *, firestore_client=None) -> List[str]:
@@ -237,11 +258,9 @@ def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client=Non
 
 
 def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client=None):
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-    memory_ref.update({'kg_extracted': True})
+    _update_memory_if_exists(
+        uid, memory_id, {'kg_extracted': True}, 'kg_extracted', firestore_client=firestore_client
+    )
 
 
 def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_client=None):
@@ -302,14 +321,10 @@ def invalidate_memory(
     """
     if invalid_at is None:
         invalid_at = datetime.now(timezone.utc)
-    database = _get_db(firestore_client)
-    user_ref = database.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-    update_payload = {'invalid_at': invalid_at, 'updated_at': datetime.now(timezone.utc)}
+    update_payload: Dict[str, Any] = {'invalid_at': invalid_at, 'updated_at': datetime.now(timezone.utc)}
     if superseded_by is not None:
         update_payload['superseded_by'] = superseded_by
-    memory_ref.update(update_payload)
+    _update_memory_if_exists(uid, memory_id, update_payload, 'invalidate', firestore_client=firestore_client)
 
 
 def delete_memory(uid: str, memory_id: str, *, firestore_client=None):

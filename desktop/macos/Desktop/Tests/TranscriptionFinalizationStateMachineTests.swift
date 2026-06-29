@@ -173,6 +173,33 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertFalse(secondClaim)
     }
 
+    func testRestartRecoveryDoesNotForceProcessWhenCapturedBackendIdWasNotPersisted() async throws {
+        let capturedBackendId = "backend-conversation-123"
+        let sessionId = try await TranscriptionStorage.shared.startSession(
+            source: "desktop",
+            finalizationStrategy: .cloudReconcile
+        )
+        try await TranscriptionStorage.shared.finishSession(
+            id: sessionId,
+            reason: .userStop
+        )
+
+        await RewindDatabase.shared.close()
+        await TranscriptionStorage.shared.invalidateCache()
+        try await RewindDatabase.shared.initialize()
+
+        let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let recoveredSession = try XCTUnwrap(storedSession)
+        XCTAssertNil(recoveredSession.backendId)
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: capturedBackendId,
+                persistedBackendId: recoveredSession.backendId
+            ),
+            "After restart, a captured-but-unpersisted id must not enable current-pointer force-process"
+        )
+    }
+
     func testProcessingServerConversationDoesNotStampFinalizationCompletedAt() async throws {
         let conversation = makeServerConversation(status: .processing)
 

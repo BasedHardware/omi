@@ -61,7 +61,10 @@ actor ConversationFinalizationService {
       case .localSegments:
         try await uploadLocalSegments(sessionId: sessionId)
       case .cloudReconcile:
-        try await finalizeCloudSession(session: session, allowForceProcess: allowCloudForceProcess)
+        guard let latestSession = try await TranscriptionStorage.shared.getSession(id: sessionId) else {
+          throw TranscriptionStorageError.sessionNotFound
+        }
+        try await finalizeCloudSession(session: latestSession, allowForceProcess: allowCloudForceProcess)
       }
     } catch {
       await markRetryableFailure(sessionId: sessionId, error: error)

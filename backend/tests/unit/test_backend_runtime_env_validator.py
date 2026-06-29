@@ -32,6 +32,14 @@ def test_repo_gke_values_match_manifest():
     assert errors == []
 
 
+def test_repo_cloud_run_workflows_match_manifest():
+    validator = load_validator()
+
+    errors = validator.validate_runtime_env(env='dev', check_workflows=True)
+
+    assert errors == []
+
+
 def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
@@ -75,6 +83,79 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
 
     assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
     assert errors[0].scope == 'cloud_run/backend'
+
+
+def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
+    validator = load_validator()
+    values_file = tmp_path / 'backend_listen.yaml'
+    write_yaml(
+        values_file,
+        {
+            'env': [
+                {'name': 'OMI_LLM_GATEWAY_URL', 'value': 'http://gateway.local'},
+            ]
+        },
+    )
+    workflow_file = tmp_path / 'deploy.yml'
+    write_yaml(
+        workflow_file,
+        {
+            'env': {'SERVICE': 'backend'},
+            'jobs': {
+                'deploy': {
+                    'steps': [
+                        {
+                            'uses': 'google-github-actions/deploy-cloudrun@v2',
+                            'with': {
+                                'service': '${{ env.SERVICE }}',
+                                'env_vars': 'GOOGLE_CLOUD_PROJECT=based-hardware\n',
+                            },
+                        }
+                    ]
+                }
+            },
+        },
+    )
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    write_yaml(
+        manifest_path,
+        {
+            'schema_version': 1,
+            'environments': {
+                'dev': {
+                    'gcp_project': 'based-hardware-dev',
+                    'region': 'us-central1',
+                    'gke': {
+                        'backend-listen': {
+                            'values_file': str(values_file),
+                            'env': {
+                                'OMI_LLM_GATEWAY_URL': {
+                                    'value': 'http://gateway.local',
+                                },
+                            },
+                        }
+                    },
+                    'cloud_run': {
+                        'workflow_files': [str(workflow_file)],
+                        'services': {
+                            'backend': {
+                                'env': {
+                                    'GOOGLE_CLOUD_PROJECT': {'value': 'based-hardware'},
+                                    'OMI_LLM_GATEWAY_URL': {'value': 'http://172.16.63.232'},
+                                },
+                                'secrets': {},
+                            }
+                        },
+                    },
+                }
+            },
+        },
+    )
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+
+    assert [error.message for error in errors] == ['missing env OMI_LLM_GATEWAY_URL']
+    assert errors[0].scope == 'cloud_run_workflow/backend'
 
 
 def test_cloud_run_state_accepts_secret_bindings(tmp_path):

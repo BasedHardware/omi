@@ -188,7 +188,19 @@ impl FirestoreService {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         loop {
             let conversations = self
-                .get_conversations(uid, 500, 0, true, &[], None, Some(folder_id), None, None)
+                .get_conversations(
+                    uid,
+                    500,
+                    0,
+                    true,
+                    &[],
+                    None,
+                    None,
+                    Some(folder_id),
+                    None,
+                    None,
+                    "created_at",
+                )
                 .await?;
             if conversations.is_empty() {
                 break;

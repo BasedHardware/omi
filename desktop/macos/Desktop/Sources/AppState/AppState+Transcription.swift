@@ -643,10 +643,10 @@ extension AppState {
     buttonStreamTask = nil
   }
 
-  /// Stop real-time transcription
-  /// The Python backend handles conversation lifecycle automatically — disconnecting the WebSocket
-  /// triggers conversation processing on the backend side. We also call force-process to ensure
-  /// the conversation is finalized, preventing the retry service from creating duplicates.
+  /// Stop real-time transcription.
+  /// The Python backend handles conversation lifecycle automatically when the WebSocket closes.
+  /// When `/v4/listen` has announced the backend conversation id, finalize that exact conversation
+  /// instead of relying on the user's current in-progress pointer.
   func stopTranscription() {
     // On-device path: there is no backend WebSocket/conversation, so skip the cloud
     // force-process/reconciliation entirely. Stop capture, then AWAIT both Parakeet instances'
@@ -667,37 +667,47 @@ extension AppState {
       return
     }
 
-    // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
+    // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil).
     let capturedSessionId = currentSessionId
-    let generationAtStop = recordingGeneration
+    let capturedBackendId = currentBackendConversationId ?? pendingBackendConversationId
 
     stopAudioCapture()
     clearTranscriptionState(
       finalizationReason: .userStop,
       runFinalizer: false,
-      allowCloudForceProcess: false
+      allowCloudForceProcess: false,
+      finishSession: false
     )
     silentMicFallbackInProgress = false
 
-    // After WS close, the Python backend processes the conversation automatically.
-    // Call force-process to ensure finalization and get the backend conversation ID.
-    // This prevents the retry service from picking up the pendingUpload session.
     Task {
-      try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3s for backend to process after WS close
-
-      // If a new recording started during the delay, skip force-process — it would
-      // finalize the NEW conversation instead of the one we just stopped.
-      // The retry service will reconcile the old session by timestamp matching.
-      guard self.recordingGeneration == generationAtStop else {
-        log("Transcription: New recording started during delay, skipping force-process for session \(capturedSessionId.map(String.init) ?? "nil")")
-        return
-      }
-
       if let sessionId = capturedSessionId {
+        var persistedBackendId: String?
+        if let backendId = capturedBackendId, !backendId.isEmpty {
+          do {
+            try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+            persistedBackendId = try await TranscriptionStorage.shared.getSession(id: sessionId)?.backendId
+          } catch {
+            logError(
+              "Transcription: Failed to persist backend conversation \(backendId) for stopped session \(sessionId)",
+              error: error
+            )
+          }
+        }
+        do {
+          try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+        } catch {
+          logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
+          return
+        }
+
         await ConversationFinalizationService.shared.finalizeSession(
           id: sessionId,
           reason: .userStop,
-          allowCloudForceProcess: true
+          allowCloudForceProcess: DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+            capturedBackendId: capturedBackendId,
+            persistedBackendId: persistedBackendId
+          )
         )
       }
 

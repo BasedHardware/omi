@@ -133,6 +133,11 @@ jobs:
           chmod +x /usr/local/bin/yq
           bash backend/scripts/sync_cloudrun_secrets_from_chart.sh ${{ vars.ENV }} backend backend-sync backend-integration
 
+      - name: Validate backend runtime env
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-live-cloud-run
+
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
         run: echo ${{ steps.deploy-backend.outputs.url }}

@@ -1,4 +1,37 @@
 use super::*;
+use crate::models::conversation::{ConversationSource, ConversationStatus};
+use serde::Serialize;
+
+pub(super) fn serde_wire_value<T: Serialize>(value: &T) -> String {
+    serde_json::to_value(value)
+        .ok()
+        .and_then(|value| value.as_str().map(ToOwned::to_owned))
+        .unwrap_or_default()
+}
+
+pub(super) fn conversation_source_wire(source: &ConversationSource) -> String {
+    serde_wire_value(source)
+}
+
+pub(super) fn conversation_status_wire(status: &ConversationStatus) -> String {
+    serde_wire_value(status)
+}
+
+pub(super) fn category_wire(category: &Category) -> String {
+    serde_wire_value(category)
+}
+
+pub(super) fn memory_category_wire(category: &MemoryCategory) -> String {
+    serde_wire_value(category)
+}
+
+pub(super) fn memory_is_active(memory: &MemoryDB, include_invalidated: bool) -> bool {
+    memory.user_review != Some(false) && (include_invalidated || memory.invalid_at.is_none())
+}
+
+pub(super) fn memory_is_public(memory: &MemoryDB) -> bool {
+    memory.visibility == "public"
+}
 
 impl FirestoreService {
     pub(super) fn parse_string_array(&self, fields: &Value, key: &str) -> Vec<String> {
@@ -179,12 +212,13 @@ impl FirestoreService {
                 .unwrap_or_default(),
             created_at: self.parse_timestamp(fields, "created_at")?,
             updated_at: self.parse_timestamp(fields, "updated_at")?,
+            memory_id: self.parse_string(fields, "memory_id"),
             conversation_id: self.parse_string(fields, "conversation_id"),
             reviewed: self.parse_bool(fields, "reviewed").unwrap_or(false),
             user_review: self.parse_bool(fields, "user_review").ok(),
             visibility: self
                 .parse_string(fields, "visibility")
-                .unwrap_or_else(|| "private".to_string()),
+                .unwrap_or_else(|| "public".to_string()),
             manually_added: self.parse_bool(fields, "manually_added").unwrap_or(false),
             scoring: self.parse_string(fields, "scoring"),
             source: self.parse_string(fields, "source"), // Can be stored directly for tips, or enriched from conversation
@@ -198,6 +232,14 @@ impl FirestoreService {
             reasoning: self.parse_string(fields, "reasoning"),
             current_activity: self.parse_string(fields, "current_activity"),
             window_title: self.parse_string(fields, "window_title"),
+            data_protection_level,
+            valid_at: self.parse_timestamp_optional(fields, "valid_at"),
+            invalid_at: self.parse_timestamp_optional(fields, "invalid_at"),
+            superseded_by: self.parse_string(fields, "superseded_by"),
+            edited: self.parse_bool(fields, "edited").unwrap_or(false),
+            is_locked: self.parse_bool(fields, "is_locked").unwrap_or(false),
+            kg_extracted: self.parse_bool(fields, "kg_extracted").unwrap_or(false),
+            app_id: self.parse_string(fields, "app_id"),
         })
     }
 
@@ -737,7 +779,7 @@ impl FirestoreService {
         );
         fields.insert(
             "source".to_string(),
-            json!({"stringValue": format!("{:?}", conv.source).to_lowercase()}),
+            json!({"stringValue": conversation_source_wire(&conv.source)}),
         );
         fields.insert(
             "language".to_string(),
@@ -745,7 +787,7 @@ impl FirestoreService {
         );
         fields.insert(
             "status".to_string(),
-            json!({"stringValue": format!("{:?}", conv.status).to_lowercase()}),
+            json!({"stringValue": conversation_status_wire(&conv.status)}),
         );
         fields.insert(
             "discarded".to_string(),
@@ -841,7 +883,7 @@ impl FirestoreService {
         );
         structured_fields.insert(
             "category".to_string(),
-            json!({"stringValue": format!("{:?}", conv.structured.category).to_lowercase()}),
+            json!({"stringValue": category_wire(&conv.structured.category)}),
         );
         structured_fields.insert(
             "action_items".to_string(),
@@ -1016,5 +1058,123 @@ impl FirestoreService {
             .and_then(|v| v.as_str())
             .and_then(|ts| DateTime::parse_from_rfc3339(ts).ok())
             .map(|dt| dt.with_timezone(&Utc))
+    }
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+
+    fn fixture(name: &str) -> Value {
+        let path = format!(
+            "{}/../../../contract_tests/fixtures/{}",
+            env!("CARGO_MANIFEST_DIR"),
+            name
+        );
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    fn secret_bytes(value: &Value) -> Vec<u8> {
+        value["encryption_secret"]
+            .as_str()
+            .unwrap()
+            .as_bytes()
+            .to_vec()
+    }
+
+    #[test]
+    fn contract_wire_values_match_python_enums() {
+        let data = fixture("conversations.json");
+        let expected = &data["wire_values"];
+
+        assert_eq!(
+            conversation_source_wire(&ConversationSource::ExternalIntegration),
+            expected["source_external_integration"].as_str().unwrap()
+        );
+        assert_eq!(
+            conversation_status_wire(&ConversationStatus::InProgress),
+            expected["status_in_progress"].as_str().unwrap()
+        );
+        assert_eq!(
+            category_wire(&Category::Romance),
+            expected["category_romance"].as_str().unwrap()
+        );
+        assert_eq!(memory_category_wire(&MemoryCategory::Workflow), "workflow");
+    }
+
+    #[test]
+    fn contract_parse_transcript_segments_reads_shared_standard_and_enhanced_fixtures() {
+        let data = fixture("conversations.json");
+        let service = FirestoreService::new_for_contract(Some(secret_bytes(&data)));
+        let uid = data["uid"].as_str().unwrap();
+
+        let standard_fields = json!({
+            "data_protection_level": {"stringValue": "standard"},
+            "transcript_segments": {"bytesValue": data["standard_compressed_transcript_b64"]},
+            "transcript_segments_compressed": {"booleanValue": true}
+        });
+        let enhanced_fields = json!({
+            "data_protection_level": {"stringValue": "enhanced"},
+            "transcript_segments": {"stringValue": data["enhanced_encrypted_transcript"]},
+            "transcript_segments_compressed": {"booleanValue": true}
+        });
+
+        let standard = service
+            .parse_transcript_segments(&standard_fields, uid)
+            .unwrap();
+        let enhanced = service
+            .parse_transcript_segments(&enhanced_fields, uid)
+            .unwrap();
+
+        assert_eq!(standard.len(), data["segments"].as_array().unwrap().len());
+        assert_eq!(enhanced.len(), data["segments"].as_array().unwrap().len());
+        assert_eq!(standard[0].text, "Hello from desktop");
+        assert_eq!(enhanced[1].text, "Rust and Python should agree");
+        assert_eq!(standard[0].person_id.as_deref(), Some("person-user"));
+    }
+
+    #[test]
+    fn contract_parse_memory_reads_python_owned_fields_and_missing_visibility_as_public() {
+        let data = fixture("memories.json");
+        let service = FirestoreService::new_for_contract(Some(secret_bytes(&data)));
+        let uid = data["uid"].as_str().unwrap();
+        let doc = json!({
+            "name": "projects/contract/databases/(default)/documents/users/contract-user-8547/memories/memory-1",
+            "fields": {
+                "content": {"stringValue": data["enhanced_encrypted_content"]},
+                "category": {"stringValue": "workflow"},
+                "created_at": {"timestampValue": data["created_at"]},
+                "updated_at": {"timestampValue": data["created_at"]},
+                "data_protection_level": {"stringValue": "enhanced"},
+                "memory_id": {"stringValue": "conversation-1"},
+                "conversation_id": {"stringValue": "conversation-1"},
+                "valid_at": {"timestampValue": data["created_at"]},
+                "invalid_at": {"timestampValue": "2026-02-03T04:05:06+00:00"},
+                "superseded_by": {"stringValue": "memory-2"},
+                "edited": {"booleanValue": true},
+                "is_locked": {"booleanValue": true},
+                "kg_extracted": {"booleanValue": true},
+                "app_id": {"stringValue": "app-1"},
+                "tags": {"arrayValue": {"values": [{"stringValue": "contract"}]}}
+            }
+        });
+
+        let memory = service.parse_memory(&doc, uid).unwrap();
+
+        assert_eq!(memory.id, "memory-1");
+        assert_eq!(
+            memory.content,
+            data["enhanced_plain_content"].as_str().unwrap()
+        );
+        assert_eq!(memory.category, MemoryCategory::Workflow);
+        assert_eq!(memory.visibility, "public");
+        assert_eq!(memory.memory_id.as_deref(), Some("conversation-1"));
+        assert!(memory.invalid_at.is_some());
+        assert_eq!(memory.superseded_by.as_deref(), Some("memory-2"));
+        assert!(memory.edited);
+        assert!(memory.is_locked);
+        assert!(memory.kg_extracted);
+        assert_eq!(memory.app_id.as_deref(), Some("app-1"));
+        assert_eq!(memory.tags, vec!["contract".to_string()]);
     }
 }
