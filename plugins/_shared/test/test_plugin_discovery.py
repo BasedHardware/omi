@@ -54,18 +54,30 @@ class TestPluginDiscoveryContract:
         mode at create time — no race window where the file exists
         with looser perms.
         """
-        from plugin_discovery import DISCOVERY_FILE, write_discovery
+        # Use `import plugin_discovery` (not `from ... import ...`) so
+        # monkeypatch on the module attribute is reflected when we
+        # re-read the attribute via getattr() below. P1 (cubic): the
+        # previous test captured DISCOVERY_FILE into a local name at
+        # import time, then monkeypatched the module attribute, but
+        # the local still pointed at the ORIGINAL
+        # ~/.config/omi/ai-clone-plugin.json — so os.stat() was
+        # inspecting the wrong file (which happened to also be 0o600
+        # on the original author's dev machine, masking the bug).
+        import plugin_discovery
 
-        monkeypatch.setattr("plugin_discovery.DISCOVERY_DIR", tmp_path)
-        monkeypatch.setattr("plugin_discovery.DISCOVERY_FILE", tmp_path / "ai-clone-plugin.json")
+        target = tmp_path / "ai-clone-plugin.json"
+        monkeypatch.setattr(plugin_discovery, "DISCOVERY_DIR", tmp_path)
+        monkeypatch.setattr(plugin_discovery, "DISCOVERY_FILE", target)
 
-        write_discovery(
+        plugin_discovery.write_discovery(
             plugin_url="http://127.0.0.1:18800",
             bearer_token="telegram-test-token",
             plugin_type="telegram",
         )
 
-        mode = stat.S_IMODE(os.stat(DISCOVERY_FILE).st_mode)
+        # Re-read DISCOVERY_FILE via the module (not a captured local)
+        # so the monkeypatch actually applies.
+        mode = stat.S_IMODE(os.stat(plugin_discovery.DISCOVERY_FILE).st_mode)
         assert mode == 0o600, (
             f"discovery file must be 0o600, got 0o{mode:o}. "
             "A looser mode would expose the bearer token to other "
@@ -78,7 +90,10 @@ class TestPluginDiscoveryContract:
         write so a dir accidentally created with looser perms (e.g.
         by a previous dev build) doesn't expose the file inside it.
         """
-        from plugin_discovery import DISCOVERY_FILE, write_discovery
+        # P1 (cubic): same stale-local-reference bug as
+        # test_discovery_file_has_strict_permissions. Use the module
+        # import so monkeypatch actually applies.
+        import plugin_discovery
 
         # Pre-create the dir with mode 0o755 (loose — what `mkdir` would
         # leave behind if no mode arg was given).
@@ -86,16 +101,16 @@ class TestPluginDiscoveryContract:
         loose_dir.mkdir(mode=0o755)
         target = loose_dir / "ai-clone-plugin.json"
 
-        monkeypatch.setattr("plugin_discovery.DISCOVERY_DIR", loose_dir)
-        monkeypatch.setattr("plugin_discovery.DISCOVERY_FILE", target)
+        monkeypatch.setattr(plugin_discovery, "DISCOVERY_DIR", loose_dir)
+        monkeypatch.setattr(plugin_discovery, "DISCOVERY_FILE", target)
 
-        write_discovery(
+        plugin_discovery.write_discovery(
             plugin_url="http://127.0.0.1:18800",
             bearer_token="telegram-test-token",
             plugin_type="telegram",
         )
 
-        dir_mode = stat.S_IMODE(os.stat(loose_dir).st_mode)
+        dir_mode = stat.S_IMODE(os.stat(plugin_discovery.DISCOVERY_DIR).st_mode)
         assert dir_mode == 0o700, (
             f"discovery dir must be tightened to 0o700 on every write, "
             f"got 0o{dir_mode:o}. A looser dir lets other local users "
