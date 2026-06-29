@@ -83,6 +83,7 @@ MCP_SCOPES_SUPPORTED = [
     "chat.read",
     "screen_activity.read",
     "people.read",
+    "calendar.read",
 ]
 
 MCP_LEGACY_API_KEY_SCOPES = [
@@ -225,6 +226,8 @@ TOOL_REQUIRED_SCOPE = {
     "get_people": "people.read",
     "get_screen_activity": "screen_activity.read",
     "get_daily_summaries": "conversations.read",
+    "get_calendar_meetings": "calendar.read",
+    "get_calendar_meeting_by_id": "calendar.read",
 }
 
 
