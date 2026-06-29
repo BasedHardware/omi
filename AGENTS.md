@@ -262,7 +262,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## CI/CD & Logs
 
-- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires manually running `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable.
+- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires manually running `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable. Desktop Rust backend deploys require environment-scoped `DESKTOP_BACKEND_BASE_API_URL` so OAuth callbacks set runtime `BASE_API_URL`.
 - Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
 
 ## Documentation Maintenance

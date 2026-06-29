@@ -1,0 +1,3 @@
+{
+  "change": "Fixed desktop OAuth setup failures when the backend callback URL is missing"
+}
