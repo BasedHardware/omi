@@ -35,6 +35,10 @@ import simple_storage  # noqa: E402
 import telegram_client  # noqa: E402
 from auth import require_bearer  # noqa: E402  (shared bearer-token auth — see plugins/_shared/auth.py)
 from persona_client import chat as _persona_chat  # noqa: E402  (re-export of plugins/_shared/persona_client.chat)
+from plugin_discovery import (
+    write_discovery,
+    clear_discovery,
+)  # noqa: E402  (write ~/.config/omi/ai-clone-plugin.json on startup)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("omi-telegram-clone")
@@ -63,11 +67,117 @@ except ValueError:
     _NUDGE_COOLDOWN_SECONDS = 14400.0
 
 
+import uuid
+from contextlib import asynccontextmanager
+
+
+_PLUGIN_INSTANCE_ID = str(uuid.uuid4())
+
+
+@asynccontextmanager
+async def _plugin_lifespan(app: FastAPI):
+    """Write the discovery file at startup, remove it at shutdown.
+
+    Plugin URL: prefer PUBLIC_BASE_URL if set (the tunnel URL), else
+    fall back to http://127.0.0.1:<port> where <port> comes from $PORT
+    (uvicorn sets it) or defaults to 8000 (Docker) / 18800 (dev).
+
+    Bearer token: the env var AI_CLONE_PLUGIN_TOKEN. We write it to the
+    discovery file as a bootstrap convenience; the desktop moves it
+    into the macOS Keychain on first read so it doesn't linger in a
+    plaintext file.
+
+    Dev mode: True if OMI_DEV_MODE=1. The desktop uses this flag to
+    relax the "developer API key required" check (useful when the
+    plugin is paired with the local persona mock).
+    """
+    port = os.getenv("PORT") or "8000"
+    public_url = os.getenv("PUBLIC_BASE_URL")
+    if not public_url:
+        public_url = f"http://127.0.0.1:{port}"
+    try:
+        write_discovery(
+            plugin_url=f"http://127.0.0.1:{port}",
+            bearer_token=os.getenv("AI_CLONE_PLUGIN_TOKEN", ""),
+            public_url=public_url,
+            dev_mode=os.getenv("OMI_DEV_MODE") == "1",
+            plugin_type="telegram",
+            instance_id=_PLUGIN_INSTANCE_ID,
+        )
+        logger.info("wrote plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
+    except OSError as e:
+        logger.warning("could not write plugin discovery file: %s", e)
+    try:
+        yield
+    finally:
+        try:
+            clear_discovery(instance_id=_PLUGIN_INSTANCE_ID)
+            logger.info("cleared plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
+        except OSError:
+            pass
+
+
 app = FastAPI(
     title="OMI Telegram AI-Clone",
     description="Self-hosted Telegram plugin that lets Omi reply on the user's behalf.",
     version="0.1.0",
+    # Lifespan writes the plugin discovery file at startup and removes
+    # it at shutdown. The desktop reads the file on its own init and
+    # auto-fills the AI Clone settings (URL + bearer token) so the
+    # user doesn't have to copy/paste them. See plugin_discovery.py
+    # for the file format and security model.
+    lifespan=_plugin_lifespan,
 )
+
+
+import uuid
+from contextlib import asynccontextmanager
+
+
+_PLUGIN_INSTANCE_ID = str(uuid.uuid4())
+
+
+@asynccontextmanager
+async def _plugin_lifespan(app: FastAPI):
+    """Write the discovery file at startup, remove it at shutdown.
+
+    Plugin URL: prefer PUBLIC_BASE_URL if set (the tunnel URL), else
+    fall back to http://127.0.0.1:<port> where <port> comes from $PORT
+    (uvicorn sets it) or defaults to 8000 (Docker) / 18800 (dev).
+
+    Bearer token: the env var AI_CLONE_PLUGIN_TOKEN. We write it to the
+    discovery file as a bootstrap convenience; the desktop moves it
+    into the macOS Keychain on first read so it doesn't linger in a
+    plaintext file.
+
+    Dev mode: True if OMI_DEV_MODE=1. The desktop uses this flag to
+    relax the "developer API key required" check (useful when the
+    plugin is paired with the local persona mock).
+    """
+    port = os.getenv("PORT") or "8000"
+    public_url = os.getenv("PUBLIC_BASE_URL")
+    if not public_url:
+        public_url = f"http://127.0.0.1:{port}"
+    try:
+        write_discovery(
+            plugin_url=f"http://127.0.0.1:{port}",
+            bearer_token=os.getenv("AI_CLONE_PLUGIN_TOKEN", ""),
+            public_url=public_url,
+            dev_mode=os.getenv("OMI_DEV_MODE") == "1",
+            plugin_type="telegram",
+            instance_id=_PLUGIN_INSTANCE_ID,
+        )
+        logger.info("wrote plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
+    except OSError as e:
+        logger.warning("could not write plugin discovery file: %s", e)
+    try:
+        yield
+    finally:
+        try:
+            clear_discovery(instance_id=_PLUGIN_INSTANCE_ID)
+            logger.info("cleared plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
+        except OSError:
+            pass
 
 
 # ---------------------------------------------------------------------------
