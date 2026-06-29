@@ -946,8 +946,9 @@ class AuthService {
                 // where auth_isSignedIn=true but no valid tokens exist.
                 isSignedIn = false
                 saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                throw AuthError.notSignedIn
             }
-            throw AuthError.notSignedIn
+            throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -1001,6 +1002,7 @@ class AuthService {
 
         // Second try: Refresh using stored refresh token
         // Allow refresh when expectedUserId is nil (token was saved by valid sign-in)
+        var refreshFailure: Error?
         if let _ = storedRefreshToken {
             let tokenUserId = storedTokenUserId
             let canRefresh = tokenUserId == nil || expectedUserId == nil || tokenUserId == expectedUserId
@@ -1008,6 +1010,7 @@ class AuthService {
                 do {
                     return try await refreshIdToken()
                 } catch {
+                    refreshFailure = error
                     NSLog("OMI AUTH: Token refresh failed: %@", error.localizedDescription)
                 }
             }
@@ -1030,11 +1033,15 @@ class AuthService {
             }
         }
 
+        if let refreshFailure {
+            throw refreshFailure
+        }
+
         throw AuthError.notSignedIn
     }
 
-    func getAuthHeader() async throws -> String {
-        let token = try await getIdToken(forceRefresh: false)
+    func getAuthHeader(forceRefresh: Bool = false) async throws -> String {
+        let token = try await getIdToken(forceRefresh: forceRefresh)
         return "Bearer \(token)"
     }
 
@@ -1079,6 +1086,7 @@ class AuthService {
 
         try Auth.auth().signOut()
         isSignedIn = false
+        CredentialHealthManager.shared.reset()
         APIKeyService.shared.clear()
         // Clear saved auth state and tokens
         saveAuthState(isSignedIn: false, email: nil, userId: nil)

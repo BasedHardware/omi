@@ -100,8 +100,10 @@ impl MemoryDB {
             MemoryCategory::System => 0,
             MemoryCategory::Manual => 1,
             // Legacy categories - treat as system
-            MemoryCategory::Core | MemoryCategory::Hobbies |
-            MemoryCategory::Lifestyle | MemoryCategory::Interests => 0,
+            MemoryCategory::Core
+            | MemoryCategory::Hobbies
+            | MemoryCategory::Lifestyle
+            | MemoryCategory::Interests => 0,
         };
         let cat_boost = 999 - category_boost;
 

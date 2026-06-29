@@ -51,7 +51,11 @@ def _drop_module_if_missing_attrs(module_name, required_attrs):
 _drop_module_if_missing_attrs("models.conversation_enums", ("CategoryEnum",))
 _drop_module_if_missing_attrs(
     "models.structured",
-    ("ActionItem", "ActionItemsExtraction", "Event", "Structured"),
+    ("ActionItem", "Event", "Structured"),
+)
+_drop_module_if_missing_attrs(
+    "models.structured_extraction",
+    ("ActionItemsExtraction", "StructuredExtraction"),
 )
 
 _conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")

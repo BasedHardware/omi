@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk getting stuck with silent audio until relogin"
+}

@@ -106,7 +106,6 @@ _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticO
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('models.structured', Structured=MagicMock())
 _install_module('utils.byok', get_byok_key=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
@@ -169,6 +168,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'database',",
         "    'database._client',",
         "    'database.llm_usage',",
+        "    'models.structured_extraction',",
         "]:",
         "    sys.modules.setdefault(module_name, MagicMock())",
         "os.environ['OPENAI_API_KEY'] = 'sk-test'",

@@ -572,6 +572,13 @@ class AnalyticsManager {
     PostHogManager.shared.feedbackSubmitted(feedbackLength: feedbackLength)
   }
 
+  func desktopHealthEvent(name: String, properties: [String: Any]) {
+    guard !Self.isDevBuild else { return }
+    var props = properties
+    props["health_event"] = name
+    PostHogManager.shared.track("desktop_health_event", properties: props)
+  }
+
   // MARK: - Rewind Events (Desktop-specific)
 
   func rewindSearchPerformed(queryLength: Int) {

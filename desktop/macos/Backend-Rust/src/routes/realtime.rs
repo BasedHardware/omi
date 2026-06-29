@@ -127,7 +127,13 @@ async fn send_and_parse(
         .await
         .map_err(|e| MintError::BadGateway(e.to_string()))?;
     if !status.is_success() {
-        tracing::warn!("realtime mint({}) {} for uid={}: {}", provider, status, uid, text);
+        tracing::warn!(
+            "realtime mint({}) {} for uid={}: {}",
+            provider,
+            status,
+            uid,
+            text
+        );
         return Err(MintError::Upstream(status, text));
     }
     serde_json::from_str(&text).map_err(|e| MintError::BadGateway(e.to_string()))
@@ -147,10 +153,21 @@ async fn record_session(
 ) {
     if let Err(e) = state
         .firestore
-        .record_realtime_session(uid, token, provider, model, expires_at.unwrap_or(""), SESSION_MAX_MIN)
+        .record_realtime_session(
+            uid,
+            token,
+            provider,
+            model,
+            expires_at.unwrap_or(""),
+            SESSION_MAX_MIN,
+        )
         .await
     {
-        tracing::warn!("realtime session-record write failed for uid={}: {}", uid, e);
+        tracing::warn!(
+            "realtime session-record write failed for uid={}: {}",
+            uid,
+            e
+        );
     }
 }
 
@@ -180,7 +197,15 @@ async fn mint_openai(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
         .ok_or_else(|| MintError::BadGateway("openai mint: no client secret in response".into()))?
         .to_string();
     let expires_at = json.get("expires_at").map(|v| v.to_string());
-    record_session(state, uid, &token, "openai", OPENAI_REALTIME_MODEL, expires_at.as_deref()).await;
+    record_session(
+        state,
+        uid,
+        &token,
+        "openai",
+        OPENAI_REALTIME_MODEL,
+        expires_at.as_deref(),
+    )
+    .await;
     tracing::info!("realtime mint(openai) ok for uid={}", uid);
     Ok(MintResponse {
         provider: "openai".to_string(),
@@ -226,7 +251,15 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
         .and_then(|v| v.as_str())
         .ok_or_else(|| MintError::BadGateway("gemini mint: no token name in response".into()))?
         .to_string();
-    record_session(state, uid, &token, "gemini", GEMINI_LIVE_MODEL, Some(&expire)).await;
+    record_session(
+        state,
+        uid,
+        &token,
+        "gemini",
+        GEMINI_LIVE_MODEL,
+        Some(&expire),
+    )
+    .await;
     tracing::info!("realtime mint(gemini) ok for uid={}", uid);
     Ok(MintResponse {
         provider: "gemini".to_string(),
