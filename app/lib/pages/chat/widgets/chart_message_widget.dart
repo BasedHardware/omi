@@ -26,7 +26,7 @@ class ChartMessageWidget extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF1A1A20),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -91,7 +91,7 @@ class ChartMessageWidget extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: _niceInterval(minY, maxY),
-          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.06), strokeWidth: 1),
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withValues(alpha: 0.06), strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
@@ -155,7 +155,7 @@ class ChartMessageWidget extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [color.withOpacity(0.25), color.withOpacity(0.0)],
+                colors: [color.withValues(alpha: 0.25), color.withValues(alpha: 0.0)],
               ),
             ),
           ),
@@ -181,7 +181,7 @@ class ChartMessageWidget extends StatelessWidget {
           show: true,
           drawVerticalLine: false,
           horizontalInterval: _niceInterval(0, maxY),
-          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withOpacity(0.06), strokeWidth: 1),
+          getDrawingHorizontalLine: (value) => FlLine(color: Colors.white.withValues(alpha: 0.06), strokeWidth: 1),
         ),
         titlesData: FlTitlesData(
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),

@@ -175,7 +175,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                             width: 36,
                                             height: 36,
                                             decoration: BoxDecoration(
-                                              color: Colors.grey.withOpacity(0.3),
+                                              color: Colors.grey.withValues(alpha: 0.3),
                                               shape: BoxShape.circle,
                                             ),
                                             child: Center(
@@ -564,7 +564,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                         onChanged: (value) {
                                           provider.setIsPrivate(value);
                                         },
-                                        activeColor: const Color(0xFF6366F1),
+                                        activeThumbColor: const Color(0xFF6366F1),
                                       ),
                                     ],
                                   ),
@@ -621,7 +621,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                           onChanged: (value) {
                                             provider.setIsPaid(value);
                                           },
-                                          activeColor: const Color(0xFF22C55E),
+                                          activeThumbColor: const Color(0xFF22C55E),
                                         ),
                                       ],
                                     ),

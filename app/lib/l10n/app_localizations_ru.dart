@@ -9497,6 +9497,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Около 1 минуты';
+
   @override
   String get jumpToLatestMessage => 'Перейти к последнему сообщению';
 

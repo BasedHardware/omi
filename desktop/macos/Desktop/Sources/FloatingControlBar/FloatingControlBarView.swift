@@ -3,6 +3,12 @@ import Combine
 import MarkdownUI
 import SwiftUI
 
+enum ShortcutHintLayout {
+    static func visibleTokens(for keys: [String]) -> [String] {
+        keys
+    }
+}
+
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
     @EnvironmentObject var state: FloatingControlBarState
@@ -412,7 +418,7 @@ struct FloatingControlBarView: View {
     }
 
     private func notchShortcutKeys(_ keys: [String]) -> some View {
-        ForEach(keys.prefix(2), id: \.self) { key in
+        ForEach(ShortcutHintLayout.visibleTokens(for: keys), id: \.self) { key in
             Text(key)
                 .scaledFont(size: 8, weight: .medium)
                 .foregroundStyle(.white.opacity(0.75))
@@ -423,6 +429,7 @@ struct FloatingControlBarView: View {
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(3)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var notchChromeHeight: CGFloat {

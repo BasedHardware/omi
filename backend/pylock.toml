@@ -1168,6 +1168,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/08/ba/45911d754e8eba3d5
 wheels = [{ url = "https://files.pythonhosted.org/packages/29/16/c8a903f4c4dffe7a12843191437d7cd8e32751d5de349d45d3fe69544e87/pytest-8.4.1-py3-none-any.whl", upload-time = 2025-06-18T05:48:03Z, size = 365474, hashes = { sha256 = "539c70ba6fcead8e78eebbf1115e8b589e7565830d7d006a8723f19ac8a0afb7" } }]
 
 [[packages]]
+name = "pytest-asyncio"
+version = "1.3.0"
+sdist = { url = "https://files.pythonhosted.org/packages/90/2c/8af215c0f776415f3590cac4f9086ccefd6fd463befeae41cd4d3f193e5a/pytest_asyncio-1.3.0.tar.gz", upload-time = 2025-11-10T16:07:47Z, size = 50087, hashes = { sha256 = "d7f52f36d231b80ee124cd216ffb19369aa168fc10095013c6b014a34d3ee9e5" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/e5/35/f8b19922b6a25bc0880171a2f1a003eaeb93657475193ab516fd87cac9da/pytest_asyncio-1.3.0-py3-none-any.whl", upload-time = 2025-11-10T16:07:45Z, size = 15075, hashes = { sha256 = "611e26147c7f77640e6d0a92a38ed17c3e9848063698d5c93d5aa7aa11cebff5" } }]
+
+[[packages]]
 name = "pytest-httpserver"
 version = "1.1.5"
 sdist = { url = "https://files.pythonhosted.org/packages/50/17/ad187f46998814014f7cda309de700b87c0eb4b2e111e18bc8c819be7116/pytest_httpserver-1.1.5.tar.gz", upload-time = 2026-02-14T13:27:23Z, size = 70974, hashes = { sha256 = "dc3d82e1fe00e491829d8939c549bf4bd9b39a260f87113c619b9d517c2f8ff1" } }

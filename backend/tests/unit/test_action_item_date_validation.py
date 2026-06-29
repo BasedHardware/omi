@@ -120,6 +120,13 @@ notif_mod.send_action_item_created_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
 notif_mod.sync_action_item_reminder = MagicMock()
 
+byok_mod = _stub_module("utils.byok")
+byok_mod.has_byok_keys = MagicMock(return_value=False)
+
+gateway_mod = _stub_module("utils.llm.gateway_client")
+gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
+gateway_mod.record_chat_extraction_gateway_result = MagicMock()
+
 # Stub langchain
 langchain_core = _stub_package("langchain_core")
 langchain_tools = _stub_module("langchain_core.tools")

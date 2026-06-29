@@ -86,10 +86,7 @@ void main() {
 }
 
 class _FakeAnalyticsAdapter implements AnalyticsAdapter {
-  _FakeAnalyticsAdapter({
-    this.hangInit = false,
-    this.trackFailuresBeforeSuccess = 0,
-  });
+  _FakeAnalyticsAdapter({this.hangInit = false, this.trackFailuresBeforeSuccess = 0});
 
   final bool hangInit;
   int trackFailuresBeforeSuccess;

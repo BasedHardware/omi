@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
 
@@ -75,8 +76,15 @@ def update_advice(uid: str, advice_id: str, is_read: bool = None, is_dismissed: 
         updates['is_read'] = is_read
     if is_dismissed is not None:
         updates['is_dismissed'] = is_dismissed
-    ref.update(updates)
+    try:
+        ref.update(updates)
+    except NotFound:
+        # The advice was deleted between the existence check and the update.
+        return None
     result = ref.get().to_dict()
+    if result is None:
+        # The advice was deleted between the update and the re-read.
+        return None
     result['id'] = advice_id
     return result
 

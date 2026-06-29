@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pusher_websockets_stub import install_websockets_stub
+from tests.unit.pusher_websockets_stub import install_websockets_stub
 
 install_websockets_stub()
 
