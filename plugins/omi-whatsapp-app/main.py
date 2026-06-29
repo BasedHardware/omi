@@ -81,6 +81,29 @@ app = FastAPI(
 
 
 # ---------------------------------------------------------------------------
+# /.well-known/omi-tools.json — Omi Chat Tools manifest
+# ---------------------------------------------------------------------------
+# Per docs/doc/developer/apps/ChatTools.mdx, AI Clone plugins expose a
+# static manifest at this well-known path so the Omi desktop/mobile app
+# can discover the tools on install. Each plugin owns its own manifest
+# (TOOLS_MANIFEST in main.py) because the JSON-Schema properties must
+# exactly match the plugin's /toggle ToggleRequest field names.
+# Unauthenticated — manifest discovery is public; the underlying /toggle
+# endpoint is auth-gated separately by the access_token parameter.
+@app.get("/.well-known/omi-tools.json", include_in_schema=False)
+async def omi_tools_manifest():
+    """Return the Omi Chat Tools manifest for this plugin.
+
+    No auth: the manifest is public metadata. Each tool declared here
+    has its own `auth_required` flag and uses request-body credentials for
+    actual authorization.
+    """
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(content=get_omi_tools_manifest())
+
+
+# ---------------------------------------------------------------------------
 # /health
 # ---------------------------------------------------------------------------
 @app.get("/health")
@@ -474,6 +497,71 @@ async def setup(req: SetupRequest):
     )
 
     return SetupResponse(deep_link=deep_link, phone_number_id=req.phone_number_id, setup_token=setup_token)
+
+
+# ---------------------------------------------------------------------------
+# Omi Chat Tools manifest — served at `GET /.well-known/omi-tools.json`.
+# Schema per docs/doc/developer/apps/ChatTools.mdx. Each plugin owns its
+# own manifest (TOOLS_MANIFEST) because the JSON-Schema `properties` keys
+# MUST match the plugin's /toggle ToggleRequest field names — the chat
+# assistant will faithfully build a request from this schema. Telegram
+# uses `chat_id`/`bot_token`; WhatsApp uses `phone`/`access_token`.
+# ---------------------------------------------------------------------------
+TOOLS_MANIFEST = {
+    "tools": [
+        {
+            "name": "toggle_auto_reply",
+            "description": (
+                "Turn the AI Clone auto-reply on or off for a connected "
+                "WhatsApp phone number. Use this when the user wants to "
+                "enable or disable Omi's automatic responses in a specific "
+                "WhatsApp conversation. The access_token parameter is the "
+                "permanent system user token used to authenticate the "
+                "toggle call against the WhatsApp Business Cloud API."
+            ),
+            "endpoint": "/toggle",
+            "method": "POST",
+            "parameters": {
+                "properties": {
+                    "phone": {
+                        "type": "string",
+                        "description": ("WhatsApp phone number in E.164 format " "(e.g. 15550001111)."),
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": (
+                            "True to enable AI Clone auto-reply for the " "phone number, false to disable it."
+                        ),
+                    },
+                    "access_token": {
+                        "type": "string",
+                        "description": (
+                            "Permanent system user access token for the "
+                            "WhatsApp Business app. Used to authenticate "
+                            "the /toggle call."
+                        ),
+                    },
+                },
+                "required": ["phone", "enabled", "access_token"],
+            },
+            "auth_required": True,
+            "status_message": "Toggling WhatsApp auto-reply...",
+        }
+    ],
+    "chat_messages": {
+        "enabled": False,
+        "target": "app",
+        "notify": False,
+    },
+}
+
+
+def get_omi_tools_manifest() -> dict:
+    """Return a fresh deep copy of the manifest so callers can't mutate
+    the shared constant. v0.1 manifest is <1KB so copy cost is trivial."""
+    import copy
+
+    return copy.deepcopy(TOOLS_MANIFEST)
 
 
 # ---------------------------------------------------------------------------
