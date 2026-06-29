@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class OnboardingKnowledgeGraphStep extends StatelessWidget {
@@ -61,19 +62,7 @@ class OnboardingKnowledgeGraphStep extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 height: 56,
-                child: ElevatedButton(
-                  onPressed: onContinue,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    context.l10n.continueAction,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                  ),
-                ),
+                child: OmiButton(label: context.l10n.continueAction, onPressed: onContinue),
               ),
             ],
           ),

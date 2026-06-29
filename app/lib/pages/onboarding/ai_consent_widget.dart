@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AiConsentWidget extends StatefulWidget {
@@ -41,9 +42,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
       children: [
         Expanded(child: Container()),
         ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: mediaQuery.size.height - mediaQuery.padding.top - 16,
-          ),
+          constraints: BoxConstraints(maxHeight: mediaQuery.size.height - mediaQuery.padding.top - 16),
           child: Container(
             width: double.infinity,
             padding: EdgeInsets.fromLTRB(32, 26, 32, mediaQuery.padding.bottom + 8),
@@ -75,8 +74,12 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
                           const SizedBox(height: 16),
                           Text(
                             context.l10n.consentDataMessage,
-                            style:
-                                const TextStyle(color: Colors.white, fontSize: 15, height: 1.5, fontFamily: 'Manrope'),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              height: 1.5,
+                              fontFamily: 'Manrope',
+                            ),
                           ),
                           const SizedBox(height: 16),
                           RichText(
@@ -112,19 +115,7 @@ class _AiConsentWidgetState extends State<AiConsentWidget> {
                   SizedBox(
                     width: double.infinity,
                     height: 56,
-                    child: ElevatedButton(
-                      onPressed: widget.onAgree,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        elevation: 0,
-                      ),
-                      child: Text(
-                        context.l10n.agreeAndContinue,
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                      ),
-                    ),
+                    child: OmiButton(label: context.l10n.agreeAndContinue, onPressed: widget.onAgree),
                   ),
                 ],
               ),

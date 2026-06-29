@@ -6,6 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
@@ -150,7 +151,8 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                         : SizedBox(
                             width: double.infinity,
                             height: 56,
-                            child: ElevatedButton(
+                            child: OmiButton(
+                              label: context.l10n.continueButton,
                               onPressed: () async {
                                 provider.setLoading(true);
                                 if (Platform.isAndroid) {
@@ -173,20 +175,6 @@ class _PermissionsWidgetState extends State<PermissionsWidget> {
                                   provider.setLoading(false);
                                 });
                               },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                elevation: 0,
-                              ),
-                              child: Text(
-                                context.l10n.continueButton,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
                             ),
                           ),
                   ],

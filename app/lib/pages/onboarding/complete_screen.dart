@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/atoms/omi_button.dart';
+
 class OnboardingCompleteScreen extends StatefulWidget {
   final VoidCallback onComplete;
 
@@ -114,25 +116,11 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                       SizedBox(
                         width: double.infinity,
                         height: 56,
-                        child: ElevatedButton(
+                        child: OmiButton(
+                          label: 'Start Using Omi',
                           onPressed: widget.onComplete,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                            elevation: 0,
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Start Using Omi',
-                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                              ),
-                              SizedBox(width: 8),
-                              Icon(Icons.arrow_forward_rounded, size: 20),
-                            ],
-                          ),
+                          icon: Icons.arrow_forward_rounded,
+                          trailingIcon: true,
                         ),
                       ),
                       const SizedBox(height: 32),
