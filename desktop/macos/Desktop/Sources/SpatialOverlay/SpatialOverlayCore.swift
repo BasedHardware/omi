@@ -182,6 +182,7 @@ struct SpatialOverlayPlacementResult: Equatable {
   var panelFrame: CGRect
   var targetPoint: CGPoint
   var arrowTipInPanel: CGPoint
+  var arrowSize: CGSize = CGSize(width: 18, height: 13)
   var attachmentEdge: SpatialOverlayAttachmentEdge
   var score: Double
   var clampDelta: CGVector
@@ -270,6 +271,7 @@ enum SpatialOverlayPlacementSolver {
         panelFrame: clampedFrame,
         targetPoint: anchorPoint,
         arrowTipInPanel: arrowTip,
+        arrowSize: spec.arrowSize,
         attachmentEdge: edge,
         score: score,
         clampDelta: clampDelta,

@@ -19,9 +19,9 @@ import CoreGraphics
 ///   `renderedArrowTip` are in that SwiftUI panel-local space so the view can consume
 ///   them directly.
 struct SpatialOverlayRenderGeometry: Equatable {
-  /// Visual size of the triangle when it points up/down. For leading/trailing the
-  /// width and height swap (the triangle is rotated 90°).
-  static let arrowSize = CGSize(width: 18, height: 13)
+  /// Default visual size of the triangle when it points up/down. For
+  /// leading/trailing the width and height swap (the triangle is rotated 90°).
+  static let defaultArrowSize = CGSize(width: 18, height: 13)
   /// Inset between the panel edge and the bubble's rounded rectangle.
   static let bubbleInset: CGFloat = 8
 
@@ -30,12 +30,14 @@ struct SpatialOverlayRenderGeometry: Equatable {
   let edge: SpatialOverlayAttachmentEdge
   /// Arrow apex in panel-local AppKit coordinates (origin bottom-left, +y up).
   let arrowTipInPanel: CGPoint
+  let arrowSize: CGSize
 
   init(placement: SpatialOverlayPlacementResult, panelSize: CGSize) {
     self.panelSize = panelSize
     self.panelOrigin = placement.panelFrame.origin
     self.edge = placement.attachmentEdge
     self.arrowTipInPanel = placement.arrowTipInPanel
+    self.arrowSize = placement.arrowSize
   }
 
   /// Apex of the rendered triangle, in SwiftUI panel-local coordinates (top-left, +y down).
@@ -55,7 +57,7 @@ struct SpatialOverlayRenderGeometry: Equatable {
   /// Bubble (rounded-rect callout) frame in SwiftUI panel-local coordinates.
   var bubbleFrame: CGRect {
     let inset = Self.bubbleInset
-    let arrow = Self.arrowSize.height
+    let arrow = arrowSize.height
     switch edge {
     case .above:
       return CGRect(
@@ -80,8 +82,8 @@ struct SpatialOverlayRenderGeometry: Equatable {
   /// lands on `renderedArrowTip` regardless of edge.
   var pointerFrame: CGRect {
     let tip = renderedArrowTip
-    let w = Self.arrowSize.width
-    let h = Self.arrowSize.height
+    let w = arrowSize.width
+    let h = arrowSize.height
     switch edge {
     case .above:
       return CGRect(x: tip.x - w / 2, y: tip.y - h, width: w, height: h)

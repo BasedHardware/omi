@@ -56,6 +56,28 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
     }
   }
 
+  func testRenderGeometryUsesPlacementArrowSize() {
+    let placement = SpatialOverlayPlacementResult(
+      panelFrame: CGRect(x: 100, y: 100, width: 240, height: 120),
+      targetPoint: .zero,
+      arrowTipInPanel: CGPoint(x: 120, y: 0),
+      arrowSize: CGSize(width: 48, height: 24),
+      attachmentEdge: .above,
+      score: 0,
+      clampDelta: .zero,
+      diagnostics: []
+    )
+
+    let render = SpatialOverlayRenderGeometry(
+      placement: placement,
+      panelSize: CGSize(width: 240, height: 120)
+    )
+
+    XCTAssertEqual(render.pointerFrame.width, 48, accuracy: 0.001)
+    XCTAssertEqual(render.pointerFrame.height, 24, accuracy: 0.001)
+    XCTAssertEqual(render.bubbleFrame.height, 88, accuracy: 0.001)
+  }
+
   /// Mirrors `TrianglePointer.path(in:)` — the vertex that should land on the target.
   private func apexVertex(of rect: CGRect, edge: SpatialOverlayAttachmentEdge) -> CGPoint {
     switch edge {

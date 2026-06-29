@@ -320,6 +320,7 @@ struct BrowserExtensionSetup: View {
             .controlSize(.small)
             .onChange(of: selectedTarget) { _, target in
                 BrowserAutomationTargetStore.select(target)
+                resetConnectionStateForSelectedBrowser()
                 refreshBrowserState()
             }
 
@@ -497,6 +498,14 @@ struct BrowserExtensionSetup: View {
             return "Token contains invalid characters. Copy the token value only, not the surrounding text."
         }
         return nil
+    }
+
+    private func resetConnectionStateForSelectedBrowser() {
+        tokenInput = ""
+        tokenError = nil
+        tokenStepDone = false
+        verifyError = nil
+        verifySuccess = false
     }
 
     private func refreshBrowserState() {
