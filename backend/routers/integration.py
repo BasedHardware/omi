@@ -19,12 +19,12 @@ import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.conversation import SearchRequest
 from models.app import App
-from routers.conversations import process_conversation, trigger_external_integrations
+from utils.app_integrations import send_app_notification, trigger_external_integrations
 from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import redact_conversation_for_integration
 from utils.conversations.memories import process_external_integration_memory
+from utils.conversations.process_conversation import process_conversation
 from utils.conversations.search import search_conversations
-from utils.app_integrations import send_app_notification
 from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import run_blocking, db_executor, postprocess_executor, critical_executor
 import logging

@@ -1673,9 +1673,7 @@ class TestInitialMessageEndpoint:
         mock_msg.text = 'Hello! How can I help?'
         mock_msg.id = 'msg-123'
 
-        with patch.dict(
-            'sys.modules', {'routers.chat': MagicMock(initial_message_util=MagicMock(return_value=mock_msg))}
-        ):
+        with patch('routers.chat_sessions.initial_message_util', return_value=mock_msg):
             result = create_initial_message(InitialMessageRequest(session_id='s1', app_id='app1'), uid='u1')
 
         assert result == {'message': 'Hello! How can I help?', 'message_id': 'msg-123'}
@@ -1688,7 +1686,7 @@ class TestInitialMessageEndpoint:
         mock_msg.id = 'msg-456'
         mock_util = MagicMock(return_value=mock_msg)
 
-        with patch.dict('sys.modules', {'routers.chat': MagicMock(initial_message_util=mock_util)}):
+        with patch('routers.chat_sessions.initial_message_util', mock_util):
             create_initial_message(InitialMessageRequest(session_id='s1'), uid='u1')
             mock_util.assert_called_once_with('u1', None, chat_session_id='s1')
 
@@ -1700,7 +1698,7 @@ class TestInitialMessageEndpoint:
         mock_msg.id = 'msg-789'
         mock_util = MagicMock(return_value=mock_msg)
 
-        with patch.dict('sys.modules', {'routers.chat': MagicMock(initial_message_util=mock_util)}):
+        with patch('routers.chat_sessions.initial_message_util', mock_util):
             create_initial_message(InitialMessageRequest(session_id='sess-42', app_id='myapp'), uid='u1')
             mock_util.assert_called_once_with('u1', 'myapp', chat_session_id='sess-42')
 

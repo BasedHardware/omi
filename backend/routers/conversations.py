@@ -143,6 +143,63 @@ def process_in_progress_conversation(
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
+@router.post(
+    '/v1/conversations/{conversation_id}/finalize', response_model=CreateConversationResponse, tags=['conversations']
+)
+def finalize_conversation(
+    conversation_id: str,
+    request: ProcessConversationRequest = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
+):
+    """Finalize exactly one backend conversation.
+
+    Unlike POST /v1/conversations, this does not operate on the user's Redis
+    "current in-progress" pointer, so desktop retry/rotation cannot accidentally
+    finalize a newer recording.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation)
+
+    if conversation.status != ConversationStatus.in_progress:
+        return CreateConversationResponse(conversation=conversation, messages=[])
+
+    claim_updates = {}
+    if request and request.calendar_meeting_context:
+        if not conversation.external_data:
+            conversation.external_data = {}
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        claim_updates['external_data'] = conversation.external_data
+
+    if not conversations_db.claim_conversation_status(
+        uid,
+        conversation.id,
+        ConversationStatus.in_progress,
+        ConversationStatus.processing,
+        extra_updates=claim_updates or None,
+    ):
+        latest = _get_valid_conversation_by_id(uid, conversation_id)
+        latest = deserialize_conversation(latest)
+        return CreateConversationResponse(conversation=latest, messages=[])
+
+    conversation.status = ConversationStatus.processing
+
+    current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+    if current_in_progress_id == conversation_id:
+        redis_db.remove_in_progress_conversation_id(uid)
+
+    geolocation = redis_db.get_cached_user_geolocation(uid)
+    if geolocation:
+        geolocation = Geolocation(**geolocation)
+        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    if conversation.status:
+        conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
+
+    return CreateConversationResponse(conversation=conversation, messages=messages)
+
+
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
     conversation_id: str,
