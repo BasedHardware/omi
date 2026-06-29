@@ -16,7 +16,9 @@ Three stores:
 from __future__ import annotations
 
 import json
+import logging
 import os
+import tempfile
 from datetime import datetime
 from typing import Optional
 
@@ -77,12 +79,25 @@ def _save(path: str, payload: dict) -> None:
     Now: log the error AND raise OSError. The caller (/setup) maps
     OSError to a 5xx response so the user knows the setup failed.
     """
-    tmp = path + ".tmp"
+    # P1 (cubic follow-up): use a UNIQUE temp filename per call.
+    # Pre-fix version used a fixed ".tmp" suffix with O_EXCL, which
+    # means a stale temp file from a crashed previous write (e.g. a
+    # crash between os.open and os.replace) would cause every
+    # subsequent _save() to fail with EEXIST. Worse: in multi-worker
+    # deployments (gunicorn -w 2 etc), two processes could race on
+    # the same fixed .tmp name; the loser's cleanup would unlink the
+    # winner's in-progress file, breaking both writes.
+    #
+    # tempfile.mkstemp gives us a per-process unique name AND atomic
+    # exclusive creation, both for free. The temp file is in the same
+    # directory as the target so os.replace is atomic.
     try:
-        # Open with explicit 0o600 so the file never briefly exists
-        # with the default umask. O_CREAT|O_EXCL prevents the (rare)
-        # race where a stale .tmp file already exists.
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        fd, tmp = tempfile.mkstemp(
+            prefix=os.path.basename(path) + ".",
+            suffix=".tmp",
+            dir=os.path.dirname(path) or None,
+        )
+        os.chmod(tmp, 0o600)
         with os.fdopen(fd, "w") as f:
             json.dump(payload, f, default=str, indent=2)
             f.flush()
