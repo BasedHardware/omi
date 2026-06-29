@@ -53,3 +53,19 @@ def test_dropbox_compatible_conversation_helpers():
     assert conversation.get_duration() == "0:00:05"
     assert "[0:00:00 - 0:00:02] Speaker 1: hello" in conversation.get_transcript(include_timestamps=True)
     assert "User: reply" in conversation.get_transcript(user_name="User")
+
+
+def test_conversation_preserves_apps_results_and_syncs_legacy_plugins_results():
+    conversation = Conversation.model_validate(
+        {
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "transcript_segments": [],
+            "structured": {"title": "Apps", "overview": "Has app output"},
+            "apps_results": [{"app_id": "summarizer", "content": "App summary"}],
+        }
+    )
+
+    assert conversation.apps_results[0].app_id == "summarizer"
+    assert conversation.apps_results[0].content == "App summary"
+    assert conversation.plugins_results[0].plugin_id == "summarizer"
+    assert conversation.plugins_results[0].content == "App summary"

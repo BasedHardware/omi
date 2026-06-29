@@ -40,6 +40,28 @@ export interface OmiTranscriptSegment {
   [key: string]: unknown;
 }
 
+export interface OmiConversationPhoto {
+  id?: string | null;
+  base64?: string;
+  description?: string | null;
+  created_at?: string | null;
+  discarded?: boolean;
+  data_protection_level?: string | null;
+  [key: string]: unknown;
+}
+
+export interface OmiAppResult {
+  app_id?: string | null;
+  content: string;
+  [key: string]: unknown;
+}
+
+export interface OmiPluginResult {
+  plugin_id?: string | null;
+  content: string;
+  [key: string]: unknown;
+}
+
 export interface OmiConversationWebhook {
   id?: string;
   created_at: string;
@@ -48,7 +70,8 @@ export interface OmiConversationWebhook {
   discarded?: boolean;
   structured: OmiStructured;
   transcript_segments: OmiTranscriptSegment[];
-  photos?: unknown[];
-  plugins_results?: unknown[];
+  photos?: OmiConversationPhoto[];
+  apps_results?: OmiAppResult[];
+  plugins_results?: OmiPluginResult[];
   [key: string]: unknown;
 }

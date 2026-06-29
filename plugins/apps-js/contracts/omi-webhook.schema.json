@@ -75,7 +75,45 @@
         }
       }
     },
-    "photos": { "type": "array", "default": [] },
-    "plugins_results": { "type": "array", "default": [] }
+    "photos": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": ["string", "null"] },
+          "base64": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "created_at": { "type": ["string", "null"], "format": "date-time" },
+          "discarded": { "type": "boolean", "default": false },
+          "data_protection_level": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "apps_results": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "app_id": { "type": ["string", "null"] },
+          "content": { "type": "string" }
+        }
+      }
+    },
+    "plugins_results": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "plugin_id": { "type": ["string", "null"] },
+          "content": { "type": "string" }
+        }
+      }
+    }
   }
 }

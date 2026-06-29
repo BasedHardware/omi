@@ -3,6 +3,7 @@
 from omi_plugin_sdk.models import (
     ActionItem,
     ActionItemsExtraction,
+    AppResult,
     CategoryEnum,
     Conversation,
     ConversationPhoto,
@@ -19,6 +20,7 @@ from omi_plugin_sdk.models import (
 __all__ = [
     "ActionItem",
     "ActionItemsExtraction",
+    "AppResult",
     "CategoryEnum",
     "Conversation",
     "ConversationPhoto",

@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class CategoryEnum(str, Enum):
@@ -178,6 +178,11 @@ class PluginResult(BaseModel):
     content: str
 
 
+class AppResult(BaseModel):
+    app_id: Optional[str] = None
+    content: str
+
+
 class TranscriptSegment(BaseModel):
     id: Optional[str] = None
     text: str
@@ -275,8 +280,17 @@ class Conversation(BaseModel):
     transcript_segments: List[TranscriptSegment] = Field(default_factory=list)
     photos: Optional[List[ConversationPhoto]] = Field(default_factory=list)
     structured: Structured
+    apps_results: List[AppResult] = Field(default_factory=list)
     plugins_results: List[PluginResult] = Field(default_factory=list)
     discarded: bool = False
+
+    @model_validator(mode="after")
+    def sync_plugin_results(self):
+        if self.apps_results and not self.plugins_results:
+            self.plugins_results = [
+                PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results
+            ]
+        return self
 
     def get_transcript(self, include_timestamps: bool = False, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(

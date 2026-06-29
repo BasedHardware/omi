@@ -5,6 +5,7 @@ import importlib
 import os
 import sys
 from pathlib import Path
+from typing import List, Tuple
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGINS = ROOT / "plugins"
@@ -12,7 +13,7 @@ SDK_SRC = PLUGINS / "omi-plugin-sdk" / "src"
 
 
 def main() -> int:
-    blockers: list[tuple[str, str]] = []
+    blockers: List[Tuple[str, str]] = []
     checked = 0
     plugin_roots = [path.resolve() for path in PLUGINS.glob("omi-*-app")]
 
@@ -53,7 +54,7 @@ def main() -> int:
     return 0
 
 
-def _purge_plugin_modules(plugin_roots: list[Path]) -> None:
+def _purge_plugin_modules(plugin_roots: List[Path]) -> None:
     for name, module in list(sys.modules.items()):
         module_file = getattr(module, "__file__", None)
         if not module_file:
@@ -62,8 +63,12 @@ def _purge_plugin_modules(plugin_roots: list[Path]) -> None:
             resolved = Path(module_file).resolve()
         except OSError:
             continue
-        if any(resolved.is_relative_to(root) for root in plugin_roots):
+        if any(_is_relative_to(resolved, root) for root in plugin_roots):
             sys.modules.pop(name, None)
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    return path == root or root in path.parents
 
 
 if __name__ == "__main__":

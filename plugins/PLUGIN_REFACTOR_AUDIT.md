@@ -34,7 +34,7 @@ Date: 2026-06-29
 
 ## Storage, Auth, and Webhook Helpers
 
-- Added SDK primitives in `auth.py`, `storage.py`, `webhook.py`, and `fastapi.py`.
+- Added SDK primitives in `auth.py`, `webhook.py`, and `fastapi.py`.
 - These are intentionally small. They do not change OAuth token storage, Redis keys, volume paths, or app-specific business logic.
 
 ## Dependency Risk

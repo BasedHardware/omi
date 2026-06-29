@@ -14,7 +14,7 @@ try:
 except ModuleNotFoundError:
     from models.conversation_enums import CategoryEnum
 
-    class _ActionItem(BaseModel):
+    class ActionItem(BaseModel):
         description: str = Field(description='The action item to be completed')
         completed: bool = False
         created_at: Optional[datetime] = Field(default=None, description='When the action item was created')
@@ -26,7 +26,7 @@ except ModuleNotFoundError:
         )
 
         @staticmethod
-        def actions_to_string(action_items: List['_ActionItem']) -> str:
+        def actions_to_string(action_items: List['ActionItem']) -> str:
             if not action_items:
                 return 'None'
 
@@ -50,7 +50,7 @@ except ModuleNotFoundError:
 
             return '\n'.join(result)
 
-    class _Event(BaseModel):
+    class Event(BaseModel):
         title: str = Field(description='The title of the event')
         description: str = Field(description='A brief description of the event', default='')
         start: datetime = Field(description='The start date and time of the event')
@@ -63,7 +63,7 @@ except ModuleNotFoundError:
             return event_dict
 
         @staticmethod
-        def events_to_string(events: List['_Event']) -> str:
+        def events_to_string(events: List['Event']) -> str:
             if not events:
                 return 'None'
             return '\n'.join(
@@ -73,12 +73,12 @@ except ModuleNotFoundError:
                 ]
             )
 
-    class _ActionItemsExtraction(BaseModel):
-        action_items: List[_ActionItem] = Field(
+    class ActionItemsExtraction(BaseModel):
+        action_items: List[ActionItem] = Field(
             description='A list of action items from the conversation', default_factory=list
         )
 
-    class _Structured(BaseModel):
+    class Structured(BaseModel):
         title: str = Field(description='A title/name for this conversation', default='')
         overview: str = Field(
             description='A brief overview of the conversation, highlighting the key details from it',
@@ -86,10 +86,10 @@ except ModuleNotFoundError:
         )
         emoji: str = Field(description='An emoji to represent the conversation', default='🧠')
         category: CategoryEnum = Field(description='A category for this conversation', default=CategoryEnum.other)
-        action_items: List[_ActionItem] = Field(
+        action_items: List[ActionItem] = Field(
             description='A list of action items from the conversation', default_factory=list
         )
-        events: List[_Event] = Field(
+        events: List[Event] = Field(
             description='A list of events extracted from the conversation, that the user must have on his calendar.',
             default_factory=list,
         )
@@ -111,15 +111,11 @@ except ModuleNotFoundError:
             )
 
             if self.action_items:
-                result += f'Action Items:\n{_ActionItem.actions_to_string(self.action_items)}\n'
+                result += f'Action Items:\n{ActionItem.actions_to_string(self.action_items)}\n'
 
             if self.events:
-                result += f'Events:\n{_Event.events_to_string(self.events)}\n'
+                result += f'Events:\n{Event.events_to_string(self.events)}\n'
             return result.strip()
 
-    ActionItem = _ActionItem
-    ActionItemsExtraction = _ActionItemsExtraction
-    Event = _Event
-    Structured = _Structured
 
 __all__ = ['ActionItem', 'ActionItemsExtraction', 'Event', 'Structured']
