@@ -3,6 +3,7 @@ import { app } from 'electron'
 import { basename, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
+import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
 import type {
   AppUsageRecord,
   ChatMessage,
@@ -737,14 +738,15 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
 
 export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
-    const like = `%${query}%`
+    const search = buildRewindSearchQuery(query)
+    if (!search) return []
     return get()
       .prepare(
         `SELECT ${REWIND_COLUMNS} FROM rewind_frames
-       WHERE ocr_text LIKE ? OR window_title LIKE ? OR app LIKE ?
+       WHERE ${search.where}
        ORDER BY ts DESC LIMIT ?`
       )
-      .all(like, like, like, limit) as RewindFrame[]
+      .all(...search.params, limit) as RewindFrame[]
   })
 }
 
