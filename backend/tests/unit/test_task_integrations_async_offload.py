@@ -27,7 +27,12 @@ def _async_funcs(tree):
 
 
 def test_run_blocking_is_imported():
-    assert "from utils.executors import db_executor, run_blocking" in SOURCE.read_text(encoding="utf-8")
+    # Semantic check (not an exact-string match) so import reordering or reformatting does not break it.
+    imported = set()
+    for node in ast.walk(_tree()):
+        if isinstance(node, ast.ImportFrom) and node.module == "utils.executors":
+            imported.update(alias.name for alias in node.names)
+    assert {"db_executor", "run_blocking"} <= imported
 
 
 def test_no_async_handler_calls_task_integration_db_directly():
