@@ -177,7 +177,19 @@ async def execute_persona_chat_stream(
         # Wire the tracer via RunnableConfig so the run_id is real in
         # LangSmith. `config` is the v0.2+ way to pass callbacks into
         # astream() — callbacks= was removed in langchain-core >= 0.2.
-        astream_kwargs = {"config": {"callbacks": tracer_callbacks}} if tracer_callbacks else {}
+        #
+        # Critical: the run_id MUST be in config (not just passed to
+        # the tracer constructor). LangChainTracer.__init__ does NOT
+        # accept a run_id — that argument is silently swallowed by
+        # **kwargs. RunnableConfig.run_id is what the callback manager
+        # reads to stamp the trace, so submit_langsmith_feedback() can
+        # later attach feedback to the exact same run. Identified by
+        # code-review sub-agent on PR #8531 (cubic-found follow-up).
+        astream_kwargs = (
+            {"config": {"callbacks": tracer_callbacks, "run_id": langsmith_run_id}}
+            if tracer_callbacks and langsmith_run_id
+            else {}
+        )
         chunk_count = 0
         async for chunk in llm.astream(formatted_messages, **astream_kwargs):
             chunk_count += 1
