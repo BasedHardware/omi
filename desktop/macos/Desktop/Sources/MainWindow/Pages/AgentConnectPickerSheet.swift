@@ -92,6 +92,9 @@ private struct ConnectOptionCard: View {
   @State private var resultMessage: String?
   @State private var mcpKey: String?
   @State private var showManual = false
+  @State private var permissionRefreshID = 0
+
+  private let permissionRefreshTimer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
   private var optionLabel: String {
     switch destination {
@@ -104,7 +107,17 @@ private struct ConnectOptionCard: View {
   }
 
   private var primaryLabel: String {
-    destination.mcpExecuteKind == .autonomous ? "Do it for me" : "Open & copy key"
+    _ = permissionRefreshID
+    switch destination.mcpExecuteKind {
+    case .localAutonomous:
+      return "Do it for me"
+    case .browserAutonomous:
+      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
+        ? "Grant Accessibility"
+        : "Do it for me"
+    case .assisted:
+      return "Open & copy key"
+    }
   }
 
   var body: some View {
@@ -174,6 +187,17 @@ private struct ConnectOptionCard: View {
         mcpKey = try? await MemoryExportService.shared.ensureMCPKey()
       }
     }
+    .onReceive(permissionRefreshTimer) { _ in
+      refreshPermissionStateIfNeeded()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      refreshPermissionStateIfNeeded()
+    }
+  }
+
+  private func refreshPermissionStateIfNeeded() {
+    guard MemoryExportExecutor.requiresAccessibilityPreflight(destination) else { return }
+    permissionRefreshID += 1
   }
 
   private func run() {

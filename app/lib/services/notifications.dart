@@ -61,8 +61,6 @@ class NotificationUtil {
   }
 
   static void _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
-    // Always ensure that all plugins was initialized
-    // TODO: for what?
     WidgetsFlutterBinding.ensureInitialized();
 
     String? navigateTo;
@@ -75,9 +73,7 @@ class NotificationUtil {
     }
 
     globalNavigatorKey.currentState?.pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => HomePageWrapper(navigateToRoute: navigateTo),
-      ),
+      MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)),
     );
   }
 

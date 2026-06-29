@@ -27,6 +27,7 @@ describe("omi tool manifest", () => {
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "delegate_agent",
+      "fill_cloud_connector_form",
       "spawn_agent",
       "manage_agent_pills",
       "search_tasks",

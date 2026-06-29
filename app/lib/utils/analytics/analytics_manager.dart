@@ -23,11 +23,7 @@ class AnalyticsManager {
   static const int _maxQueuedEvents = 200;
   static const int _flushBatchSize = 20;
   static const int _maxDeliveryAttempts = 3;
-  static const List<Duration> _retryDelays = [
-    Duration(seconds: 1),
-    Duration(seconds: 5),
-    Duration(seconds: 30),
-  ];
+  static const List<Duration> _retryDelays = [Duration(seconds: 1), Duration(seconds: 5), Duration(seconds: 30)];
   static final List<_QueuedAnalyticsEvent> _queuedEvents = [];
   static bool _flushScheduled = false;
   static bool _flushInProgress = false;
@@ -51,8 +47,10 @@ class AnalyticsManager {
     final adapter = _adapter;
     if (adapter == null) return;
     try {
-      await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init)
-          .timeout(timeout);
+      await PlatformService.executeIfSupportedAsync(
+        PlatformService.isAnalyticsSupported,
+        adapter.init,
+      ).timeout(timeout);
       await _loadPersonPropertyCache();
       _scheduleFlush();
     } catch (_) {}
@@ -293,10 +291,12 @@ class AnalyticsManager {
   static void _scheduleFlush() {
     if (_flushScheduled || _flushInProgress || (_retryTimer?.isActive ?? false)) return;
     _flushScheduled = true;
-    unawaited(Future<void>.microtask(() async {
-      _flushScheduled = false;
-      await _flushQueuedEvents();
-    }));
+    unawaited(
+      Future<void>.microtask(() async {
+        _flushScheduled = false;
+        await _flushQueuedEvents();
+      }),
+    );
   }
 
   static Future<void> _flushQueuedEvents({bool force = false}) async {
@@ -1926,19 +1926,12 @@ class AnalyticsManager {
 }
 
 class _QueuedAnalyticsEvent {
-  const _QueuedAnalyticsEvent({
-    required this.eventName,
-    required this.properties,
-    this.attempts = 0,
-  });
+  const _QueuedAnalyticsEvent({required this.eventName, required this.properties, this.attempts = 0});
 
   final String eventName;
   final Map<String, Object> properties;
   final int attempts;
 
-  _QueuedAnalyticsEvent nextAttempt() => _QueuedAnalyticsEvent(
-        eventName: eventName,
-        properties: properties,
-        attempts: attempts + 1,
-      );
+  _QueuedAnalyticsEvent nextAttempt() =>
+      _QueuedAnalyticsEvent(eventName: eventName, properties: properties, attempts: attempts + 1);
 }

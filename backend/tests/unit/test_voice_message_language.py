@@ -11,6 +11,11 @@ sys.modules["stripe"] = MagicMock()
 sys.modules["database.chat"] = MagicMock()
 sys.modules["database.notifications"] = MagicMock()
 sys.modules["database.apps"] = MagicMock()
+sys.modules["database.auth"] = MagicMock()
+sys.modules["database.users"] = MagicMock()
+sys.modules["utils.apps"] = MagicMock()
+sys.modules["utils.llm.chat"] = MagicMock()
+sys.modules["utils.llm.persona"] = MagicMock()
 sys.modules["database.redis_db"] = MagicMock()
 sys.modules["database.redis_db"].try_acquire_user_platform_write_lock = MagicMock()
 sys.modules["models.chat"] = MagicMock()
@@ -35,7 +40,9 @@ class NotFound(Exception):
 
 
 _google_module = sys.modules.setdefault("google", types.ModuleType("google"))
+_google_module.__path__ = []
 _google_cloud_module = sys.modules.setdefault("google.cloud", types.ModuleType("google.cloud"))
+_google_cloud_module.__path__ = []
 _google_exceptions_module = types.ModuleType("google.cloud.exceptions")
 _google_exceptions_module.NotFound = NotFound
 sys.modules.setdefault("google.cloud.exceptions", _google_exceptions_module)
