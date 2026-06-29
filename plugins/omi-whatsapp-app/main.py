@@ -184,10 +184,18 @@ async def webhook_delivery(
             hashlib.sha256,
         ).hexdigest()
         if not hmac.compare_digest(presented_sig, expected_sig):
+            # Maintainer security review on PR #8531 (review 4592357379):
+            # Do NOT log the full presented OR expected sigs — the
+            # expected sig is derived from WHATSAPP_APP_SECRET, so
+            # putting it in /tmp/omi-dev.log lets anyone with file
+            # read access correlate the log entry back to the secret.
+            # Log only that the signature mismatched, plus a short
+            # non-sensitive correlation prefix and the body length.
+            correlation_prefix = presented_sig[:8]
             logger.warning(
-                "webhook signature mismatch (presented=%s expected=%s)",
-                presented_sig,
-                expected_sig,
+                "webhook signature mismatch (correlation_prefix=%s body_len=%d)",
+                correlation_prefix,
+                len(raw_body),
             )
             raise HTTPException(status_code=401, detail="Invalid signature")
 
