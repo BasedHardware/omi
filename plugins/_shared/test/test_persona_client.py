@@ -414,6 +414,25 @@ class TestChatErrors:
                 )
 
         assert reply == ""
+        # P2 (cubic): the test name promised log verification but never
+        # asserted on caplog. Without this assertion, a regression that
+        # swallows the connect-error silently (returns '' without
+        # logging) would pass — defeating the whole point of the test.
+        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert error_records, "expected an ERROR-level log record on connect error"
+        # The message must be informative enough for on-call to diagnose,
+        # but MUST NOT contain the user-supplied api_key (the literal
+        # "k" we passed in) or the raw uid.
+        joined = " ".join(r.getMessage() for r in error_records)
+        assert "boom" in joined or "connect" in joined.lower(), (
+            f"expected log to mention the connect error, got: {joined!r}"
+        )
+        # Negative assertions — guard against future regressions where a
+        # logger.error("%s", exception) leaks sensitive args.
+        assert "api_key='k'" not in joined and "api_key=k" not in joined, (
+            f"api_key leaked into log: {joined!r}"
+        )
+        assert "uid='u-1'" not in joined, f"uid leaked into log: {joined!r}"
 
     @pytest.mark.asyncio
     async def test_wall_clock_timeout_caps_long_sse_stream(self, caplog):
