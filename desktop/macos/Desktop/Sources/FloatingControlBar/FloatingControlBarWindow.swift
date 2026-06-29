@@ -159,7 +159,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var frameAnimationToken: Int = 0
 
     private var notchModeEnabled: Bool {
-        ShortcutSettings.shared.notchModeEnabled && Self.screenHasCameraHousing(screenForPlacement)
+        Self.screenHasCameraHousing(screenForPlacement)
     }
     var usesNotchIslandForCurrentScreen: Bool { notchModeEnabled }
     private var screenForPlacement: NSScreen? {
@@ -253,8 +253,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
         backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
     ) {
-        let initialSize = ShortcutSettings.shared.notchModeEnabled
-            && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+        let initialSize = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
             ? NSSize(
                 width: FloatingControlBarWindow.notchHiddenCenterWidth(for: NSScreen.main ?? NSScreen.screens.first)
                     + FloatingControlBarWindow.notchCompactSideWidth * 2,
@@ -274,8 +273,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
-        self.level = ShortcutSettings.shared.notchModeEnabled
-            && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first) ? .statusBar : .floating
+        self.level = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+            ? .statusBar
+            : .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = false
         self.acceptsMouseMovedEvents = true
@@ -755,8 +755,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let currentVisible = currentScreen?.visibleFrame ?? .zero
         let targetVisible = targetScreen.visibleFrame
 
-        let targetUsesNotchIsland = ShortcutSettings.shared.notchModeEnabled
-            && Self.screenHasCameraHousing(targetScreen)
+        let targetUsesNotchIsland = Self.screenHasCameraHousing(targetScreen)
 
         if targetUsesNotchIsland {
             growOutFromNotch(on: targetScreen)
@@ -1543,9 +1542,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private var topInsetForPillFallback: CGFloat {
-        ShortcutSettings.shared.notchModeEnabled
-            ? Self.topInsetWhenNotchModeFallsBackToPill
-            : Self.topInset
+        Self.topInsetWhenNotchModeFallsBackToPill
     }
 
     /// Center the bar near the top of the main screen.
@@ -1556,7 +1553,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        if ShortcutSettings.shared.notchModeEnabled && Self.screenHasCameraHousing(screen) {
+        if Self.screenHasCameraHousing(screen) {
             let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: true)
             self.setFrame(targetFrame, display: true, animate: false)
             log("FloatingControlBarWindow: centered notch island at \(targetFrame.origin) on screen \(screen.frame)")
