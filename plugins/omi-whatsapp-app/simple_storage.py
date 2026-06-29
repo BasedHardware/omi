@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
@@ -140,7 +140,15 @@ def should_nudge(user: dict, cooldown_seconds: float) -> bool:
         last_dt = datetime.fromisoformat(last)
     except (TypeError, ValueError):
         return True
-    elapsed = (datetime.utcnow() - last_dt).total_seconds()
+    # Normalize to naive UTC for the subtraction. datetime.fromisoformat
+    # in Python 3.11+ parses a trailing 'Z' as tz-aware; subtracting an
+    # aware datetime from datetime.utcnow() (naive) raises TypeError.
+    # P2 (cubic): this would 500 on production webhooks that re-load
+    # an old user file where the timestamp was written by a newer Python.
+    if last_dt.tzinfo is not None:
+        last_dt = last_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+    elapsed = (now_naive - last_dt).total_seconds()
     return elapsed >= cooldown_seconds
 
 
