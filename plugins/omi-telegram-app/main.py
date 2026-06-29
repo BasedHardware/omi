@@ -19,6 +19,8 @@ import logging
 import os
 import secrets
 import sys
+import errno
+import fcntl
 from typing import Optional
 
 # Add plugins/_shared to sys.path so `from persona_client import chat` works.
@@ -46,10 +48,10 @@ logger = logging.getLogger("omi-telegram-clone")
 # WEBHOOK_SECRET is the value Telegram sends back in X-Telegram-Bot-Api-Secret-Token
 # on every webhook delivery. Resolution order:
 #   1. TELEGRAM_WEBHOOK_SECRET env var (production — operator-managed)
-#   2. $STORAGE_DIR/webhook_secret (auto-generated, persisted on first run;
+#   2. <STORAGE_DIR>/webhook_secret (auto-generated, persisted on first run;
 #      survives restarts so Telegram's stored secret stays in sync)
 #   3. secrets.token_urlsafe(32) (first run, dev installs) — and immediately
-#      written to $STORAGE_DIR/webhook_secret so the next start picks it up.
+#      written to <STORAGE_DIR>/webhook_secret so the next start picks it up.
 #
 # P1 (cubic): previously, when TELEGRAM_WEBHOOK_SECRET was unset, the plugin
 # generated a fresh random secret on every startup. Telegram's stored
@@ -58,42 +60,182 @@ logger = logging.getLogger("omi-telegram-clone")
 # request got a 401 until the user re-ran /setup. Persisting the auto-
 # generated secret to a file makes the first-run experience stable
 # across restarts; production still has the option of env-var override.
+#
+# Storage path: default to the PLUGIN's own directory (not /tmp) so the
+# secret survives reboots. /tmp is ephemeral on most systems — using it
+# as the default would defeat the whole "survive restarts" goal. The
+# STORAGE_DIR env var overrides this (same convention as the plugin's
+# simple_storage.py).
 def _resolve_webhook_secret():
     """Return (secret, source_description). Side effect: may write the
-    freshly generated secret to $STORAGE_DIR/webhook_secret with mode
-    0o600 (best-effort; logged on failure)."""
+    freshly generated secret to <STORAGE_DIR>/webhook_secret with mode
+    0o600 (best-effort; logged on failure).
+
+    Security:
+    - File is opened with O_NOFOLLOW so a pre-existing symlink at the
+      target path can't redirect the write to an attacker-controlled
+      location (P1 cubic follow-up: pre-fix version used O_CREAT only
+      and followed symlinks, allowing a local attacker to pre-create
+      a symlink and exfiltrate the secret).
+    - File is opened with O_EXCL to atomically claim the path —
+      prevents two processes from racing on first startup and ending
+      up with different in-memory secrets (P1 cubic follow-up:
+      pre-fix version used O_CREAT|O_TRUNC which overwrites any
+      in-progress writer's file).
+    - File is created with mode 0o600 (owner read/write only) so the
+      secret isn't world-readable.
+    - A short-lived flock on the path serializes concurrent first-run
+      processes. The first to grab the lock writes; the second sees
+      the freshly-written file and reads it.
+    """
     env_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
     if env_secret:
         return env_secret, "configured via env"
 
-    storage_dir = os.getenv("STORAGE_DIR", "/tmp/omi-tg-e2e")
-    secret_path = os.path.join(storage_dir, "webhook_secret")
-    if os.path.exists(secret_path):
-        try:
-            with open(secret_path, "r") as f:
-                persisted = f.read().strip()
-            if persisted:
-                return persisted, "loaded from $STORAGE_DIR/webhook_secret"
-        except OSError as e:
-            logger.warning("webhook secret file %s unreadable: %s", secret_path, e)
+    # Default to a persistent path (the plugin's own directory) so the
+    # webhook secret survives reboots. /tmp/omi-tg-e2e is the LEGACY
+    # default and is still honored for back-compat with existing installs.
+    default_storage_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "data"
+    )
+    if not os.path.exists(default_storage_dir):
+        # Plugin shipped without a data/ subdir; fall back to the
+        # plugin dir itself (which is git-ignored, persistent).
+        default_storage_dir = os.path.dirname(os.path.abspath(__file__))
+    legacy_storage_dir = "/tmp/omi-tg-e2e"
 
-    # First run: generate + persist. Open with O_CREAT|O_WRONLY|O_TRUNC
-    # + explicit 0o600 so the file never briefly exists with the default
-    # umask (which on most systems would be 0o644 — world-readable).
+    storage_dir = os.getenv("STORAGE_DIR") or default_storage_dir
+    secret_path = os.path.join(storage_dir, "webhook_secret")
+
+    # Try the active path first
+    persisted = _read_secret_safely(secret_path)
+    if persisted:
+        return persisted, f"loaded from {secret_path}"
+
+    # Active path missing/empty — also try the legacy /tmp path on the
+    # theory that an older install has a secret there. If found, copy
+    # it to the active path so future reads use the persistent store.
+    if storage_dir != legacy_storage_dir:
+        legacy_path = os.path.join(legacy_storage_dir, "webhook_secret")
+        legacy = _read_secret_safely(legacy_path)
+        if legacy:
+            # Migrate from /tmp to the persistent path so the next
+            # restart doesn't need the legacy fallback.
+            _write_secret_atomically(secret_path, legacy)
+            return legacy, f"loaded from {legacy_path} (migrated to {secret_path})"
+
+    # First run: generate + persist. The flock is held by whichever
+    # process wins the race; the others will see the freshly-written
+    # file on the next check.
     secret = secrets.token_urlsafe(32)
+    _write_secret_atomically(secret_path, secret)
+    return secret, f"auto-generated and persisted to {secret_path}"
+
+
+def _read_secret_safely(path: str):
+    """Read a webhook-secret file if it exists. Returns the secret
+    string or None. O_NOFOLLOW on open refuses symlinks (the
+    caller would be a local attacker pointing the path at, e.g.,
+    /dev/stdin to read what the process then writes)."""
     try:
-        os.makedirs(storage_dir, exist_ok=True)
-        fd = os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        # O_RDONLY | O_NOFOLLOW: read the file, error if it's a symlink.
+        # The secret is small (43 chars from token_urlsafe(32)) so the
+        # read syscall returns it all at once.
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError as e:
+        if e.errno == errno.ENOENT:
+            return None  # not present
+        # ELOOP means path is a symlink (O_NOFOLLOW refused). Don't
+        # follow it — that's the whole point. Treat as missing.
+        if e.errno == errno.ELOOP:
+            logger.warning("webhook secret path %s is a symlink \u2014 refusing to read", path)
+            return None
+        # Any other error (EACCES, EIO, ...): the file exists but we
+        # can't read it. Log so operators can debug perm/mount issues,
+        # then fall back to generating a new secret.
+        logger.warning("webhook secret file %s unreadable: %s", path, e)
+        return None
+    try:
+        with os.fdopen(fd, "r") as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def _write_secret_atomically(path: str, secret: str) -> bool:
+    """Write secret to path with mode 0o600, atomically. Returns True
+    on success. P1 (cubic follow-up): uses O_CREAT|O_EXCL|O_NOFOLLOW
+    to atomically claim the path AND refuse symlinks. A short-lived
+    flock serializes concurrent first-run writers — whichever process
+    wins the lock writes; the others see the file on the next read."""
+    import errno
+    import fcntl
+    import tempfile
+
+    parent = os.path.dirname(path)
+    if parent:
+        try:
+            os.makedirs(parent, exist_ok=True)
+        except OSError:
+            return False
+
+    # Serialize concurrent writers. A short blocking flock so the
+    # second process waits for the first to finish, then re-reads.
+    # We use a sidecar .lock file because we can't flock() a path
+    # that may not exist yet.
+    lock_path = path + ".lock"
+    lock_fd = None
+    try:
+        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+    except OSError as e:
+        if lock_fd is not None:
+            os.close(lock_fd)
+        return False
+
+    try:
+        # Re-check: another process may have just written the file
+        # while we were waiting for the lock.
+        existing = _read_secret_safely(path)
+        if existing:
+            # Someone else already wrote; don't overwrite their secret.
+            return True  # but the caller will read it on its own
+        # Open the file. O_CREAT|O_EXCL means we fail if the file
+        # already exists (race against another process that beat us
+        # to it between the re-check and the open). O_NOFOLLOW means
+        # we error out if the path is a symlink (local attacker could
+        # have pre-created a symlink at this path to exfiltrate the
+        # secret to an attacker-readable location).
+        try:
+            fd = os.open(
+                path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                0o600,
+            )
+        except OSError as e:
+            if e.errno == errno.EEXIST:
+                # Another process wrote between the re-check and
+                # the open. Their file is fine; let them keep it.
+                return True
+            return False
         with os.fdopen(fd, "w") as f:
             f.write(secret)
-        # Tighten parent dir perms too, best-effort.
+        # Tighten parent dir perms so the file isn't accessible via
+        # path-traversal on a misconfigured share.
         try:
-            os.chmod(storage_dir, 0o700)
+            os.chmod(parent, 0o700)
         except OSError:
             pass
-    except OSError as e:
-        logger.warning("could not persist webhook secret to %s: %s", secret_path, e)
-    return secret, "auto-generated and persisted to $STORAGE_DIR/webhook_secret"
+        return True
+    finally:
+        try:
+            fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        except OSError:
+            pass
+        try:
+            os.close(lock_fd)
+        except OSError:
+            pass
 
 
 WEBHOOK_SECRET, _webhook_source = _resolve_webhook_secret()
