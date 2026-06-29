@@ -28,23 +28,25 @@ Self-hosted FastAPI service. Receives Telegram webhook updates, calls the Omi pe
 
 ### `POST /toggle` — auth + body schema
 
-The endpoint is gated by the **plugin bearer token** (set `AI_CLONE_PLUGIN_TOKEN` when launching the plugin; the desktop stores it in Keychain after reading `~/.config/omi/ai-clone-plugin.json`). The same 401 is returned for missing and wrong bearer so the endpoint can't be probed.
+The endpoint is gated by the **plugin bearer token** (set `AI_CLONE_PLUGIN_TOKEN` when launching the plugin; the desktop stores it in Keychain after reading `~/.config/omi/ai-clone-plugin.json`). The same 401 is returned for missing and wrong bearer so the endpoint can't be probed. The chat assistant never sees the bearer token — it's held in the desktop / Keychain.
 
 Request body (JSON):
 
 ```json
 {
   "chat_id": "999001",
-  "enabled": true,
-  "bot_token": "123456789:AABBCC-DDeeff..."
+  "enabled": true
 }
 ```
 
 - `chat_id` — the Telegram chat id (string of int) to flip.
 - `enabled` — bool, the new value of `auto_reply_enabled`.
-- `bot_token` — the bot token the chat was bound to during `/setup`. Required; same 403 for unknown chat AND wrong token to prevent enumeration.
 
-Response: `200 OK` with `{"ok": true}` on success.
+The endpoint looks up the user by `chat_id` (the chat was bound to a specific Telegram bot during `/setup` / `/start` handshake — see Setup above). Returns `403` for unknown chat_id with no enumeration signal.
+
+Response: `200 OK` with `{"chat_id": "999001", "auto_reply_enabled": true}` on success.
+
+> **Security note** — the manifest deliberately does NOT require the user to paste the bot token in chat. Long-lived platform secrets never transit through the chat assistant (chat history, tool-call logs, traces, model context). This was an explicit design decision per the maintainer security review on PR #8531.
 
 ## Architecture
 
