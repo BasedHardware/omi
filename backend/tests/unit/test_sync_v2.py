@@ -15,6 +15,7 @@ import sys
 import threading
 import time
 import unittest
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -200,6 +201,18 @@ class TestSyncV2Structure:
 
         assert 'get_user_transcription_preferences' in func_body, "bg worker must fetch prefs"
         assert 'build_person_embeddings_cache' in func_body, "bg worker must build embeddings cache"
+
+    def test_v2_bg_worker_forwards_private_cloud_sync_enabled(self):
+        """Background worker must forward private cloud sync intent into process_segment."""
+        source = self._read_sync_source()
+        start = source.index('async def _run_full_pipeline_background_async')
+        next_boundary = source.find('\n@router.', start + 1)
+        if next_boundary == -1:
+            next_boundary = len(source)
+        func_body = source[start:next_boundary]
+
+        assert 'get_user_private_cloud_sync_enabled' in func_body
+        assert 'private_cloud_sync_enabled=private_cloud_sync_enabled' in func_body
 
     def test_v2_fast_path_only_saves_files(self):
         """v2 fast path must only save raw files — no decode, no VAD, no prefs/cache fetch."""
@@ -1271,11 +1284,16 @@ class TestAsyncCoordinatorBehavioral:
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
+            'python_multipart',
+            'python_multipart.multipart',
         ]
 
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        sys.modules['python_multipart'].__version__ = '0.0.99'
+        sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
 
         mock_executors = MagicMock()
         mock_executors.critical_executor = MagicMock()
@@ -1449,7 +1467,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_with_segments(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/1000.wav')
+                segmented_paths.add('/tmp/seg_1700000001.wav')
 
             module.retrieve_vad_segments = _vad_with_segments
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1478,7 +1496,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_with_segments(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/1000.wav')
+                segmented_paths.add('/tmp/seg_1700000001.wav')
 
             module.retrieve_vad_segments = _vad_with_segments
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1512,8 +1530,8 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_two_segments(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/1000.wav')
-                segmented_paths.add('/tmp/2000.wav')
+                segmented_paths.add('/tmp/seg_1700000001.wav')
+                segmented_paths.add('/tmp/seg_1700000002.wav')
 
             module.retrieve_vad_segments = _vad_two_segments
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1523,7 +1541,7 @@ class TestAsyncCoordinatorBehavioral:
             module.record_usage = MagicMock()
             call_count = [0]
 
-            def _process_seg_fails_once(path, uid, response, lock, errors, *args):
+            def _process_seg_fails_once(path, uid, response, lock, errors, *args, **kwargs):
                 call_count[0] += 1
                 if call_count[0] == 1:
                     errors.append(f'Segment {path} failed')
@@ -1550,7 +1568,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_one_seg(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/1000.wav')
+                segmented_paths.add('/tmp/seg_1700000001.wav')
 
             module.retrieve_vad_segments = _vad_one_seg
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1559,7 +1577,7 @@ class TestAsyncCoordinatorBehavioral:
             module.build_person_embeddings_cache = MagicMock(side_effect=RuntimeError('cache boom'))
             captured_cache = {}
 
-            def _capture_process(path, uid, response, lock, errors, source, is_locked, prefs, cache, *args):
+            def _capture_process(path, uid, response, lock, errors, source, is_locked, prefs, cache, *args, **kwargs):
                 captured_cache['value'] = cache
                 response['new_memories'].add('m1')
 
@@ -1582,7 +1600,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = MagicMock()
 
             def _vad_one_seg(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/1000.wav')
+                segmented_paths.add('/tmp/seg_1700000001.wav')
 
             module.retrieve_vad_segments = _vad_one_seg
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1593,19 +1611,7 @@ class TestAsyncCoordinatorBehavioral:
             captured_target = {}
 
             def _capture_target(
-                path,
-                uid,
-                response,
-                lock,
-                errors,
-                source,
-                is_locked,
-                prefs,
-                cache,
-                target_cid,
-                turnstile,
-                private_cloud_sync_enabled=False,
-                data_protection_level=None,
+                path, uid, response, lock, errors, source, is_locked, prefs, cache, target_cid, *args, **kwargs
             ):
                 captured_target['value'] = target_cid
                 response['new_memories'].add('m1')
@@ -1621,6 +1627,40 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
+    async def test_private_cloud_sync_enabled_forwarded(self):
+        """private_cloud_sync_enabled must be forwarded to process_segment."""
+        module, stubs = self._load_sync_module()
+        try:
+            module.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            module._cleanup_files = MagicMock()
+
+            def _vad_one_seg(path, segmented_paths, errors):
+                segmented_paths.add('/tmp/seg_1700000001.wav')
+
+            module.retrieve_vad_segments = _vad_one_seg
+            module.get_wav_duration = MagicMock(return_value=5.0)
+            module.users_db = MagicMock()
+            module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            module.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=True)
+            module.build_person_embeddings_cache = MagicMock(return_value={})
+            module.record_usage = MagicMock()
+            captured = {}
+
+            def _capture_private_sync(path, uid, response, lock, errors, *args, **kwargs):
+                captured['value'] = kwargs['private_cloud_sync_enabled']
+                response['new_memories'].add('m1')
+
+            module.process_segment = _capture_private_sync
+
+            await module._run_full_pipeline_background_async(
+                'j-private', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-private'
+            )
+
+            assert captured['value'] is True
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
     async def test_cleanup_called_on_success(self):
         """Cleanup must be called even on successful completion."""
         module, stubs = self._load_sync_module()
@@ -1630,7 +1670,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = lambda paths: cleanup_calls.append(list(paths))
 
             def _vad_one_seg(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/1000.wav')
+                segmented_paths.add('/tmp/seg_1700000001.wav')
 
             module.retrieve_vad_segments = _vad_one_seg
             module.get_wav_duration = MagicMock(return_value=5.0)
@@ -1657,7 +1697,7 @@ class TestAsyncCoordinatorBehavioral:
             module._cleanup_files = lambda paths: cleanup_calls.append(list(paths))
 
             def _vad_one_seg(path, segmented_paths, errors):
-                segmented_paths.add('/tmp/1000.wav')
+                segmented_paths.add('/tmp/seg_1700000001.wav')
 
             module.retrieve_vad_segments = _vad_one_seg
             module.get_wav_duration = MagicMock(side_effect=RuntimeError('unexpected crash'))
@@ -1726,11 +1766,16 @@ class TestV2EndpointExecution:
             'utils.speaker_assignment',
             'utils.speaker_identification',
             'utils.stt.speaker_embedding',
+            'python_multipart',
+            'python_multipart.multipart',
         ]
 
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        sys.modules['python_multipart'].__version__ = '0.0.99'
+        sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
 
         # Stub utils.executors with real-ish executor mocks
         import contextvars
@@ -2018,18 +2063,14 @@ class TestV2EndpointExecution:
 
             module.run_blocking = _passthrough_run_blocking
 
-            from fastapi import FastAPI
-            from fastapi.testclient import TestClient
+            import asyncio
+            from starlette.datastructures import UploadFile
 
-            app = FastAPI()
-            app.include_router(module.router)
-            app.dependency_overrides[module.auth.get_current_user_uid] = lambda: 'test-uid'
-
-            client = TestClient(app)
-            resp = client.post('/v2/sync-local-files', files=[('files', ('test.opus', b'\x00' * 10, 'audio/opus'))])
+            upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+            resp = asyncio.run(module.sync_local_files_v2(files=[upload], uid='test-uid'))
 
             assert resp.status_code == 202, f"Expected 202, got {resp.status_code}: {resp.text}"
-            body = resp.json()
+            body = json.loads(resp.body)
             assert 'job_id' in body
             assert body['status'] == 'queued'
             assert body['poll_after_ms'] == 3000

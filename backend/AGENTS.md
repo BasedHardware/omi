@@ -84,6 +84,7 @@ backend/
                           #   - Batches + uploads audio to private cloud storage (60s batches, 3 retries)
                           #   - Queues speaker sample extraction (120s age minimum)
                           #   - 5 concurrent background tasks per WebSocket connection
+  llm_gateway/            # Subservice: internal Omi-managed LLM auto-lane gateway
   diarizer/              # Subservice: speaker audio analysis (separate Docker, GPU/CUDA)
                           #   - POST /v1/diarization — speaker boundary detection (pyannote/speaker-diarization)
                           #   - POST /v1/embedding — speaker vector extraction (pyannote/embedding)
@@ -168,7 +169,7 @@ Never block the event loop — it freezes health checks, HPA scaling, and all co
     - `stripe_executor` (4w) — Stripe API calls
     - `sync_executor` (16w) — sync endpoint pipeline work, parent calls that fan out to storage_executor
     - `postprocess_executor` (24w) — post-conversation processing, coordinator functions
-    - `storage_executor` (96w) — GCS uploads/downloads, audio chunk I/O (fan-out gated by semaphores: 32 global chunks, 8 per-call window, 4 concurrent precache files)
+    - `storage_executor` (128w) — GCS uploads/downloads, audio chunk I/O (fan-out gated by semaphores: 32 global chunks, 8 per-call window, 4 concurrent precache files)
   - **Deadlock prevention — 4 rules:**
     1. **Worker threads are leaf operations only.** Never `.result()` on another pool from inside a worker thread. If pool A thread submits to pool B and calls `.result()`, and vice versa, both pools deadlock.
     2. **Orchestration stays in async code.** The async handler coordinates via `await run_blocking(pool, fn)` — sequentially or with `asyncio.gather`. The event loop never blocks, pools stay independent.

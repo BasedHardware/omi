@@ -245,11 +245,15 @@ struct DashboardPage: View {
             return .blocked
         }
 
-        if screenAnalysisEnabled && isCaptureMonitoring {
+        if isCaptureLive {
             return .active
         }
 
         return .inactive
+    }
+
+    private var isCaptureLive: Bool {
+        isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
     }
 
     private var hasOmiDeviceHistory: Bool {
@@ -721,7 +725,8 @@ struct DashboardPage: View {
     }
 
     private func toggleCapture() {
-        let enabled = !screenAnalysisEnabled
+        syncCaptureState()
+        let enabled = !isCaptureLive
         isTogglingCapture = true
 
         if enabled {

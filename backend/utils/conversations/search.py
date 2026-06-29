@@ -31,8 +31,18 @@ def search_conversations(
     include_discarded: bool = True,
     start_date: int = None,
     end_date: int = None,
+    speaker_id: str = None,
 ) -> Dict:
     try:
+        stripped_query = query.strip() if query else ''
+        has_filter_only_browse = bool(speaker_id) or start_date is not None or end_date is not None
+        if not stripped_query and not has_filter_only_browse:
+            return {
+                'items': [],
+                'total_pages': page,
+                'current_page': page,
+                'per_page': per_page,
+            }
 
         filter_by = f'userId:={uid}'
         if not include_discarded:
@@ -44,8 +54,13 @@ def search_conversations(
         if end_date is not None:
             filter_by = filter_by + f' && created_at:<={end_date}'
 
+        if speaker_id == 'user':
+            filter_by = filter_by + ' && transcript_segments.is_user:=true'
+        elif speaker_id:
+            filter_by = filter_by + f' && transcript_segments.person_id:={speaker_id}'
+
         search_parameters = {
-            'q': query,
+            'q': stripped_query or '*',
             'query_by': 'structured.overview, structured.title',
             'filter_by': filter_by,
             'sort_by': 'created_at:desc',
@@ -100,6 +115,9 @@ def keyword_search_conversation_ids(
 
     Fail-open: any search error returns [] so callers can fall back to vector-only results.
     """
+    if not query.strip():
+        return []
+
     try:
         results = search_conversations(
             uid=uid,

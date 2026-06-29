@@ -21,6 +21,7 @@ import type {
 } from "../src/adapters/interface.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import { AdapterWorkerPool, configuredMaxWorkers, configuredPiMonoMaxWorkers } from "../src/runtime/worker-pool.js";
+import { AdapterRuntimeError } from "../src/runtime/failures.js";
 import { FakeRuntimeAdapter } from "./kernel-fakes.js";
 
 vi.mock("child_process", async () => {
@@ -198,6 +199,97 @@ describe("AcpRuntimeAdapter process spawning", () => {
       if (saved.OMI_AUTH_TOKEN === undefined) delete process.env.OMI_AUTH_TOKEN;
       else process.env.OMI_AUTH_TOKEN = saved.OMI_AUTH_TOKEN;
     }
+  });
+
+  it("includes sanitized OpenAI stderr when the ACP subprocess exits", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "acp",
+      nodeBin: "/node",
+      acpEntry: "/acp-entry.mjs",
+    });
+    proc.stdin.on("data", () => {});
+    await adapter.start();
+
+    const request = adapter.request("initialize");
+    proc.stderr.write("OpenAI API error: Authorization: Bearer secret-token sk-testsecret123456\n");
+    await Promise.resolve();
+    proc.emit("exit", 1);
+
+    await expect(request).rejects.toThrow(
+      /OpenAI failed: OpenAI API error: Authorization: Bearer \[redacted\] sk-\[redacted\]/
+    );
+    await request.catch((error) => {
+      expect(error).toBeInstanceOf(AdapterRuntimeError);
+      expect((error as AdapterRuntimeError).failure).toMatchObject({
+        code: "adapter_process_exited",
+        source: "adapter_process",
+        adapterId: "acp",
+        provider: "openai",
+        retryable: true,
+        technicalMessage: "OpenAI API error: Authorization: Bearer [redacted] sk-[redacted]",
+      });
+    });
+  });
+
+  it("labels OpenClaw subprocess exits as OpenClaw failures even when stderr mentions OpenAI", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "openclaw",
+      command: "openclaw acp",
+      envCommandName: "OMI_OPENCLAW_ADAPTER_COMMAND",
+    });
+    proc.stdin.on("data", () => {});
+    await adapter.start();
+
+    const request = adapter.request("initialize");
+    proc.stderr.write("OpenAI API error: upstream unavailable\n");
+    await Promise.resolve();
+    proc.emit("exit", 1);
+
+    await expect(request).rejects.toThrow("OpenClaw failed: OpenAI API error: upstream unavailable");
+    await request.catch((error) => {
+      expect(error).toBeInstanceOf(AdapterRuntimeError);
+      expect((error as AdapterRuntimeError).failure).toMatchObject({
+        code: "adapter_process_exited",
+        source: "adapter_process",
+        adapterId: "openclaw",
+        provider: "openai",
+        userMessage: "OpenClaw failed: OpenAI API error: upstream unavailable",
+      });
+    });
+  });
+
+  it("structures OpenClaw subprocess spawn errors", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new AcpRuntimeAdapter({
+      adapterId: "openclaw",
+      command: "openclaw acp",
+      envCommandName: "OMI_OPENCLAW_ADAPTER_COMMAND",
+    });
+    await adapter.start();
+
+    const wroteInitialize = new Promise<void>((resolve) => {
+      proc.stdin.once("data", () => resolve());
+    });
+    const request = adapter.request("initialize");
+    await wroteInitialize;
+    proc.emit("error", new Error("spawn failed: OpenAI API key sk-testsecret123456"));
+
+    await expect(request).rejects.toThrow("OpenClaw failed: spawn failed: OpenAI API key sk-[redacted]");
+    await request.catch((error) => {
+      expect(error).toBeInstanceOf(AdapterRuntimeError);
+      expect((error as AdapterRuntimeError).failure).toMatchObject({
+        code: "adapter_process_error",
+        source: "adapter_process",
+        adapterId: "openclaw",
+        provider: "openai",
+        retryable: true,
+      });
+    });
   });
 });
 

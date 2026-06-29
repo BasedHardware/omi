@@ -221,6 +221,9 @@ struct OMIApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   static var openMainWindow: (() -> Void)?
+  private static var appIsActive = false
+  private static var mainWindowIsKey = false
+  private static var lastMainWindowForegroundAt: Date?
 
   private var sentryHeartbeatTimer: Timer?
   private var globalHotkeyMonitor: Any?
@@ -260,14 +263,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
+    let restoreMainWindowAfterUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    if let restoreMainWindowAfterUpdateRelaunch {
+      log(
+        "AppDelegate: Sparkle update relaunch detected; restoreMainWindow=\(restoreMainWindowAfterUpdateRelaunch)"
+      )
+    }
 
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
 
     // After a Sparkle update, show a small "what's new" card in the corner of the
     // main window once. Delayed so the window/overlay exist to render it.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-      WhatsNewToast.shared.presentIfUpdated()
+    if restoreMainWindowAfterUpdateRelaunch != false {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+        WhatsNewToast.shared.presentIfUpdated()
+      }
     }
 
     // Proactive notifications are now OFF by default for everyone. Run the one-time
@@ -561,21 +572,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Start Sentry heartbeat timer (every 5 minutes) to capture breadcrumbs periodically
     startSentryHeartbeat()
+    startForegroundTracking()
 
-    // Activate app and show main window after a brief delay
+    // Apply initial main-window policy after SwiftUI has created the window.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
       log("AppDelegate: Checking windows after 0.2s delay, count=\(NSApp.windows.count)")
-      NSApp.activate()
+      let shouldSuppressMainWindow = restoreMainWindowAfterUpdateRelaunch == false
+      if !shouldSuppressMainWindow {
+        NSApp.activate()
+      }
       var foundOmiWindow = false
       for window in NSApp.windows {
         log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
-        if window.title.hasPrefix("Omi") {
+        if Self.isMainOmiWindow(window) {
           foundOmiWindow = true
-          window.makeKeyAndOrderFront(nil)
           window.appearance = NSAppearance(named: .darkAqua)
           // Ensure fullscreen always creates a dedicated Space
           window.collectionBehavior.insert(.fullScreenPrimary)
-          log("AppDelegate: Main window shown on launch")
+          if shouldSuppressMainWindow {
+            window.orderOut(nil)
+            log("AppDelegate: Main window suppressed after background update relaunch")
+          } else {
+            window.makeKeyAndOrderFront(nil)
+            log("AppDelegate: Main window shown on launch")
+          }
         }
       }
       if !foundOmiWindow {
@@ -598,6 +618,77 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
       log("Sentry: Session heartbeat captured")
     }
+  }
+
+  private func startForegroundTracking() {
+    Self.recordForegroundState()
+
+    let center = NotificationCenter.default
+    windowObservers.append(
+      center.addObserver(
+        forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSWindow.didResignKeyNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+  }
+
+  static func shouldRestoreMainWindowAfterUpdateRelaunch() -> Bool {
+    let readState = {
+      Self.recordForegroundState()
+      return UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
+        appIsActive: appIsActive,
+        frontmostBundleMatches: frontmostApplicationMatchesBundle(),
+        mainWindowIsKey: mainWindowIsKey,
+        lastMainWindowForegroundAt: lastMainWindowForegroundAt
+      )
+    }
+
+    if Thread.isMainThread {
+      return readState()
+    }
+
+    return DispatchQueue.main.sync(execute: readState)
+  }
+
+  private static func recordForegroundState(now: Date = Date()) {
+    appIsActive = NSApp.isActive
+    mainWindowIsKey = NSApp.keyWindow.map(isMainOmiWindow) ?? false
+
+    if UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
+      appIsActive: appIsActive,
+      frontmostBundleMatches: frontmostApplicationMatchesBundle(),
+      mainWindowIsKey: mainWindowIsKey,
+      lastMainWindowForegroundAt: nil,
+      now: now
+    ) {
+      lastMainWindowForegroundAt = now
+    }
+  }
+
+  private static func frontmostApplicationMatchesBundle() -> Bool {
+    NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier
+  }
+
+  private static func isMainOmiWindow(_ window: NSWindow) -> Bool {
+    window.title.lowercased().hasPrefix("omi")
   }
 
   /// Strip com.apple.provenance extended attributes from our own bundle.

@@ -67,6 +67,7 @@ _stubs = [
     'utils.conversations.calendar_linking',
     'utils.conversations.calendar_utils',
     'utils.conversations.location',
+    'utils.executors',
     'utils.llm.conversation_processing',
     'utils.speaker_identification',
     'utils.app_integrations',
@@ -210,3 +211,38 @@ def test_valid_date_is_accepted_and_calls_search():
         )
         assert resp.status_code == 200
         assert mock_search.called
+
+
+def test_named_speaker_is_validated_and_forwarded():
+    with (
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}) as mock_get_person,
+        patch.object(conv, 'search_conversations', return_value={'items': []}) as mock_search,
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'person-1'})
+
+    assert resp.status_code == 200
+    mock_get_person.assert_called_once_with('test-uid', 'person-1')
+    assert mock_search.call_args.kwargs['speaker_id'] == 'person-1'
+
+
+def test_unknown_speaker_returns_404():
+    with patch.object(conv.users_db, 'get_person', return_value=None):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'missing'})
+
+    assert resp.status_code == 404
+    assert resp.json()['detail'] == 'Speaker not found'
+
+
+def test_user_speaker_does_not_require_person_record():
+    with (
+        patch.object(conv.users_db, 'get_person') as mock_get_person,
+        patch.object(conv, 'search_conversations', return_value={'items': []}) as mock_search,
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'user'})
+
+    assert resp.status_code == 200
+    mock_get_person.assert_not_called()
+    assert mock_search.call_args.kwargs['speaker_id'] == 'user'

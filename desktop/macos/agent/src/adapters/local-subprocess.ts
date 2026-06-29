@@ -16,6 +16,7 @@ import type {
   RuntimeAdapter,
 } from "./interface.js";
 import type { ArtifactRole } from "../runtime/types.js";
+import { normalizeRuntimeFailure, type RuntimeFailure } from "../runtime/failures.js";
 import type { OutboundMessage } from "../protocol.js";
 
 type LocalSubprocessRequest = {
@@ -61,6 +62,7 @@ type LocalSubprocessMessage = {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  failure?: unknown;
 };
 
 type PendingRequest = {
@@ -541,8 +543,27 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
       outputTokens: optionalNumber(result.outputTokens),
       cacheReadTokens: optionalNumber(result.cacheReadTokens),
       cacheWriteTokens: optionalNumber(result.cacheWriteTokens),
+      failure: this.failureFrom(result.failure),
       artifacts: artifacts.length > 0 ? artifacts : undefined,
     };
+  }
+
+  private failureFrom(value: unknown): RuntimeFailure | undefined {
+    if (!isRecord(value)) return undefined;
+    const code = optionalString(value.code);
+    const userMessage = optionalString(value.userMessage);
+    if (!code || !userMessage) return undefined;
+    return normalizeRuntimeFailure({
+      code,
+      userMessage,
+      technicalMessage: optionalString(value.technicalMessage),
+      source: value.source === "adapter_process" || value.source === "adapter_execution" || value.source === "runtime"
+        ? value.source
+        : undefined,
+      adapterId: optionalString(value.adapterId) ?? this.adapterId,
+      provider: optionalString(value.provider),
+      retryable: typeof value.retryable === "boolean" ? value.retryable : undefined,
+    });
   }
 
   private artifactFrom(value: unknown): AdapterArtifactReference | null {

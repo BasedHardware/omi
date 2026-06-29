@@ -1,18 +1,77 @@
 {
-  "unreleased": [
-    "Memory tier badge now only shows for memories the backend actually tiered; legacy untiered memories show no badge",
-    "Fixed Hermes and OpenClaw agent rows to show one status-tinted logo instead of full-color duplicate-looking marks",
-    "Improved agent chats so running tool-call steps open live instead of staying hidden behind a collapsed row",
-    "Improved Hermes and OpenClaw agent pills with provider logos, visible tool/thinking blocks, and a no-progress timeout",
-    "Fixed Hermes and OpenClaw agent chats so follow-up turns show full conversation history instead of only the latest response",
-    "Fixed Hermes agent startup from the desktop app by launching it with its managed Python environment",
-    "Improved OpenClaw multi-turn continuity in desktop agent chats",
-    "Fixed push-to-talk voice replies cutting off, restored Notch Mode chat row clicks, and aligned subagent back buttons with the chat row list",
-    "Fixed duplicated/doubled Hermes and OpenClaw agent logos in the menu-bar agent list",
-    "Added a flat status-colored robot mark for agent providers without a dedicated logo",
-    "Improved Omi agent tool registration reliability across desktop chat, pi-mono, and local agent APIs"
-  ],
+  "unreleased": [],
   "releases": [
+    {
+      "version": "0.11.560",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed Omi Beta desktop chat failing before answering when agent control tools are available"
+      ]
+    },
+    {
+      "version": "0.11.559",
+      "date": "2026-06-28",
+      "changes": [
+        "Fixed Omi Beta desktop chat failing before answering when agent control tools are available."
+      ]
+    },
+    {
+      "version": "0.11.558",
+      "date": "2026-06-28",
+      "changes": [
+        "Improved automatic updates so the main window only reopens when omi was already in the foreground"
+      ]
+    },
+    {
+      "version": "0.11.557",
+      "date": "2026-06-28",
+      "changes": [
+        "Added direct calendar event creation for realtime voice requests"
+      ]
+    },
+    {
+      "version": "0.11.556",
+      "date": "2026-06-28",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.555",
+      "date": "2026-06-28",
+      "changes": [
+        "Fixed automatic desktop updates getting stuck after they were deferred during active conversations"
+      ]
+    },
+    {
+      "version": "0.11.554",
+      "date": "2026-06-28",
+      "changes": [
+        "Fixed failed agent runs so provider errors appear in the agent chat detail, not just the row summary",
+        "Fixed OpenClaw agent launch so it uses the Node runtime from its own install instead of the Omi app bundle."
+      ]
+    },
+    {
+      "version": "0.11.553",
+      "date": "2026-06-28",
+      "changes": [
+        "Fixed delayed push-to-talk replies after interrupting a streaming voice response"
+      ]
+    },
+    {
+      "version": "0.11.552",
+      "date": "2026-06-28",
+      "changes": [
+        "Fixed the dashboard Capture button so it reflects live screen capture immediately after launch"
+      ]
+    },
+    {
+      "version": "0.11.551",
+      "date": "2026-06-28",
+      "changes": [
+        "Improved Hermes and OpenClaw agent chats with better follow-up handling, safer progress summaries, and clearer provider visuals"
+      ]
+    },
     {
       "version": "0.11.550",
       "date": "2026-06-27",
