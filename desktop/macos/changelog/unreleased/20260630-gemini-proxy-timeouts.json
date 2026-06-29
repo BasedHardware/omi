@@ -1,3 +1,0 @@
-{
-  "change": "Improved desktop AI timeout handling so slow Gemini requests fail clearly before the backend deadline"
-}
