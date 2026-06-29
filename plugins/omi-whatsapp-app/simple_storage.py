@@ -36,6 +36,13 @@ def load_storage() -> None:
     for path, target_name in ((USERS_FILE, "users"), (PENDING_FILE, "pending_setups")):
         try:
             if os.path.exists(path):
+                # Tighten file perms to 0o600 on load if they're wider
+                # (e.g. an older build created the file with default umask,
+                # or the operator manually chmod'd it). Best-effort.
+                try:
+                    os.chmod(path, 0o600)
+                except OSError:
+                    pass
                 with open(path, "r") as f:
                     if target_name == "users":
                         users = json.load(f)
@@ -46,21 +53,61 @@ def load_storage() -> None:
 
 
 def _save(path: str, payload: dict) -> None:
-    """Atomically write payload to path. Write to <path>.tmp, fsync, then os.replace."""
+    """Atomically write payload to path. Write to <path>.tmp, fsync, then os.replace.
+
+    Permissions: file is created with mode 0o600 (owner read/write only).
+    The file holds user-bound platform tokens (WhatsApp access_token,
+    omidev_api_key) — must not be world-readable. Parent STORAGE_DIR is
+    also chmod 0o700 (best-effort) so the file isn't accessible via
+    path-traversal on a misconfigured share.
+
+    P1 (cubic follow-up on PR #8528): the previous version used plain
+    open() with the default umask, which on most systems creates files
+    at 0o644 (world-readable). Anyone with read access to STORAGE_DIR
+    could read user access_tokens off disk.
+
+    P1 (cubic follow-up): the previous version swallowed all write
+    failures via a broad `except Exception` that just printed a warning.
+    If the disk was full or the dir was read-only, /setup would
+    'succeed' (because no exception propagated to the caller) but
+    the user data wouldn't be persisted. On the next restart the
+    plugin would resurrect from the stale (or empty) file, and
+    one-shot setup tokens could be re-redeemed indefinitely.
+
+    Now: log the error AND raise OSError. The caller (/setup) maps
+    OSError to a 5xx response so the user knows the setup failed.
+    """
     tmp = path + ".tmp"
     try:
-        with open(tmp, "w") as f:
+        # Open with explicit 0o600 so the file never briefly exists
+        # with the default umask. O_CREAT|O_EXCL prevents the (rare)
+        # race where a stale .tmp file already exists.
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w") as f:
             json.dump(payload, f, default=str, indent=2)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
-    except Exception as e:
-        print(f"⚠️  Could not save {path}: {e}", flush=True)
+        # Tighten parent dir perms on first write.
+        parent = os.path.dirname(path)
+        if parent:
+            try:
+                os.chmod(parent, 0o700)
+            except OSError:
+                pass
+    except OSError as e:
+        # Cleanup the .tmp file if it exists. Don't suppress the
+        # error — the caller needs to know the write failed.
         try:
             if os.path.exists(tmp):
                 os.remove(tmp)
-        except Exception:
+        except OSError:
             pass
+        import logging
+        logging.getLogger("omi-whatsapp-clone").error(
+            "storage write failed for %s: %s", path, e
+        )
+        raise
 
 
 load_storage()
