@@ -1326,6 +1326,7 @@ class CaptureProvider extends ChangeNotifier
   Future _closeBleStream({bool disableNativeBackground = false}) async {
     await _bleBytesStream?.cancel();
     await _blePhotoStream?.cancel();
+    await _bleButtonStream?.cancel();
     _stopMetricsTracking();
     if (disableNativeBackground) {
       await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
@@ -1346,6 +1347,7 @@ class CaptureProvider extends ChangeNotifier
   void dispose() {
     _bleBytesStream?.cancel();
     _blePhotoStream?.cancel();
+    _bleButtonStream?.cancel();
     _socket?.unsubscribe(this);
     _keepAliveTimer?.cancel();
     _inProgressConversationRefreshTimer?.cancel();

@@ -31,6 +31,13 @@ class _NameWidgetState extends State<NameWidget> {
   }
 
   @override
+  void dispose() {
+    nameController.dispose();
+    focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
