@@ -1,4 +1,23 @@
+use super::values::memory_is_public;
 use super::*;
+
+pub(super) fn build_public_memories_query(limit: usize, offset: usize) -> Value {
+    json!({
+        "structuredQuery": {
+            "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
+            "orderBy": [
+                {"field": {"fieldPath": "scoring"}, "direction": "DESCENDING"},
+                {"field": {"fieldPath": "created_at"}, "direction": "DESCENDING"}
+            ],
+            "limit": limit,
+            "offset": offset
+        }
+    })
+}
+
+pub(super) fn memory_counts_as_public(memory: &MemoryDB) -> bool {
+    memory_is_public(memory)
+}
 
 impl FirestoreService {
     pub async fn get_user_persona(
@@ -272,23 +291,11 @@ impl FirestoreService {
         &self,
         uid: &str,
         limit: usize,
+        offset: usize,
     ) -> Result<Vec<MemoryDB>, Box<dyn std::error::Error + Send + Sync>> {
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
-        let query = json!({
-            "structuredQuery": {
-                "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
-                "where": {
-                    "fieldFilter": {
-                        "field": {"fieldPath": "visibility"},
-                        "op": "EQUAL",
-                        "value": {"stringValue": "public"}
-                    }
-                },
-                "orderBy": [{"field": {"fieldPath": "created_at"}, "direction": "DESCENDING"}],
-                "limit": limit
-            }
-        });
+        let query = build_public_memories_query(limit, offset);
 
         let response = self
             .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
@@ -304,13 +311,7 @@ impl FirestoreService {
         }
 
         let results: Vec<Value> = response.json().await?;
-        let memories: Vec<MemoryDB> = results
-            .into_iter()
-            .filter_map(|doc| {
-                doc.get("document")
-                    .and_then(|d| self.parse_memory(d, uid).ok())
-            })
-            .collect();
+        let memories = self.parse_public_memory_query_results(uid, results);
 
         tracing::info!("Found {} public memories for user {}", memories.len(), uid);
         Ok(memories)
@@ -327,20 +328,7 @@ impl FirestoreService {
         let limit = 500usize;
 
         loop {
-            let query = json!({
-                "structuredQuery": {
-                    "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
-                    "where": {
-                        "fieldFilter": {
-                            "field": {"fieldPath": "visibility"},
-                            "op": "EQUAL",
-                            "value": {"stringValue": "public"}
-                        }
-                    },
-                    "limit": limit,
-                    "offset": offset
-                }
-            });
+            let query = build_public_memories_query(limit, offset);
 
             let response = self
                 .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
@@ -359,7 +347,14 @@ impl FirestoreService {
                 .iter()
                 .filter(|doc| doc.get("document").is_some())
                 .count();
-            count += fetched_count as i32;
+            count += results
+                .iter()
+                .filter_map(|doc| {
+                    doc.get("document")
+                        .and_then(|d| self.parse_memory(d, uid).ok())
+                })
+                .filter(memory_counts_as_public)
+                .count() as i32;
             if fetched_count < limit {
                 break;
             }
@@ -367,6 +362,22 @@ impl FirestoreService {
         }
 
         Ok(count)
+    }
+
+    pub(super) fn parse_public_memory_query_results(
+        &self,
+        uid: &str,
+        results: Vec<Value>,
+    ) -> Vec<MemoryDB> {
+        results
+            .into_iter()
+            .filter_map(|doc| {
+                doc.get("document")
+                    .and_then(|d| self.parse_memory(d, uid).ok())
+            })
+            // Match Python get_user_public_memories: Firestore limit/offset first, then only visibility filter.
+            .filter(memory_counts_as_public)
+            .collect()
     }
 
     /// Parse a persona from Firestore document
@@ -413,5 +424,141 @@ impl FirestoreService {
                 .parse_timestamp_optional(fields, "updated_at")
                 .unwrap_or_else(Utc::now),
         })
+    }
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn memory(
+        id: &str,
+        visibility: &str,
+        invalidated: bool,
+        user_review: Option<bool>,
+    ) -> MemoryDB {
+        let created_at = Utc.timestamp_opt(1_767_323_045, 0).unwrap();
+        MemoryDB {
+            id: id.to_string(),
+            uid: "contract-user-8547".to_string(),
+            content: id.to_string(),
+            category: MemoryCategory::System,
+            created_at,
+            updated_at: created_at,
+            memory_id: None,
+            conversation_id: None,
+            reviewed: false,
+            user_review,
+            visibility: visibility.to_string(),
+            manually_added: false,
+            scoring: None,
+            source: None,
+            input_device_name: None,
+            confidence: None,
+            source_app: None,
+            context_summary: None,
+            is_read: false,
+            is_dismissed: false,
+            tags: vec![],
+            reasoning: None,
+            current_activity: None,
+            window_title: None,
+            data_protection_level: None,
+            valid_at: Some(created_at),
+            invalid_at: invalidated.then_some(created_at),
+            superseded_by: None,
+            edited: false,
+            is_locked: false,
+            kg_extracted: false,
+            app_id: None,
+        }
+    }
+
+    fn memory_doc(
+        id: &str,
+        visibility: Option<&str>,
+        invalidated: bool,
+        user_review: Option<bool>,
+    ) -> Value {
+        let created_at = "2026-01-02T03:04:05+00:00";
+        let mut fields = json!({
+            "content": {"stringValue": id},
+            "category": {"stringValue": "system"},
+            "created_at": {"timestampValue": created_at},
+            "updated_at": {"timestampValue": created_at}
+        });
+        if let Some(visibility) = visibility {
+            fields["visibility"] = json!({"stringValue": visibility});
+        }
+        if let Some(review) = user_review {
+            fields["user_review"] = json!({"booleanValue": review});
+        }
+        if invalidated {
+            fields["invalid_at"] = json!({"timestampValue": "2026-01-03T00:00:00+00:00"});
+        }
+        json!({
+            "document": {
+                "name": format!("projects/contract/databases/(default)/documents/users/contract-user-8547/memories/{}", id),
+                "fields": fields
+            }
+        })
+    }
+
+    #[test]
+    fn contract_public_memory_query_does_not_filter_missing_visibility_in_firestore() {
+        let query = build_public_memories_query(100, 20);
+        let structured = &query["structuredQuery"];
+
+        assert!(structured.get("where").is_none());
+        assert_eq!(structured["orderBy"][0]["field"]["fieldPath"], "scoring");
+        assert_eq!(structured["orderBy"][1]["field"]["fieldPath"], "created_at");
+        assert_eq!(structured["limit"], 100);
+        assert_eq!(structured["offset"], 20);
+    }
+
+    #[test]
+    fn contract_public_memory_filter_matches_python_visibility_only() {
+        assert!(memory_counts_as_public(&memory(
+            "public", "public", false, None
+        )));
+        assert!(!memory_counts_as_public(&memory(
+            "private", "private", false, None
+        )));
+        assert!(memory_counts_as_public(&memory(
+            "rejected",
+            "public",
+            false,
+            Some(false)
+        )));
+        assert!(memory_counts_as_public(&memory(
+            "invalidated",
+            "public",
+            true,
+            None
+        )));
+
+        let service = FirestoreService::new_for_contract(None);
+        let query = build_public_memories_query(3, 2);
+        assert_eq!(query["structuredQuery"]["limit"], 3);
+        assert_eq!(query["structuredQuery"]["offset"], 2);
+
+        let parsed = service.parse_public_memory_query_results(
+            "contract-user-8547",
+            vec![
+                memory_doc("missing-visibility", None, false, None),
+                memory_doc("private", Some("private"), false, None),
+                memory_doc("rejected", Some("public"), false, Some(false)),
+                memory_doc("invalidated", Some("public"), true, None),
+            ],
+        );
+
+        assert_eq!(
+            parsed
+                .iter()
+                .map(|memory| memory.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["missing-visibility", "rejected", "invalidated"]
+        );
     }
 }

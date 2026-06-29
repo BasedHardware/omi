@@ -1,0 +1,31 @@
+{
+  "uid": "contract-user-8547",
+  "encryption_secret": "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+  "created_at": "2026-01-02T03:04:05+00:00",
+  "enhanced_encrypted_content": "DA0ODxAREhMUFRYXxDRpYlQa/R7Anh2SaeAQNma74MyaecBkYZy7hIW3Ij0qnJM4MtmPU4iyNfojkPJfiQ==",
+  "enhanced_plain_content": "Encrypted contract memory content",
+  "query": {
+    "limit": 11,
+    "offset": 4,
+    "categories": ["system", "workflow"],
+    "start_date": "2026-01-01T00:00:00+00:00",
+    "end_date": "2026-01-31T23:59:59+00:00"
+  },
+  "scoring": {
+    "interesting": "00_998_1767323045",
+    "system": "00_999_1767323045",
+    "manual": "00_998_1767323045",
+    "workflow": "00_998_1767323045",
+    "core": "00_998_1767323045",
+    "hobbies": "00_998_1767323045",
+    "lifestyle": "00_998_1767323045",
+    "interests": "00_998_1767323045",
+    "habits": "00_999_1767323045",
+    "work": "00_998_1767323045",
+    "skills": "00_998_1767323045",
+    "learnings": "00_998_1767323045",
+    "other": "00_999_1767323045",
+    "auto": "00_999_1767323045",
+    "manual_added_interesting": "01_998_1767323045"
+  }
+}
