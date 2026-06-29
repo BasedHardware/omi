@@ -15,7 +15,7 @@ import os
 import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -185,4 +185,20 @@ def test_equal_dates_are_allowed():
 def test_valid_range_passes_through():
     with patch.object(ai.action_items_db, 'get_action_items', return_value=[]):
         result = _call(start_date=datetime(2024, 1, 1), end_date=datetime(2024, 12, 31))
+    assert result == {"action_items": [], "has_more": False}
+
+
+def test_mixed_timezone_awareness_inverted_returns_400():
+    # FastAPI parses one bound as naive and the other as timezone-aware when the client only adds an
+    # offset to one of them. Comparing those directly raises TypeError (a 500); the endpoint must
+    # normalize and still return a clean 400 for an inverted range.
+    with pytest.raises(HTTPException) as exc:
+        _call(start_date=datetime(2024, 12, 31), end_date=datetime(2024, 1, 1, tzinfo=timezone.utc))
+    assert exc.value.status_code == 400
+
+
+def test_mixed_timezone_awareness_valid_passes():
+    # A valid range with mixed awareness must not raise TypeError either.
+    with patch.object(ai.action_items_db, 'get_action_items', return_value=[]):
+        result = _call(start_date=datetime(2024, 1, 1), end_date=datetime(2024, 12, 31, tzinfo=timezone.utc))
     assert result == {"action_items": [], "has_more": False}
