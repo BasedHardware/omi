@@ -165,6 +165,15 @@ def test_sse_tool_security_schemes_match_runtime_scope_map():
         assert advertised_scopes == [sse.TOOL_REQUIRED_SCOPE[tool['name']]]
 
 
+def test_every_supported_scope_has_consent_permission_text():
+    # The OAuth authorize endpoint renders the consent page with
+    # `[SCOPE_PERMISSION_TEXT[item] for item in scopes]`, so every scope a client can request
+    # (everything advertised in MCP_SCOPES_SUPPORTED) must have a permission string, or that endpoint
+    # raises KeyError and the OAuth MCP path breaks for the affected tools.
+    missing = [scope for scope in sse.MCP_SCOPES_SUPPORTED if scope not in sse.SCOPE_PERMISSION_TEXT]
+    assert not missing, f"scopes missing SCOPE_PERMISSION_TEXT entries: {missing}"
+
+
 def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     response, _ = sse.handle_mcp_message(

@@ -246,6 +246,8 @@ SCOPE_PERMISSION_TEXT = {
     "chat.read": "Read your Omi chat history",
     "screen_activity.read": "Read your Omi screen activity",
     "people.read": "Read people saved in your Omi account",
+    "folders.read": "Read your Omi conversation folders",
+    "folders.write": "Create, rename, delete, and organize your Omi conversation folders",
 }
 
 
