@@ -88,6 +88,7 @@ pytest tests/unit/test_conversation_tool_date_range_bound.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
+pytest tests/unit/test_conversations_date_range_validation.py -v
 pytest tests/unit/test_calendar_autolink_invalid_timestamp.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
