@@ -1547,6 +1547,8 @@ class TestAsyncCoordinatorBehavioral:
             module.get_wav_duration = MagicMock(return_value=5.0)
             module.users_db = MagicMock()
             module.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            module.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            module.users_db.get_data_protection_level = MagicMock(return_value=None)
             module.build_person_embeddings_cache = MagicMock(return_value={})
             module._reprocess_merged_conversations = MagicMock()
             module.record_usage = MagicMock()

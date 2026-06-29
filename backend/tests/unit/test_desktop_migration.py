@@ -1731,9 +1731,7 @@ class TestGenerateTitleEndpoint:
             messages=[TitleMessageInput(text='hi', sender='human'), TitleMessageInput(text='hello', sender='ai')],
         )
         mock_get_llm = MagicMock(return_value=mock_llm)
-        llm_clients_stub = types.ModuleType('utils.llm.clients')
-        llm_clients_stub.get_llm = mock_get_llm
-        with patch.dict('sys.modules', {'utils.llm.clients': llm_clients_stub}):
+        with patch('routers.chat_sessions.get_llm', mock_get_llm):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'Project Discussion'}
@@ -1754,9 +1752,7 @@ class TestGenerateTitleEndpoint:
             messages=[TitleMessageInput(text='hi', sender='human')],
         )
         mock_get_llm = MagicMock(return_value=mock_llm)
-        llm_clients_stub = types.ModuleType('utils.llm.clients')
-        llm_clients_stub.get_llm = mock_get_llm
-        with patch.dict('sys.modules', {'utils.llm.clients': llm_clients_stub}):
+        with patch('routers.chat_sessions.get_llm', mock_get_llm):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'New Chat'}
