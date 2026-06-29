@@ -114,6 +114,16 @@ describe("omi tool manifest", () => {
     ]);
   });
 
+  it("keeps MCP-only schema options from overriding base tool schema fields", () => {
+    for (const tool of toolsForAdapter("omi-tools-stdio")) {
+      const mcpTool = mcpToolDefinitionsForAdapter("omi-tools-stdio").find((candidate) => candidate.name === tool.name);
+      expect(mcpTool?.inputSchema.type).toBe(tool.inputSchema.type);
+      expect(mcpTool?.inputSchema.properties).toEqual(tool.inputSchema.properties);
+      expect(mcpTool?.inputSchema.required).toEqual(tool.inputSchema.required);
+      expect(mcpTool?.inputSchema.additionalProperties).toEqual(tool.inputSchema.additionalProperties);
+    }
+  });
+
   it("normalizes MCP-prefixed and explicit aliases", () => {
     expect(normalizeOmiToolName("omi-tools-stdio", "mcp__omi-tools__execute_sql")).toEqual({
       canonicalName: "execute_sql",

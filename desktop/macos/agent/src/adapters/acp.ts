@@ -17,6 +17,7 @@ import type {
   ResumeBindingInput,
   RuntimeAdapter,
 } from "./interface.js";
+import { AdapterRuntimeError, failureFromProcessError, failureFromProcessExit } from "../runtime/failures.js";
 
 type ResponseHandler = {
   resolve: (result: unknown) => void;
@@ -101,6 +102,16 @@ export class AcpError extends Error {
     this.code = code;
     this.data = data;
   }
+}
+
+const MAX_RECENT_STDERR_CHARS = 2_000;
+
+function appendRecentStderr(current: string, next: string): string {
+  const combined = `${current}${next}`;
+  if (combined.length <= MAX_RECENT_STDERR_CHARS) {
+    return combined;
+  }
+  return combined.slice(combined.length - MAX_RECENT_STDERR_CHARS);
 }
 
 export type AcpNotificationHandler = (method: string, params: unknown) => void;
@@ -212,17 +223,18 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     }
     const proc = this.process;
     let finalized = false;
-    const finalizeProcess = (reason: string): void => {
+    let recentStderr = "";
+    const finalizeProcess = (error: Error): void => {
       if (finalized || this.process !== proc) return;
       finalized = true;
-      this.log(reason);
+      this.log(error.message);
       this.process = null;
       this.stdinWriter = null;
       this.readline = null;
       this.initialized = false;
       this.initializePromise = null;
       for (const [, handler] of this.responseHandlers) {
-        handler.reject(new Error(reason));
+        handler.reject(error);
       }
       this.responseHandlers.clear();
       this.onProcessExit?.();
@@ -233,7 +245,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     }
 
     proc.on("error", (err) => {
-      finalizeProcess(`${this.adapterId} ACP process error: ${err.message}`);
+      finalizeProcess(new AdapterRuntimeError(failureFromProcessError({
+        adapterId: this.adapterId,
+        message: err.message,
+      })));
     });
 
     this.stdinWriter = (line: string) => {
@@ -254,12 +269,17 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     proc.stderr.on("data", (data: Buffer) => {
       const text = data.toString().trim();
       if (text) {
+        recentStderr = appendRecentStderr(recentStderr, `${text}\n`);
         this.log(`ACP stderr: ${text}`);
       }
     });
 
     proc.on("exit", (code) => {
-      finalizeProcess(`ACP process exited with code ${code}`);
+      finalizeProcess(new AdapterRuntimeError(failureFromProcessExit({
+        adapterId: this.adapterId,
+        exitCode: code,
+        recentStderr,
+      })));
     });
   }
 

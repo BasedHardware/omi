@@ -639,7 +639,7 @@ struct MemoryExportDestinationSheet: View {
       return
         "Omi sets up \(destination.title) for you — it runs as an Omi task you can watch in the floating bar. If it gets stuck, use the manual steps below."
     case .browserAutonomous:
-      if MemoryExportExecutor.requiresAccessibilityPreflight(destination) {
+      if MemoryExportExecutor.accessibilityPreflightMissing(for: destination) {
         return
           "Omi needs Accessibility permission to use your signed-in browser for \(destination.title). If you prefer not to grant it, use the manual steps below."
       } else {

@@ -42,7 +42,14 @@ final class CloudConnectorGuidanceOverlay {
         candidates: candidates,
         overlaySize: overlaySize
       )
-    else { return }
+    else {
+      presentInstructionCard(
+        title: "Finish in Claude",
+        subtitle: "Click \(actionLabel) in the connector window to continue.",
+        near: windowFrame
+      )
+      return
+    }
 
     lastAutomationState = Self.stateDictionary(
       actionLabel: actionLabel,

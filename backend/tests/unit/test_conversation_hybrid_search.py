@@ -76,7 +76,11 @@ _restore_real_backend_package("utils")
 _restore_real_backend_package("utils.conversations")
 
 import utils.conversations.search as search_module
-from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
+from utils.conversations.search import (
+    keyword_search_conversation_ids,
+    merge_conversation_search_ids,
+    search_conversations,
+)
 
 
 class TestMergeConversationSearchIds:
@@ -117,6 +121,12 @@ class TestKeywordSearchConversationIds:
             mock_search.side_effect = Exception('typesense unreachable')
             assert keyword_search_conversation_ids('uid1', 'Steph') == []
 
+    def test_empty_query_returns_no_keyword_hits(self):
+        with patch.object(search_module, 'search_conversations') as mock_search:
+            assert keyword_search_conversation_ids('uid1', '   ') == []
+
+        mock_search.assert_not_called()
+
     def test_passes_filters_and_excludes_discarded(self):
         with patch.object(search_module, 'search_conversations') as mock_search:
             mock_search.return_value = {'items': []}
@@ -129,6 +139,59 @@ class TestKeywordSearchConversationIds:
                 start_date=100,
                 end_date=200,
             )
+
+
+class TestSpeakerFilteredConversationSearch:
+    def _search_mock(self):
+        search = MagicMock(return_value={'hits': []})
+        collection = MagicMock()
+        collection.documents.search = search
+        return search, {'conversations': collection}
+
+    def test_named_speaker_filter_combines_with_existing_filters(self):
+        search, collections = self._search_mock()
+        with patch.object(search_module.client, 'collections', collections, create=True):
+            search_conversations(
+                uid='uid1',
+                query='launch',
+                include_discarded=False,
+                start_date=100,
+                end_date=200,
+                speaker_id='person-1',
+            )
+
+        params = search.call_args.args[0]
+        assert params['q'] == 'launch'
+        assert params['filter_by'] == (
+            'userId:=uid1 && discarded:=false && created_at:>=100 && created_at:<=200 '
+            '&& transcript_segments.person_id:=person-1'
+        )
+
+    def test_user_speaker_filter_uses_is_user_field(self):
+        search, collections = self._search_mock()
+        with patch.object(search_module.client, 'collections', collections, create=True):
+            search_conversations(uid='uid1', query='', speaker_id='user')
+
+        params = search.call_args.args[0]
+        assert params['q'] == '*'
+        assert params['filter_by'] == 'userId:=uid1 && transcript_segments.is_user:=true'
+
+    def test_empty_query_without_structured_filter_returns_empty_without_wildcard_search(self):
+        search, collections = self._search_mock()
+        with patch.object(search_module.client, 'collections', collections, create=True):
+            results = search_conversations(uid='uid1', query='   ')
+
+        assert results == {'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10}
+        search.assert_not_called()
+
+    def test_search_without_speaker_keeps_existing_filter_behavior(self):
+        search, collections = self._search_mock()
+        with patch.object(search_module.client, 'collections', collections, create=True):
+            search_conversations(uid='uid1', query='planning')
+
+        params = search.call_args.args[0]
+        assert params['q'] == 'planning'
+        assert params['filter_by'] == 'userId:=uid1'
 
 
 class TestCallSitesUseHybridSearch:

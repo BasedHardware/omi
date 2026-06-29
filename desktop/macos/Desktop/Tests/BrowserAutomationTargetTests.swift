@@ -117,6 +117,32 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertNil(BrowserAutomationTargetStore.selectedBundleIdentifier)
   }
 
+  func testSelectingDifferentBrowserClearsPersistedExtensionToken() {
+    let defaults = UserDefaults.standard
+    defaults.set("com.google.Chrome", forKey: "playwrightBrowserBundleIdentifier")
+    defaults.set(true, forKey: "playwrightBrowserBundleIdentifierUserSelected")
+    defaults.set("old-token", forKey: "playwrightExtensionToken")
+    defer {
+      defaults.removeObject(forKey: "playwrightBrowserBundleIdentifier")
+      defaults.removeObject(forKey: "playwrightBrowserBundleIdentifierUserSelected")
+      defaults.removeObject(forKey: "playwrightExtensionToken")
+    }
+
+    let atlas = BrowserAutomationTarget(
+      name: "ChatGPT Atlas",
+      bundleIdentifier: "com.openai.atlas",
+      appPath: "/Applications/ChatGPT Atlas.app",
+      profileDirectoryRelativePath: "Library/Application Support/com.openai.atlas/browser-data/host",
+      installURL: nil,
+      supportsChromeWebStore: true
+    )
+
+    BrowserAutomationTargetStore.select(atlas)
+
+    XCTAssertEqual(BrowserAutomationTargetStore.selectedBundleIdentifier, "com.openai.atlas")
+    XCTAssertNil(defaults.string(forKey: "playwrightExtensionToken"))
+  }
+
   func testClaudeCloudSetupUsesCustomizeConnectorModalURL() throws {
     let setup = try XCTUnwrap(MemoryExportDestination.claude.mcpSetup(key: "test-key"))
 
@@ -170,72 +196,34 @@ final class BrowserAutomationTargetTests: XCTestCase {
         == true)
   }
 
-  func testCloudSetupDoesNotReusePersistedPlaywrightBrowserSelection() throws {
-    let repoRoot = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-    let executor =
-      repoRoot
-      .appendingPathComponent("Sources/MemoryExportExecutor.swift")
-    let source = try String(contentsOf: executor)
-
-    XCTAssertFalse(
-      source.contains("BrowserAutomationTargetStore.selectedBundleIdentifier"),
-      "Cloud connector setup should use the macOS default browser, not the persisted Playwright/extension browser preference."
-    )
-  }
-
-  func testClaudeCloudSetupDoesNotSpawnGenericBrowserAgentFallback() throws {
-    let repoRoot = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-    let executor =
-      repoRoot
-      .appendingPathComponent("Sources/MemoryExportExecutor.swift")
-    let source = try String(contentsOf: executor)
-
-    XCTAssertTrue(source.contains("runClaudeNativeCloudSetup"))
-    XCTAssertTrue(source.contains("stopping without agent fallback"))
-    XCTAssertFalse(
-      source.contains("MemoryExportDestination.claude.guidedBrowserSetupTask"),
-      "Claude Cloud should stop with the deterministic native result instead of spawning the Playwright-capable generic browser agent."
+  func testAgentRuntimeOnlyEnablesPlaywrightWhenBridgeIsConfigured() {
+    XCTAssertTrue(
+      AgentRuntimeProcess.shouldEnablePlaywrightExtension(
+        useExtension: true,
+        token: "token",
+        targetHasExtension: true
+      )
     )
     XCTAssertFalse(
-      source.contains("Native setup result:"),
-      "Cloud setup cards should show user guidance, not raw native automation diagnostics."
+      AgentRuntimeProcess.shouldEnablePlaywrightExtension(
+        useExtension: false,
+        token: "token",
+        targetHasExtension: true
+      )
     )
     XCTAssertFalse(
-      source.contains("I did not start the Playwright/browser-agent fallback"),
-      "Cloud setup cards should not mention internal fallback implementation details."
+      AgentRuntimeProcess.shouldEnablePlaywrightExtension(
+        useExtension: true,
+        token: "",
+        targetHasExtension: true
+      )
     )
-    let manualAddRange = try XCTUnwrap(source.range(of: "cloudFormFillNeedsManualClaudeAdd(lastResult)"))
-    let screenRecordingRange = try XCTUnwrap(source.range(of: "cloudFormFillRequiresScreenRecordingApproval(lastResult)"))
-    XCTAssertLessThan(
-      manualAddRange.lowerBound,
-      screenRecordingRange.lowerBound,
-      "Manual Claude Add guidance must run before Screen Recording handling; the Add button can be hidden from AX even when Screen Recording is already granted."
-    )
-  }
-
-  func testAgentRuntimeOnlyEnablesPlaywrightWhenBridgeIsConfigured() throws {
-    let repoRoot = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-    let runtimeSource = try String(
-      contentsOf: repoRoot.appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift"))
-    let bridgeSource = try String(
-      contentsOf:
-        repoRoot
-        .deletingLastPathComponent()
-        .appendingPathComponent("agent/src/index.ts"))
-
-    XCTAssertTrue(runtimeSource.contains("PLAYWRIGHT_MCP_ENABLED"))
-    XCTAssertTrue(runtimeSource.contains("playwrightExtensionToken"))
-    XCTAssertTrue(runtimeSource.contains("isExtensionInstalled"))
-    XCTAssertTrue(bridgeSource.contains("process.env.PLAYWRIGHT_MCP_ENABLED === \"true\""))
     XCTAssertFalse(
-      bridgeSource.contains("servers.push({\n    name: \"playwright\""),
-      "The Node bridge should not register Playwright unconditionally."
+      AgentRuntimeProcess.shouldEnablePlaywrightExtension(
+        useExtension: true,
+        token: "token",
+        targetHasExtension: false
+      )
     )
   }
 

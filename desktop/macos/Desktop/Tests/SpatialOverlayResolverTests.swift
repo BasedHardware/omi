@@ -35,6 +35,33 @@ final class SpatialOverlayResolverTests: XCTestCase {
     XCTAssertEqual(resolution.candidate.id, "add-ax")
   }
 
+  func testResolverAppliesConfidenceThresholdBeforeSourceRanking() throws {
+    let lowConfidenceAX = candidate(
+      id: "add-ax-low",
+      rect: CGRect(x: 1180, y: 160, width: 80, height: 36),
+      source: .accessibility,
+      confidence: 0.2,
+      uses: [.displayGuidance, .performClick]
+    )
+    let goodHeuristic = candidate(
+      id: "add-heuristic-good",
+      rect: CGRect(x: 1190, y: 162, width: 2, height: 2),
+      source: .layoutHeuristic,
+      confidence: 0.9,
+      uses: [.displayGuidance]
+    )
+    let snapshot = SpatialOverlayDesktopSnapshot(screens: [screen], candidates: [lowConfidenceAX, goodHeuristic])
+
+    let resolution = try SpatialOverlayAnchorResolver()
+      .resolve(
+        SpatialOverlayAnchorSpec(id: "claude.add.guidance", use: .displayGuidance, minimumConfidence: 0.5),
+        in: snapshot
+      )
+      .get()
+
+    XCTAssertEqual(resolution.candidate.id, "add-heuristic-good")
+  }
+
   func testResolverRejectsHeuristicForClickUse() {
     let heuristic = candidate(
       id: "add-heuristic",

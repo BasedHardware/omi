@@ -122,7 +122,7 @@ enum OmiToolManifest {
         ],
       ],
       required: ["provider", "server_url"],
-      annotations: ["readOnlyHint": false, "destructiveHint": false, "openWorldHint": false]
+      annotations: ["readOnlyHint": false, "destructiveHint": false, "openWorldHint": true]
     ),
   ]
 }

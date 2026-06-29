@@ -161,7 +161,7 @@ enum MemoryExportExecutor {
           // We could not anchor to Claude. Send the user to grant Screen Recording, but
           // never leave them on a bare settings pane: show an instruction card too.
           requestScreenRecordingApprovalForCloudSetup()
-          await CloudConnectorFormAutomation.showScreenRecordingSettingsInstructionOverlay()
+          await CloudConnectorFormAutomation.showScreenRecordingSettingsInstructionOverlay(actionLabel: "Connect")
           throw ExecutorError.browserSetupRequired(cloudSetupScreenRecordingPermissionMessage)
         }
       }
@@ -300,11 +300,5 @@ enum MemoryExportExecutor {
     let query = ProactiveTaskExecute.buildQuery(title: task.title, message: task.body)
     _ = AgentPillsManager.shared.spawn(
       query: query, model: model, systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix)
-  }
-}
-
-private extension UserDefaults {
-  func string(forKey key: String, fallback: String) -> String {
-    string(forKey: key) ?? fallback
   }
 }

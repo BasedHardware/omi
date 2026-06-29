@@ -2043,25 +2043,9 @@ workflows:
         script: |
           scripts/prepare-agent-runtime.sh --universal-node
 
-      - name: Test pi-mono-extension denylist classifier
+      - name: Test desktop tool surfaces
         script: |
-          # Run the pi-mono-extension unit tests so a `classifyBash()` /
-          # `classifyFileWrite()` / audit-log fail-safe regression fails the
-          # Mac app build before the tagged release is cut. The tests live
-          # in `pi-mono-extension/index.test.ts` and use node:test + the
-          # `--experimental-strip-types` flag that ships in Node 22+. We
-          # avoid a hard dependency on the codemagic runner's Node version
-          # by using `npx tsx` as a version-agnostic TypeScript loader that
-          # still delegates to node:test.
-          cd pi-mono-extension
-          npm ci --no-fund --no-audit
-          if node --experimental-strip-types --test index.test.ts; then
-            echo "pi-mono-extension tests passed (native Node --experimental-strip-types)"
-          else
-            echo "Falling back to npx tsx for older Node versions..."
-            npx --yes tsx@4.19.2 --test index.test.ts
-          fi
-          cd ..
+          scripts/test-tool-surfaces.sh
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
         script: |
@@ -2374,6 +2358,7 @@ workflows:
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
             cp -f agent/src/runtime/control-tool-manifest.js "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
+            cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
           else
             echo "ERROR: agent/dist not found"

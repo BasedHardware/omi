@@ -1138,6 +1138,7 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()
+            Self.ensureFailureMessage(errorText, for: pill)
             pill.markContentChanged()
         } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
             pill.status = .done
@@ -1151,6 +1152,7 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed("Agent ended before reporting a final result")
             pill.completedAt = Date()
             pill.latestActivity = "Agent ended before reporting a final result"
+            Self.ensureFailureMessage("Agent ended before reporting a final result", for: pill)
             pill.markContentChanged()
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
@@ -1160,6 +1162,24 @@ final class AgentPillsManager: ObservableObject {
         // Keep the provider + stream alive after completion so a voice/text follow-up
         // can continue THIS agent's session with full context. They're torn down on
         // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
+    }
+
+    private static func ensureFailureMessage(_ errorText: String, for pill: AgentPill) {
+        let text = errorText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let failureMessage = ChatMessage(text: "Failed: \(text)", sender: .ai)
+        if pill.conversationMessages.isEmpty {
+            pill.conversationMessages = [
+                ChatMessage(text: pill.query, sender: .user),
+                failureMessage,
+            ]
+        } else if !pill.conversationMessages.contains(where: { message in
+            message.sender == .ai
+                && message.text.trimmingCharacters(in: .whitespacesAndNewlines) == failureMessage.text
+        }) {
+            pill.conversationMessages.append(failureMessage)
+        }
+        pill.aiMessage = failureMessage
     }
 
     private static func apply(projection: AgentRunProjection, to pill: AgentPill) {
@@ -1184,10 +1204,11 @@ final class AgentPillsManager: ObservableObject {
                 }
             }
         case .failed, .timedOut, .orphaned:
-            let message = projection.errorMessage ?? "Agent failed"
+            let message = projection.failure?.displayMessage ?? projection.errorMessage ?? "Agent failed"
             pill.status = .failed(message)
             pill.latestActivity = message
             pill.completedAt = projection.completedAt ?? Date()
+            ensureFailureMessage(message, for: pill)
             pill.markContentChanged()
         case .cancelled:
             pill.status = .failed("Stopped by user")

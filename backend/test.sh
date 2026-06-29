@@ -36,6 +36,8 @@ pytest tests/unit/test_mcp_search_conversations_poison.py -v
 pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
+pytest tests/unit/test_mcp_oauth.py -v
+pytest tests/unit/test_mcp_action_item_writes.py -v
 pytest tests/unit/test_mcp_conversations_poison.py -v
 pytest tests/unit/test_mcp_profile_contact.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
@@ -43,6 +45,21 @@ pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
 pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_announcement_malformed_type.py -v
+pytest tests/unit/test_llm_gateway_service.py -v
+pytest tests/unit/test_llm_gateway_config.py -v
+pytest tests/unit/test_llm_gateway_auth.py -v
+pytest tests/unit/test_llm_gateway_credentials.py -v
+pytest tests/unit/test_llm_gateway_validator.py -v
+pytest tests/unit/test_llm_gateway_resolver.py -v
+pytest tests/unit/test_llm_gateway_executor.py -v
+pytest tests/unit/test_llm_gateway_openai_provider.py -v
+pytest tests/unit/test_llm_gateway_openai_compatible.py -v
+pytest tests/unit/test_llm_gateway_readiness.py -v
+pytest tests/unit/test_llm_gateway_client_config.py -v
+pytest tests/unit/test_llm_gateway_route_refs.py -v
+pytest tests/unit/test_llm_gateway_dependencies.py -v
+pytest tests/unit/test_llm_gateway_chat_extraction_pilot.py -v
+pytest tests/unit/test_backend_runtime_env_validator.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v
@@ -67,6 +84,7 @@ pytest tests/unit/test_location_maps_status_guard.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_retrieval_semantics.py -v
+pytest tests/unit/test_conversation_tool_date_range_bound.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
@@ -116,6 +134,7 @@ pytest tests/unit/test_executors.py -v
 pytest tests/unit/test_modulate_stt.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
+pytest tests/unit/test_action_items_timezone.py -v
 pytest tests/unit/test_request_validation_contracts.py -v
 pytest tests/unit/test_conversation_structure_timezone.py -v
 pytest tests/unit/test_action_item_dedup.py -v

@@ -351,7 +351,7 @@ enum CloudConnectorFormAutomation {
   /// the user to System Settings to grant Screen Recording. We never leave them staring
   /// at a bare settings pane: an instruction card explains what to enable and where to
   /// return. Placed near the System Settings window so the two read as one step.
-  static func showScreenRecordingSettingsInstructionOverlay() async {
+  static func showScreenRecordingSettingsInstructionOverlay(actionLabel: String = "Add") async {
     let appName =
       (Bundle.main.infoDictionary?["CFBundleName"] as? String)
       ?? (Bundle.main.infoDictionary?["CFBundleDisplayName"] as? String)
@@ -367,7 +367,7 @@ enum CloudConnectorFormAutomation {
     CloudConnectorGuidanceOverlay.shared.presentInstructionCard(
       title: "Allow Screen Recording for \(appName)",
       subtitle:
-        "Flip the \(appName) toggle on under Screen & System Audio Recording, then return to Claude and click Add.",
+        "Flip the \(appName) toggle on under Screen & System Audio Recording, then return to Claude and click \(actionLabel).",
       near: anchor
     )
   }

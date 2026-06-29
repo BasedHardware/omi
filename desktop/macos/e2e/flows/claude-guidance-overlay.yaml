@@ -131,4 +131,4 @@ steps:
       absent:
         - "DesktopAutomationBridge: failed"
         - "unsupported_route"
-        - "overlay placement failed"
+        - "No viable overlay placement"

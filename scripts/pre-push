@@ -137,6 +137,18 @@ PY
   fi
 }
 
+check_desktop_tool_surfaces_if_needed() {
+  local file
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      desktop/macos/agent/*|desktop/macos/agent/**/*|desktop/macos/pi-mono-extension/*|desktop/macos/pi-mono-extension/**/*|desktop/macos/run.sh|desktop/macos/scripts/prepare-agent-runtime.sh|desktop/macos/scripts/test-tool-surfaces.sh|codemagic.yaml)
+        desktop/macos/scripts/test-tool-surfaces.sh
+        return
+        ;;
+    esac
+  done
+}
+
 run_step check_merge_conflicts
 run_step python3 .github/scripts/desktop-changelog.py validate
 
@@ -149,6 +161,7 @@ else
 fi
 
 run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
+run_step check_desktop_tool_surfaces_if_needed
 run_step check_optional_formatters
 
 echo "Fast pre-push checks passed."

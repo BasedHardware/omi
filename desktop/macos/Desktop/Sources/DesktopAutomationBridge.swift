@@ -457,11 +457,7 @@ final class DesktopAutomationActionRegistry {
           "unknown fixture; expected one of \(SpatialOverlayDogfoodFixture.allCases.map(\.rawValue).joined(separator: ","))"
         )
       }
-      let settleMs = UInt64(max(0, intParam(params["settleMs"], default: 0)))
       let state = CloudConnectorGuidanceOverlay.shared.presentAutomationFixture(fixture)
-      if settleMs > 0 {
-        try? await Task.sleep(nanoseconds: settleMs * 1_000_000)
-      }
       return state
     }
 

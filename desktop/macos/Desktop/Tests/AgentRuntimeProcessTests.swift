@@ -156,11 +156,45 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
     XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
     XCTAssertTrue(source.contains(#""\(home)/.hermes/hermes-agent/venv/bin""#))
-    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init) + trustedPathDirs + adapterPathDirs"))
+    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init) + trustedPathDirs"))
+    XCTAssertTrue(source.contains("+ adapterPathDirs"))
     XCTAssertFalse(source.contains("adapterPathPrefixDirs + existingPath.split"))
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+  }
+
+  func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("openclaw-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let nodePath = tempDir.appendingPathComponent("node").path
+    let openClawPath = tempDir.appendingPathComponent("openclaw").path
+    FileManager.default.createFile(atPath: nodePath, contents: Data("#!/bin/sh\n".utf8))
+    FileManager.default.createFile(atPath: openClawPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: nodePath)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: openClawPath)
+
+    let command = AgentRuntimeProcess.openClawAdapterCommand(openClawPath: openClawPath)
+
+    XCTAssertEqual(command, "'\(nodePath)' '\(openClawPath)' acp")
+  }
+
+  func testOpenClawAdapterCommandFallsBackToLauncherWithoutSiblingNode() throws {
+    let tempDir = FileManager.default.temporaryDirectory
+      .appendingPathComponent("openclaw-command-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: tempDir) }
+
+    let openClawPath = tempDir.appendingPathComponent("openclaw").path
+    FileManager.default.createFile(atPath: openClawPath, contents: Data("#!/usr/bin/env node\n".utf8))
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: openClawPath)
+
+    let command = AgentRuntimeProcess.openClawAdapterCommand(openClawPath: openClawPath)
+
+    XCTAssertEqual(command, "'\(openClawPath)' acp")
   }
 
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {
@@ -241,7 +275,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)"))
+    XCTAssertTrue(source.contains("completeToolCall("))
+    XCTAssertTrue(source.contains("requestId: request.requestId"))
+    XCTAssertTrue(source.contains("clientId: request.clientId"))
     XCTAssertTrue(source.contains(#"if let requestId { payload["requestId"] = requestId }"#))
     XCTAssertTrue(source.contains(#"if let clientId { payload["clientId"] = clientId }"#))
   }

@@ -476,6 +476,57 @@ describe("env-command local subprocess adapters", () => {
     await adapter.stop();
   });
 
+  it("preserves structured failed-result payloads", async () => {
+    const proc = createMockProcess();
+    vi.mocked(spawn).mockReturnValue(proc as any);
+    const adapter = new LocalSubprocessRuntimeAdapter({ adapterId: "openclaw", envCommandName: "OMI_OPENCLAW_ADAPTER_COMMAND", command: "openclaw-adapter" });
+
+    collectRequests(proc, (request) => {
+      if (request.type === "open") {
+        writeResponse(proc, request, {
+          type: "opened",
+          adapterNativeSessionId: "openclaw-native-1",
+        });
+      }
+      if (request.type === "execute") {
+        writeResponse(proc, request, {
+          type: "result",
+          text: "",
+          adapterSessionId: "openclaw-native-1",
+          terminalStatus: "failed",
+          failure: {
+            code: "adapter_process_exited",
+            source: "adapter_process",
+            adapterId: "openclaw",
+            provider: "openai",
+            retryable: true,
+            userMessage: "OpenClaw failed: OpenAI API error: upstream unavailable",
+            technicalMessage: "OpenAI API error: upstream unavailable",
+          },
+        });
+      }
+    });
+
+    await adapter.start();
+    const opened = await adapter.openBinding({
+      sessionId: "omi-session",
+      cwd: "/tmp/work",
+    });
+
+    const result = await adapter.executeAttempt(makeAttemptContext(opened), () => {}, new AbortController().signal);
+    expect(result).toMatchObject({
+      terminalStatus: "failed",
+      failure: {
+        code: "adapter_process_exited",
+        source: "adapter_process",
+        adapterId: "openclaw",
+        provider: "openai",
+        userMessage: "OpenClaw failed: OpenAI API error: upstream unavailable",
+      },
+    });
+    await adapter.stop();
+  });
+
   it("does not import legacy permission policy from new adapter modules", () => {
     for (const file of [
       "src/adapters/local-subprocess.ts",

@@ -1,12 +1,15 @@
 import asyncio
 import functools
 import gc
+import math
 import os
 import time
 import uuid
 import logging
 import io as _io
 import wave as _wave
+
+import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -17,7 +20,7 @@ from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconn
 from fastapi.responses import JSONResponse
 from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
 
-from gpu_worker import GPUWorker
+from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
 from transcribe import (
     transcribe_file,
@@ -81,14 +84,28 @@ batch_engine: Optional[BatchEngine] = None
 start_time: float = 0
 _diarize_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="diarize")
 _io_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="file-io")
+_max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
 
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
     try:
+        info = sf.info(_io.BytesIO(data))
+        return info.duration
+    except Exception:
+        pass
+    try:
         with _wave.open(_io.BytesIO(data), 'rb') as wf:
             return wf.getnframes() / wf.getframerate()
     except Exception:
+        if _max_file_duration_sec > 0:
+            return float('inf')
         return 0.0
+
+
+def _duration_limit_detail(audio_dur: float) -> str:
+    if math.isinf(audio_dur):
+        return "Cannot determine audio duration"
+    return f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"
 
 
 def _on_batch_complete(queue_durations, inference_seconds, batch_size):
@@ -168,7 +185,13 @@ async def transcribe(file: UploadFile = File(...)):
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
-        if audio_dur > 0:
+        if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
+            status = "rejected"
+            return JSONResponse(
+                status_code=413,
+                content={"detail": _duration_limit_detail(audio_dur)},
+            )
+        if audio_dur > 0 and math.isfinite(audio_dur):
             AUDIO_DURATION.observe(audio_dur)
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
@@ -183,6 +206,9 @@ async def transcribe(file: UploadFile = File(...)):
     except QueueFullError:
         status = "error"
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except AudioDurationExceededError as e:
+        status = "rejected"
+        return JSONResponse(status_code=413, content={"detail": str(e)})
     except Exception:
         status = "error"
         raise
@@ -215,7 +241,13 @@ async def transcribe_v2(
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
-        if audio_dur > 0:
+        if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
+            status = "rejected"
+            return JSONResponse(
+                status_code=413,
+                content={"detail": _duration_limit_detail(audio_dur)},
+            )
+        if audio_dur > 0 and math.isfinite(audio_dur):
             AUDIO_DURATION.observe(audio_dur)
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
@@ -234,6 +266,9 @@ async def transcribe_v2(
     except QueueFullError:
         status = "error"
         return JSONResponse(status_code=503, content={"detail": "Server overloaded — try again later"})
+    except AudioDurationExceededError as e:
+        status = "rejected"
+        return JSONResponse(status_code=413, content={"detail": str(e)})
     except Exception:
         status = "error"
         raise

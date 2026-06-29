@@ -172,10 +172,8 @@ class OverlayService {
       return nil
     }
 
-    return SpatialOverlayGeometry.appKitFrame(
-      topLeftOrigin: position,
-      size: size,
-      screenFrame: SpatialOverlayGeometry.screenFrameForTopLeftNormalization()
+    return SpatialOverlayGeometry.globalAppKitFrame(
+      topLeftFrame: CGRect(origin: position, size: size)
     )
   }
 

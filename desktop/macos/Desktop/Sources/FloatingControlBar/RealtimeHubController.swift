@@ -907,6 +907,39 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
           id: id, completed: completed, description: newDescription, dueAt: dueAt
         ).resultText
       }
+    case .createCalendarEvent:
+      let title = (arguments["title"] as? String)?
+        .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+      guard !title.isEmpty else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: "No calendar event title was given.")
+        return
+      }
+      guard let startTime = arguments["start_time"] as? String, !startTime.isEmpty else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: "No calendar event start time was given.")
+        return
+      }
+      guard let endTime = arguments["end_time"] as? String, !endTime.isEmpty else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name, output: "No calendar event end time was given.")
+        return
+      }
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "\"\(title.prefix(60))\"",
+        emptyText: "Calendar event created.",
+        errorText: "Could not create the calendar event right now."
+      ) {
+        try await APIClient.shared.toolCreateCalendarEvent(
+          title: title,
+          startTime: startTime,
+          endTime: endTime,
+          description: arguments["description"] as? String,
+          location: arguments["location"] as? String,
+          attendees: arguments["attendees"] as? String
+        ).resultText
+      }
     case .spawnAgent:
       let brief = arg("brief")
       let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)

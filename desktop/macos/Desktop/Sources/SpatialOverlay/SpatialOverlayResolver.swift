@@ -99,7 +99,13 @@ struct SpatialOverlayAnchorResolver {
       return .failure(.noCandidateAllowedForUse(spec.use))
     }
 
-    let ranked = allowed.sorted { lhs, rhs in
+    let confident = allowed.filter { $0.confidence >= spec.minimumConfidence }
+    guard !confident.isEmpty else {
+      let bestConfidence = allowed.map(\.confidence).max() ?? 0
+      return .failure(.belowConfidenceThreshold(required: spec.minimumConfidence, best: bestConfidence))
+    }
+
+    let ranked = confident.sorted { lhs, rhs in
       let lhsRank = sourceRank(lhs, spec: spec)
       let rhsRank = sourceRank(rhs, spec: spec)
       if lhsRank != rhsRank {
@@ -113,9 +119,6 @@ struct SpatialOverlayAnchorResolver {
 
     guard let best = ranked.first else {
       return .failure(.noCandidates)
-    }
-    guard best.confidence >= spec.minimumConfidence else {
-      return .failure(.belowConfidenceThreshold(required: spec.minimumConfidence, best: best.confidence))
     }
 
     return .success(SpatialOverlayAnchorResolution(spec: spec, candidate: best))

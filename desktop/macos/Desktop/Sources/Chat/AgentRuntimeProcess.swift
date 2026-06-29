@@ -3,6 +3,14 @@ import Foundation
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
 
+  nonisolated static func shouldEnablePlaywrightExtension(
+    useExtension: Bool,
+    token: String,
+    targetHasExtension: Bool
+  ) -> Bool {
+    useExtension && !token.isEmpty && targetHasExtension
+  }
+
   struct WarmupSessionConfig {
     let key: String
     let model: String?
@@ -480,9 +488,14 @@ actor AgentRuntimeProcess {
       defaults.object(forKey: "playwrightUseExtension") == nil
       || defaults.bool(forKey: "playwrightUseExtension")
     let playwrightToken = defaults.string(forKey: "playwrightExtensionToken") ?? ""
-    let hasInstalledPlaywrightBridge = BrowserAutomationTargetResolver.installedTargets()
-      .contains { BrowserAutomationTargetResolver.isExtensionInstalled(in: $0) }
-    if useExtension && !playwrightToken.isEmpty && hasInstalledPlaywrightBridge {
+    let playwrightTarget = BrowserAutomationTargetResolver.preferredTarget()
+    let hasInstalledPlaywrightBridge =
+      playwrightTarget.map { BrowserAutomationTargetResolver.isExtensionInstalled(in: $0) } ?? false
+    if Self.shouldEnablePlaywrightExtension(
+      useExtension: useExtension,
+      token: playwrightToken,
+      targetHasExtension: hasInstalledPlaywrightBridge)
+    {
       env["PLAYWRIGHT_MCP_ENABLED"] = "true"
       env["PLAYWRIGHT_USE_EXTENSION"] = "true"
       env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = playwrightToken
@@ -584,17 +597,25 @@ actor AgentRuntimeProcess {
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
       let hermes = firstExecutable(named: "hermes", in: adapterSearchDirs)
     {
-      env["OMI_HERMES_ADAPTER_COMMAND"] = "\(shellQuote(hermes)) acp"
+      env["OMI_HERMES_ADAPTER_COMMAND"] = "\(Self.shellQuote(hermes)) acp"
     }
 
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
       let openClaw = firstExecutable(named: "openclaw", in: adapterSearchDirs)
     {
-      env["OMI_OPENCLAW_ADAPTER_COMMAND"] = "\(shellQuote(openClaw)) acp"
+      env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
   }
 
-  private func shellQuote(_ value: String) -> String {
+  static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
+    let nodePath = ((openClawPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("node")
+    if fileManager.isExecutableFile(atPath: nodePath) {
+      return "\(shellQuote(nodePath)) \(shellQuote(openClawPath)) acp"
+    }
+    return "\(shellQuote(openClawPath)) acp"
+  }
+
+  private static func shellQuote(_ value: String) -> String {
     "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
 
@@ -888,7 +909,8 @@ actor AgentRuntimeProcess {
   }
 
   private func failRequest(_ message: RuntimeMessage) {
-    let raw = message.payload["message"] as? String ?? "Unknown error"
+    let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
+    let raw = failure?.displayMessage ?? message.payload["message"] as? String ?? "Unknown error"
     if let requestKey = message.requestKey,
       let controlRequest = activeControlRequests.removeValue(forKey: requestKey)
     {

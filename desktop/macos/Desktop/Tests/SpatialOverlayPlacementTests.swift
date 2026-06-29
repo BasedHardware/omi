@@ -69,6 +69,22 @@ final class SpatialOverlayPlacementTests: XCTestCase {
     XCTAssertEqual(result.failure, .arrowCannotReachTargetAfterClamping)
   }
 
+  func testArrowSizeConstrainsTipInset() throws {
+    let target = candidate(rect: CGRect(x: 118, y: 420, width: 20, height: 20))
+    let spec = SpatialOverlayPlacementSpec(
+      overlaySize: CGSize(width: 330, height: 118),
+      preferredEdges: [.above],
+      margin: 12,
+      arrowSize: CGSize(width: 96, height: 13),
+      minimumArrowInset: 10,
+      canCoverTarget: true
+    )
+
+    let result = try SpatialOverlayPlacementSolver.place(target: target, spec: spec).get()
+
+    XCTAssertGreaterThanOrEqual(result.arrowTipInPanel.x, spec.arrowSize.width / 2)
+  }
+
   func testCanUseTrailingPlacementNearLeftEdge() throws {
     let target = candidate(rect: CGRect(x: 18, y: 420, width: 20, height: 20))
     let spec = SpatialOverlayPlacementSpec(
