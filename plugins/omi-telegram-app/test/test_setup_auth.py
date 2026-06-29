@@ -148,12 +148,21 @@ class TestSetupAuth:
         )
 
     def test_setup_with_dev_mode_no_token_allows(self, monkeypatch):
-        """Dev mode + no token = allow. Matches the WhatsApp-webhook pattern."""
+        """Dev mode + no token = allow. Matches the WhatsApp-webhook pattern.
+
+        Identified by cubic (P3): a previous version of this assertion only
+        checked `!= 503`. That's a weak guard — it would pass even if the
+        auth gate were refactored to require a bearer FIRST and return 401
+        for callers without one. Tighten: assert the request PASSED the
+        auth gate (i.e. got a non-401/non-503 response from the Telegram
+        call). 4xx from Telegram is expected for the fake bot_token.
+        """
         monkeypatch.setenv("OMI_DEV_MODE", "1")
         from fastapi.testclient import TestClient
 
         client = TestClient(fastapi_app)
         r = _post_setup(client)
-        # Not 503 (auth gate passed). Subsequent response is from
-        # Telegram (will be 4xx for the fake token).
-        assert r.status_code != 503
+        assert r.status_code not in (401, 503), (
+            f"Dev mode + no token must pass the auth gate. Got "
+            f"{r.status_code}: {r.text}"
+        )

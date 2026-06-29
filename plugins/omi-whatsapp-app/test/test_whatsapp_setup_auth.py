@@ -114,7 +114,18 @@ class TestWhatsappSetupAuth:
         )
 
     def test_setup_with_dev_mode_no_token_allows(self, client, monkeypatch):
-        """Dev mode + no token = allow. Matches the WhatsApp-webhook pattern."""
+        """Dev mode + no token = allow. Matches the WhatsApp-webhook pattern.
+
+        Tightened per cubic (P3): the previous assertion only checked
+        `!= 503`. That's a weak guard — a refactor that required the
+        bearer first (returning 401) would still pass it. Now we also
+        forbid 401, so the test catches both the misconfig path (503)
+        and the wrong-shape path (401) and proves the auth gate let
+        the request through.
+        """
         monkeypatch.setenv("OMI_DEV_MODE", "1")
         r = _post_setup(client)
-        assert r.status_code != 503
+        assert r.status_code not in (401, 503), (
+            f"Dev mode + no token must pass the auth gate. Got "
+            f"{r.status_code}: {r.text}"
+        )
