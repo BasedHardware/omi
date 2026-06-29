@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildRewindSearchQuery,
   escapeRewindSearchLikeToken,
+  REWIND_SEARCH_QUERY_CHAR_LIMIT,
   REWIND_SEARCH_TOKEN_LIMIT,
   tokenizeRewindSearchQuery
 } from './rewindSearchQuery'
@@ -18,6 +19,11 @@ describe('rewindSearchQuery', () => {
       ' '
     )
     expect(tokenizeRewindSearchQuery(many)).toHaveLength(REWIND_SEARCH_TOKEN_LIMIT)
+  })
+
+  it('limits scanned query text before tokenizing large inputs', () => {
+    const huge = `${'a'.repeat(REWIND_SEARCH_QUERY_CHAR_LIMIT + 20)} tail`
+    expect(tokenizeRewindSearchQuery(huge)).toEqual(['a'.repeat(REWIND_SEARCH_QUERY_CHAR_LIMIT)])
   })
 
   it('escapes LIKE wildcards and the escape character itself', () => {
