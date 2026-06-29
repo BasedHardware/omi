@@ -300,6 +300,11 @@ _attach_existing_module('utils.stt.speaker_embedding')
 
 _ensure_package('google', BACKEND_DIR / 'tests')
 _ensure_package('google.cloud', BACKEND_DIR / 'tests')
+_ensure_package('google.api_core', BACKEND_DIR / 'tests')
+_api_core_exceptions = _install_module('google.api_core.exceptions')
+_api_core_exceptions.AlreadyExists = type('AlreadyExists', (Exception,), {})
+_api_core_exceptions.Conflict = type('Conflict', (Exception,), {})
+_api_core_exceptions.NotFound = type('NotFound', (Exception,), {})
 _gcs = _install_module('google.cloud.storage')
 _gcs.Client = MagicMock
 

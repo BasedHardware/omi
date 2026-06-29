@@ -91,9 +91,12 @@ for mod_name in [
     "sentry_sdk",
     "database.redis_db",
     "database.auth",
+    "utils.chat",
 ]:
     if mod_name not in sys.modules:
         _stub_module(mod_name)
+
+sys.modules["utils.chat"].initial_message_util = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]

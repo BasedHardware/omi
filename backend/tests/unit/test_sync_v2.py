@@ -1283,6 +1283,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.http_client',
             'utils.request_validation',
             'utils.sync',
+            'utils.sync.files',
             'utils.sync.playback',
             'utils.speaker_assignment',
             'utils.speaker_identification',
@@ -1339,6 +1340,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.byok'].get_byok_keys = MagicMock(return_value={})
         sys.modules['utils.analytics'].record_usage = MagicMock()
         sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+        sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
         sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
         sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
@@ -1773,6 +1775,7 @@ class TestV2EndpointExecution:
             'utils.http_client',
             'utils.request_validation',
             'utils.sync',
+            'utils.sync.files',
             'utils.sync.playback',
             'utils.speaker_assignment',
             'utils.speaker_identification',
@@ -1817,6 +1820,7 @@ class TestV2EndpointExecution:
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
         sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
+        sys.modules['utils.sync'].files = sys.modules['utils.sync.files']
         sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
         sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})

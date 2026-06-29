@@ -1116,6 +1116,7 @@ class TestVoiceMessageRuntimeErrorHandling:
         sys.modules['models.chat'].MessageConversation = MagicMock()
         sys.modules['models.conversation'].Conversation = MagicMock()
         sys.modules['models.notification_message'].NotificationMessage = MagicMock()
+        sys.modules['models.app'].App = MagicMock()
         sys.modules['models.app'].UsageHistoryType = MagicMock()
         sys.modules['models.transcript_segment'].TranscriptSegment = MagicMock()
 
