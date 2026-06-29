@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 MARKERS = ("TO" "DO", "FIX" "ME", "HA" "CK")
-MARKER_RE = re.compile(r"\b(" + "|".join(MARKERS) + r")\b")
+MARKER_RE = re.compile(r"\b(" + "|".join(MARKERS) + r")\b", re.IGNORECASE)
 
 EXCLUDED_DIR_NAMES = {
     ".build",
@@ -119,7 +119,7 @@ def count_markers(root: Path, raw: bool) -> tuple[dict[str, int], dict[str, int]
 
         file_counts[relative_path] = len(matches)
         for marker in matches:
-            marker_counts[marker] += 1
+            marker_counts[marker.upper()] += 1
 
     return marker_counts, file_counts
 
