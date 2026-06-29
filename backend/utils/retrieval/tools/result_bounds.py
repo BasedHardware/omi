@@ -24,16 +24,20 @@ def cap_items_for_llm(items: list, max_items: int):
     return list(items), total_found, False
 
 
-def bounded_result(result: str, total_found: int, truncated: bool, noun: str = "results") -> str:
+def bounded_result(result: str, truncated: bool, noun: str = "results") -> str:
     """Apply a hard character budget and, when the set was truncated, append a note telling the
-    model to summarize what it has and to offer to narrow, so it answers instead of freezing."""
+    model to summarize what it has and to offer to narrow, so it answers instead of freezing.
+
+    The note deliberately does not state a total count: callers may pass an already-paginated
+    page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
+    """
     if len(result) > MAX_RESULT_CHARS:
         result = result[:MAX_RESULT_CHARS]
         truncated = True
     if truncated:
         result += (
-            f"\n\n[This query matched {total_found} {noun}; only the most relevant are shown to stay "
-            f"within limits. Summarize what is shown and tell the user they can ask about a narrower "
-            f"topic or date range for complete detail.]"
+            f"\n\n[Only the most relevant {noun} are shown here to stay within limits; more may exist. "
+            f"Summarize what is shown and tell the user they can ask about a narrower topic or date range, "
+            f"or page with the offset, for the rest.]"
         )
     return result
