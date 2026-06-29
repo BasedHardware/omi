@@ -26,6 +26,7 @@ from models.conversation import (
 from models.conversation_enums import (
     CategoryEnum,
     ConversationSource,
+    ConversationStatus,
     ExternalIntegrationConversationSource,
 )
 from models.geolocation import Geolocation
@@ -57,6 +58,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+FROM_SEGMENTS_CLAIM_STALE_AFTER = timedelta(minutes=15)
 
 _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
 
@@ -1077,6 +1079,20 @@ def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
     return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
 
 
+def _is_stale_from_segments_claim(conversation: dict, client_session_id: str, now: datetime) -> bool:
+    external_data = conversation.get('external_data') or {}
+    if external_data.get('from_segments_client_session_id') != client_session_id:
+        return False
+    if conversation.get('status') != ConversationStatus.processing.value:
+        return False
+    claimed_at = external_data.get('from_segments_claimed_at')
+    if not isinstance(claimed_at, datetime):
+        return False
+    if claimed_at.tzinfo is None:
+        claimed_at = claimed_at.replace(tzinfo=timezone.utc)
+    return now - claimed_at > FROM_SEGMENTS_CLAIM_STALE_AFTER
+
+
 def _conversation_response_from_data(conversation: dict) -> ConversationResponse:
     status = conversation.get('status') or 'completed'
     if hasattr(status, 'value'):
@@ -1161,13 +1177,24 @@ def _create_conversation_from_segments(
         conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
         existing_conversation = conversations_db.get_conversation(uid, conversation_id)
         if existing_conversation:
-            logger.info(
-                "from-segments idempotency hit for uid=%s client_session_id=%s conversation_id=%s",
-                uid,
-                request.client_session_id,
-                conversation_id,
-            )
-            return _conversation_response_from_data(existing_conversation)
+            if _is_stale_from_segments_claim(
+                existing_conversation, request.client_session_id, datetime.now(timezone.utc)
+            ):
+                logger.warning(
+                    "from-segments idempotency stale claim for uid=%s client_session_id=%s conversation_id=%s; retrying",
+                    uid,
+                    request.client_session_id,
+                    conversation_id,
+                )
+                conversations_db.delete_conversation(uid, conversation_id)
+            else:
+                logger.info(
+                    "from-segments idempotency hit for uid=%s client_session_id=%s conversation_id=%s",
+                    uid,
+                    request.client_session_id,
+                    conversation_id,
+                )
+                return _conversation_response_from_data(existing_conversation)
 
     # Create conversation object with transcript segments
     if conversation_id:
@@ -1183,8 +1210,21 @@ def _create_conversation_from_segments(
             structured=Structured(),
             external_data={
                 'from_segments_client_session_id': request.client_session_id,
+                'from_segments_claimed_at': datetime.now(timezone.utc),
             },
+            status=ConversationStatus.processing,
         )
+        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.dict()):
+            existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+            if existing_conversation:
+                logger.info(
+                    "from-segments idempotency concurrent hit for uid=%s client_session_id=%s conversation_id=%s",
+                    uid,
+                    request.client_session_id,
+                    conversation_id,
+                )
+                return _conversation_response_from_data(existing_conversation)
+            raise HTTPException(status_code=409, detail="Conversation creation already in progress")
     else:
         create_conversation_obj = CreateConversation(
             transcript_segments=transcript_segments,
@@ -1196,8 +1236,13 @@ def _create_conversation_from_segments(
         )
 
     # Process conversation
-    conversation = process_conversation(uid, language_code, create_conversation_obj)
-    if request.client_session_id and not conversations_db.get_conversation(uid, conversation.id):
+    try:
+        conversation = process_conversation(uid, language_code, create_conversation_obj)
+    except Exception:
+        if request.client_session_id and conversation_id:
+            conversations_db.delete_conversation(uid, conversation_id)
+        raise
+    if request.client_session_id:
         logger.info(
             "from-segments idempotency persisted returned conversation uid=%s client_session_id=%s conversation_id=%s",
             uid,

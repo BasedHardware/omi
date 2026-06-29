@@ -203,6 +203,52 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertNil(session)
     }
 
+    func testCompactsOversizedLocalUploadWithoutDroppingText() {
+        let segments = (0..<750).map { index in
+            APIClient.UploadSegment(
+                text: "segment-\(index)",
+                speaker: index.isMultiple(of: 2) ? "SPEAKER_00" : "SPEAKER_01",
+                speaker_id: index.isMultiple(of: 2) ? 0 : 1,
+                is_user: index.isMultiple(of: 2),
+                person_id: nil,
+                start: Double(index),
+                end: Double(index) + 0.5
+            )
+        }
+
+        let compacted = ConversationFinalizationService.compactSegmentsForBackendLimit(segments)
+
+        XCTAssertEqual(compacted.count, 500)
+        XCTAssertEqual(compacted.first?.start, 0)
+        XCTAssertEqual(compacted.last?.end, 749.5)
+        let compactedText = compacted.map(\.text).joined(separator: " ")
+        for index in 0..<750 {
+            XCTAssertTrue(compactedText.contains("segment-\(index)"))
+        }
+        XCTAssertTrue(compacted.contains { $0.speaker == "MIXED" })
+    }
+
+    func testCompactionLeavesBackendSizedUploadsUnchanged() {
+        let segments = (0..<3).map { index in
+            APIClient.UploadSegment(
+                text: "segment-\(index)",
+                speaker: "SPEAKER_00",
+                speaker_id: 0,
+                is_user: true,
+                person_id: "person-1",
+                start: Double(index),
+                end: Double(index) + 0.5
+            )
+        }
+
+        let compacted = ConversationFinalizationService.compactSegmentsForBackendLimit(segments)
+
+        XCTAssertEqual(compacted.count, segments.count)
+        XCTAssertEqual(compacted.map(\.text), segments.map(\.text))
+        XCTAssertEqual(compacted.map(\.speaker), segments.map(\.speaker))
+        XCTAssertEqual(compacted.map(\.person_id), segments.map(\.person_id))
+    }
+
     private func makeServerConversation(status: ConversationStatus) -> ServerConversation {
         let createdAt = Date(timeIntervalSince1970: 1_000)
         return ServerConversation(

@@ -160,13 +160,28 @@ def finalize_conversation(
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
 
+    if conversation.status != ConversationStatus.in_progress:
+        return CreateConversationResponse(conversation=conversation, messages=[])
+
+    claim_updates = {}
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        claim_updates['external_data'] = conversation.external_data
 
-    if conversation.status != ConversationStatus.in_progress:
-        return CreateConversationResponse(conversation=conversation, messages=[])
+    if not conversations_db.claim_conversation_status(
+        uid,
+        conversation.id,
+        ConversationStatus.in_progress,
+        ConversationStatus.processing,
+        extra_updates=claim_updates or None,
+    ):
+        latest = _get_valid_conversation_by_id(uid, conversation_id)
+        latest = deserialize_conversation(latest)
+        return CreateConversationResponse(conversation=latest, messages=[])
+
+    conversation.status = ConversationStatus.processing
 
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation_id:
@@ -177,7 +192,6 @@ def finalize_conversation(
         geolocation = Geolocation(**geolocation)
         conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
     if conversation.status:
         conversations_db.update_conversation_status(uid, conversation.id, conversation.status)

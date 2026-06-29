@@ -10,7 +10,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from types import ModuleType
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault(
@@ -251,6 +251,7 @@ def test_finalize_conversation_processes_target_id_and_clears_matching_redis_poi
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=True) as claim_status,
         patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
         patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
@@ -260,11 +261,15 @@ def test_finalize_conversation_processes_target_id_and_clears_matching_redis_poi
     ):
         response = conv.finalize_conversation('conv-1', uid='test-uid')
 
+    claim_status.assert_called_once_with(
+        'test-uid',
+        'conv-1',
+        ConversationStatus.in_progress,
+        ConversationStatus.processing,
+        extra_updates=None,
+    )
     remove_pointer.assert_called_once_with('test-uid')
-    assert update_status.call_args_list == [
-        call('test-uid', 'conv-1', ConversationStatus.processing),
-        call('test-uid', 'conv-1', ConversationStatus.completed),
-    ]
+    update_status.assert_called_once_with('test-uid', 'conv-1', ConversationStatus.completed)
     process.assert_called_once_with('test-uid', 'en', target, force_process=True)
     assert response.conversation.id == 'conv-1'
     assert response.conversation.status == ConversationStatus.completed
@@ -277,6 +282,7 @@ def test_finalize_conversation_does_not_clear_different_redis_pointer():
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=True),
         patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='newer-conv'),
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
         patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
@@ -287,6 +293,31 @@ def test_finalize_conversation_does_not_clear_different_redis_pointer():
         conv.finalize_conversation('conv-1', uid='test-uid')
 
     remove_pointer.assert_not_called()
+
+
+def test_finalize_conversation_claim_loser_returns_latest_without_side_effects():
+    target = _conversation(status=ConversationStatus.in_progress)
+    latest = _conversation(status=ConversationStatus.processing)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=False) as claim_status,
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
+        patch.object(conv, 'process_conversation') as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
+    ):
+        response = conv.finalize_conversation('conv-1', uid='test-uid')
+
+    claim_status.assert_called_once()
+    get_pointer.assert_not_called()
+    remove_pointer.assert_not_called()
+    update_status.assert_not_called()
+    process.assert_not_called()
+    integrations.assert_not_called()
+    assert response.conversation.status == ConversationStatus.processing
 
 
 def test_finalize_conversation_is_noop_for_completed_conversation():

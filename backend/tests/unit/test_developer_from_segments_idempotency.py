@@ -1,9 +1,9 @@
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -177,6 +177,7 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
         )
 
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock())
+    monkeypatch.setattr(conversations_db, 'create_conversation_if_absent', MagicMock())
     monkeypatch.setattr(developer, 'process_conversation', _process)
 
     response = developer._create_conversation_from_segments('uid1', _request())
@@ -184,11 +185,14 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
     assert response.id == 'random-process-id'
     assert isinstance(captured['conversation'], CreateConversation)
     conversations_db.get_conversation.assert_not_called()
+    conversations_db.create_conversation_if_absent.assert_not_called()
 
 
 def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     captured = {}
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    claim = MagicMock(return_value=True)
+    monkeypatch.setattr(conversations_db, 'create_conversation_if_absent', claim)
     upsert = MagicMock()
     monkeypatch.setattr(conversations_db, 'upsert_conversation', upsert)
 
@@ -205,17 +209,21 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
     assert response.id == expected_id
     assert isinstance(captured['conversation'], Conversation)
     assert captured['conversation'].id == expected_id
-    assert captured['conversation'].external_data == {'from_segments_client_session_id': 'local-session-1'}
-    assert conversations_db.get_conversation.call_args_list == [
-        call('uid1', expected_id),
-        call('uid1', expected_id),
-    ]
+    assert captured['conversation'].external_data['from_segments_client_session_id'] == 'local-session-1'
+    assert isinstance(captured['conversation'].external_data['from_segments_claimed_at'], datetime)
+    assert captured['conversation'].status == ConversationStatus.completed
+    conversations_db.get_conversation.assert_called_once_with('uid1', expected_id)
+    claim.assert_called_once()
+    assert claim.call_args.args[0] == 'uid1'
+    assert claim.call_args.args[1]['id'] == expected_id
+    assert claim.call_args.args[1]['status'] == ConversationStatus.processing
     upsert.assert_called_once()
 
 
 def test_client_session_id_persists_when_processor_returns_without_saving(monkeypatch):
     expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
-    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(side_effect=[None, None]))
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(conversations_db, 'create_conversation_if_absent', MagicMock(return_value=True))
     upsert = MagicMock()
     monkeypatch.setattr(conversations_db, 'upsert_conversation', upsert)
 
@@ -249,6 +257,80 @@ def test_client_session_id_retry_returns_existing_without_processing(monkeypatch
     assert response.status == 'processing'
     assert response.discarded is False
     process.assert_not_called()
+
+
+def test_client_session_id_concurrent_claim_loser_returns_existing_without_processing(monkeypatch):
+    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
+    monkeypatch.setattr(
+        conversations_db,
+        'get_conversation',
+        MagicMock(side_effect=[None, {'id': expected_id, 'status': 'processing', 'discarded': False}]),
+    )
+    monkeypatch.setattr(conversations_db, 'create_conversation_if_absent', MagicMock(return_value=False))
+    process = MagicMock()
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
+
+    assert response.id == expected_id
+    assert response.status == 'processing'
+    process.assert_not_called()
+
+
+def test_client_session_id_stale_claim_is_deleted_and_reprocessed(monkeypatch):
+    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
+    stale_claim = {
+        'id': expected_id,
+        'status': 'processing',
+        'discarded': False,
+        'external_data': {
+            'from_segments_client_session_id': 'local-session-1',
+            'from_segments_claimed_at': datetime.now(timezone.utc) - timedelta(minutes=30),
+        },
+    }
+    delete = MagicMock()
+    process = MagicMock(side_effect=lambda _uid, _language, conversation: conversation)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=stale_claim))
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(conversations_db, 'create_conversation_if_absent', MagicMock(return_value=True))
+    monkeypatch.setattr(conversations_db, 'upsert_conversation', MagicMock())
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    response = developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
+
+    assert response.id == expected_id
+    delete.assert_called_once_with('uid1', expected_id)
+    process.assert_called_once()
+
+
+def test_client_session_id_claim_is_released_when_processing_fails(monkeypatch):
+    expected_id = developer._from_segments_conversation_id('uid1', 'local-session-1')
+    delete = MagicMock()
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(conversations_db, 'create_conversation_if_absent', MagicMock(return_value=True))
+    monkeypatch.setattr(conversations_db, 'delete_conversation', delete)
+    monkeypatch.setattr(developer, 'process_conversation', MagicMock(side_effect=RuntimeError('boom')))
+
+    try:
+        developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError('expected processing failure')
+
+    delete.assert_called_once_with('uid1', expected_id)
+
+
+def test_client_session_id_atomic_claim_winner_processes_once(monkeypatch):
+    process = MagicMock(side_effect=lambda _uid, _language, conversation: conversation)
+    monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
+    monkeypatch.setattr(conversations_db, 'create_conversation_if_absent', MagicMock(return_value=True))
+    monkeypatch.setattr(conversations_db, 'upsert_conversation', MagicMock())
+    monkeypatch.setattr(developer, 'process_conversation', process)
+
+    developer._create_conversation_from_segments('uid1', _request(client_session_id='local-session-1'))
+
+    process.assert_called_once()
 
 
 def test_client_session_id_aliases_and_trimming():
