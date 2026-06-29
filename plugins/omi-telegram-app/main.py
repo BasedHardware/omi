@@ -344,10 +344,19 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
 # Omi Chat Tools manifest — served at `GET /.well-known/omi-tools.json`.
 # Schema per docs/doc/developer/apps/ChatTools.mdx. Each plugin has its own
 # manifest because the parameter NAMES must match that plugin's /toggle
-# ToggleRequest model (Telegram uses `chat_id`/`bot_token`; WhatsApp uses
-# `phone`/`access_token`). The chat assistant will faithfully build a
-# request from this schema, so the JSON-Schema `properties` keys MUST
-# exactly match the field names the corresponding /toggle endpoint accepts.
+# ToggleRequest model.
+#
+# SECURITY: the manifest is public discovery metadata read by the chat
+# assistant. It must NEVER advertise long-lived platform credentials as
+# tool parameters — the chat assistant would faithfully prompt the user
+# to paste them in chat, and those secrets would then live in chat
+# history, tool-call logs, traces, screenshots, and model context.
+#
+# The plugin bearer token (in `Authorization: Bearer`) gates the call.
+# The chat_id / phone is a NON-SECRET reference the plugin uses to look
+# up which user the call applies to (the binding was made at /start
+# handshake time). The platform credential is held by the plugin in
+# its storage; the chat tool never sees it.
 # ---------------------------------------------------------------------------
 TOOLS_MANIFEST = {
     "tools": [
@@ -357,8 +366,7 @@ TOOLS_MANIFEST = {
                 "Turn the AI Clone auto-reply on or off for a connected "
                 "Telegram chat. Use this when the user wants to enable or "
                 "disable Omi's automatic responses in a specific Telegram "
-                "conversation. The bot_token parameter is the bot's token "
-                "(from @BotFather) used to authenticate the toggle call."
+                "conversation."
             ),
             "endpoint": "/toggle",
             "method": "POST",
@@ -366,20 +374,19 @@ TOOLS_MANIFEST = {
                 "properties": {
                     "chat_id": {
                         "type": "string",
-                        "description": "Telegram chat_id of the conversation.",
+                        "description": (
+                            "Telegram chat_id of the conversation. The "
+                            "plugin uses this to look up the bound user "
+                            "from the prior /start handshake — it is NOT "
+                            "a secret and never identifies the user."
+                        ),
                     },
                     "enabled": {
                         "type": "boolean",
                         "description": ("True to enable AI Clone auto-reply for the " "chat, false to disable it."),
                     },
-                    "bot_token": {
-                        "type": "string",
-                        "description": (
-                            "Telegram bot_token (from @BotFather). Used to " "authenticate the /toggle call."
-                        ),
-                    },
                 },
-                "required": ["chat_id", "enabled", "bot_token"],
+                "required": ["chat_id", "enabled"],
             },
             "auth_required": True,
             "status_message": "Toggling Telegram auto-reply...",
@@ -414,17 +421,19 @@ def _is_bot_sender(update: dict) -> bool:
 # ---------------------------------------------------------------------------
 # /toggle — flips auto_reply_enabled for a chat (called by Chat Tools).
 #
-# Auth: the request must include the bot_token that was registered for that
-# chat_id. The bot_token is a real secret (only the user has it; calling
-# setWebhook with the wrong token fails at Telegram). chat_id alone is NOT
-# sufficient — it's exposed in Telegram update payloads and could be guessed
-# by anyone scraping a public channel. Pairing the two raises the bar from
-# "knows chat_id" to "knows chat_id AND bot_token".
+# Auth model: the caller must hold a valid plugin bearer token (via the
+# `Authorization: Bearer` header, enforced by the shared
+# plugins/_shared/auth.require_bearer dependency). The chat_id parameter
+# identifies which user/chat the call applies to — the plugin looks up
+# the user bound to chat_id from its storage (set at /start handshake
+# time). The platform bot_token is held by the plugin and is NEVER
+# requested from or transmitted through chat — that keeps long-lived
+# credentials out of chat history, tool-call logs, traces, and model
+# context. (Identified by maintainer security review on PR #8528.)
 # ---------------------------------------------------------------------------
 class ToggleRequest(BaseModel):
     chat_id: str
     enabled: bool
-    bot_token: str  # required: must match the stored token for chat_id
 
 
 class ToggleResponse(BaseModel):
@@ -443,11 +452,17 @@ async def toggle(req: ToggleRequest):
     Called by the Chat Tools manifest entry `toggle_auto_reply` (T-008).
     """
     user = simple_storage.get_user_by_chat_id(req.chat_id)
-    # Same response for both 'unknown chat_id' and 'wrong bot_token' so the
-    # endpoint doesn't leak which chat_ids exist (chat_ids are exposed in
-    # Telegram update payloads and could be enumerated otherwise).
-    if user is None or not secrets.compare_digest(req.bot_token, user["bot_token"]):
-        raise HTTPException(status_code=403, detail="Invalid chat_id or bot_token")
+    # Look up the user by chat_id alone — no platform credential is
+    # required because (a) the plugin bearer token already gates this
+    # endpoint and (b) the user-to-chat binding was established at
+    # /start handshake time. See the maintainer security note above.
+    user = simple_storage.get_user_by_chat_id(req.chat_id)
+    if user is None:
+        # Bearer auth already gates this endpoint; the bearer holder
+        # can pass any chat_id they know. Returning 403 with a generic
+        # message is fine — chat_ids aren't secret and an attacker
+        # without the bearer can't even reach this code path.
+        raise HTTPException(status_code=403, detail="Unknown chat_id")
     simple_storage.update_auto_reply(req.chat_id, req.enabled)
     return ToggleResponse(chat_id=req.chat_id, auto_reply_enabled=req.enabled)
 

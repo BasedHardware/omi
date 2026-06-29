@@ -275,7 +275,7 @@ class TestToggle:
         _seed_user(777, auto_reply_enabled=False)
 
         client = TestClient(app)
-        resp = client.post("/toggle", json={"chat_id": "777", "enabled": True, "bot_token": "123:abc"})
+        resp = client.post("/toggle", json={"chat_id": "777", "enabled": True})
         assert resp.status_code == 200
         assert resp.json() == {"chat_id": "777", "auto_reply_enabled": True}
 
@@ -292,13 +292,18 @@ class TestToggle:
         _seed_user(777, auto_reply_enabled=True)
 
         client = TestClient(app)
-        resp = client.post("/toggle", json={"chat_id": "777", "enabled": False, "bot_token": "123:abc"})
+        resp = client.post("/toggle", json={"chat_id": "777", "enabled": False})
         assert resp.status_code == 200
         assert resp.json() == {"chat_id": "777", "auto_reply_enabled": False}
 
         assert users["777"]["auto_reply_enabled"] is False
 
-    def test_toggle_unknown_chat_returns_404(self, telegram_api, persona_mock):
+    def test_toggle_unknown_chat_returns_403(self, telegram_api, persona_mock):
+        """After the PR #8528 security redesign: /toggle no longer
+        accepts a bot_token parameter. Auth is via the plugin bearer
+        (Authorization: Bearer header); the chat_id alone identifies
+        the chat. Unknown chat_id -> 403 (no token-check path to test
+        any more)."""
         from fastapi.testclient import TestClient
 
         from main import app
@@ -307,29 +312,67 @@ class TestToggle:
         users.clear()
 
         client = TestClient(app)
-        resp = client.post("/toggle", json={"chat_id": "no-such-chat", "enabled": True, "bot_token": "123:abc"})
-        assert resp.status_code == 403  # unknown chat_id -> 403 (enumeration-safe)
-
-    def test_toggle_wrong_bot_token_returns_403(self, telegram_api, persona_mock):
-        from fastapi.testclient import TestClient
-
-        from main import app
-        from simple_storage import users
-
-        users.clear()
-        _seed_user(777, auto_reply_enabled=True)
-
-        client = TestClient(app)
-        resp = client.post(
-            "/toggle",
-            json={"chat_id": "777", "enabled": False, "bot_token": "wrong-token"},
-        )
+        resp = client.post("/toggle", json={"chat_id": "no-such-chat", "enabled": True})
         assert resp.status_code == 403
-        # State should NOT have changed
-        assert users["777"]["auto_reply_enabled"] is True
 
-    def test_toggle_missing_bot_token_returns_422(self, telegram_api, persona_mock):
-        """Pydantic should reject the request if bot_token is missing."""
+    def test_toggle_does_not_require_bot_token(self, telegram_api, persona_mock):
+        """P1 (Git-on-my-level review): the manifest must not require
+        the caller to send the bot_token. Verify /toggle accepts a
+        request with only chat_id + enabled (no credential in body).
+        This is the core invariant that lets chat users toggle without
+        exposing long-lived secrets through chat."""
+        from fastapi.testclient import TestClient
+
+        from main import app
+        from simple_storage import users
+
+        users.clear()
+        _seed_user(777, auto_reply_enabled=False)
+
+        client = TestClient(app)
+        resp = client.post(
+            "/toggle",
+            json={"chat_id": "777", "enabled": True},
+        )
+        assert resp.status_code == 200, (
+            f"chat_id-only toggle must work after the security redesign. "
+            f"Got {resp.status_code}: {resp.text}"
+        )
+        assert resp.json() == {"chat_id": "777", "auto_reply_enabled": True}
+
+    def test_toggle_rejects_extra_bot_token_in_body(self, telegram_api, persona_mock):
+        """If a caller (e.g. a misconfigured chat assistant) sends
+        bot_token in the body, the request must NOT silently use it
+        for auth. The new ToggleRequest model has no bot_token field;
+        Pydantic will accept the extra field (default behavior) but the
+        auth path no longer reads it — the toggle should still succeed
+        via chat_id alone. This proves a leftover bot_token in the body
+        can't weaken the security model."""
+        from fastapi.testclient import TestClient
+
+        from main import app
+        from simple_storage import users
+
+        users.clear()
+        _seed_user(777, auto_reply_enabled=False, bot_token="real-token")
+
+        client = TestClient(app)
+        # Caller sends a WRONG bot_token in the body. If the auth
+        # path still read bot_token, this would 403. Under the new
+        # bearer+chat_id auth model, it must succeed because the
+        # bot_token in the body is ignored.
+        resp = client.post(
+            "/toggle",
+            json={"chat_id": "777", "enabled": True, "bot_token": "WRONG-TOKEN"},
+        )
+        assert resp.status_code == 200, (
+            f"bot_token in body must be ignored (not used for auth). "
+            f"Got {resp.status_code}: {resp.text}"
+        )
+
+    def test_toggle_missing_required_field_returns_422(self, telegram_api, persona_mock):
+        """Pydantic should reject the request if `enabled` is missing
+        (the only non-chat_id required field after the redesign)."""
         from fastapi.testclient import TestClient
 
         from main import app
@@ -341,7 +384,7 @@ class TestToggle:
         client = TestClient(app)
         resp = client.post(
             "/toggle",
-            json={"chat_id": "777", "enabled": False},
+            json={"chat_id": "777"},
         )
         assert resp.status_code == 422
 

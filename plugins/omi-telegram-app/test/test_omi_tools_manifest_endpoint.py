@@ -91,9 +91,44 @@ class TestOmiToolsManifestEndpoint:
         r = client.get("/.well-known/omi-tools.json")
         tool = next(t for t in r.json()["tools"] if t["name"] == "toggle_auto_reply")
         # Per-plugin manifest: must match Telegram's ToggleRequest fields
-        # EXACTLY (chat_id, enabled, bot_token). The chat assistant builds the
-        # request from this schema, so a mismatch = 422.
-        assert set(tool["parameters"]["required"]) == {"chat_id", "enabled", "bot_token"}
+        # EXACTLY (chat_id, enabled). The chat assistant builds the request
+        # from this schema, so a mismatch = 422.
+        #
+        # SECURITY (PR #8528 review): the manifest must NOT advertise
+        # long-lived platform credentials like bot_token as tool
+        # parameters — the chat assistant would faithfully prompt the
+        # user to paste them in chat, putting the secret into chat
+        # history / tool-call logs / traces / model context. The plugin
+        # bearer token (in Authorization header) gates the call; the
+        # chat_id is a non-secret reference to the user/chat.
+        assert set(tool["parameters"]["required"]) == {"chat_id", "enabled"}
+
+    def test_manifest_does_not_advertise_bot_token(self, client):
+        """P1 (Git-on-my-level review): the manifest must NEVER advertise
+        the bot_token. The chat assistant would faithfully prompt the
+        user to paste it in chat, and that secret would persist in
+        chat history, tool-call logs, traces, screenshots, and model
+        context."""
+        r = client.get("/.well-known/omi-tools.json")
+        tool = next(t for t in r.json()["tools"] if t["name"] == "toggle_auto_reply")
+        params = tool["parameters"]
+        assert "bot_token" not in params["properties"], (
+            "Manifest advertises bot_token as a tool parameter. The chat "
+            "assistant would prompt the user to paste their Telegram "
+            "bot token in chat — that secret would then live in chat "
+            "history, tool-call logs, traces, screenshots, and model "
+            "context. Use the plugin bearer + chat_id instead."
+        )
+        assert "bot_token" not in params["required"]
+        # Make sure no required field sneaks back in under another name
+        # (defense against future regressions that re-add a credential
+        # field with a different key).
+        for required_field in params["required"]:
+            assert required_field not in {"bot_token", "access_token", "token", "secret", "password"}, (
+                f"Manifest requires {required_field!r} — looks like a "
+                f"credential field. Long-lived secrets should never flow "
+                f"through chat; gate via Authorization: Bearer."
+            )
 
     def test_manifest_parameters_match_toggle_request(self, client):
         """The JSON-Schema `properties` keys MUST be the same as the
