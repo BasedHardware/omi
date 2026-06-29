@@ -7,18 +7,31 @@ import os.log
 // `ssh://`, or any custom scheme, so we must gate this client-side.
 private enum DeepLinkSafeScheme: String { case https, http }
 
-// Allowlist of expected deep-link hostnames. The plugin deep links are
-// `https://t.me/<bot>?start=<token>` (Telegram) or `https://wa.me/<phone>?text=…`
-// (WhatsApp). Anything else is rejected.
+// Allowlist of expected deep-link hostnames per plugin. The plugin deep
+// links are `https://t.me/<bot>?start=<token>` (Telegram) or
+// `https://wa.me/<phone>?text=…` (WhatsApp). Anything else is rejected.
 //
-// (P1 fix verification by sub-agent: `URL(string: "https://t.me/…")?.host`
-// returns the literal substring `t.me` — not the registrable suffix `me` —
-// so a naive `RawRepresentable.init(rawValue: host)` match would reject every
-// legitimate link. We use a `Set<String>` of literal hostnames instead.)
+// (P1 fix from code review: `URL(string: "https://t.me/…")?.host` returns the
+// literal substring `t.me` — not the registrable suffix `me` — so a naive
+// `RawRepresentable.init(rawValue: host)` match rejects every legitimate
+// link. We use a per-plugin lookup instead, and the host check is bound
+// to the active plugin: a `t.me` URL in a WhatsApp connect sheet is
+// rejected, and vice versa, so a compromised plugin service can't
+// phish by returning the other platform's host.)
 private enum DeepLinkSafeHost {
     static let telegram = "t.me"
     static let whatsapp = "wa.me"
-    static let allowed: Set<String> = [telegram, whatsapp]
+
+    /// Hostname expected for the given plugin's deep links. Returning
+    /// `nil` for any other plugin would be a programming error — we
+    /// only ever call this with the two plugins above, but the function
+    /// is total so the compiler is happy.
+    static func expected(for plugin: AIPlugin) -> String? {
+        switch plugin {
+        case .telegram: return telegram
+        case .whatsapp: return whatsapp
+        }
+    }
 }
 
 private let logger = Logger(subsystem: "omi.desktop", category: "ai-clone")
@@ -302,9 +315,9 @@ struct ConnectSheet: View {
         // P1 fix (cubic): a compromised plugin service could return a deep link
         // with a hostile scheme/host (e.g. `file://`, `ssh://`, or a phishing
         // domain) and `NSWorkspace.shared.open` would happily launch it.
-        // The actual safety check is in `isSafeDeepLink` below so it can be
-        // unit-tested without going through NSWorkspace.
-        guard ConnectSheet.isSafeDeepLink(s) else {
+        // The actual safety check is in `isSafeDeepLink(_:plugin:)` below so
+        // it can be unit-tested without going through NSWorkspace.
+        guard ConnectSheet.isSafeDeepLink(s, plugin: plugin) else {
             logger.warning("Refusing to open deep link with unsafe URL: \(s)")
             return
         }
@@ -315,14 +328,18 @@ struct ConnectSheet: View {
     }
 
     /// Returns true iff the URL is one we're willing to hand to
-    /// `NSWorkspace.shared.open`. Pure function — extracted so the gate can
-    /// be unit-tested without launching any actual application.
-    static func isSafeDeepLink(_ s: String) -> Bool {
+    /// `NSWorkspace.shared.open` for the given plugin. The host check is
+    /// bound to the plugin: a Telegram deep link (`t.me`) is only valid
+    /// when connecting the Telegram plugin, etc. — a phishing attack
+    /// returning a `t.me` URL inside a WhatsApp connect sheet is rejected.
+    /// Pure function — extracted so the gate can be unit-tested without
+    /// launching any actual application.
+    static func isSafeDeepLink(_ s: String, plugin: AIPlugin) -> Bool {
         guard let url = URL(string: s),
               let scheme = url.scheme?.lowercased(),
               DeepLinkSafeScheme(rawValue: scheme) != nil,
               let host = url.host?.lowercased(),
-              DeepLinkSafeHost.allowed.contains(host)
+              host == DeepLinkSafeHost.expected(for: plugin)
         else { return false }
         return true
     }
