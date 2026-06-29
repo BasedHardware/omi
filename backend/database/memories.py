@@ -258,9 +258,7 @@ def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client=Non
 
 
 def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client=None):
-    _update_memory_if_exists(
-        uid, memory_id, {'kg_extracted': True}, 'kg_extracted', firestore_client=firestore_client
-    )
+    _update_memory_if_exists(uid, memory_id, {'kg_extracted': True}, 'kg_extracted', firestore_client=firestore_client)
 
 
 def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_client=None):

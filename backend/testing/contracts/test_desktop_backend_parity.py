@@ -199,13 +199,12 @@ def test_python_memory_scoring_matches_shared_fixture():
     assert MemoryDB.calculate_score(manual_memory) == data["scoring"]["manual_added_interesting"]
 
 
-def test_python_memory_query_and_filter_semantics(monkeypatch):
+def test_python_memory_query_and_filter_semantics():
     data = fixture("memories.json")["query"]
     active = {"id": "active", "content": "active", "user_review": None, "invalid_at": None}
     rejected = {"id": "rejected", "content": "rejected", "user_review": False, "invalid_at": None}
     invalidated = {"id": "invalidated", "content": "invalidated", "user_review": None, "invalid_at": "2026-01-03"}
     fake_db = FakeQuery([active, rejected, invalidated])
-    monkeypatch.setattr(memories_db, "db", fake_db)
 
     result = memories_db.get_memories(
         "contract-user-8547",
@@ -214,6 +213,7 @@ def test_python_memory_query_and_filter_semantics(monkeypatch):
         categories=data["categories"],
         start_date=datetime.fromisoformat(data["start_date"]),
         end_date=datetime.fromisoformat(data["end_date"]),
+        firestore_client=fake_db,
     )
 
     filters = [filter_parts(f) for f in fake_db.filters]
@@ -226,12 +226,11 @@ def test_python_memory_query_and_filter_semantics(monkeypatch):
     assert [memory["id"] for memory in result] == ["active"]
 
     fake_db = FakeQuery([active, rejected, invalidated])
-    monkeypatch.setattr(memories_db, "db", fake_db)
-    result = memories_db.get_memories("contract-user-8547", include_invalidated=True)
+    result = memories_db.get_memories("contract-user-8547", include_invalidated=True, firestore_client=fake_db)
     assert [memory["id"] for memory in result] == ["active", "invalidated"]
 
 
-def test_python_public_memories_treat_missing_visibility_as_public(monkeypatch):
+def test_python_public_memories_treat_missing_visibility_as_public():
     fake_db = FakeQuery(
         [
             {"id": "missing-visibility", "content": "legacy public"},
@@ -239,9 +238,8 @@ def test_python_public_memories_treat_missing_visibility_as_public(monkeypatch):
             {"id": "private", "content": "private", "visibility": "private"},
         ]
     )
-    monkeypatch.setattr(memories_db, "db", fake_db)
 
-    result = memories_db.get_user_public_memories("contract-user-8547", limit=5, offset=2)
+    result = memories_db.get_user_public_memories("contract-user-8547", limit=5, offset=2, firestore_client=fake_db)
 
     assert [memory["id"] for memory in result] == ["missing-visibility", "public"]
     assert fake_db.orders == [("scoring", "DESCENDING"), ("created_at", "DESCENDING")]
