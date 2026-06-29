@@ -355,3 +355,22 @@ class TestToolRegistration:
 
     def test_write_scope_advertised(self):
         assert 'goals.write' in sse.MCP_SCOPES_SUPPORTED
+
+
+def test_goal_create_rate_limit_not_looser_than_memories():
+    # create_goal is a Firestore write that can retire the oldest active goal once the user is at the
+    # active-goal cap, so it sits behind with_rate_limit(..., "goals:write"). That policy must exist
+    # (or the dependency raises) and must not be easier to spam than memories:create (David on #8480).
+    import importlib.util
+
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+    spec = importlib.util.spec_from_file_location(
+        'rate_limit_config_under_test', os.path.join(backend_dir, 'utils', 'rate_limit_config.py')
+    )
+    rlc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rlc)
+
+    assert 'goals:write' in rlc.RATE_POLICIES
+    goals_max, goals_window = rlc.RATE_POLICIES['goals:write']
+    mem_max, mem_window = rlc.RATE_POLICIES['memories:create']
+    assert goals_max / goals_window <= mem_max / mem_window

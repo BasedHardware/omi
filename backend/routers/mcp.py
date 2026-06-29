@@ -584,7 +584,10 @@ def _goal_write_error(exc: Exception) -> HTTPException:
 
 
 @router.post("/v1/mcp/goals", tags=["mcp"])
-def create_goal(body: McpCreateGoal, uid: str = Depends(get_uid_from_mcp_api_key)):
+def create_goal(
+    body: McpCreateGoal,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "goals:write")),
+):
     logger.info(f"create_goal {uid} type={body.goal_type}")
     try:
         return mcp_goals.create_goal(
