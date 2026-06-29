@@ -143,6 +143,47 @@ def process_in_progress_conversation(
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
+@router.post(
+    '/v1/conversations/{conversation_id}/finalize', response_model=CreateConversationResponse, tags=['conversations']
+)
+def finalize_conversation(
+    conversation_id: str,
+    request: ProcessConversationRequest = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
+):
+    """Finalize exactly one backend conversation.
+
+    Unlike POST /v1/conversations, this does not operate on the user's Redis
+    "current in-progress" pointer, so desktop retry/rotation cannot accidentally
+    finalize a newer recording.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation)
+
+    if request and request.calendar_meeting_context:
+        if not conversation.external_data:
+            conversation.external_data = {}
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+
+    if conversation.status != ConversationStatus.in_progress:
+        return CreateConversationResponse(conversation=conversation, messages=[])
+
+    current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+    if current_in_progress_id == conversation_id:
+        redis_db.remove_in_progress_conversation_id(uid)
+
+    geolocation = redis_db.get_cached_user_geolocation(uid)
+    if geolocation:
+        geolocation = Geolocation(**geolocation)
+        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+    conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
+    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
+
+    return CreateConversationResponse(conversation=conversation, messages=messages)
+
+
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
     conversation_id: str,

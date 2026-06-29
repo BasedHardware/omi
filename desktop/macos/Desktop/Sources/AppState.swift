@@ -648,8 +648,17 @@ class AppState: ObservableObject {
       Task { @MainActor in
         if self.isTranscribing {
           log("App terminating - stopping transcription (backend handles conversation)")
+          let sessionId = self.currentSessionId
           self.stopAudioCapture()
-          self.clearTranscriptionState()
+          if let sessionId {
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+          }
+          self.clearTranscriptionState(
+            finalizationReason: .userStop,
+            runFinalizer: false,
+            allowCloudForceProcess: false,
+            finishSession: false
+          )
         }
       }
     }
@@ -665,8 +674,17 @@ class AppState: ObservableObject {
         self.wasTranscribingBeforeSleep = self.isTranscribing
         if self.isTranscribing {
           log("Computer sleeping - stopping transcription (backend handles conversation)")
+          let sessionId = self.currentSessionId
           self.stopAudioCapture()
-          self.clearTranscriptionState()
+          if let sessionId {
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+          }
+          self.clearTranscriptionState(
+            finalizationReason: .userStop,
+            runFinalizer: false,
+            allowCloudForceProcess: false,
+            finishSession: false
+          )
         }
         // Flush final sync changes before sleep
         await AgentSyncService.shared.stop()
@@ -1728,7 +1746,8 @@ class AppState: ObservableObject {
             source: currentConversationSource.rawValue,
             language: effectiveLanguage,
             timezone: TimeZone.current.identifier,
-            inputDeviceName: recordingInputDeviceName
+            inputDeviceName: recordingInputDeviceName,
+            finalizationStrategy: useLocalSTT ? .localSegments : .cloudReconcile
           )
           await MainActor.run {
             self.currentSessionId = sessionId
@@ -1765,9 +1784,27 @@ class AppState: ObservableObject {
         Task { @MainActor in
           guard let self = self, self.isTranscribing else { return }
           log("Transcription: 4-hour limit reached - restarting session")
-          // Stop and restart (WebSocket close triggers backend conversation processing)
+          let sessionId = self.currentSessionId
+          // Stop, durably queue finalization, and restart.
           self.stopAudioCapture()
-          self.clearTranscriptionState()
+          if let sessionId {
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
+          }
+          self.clearTranscriptionState(
+            finalizationReason: .maxDurationRotation,
+            runFinalizer: false,
+            allowCloudForceProcess: false,
+            finishSession: false
+          )
+          if let sessionId {
+            Task {
+              await ConversationFinalizationService.shared.finalizeSession(
+                id: sessionId,
+                reason: .maxDurationRotation,
+                allowCloudForceProcess: false
+              )
+            }
+          }
           self.startTranscription()
         }
       }
@@ -2122,27 +2159,26 @@ class AppState: ObservableObject {
       let sys = localSystemService
       localMicService = nil
       localSystemService = nil
-      let uploadSessionId = currentSessionId
       Task { @MainActor in
         self.stopAudioCapture()
         await mic?.finish()
         await sys?.finish()
-        self.clearTranscriptionState()
+        self.clearTranscriptionState(finalizationReason: .userStop, allowCloudForceProcess: false)
         self.silentMicFallbackInProgress = false
-        // Upload the on-device transcript so the conversation syncs + gets memories/summaries.
-        if let uploadSessionId { await self.uploadLocalSession(uploadSessionId) }
       }
       return
     }
 
     // Capture session metadata BEFORE clearing state (clearTranscriptionState sets sessionId to nil)
     let capturedSessionId = currentSessionId
-    let capturedStartTime = recordingStartTime
-    let capturedBackendConversationId = currentBackendConversationId
     let generationAtStop = recordingGeneration
 
     stopAudioCapture()
-    clearTranscriptionState()
+    clearTranscriptionState(
+      finalizationReason: .userStop,
+      runFinalizer: false,
+      allowCloudForceProcess: false
+    )
     silentMicFallbackInProgress = false
 
     // After WS close, the Python backend processes the conversation automatically.
@@ -2159,50 +2195,12 @@ class AppState: ObservableObject {
         return
       }
 
-      do {
-        if let conversation = try await APIClient.shared.forceProcessConversation() {
-          // Prefer the exact backend conversation id announced by /v4/listen; fall back to
-          // timestamp/source matching for older backend sessions that did not emit the event.
-          if let sessionId = capturedSessionId,
-             let backendConversationId = capturedBackendConversationId,
-             DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
-               id: conversation.id,
-               boundBackendId: backendConversationId,
-               status: conversation.status,
-               source: conversation.source) {
-            try? await TranscriptionStorage.shared.markSessionCompleted(
-              id: sessionId, backendId: conversation.id)
-            log("Transcription: Force-processed bound conversation \(conversation.id), session \(sessionId) completed")
-          } else if let sessionId = capturedSessionId, let startTime = capturedStartTime,
-                    capturedBackendConversationId == nil,
-                    DesktopConversationMatchPolicy.matchesDesktopConversation(
-              startedAt: conversation.startedAt,
-              source: conversation.source,
-              sessionStartedAt: startTime) {
-            try? await TranscriptionStorage.shared.markSessionCompleted(
-              id: sessionId, backendId: conversation.id)
-            log("Transcription: Force-processed conversation \(conversation.id), session \(sessionId) completed")
-          } else if let sessionId = capturedSessionId, let startTime = capturedStartTime {
-            // Force-process returned a different conversation — fall back to reconciliation
-            log("Transcription: Force-processed conversation \(conversation.id) does not match session \(sessionId), reconciling by timestamp")
-            await reconcileSession(
-              sessionId: sessionId,
-              startTime: startTime,
-              backendConversationId: capturedBackendConversationId)
-          }
-        } else {
-          // 404: No in-progress conversation — WS close handler already processed it.
-          // Reconcile by exact backend id when available, otherwise by timestamp/source.
-          if let sessionId = capturedSessionId, let startTime = capturedStartTime {
-            await reconcileSession(
-              sessionId: sessionId,
-              startTime: startTime,
-              backendConversationId: capturedBackendConversationId)
-          }
-        }
-      } catch {
-        // Other error — leave session as pendingUpload for retry service to reconcile
-        logError("Transcription: Force-process failed, retry service will reconcile", error: error)
+      if let sessionId = capturedSessionId {
+        await ConversationFinalizationService.shared.finalizeSession(
+          id: sessionId,
+          reason: .userStop,
+          allowCloudForceProcess: true
+        )
       }
 
       await loadConversations()
@@ -2265,122 +2263,6 @@ class AppState: ObservableObject {
     }
   }
 
-  /// Reconcile a local session by checking if a matching conversation exists on the backend.
-  /// If found, marks the session as completed. Otherwise leaves it as pendingUpload for retry.
-  private func reconcileSession(
-    sessionId: Int64,
-    startTime: Date,
-    backendConversationId: String? = nil
-  ) async {
-    do {
-      if let backendConversationId, !backendConversationId.isEmpty {
-        do {
-          let conversation = try await APIClient.shared.getConversation(id: backendConversationId)
-          guard DesktopConversationMatchPolicy.canCompleteBoundBackendConversation(
-            id: conversation.id,
-            boundBackendId: backendConversationId,
-            status: conversation.status,
-            source: conversation.source
-          ) else {
-            log("Transcription: Exact backend conversation \(backendConversationId) is not a completed desktop session; falling back to timestamp")
-            throw APIError.invalidResponse
-          }
-          try await TranscriptionStorage.shared.markSessionCompleted(
-            id: sessionId, backendId: conversation.id)
-          log("Transcription: Reconciled session \(sessionId) by exact backend conversation \(conversation.id)")
-          return
-        } catch {
-          logError("Transcription: Exact backend conversation reconciliation failed for session \(sessionId), falling back to timestamp", error: error)
-        }
-      }
-
-      let conversations = try await APIClient.shared.getConversations(
-        limit: 5,
-        includeDiscarded: true,
-        startDate: startTime.addingTimeInterval(-5),
-        endDate: Date().addingTimeInterval(5)
-      )
-      if let match = conversations.first(where: { conv in
-        DesktopConversationMatchPolicy.matchesDesktopConversation(
-          startedAt: conv.startedAt,
-          source: conv.source,
-          sessionStartedAt: startTime)
-      }) {
-        try await TranscriptionStorage.shared.markSessionCompleted(
-          id: sessionId, backendId: match.id)
-        log("Transcription: Reconciled session \(sessionId) → backend conversation \(match.id)")
-      } else {
-        log("Transcription: No matching backend conversation found for session \(sessionId), leaving for retry")
-      }
-    } catch {
-      logError("Transcription: Reconciliation failed for session \(sessionId)", error: error)
-    }
-  }
-
-  /// Upload a finished on-device (Parakeet) conversation to the backend so it is persisted,
-  /// processed (memories/summaries), and synced to every device — the same result a cloud
-  /// conversation gets, but the transcript was produced locally. On success, marks the local
-  /// session completed with the returned backend conversation id.
-  private func uploadLocalSession(_ sessionId: Int64) async {
-    // Segment DB writes are scheduled fire-and-forget by handleBackendSegments — let them drain
-    // so the upload includes the final tail segments.
-    try? await Task.sleep(nanoseconds: 1_000_000_000)
-    do {
-      guard let bundle = try await TranscriptionStorage.shared.getSessionWithSegments(id: sessionId)
-      else { return }
-      let session = bundle.session
-      guard !bundle.segments.isEmpty else {
-        log("Transcription: Local session \(sessionId) has no segments — nothing to upload")
-        return
-      }
-
-      let raw: [APIClient.UploadSegment] = bundle.segments.map { seg in
-        APIClient.UploadSegment(
-          text: seg.text,
-          speaker: seg.speakerLabel ?? String(format: "SPEAKER_%02d", seg.speaker),
-          speaker_id: seg.speaker,
-          is_user: seg.isUser,
-          person_id: seg.personId,
-          start: seg.startTime,
-          end: seg.endTime
-        )
-      }
-      // Merge consecutive same-speaker segments to stay under the backend's 500-segment cap
-      // (Parakeet emits ~1 segment per 10s window).
-      var merged: [APIClient.UploadSegment] = []
-      for seg in raw {
-        if let last = merged.last, last.speaker_id == seg.speaker_id {
-          merged[merged.count - 1] = APIClient.UploadSegment(
-            text: last.text + " " + seg.text, speaker: last.speaker, speaker_id: last.speaker_id,
-            is_user: last.is_user, person_id: last.person_id, start: last.start, end: seg.end)
-        } else {
-          merged.append(seg)
-        }
-      }
-      if merged.count > 500 {
-        log("Transcription: Local session \(sessionId) has \(merged.count) segments (>500), truncating")
-        merged = Array(merged.prefix(500))
-      }
-
-      let iso = ISO8601DateFormatter()
-      let request = APIClient.CreateConversationFromSegmentsRequest(
-        transcript_segments: merged,
-        source: "desktop",
-        started_at: iso.string(from: session.startedAt),
-        finished_at: session.finishedAt.map { iso.string(from: $0) },
-        language: session.language
-      )
-      let response = try await APIClient.shared.createConversationFromSegments(request)
-      try? await TranscriptionStorage.shared.markSessionCompleted(
-        id: sessionId, backendId: response.id)
-      log(
-        "Transcription: Uploaded on-device session \(sessionId) → backend conversation \(response.id) (\(merged.count) segments)"
-      )
-    } catch {
-      logError("Transcription: Failed to upload on-device session \(sessionId)", error: error)
-    }
-  }
-
   /// Finish the current conversation and keep recording for a new one.
   /// Disconnects the WebSocket (triggers backend conversation processing) then reconnects.
   func finishConversation() async -> FinishConversationResult {
@@ -2395,6 +2277,8 @@ class AppState: ObservableObject {
     // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
     finishedSessionId = currentSessionId
     finishedRecordingStartTime = recordingStartTime
+    let finishedUsesLocalSTT = useLocalSTT
+    let sessionToFinalize = currentSessionId
 
     // Local mode: flush both Parakeet instances' final tails to the CURRENT session BEFORE we
     // rotate currentSessionId, so the last sub-window words attach to THIS conversation rather
@@ -2403,28 +2287,23 @@ class AppState: ObservableObject {
     if useLocalSTT {
       await localMicService?.finish()
       await localSystemService?.finish()
+    } else {
+      // Close the cloud stream before marking the old local session finished, so no late
+      // WebSocket segments can be persisted after the finalization snapshot starts.
+      transcriptionService?.stop()
+      transcriptionService = nil
     }
 
     // Mark current DB session as finished before stopping
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
-    if let sessionId = currentSessionId {
+    if let sessionId = sessionToFinalize {
       do {
-        try await TranscriptionStorage.shared.finishSession(id: sessionId)
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .finishAndContinue)
         log("Transcription: Finished DB session \(sessionId) before reconnect")
       } catch {
         logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
       }
     }
-
-    // Local mode: upload the just-finished on-device conversation to the backend (async) so it
-    // syncs + gets memories/summaries while we keep recording the next conversation.
-    if useLocalSTT, let uploadSessionId = finishedSessionId {
-      Task { await self.uploadLocalSession(uploadSessionId) }
-    }
-
-    // Stop the transcription service (closes WebSocket, triggers backend conversation processing)
-    transcriptionService?.stop()
-    transcriptionService = nil
 
     // Clear currentSessionId BEFORE reconnecting — any segments arriving on the new WebSocket
     // must not be persisted against the finished session. They'll be buffered in memory until
@@ -2452,6 +2331,16 @@ class AppState: ObservableObject {
     pendingBackendConversationId = nil
     RecordingTimer.shared.restart()
 
+    if let sessionId = sessionToFinalize {
+      Task {
+        await ConversationFinalizationService.shared.finalizeSession(
+          id: sessionId,
+          reason: .finishAndContinue,
+          allowCloudForceProcess: !finishedUsesLocalSTT
+        )
+      }
+    }
+
     // Restart the 4-hour max recording timer
     maxRecordingTimer?.invalidate()
     maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false)
@@ -2459,8 +2348,26 @@ class AppState: ObservableObject {
       Task { @MainActor in
         guard let self = self, self.isTranscribing else { return }
         log("Transcription: 4-hour limit reached — stopping and restarting")
+        let sessionId = self.currentSessionId
         self.stopAudioCapture()
-        self.clearTranscriptionState()
+        if let sessionId {
+          try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .maxDurationRotation)
+        }
+        self.clearTranscriptionState(
+          finalizationReason: .maxDurationRotation,
+          runFinalizer: false,
+          allowCloudForceProcess: false,
+          finishSession: false
+        )
+        if let sessionId {
+          Task {
+            await ConversationFinalizationService.shared.finalizeSession(
+              id: sessionId,
+              reason: .maxDurationRotation,
+              allowCloudForceProcess: false
+            )
+          }
+        }
         self.startTranscription()
       }
     }
@@ -2522,7 +2429,8 @@ class AppState: ObservableObject {
           source: currentConversationSource.rawValue,
           language: lang,
           timezone: TimeZone.current.identifier,
-          inputDeviceName: recordingInputDeviceName
+          inputDeviceName: recordingInputDeviceName,
+          finalizationStrategy: useLocalSTT ? .localSegments : .cloudReconcile
         )
         await MainActor.run {
           self.currentSessionId = sessionId
@@ -2614,7 +2522,12 @@ class AppState: ObservableObject {
   }
 
   /// Clear transcription state after saving
-  private func clearTranscriptionState() {
+  private func clearTranscriptionState(
+    finalizationReason: TranscriptionFinalizationReason = .userStop,
+    runFinalizer: Bool = true,
+    allowCloudForceProcess: Bool = false,
+    finishSession: Bool = true
+  ) {
     log(
       "Transcription: Final segments count: \(totalSegmentCount) (in-memory: \(speakerSegments.count)), words: \(totalWordCount)"
     )
@@ -2623,11 +2536,18 @@ class AppState: ObservableObject {
     LiveNotesMonitor.shared.endSession()
 
     // Mark DB session as finished (pending upload / crash recovery)
-    if let sessionId = currentSessionId {
+    if finishSession, let sessionId = currentSessionId {
       Task {
         do {
-          try await TranscriptionStorage.shared.finishSession(id: sessionId)
+          try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
           log("Transcription: Finished DB session \(sessionId)")
+          if runFinalizer {
+            await ConversationFinalizationService.shared.finalizeSession(
+              id: sessionId,
+              reason: finalizationReason,
+              allowCloudForceProcess: allowCloudForceProcess
+            )
+          }
         } catch {
           logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
         }

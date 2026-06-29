@@ -1,0 +1,3 @@
+{
+  "change": "Fixed desktop conversations so local transcription sessions are finalized and retried through one durable path"
+}

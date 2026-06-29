@@ -5,7 +5,7 @@ from enum import Enum
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import AliasChoices, BaseModel, Field, ValidationError, field_validator
 
 import database.folders as folders_db
 import database.memories as memories_db
@@ -18,13 +18,18 @@ from database.vector_db import upsert_memory_vectors_batch
 
 from models.folder import Folder
 from models.memories import MemoryCategory, Memory, MemoryDB
-from models.conversation import CreateConversation, ExternalIntegrationCreateConversation
+from models.conversation import (
+    Conversation as OmiConversation,
+    CreateConversation,
+    ExternalIntegrationCreateConversation,
+)
 from models.conversation_enums import (
     CategoryEnum,
     ConversationSource,
     ExternalIntegrationConversationSource,
 )
 from models.geolocation import Geolocation
+from models.structured import Structured
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
@@ -52,6 +57,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+_FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6fdb3fd13')
 
 
 # ******************************************************
@@ -835,6 +842,13 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     transcript_segments: List[DevTranscriptSegment] = Field(
         description="List of transcript segments with speaker and timing info", min_length=1, max_length=500
     )
+    client_session_id: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices('client_session_id', 'client_conversation_id', 'session_id', 'client_id'),
+        min_length=1,
+        max_length=200,
+        description="Stable client-generated session ID. When provided, retries return the same conversation ID.",
+    )
     source: Optional[ConversationSource] = Field(
         default=ConversationSource.external_integration,
         description="Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)",
@@ -845,6 +859,16 @@ class CreateConversationFromTranscriptRequest(BaseModel):
     )
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[Geolocation] = Field(default=None, description="Geolocation where conversation occurred")
+
+    @field_validator('client_session_id')
+    @classmethod
+    def normalize_client_session_id(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value:
+            raise ValueError('client_session_id cannot be empty')
+        return value
 
 
 @router.get("/v1/dev/user/folders", response_model=List[Folder], tags=["developer"])
@@ -1049,6 +1073,21 @@ def get_conversation_endpoint(
     return conversation
 
 
+def _from_segments_conversation_id(uid: str, client_session_id: str) -> str:
+    return str(uuid.uuid5(_FROM_SEGMENTS_CONVERSATION_NAMESPACE, f'{uid}\0{client_session_id}'))
+
+
+def _conversation_response_from_data(conversation: dict) -> ConversationResponse:
+    status = conversation.get('status') or 'completed'
+    if hasattr(status, 'value'):
+        status = status.value
+    return ConversationResponse(
+        id=conversation['id'],
+        status=status,
+        discarded=bool(conversation.get('discarded', False)),
+    )
+
+
 def _create_conversation_from_segments(
     uid: str, request: CreateConversationFromTranscriptRequest
 ) -> ConversationResponse:
@@ -1117,15 +1156,44 @@ def _create_conversation_from_segments(
     # Source defaults
     source = request.source or ConversationSource.external_integration
 
+    conversation_id = None
+    if request.client_session_id:
+        conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        existing_conversation = conversations_db.get_conversation(uid, conversation_id)
+        if existing_conversation:
+            logger.info(
+                "from-segments idempotency hit for uid=%s client_session_id=%s conversation_id=%s",
+                uid,
+                request.client_session_id,
+                conversation_id,
+            )
+            return _conversation_response_from_data(existing_conversation)
+
     # Create conversation object with transcript segments
-    create_conversation_obj = CreateConversation(
-        transcript_segments=transcript_segments,
-        started_at=started_at,
-        finished_at=finished_at,
-        language=language_code,
-        geolocation=geolocation,
-        source=source,
-    )
+    if conversation_id:
+        create_conversation_obj = OmiConversation(
+            id=conversation_id,
+            created_at=started_at,
+            transcript_segments=transcript_segments,
+            started_at=started_at,
+            finished_at=finished_at,
+            language=language_code,
+            geolocation=geolocation,
+            source=source,
+            structured=Structured(),
+            external_data={
+                'from_segments_client_session_id': request.client_session_id,
+            },
+        )
+    else:
+        create_conversation_obj = CreateConversation(
+            transcript_segments=transcript_segments,
+            started_at=started_at,
+            finished_at=finished_at,
+            language=language_code,
+            geolocation=geolocation,
+            source=source,
+        )
 
     # Process conversation
     conversation = process_conversation(uid, language_code, create_conversation_obj)
