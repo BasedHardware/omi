@@ -478,11 +478,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("private var bargeInReplacementAudioBuffer: [Data] = []"))
     XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn() -> Bool"))
     XCTAssertTrue(hubSource.contains("case .ephemeral:\n      remintReplacementSessionForBargeIn(provider: provider)"))
-    XCTAssertTrue(hubSource.contains("let token = await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
+    XCTAssertTrue(hubSource.contains("token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
     XCTAssertTrue(hubSource.contains("startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))"))
     XCTAssertTrue(hubSource.contains("bargeInReplacementAudioBuffer.append(pcm16k)"))
     XCTAssertTrue(hubSource.contains("bargeInReplacementPendingCommit = true"))
-    XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: \"token mint failed\")"))
+    XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
     XCTAssertTrue(hubSource.contains("if provider == .gemini, let speculativeScreenshot"))
     XCTAssertTrue(hubSource.contains("session?.sendVideoFrame(speculativeScreenshot, mime: \"image/jpeg\")"))
     XCTAssertTrue(hubSource.contains("responding = false\n    realtimePlaybackActive = false"))
@@ -508,6 +508,33 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(sessionSource.contains("return eventResponseID == expected"))
     XCTAssertFalse(sessionSource.contains("guard let expected = openAIActiveResponseID else { return true }"))
     XCTAssertTrue(sessionSource.contains("ignoring stale response.done"))
+  }
+
+  func testCredentialHealthRetryAndFailoverInvariants() throws {
+    let apiSource = try apiClientSource()
+    let hubSource = try realtimeHubControllerSource()
+
+    XCTAssertTrue(
+      apiSource.contains("try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: \"Authorization\")"),
+      "Backend 401 retry paths must force-refresh Firebase auth")
+    XCTAssertTrue(
+      apiSource.contains("throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)"),
+      "Realtime mint retry transport failures must stay transient, not requires-login")
+    XCTAssertTrue(
+      apiSource.contains("} catch AuthError.notSignedIn {\n        throw CredentialHealthError.requiresLogin"),
+      "Only definitive not-signed-in refresh failures should become requires-login")
+    XCTAssertTrue(
+      hubSource.contains("self.minting = false\n        CredentialHealthManager.shared.record(error, context: \"realtime_mint\")"),
+      "Mint failure must clear minting before failover starts the alternate provider")
+    XCTAssertTrue(
+      hubSource.contains("if case .providerAuthFailed = credentialFailureClass {\n      if aliveFor < 10, failoverToAlternateProvider() { return }"),
+      "Provider auth failures should try alternate provider before stopping reconnect")
+    XCTAssertTrue(
+      hubSource.contains("if case .providerQuotaExceeded = credentialFailureClass {\n      if failoverToAlternateProvider() { return }"),
+      "Provider quota failures should try alternate provider regardless of socket age")
+    XCTAssertTrue(
+      hubSource.contains("let shouldRedactProviderMessage: Bool"),
+      "Credential close logs must redact raw provider auth/quota payloads")
   }
 
   func testSpeechSynthesizerDidCancelClearsGlow() throws {
@@ -971,6 +998,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func apiClientSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/APIClient.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

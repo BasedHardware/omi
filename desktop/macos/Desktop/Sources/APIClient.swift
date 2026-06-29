@@ -76,11 +76,16 @@ actor APIClient {
 
   // MARK: - Request Building
 
-  func buildHeaders(requireAuth: Bool = true) async throws -> [String: String] {
+  func buildHeaders(
+    requireAuth: Bool = true,
+    forceRefreshAuth: Bool = false,
+    includeBYOK: Bool = true
+  ) async throws -> [String: String] {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
+      "X-Desktop-Request-ID": UUID().uuidString,
     ]
 
     if requireAuth {
@@ -88,15 +93,28 @@ actor APIClient {
         headers["Authorization"] = testHeader
       } else {
         let authService = await MainActor.run { AuthService.shared }
-        let authHeader = try await authService.getAuthHeader()
+        let authHeader = try await authService.getAuthHeader(forceRefresh: forceRefreshAuth)
         headers["Authorization"] = authHeader
       }
     }
 
     // BYOK: attach user-provided keys so the backend uses them for LLM/STT
     // calls this request triggers. Sent per-request; never stored server-side.
-    for (provider, entry) in APIKeyService.byokSnapshot {
-      headers[provider.headerName] = entry.key
+    if includeBYOK, APIKeyService.isByokActive {
+      let health = await MainActor.run { CredentialHealthManager.shared }
+      let snapshot = APIKeyService.byokSnapshot
+      for (provider, entry) in snapshot {
+        let canAttach = await MainActor.run {
+          health.canUseBYOK(provider: provider, fingerprint: entry.fingerprint)
+        }
+        if canAttach {
+          headers[provider.headerName] = entry.key
+        } else {
+          log(
+            "CredentialHealth: context=build_headers failure_class=byok_invalid_suppressed"
+              + " provider=\(provider.rawValue)")
+        }
+      }
     }
 
     return headers
@@ -122,14 +140,15 @@ actor APIClient {
     _ endpoint: String,
     body: B,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     log("APIClient: POST \(url.absoluteString)")
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
     request.httpBody = try JSONEncoder().encode(body)
 
     return try await performRequest(request)
@@ -138,34 +157,98 @@ actor APIClient {
   func post<T: Decodable>(
     _ endpoint: String,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
 
     return try await performRequest(request)
   }
 
   /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
-  /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall and
-  /// returns 402/403 if not entitled — any non-200 surfaces here as a thrown error,
-  /// so we return nil and the caller falls back to the legacy cascade.
-  func mintRealtimeToken(provider: String) async -> String? {
+  /// for `provider` ("openai"|"gemini"). The backend gates on auth + paywall.
+  /// Credential failures are typed so the hub can recover deterministically instead
+  /// of treating every failure as a silent fallback.
+  func mintRealtimeToken(provider: String) async throws -> String {
     struct Resp: Decodable { let token: String }
     let base = rustBackendURL
-    guard !base.isEmpty else { return nil }
+    guard !base.isEmpty else {
+      throw CredentialHealthError.backendTransient(
+        statusCode: nil,
+        message: "Desktop backend URL is not configured.")
+    }
     let normalized = base.hasSuffix("/") ? base : base + "/"
+    guard let url = URL(string: normalized + "v2/realtime/session") else {
+      throw CredentialHealthError.backendTransient(statusCode: nil, message: "Invalid desktop backend URL.")
+    }
+
+    let providerType = CredentialHealthManager.realtimeProvider(from: provider)
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true, includeBYOK: false)
+    request.httpBody = try JSONEncoder().encode(["provider": provider])
+
     do {
-      let resp: Resp = try await post(
-        "v2/realtime/session", body: ["provider": provider], customBaseURL: normalized)
-      return resp.token.isEmpty ? nil : resp.token
+      return try await performRealtimeMintRequest(request, provider: providerType, retriedAuth: false)
+    } catch let error as CredentialHealthError {
+      log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      throw error
     } catch {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
-      return nil
+      throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
     }
+  }
+
+  private func performRealtimeMintRequest(
+    _ request: URLRequest,
+    provider: RealtimeHubProvider?,
+    retriedAuth: Bool
+  ) async throws -> String {
+    struct Resp: Decodable { let token: String }
+    let (data, response) = try await session.data(for: request)
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw CredentialHealthError.backendTransient(statusCode: nil, message: APIError.invalidResponse.localizedDescription)
+    }
+
+    if httpResponse.statusCode == 401, !retriedAuth {
+      let authService = await MainActor.run { AuthService.shared }
+      var retry = request
+      do {
+        retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      } catch AuthError.notSignedIn {
+        throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
+      } catch {
+        throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
+      }
+
+      do {
+        let token = try await performRealtimeMintRequest(retry, provider: provider, retriedAuth: true)
+        log("CredentialHealth: context=realtime_mint_auth_retry failure_class=retry_succeeded")
+        return token
+      } catch let error as CredentialHealthError {
+        throw error
+      } catch {
+        throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
+      }
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      let payload = Self.extractErrorPayload(from: data)
+      throw CredentialHealthManager.classifyHTTPFailure(
+        statusCode: httpResponse.statusCode,
+        payload: payload,
+        provider: provider)
+    }
+
+    let resp = try decoder.decode(Resp.self, from: data)
+    guard !resp.token.isEmpty else {
+      throw CredentialHealthError.backendTransient(statusCode: httpResponse.statusCode, message: "Realtime token was empty.")
+    }
+    return resp.token
   }
 
   /// Report a managed realtime turn's token usage so the backend can price it and record
@@ -211,13 +294,14 @@ actor APIClient {
   func delete(
     _ endpoint: String,
     requireAuth: Bool = true,
-    customBaseURL: String? = nil
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
   ) async throws {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "DELETE"
-    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
 
     let (_, response) = try await session.data(for: request)
 
@@ -247,11 +331,10 @@ actor APIClient {
     if httpResponse.statusCode == 401 {
       // Try to refresh token and retry once
       let authService = await MainActor.run { AuthService.shared }
-      _ = try await authService.getIdToken(forceRefresh: true)
 
       var retryRequest = request
       retryRequest.setValue(
-        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
+        try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
 
       let (retryData, retryResponse) = try await session.data(for: retryRequest)
 
@@ -304,11 +387,18 @@ actor APIClient {
   }
 
   private static func extractErrorDetail(from data: Data) -> String? {
+    if let payload = extractErrorPayload(from: data) {
+      return payload.preferredMessage
+    }
     guard
       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       let detail = json["detail"] as? String
     else { return nil }
     return detail
+  }
+
+  private static func extractErrorPayload(from data: Data) -> APIErrorPayload? {
+    try? JSONDecoder().decode(APIErrorPayload.self, from: data)
   }
 }
 
@@ -4829,13 +4919,13 @@ extension APIClient {
     }
     struct Empty: Decodable {}
     let _: Empty = try await post(
-      "v1/users/me/byok-active", body: Request(fingerprints: fingerprints)
+      "v1/users/me/byok-active", body: Request(fingerprints: fingerprints), includeBYOK: false
     )
   }
 
   /// Deactivate BYOK (user cleared keys) so they return to the paid plan gate.
   func deactivateBYOK() async throws {
-    try await delete("v1/users/me/byok-active")
+    try await delete("v1/users/me/byok-active", includeBYOK: false)
   }
 
   /// Fetches all people for the current user
