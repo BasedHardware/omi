@@ -26,6 +26,7 @@ class ConversationProvider extends ChangeNotifier {
   bool hasDailySummaries = false; // whether user has any daily summaries
   DateTime? selectedDate;
   String? selectedFolderId;
+  String? selectedSpeakerId;
 
   String previousQuery = '';
   int totalSearchPages = 1;
@@ -68,6 +69,7 @@ class ConversationProvider extends ChangeNotifier {
   // The empty-state widget should defer to a pending auto-retry so the user
   // doesn't see "No conversations yet" in the gap between backoff attempts.
   bool get isAwaitingInitialFetchRetry => _initialFetchRetryTimer?.isActive ?? false;
+  bool get hasActiveSearch => previousQuery.isNotEmpty || selectedSpeakerId != null;
 
   ConversationProvider() {
     _setupMergeListener();
@@ -103,6 +105,7 @@ class ConversationProvider extends ChangeNotifier {
     hasDailySummaries = false;
     selectedDate = null;
     selectedFolderId = null;
+    selectedSpeakerId = null;
     previousQuery = '';
     totalSearchPages = 1;
     currentSearchPage = 1;
@@ -138,7 +141,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   Future<void> searchConversations(String query, {bool showShimmer = false}) async {
-    if (query.isEmpty) {
+    if (query.isEmpty && selectedSpeakerId == null) {
       previousQuery = "";
       currentSearchPage = 0;
       totalSearchPages = 0;
@@ -154,7 +157,11 @@ class ConversationProvider extends ChangeNotifier {
     }
 
     previousQuery = query;
-    var (convos, current, total) = await searchConversationsServer(query, includeDiscarded: showDiscardedConversations);
+    var (convos, current, total) = await searchConversationsServer(
+      query,
+      includeDiscarded: showDiscardedConversations,
+      speakerId: selectedSpeakerId,
+    );
     convos.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
     searchedConversations = convos;
     currentSearchPage = current;
@@ -170,6 +177,11 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setSpeakerFilter(String? speakerId) async {
+    selectedSpeakerId = speakerId;
+    await searchConversations(previousQuery, showShimmer: true);
+  }
+
   Future<void> searchMoreConversations() async {
     if (totalSearchPages < currentSearchPage + 1) {
       return;
@@ -179,6 +191,7 @@ class ConversationProvider extends ChangeNotifier {
       previousQuery,
       page: currentSearchPage + 1,
       includeDiscarded: showDiscardedConversations,
+      speakerId: selectedSpeakerId,
     );
     searchedConversations.addAll(newConvos);
     searchedConversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -225,7 +238,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -242,7 +255,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -257,7 +270,7 @@ class ConversationProvider extends ChangeNotifier {
     groupedConversations = {};
     notifyListeners();
 
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       searchConversations(previousQuery, showShimmer: true);
     } else {
       fetchConversations();
@@ -524,6 +537,7 @@ class ConversationProvider extends ChangeNotifier {
     selectedDate = date;
 
     // Clear search when applying date filter
+    selectedSpeakerId = null;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -540,6 +554,7 @@ class ConversationProvider extends ChangeNotifier {
     selectedDate = null;
 
     // Clear search when clearing date filter
+    selectedSpeakerId = null;
     previousQuery = "";
     currentSearchPage = 0;
     totalSearchPages = 0;
@@ -589,7 +604,7 @@ class ConversationProvider extends ChangeNotifier {
   }
 
   void groupConversationsByDate() {
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       _groupSearchConvosByDateWithoutNotify();
     } else {
       _groupConversationsByDateWithoutNotify();
@@ -728,7 +743,7 @@ class ConversationProvider extends ChangeNotifier {
       }
     }
     conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-    if (previousQuery.isNotEmpty) {
+    if (hasActiveSearch) {
       int si = searchedConversations.indexWhere((element) => element.id == conversation.id);
       if (si != -1) {
         searchedConversations[si] = conversation;
@@ -875,8 +890,8 @@ class ConversationProvider extends ChangeNotifier {
     final originalConvoIndex = conversations.indexWhere((c) => c.id == convoId);
     if (originalConvoIndex != -1) {
       final itemIndex = conversations[originalConvoIndex].structured.actionItems.indexWhere(
-            (item) => item.description == actionItemDescription,
-          );
+        (item) => item.description == actionItemDescription,
+      );
       if (itemIndex != -1) {
         conversations[originalConvoIndex].structured.actionItems[itemIndex].completed = newState;
         conversationFoundAndUpdated = true;
@@ -889,8 +904,8 @@ class ConversationProvider extends ChangeNotifier {
       final groupIndex = groupedConversations[dateKey]!.indexWhere((c) => c.id == convoId);
       if (groupIndex != -1) {
         final itemIndex = groupedConversations[dateKey]![groupIndex].structured.actionItems.indexWhere(
-              (item) => item.description == actionItemDescription,
-            );
+          (item) => item.description == actionItemDescription,
+        );
         if (itemIndex != -1) {
           groupedConversations[dateKey]![groupIndex].structured.actionItems[itemIndex].completed = newState;
         }

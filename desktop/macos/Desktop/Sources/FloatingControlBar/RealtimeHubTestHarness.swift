@@ -140,6 +140,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."
     case .updateActionItem: stub = "Updated the task."
+    case .createCalendarEvent: stub = "Created calendar event: Example event."
     case .spawnAgent: stub = "Started a background agent."
     case .screenshot: stub = "Screen captured."
     case .pointClick: stub = "Clicked."

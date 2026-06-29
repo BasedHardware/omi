@@ -10,6 +10,7 @@ import type {
 import type { OutboundMessage } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
+import { AdapterRuntimeError, failureFromError, type RuntimeFailure } from "./failures.js";
 import type {
   AdapterBinding,
   AgentEvent,
@@ -638,6 +639,12 @@ export class AgentRuntimeKernel {
         }
         const wasCancelling = this.runStatus(accepted.run.runId) === "cancelling";
         const status: AttemptStatus = wasCancelling ? "cancelled" : "failed";
+        const failure = wasCancelling ? null : failureFromError(error, {
+          code: "adapter_execution_failed",
+          source: "adapter_execution",
+          adapterId: attempt.adapterId,
+          retryable: false,
+        });
         this.finishAttemptAndRun({
           sessionId: accepted.session.sessionId,
           runId: accepted.run.runId,
@@ -645,7 +652,8 @@ export class AgentRuntimeKernel {
           status,
           finalText: null,
           errorCode: wasCancelling ? null : "adapter_execution_failed",
-          errorMessage: wasCancelling ? null : messageFrom(error),
+          errorMessage: failure?.userMessage ?? null,
+          failure,
         });
         break;
       } finally {
@@ -1541,6 +1549,9 @@ export class AgentRuntimeKernel {
         status,
         finalText: result.text,
         result,
+        errorCode: status === "failed" ? result.failure?.code ?? "adapter_execution_failed" : null,
+        errorMessage: status === "failed" ? result.failure?.userMessage ?? null : null,
+        failure: result.failure,
       });
     });
     return {
@@ -1562,6 +1573,7 @@ export class AgentRuntimeKernel {
     result?: AdapterAttemptResult;
     errorCode?: string | null;
     errorMessage?: string | null;
+    failure?: RuntimeFailure | null;
   }): void {
     const now = Date.now();
     const completedStatus = input.status;
@@ -1575,7 +1587,7 @@ export class AgentRuntimeKernel {
     this.updateRun(input.runId, {
       status: completedStatus,
       finalText: input.finalText,
-      resultJson: input.result ? JSON.stringify(input.result) : null,
+      resultJson: input.result ? JSON.stringify(input.result) : input.failure ? JSON.stringify({ failure: input.failure }) : null,
       errorCode: input.errorCode ?? null,
       errorMessage: input.errorMessage ?? null,
       inputTokens: input.result?.inputTokens ?? null,
@@ -1592,7 +1604,7 @@ export class AgentRuntimeKernel {
         runId: input.runId,
         attemptId: input.attemptId,
         type: completedStatus === "failed" ? "attempt.failed" : "attempt.cancelled",
-        payload: { attemptId: input.attemptId, status: completedStatus },
+        payload: { attemptId: input.attemptId, status: completedStatus, failure: input.failure ?? input.result?.failure },
       });
     }
     if (completedStatus === "succeeded") {
@@ -1622,7 +1634,7 @@ export class AgentRuntimeKernel {
       runId: input.runId,
       attemptId: input.attemptId,
       type: `run.${completedStatus}`,
-      payload: { runId: input.runId, status: completedStatus },
+      payload: { runId: input.runId, status: completedStatus, failure: input.failure ?? input.result?.failure },
     });
   }
 
@@ -2191,6 +2203,9 @@ function isStaleBindingError(error: unknown): boolean {
 }
 
 function messageFrom(error: unknown): string {
+  if (error instanceof AdapterRuntimeError) {
+    return error.failure.userMessage;
+  }
   return error instanceof Error ? error.message : String(error);
 }
 
