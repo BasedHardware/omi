@@ -13,12 +13,14 @@ Each scenario corresponds to a real-world sticky-pending failure mode.
 """
 
 import importlib.util
+import io
 import os
 import struct
 import sys
 import tempfile
 import wave
 from types import ModuleType
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -216,7 +218,12 @@ sys.modules['utils.log_sanitizer'].sanitize_pii = lambda x: x
 _remove_python_multipart_stub = _install_python_multipart_stub()
 try:
     from routers.sync import _merge_and_cap_vad_segments, MAX_VAD_SEGMENT_SECONDS  # noqa: E402
-    from utils.sync.files import decode_files_to_wav, decode_opus_file_to_wav  # noqa: E402
+    from utils.sync.files import (  # noqa: E402
+        MAX_SYNC_FRAME_BYTES,
+        decode_files_to_wav,
+        decode_opus_file_to_wav,
+        retrieve_file_paths,
+    )
 finally:
     if _remove_python_multipart_stub:
         sys.modules.pop('python_multipart', None)
@@ -472,9 +479,9 @@ class TestDecodeOpusFileToWav:
             with wave.open(wav_path, 'rb') as wf:
                 assert wf.getnframes() == 160
 
-    def test_gigantic_length_prefix_treated_as_truncation(self):
-        """0xFFFFFFFF frame length → read returns far fewer bytes → truncation break → prior frames kept."""
-        klass, _ = _good_decoder()
+    def test_gigantic_length_prefix_rejected_before_read(self):
+        """0xFFFFFFFF frame length → reject before attempting a huge read, prior frames kept."""
+        klass, instance = _good_decoder()
         with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
             bin_path = os.path.join(d, 'giant_prefix.bin')
             wav_path = os.path.join(d, 'giant_prefix.wav')
@@ -482,13 +489,65 @@ class TestDecodeOpusFileToWav:
                 f.write(struct.pack('<I', len(FAKE_OPUS_FRAME)))
                 f.write(FAKE_OPUS_FRAME)
                 f.write(struct.pack('<I', 0xFFFFFFFF))  # 4 GB claimed
-                f.write(b'\xaa' * 20)  # Only 20 bytes available
+                f.write(b'\xaa' * 20)  # Must not be read as a frame
 
             result = decode_opus_file_to_wav(bin_path, wav_path)
 
             assert result is True
+            assert instance.decode.call_count == 1
             with wave.open(wav_path, 'rb') as wf:
                 assert wf.getnframes() == 160
+
+    def test_frame_length_above_cap_rejected_before_read(self):
+        """Malformed Opus frame lengths use the same cap as PCM decoding."""
+        klass, instance = _good_decoder()
+        with tempfile.TemporaryDirectory() as d, patch('utils.sync.files.Decoder', klass):
+            bin_path = os.path.join(d, 'over_cap.bin')
+            wav_path = os.path.join(d, 'over_cap.wav')
+            with open(bin_path, 'wb') as f:
+                f.write(struct.pack('<I', len(FAKE_OPUS_FRAME)))
+                f.write(FAKE_OPUS_FRAME)
+                f.write(struct.pack('<I', MAX_SYNC_FRAME_BYTES + 1))
+                f.write(b'\xaa' * 20)
+
+            result = decode_opus_file_to_wav(bin_path, wav_path)
+
+            assert result is True
+            assert instance.decode.call_count == 1
+
+
+class TestRetrieveFilePaths:
+    """Upload path validation for shared sync file helpers."""
+
+    class _Upload:
+        def __init__(self, filename: str):
+            self.filename = filename
+            self.file = io.BytesIO(b'payload')
+
+    @pytest.mark.parametrize(
+        "filename",
+        [
+            "../audio_omi_opus_16000_1_fs160_1710000000.bin",
+            "nested/audio_omi_opus_16000_1_fs160_1710000000.bin",
+            "nested\\audio_omi_opus_16000_1_fs160_1710000000.bin",
+        ],
+    )
+    def test_rejects_path_separator_filenames(self, filename, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+
+        with pytest.raises(Exception) as exc_info:
+            retrieve_file_paths(cast(list, [self._Upload(filename)]), "u1")
+
+        assert getattr(exc_info.value, "status_code", None) == 400
+        assert not (tmp_path / "audio_omi_opus_16000_1_fs160_1710000000.bin").exists()
+
+    def test_valid_filename_stays_under_uid_directory(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+
+        paths = retrieve_file_paths(cast(list, [self._Upload("audio_omi_opus_16000_1_fs160_1710000000.bin")]), "u1")
+
+        assert paths == [os.path.join("syncing/u1", "audio_omi_opus_16000_1_fs160_1710000000.bin")]
+        assert (tmp_path / paths[0]).read_bytes() == b'payload'
 
 
 # ---------------------------------------------------------------------------

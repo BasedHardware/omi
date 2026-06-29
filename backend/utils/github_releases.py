@@ -3,9 +3,9 @@ import os
 import re
 from typing import Dict, List, Optional
 
-import httpx
-
 from database.redis_db import get_generic_cache, set_generic_cache
+from utils.executors import db_executor, run_blocking
+from utils.http_client import get_web_fetch_client
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -28,74 +28,76 @@ async def get_omi_github_releases(cache_key: str, tag_filter: Optional[re.Patter
 
     lkg_key = f"{cache_key}:lkg"
 
-    cached_releases = get_generic_cache(cache_key)
+    cached_releases = await run_blocking(db_executor, get_generic_cache, cache_key)
     if cached_releases is not None:
         return cached_releases
 
     headers = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
-        "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}",
     }
+    github_token = os.getenv('GITHUB_TOKEN')
+    if github_token:
+        headers["Authorization"] = f"Bearer {github_token}"
 
     collected: List[Dict] = []
     fetch_failed = False
 
     try:
         page = 1
-        async with httpx.AsyncClient() as client:
-            while page <= MAX_PAGES:
-                url = f"https://api.github.com/repos/BasedHardware/omi/releases?per_page=100&page={page}"
-                response = await client.get(url, headers=headers)
-                if response.status_code != 200:
-                    logger.error(
-                        "Error fetching GitHub releases page %d: %d %s",
-                        page,
-                        response.status_code,
-                        sanitize(response.text),
-                    )
-                    fetch_failed = True
-                    break
+        client = get_web_fetch_client()
+        while page <= MAX_PAGES:
+            url = f"https://api.github.com/repos/BasedHardware/omi/releases?per_page=100&page={page}"
+            response = await client.get(url, headers=headers)
+            if response.status_code != 200:
+                logger.error(
+                    "Error fetching GitHub releases page %d: %d %s",
+                    page,
+                    response.status_code,
+                    sanitize(response.text),
+                )
+                fetch_failed = True
+                break
 
-                page_releases = response.json()
-                if not page_releases:
-                    break
+            page_releases = response.json()
+            if not page_releases:
+                break
 
-                if tag_filter:
-                    for release in page_releases:
-                        tag_name = release.get("tag_name", "")
-                        if tag_filter.match(tag_name):
-                            collected.append(release)
-                else:
-                    collected.extend(page_releases)
+            if tag_filter:
+                for release in page_releases:
+                    tag_name = release.get("tag_name", "")
+                    if tag_filter.match(tag_name):
+                        collected.append(release)
+            else:
+                collected.extend(page_releases)
 
-                if not tag_filter:
-                    break
+            if not tag_filter:
+                break
 
-                if len(page_releases) < 100:
-                    break
+            if len(page_releases) < 100:
+                break
 
-                page += 1
+            page += 1
     except Exception as exc:
         logger.exception("Exception fetching GitHub releases: %s", sanitize(str(exc)))
         fetch_failed = True
 
     if fetch_failed or not collected:
-        last_known_good = get_generic_cache(lkg_key)
+        last_known_good = await run_blocking(db_executor, get_generic_cache, lkg_key)
         if last_known_good:
             logger.warning(
                 "GitHub releases fetch %s; serving last-known-good cache for %s",
                 "failed" if fetch_failed else "returned empty",
                 cache_key,
             )
-            set_generic_cache(cache_key, last_known_good, ttl=60)
+            await run_blocking(db_executor, set_generic_cache, cache_key, last_known_good, ttl=60)
             return last_known_good
 
-        set_generic_cache(cache_key, collected, ttl=60)
+        await run_blocking(db_executor, set_generic_cache, cache_key, collected, ttl=60)
         return collected
 
-    set_generic_cache(cache_key, collected, ttl=300)
-    set_generic_cache(lkg_key, collected, ttl=86400)
+    await run_blocking(db_executor, set_generic_cache, cache_key, collected, ttl=300)
+    await run_blocking(db_executor, set_generic_cache, lkg_key, collected, ttl=86400)
     return collected
 
 

@@ -64,7 +64,7 @@ def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id
 
     text: str
     if app and app.is_a_persona():
-        text = initial_persona_chat_message(uid, app, prev_messages)
+        text = initial_persona_chat_message(uid, app, [Message(**msg) for msg in prev_messages])
     else:
         prev_messages_str = ''
         if prev_messages:

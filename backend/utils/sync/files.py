@@ -22,6 +22,8 @@ else:
 
 logger = logging.getLogger(__name__)
 
+MAX_SYNC_FRAME_BYTES = 65536
+
 
 def _get_opus_decoder_class():
     if Decoder is None:
@@ -60,6 +62,9 @@ def decode_opus_file_to_wav(opus_file_path, wav_file_path, sample_rate=16000, ch
                     break
 
                 frame_length = struct.unpack('<I', length_bytes)[0]
+                if frame_length == 0 or frame_length > MAX_SYNC_FRAME_BYTES:
+                    logger.warning(f"Opus decode: suspicious frame length {frame_length}, skipping rest")
+                    break
                 opus_data = f.read(frame_length)
                 if len(opus_data) < frame_length:
                     logger.error(f"Unexpected end of file at frame {frame_count}.")
@@ -99,6 +104,10 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
         filename = file.filename
         if not filename:
             raise HTTPException(status_code=400, detail='Uploaded file is missing a filename')
+        if os.path.basename(filename) != filename or '/' in filename or '\\' in filename:
+            raise HTTPException(
+                status_code=400, detail=f"Invalid file format {filename}, path separators are not allowed"
+            )
         if not filename.endswith('.bin'):
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}")
         if '_' not in filename:
@@ -108,7 +117,7 @@ def retrieve_file_paths(files: List[UploadFile], uid: str):
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid file format {filename}, invalid timestamp")
 
-        path = f"{directory}{filename}"
+        path = os.path.join(directory, filename)
         try:
             with open(path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
@@ -147,7 +156,7 @@ def decode_pcm_file_to_wav(pcm_file_path, wav_file_path, sample_rate=16000, chan
                 if not length_bytes or len(length_bytes) < 4:
                     break
                 frame_length = struct.unpack('<I', length_bytes)[0]
-                if frame_length == 0 or frame_length > 65536:
+                if frame_length == 0 or frame_length > MAX_SYNC_FRAME_BYTES:
                     logger.warning(f"PCM decode: suspicious frame length {frame_length}, skipping rest")
                     break
                 frame_data = f.read(frame_length)

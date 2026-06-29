@@ -108,7 +108,7 @@ class TestPagination:
 
         with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
             'utils.github_releases.set_generic_cache'
-        ) as mock_set_cache, patch('utils.github_releases.httpx.AsyncClient', return_value=mock_client), patch.dict(
+        ) as mock_set_cache, patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
             'os.environ', {'GITHUB_TOKEN': 'test-token'}
         ):
 
@@ -143,7 +143,7 @@ class TestPagination:
 
         with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
             'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.httpx.AsyncClient', return_value=mock_client), patch.dict(
+        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
             'os.environ', {'GITHUB_TOKEN': 'test-token'}
         ):
 
@@ -153,6 +153,46 @@ class TestPagination:
         assert len(result) == 100
         # Should only have made 1 API call (no pagination)
         assert mock_client.get.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_omits_authorization_header_without_github_token(self):
+        """Public release fetches must not send Bearer None when GITHUB_TOKEN is unset."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = _desktop_releases(1)
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
+            'utils.github_releases.set_generic_cache'
+        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
+            'os.environ', {}, clear=True
+        ):
+            await get_omi_github_releases("test_key")
+
+        headers = mock_client.get.call_args.kwargs["headers"]
+        assert "Authorization" not in headers
+
+    @pytest.mark.asyncio
+    async def test_adds_authorization_header_with_github_token(self):
+        """Configured tokens are still used for authenticated GitHub release fetches."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = _desktop_releases(1)
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
+            'utils.github_releases.set_generic_cache'
+        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
+            'os.environ', {'GITHUB_TOKEN': 'test-token'}
+        ):
+            await get_omi_github_releases("test_key")
+
+        headers = mock_client.get.call_args.kwargs["headers"]
+        assert headers["Authorization"] == "Bearer test-token"
 
     @pytest.mark.asyncio
     async def test_pagination_safety_cap(self):
@@ -170,7 +210,7 @@ class TestPagination:
 
         with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
             'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.httpx.AsyncClient', return_value=mock_client), patch.dict(
+        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
             'os.environ', {'GITHUB_TOKEN': 'test-token'}
         ):
 
@@ -206,7 +246,7 @@ class TestCacheBehavior:
 
         with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
             'utils.github_releases.set_generic_cache'
-        ) as mock_set, patch('utils.github_releases.httpx.AsyncClient', return_value=mock_client), patch.dict(
+        ) as mock_set, patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
             'os.environ', {'GITHUB_TOKEN': 'test-token'}
         ):
 
@@ -245,7 +285,7 @@ class TestLastKnownGoodFallback:
 
         with patch('utils.github_releases.get_generic_cache', side_effect=fake_get), patch(
             'utils.github_releases.set_generic_cache'
-        ) as mock_set, patch('utils.github_releases.httpx.AsyncClient', return_value=mock_client), patch.dict(
+        ) as mock_set, patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
             'os.environ', {'GITHUB_TOKEN': 'test-token'}
         ):
 
@@ -277,7 +317,7 @@ class TestLastKnownGoodFallback:
 
         with patch('utils.github_releases.get_generic_cache', side_effect=fake_get), patch(
             'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.httpx.AsyncClient', return_value=mock_client), patch.dict(
+        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
             'os.environ', {'GITHUB_TOKEN': 'test-token'}
         ):
 
@@ -300,7 +340,7 @@ class TestLastKnownGoodFallback:
 
         with patch('utils.github_releases.get_generic_cache', side_effect=fake_get), patch(
             'utils.github_releases.set_generic_cache'
-        ), patch('utils.github_releases.httpx.AsyncClient', return_value=mock_client), patch.dict(
+        ), patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
             'os.environ', {'GITHUB_TOKEN': 'test-token'}
         ):
 
@@ -324,7 +364,7 @@ class TestLastKnownGoodFallback:
 
         with patch('utils.github_releases.get_generic_cache', return_value=None), patch(
             'utils.github_releases.set_generic_cache'
-        ) as mock_set, patch('utils.github_releases.httpx.AsyncClient', return_value=mock_client), patch.dict(
+        ) as mock_set, patch('utils.github_releases.get_web_fetch_client', return_value=mock_client), patch.dict(
             'os.environ', {'GITHUB_TOKEN': 'test-token'}
         ):
 
