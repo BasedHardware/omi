@@ -2,6 +2,7 @@ import copy
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
+from google.api_core.exceptions import NotFound as FirestoreNotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -15,6 +16,18 @@ logger = logging.getLogger(__name__)
 
 memories_collection = 'memories'
 users_collection = 'users'
+
+
+def _update_memory_if_exists(uid: str, memory_id: str, update_payload: Dict[str, Any], operation: str) -> bool:
+    user_ref = db.collection(users_collection).document(uid)
+    memories_ref = user_ref.collection(memories_collection)
+    memory_ref = memories_ref.document(memory_id)
+    try:
+        memory_ref.update(update_payload)
+        return True
+    except FirestoreNotFound:
+        logger.warning('Skipping stale memory %s update: memory document no longer exists uid=%s', operation, uid)
+        return False
 
 
 def get_memory_ids(uid: str) -> List[str]:
@@ -222,10 +235,7 @@ def review_memory(uid: str, memory_id: str, value: bool):
 
 
 def set_memory_kg_extracted(uid: str, memory_id: str):
-    user_ref = db.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
-    memory_ref.update({'kg_extracted': True})
+    _update_memory_if_exists(uid, memory_id, {'kg_extracted': True}, 'kg_extracted')
 
 
 def change_memory_visibility(uid: str, memory_id: str, value: str):
@@ -278,13 +288,10 @@ def invalidate_memory(
     """
     if invalid_at is None:
         invalid_at = datetime.now(timezone.utc)
-    user_ref = db.collection(users_collection).document(uid)
-    memories_ref = user_ref.collection(memories_collection)
-    memory_ref = memories_ref.document(memory_id)
     update_payload = {'invalid_at': invalid_at, 'updated_at': datetime.now(timezone.utc)}
     if superseded_by is not None:
         update_payload['superseded_by'] = superseded_by
-    memory_ref.update(update_payload)
+    _update_memory_if_exists(uid, memory_id, update_payload, 'invalidate')
 
 
 def delete_memory(uid: str, memory_id: str):
