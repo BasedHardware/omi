@@ -321,8 +321,52 @@ impl FirestoreService {
         &self,
         uid: &str,
     ) -> Result<i32, Box<dyn std::error::Error + Send + Sync>> {
-        let memories = self.get_public_memories(uid, 1000).await?;
-        Ok(memories.len() as i32)
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
+        let mut count = 0i32;
+        let mut offset = 0usize;
+        let limit = 500usize;
+
+        loop {
+            let query = json!({
+                "structuredQuery": {
+                    "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
+                    "where": {
+                        "fieldFilter": {
+                            "field": {"fieldPath": "visibility"},
+                            "op": "EQUAL",
+                            "value": {"stringValue": "public"}
+                        }
+                    },
+                    "limit": limit,
+                    "offset": offset
+                }
+            });
+
+            let response = self
+                .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+                .await?
+                .json(&query)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore query error: {}", error_text).into());
+            }
+
+            let results: Vec<Value> = response.json().await?;
+            let fetched_count = results
+                .iter()
+                .filter(|doc| doc.get("document").is_some())
+                .count();
+            count += fetched_count as i32;
+            if fetched_count < limit {
+                break;
+            }
+            offset += fetched_count;
+        }
+
+        Ok(count)
     }
 
     /// Parse a persona from Firestore document

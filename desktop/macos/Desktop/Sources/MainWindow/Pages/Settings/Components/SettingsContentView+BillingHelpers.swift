@@ -6,6 +6,7 @@ import WebKit
 extension SettingsContentView {
   var hasPaidSubscription: Bool {
     guard let subscription = userSubscription?.subscription else { return false }
+    if subscription.features.contains("byok") { return false }
     return subscription.plan != .basic && subscription.status == .active
   }
 
@@ -66,7 +67,7 @@ extension SettingsContentView {
     guard let subscription = userSubscription?.subscription,
           let currentPriceId = subscription.currentPriceId
     else { return false }
-    for plan in subscriptionPlansForDisplay {
+    for plan in mergedPlanCatalog {
       guard plan.title == "Operator" else { continue }
       if plan.prices.contains(where: { $0.id == currentPriceId }) {
         return true
@@ -96,7 +97,7 @@ extension SettingsContentView {
       return nil
     }
 
-    for plan in subscriptionPlansForDisplay {
+    for plan in mergedPlanCatalog {
       if let price = plan.prices.first(where: { $0.id == currentPriceId }) {
         return "\(plan.title) \(price.title) • \(price.priceString)"
       }
@@ -191,6 +192,12 @@ extension SettingsContentView {
   func isCurrentSubscriptionPlan(_ plan: SubscriptionPlanOption) -> Bool {
     guard hasPaidSubscription, let currentPlan = userSubscription?.subscription.plan else {
       return false
+    }
+    if currentPlan == .operator && plan.id == "unlimited" {
+      return true
+    }
+    if currentPlan == .unlimited && plan.id == "operator" && isCurrentSubscriptionOperator() {
+      return true
     }
     return currentPlan.rawValue == plan.id
   }

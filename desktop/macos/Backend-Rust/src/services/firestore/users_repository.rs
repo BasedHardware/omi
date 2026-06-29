@@ -305,9 +305,13 @@ impl FirestoreService {
         let fields = doc.get("fields").unwrap_or(&empty);
 
         let settings_fields = self.parse_sub_map(fields, "assistant_settings");
+        let update_channel = self.parse_string(fields, "update_channel");
 
         let Some(sf) = settings_fields else {
-            return Ok(AssistantSettingsData::default());
+            return Ok(AssistantSettingsData {
+                update_channel,
+                ..AssistantSettingsData::default()
+            });
         };
 
         // Parse shared settings
@@ -370,9 +374,6 @@ impl FirestoreService {
                     voice_answers_enabled: self.parse_bool(f, "voice_answers_enabled").ok(),
                 });
 
-        // Read top-level update_channel from user doc (not from assistant_settings sub-map)
-        let update_channel = self.parse_string(fields, "update_channel");
-
         Ok(AssistantSettingsData {
             shared,
             focus,
@@ -390,9 +391,15 @@ impl FirestoreService {
         uid: &str,
         data: &AssistantSettingsData,
     ) -> Result<AssistantSettingsData, Box<dyn std::error::Error + Send + Sync>> {
+        let current_doc = self.get_user_document(uid).await?;
+        let empty = json!({});
+        let current_fields = current_doc.get("fields").unwrap_or(&empty);
+        let mut top_fields = self
+            .parse_sub_map(current_fields, "assistant_settings")
+            .and_then(|settings| settings.as_object())
+            .cloned()
+            .unwrap_or_default();
         let current = self.get_assistant_settings(uid).await?;
-
-        let mut top_fields = serde_json::Map::new();
 
         // Build shared sub-map
         if data.shared.is_some() || current.shared.is_some() {

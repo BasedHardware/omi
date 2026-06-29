@@ -116,35 +116,53 @@ impl FirestoreService {
         uid: &str,
     ) -> Result<Vec<crate::models::KnowledgeGraphNode>, Box<dyn std::error::Error + Send + Sync>>
     {
-        let url = format!(
+        let base_url = format!(
             "{}/{}/{}/{}",
             self.base_url(),
             USERS_COLLECTION,
             uid,
             KG_NODES_SUBCOLLECTION
         );
+        let mut page_token: Option<String> = None;
+        let mut nodes = Vec::new();
 
-        let response = self
-            .build_request(reqwest::Method::GET, &url)
-            .await?
-            .send()
-            .await?;
+        loop {
+            let url = match &page_token {
+                Some(token) => format!(
+                    "{}?pageSize=500&pageToken={}",
+                    base_url,
+                    urlencoding::encode(token)
+                ),
+                None => format!("{}?pageSize=500", base_url),
+            };
 
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Failed to get KG nodes: {}", error_text).into());
+            let response = self
+                .build_request(reqwest::Method::GET, &url)
+                .await?
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Failed to get KG nodes: {}", error_text).into());
+            }
+
+            let result: Value = response.json().await?;
+            if let Some(documents) = result.get("documents").and_then(|d| d.as_array()) {
+                nodes.extend(
+                    documents
+                        .iter()
+                        .filter_map(|doc| self.parse_kg_node(doc).ok()),
+                );
+            }
+            page_token = result
+                .get("nextPageToken")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            if page_token.is_none() {
+                break;
+            }
         }
-
-        let result: Value = response.json().await?;
-        let documents = result.get("documents").and_then(|d| d.as_array());
-
-        let nodes: Vec<crate::models::KnowledgeGraphNode> = documents
-            .map(|docs| {
-                docs.iter()
-                    .filter_map(|doc| self.parse_kg_node(doc).ok())
-                    .collect()
-            })
-            .unwrap_or_default();
 
         tracing::info!("Found {} KG nodes for user {}", nodes.len(), uid);
         Ok(nodes)
@@ -156,35 +174,53 @@ impl FirestoreService {
         uid: &str,
     ) -> Result<Vec<crate::models::KnowledgeGraphEdge>, Box<dyn std::error::Error + Send + Sync>>
     {
-        let url = format!(
+        let base_url = format!(
             "{}/{}/{}/{}",
             self.base_url(),
             USERS_COLLECTION,
             uid,
             KG_EDGES_SUBCOLLECTION
         );
+        let mut page_token: Option<String> = None;
+        let mut edges = Vec::new();
 
-        let response = self
-            .build_request(reqwest::Method::GET, &url)
-            .await?
-            .send()
-            .await?;
+        loop {
+            let url = match &page_token {
+                Some(token) => format!(
+                    "{}?pageSize=500&pageToken={}",
+                    base_url,
+                    urlencoding::encode(token)
+                ),
+                None => format!("{}?pageSize=500", base_url),
+            };
 
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Failed to get KG edges: {}", error_text).into());
+            let response = self
+                .build_request(reqwest::Method::GET, &url)
+                .await?
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Failed to get KG edges: {}", error_text).into());
+            }
+
+            let result: Value = response.json().await?;
+            if let Some(documents) = result.get("documents").and_then(|d| d.as_array()) {
+                edges.extend(
+                    documents
+                        .iter()
+                        .filter_map(|doc| self.parse_kg_edge(doc).ok()),
+                );
+            }
+            page_token = result
+                .get("nextPageToken")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            if page_token.is_none() {
+                break;
+            }
         }
-
-        let result: Value = response.json().await?;
-        let documents = result.get("documents").and_then(|d| d.as_array());
-
-        let edges: Vec<crate::models::KnowledgeGraphEdge> = documents
-            .map(|docs| {
-                docs.iter()
-                    .filter_map(|doc| self.parse_kg_edge(doc).ok())
-                    .collect()
-            })
-            .unwrap_or_default();
 
         tracing::info!("Found {} KG edges for user {}", edges.len(), uid);
         Ok(edges)
@@ -206,11 +242,17 @@ impl FirestoreService {
                 KG_NODES_SUBCOLLECTION,
                 node.id
             );
-            let _ = self
+            let response = self
                 .build_request(reqwest::Method::DELETE, &url)
                 .await?
                 .send()
-                .await;
+                .await?;
+            if !response.status().is_success()
+                && response.status() != reqwest::StatusCode::NOT_FOUND
+            {
+                let error_text = response.text().await?;
+                return Err(format!("Failed to delete KG node: {}", error_text).into());
+            }
         }
 
         // Delete all edges
@@ -224,11 +266,17 @@ impl FirestoreService {
                 KG_EDGES_SUBCOLLECTION,
                 edge.id
             );
-            let _ = self
+            let response = self
                 .build_request(reqwest::Method::DELETE, &url)
                 .await?
                 .send()
-                .await;
+                .await?;
+            if !response.status().is_success()
+                && response.status() != reqwest::StatusCode::NOT_FOUND
+            {
+                let error_text = response.text().await?;
+                return Err(format!("Failed to delete KG edge: {}", error_text).into());
+            }
         }
 
         tracing::info!(

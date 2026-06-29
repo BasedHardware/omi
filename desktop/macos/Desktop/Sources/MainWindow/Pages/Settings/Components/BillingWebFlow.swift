@@ -83,13 +83,15 @@ struct BillingWebView: NSViewRepresentable {
       decidePolicyFor navigationAction: WKNavigationAction,
       decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-      guard let url = navigationAction.request.url?.absoluteString else {
+      guard let url = navigationAction.request.url else {
         decisionHandler(.allow)
         return
       }
 
-      if let matchedCompletionURL = flow.completionURLs.first(where: { url.hasPrefix($0) }) {
-        if matchedCompletionURL.hasSuffix("/cancel") {
+      if let matchedCompletionURL = flow.completionURLs.compactMap(URL.init(string:)).first(where: {
+        Self.urlsMatchCompletion(url, completionURL: $0)
+      }) {
+        if matchedCompletionURL.pathComponents.last == "cancel" {
           finish(.cancelled)
         } else {
           finish(.completed)
@@ -99,6 +101,16 @@ struct BillingWebView: NSViewRepresentable {
       }
 
       decisionHandler(.allow)
+    }
+
+    private static func urlsMatchCompletion(_ url: URL, completionURL: URL) -> Bool {
+      guard url.scheme == completionURL.scheme,
+        url.host == completionURL.host,
+        url.path == completionURL.path
+      else {
+        return false
+      }
+      return url.query == completionURL.query || completionURL.query == nil
     }
 
     func webView(

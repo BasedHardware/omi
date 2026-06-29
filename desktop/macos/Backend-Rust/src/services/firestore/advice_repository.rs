@@ -151,8 +151,7 @@ impl FirestoreService {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            tracing::error!("Firestore query error: {}", error_text);
-            return Ok(vec![]);
+            return Err(format!("Firestore query error: {}", error_text).into());
         }
 
         let results: Vec<Value> = response.json().await?;
@@ -266,7 +265,8 @@ impl FirestoreService {
 
         // Update each one
         for advice in unread {
-            let _ = self.update_advice(uid, &advice.id, Some(true), None).await;
+            self.update_advice(uid, &advice.id, Some(true), None)
+                .await?;
         }
 
         Ok(count)

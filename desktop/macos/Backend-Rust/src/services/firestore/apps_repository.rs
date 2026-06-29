@@ -472,39 +472,34 @@ impl FirestoreService {
         &self,
         app_id: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        // First get current installs
-        let app = match self.get_app("", app_id).await? {
-            Some(a) => a,
-            None => return Ok(()),
-        };
-
-        let new_installs = app.installs + 1;
-
-        let url = format!(
-            "{}/{}/{}?updateMask.fieldPaths=installs",
-            self.base_url(),
-            APPS_COLLECTION,
-            app_id
+        let document = format!("{}/{}/{}", self.base_url(), APPS_COLLECTION, app_id);
+        let commit_url = format!(
+            "https://firestore.googleapis.com/v1/projects/{}/databases/(default)/documents:commit",
+            self.project_id
         );
-
-        let doc = json!({
-            "fields": {
-                "installs": {"integerValue": new_installs.to_string()}
-            }
+        let body = json!({
+            "writes": [{
+                "transform": {
+                    "document": document,
+                    "fieldTransforms": [{
+                        "fieldPath": "installs",
+                        "increment": {"integerValue": "1"}
+                    }]
+                },
+                "currentDocument": {"exists": true}
+            }]
         });
 
         let response = self
-            .build_request(reqwest::Method::PATCH, &url)
+            .build_request(reqwest::Method::POST, &commit_url)
             .await?
-            .json(&doc)
+            .json(&body)
             .send()
             .await?;
 
         if !response.status().is_success() {
-            tracing::warn!(
-                "Failed to increment app installs: {}",
-                response.text().await?
-            );
+            let error_text = response.text().await?;
+            return Err(format!("Failed to increment app installs: {}", error_text).into());
         }
 
         Ok(())

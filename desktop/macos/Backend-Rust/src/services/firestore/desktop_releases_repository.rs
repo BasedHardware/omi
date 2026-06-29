@@ -5,31 +5,50 @@ impl FirestoreService {
         &self,
     ) -> Result<Vec<crate::routes::updates::ReleaseInfo>, Box<dyn std::error::Error + Send + Sync>>
     {
-        let url = format!("{}/desktop_releases", self.base_url());
-
-        let response = self
-            .build_request(reqwest::Method::GET, &url)
-            .await?
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            // If collection doesn't exist, return empty list
-            if response.status() == reqwest::StatusCode::NOT_FOUND {
-                return Ok(vec![]);
-            }
-            let error_text = response.text().await?;
-            return Err(format!("Firestore error: {}", error_text).into());
-        }
-
-        let data: Value = response.json().await?;
+        let base_url = format!("{}/desktop_releases", self.base_url());
+        let mut page_token: Option<String> = None;
         let mut releases = Vec::new();
 
-        if let Some(documents) = data.get("documents").and_then(|d| d.as_array()) {
-            for doc in documents {
-                if let Ok(release) = self.parse_release(doc) {
-                    releases.push(release);
+        loop {
+            let url = match &page_token {
+                Some(token) => format!(
+                    "{}?pageSize=500&pageToken={}",
+                    base_url,
+                    urlencoding::encode(token)
+                ),
+                None => format!("{}?pageSize=500", base_url),
+            };
+
+            let response = self
+                .build_request(reqwest::Method::GET, &url)
+                .await?
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                // If collection doesn't exist, return empty list
+                if response.status() == reqwest::StatusCode::NOT_FOUND {
+                    return Ok(vec![]);
                 }
+                let error_text = response.text().await?;
+                return Err(format!("Firestore error: {}", error_text).into());
+            }
+
+            let data: Value = response.json().await?;
+            if let Some(documents) = data.get("documents").and_then(|d| d.as_array()) {
+                for doc in documents {
+                    if let Ok(release) = self.parse_release(doc) {
+                        releases.push(release);
+                    }
+                }
+            }
+
+            page_token = data
+                .get("nextPageToken")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            if page_token.is_none() {
+                break;
             }
         }
 
@@ -65,7 +84,10 @@ impl FirestoreService {
 
         Ok(crate::routes::updates::ReleaseInfo {
             version: self.parse_string(fields, "version").unwrap_or_default(),
-            build_number: self.parse_int(fields, "build_number").unwrap_or(0) as u32,
+            build_number: self
+                .parse_int(fields, "build_number")
+                .and_then(|value| u32::try_from(value).ok())
+                .unwrap_or(0),
             download_url: self
                 .parse_string(fields, "download_url")
                 .unwrap_or_default(),
@@ -170,10 +192,15 @@ impl FirestoreService {
         let new_channel_value = json!({"stringValue": new_channel});
 
         // PATCH only the channel field
+        let update_time = doc
+            .get("updateTime")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing updateTime in document")?;
         let patch_url = format!(
-            "{}/desktop_releases/{}?updateMask.fieldPaths=channel",
+            "{}/desktop_releases/{}?updateMask.fieldPaths=channel&currentDocument.updateTime={}",
             self.base_url(),
-            doc_id
+            doc_id,
+            urlencoding::encode(update_time)
         );
 
         let patch_doc = json!({
