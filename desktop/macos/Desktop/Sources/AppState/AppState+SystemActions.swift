@@ -1,0 +1,429 @@
+import AVFoundation
+import Combine
+import SwiftUI
+import UserNotifications
+
+@MainActor
+extension AppState {
+  func requestMicrophonePermission() {
+    // Activate app to ensure permission dialog appears
+    NSApp.activate()
+
+    log(
+      "Requesting microphone permission, current status: \(AudioCaptureService.authorizationStatus().rawValue)"
+    )
+
+    Task {
+      let granted = await AudioCaptureService.requestPermission()
+      await MainActor.run {
+        self.hasMicrophonePermission = granted
+        log("Microphone permission request completed, granted: \(granted)")
+        if granted {
+          log("Microphone permission granted")
+          // Only start transcription if onboarding is complete
+          // During onboarding, we just update the permission state
+          if self.hasCompletedOnboarding {
+            self.startTranscription()
+          }
+        } else {
+          log("Microphone permission denied")
+          // UI will show the denied state with reset options inline
+        }
+      }
+    }
+  }
+
+  /// Check microphone permission status
+  func checkMicrophonePermission() {
+    hasMicrophonePermission = AudioCaptureService.checkPermission()
+  }
+
+  /// Check if microphone permission was explicitly denied
+  func isMicrophonePermissionDenied() -> Bool {
+    return AudioCaptureService.isPermissionDenied()
+  }
+
+  /// Check if screen recording permission is denied (onboarding complete but permission not granted)
+  func isScreenRecordingPermissionDenied() -> Bool {
+    return hasCompletedOnboarding && !CGPreflightScreenCaptureAccess()
+  }
+
+  /// Restart the app by launching a new instance and terminating the current one
+  nonisolated func restartApp() {
+    if UpdaterViewModel.isUpdateInProgress {
+      log("Sparkle update in progress, skipping independent restart (Sparkle will handle relaunch)")
+      return
+    }
+
+    log("Restarting app...")
+
+    guard let bundleURL = Bundle.main.bundleURL as URL? else {
+      log("Failed to get bundle URL for restart")
+      return
+    }
+
+    // Use a shell script to wait briefly, then relaunch the app
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/bin/sh")
+    task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+
+    do {
+      try task.run()
+      log("Restart scheduled, terminating current instance...")
+
+      // Terminate the current app
+      DispatchQueue.main.async {
+        NSApplication.shared.terminate(nil)
+      }
+    } catch {
+      log("Failed to schedule restart: \(error)")
+    }
+  }
+
+  /// Reset onboarding state for the current app only, then restart.
+  /// This clears onboarding state without touching production data or system permissions.
+  nonisolated func resetOnboardingAndRestart() {
+    log("Resetting onboarding state for current app...")
+
+    // Update live @AppStorage state in the current app instance before touching
+    // raw UserDefaults so SwiftUI doesn't write stale onboarding values back.
+    DispatchQueue.main.async {
+      NotificationCenter.default.post(name: .resetOnboardingRequested, object: nil)
+    }
+
+    // Clear onboarding-related UserDefaults keys (thread-safe, do first)
+    let onboardingKeys = [
+      "hasCompletedOnboarding",
+      "onboardingStep",
+      "hasSeenRewindIntro",
+      "hasTriggeredNotification",
+      "hasTriggeredAutomation",
+      "hasTriggeredScreenRecording",
+      "hasTriggeredMicrophone",
+      "hasTriggeredSystemAudio",
+      "hasTriggeredAccessibility",
+      "hasTriggeredBluetooth",
+      "onboardingJustCompleted",
+    ]
+    for key in onboardingKeys {
+      UserDefaults.standard.removeObject(forKey: key)
+    }
+    UserDefaults.standard.synchronize()
+    log("Cleared onboarding UserDefaults keys")
+
+    // Clear onboarding chat persistence and messages
+    OnboardingChatPersistence.clear()
+    log("Cleared onboarding chat persistence")
+
+    // Clear knowledge graph (local + server) so the onboarding chart starts fresh
+    Task {
+      await KnowledgeGraphStorage.shared.clearAll()
+      log("Cleared local knowledge graph storage")
+      do {
+        try await APIClient.shared.deleteKnowledgeGraph()
+        log("Cleared server knowledge graph")
+      } catch {
+        logError("Failed to clear server knowledge graph during onboarding reset", error: error)
+      }
+    }
+
+    // Clear persisted backend chat messages so onboarding does not resume old history.
+    // Onboarding currently uses the default chat message stream.
+    Task {
+      do {
+        _ = try await APIClient.shared.deleteMessages()
+        log("Cleared backend chat messages")
+      } catch {
+        logError("Failed to clear backend chat messages during onboarding reset", error: error)
+      }
+    }
+
+    // Restart off the main thread to avoid blocking the menu action path.
+    DispatchQueue.global(qos: .utility).async { [self] in
+      Thread.sleep(forTimeInterval: 0.15)
+      // Keep onboarding reset scoped to the current app instance.
+      // It must not mutate production defaults, shared local data, or TCC permissions.
+      self.restartApp()
+    }
+  }
+
+  /// Clean conflicting app bundles from Trash, DerivedData, and DMG staging directories
+  nonisolated func cleanConflictingAppBundles() {
+    let fileManager = FileManager.default
+    let homeDir = fileManager.homeDirectoryForCurrentUser.path
+
+    // Clean Omi apps from Trash (they still pollute Launch Services!)
+    let trashPath = "\(homeDir)/.Trash"
+    if let contents = try? fileManager.contentsOfDirectory(atPath: trashPath) {
+      for item in contents where item.lowercased().contains("omi") {
+        let itemPath = "\(trashPath)/\(item)"
+        do {
+          try fileManager.removeItem(atPath: itemPath)
+          log("Cleaned from Trash: \(item)")
+        } catch {
+          log("Failed to clean from Trash: \(item) - \(error.localizedDescription)")
+        }
+      }
+    }
+
+    // Clean DMG staging directories
+    let tmpDir = "/private/tmp"
+    if let contents = try? fileManager.contentsOfDirectory(atPath: tmpDir) {
+      for item in contents where item.hasPrefix("omi-dmg-staging") || item.hasPrefix("omi-dmg-test")
+      {
+        let itemPath = "\(tmpDir)/\(item)"
+        do {
+          try fileManager.removeItem(atPath: itemPath)
+          log("Cleaned DMG staging: \(item)")
+        } catch {
+          log("Failed to clean DMG staging: \(item) - \(error.localizedDescription)")
+        }
+      }
+    }
+
+    // Clean Xcode DerivedData Omi builds
+    let derivedDataPath = "\(homeDir)/Library/Developer/Xcode/DerivedData"
+    if let contents = try? fileManager.contentsOfDirectory(atPath: derivedDataPath) {
+      for item in contents where item.lowercased().contains("omi") {
+        let buildProductsPath = "\(derivedDataPath)/\(item)/Build/Products"
+        if let buildDirs = try? fileManager.contentsOfDirectory(atPath: buildProductsPath) {
+          for buildDir in buildDirs {
+            let appPath = "\(buildProductsPath)/\(buildDir)/Omi.app"
+            let appPath2 = "\(buildProductsPath)/\(buildDir)/Omi Computer.app"
+            let appPath3 = "\(buildProductsPath)/\(buildDir)/omi.app"
+            let appPath4 = "\(buildProductsPath)/\(buildDir)/Omi Dev.app"
+            for path in [appPath, appPath2, appPath3, appPath4] {
+              if fileManager.fileExists(atPath: path) {
+                do {
+                  try fileManager.removeItem(atPath: path)
+                  log("Cleaned DerivedData: \(path)")
+                } catch {
+                  log("Failed to clean DerivedData: \(path) - \(error.localizedDescription)")
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /// Eject any mounted Omi DMG volumes
+  nonisolated func ejectMountedDMGVolumes() {
+    let fileManager = FileManager.default
+    let volumesPath = "/Volumes"
+
+    guard let contents = try? fileManager.contentsOfDirectory(atPath: volumesPath) else { return }
+
+    for volume in contents where volume.lowercased().contains("omi") || volume.hasPrefix("dmg.") {
+      let volumePath = "\(volumesPath)/\(volume)"
+
+      // Try diskutil eject first
+      let process = Process()
+      process.executableURL = URL(fileURLWithPath: "/usr/sbin/diskutil")
+      process.arguments = ["eject", volumePath]
+      process.standardOutput = FileHandle.nullDevice
+      process.standardError = FileHandle.nullDevice
+
+      do {
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus == 0 {
+          log("Ejected volume: \(volume)")
+        } else {
+          // Try hdiutil detach as fallback
+          let detachProcess = Process()
+          detachProcess.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+          detachProcess.arguments = ["detach", volumePath]
+          detachProcess.standardOutput = FileHandle.nullDevice
+          detachProcess.standardError = FileHandle.nullDevice
+          try? detachProcess.run()
+          detachProcess.waitUntilExit()
+        }
+      } catch {
+        log("Failed to eject volume: \(volume) - \(error.localizedDescription)")
+      }
+    }
+  }
+
+  /// Reset Launch Services database to clear stale app registrations
+  nonisolated func resetLaunchServicesDatabase() {
+    let lsregisterPath =
+      "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: lsregisterPath)
+    process.arguments = ["-kill", "-r", "-domain", "local", "-domain", "user"]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+
+    do {
+      try process.run()
+      process.waitUntilExit()
+      log("Launch Services database reset (exit code: \(process.terminationStatus))")
+    } catch {
+      log("Failed to reset Launch Services: \(error.localizedDescription)")
+    }
+  }
+
+  /// Clean user TCC database entries for Omi apps
+  nonisolated func cleanUserTCCDatabase() {
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+    let tccDbPath = "\(homeDir)/Library/Application Support/com.apple.TCC/TCC.db"
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+    process.arguments = [
+      tccDbPath, "DELETE FROM access WHERE client LIKE '%com.omi.computer-macos%';",
+    ]
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = FileHandle.nullDevice
+
+    do {
+      try process.run()
+      process.waitUntilExit()
+      log("User TCC database cleaned (exit code: \(process.terminationStatus))")
+    } catch {
+      log("Failed to clean user TCC database: \(error.localizedDescription)")
+    }
+
+    // Also clean entries for non-production Omi bundles (for example com.omi.desktop-dev, com.omi.1233).
+    let process2 = Process()
+    process2.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
+    process2.arguments = [
+      tccDbPath,
+      "DELETE FROM access WHERE client LIKE 'com.omi.%' AND client != 'com.omi.computer-macos';",
+    ]
+    process2.standardOutput = FileHandle.nullDevice
+    process2.standardError = FileHandle.nullDevice
+
+    do {
+      try process2.run()
+      process2.waitUntilExit()
+      log(
+        "User TCC database cleaned for non-production bundles (exit code: \(process2.terminationStatus))"
+      )
+    } catch {
+      log(
+        "Failed to clean user TCC database for non-production bundles: \(error.localizedDescription)"
+      )
+    }
+  }
+
+  /// Reset microphone permission using tccutil (Option 1: Direct)
+  /// Returns true if the reset command was executed successfully
+  /// If shouldRestart is true, the app will restart after reset
+  nonisolated func resetMicrophonePermissionDirect(shouldRestart: Bool = false) -> Bool {
+    let bundleId = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
+    log("Resetting microphone permission for \(bundleId) via tccutil...")
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+    process.arguments = ["reset", "Microphone", bundleId]
+
+    do {
+      try process.run()
+      process.waitUntilExit()
+      let success = process.terminationStatus == 0
+      log("tccutil reset completed with exit code: \(process.terminationStatus)")
+
+      if success && shouldRestart {
+        restartApp()
+      }
+
+      return success
+    } catch {
+      log("Failed to run tccutil: \(error)")
+      return false
+    }
+  }
+
+  /// Reset microphone permission via Terminal (Option 2: Visible to user)
+  /// If shouldRestart is true, the app will restart after the terminal command
+  func resetMicrophonePermissionViaTerminal(shouldRestart: Bool = false) {
+    let bundleId = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
+    let appPath = Bundle.main.bundleURL.path
+    log("Opening Terminal to reset microphone permission for \(bundleId)...")
+
+    // Build the shell command - escape single quotes in path for shell
+    let escapedPath = appPath.replacingOccurrences(of: "'", with: "'\\''")
+    let restartCommand = shouldRestart ? " && open '\(escapedPath)'" : ""
+    let shellCommand =
+      "tccutil reset Microphone \(bundleId) && echo 'Done! Permission reset.'\(restartCommand)"
+
+    // AppleScript to open Terminal and run the command
+    let script = "tell application \"Terminal\"\nactivate\ndo script \"\(shellCommand)\"\nend tell"
+
+    var error: NSDictionary?
+    if let appleScript = NSAppleScript(source: script) {
+      appleScript.executeAndReturnError(&error)
+      if let error = error {
+        log("AppleScript error: \(error)")
+      } else if shouldRestart {
+        // Terminate current app after terminal script is running
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+          NSApplication.shared.terminate(nil)
+        }
+      }
+    }
+  }
+
+  /// Check system audio permission status
+  /// This checks if the test capture was successful (set by triggerSystemAudioPermission)
+  func checkSystemAudioPermission() {
+    // Permission is set by triggerSystemAudioPermission after successful test
+    // No-op here - we rely on the test result
+  }
+
+  /// Trigger system audio permission by actually testing capture
+  /// This verifies system audio works by briefly starting and stopping capture
+  func triggerSystemAudioPermission() {
+    guard #available(macOS 14.4, *) else {
+      log("System audio not supported on this macOS version")
+      hasSystemAudioPermission = false
+      return
+    }
+
+    log("System audio: Testing capture...")
+
+    // Create a test capture service
+    let testService = SystemAudioCaptureService()
+
+    Task {
+      do {
+        // Try to start capture - this will fail if permission is not granted
+        try await testService.startCapture { _ in
+          // We don't need the audio data, just testing if it works
+        }
+
+        // If we get here, capture started successfully
+        log("System audio: Test capture started successfully")
+
+        // Stop the test capture
+        testService.stopCapture()
+        log("System audio: Test capture stopped")
+
+        // Mark permission as granted
+        hasSystemAudioPermission = true
+        log("System audio: Permission verified")
+
+      } catch {
+        logError("System audio: Test capture failed", error: error)
+        hasSystemAudioPermission = false
+
+        // Open System Settings to Screen Recording section
+        if let url = URL(
+          string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
+        {
+          NSWorkspace.shared.open(url)
+        }
+      }
+    }
+  }
+}
+
+// MARK: - System Event Notification Names
+
+extension Notification.Name {
+  /// Posted when the current app instance should fully clear its own onboarding state.
+}
