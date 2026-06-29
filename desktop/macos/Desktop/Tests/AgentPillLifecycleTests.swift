@@ -128,7 +128,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     let rowSource = String(source[rowRange.lowerBound..<heightRange.lowerBound])
 
     XCTAssertTrue(rowSource.contains("Text(\"Omi Chat\")"))
-    XCTAssertTrue(rowSource.contains("onAskAI()"))
+    XCTAssertTrue(rowSource.contains("openOmiChatFromNotchRow()"))
+    XCTAssertTrue(rowSource.contains("private var notchOmiChatOverlayHitTarget: some View"))
+    XCTAssertTrue(rowSource.contains(".accessibilityLabel(\"Omi Chat\")"))
     XCTAssertTrue(rowSource.contains("notchShortcutHint(\"Ask\""))
     XCTAssertTrue(rowSource.contains("notchShortcutHint(systemImage: \"mic.fill\""))
     XCTAssertFalse(rowSource.contains("notchShortcutHint(\"PTT\""))
@@ -210,6 +212,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(": .spring(response: 0.18, dampingFraction: 0.92)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
     XCTAssertTrue(source.contains("notchOmiChatRow\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
+    XCTAssertTrue(source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
+    XCTAssertTrue(source.contains("notchOmiChatOverlayHitTarget\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
+    XCTAssertTrue(source.contains(".offset(y: FloatingControlBarWindow.notchChromeHeight)"))
+    XCTAssertTrue(source.contains(".zIndex(2)"))
     XCTAssertTrue(source.contains("height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("state.present(.agent(pill.id))"))
     XCTAssertTrue(source.contains("private let agentChatSwitchTransition = Animation.easeOut(duration: 0.10)"))
@@ -232,7 +238,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("ForEach(0..<NotchAgentStackMetrics.maxAgents"))
     XCTAssertTrue(source.contains("NotchLogoPlaceholderDot(progress: logoPlaceholderProgress)"))
     XCTAssertTrue(source.contains("Color.white.opacity(0.96 * Double(1 - progress))"))
-    XCTAssertTrue(source.contains("if shouldShowNotchHoverMenu && !showingNotchWaveform"))
+    XCTAssertTrue(source.contains("private var shouldUseOmiChatOverlayHitTarget: Bool"))
+    XCTAssertTrue(source.contains("if shouldUseOmiChatOverlayHitTarget"))
     XCTAssertTrue(source.contains("rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
@@ -520,6 +527,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     // size on legacy displays, not just record the boolean.
     XCTAssertTrue(source.contains("guard !self.notchModeEnabled else { return }"))
     XCTAssertTrue(source.contains("self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)"))
+  }
+
+  func testStartupRevalidatesDisplayMetadataForAutomaticNotchMode() throws {
+    let source = try floatingControlBarWindowSource()
+
+    // Some MacBook notch safe-area metadata can arrive after the floating bar
+    // window is created. Startup retries should use the same layout path as
+    // display changes so users do not need to change screen resolution first.
+    XCTAssertTrue(source.contains("private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]"))
+    XCTAssertTrue(source.contains("scheduleStartupDisplayRevalidation()"))
+    XCTAssertTrue(source.contains("self?.validatePositionOnScreenChange(reason: \"startup_display_revalidation\")"))
+    XCTAssertTrue(source.contains("self?.validatePositionOnScreenChange(reason: \"screen_parameters_changed\")"))
   }
 
   func testBackFromAgentUsesSharedDisplayAwarePath() throws {
