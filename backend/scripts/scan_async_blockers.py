@@ -316,7 +316,7 @@ def changed_scope(diff_base, dirs):
         "git",
         "diff",
         "--unified=0",
-        "--diff-filter=ACM",
+        "--diff-filter=ACMR",
         f"{diff_base}...HEAD",
         "--",
         *_diff_paths(dirs),
@@ -341,6 +341,13 @@ def changed_scope(diff_base, dirs):
             start = int(match.group(1))
             count = int(match.group(2) or "1")
             if count == 0:
+                # Deletion-only hunks have an empty new-side range (for example
+                # ``+42,0``). Keep the adjacent post-delete line in scope so
+                # diff-scoped fail-on checks still catch regressions caused by
+                # removing an await/offload inside an otherwise unchanged async
+                # function.
+                start = max(start, 1)
+                ranges_by_file[current_file].append((start, start))
                 continue
             ranges_by_file[current_file].append((start, start + count - 1))
             continue
@@ -367,8 +374,6 @@ def finding_in_changed_scope(finding, scope):
 
 
 def _finding_qualifies(category, finding):
-    if category == "no_await_should_be_def":
-        return bool(finding.get("all_blocking"))
     return True
 
 
