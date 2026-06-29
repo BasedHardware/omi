@@ -163,10 +163,18 @@ impl IntoResponse for ErrorResponse {
 }
 
 fn api_base_url(config: &Config) -> Result<&str, ErrorResponse> {
-    config.base_api_url.as_deref().ok_or_else(|| ErrorResponse {
-        error: "not_configured".to_string(),
-        message: "BASE_API_URL not configured".to_string(),
-    })
+    config
+        .base_api_url
+        .as_deref()
+        .filter(|url| is_nonblank_url(url))
+        .ok_or_else(|| ErrorResponse {
+            error: "not_configured".to_string(),
+            message: "BASE_API_URL not configured".to_string(),
+        })
+}
+
+fn is_nonblank_url(url: &str) -> bool {
+    !url.trim().is_empty()
 }
 
 // OAuth credential data stored in auth codes
@@ -646,7 +654,8 @@ async fn generate_custom_token(
     let request_uri = state
         .config
         .base_api_url
-        .as_ref()
+        .as_deref()
+        .filter(|url| is_nonblank_url(url))
         .ok_or("BASE_API_URL not configured")?;
 
     // Sign in with OAuth credential using Firebase Auth REST API
@@ -757,4 +766,22 @@ pub fn auth_routes(config: Arc<Config>) -> Router {
         .route("/v1/auth/callback/google", get(auth_callback_google))
         .route("/v1/auth/token", post(auth_token))
         .with_state(auth_state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_base_url_rejects_blank_values() {
+        assert!(!is_nonblank_url(""));
+        assert!(!is_nonblank_url("   "));
+        assert!(!is_nonblank_url("\n\t"));
+    }
+
+    #[test]
+    fn auth_base_url_accepts_nonblank_values() {
+        assert!(is_nonblank_url("https://desktop-backend.example.com"));
+        assert!(is_nonblank_url("  https://desktop-backend.example.com  "));
+    }
 }
