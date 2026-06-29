@@ -55,21 +55,23 @@ class TestCapItemsForLlm:
 
 class TestBoundedResult:
     def test_truncated_appends_summarize_and_narrow_note(self):
-        out = rb.bounded_result("User Memories (500 total):\n- a fact", 500, True, noun="memories")
-        assert "500 memories" in out
+        out = rb.bounded_result("User Memories (300 shown):\n- a fact", True, noun="memories")
+        # No definitive total is claimed (the page length is not the true total); it says more may exist.
+        assert "more may exist" in out
+        assert "most relevant memories" in out
         assert "Summarize what is shown" in out
-        assert "narrow" in out
+        assert "narrower" in out
 
     def test_not_truncated_short_result_unchanged(self):
-        body = "User Memories (3 total):\n- a fact"
-        assert rb.bounded_result(body, 3, False, noun="memories") == body
+        body = "User Memories (3 shown):\n- a fact"
+        assert rb.bounded_result(body, False, noun="memories") == body
 
     def test_oversized_result_is_clipped_to_budget_with_note(self):
         big = "x" * (rb.MAX_RESULT_CHARS + 5000)
-        out = rb.bounded_result(big, 1000, False, noun="memories")
+        out = rb.bounded_result(big, False, noun="memories")
         assert len(out) <= rb.MAX_RESULT_CHARS + 400  # budget plus the appended note
         assert "Summarize what is shown" in out
 
     def test_default_noun(self):
-        out = rb.bounded_result("body", 10, True)
-        assert "10 results" in out
+        out = rb.bounded_result("body", True)
+        assert "most relevant results" in out
