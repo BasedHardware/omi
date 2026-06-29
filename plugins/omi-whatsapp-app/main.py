@@ -29,10 +29,11 @@ if _SHARED not in sys.path:
     sys.path.insert(0, _SHARED)
 
 import httpx  # noqa: E402
-from fastapi import FastAPI, Header, HTTPException, Query, Request, Response  # noqa: E402
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
 import simple_storage  # noqa: E402
+from auth import require_bearer  # noqa: E402  (shared bearer-token auth — see plugins/_shared/auth.py)
 import whatsapp_client  # noqa: E402
 from persona_client import chat as _persona_chat  # noqa: E402
 import secrets  # noqa: E402
@@ -455,7 +456,7 @@ class SetupResponse(BaseModel):
     setup_token: str
 
 
-@app.post("/setup", response_model=SetupResponse)
+@app.post("/setup", response_model=SetupResponse, dependencies=[Depends(require_bearer)])
 async def setup(req: SetupRequest):
     """Register the user's WhatsApp Business API creds and return a one-shot deep link.
 
@@ -617,7 +618,7 @@ class ToggleResponse(BaseModel):
     auto_reply_enabled: bool
 
 
-@app.post("/toggle", response_model=ToggleResponse)
+@app.post("/toggle", response_model=ToggleResponse, dependencies=[Depends(require_bearer)])
 async def toggle(req: ToggleRequest):
     """Enable or disable auto-reply for the given phone.
 
