@@ -5,7 +5,7 @@ import zlib
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -170,6 +170,24 @@ def upsert_conversation(uid: str, conversation_data: dict):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     conversation_ref.set(conversation_data)
+
+
+@set_data_protection_level(data_arg_name='conversation_data')
+@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
+def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
+    """Atomically create a conversation document if it does not already exist."""
+    if 'audio_base64_url' in conversation_data:
+        del conversation_data['audio_base64_url']
+    if 'photos' in conversation_data:
+        del conversation_data['photos']
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    try:
+        conversation_ref.create(conversation_data)
+        return True
+    except (AlreadyExists, Conflict):
+        return False
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -741,6 +759,35 @@ def update_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
+
+
+def claim_conversation_status(
+    uid: str,
+    conversation_id: str,
+    expected_status: ConversationStatus,
+    claimed_status: ConversationStatus,
+    extra_updates: Optional[Dict[str, Any]] = None,
+) -> bool:
+    """Atomically transition a conversation status when the current status matches."""
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _claim(transaction):
+        snapshot = conversation_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            raise NotFound(f'Conversation {conversation_id} not found')
+        current = snapshot.to_dict() or {}
+        if current.get('status') != expected_status.value:
+            return False
+        updates = {'status': claimed_status.value}
+        if extra_updates:
+            updates.update(extra_updates)
+        transaction.update(conversation_ref, updates)
+        return True
+
+    return _claim(transaction)
 
 
 def set_conversation_as_discarded(uid: str, conversation_id: str):
