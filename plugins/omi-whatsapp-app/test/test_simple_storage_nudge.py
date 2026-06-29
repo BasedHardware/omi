@@ -19,9 +19,7 @@ sys.path.insert(0, _PLUGIN_ROOT)
 
 
 def _load_simple_storage():
-    spec = importlib.util.spec_from_file_location(
-        "simple_storage", os.path.join(_PLUGIN_ROOT, "simple_storage.py")
-    )
+    spec = importlib.util.spec_from_file_location("simple_storage", os.path.join(_PLUGIN_ROOT, "simple_storage.py"))
     mod = importlib.util.module_from_spec(spec)
     sys.modules["simple_storage"] = mod
     spec.loader.exec_module(mod)
