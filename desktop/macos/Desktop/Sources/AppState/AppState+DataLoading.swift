@@ -3,6 +3,8 @@ import Combine
 import SwiftUI
 import UserNotifications
 
+private struct LocalConversationCacheTimeout: Error {}
+
 @MainActor
 extension AppState {
 
@@ -55,7 +57,7 @@ extension AppState {
           }
           group.addTask {
             try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
-            throw CancellationError()
+            throw LocalConversationCacheTimeout()
           }
           let result = try await group.next()!
           group.cancelAll()
@@ -77,6 +79,11 @@ extension AppState {
           // Notify sidebar immediately so loading indicator clears with cached data
           NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
         }
+      } catch is LocalConversationCacheTimeout {
+        log("Conversations: Local cache load timed out, falling back to API")
+      } catch is CancellationError {
+        log("Conversations: Local cache load cancelled")
+        return
       } catch {
         log("Conversations: Local cache unavailable, falling back to API")
         // Continue to API fetch even if local fails
@@ -139,7 +146,7 @@ extension AppState {
       // DEBUG: Log any conversations with empty titles
       for conv in fetchedConversations where conv.structured.title.isEmpty {
         log(
-          "DEBUG: Conversation \(conv.id) has EMPTY title! overview=\(conv.structured.overview.prefix(50))..."
+          "DEBUG: Conversation \(conv.id) has EMPTY title"
         )
       }
 
@@ -392,13 +399,18 @@ extension AppState {
       try await APIClient.shared.moveConversationToFolder(
         conversationId: conversationId, folderId: folderId)
 
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateFolderByBackendId(
-        conversationId, folderId: folderId)
-
       var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
       mutation.setFolderId(folderId)
       pendingConversationMutations[conversationId] = mutation
+
+      // Sync to local SQLite cache so reload doesn't revert the change. A cache write failure
+      // should not roll back the already-successful backend move or block UI reconciliation.
+      do {
+        try await TranscriptionStorage.shared.updateFolderByBackendId(
+          conversationId, folderId: folderId)
+      } catch {
+        logError("Folders: Failed to update local folder cache", error: error)
+      }
 
       // Update local state
       if conversations.contains(where: { $0.id == conversationId }) {

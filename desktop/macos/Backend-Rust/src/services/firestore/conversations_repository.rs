@@ -339,7 +339,9 @@ impl FirestoreService {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // First get the current conversation to append to apps_results
         let current = self.get_conversation(uid, conversation_id).await?;
-        let mut apps_results = current.map(|c| c.apps_results).unwrap_or_default();
+        let mut apps_results = current
+            .ok_or_else(|| "Conversation not found".to_string())?
+            .apps_results;
 
         // Remove existing result for this app if present, then add new one
         apps_results.retain(|r| r.app_id.as_deref() != Some(app_id));

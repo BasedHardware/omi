@@ -979,7 +979,14 @@ impl FirestoreService {
     }
 
     pub(super) fn parse_float(&self, fields: &Value, key: &str) -> Option<f64> {
-        fields.get(key)?.get("doubleValue")?.as_f64()
+        let value = fields.get(key)?;
+        if let Some(double_value) = value.get("doubleValue").and_then(|v| v.as_f64()) {
+            return Some(double_value);
+        }
+        value
+            .get("integerValue")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse::<f64>().ok())
     }
 
     pub(super) fn parse_timestamp(

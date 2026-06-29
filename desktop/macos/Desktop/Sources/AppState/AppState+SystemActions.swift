@@ -115,8 +115,8 @@ extension AppState {
     OnboardingChatPersistence.clear()
     log("Cleared onboarding chat persistence")
 
-    // Clear knowledge graph (local + server) so the onboarding chart starts fresh
-    Task {
+    Task { [self] in
+      // Clear knowledge graph (local + server) so the onboarding chart starts fresh
       await KnowledgeGraphStorage.shared.clearAll()
       log("Cleared local knowledge graph storage")
       do {
@@ -125,22 +125,17 @@ extension AppState {
       } catch {
         logError("Failed to clear server knowledge graph during onboarding reset", error: error)
       }
-    }
 
-    // Clear persisted backend chat messages so onboarding does not resume old history.
-    // Onboarding currently uses the default chat message stream.
-    Task {
+      // Clear persisted backend chat messages so onboarding does not resume old history.
+      // Onboarding currently uses the default chat message stream.
       do {
         _ = try await APIClient.shared.deleteMessages()
         log("Cleared backend chat messages")
       } catch {
         logError("Failed to clear backend chat messages during onboarding reset", error: error)
       }
-    }
 
-    // Restart off the main thread to avoid blocking the menu action path.
-    DispatchQueue.global(qos: .utility).async { [self] in
-      Thread.sleep(forTimeInterval: 0.15)
+      try? await Task.sleep(nanoseconds: 150_000_000)
       // Keep onboarding reset scoped to the current app instance.
       // It must not mutate production defaults, shared local data, or TCC permissions.
       self.restartApp()

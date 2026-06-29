@@ -125,16 +125,14 @@ impl FirestoreService {
                 .collect();
 
             memories.extend(batch);
+            if memories.len() >= limit {
+                memories.truncate(limit);
+                break;
+            }
             current_offset += fetched_count;
 
             // Stop if Firestore returned fewer than requested (no more data)
             if fetched_count < fetch_batch {
-                break;
-            }
-
-            // Stop if we have enough items
-            if memories.len() >= limit {
-                memories.truncate(limit);
                 break;
             }
         }
@@ -602,43 +600,23 @@ impl FirestoreService {
         &self,
         uid: &str,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        // First get all unread memories
-        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
-
-        let query = json!({
-            "structuredQuery": {
-                "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
-                "where": {
-                    "fieldFilter": {
-                        "field": {"fieldPath": "is_read"},
-                        "op": "EQUAL",
-                        "value": {"booleanValue": false}
-                    }
-                },
-                "limit": 500
-            }
-        });
-
-        let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+        let memory_ids: Vec<String> = self
+            .fetch_all_memory_documents(uid)
             .await?
-            .json(&query)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore query error: {}", error_text).into());
-        }
-
-        let results: Vec<Value> = response.json().await?;
-        let memory_ids: Vec<String> = results
             .iter()
             .filter_map(|doc| {
-                doc.get("document")
-                    .and_then(|d| d.get("name"))
+                let fields = doc.get("fields")?;
+                let is_read = fields
+                    .get("is_read")
+                    .and_then(|v| v.get("booleanValue"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                if is_read {
+                    return None;
+                }
+                doc.get("name")
                     .and_then(|n| n.as_str())
-                    .map(|s| s.split('/').last().unwrap_or("").to_string())
+                    .map(Self::document_id_from_name)
             })
             .filter(|id| !id.is_empty())
             .collect();
@@ -663,12 +641,16 @@ impl FirestoreService {
                 }
             });
 
-            let _ = self
+            let response = self
                 .build_request(reqwest::Method::PATCH, &url)
                 .await?
                 .json(&doc)
                 .send()
-                .await;
+                .await?;
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore memory update error: {}", error_text).into());
+            }
         }
 
         tracing::info!("Marked {} memories as read for user {}", count, uid);
@@ -681,36 +663,14 @@ impl FirestoreService {
         uid: &str,
         visibility: &str,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        // Get all memories
-        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
-
-        let query = json!({
-            "structuredQuery": {
-                "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
-                "limit": 1000
-            }
-        });
-
-        let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+        let memory_ids: Vec<String> = self
+            .fetch_all_memory_documents(uid)
             .await?
-            .json(&query)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore query error: {}", error_text).into());
-        }
-
-        let results: Vec<Value> = response.json().await?;
-        let memory_ids: Vec<String> = results
             .iter()
             .filter_map(|doc| {
-                doc.get("document")
-                    .and_then(|d| d.get("name"))
+                doc.get("name")
                     .and_then(|n| n.as_str())
-                    .map(|s| s.split('/').last().unwrap_or("").to_string())
+                    .map(Self::document_id_from_name)
             })
             .filter(|id| !id.is_empty())
             .collect();
@@ -735,12 +695,16 @@ impl FirestoreService {
                 }
             });
 
-            let _ = self
+            let response = self
                 .build_request(reqwest::Method::PATCH, &url)
                 .await?
                 .json(&doc)
                 .send()
-                .await;
+                .await?;
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore memory update error: {}", error_text).into());
+            }
         }
 
         tracing::info!(
@@ -757,36 +721,14 @@ impl FirestoreService {
         &self,
         uid: &str,
     ) -> Result<usize, Box<dyn std::error::Error + Send + Sync>> {
-        // Get all memories
-        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
-
-        let query = json!({
-            "structuredQuery": {
-                "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
-                "limit": 1000
-            }
-        });
-
-        let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+        let memory_ids: Vec<String> = self
+            .fetch_all_memory_documents(uid)
             .await?
-            .json(&query)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore query error: {}", error_text).into());
-        }
-
-        let results: Vec<Value> = response.json().await?;
-        let memory_ids: Vec<String> = results
             .iter()
             .filter_map(|doc| {
-                doc.get("document")
-                    .and_then(|d| d.get("name"))
+                doc.get("name")
                     .and_then(|n| n.as_str())
-                    .map(|s| s.split('/').last().unwrap_or("").to_string())
+                    .map(Self::document_id_from_name)
             })
             .filter(|id| !id.is_empty())
             .collect();
@@ -804,15 +746,72 @@ impl FirestoreService {
                 memory_id
             );
 
-            let _ = self
+            let response = self
                 .build_request(reqwest::Method::DELETE, &url)
                 .await?
                 .send()
-                .await;
+                .await?;
+            if !response.status().is_success()
+                && response.status() != reqwest::StatusCode::NOT_FOUND
+            {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore memory delete error: {}", error_text).into());
+            }
         }
 
         tracing::info!("Deleted {} memories for user {}", count, uid);
         Ok(count)
+    }
+
+    async fn fetch_all_memory_documents(
+        &self,
+        uid: &str,
+    ) -> Result<Vec<Value>, Box<dyn std::error::Error + Send + Sync>> {
+        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
+        let mut documents = Vec::new();
+        let mut offset = 0usize;
+        let limit = 500usize;
+
+        loop {
+            let query = json!({
+                "structuredQuery": {
+                    "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
+                    "limit": limit,
+                    "offset": offset
+                }
+            });
+
+            let response = self
+                .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+                .await?
+                .json(&query)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore query error: {}", error_text).into());
+            }
+
+            let results: Vec<Value> = response.json().await?;
+            let batch: Vec<Value> = results
+                .into_iter()
+                .filter_map(|doc| doc.get("document").cloned())
+                .collect();
+            let fetched_count = batch.len();
+            documents.extend(batch);
+
+            if fetched_count < limit {
+                break;
+            }
+            offset += fetched_count;
+        }
+
+        Ok(documents)
+    }
+
+    fn document_id_from_name(name: &str) -> String {
+        name.split('/').last().unwrap_or("").to_string()
     }
 
     /// Save memories to Firestore

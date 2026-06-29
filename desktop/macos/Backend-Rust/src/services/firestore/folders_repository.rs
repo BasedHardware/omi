@@ -25,8 +25,7 @@ impl FirestoreService {
 
         if !response.status().is_success() {
             let error_text = response.text().await?;
-            tracing::error!("Firestore query error: {}", error_text);
-            return Ok(vec![]);
+            return Err(format!("Firestore query error: {}", error_text).into());
         }
 
         let results: Vec<Value> = response.json().await?;
@@ -187,21 +186,16 @@ impl FirestoreService {
         folder_id: &str,
         move_to_folder_id: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if let Some(target_id) = move_to_folder_id {
+        loop {
             let conversations = self
-                .get_conversations(uid, 100, 0, true, &[], None, Some(folder_id), None, None)
+                .get_conversations(uid, 500, 0, true, &[], None, Some(folder_id), None, None)
                 .await?;
-            for conv in conversations {
-                let _ = self
-                    .set_conversation_folder(uid, &conv.id, Some(target_id))
-                    .await;
+            if conversations.is_empty() {
+                break;
             }
-        } else {
-            let conversations = self
-                .get_conversations(uid, 100, 0, true, &[], None, Some(folder_id), None, None)
-                .await?;
             for conv in conversations {
-                let _ = self.set_conversation_folder(uid, &conv.id, None).await;
+                self.set_conversation_folder(uid, &conv.id, move_to_folder_id)
+                    .await?;
             }
         }
 
@@ -315,12 +309,16 @@ impl FirestoreService {
             );
 
             let doc = json!({"fields": {"order": {"integerValue": index.to_string()}}});
-            let _ = self
+            let response = self
                 .build_request(reqwest::Method::PATCH, &url)
                 .await?
                 .json(&doc)
                 .send()
-                .await;
+                .await?;
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore reorder error: {}", error_text).into());
+            }
         }
         tracing::info!("Reordered {} folders for user {}", folder_ids.len(), uid);
         Ok(())

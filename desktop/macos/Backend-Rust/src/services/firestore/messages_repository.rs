@@ -286,7 +286,7 @@ impl FirestoreService {
         rating: Option<i32>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
-            "{}/{}/{}/{}/{}",
+            "{}/{}/{}/{}/{}?updateMask.fieldPaths=rating&currentDocument.exists=true",
             self.base_url(),
             USERS_COLLECTION,
             uid,
@@ -294,42 +294,8 @@ impl FirestoreService {
             message_id
         );
 
-        // First, get the existing message to preserve other fields
-        let get_response = self
-            .build_request(reqwest::Method::GET, &url)
-            .await?
-            .send()
-            .await?;
-
-        if get_response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Err("Message not found".into());
-        }
-
-        if !get_response.status().is_success() {
-            let error_text = get_response.text().await?;
-            return Err(format!("Failed to get message: {}", error_text).into());
-        }
-
-        let doc: Value = get_response.json().await?;
-        let existing_fields = doc.get("fields").ok_or("Missing fields")?;
-
-        // Build updated fields, preserving existing values
-        let mut fields = json!({
-            "text": existing_fields.get("text").cloned().unwrap_or(json!({"stringValue": ""})),
-            "sender": existing_fields.get("sender").cloned().unwrap_or(json!({"stringValue": "human"})),
-            "created_at": existing_fields.get("created_at").cloned().unwrap_or(json!({"timestampValue": Utc::now().to_rfc3339()})),
-            "reported": existing_fields.get("reported").cloned().unwrap_or(json!({"booleanValue": false}))
-        });
-
-        // Preserve optional fields if they exist
-        if let Some(app_id) = existing_fields.get("app_id") {
-            fields["app_id"] = app_id.clone();
-        }
-        if let Some(session_id) = existing_fields.get("session_id") {
-            fields["session_id"] = session_id.clone();
-        }
-
         // Set the rating (or null to clear)
+        let mut fields = json!({});
         match rating {
             Some(r) => {
                 fields["rating"] = json!({"integerValue": r.to_string()});

@@ -19,9 +19,12 @@ extension AppState {
         for line in contents.components(separatedBy: .newlines) {
           let parts = line.split(separator: "=", maxSplits: 1)
           if parts.count == 2 {
-            let key = String(parts[0]).trimmingCharacters(in: .whitespaces)
+            var key = String(parts[0]).trimmingCharacters(in: .whitespaces)
             // Skip comments
             guard !key.hasPrefix("#") else { continue }
+            if key.hasPrefix("export ") {
+              key = String(key.dropFirst("export ".count)).trimmingCharacters(in: .whitespaces)
+            }
             // API keys are fetched from the backend at runtime (APIKeyService).
             // Do NOT load them from .env — defer entirely to APIKeyService.fetchKeys().
             let backendServedKeys = ["GEMINI_API_KEY", "GOOGLE_CALENDAR_API_KEY"]

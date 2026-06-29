@@ -17,6 +17,10 @@ extension AppState {
   /// - Parameter source: Audio source to use (defaults to current audioSource setting)
   func startTranscription(source: AudioSource? = nil) {
     guard !isTranscribing else { return }
+    if !sttFallbackInProgress {
+      sttCloudFallbackTried = false
+      forceLocalSTTForSession = false
+    }
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
     // funnels through here, including auto-restart from sleep and toggle
@@ -54,7 +58,7 @@ extension AppState {
         && (ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1"
           || UserDefaults.standard.bool(forKey: "forceCloudSTT")
           || forceCloudSTTForSession)  // set after an on-device Parakeet model-load failure
-      useLocalSTT = !forceCloudSTT && Self.isAppleSilicon
+      useLocalSTT = effectiveSource != .bleDevice && !forceCloudSTT && Self.isAppleSilicon
       if useLocalSTT {
         log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
         // Segments are delivered on the main actor by the service, so no Task hop here.
@@ -689,7 +693,7 @@ extension AppState {
   /// or we've already tried this once this session.
   @MainActor
   func handleCloudSTTReconnectFailure() {
-    guard isTranscribing, !useLocalSTT, Self.isAppleSilicon,
+    guard isTranscribing, audioSource != .bleDevice, !useLocalSTT, Self.isAppleSilicon,
       !forceCloudSTTForSession, !sttCloudFallbackTried, !sttFallbackInProgress
     else {
       stopTranscription()

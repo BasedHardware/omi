@@ -1194,54 +1194,66 @@ impl FirestoreService {
 
         // Composite filter: from_staged=true AND completed=false at Firestore level
         // so we don't miss items when users have thousands of action_items
-        let query = json!({
-            "structuredQuery": {
-                "from": [{"collectionId": ACTION_ITEMS_SUBCOLLECTION}],
-                "where": {
-                    "compositeFilter": {
-                        "op": "AND",
-                        "filters": [
-                            {
-                                "fieldFilter": {
-                                    "field": {"fieldPath": "completed"},
-                                    "op": "EQUAL",
-                                    "value": {"booleanValue": false}
+        let mut count = 0usize;
+        let mut offset = 0usize;
+        let limit = 500usize;
+        loop {
+            let query = json!({
+                "structuredQuery": {
+                    "from": [{"collectionId": ACTION_ITEMS_SUBCOLLECTION}],
+                    "where": {
+                        "compositeFilter": {
+                            "op": "AND",
+                            "filters": [
+                                {
+                                    "fieldFilter": {
+                                        "field": {"fieldPath": "completed"},
+                                        "op": "EQUAL",
+                                        "value": {"booleanValue": false}
+                                    }
+                                },
+                                {
+                                    "fieldFilter": {
+                                        "field": {"fieldPath": "from_staged"},
+                                        "op": "EQUAL",
+                                        "value": {"booleanValue": true}
+                                    }
                                 }
-                            },
-                            {
-                                "fieldFilter": {
-                                    "field": {"fieldPath": "from_staged"},
-                                    "op": "EQUAL",
-                                    "value": {"booleanValue": true}
-                                }
-                            }
-                        ]
-                    }
-                },
-                "limit": 100
+                            ]
+                        }
+                    },
+                    "limit": limit,
+                    "offset": offset
+                }
+            });
+
+            let query_url = format!("{}:runQuery", parent);
+            let response = self
+                .build_request(reqwest::Method::POST, &query_url)
+                .await?
+                .json(&query)
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let error_text = response.text().await?;
+                return Err(format!("Firestore count AI items error: {}", error_text).into());
             }
-        });
 
-        let query_url = format!("{}:runQuery", parent);
-        let response = self
-            .build_request(reqwest::Method::POST, &query_url)
-            .await?
-            .json(&query)
-            .send()
-            .await?;
+            let results: Vec<Value> = response.json().await?;
+            let docs: Vec<&Value> = results.iter().filter_map(|r| r.get("document")).collect();
+            let fetched_count = docs.len();
+            count += docs
+                .into_iter()
+                .filter_map(|doc| self.parse_action_item(doc).ok())
+                .filter(|item| item.deleted != Some(true) && item.from_staged == Some(true))
+                .count();
 
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore count AI items error: {}", error_text).into());
+            if fetched_count < limit {
+                break;
+            }
+            offset += fetched_count;
         }
-
-        let results: Vec<Value> = response.json().await?;
-        let count = results
-            .iter()
-            .filter_map(|r| r.get("document"))
-            .filter_map(|doc| self.parse_action_item(doc).ok())
-            .filter(|item| item.deleted != Some(true) && item.from_staged == Some(true))
-            .count();
 
         Ok(count)
     }
