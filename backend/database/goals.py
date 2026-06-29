@@ -24,6 +24,19 @@ def _goal_dict(doc) -> Dict[str, Any]:
     return data
 
 
+def _goal_created_at_sort_key(goal: Dict[str, Any]) -> datetime:
+    """Sort key for goals by created_at, robust to missing or non-datetime values.
+
+    Goals normally carry a timezone-aware datetime, but a missing field or a legacy/manual ISO-string
+    value would mix types in the comparison and raise TypeError. Coerce anything that is not a datetime
+    (and normalize naive datetimes to UTC) so the sort never crashes; such values sort first.
+    """
+    value = goal.get('created_at')
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
 def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
     """Get the current active goal for a user (backward compatibility - returns first active goal)."""
     user_ref = db.collection(users_collection).document(uid)
@@ -47,12 +60,12 @@ def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     query = goals_ref.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
     docs = list(query.stream())
 
-    # Sort in Python instead of Firestore (avoids composite index requirement). Fall back to a
-    # timezone-aware datetime.min (not '') for goals missing created_at, so the key never mixes
-    # datetime and str -- comparing those raises TypeError and crashes the whole list. This mirrors
-    # the fallback already used in create_goal below.
+    # Sort in Python instead of Firestore (avoids composite index requirement). The sort key always
+    # returns a timezone-aware datetime, because a missing, falsy, or non-datetime created_at (e.g. a
+    # legacy ISO string) would otherwise mix types in the comparison and raise TypeError, crashing the
+    # whole list.
     goals = [_goal_dict(doc) for doc in docs]
-    goals.sort(key=lambda x: x.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=False)
+    goals.sort(key=_goal_created_at_sort_key, reverse=False)
 
     return goals
 

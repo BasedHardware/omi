@@ -61,3 +61,14 @@ def test_get_user_goals_all_dated_orders_ascending():
     ]
     _set_docs(docs)
     assert [g['id'] for g in goals.get_user_goals('uid1')] == ['a', 'b']
+
+
+def test_get_user_goals_handles_non_datetime_created_at():
+    # A legacy/manual goal whose created_at is a (truthy) ISO string must not crash the sort -- the
+    # value is coerced to datetime.min and sorts first, rather than mixing str and datetime.
+    docs = [
+        _Doc('g_dt', {'id': 'g_dt', 'created_at': BASE.replace(day=2), 'is_active': True}),
+        _Doc('g_str', {'id': 'g_str', 'created_at': '2026-01-05T00:00:00Z', 'is_active': True}),
+    ]
+    _set_docs(docs)
+    assert [g['id'] for g in goals.get_user_goals('uid1')] == ['g_str', 'g_dt']
