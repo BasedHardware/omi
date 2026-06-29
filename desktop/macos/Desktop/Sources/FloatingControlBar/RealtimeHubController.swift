@@ -958,6 +958,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
           output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
         return
       }
+      if let directedProvider {
+        let availability = LocalAgentProviderDetector.availability(for: directedProvider)
+        guard availability.isAvailable else {
+          let setupPrompt = availability.setupPrompt
+          assistantText = setupPrompt
+          barState?.isVoiceResponseActive = true
+          if !audioReceivedThisTurn {
+            speak(directedProvider.setupNeededStatus)
+          }
+          suppressAssistantOutputForCurrentTurn = true
+          log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) unavailable")
+          sendToolResultIfCurrent(
+            source: source, callId: callId, name: name,
+            output: setupPrompt)
+          return
+        }
+      }
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its

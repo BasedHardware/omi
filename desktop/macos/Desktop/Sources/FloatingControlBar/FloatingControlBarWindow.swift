@@ -2540,6 +2540,28 @@ class FloatingControlBarManager {
                 provider.stopAgent()
             }
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
+            let availability = LocalAgentProviderDetector.availability(for: directive.provider)
+            guard availability.isAvailable else {
+                let assistantText = availability.setupPrompt
+                let recordedTurn = provider.recordCompletedTurn(
+                    userText: message,
+                    assistantText: assistantText,
+                    logLabel: "floating-agent-provider-unavailable"
+                )
+                switch presentation {
+                case .visible:
+                    completeVisibleAgentResponse(
+                        userText: message,
+                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                        barWindow: barWindow
+                    )
+                case .voiceOnly:
+                    barWindow.state.currentQueryFromVoice = false
+                    barWindow.state.isVoiceResponseActive = false
+                    FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)
+                }
+                return
+            }
             let pill = AgentPillsManager.shared.spawnFromUserQuery(
                 directive.rewrittenQuery,
                 model: selectedFloatingModel,
@@ -2683,11 +2705,23 @@ class FloatingControlBarManager {
         assistantText: String,
         barWindow: FloatingControlBarWindow
     ) {
+        completeVisibleAgentResponse(
+            userText: handoff.originalRequest,
+            assistantMessage: assistantMessage ?? ChatMessage(text: assistantText, sender: .ai),
+            barWindow: barWindow
+        )
+    }
+
+    private func completeVisibleAgentResponse(
+        userText: String,
+        assistantMessage: ChatMessage,
+        barWindow: FloatingControlBarWindow
+    ) {
         chatCancellable?.cancel()
         chatCancellable = nil
         barWindow.state.aiInputText = ""
-        barWindow.state.displayedQuery = handoff.originalRequest
-        barWindow.state.currentAIMessage = assistantMessage ?? ChatMessage(text: assistantText, sender: .ai)
+        barWindow.state.displayedQuery = userText
+        barWindow.state.currentAIMessage = assistantMessage
         barWindow.state.isAILoading = false
         barWindow.state.present(.mainResponse)
         barWindow.state.currentQueryFromVoice = false

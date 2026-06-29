@@ -44,6 +44,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("barWindow.state.chatHistory.reversed().compactMap"))
   }
 
+  func testTypedProviderDirectivePromptsForSetupWhenProviderUnavailable() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directive.provider)"))
+    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
+    XCTAssertTrue(source.contains("floating-agent-provider-unavailable"))
+    XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
+    XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)"))
+  }
+
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
     let source = try floatingControlBarViewSource()
     let agentPillSource = try agentPillSource()
