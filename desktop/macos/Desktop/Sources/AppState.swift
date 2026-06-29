@@ -251,6 +251,7 @@ class AppState: ObservableObject {
   }
   var captureGateInFlight = false
   var captureReconcilePending = false
+  var pendingCoreAudioCaptureRecoveryReason: String?
   @Published var isAwaitingMeeting = false
 
   var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {
@@ -339,6 +340,10 @@ class AppState: ObservableObject {
   var systemAudioCaptureModeObserver: NSObjectProtocol? {
     get { servicesCoordinator.systemAudioCaptureModeObserver }
     set { servicesCoordinator.systemAudioCaptureModeObserver = newValue }
+  }
+  var coreAudioCaptureRecoveryObserver: NSObjectProtocol? {
+    get { servicesCoordinator.coreAudioCaptureRecoveryObserver }
+    set { servicesCoordinator.coreAudioCaptureRecoveryObserver = newValue }
   }
 
   var wasTranscribingBeforeSleep = false
@@ -603,6 +608,17 @@ class AppState: ObservableObject {
     ) { [weak self] _ in
       Task { @MainActor in
         await self?.reconcileCapture()
+      }
+    }
+
+    coreAudioCaptureRecoveryObserver = NotificationCenter.default.addObserver(
+      forName: .coreAudioCaptureRecoveryRequested,
+      object: nil,
+      queue: .main
+    ) { [weak self] note in
+      let reason = note.userInfo?["reason"] as? String ?? "unspecified"
+      Task { @MainActor in
+        await self?.rebuildCoreAudioCaptureStack(reason: reason)
       }
     }
   }

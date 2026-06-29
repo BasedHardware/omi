@@ -297,12 +297,17 @@ extension AppState {
   func startMicrophoneAudioCapture() async {
     guard let audioCaptureService = audioCaptureService else { return }
 
-    // Silent-mic watchdog: on A2DP profile conflict the Bluetooth input device returns
-    // zero samples even though CoreAudio reports healthy capture. Fall back to the
-    // built-in mic when the watchdog fires.
-    audioCaptureService.onSilentMicDetected = { [weak self] in
+    // Silent-mic watchdog: on A2DP profile conflict the Bluetooth input device returns zero
+    // samples even though CoreAudio reports healthy capture. Fall back to built-in mic for
+    // Bluetooth, and rebuild the full CoreAudio capture stack for stale-route wedges.
+    audioCaptureService.onSilentMicDetected = { [weak self] detection in
       Task { @MainActor in
-        self?.handleSilentMicFallback()
+        switch detection.suggestedAction {
+        case .fallbackToBuiltIn:
+          self?.handleSilentMicFallback()
+        case .rebuildCoreAudioStack:
+          await self?.rebuildCoreAudioCaptureStack(reason: detection.reason)
+        }
       }
     }
 
@@ -483,6 +488,11 @@ extension AppState {
     }
 
     captureGateInFlight = false
+    if let recoveryReason = pendingCoreAudioCaptureRecoveryReason {
+      pendingCoreAudioCaptureRecoveryReason = nil
+      await rebuildCoreAudioCaptureStack(reason: recoveryReason)
+      return
+    }
     if captureReconcilePending {
       captureReconcilePending = false
       await reconcileCapture()
@@ -515,6 +525,40 @@ extension AppState {
       await self.startMicrophoneAudioCapture()
       self.silentMicFallbackInProgress = false
     }
+  }
+
+  @MainActor
+  func rebuildCoreAudioCaptureStack(reason: String) async {
+    guard isTranscribing, audioCaptureService != nil else { return }
+
+    if captureGateInFlight {
+      pendingCoreAudioCaptureRecoveryReason = reason
+      return
+    }
+
+    log("Transcription: rebuilding CoreAudio capture stack — \(reason)")
+    captureReconcilePending = false
+    silentMicFallbackInProgress = false
+
+    if #available(macOS 14.4, *) {
+      if let systemService = systemAudioCaptureService as? SystemAudioCaptureService {
+        systemService.stopCapture()
+      }
+      systemAudioCaptureService = nil
+      AudioLevelMonitor.shared.updateSystemLevel(0)
+    }
+
+    audioCaptureService?.stopCapture()
+    audioCaptureService = AudioCaptureService()
+    AudioLevelMonitor.shared.updateMicrophoneLevel(0)
+
+    if !useLocalSTT {
+      audioMixer?.stop()
+      audioMixer = AudioMixer()
+    }
+
+    recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName() ?? recordingInputDeviceName
+    await startMicrophoneAudioCapture()
   }
 
   /// Start BLE device audio capture
@@ -951,6 +995,7 @@ extension AppState {
     meetingDetector = nil
     captureGateInFlight = false
     captureReconcilePending = false
+    pendingCoreAudioCaptureRecoveryReason = nil
     isAwaitingMeeting = false
 
     // Stop system audio capture first (if available)
