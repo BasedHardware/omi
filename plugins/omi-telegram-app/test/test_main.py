@@ -306,9 +306,9 @@ class TestWebhook:
         # At least one body must include the actionable guidance text
         # (case-insensitive). The exact wording can change but the user
         # MUST be told to enable auto-reply in the desktop.
-        assert any("auto-reply" in (b or "").lower() or "auto reply" in (b or "").lower() for b in bodies), (
-            f"nudge body should mention 'auto-reply', got: {bodies!r}"
-        )
+        assert any(
+            "auto-reply" in (b or "").lower() or "auto reply" in (b or "").lower() for b in bodies
+        ), f"nudge body should mention 'auto-reply', got: {bodies!r}"
 
     def test_webhook_regular_message_from_unknown_chat_does_not_reply(self, telegram_api):
         # /webhook from a chat that has never been set up -> 200, no sendMessage

@@ -177,11 +177,7 @@ async def execute_persona_chat_stream(
         # Wire the tracer via RunnableConfig so the run_id is real in
         # LangSmith. `config` is the v0.2+ way to pass callbacks into
         # astream() — callbacks= was removed in langchain-core >= 0.2.
-        astream_kwargs = (
-            {"config": {"callbacks": tracer_callbacks}}
-            if tracer_callbacks
-            else {}
-        )
+        astream_kwargs = {"config": {"callbacks": tracer_callbacks}} if tracer_callbacks else {}
         chunk_count = 0
         async for chunk in llm.astream(formatted_messages, **astream_kwargs):
             chunk_count += 1
