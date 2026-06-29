@@ -179,6 +179,7 @@ class TestBearerMatch:
         # Suffix-match should NOT succeed.
         assert client.get("/protected", headers={"Authorization": "Bearer bc"}).status_code == 401
 
+<<<<<<< HEAD
     def test_non_ascii_header_returns_401_not_500(self, monkeypatch):
         """Identified by cubic (P1): secrets.compare_digest raises
         TypeError on non-ASCII input. Without a guard, a non-ASCII
