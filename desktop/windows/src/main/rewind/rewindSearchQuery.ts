@@ -10,8 +10,8 @@ export type RewindSearchSql = {
 
 export function tokenizeRewindSearchQuery(query: string): string[] {
   return query
-    .slice(0, REWIND_SEARCH_QUERY_CHAR_LIMIT)
     .trim()
+    .slice(0, REWIND_SEARCH_QUERY_CHAR_LIMIT)
     .split(/\s+/)
     .filter(Boolean)
     .slice(0, REWIND_SEARCH_TOKEN_LIMIT)

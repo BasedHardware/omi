@@ -26,6 +26,11 @@ describe('rewindSearchQuery', () => {
     expect(tokenizeRewindSearchQuery(huge)).toEqual(['a'.repeat(REWIND_SEARCH_QUERY_CHAR_LIMIT)])
   })
 
+  it('does not let leading whitespace consume the query text cap', () => {
+    const padded = `${' '.repeat(REWIND_SEARCH_QUERY_CHAR_LIMIT + 20)}visual studio`
+    expect(tokenizeRewindSearchQuery(padded)).toEqual(['visual', 'studio'])
+  })
+
   it('escapes LIKE wildcards and the escape character itself', () => {
     expect(escapeRewindSearchLikeToken('100%_done\\today')).toBe('100\\%\\_done\\\\today')
   })
