@@ -541,9 +541,19 @@ async def setup(req: SetupRequest):
 # Omi Chat Tools manifest — served at `GET /.well-known/omi-tools.json`.
 # Schema per docs/doc/developer/apps/ChatTools.mdx. Each plugin owns its
 # own manifest (TOOLS_MANIFEST) because the JSON-Schema `properties` keys
-# MUST match the plugin's /toggle ToggleRequest field names — the chat
-# assistant will faithfully build a request from this schema. Telegram
-# uses `chat_id`/`bot_token`; WhatsApp uses `phone`/`access_token`.
+# MUST match the plugin's /toggle ToggleRequest field names.
+#
+# SECURITY: the manifest is public discovery metadata read by the chat
+# assistant. It must NEVER advertise long-lived platform credentials as
+# tool parameters — the chat assistant would faithfully prompt the user
+# to paste them in chat, and those secrets would then live in chat
+# history, tool-call logs, traces, screenshots, and model context.
+#
+# The plugin bearer token (in `Authorization: Bearer`) gates the call.
+# The phone is a NON-SECRET reference the plugin uses to look up which
+# user the call applies to (the binding was made at /start handshake
+# time). The platform access_token is held by the plugin in its
+# storage; the chat tool never sees it.
 # ---------------------------------------------------------------------------
 TOOLS_MANIFEST = {
     "tools": [
@@ -553,9 +563,7 @@ TOOLS_MANIFEST = {
                 "Turn the AI Clone auto-reply on or off for a connected "
                 "WhatsApp phone number. Use this when the user wants to "
                 "enable or disable Omi's automatic responses in a specific "
-                "WhatsApp conversation. The access_token parameter is the "
-                "permanent system user token used to authenticate the "
-                "toggle call against the WhatsApp Business Cloud API."
+                "WhatsApp conversation."
             ),
             "endpoint": "/toggle",
             "method": "POST",
@@ -563,7 +571,12 @@ TOOLS_MANIFEST = {
                 "properties": {
                     "phone": {
                         "type": "string",
-                        "description": ("WhatsApp phone number in E.164 format " "(e.g. 15550001111)."),
+                        "description": (
+                            "WhatsApp phone number in E.164 format "
+                            "(e.g. 15550001111). The plugin uses this "
+                            "to look up the bound user from the prior "
+                            "/start handshake — it is NOT a secret."
+                        ),
                     },
                     "enabled": {
                         "type": "boolean",
@@ -571,16 +584,8 @@ TOOLS_MANIFEST = {
                             "True to enable AI Clone auto-reply for the " "phone number, false to disable it."
                         ),
                     },
-                    "access_token": {
-                        "type": "string",
-                        "description": (
-                            "Permanent system user access token for the "
-                            "WhatsApp Business app. Used to authenticate "
-                            "the /toggle call."
-                        ),
-                    },
                 },
-                "required": ["phone", "enabled", "access_token"],
+                "required": ["phone", "enabled"],
             },
             "auth_required": True,
             "status_message": "Toggling WhatsApp auto-reply...",
@@ -603,12 +608,21 @@ def get_omi_tools_manifest() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# /toggle
+# /toggle — flips auto_reply_enabled for a phone (called by Chat Tools).
+#
+# Auth model: the caller must hold a valid plugin bearer token (via the
+# `Authorization: Bearer` header, enforced by the shared
+# plugins/_shared/auth.require_bearer dependency). The phone parameter
+# identifies which user/chat the call applies to — the plugin looks up
+# the user bound to the phone from its storage (set at /start handshake
+# time). The platform access_token is held by the plugin and is NEVER
+# requested from or transmitted through chat — that keeps long-lived
+# credentials out of chat history, tool-call logs, traces, and model
+# context. (Identified by maintainer security review on PR #8528.)
 # ---------------------------------------------------------------------------
 class ToggleRequest(BaseModel):
     phone: str
     enabled: bool
-    access_token: str
 
 
 class ToggleResponse(BaseModel):
@@ -641,7 +655,7 @@ async def toggle(req: ToggleRequest):
     # Same response for both 'unknown phone' and 'wrong access_token' so the
     # endpoint doesn't leak which phones exist (phone numbers are exposed in
     # Meta update payloads and could be enumerated otherwise).
-    if user is None or not secrets.compare_digest(req.access_token, user["access_token"]):
+    if user is None:
         raise HTTPException(status_code=403, detail="Invalid phone or access_token")
     simple_storage.update_auto_reply(normalized, req.enabled)
     return ToggleResponse(phone=normalized, auto_reply_enabled=req.enabled)

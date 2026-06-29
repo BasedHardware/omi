@@ -1,10 +1,17 @@
 """Tests for the WhatsApp /toggle endpoint.
 
+After the PR #8528 security redesign (Git-on-my-level review): the
+endpoint no longer accepts an `access_token` in the request body. Auth
+is via the plugin bearer (Authorization: Bearer header); the phone
+parameter alone identifies the user/chat (the binding was made at
+/start handshake time). Long-lived platform credentials never flow
+through chat.
+
 Mirrors plugins/omi-telegram-app/test/test_fixes.py in structure for the
 toggle-related cases. Covers:
-- Successful toggle (right access_token, existing phone)
-- 403 on wrong access_token
-- 403 on unknown phone (enumeration-safe — same response as wrong token)
+- Successful toggle with phone-only payload
+- 403 on unknown phone
+- Extra `access_token` field in body is ignored (not used for auth)
 """
 
 from __future__ import annotations
@@ -61,49 +68,68 @@ def _seed_user(phone="15550001111", access_token=SECRET_TOKEN):
 
 
 class TestToggle:
-    def test_enable_with_correct_access_token(self, client):
+    def test_enable_with_phone_only(self, client):
+        """P1 (Git-on-my-level review): the manifest must not require
+        the caller to send the access_token. Verify /toggle accepts a
+        request with only phone + enabled (no credential in body)."""
         _seed_user()
-        r = client.post("/toggle", json={"phone": "15550001111", "enabled": True, "access_token": SECRET_TOKEN})
-        assert r.status_code == 200
+        r = client.post("/toggle", json={"phone": "15550001111", "enabled": True})
+        assert r.status_code == 200, (
+            f"phone-only toggle must work after the security redesign. "
+            f"Got {r.status_code}: {r.text}"
+        )
         assert r.json()["auto_reply_enabled"] is True
 
-    def test_disable_with_correct_access_token(self, client):
+    def test_disable_with_phone_only(self, client):
         _seed_user()
         # First enable
-        client.post("/toggle", json={"phone": "15550001111", "enabled": True, "access_token": SECRET_TOKEN})
+        client.post("/toggle", json={"phone": "15550001111", "enabled": True})
         # Then disable
-        r = client.post("/toggle", json={"phone": "15550001111", "enabled": False, "access_token": SECRET_TOKEN})
+        r = client.post("/toggle", json={"phone": "15550001111", "enabled": False})
         assert r.status_code == 200
         assert r.json()["auto_reply_enabled"] is False
 
-    def test_403_on_wrong_access_token(self, client):
-        _seed_user()
-        r = client.post(
-            "/toggle",
-            json={"phone": "15550001111", "enabled": True, "access_token": "WRONG"},
-        )
-        assert r.status_code == 403
-
     def test_403_on_unknown_phone(self, client):
-        """Same 403 as wrong access_token \u2014 don't leak which phones exist."""
+        """Same 403 as the old wrong-access_token path — don't leak
+        which phones exist. The bearer holder can pass any phone they
+        know; the only failure mode is 'no such user'."""
         _seed_user(phone="15550001111")
         r = client.post(
             "/toggle",
-            json={"phone": "15559999999", "enabled": True, "access_token": SECRET_TOKEN},
+            json={"phone": "15559999999", "enabled": True},
         )
         assert r.status_code == 403
 
-    def test_unknown_phone_and_wrong_token_return_same_detail(self, client):
-        """Verify both error paths return identical responses (no enumeration)."""
-        _seed_user(phone="15550001111")
+    def test_ignores_access_token_in_body(self, client):
+        """If a caller (e.g. a misconfigured chat assistant) sends
+        access_token in the body, the request must NOT silently use it
+        for auth. The new ToggleRequest model has no access_token field;
+        Pydantic drops extra fields by default and the auth path no
+        longer reads access_token from the body."""
+        _seed_user(access_token="real-token")
 
-        r_unknown = client.post(
+        client_ = client
+        # Caller sends a WRONG access_token in the body. If the auth
+        # path still read access_token, this would 403. Under the new
+        # bearer+phone auth model, it must succeed.
+        r = client_.post(
             "/toggle",
-            json={"phone": "15559999999", "enabled": True, "access_token": SECRET_TOKEN},
+            json={"phone": "15550001111", "enabled": True, "access_token": "WRONG-TOKEN"},
         )
-        r_wrong = client.post(
+        assert r.status_code == 200, (
+            f"access_token in body must be ignored (not used for auth). "
+            f"Got {r.status_code}: {r.text}"
+        )
+
+    def test_normalizes_formatted_phone(self, client):
+        """The phone normalization fix (cubic P2) still works under
+        the new auth model — formatted E.164 variants match the stored
+        user."""
+        _seed_user(phone="15550001111")
+        r = client.post(
             "/toggle",
-            json={"phone": "15550001111", "enabled": True, "access_token": "WRONG"},
+            json={"phone": "+1 (555) 000-1111", "enabled": True},
         )
-        assert r_unknown.status_code == r_wrong.status_code == 403
-        assert r_unknown.json() == r_wrong.json()
+        assert r.status_code == 200
+        assert r.json()["phone"] == "15550001111"
+        assert r.json()["auto_reply_enabled"] is True
