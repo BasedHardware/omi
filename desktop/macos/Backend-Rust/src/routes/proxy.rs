@@ -130,29 +130,12 @@ fn duration_bucket(elapsed: Duration) -> &'static str {
 }
 
 fn map_upstream_error(error: reqwest::Error, operation: &str) -> ProxyError {
+    let error = error.without_url();
     if error.is_timeout() {
         tracing::warn!("gemini_proxy: {} timed out: {}", operation, error);
         ProxyError::UpstreamTimeout
     } else {
         tracing::error!("gemini_proxy: {} failed: {}", operation, error);
-        ProxyError::Status(StatusCode::BAD_GATEWAY)
-    }
-}
-
-fn map_upstream_error_without_url(error: reqwest::Error, operation: &str) -> ProxyError {
-    if error.is_timeout() {
-        tracing::warn!(
-            "gemini_proxy: {} timed out: {}",
-            operation,
-            error.without_url()
-        );
-        ProxyError::UpstreamTimeout
-    } else {
-        tracing::error!(
-            "gemini_proxy: {} failed: {}",
-            operation,
-            error.without_url()
-        );
         ProxyError::Status(StatusCode::BAD_GATEWAY)
     }
 }
@@ -265,14 +248,14 @@ async fn gemini_proxy(
         .body(sanitized_body)
         .send()
         .await
-        .map_err(|e| map_upstream_error_without_url(e, "BYOK upstream request"))?;
+        .map_err(|e| map_upstream_error(e, "BYOK upstream request"))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
     let bytes = upstream
         .bytes()
         .await
-        .map_err(|e| map_upstream_error_without_url(e, "BYOK upstream body read"))?;
+        .map_err(|e| map_upstream_error(e, "BYOK upstream body read"))?;
     tracing::info!(
         "gemini_proxy: upstream_result uid={} provider=ai_studio_byok model={} action={} payload_bucket={} duration_bucket={} status={}",
         user.uid,
@@ -546,7 +529,7 @@ async fn gemini_stream_proxy(
         .body(sanitized_body)
         .send()
         .await
-        .map_err(|e| map_upstream_error_without_url(e, "BYOK stream upstream request"))?;
+        .map_err(|e| map_upstream_error(e, "BYOK stream upstream request"))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
