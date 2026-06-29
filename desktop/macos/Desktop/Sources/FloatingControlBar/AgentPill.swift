@@ -55,12 +55,14 @@ final class AgentPill: ObservableObject, Identifiable {
     let query: String
     let createdAt: Date
     let model: String
+    let bridgeHarnessOverride: AgentHarnessMode?
 
     @Published var title: String
     @Published var status: Status = .queued
     @Published var latestActivity: String = "Queued…"
     @Published var transcript: [String] = []
     @Published var aiMessage: ChatMessage?
+    @Published var conversationMessages: [ChatMessage] = []
     @Published var completedAt: Date?
     @Published var viewedAt: Date?
     @Published var suggestedFollowUps: [String] = []
@@ -71,9 +73,10 @@ final class AgentPill: ObservableObject, Identifiable {
         (completedAt ?? Date()).timeIntervalSince(createdAt)
     }
 
-    init(query: String, model: String) {
+    init(query: String, model: String, bridgeHarnessOverride: AgentHarnessMode? = nil) {
         self.query = query
         self.model = model
+        self.bridgeHarnessOverride = bridgeHarnessOverride
         self.title = AgentPill.deriveTitle(from: query)
         self.createdAt = Date()
     }
@@ -164,6 +167,32 @@ final class AgentPillsManager: ObservableObject {
         let route: Route
         let title: String?
         let ack: String?
+    }
+
+    enum DirectedProvider: String, Equatable {
+        case hermes
+        case openclaw
+
+        var displayName: String {
+            switch self {
+            case .hermes: return "Hermes"
+            case .openclaw: return "OpenClaw"
+            }
+        }
+
+        var harnessMode: AgentHarnessMode {
+            switch self {
+            case .hermes: return .hermes
+            case .openclaw: return .openclaw
+            }
+        }
+    }
+
+    struct ProviderDirective: Equatable {
+        let provider: DirectedProvider
+        let rewrittenQuery: String
+        let title: String
+        let ack: String
     }
 
     struct Snapshot: Encodable {
@@ -319,6 +348,97 @@ final class AgentPillsManager: ObservableObject {
         return 1
     }
 
+    nonisolated static func providerDirective(from text: String) -> ProviderDirective? {
+        providerDirective(from: text, contextualPreviousRequest: nil)
+    }
+
+    nonisolated static func providerDirective(
+        from text: String,
+        contextualPreviousRequest: String?
+    ) -> ProviderDirective? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let providerPattern = "(open\\s*claw|openclaw|hermes)"
+        let patterns = [
+            #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
+            #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
+        ]
+
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(trimmed.startIndex..., in: trimmed)
+            guard let match = regex.firstMatch(in: trimmed, range: range), match.numberOfRanges >= 2 else { continue }
+            guard let providerRange = Range(match.range(at: 1), in: trimmed) else { continue }
+            let providerToken = trimmed[providerRange]
+                .lowercased()
+                .replacingOccurrences(of: " ", with: "")
+            let provider: DirectedProvider
+            switch providerToken {
+            case "openclaw": provider = .openclaw
+            case "hermes": provider = .hermes
+            default: continue
+            }
+
+            let restIndex = match.numberOfRanges > 2 ? 2 : NSNotFound
+            let rest: String
+            if restIndex != NSNotFound,
+                let restRange = Range(match.range(at: restIndex), in: trimmed) {
+                rest = String(trimmed[restRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                rest = ""
+            }
+            let contextualObjective = contextualPreviousRequest
+                .flatMap { providerObjective(from: $0) }?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let objective: String
+            if rest.isEmpty, isProviderCorrection(trimmed), contextualObjective?.isEmpty == false {
+                objective = contextualObjective!
+            } else {
+                objective = rest.isEmpty ? "Say how it's going." : rest
+            }
+            return ProviderDirective(
+                provider: provider,
+                rewrittenQuery: objective,
+                title: provider.displayName,
+                ack: "Asking \(provider.displayName)."
+            )
+        }
+
+        return nil
+    }
+
+    nonisolated static func providerObjective(from text: String) -> String {
+        let original = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !original.isEmpty else { return original }
+        let patterns = [
+            #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\S+\s+(?:to|about)\s+(.+)$"#,
+            #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\S+\s+(.+)$"#,
+        ]
+        for pattern in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
+            let range = NSRange(original.startIndex..., in: original)
+            guard let match = regex.firstMatch(in: original, range: range),
+                  match.numberOfRanges > 1,
+                  let objectiveRange = Range(match.range(at: 1), in: original) else {
+                continue
+            }
+            let objective = original[objectiveRange].trimmingCharacters(in: .whitespacesAndNewlines)
+            if !objective.isEmpty {
+                return objective
+            }
+        }
+        return original
+    }
+
+    private nonisolated static func isProviderCorrection(_ text: String) -> Bool {
+        let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return lower.hasPrefix("i meant")
+            || lower.hasPrefix("meant")
+            || lower.hasSuffix("instead")
+            || lower.contains(" instead of ")
+    }
+
     /// User control-plane request from the floating bar UI: create a visible sibling
     /// background agent. This is intentionally separate from an agent's own tool use;
     /// existing floating agents still cannot self-spawn nested pills.
@@ -419,7 +539,8 @@ final class AgentPillsManager: ObservableObject {
         model: String,
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
-        preFetchedAck: String? = nil
+        preFetchedAck: String? = nil,
+        bridgeHarnessOverride: AgentHarnessMode? = nil
     ) -> AgentPill {
         let count = AgentPillsManager.parseAgentCount(from: query)
         if count <= 1 {
@@ -428,7 +549,8 @@ final class AgentPillsManager: ObservableObject {
                 model: model,
                 fromVoice: fromVoice,
                 preFetchedTitle: preFetchedTitle,
-                preFetchedAck: preFetchedAck
+                preFetchedAck: preFetchedAck,
+                bridgeHarnessOverride: bridgeHarnessOverride
             )
         }
         var first: AgentPill?
@@ -444,11 +566,12 @@ final class AgentPillsManager: ObservableObject {
                 model: model,
                 fromVoice: fromVoice && first == nil,
                 preFetchedTitle: first == nil ? preFetchedTitle : nil,
-                preFetchedAck: first == nil ? preFetchedAck : nil
+                preFetchedAck: first == nil ? preFetchedAck : nil,
+                bridgeHarnessOverride: bridgeHarnessOverride
             )
             if first == nil { first = pill }
         }
-        return first ?? spawn(query: query, model: model, fromVoice: fromVoice)
+        return first ?? spawn(query: query, model: model, fromVoice: fromVoice, bridgeHarnessOverride: bridgeHarnessOverride)
     }
 
     @discardableResult
@@ -457,7 +580,8 @@ final class AgentPillsManager: ObservableObject {
         model: String,
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
-        preFetchedAck: String? = nil
+        preFetchedAck: String? = nil,
+        bridgeHarnessOverride: AgentHarnessMode? = nil
     ) -> AgentPill {
         let count = AgentPillsManager.parseAgentCount(from: handoff.originalRequest)
         if count <= 1 {
@@ -466,7 +590,8 @@ final class AgentPillsManager: ObservableObject {
                 model: model,
                 fromVoice: fromVoice,
                 preFetchedTitle: preFetchedTitle,
-                preFetchedAck: preFetchedAck
+                preFetchedAck: preFetchedAck,
+                bridgeHarnessOverride: bridgeHarnessOverride
             )
         }
         var first: AgentPill?
@@ -477,11 +602,17 @@ final class AgentPillsManager: ObservableObject {
                 model: model,
                 fromVoice: fromVoice && first == nil,
                 preFetchedTitle: first == nil ? preFetchedTitle : nil,
-                preFetchedAck: first == nil ? preFetchedAck : nil
+                preFetchedAck: first == nil ? preFetchedAck : nil,
+                bridgeHarnessOverride: bridgeHarnessOverride
             )
             if first == nil { first = pill }
         }
-        return first ?? spawn(query: handoff.agentTask, model: model, fromVoice: fromVoice)
+        return first ?? spawn(
+            query: handoff.agentTask,
+            model: model,
+            fromVoice: fromVoice,
+            bridgeHarnessOverride: bridgeHarnessOverride
+        )
     }
 
     /// Spawn a new agent pill. Each pill gets its own ChatProvider so the
@@ -495,9 +626,10 @@ final class AgentPillsManager: ObservableObject {
         fromVoice: Bool = false,
         preFetchedTitle: String? = nil,
         preFetchedAck: String? = nil,
-        systemPromptSuffix: String? = nil
+        systemPromptSuffix: String? = nil,
+        bridgeHarnessOverride: AgentHarnessMode? = nil
     ) -> AgentPill {
-        let pill = AgentPill(query: query, model: model)
+        let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
             pill.title = preFetchedTitle
         }
@@ -515,10 +647,17 @@ final class AgentPillsManager: ObservableObject {
 
         pills.append(pill)
 
-        let provider = ChatProvider()
+        let provider = ChatProvider(bridgeHarnessOverride: bridgeHarnessOverride)
+        let hasBridgeHarnessOverride = bridgeHarnessOverride != nil
         if let floating = FloatingControlBarManager.shared.sharedFloatingProvider {
             provider.workingDirectory = floating.workingDirectory
-            provider.modelOverride = floating.modelOverride
+            // Directed Hermes/OpenClaw pills must not inherit the floating bar's
+            // Claude model override. Those harnesses can reject Omi's Claude
+            // aliases during session/set_model, so leave model selection to the
+            // provider-native default when a harness override is present.
+            if !hasBridgeHarnessOverride {
+                provider.modelOverride = floating.modelOverride
+            }
         }
         providersByPill[pill.id] = provider
 
@@ -591,7 +730,7 @@ final class AgentPillsManager: ObservableObject {
             pill.suggestedFollowUps = []
             let finalText = await provider.sendMessage(
                 pill.query,
-                model: pill.model,
+                model: Self.modelForSend(pill: pill, provider: provider),
                 systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
@@ -658,7 +797,7 @@ final class AgentPillsManager: ObservableObject {
             guard !Task.isCancelled else { return }
             let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
             let finalText = await provider.sendMessage(
-                text, model: pill.model,
+                text, model: Self.modelForSend(pill: pill, provider: provider),
                 systemPromptSuffix: Self.backgroundAgentSystemPromptSuffix,
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
@@ -774,9 +913,14 @@ final class AgentPillsManager: ObservableObject {
             let pill = AgentPill(query: "Automation subagent \(index + 1)", model: ModelQoS.Claude.defaultSelection)
             pill.title = index == 0 ? "SLEEP FOR 5" : "Sleep Subagent"
             if index == 0 {
+                let aiMessage = ChatMessage(text: "Automation output for subagent \(index + 1).", sender: .ai)
                 pill.status = .done
                 pill.latestActivity = "Done — automation output."
-                pill.aiMessage = ChatMessage(text: "Automation output for subagent \(index + 1).", sender: .ai)
+                pill.aiMessage = aiMessage
+                pill.conversationMessages = [
+                    ChatMessage(text: pill.query, sender: .user),
+                    aiMessage,
+                ]
                 pill.completedAt = Date()
             } else {
                 pill.status = .running
@@ -808,6 +952,10 @@ final class AgentPillsManager: ObservableObject {
         providersByPill[pillID] = nil
         messageCountByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
+    }
+
+    private static func modelForSend(pill: AgentPill, provider: ChatProvider) -> String? {
+        provider.hasBridgeHarnessOverride ? nil : pill.model
     }
 
     /// Remove all completed (done or failed) pills.
@@ -896,6 +1044,14 @@ final class AgentPillsManager: ObservableObject {
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
         guard messages.count > since else { return }
         let recent = Array(messages.suffix(from: since))
+        let displayMessages = recent.filter { message in
+            let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty
+        }
+        if !displayMessages.isEmpty {
+            pill.conversationMessages = displayMessages
+            pill.markContentChanged()
+        }
         guard let aiMessage = recent.last(where: { $0.sender == .ai }) else { return }
         pill.aiMessage = aiMessage
         pill.markContentChanged()
@@ -950,7 +1106,20 @@ final class AgentPillsManager: ObservableObject {
         let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
             if pill.aiMessage?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                pill.aiMessage = ChatMessage(text: trimmedFinalText, sender: .ai)
+                var finalMessage = pill.aiMessage ?? ChatMessage(text: trimmedFinalText, sender: .ai)
+                finalMessage.text = trimmedFinalText
+                finalMessage.isStreaming = false
+                pill.aiMessage = finalMessage
+                if pill.conversationMessages.isEmpty {
+                    pill.conversationMessages = [
+                        ChatMessage(text: pill.query, sender: .user),
+                        finalMessage,
+                    ]
+                } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == finalMessage.id }) {
+                    pill.conversationMessages[index] = finalMessage
+                } else {
+                    pill.conversationMessages.append(finalMessage)
+                }
             }
             pill.latestActivity = String(trimmedFinalText.prefix(140))
             pill.markContentChanged()
@@ -969,6 +1138,7 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()
+            Self.ensureFailureMessage(errorText, for: pill)
             pill.markContentChanged()
         } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
             pill.status = .done
@@ -982,6 +1152,7 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed("Agent ended before reporting a final result")
             pill.completedAt = Date()
             pill.latestActivity = "Agent ended before reporting a final result"
+            Self.ensureFailureMessage("Agent ended before reporting a final result", for: pill)
             pill.markContentChanged()
         }
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
@@ -991,6 +1162,24 @@ final class AgentPillsManager: ObservableObject {
         // Keep the provider + stream alive after completion so a voice/text follow-up
         // can continue THIS agent's session with full context. They're torn down on
         // dismiss, or when the pill is trimmed at the maxPills cap (see cleanup()).
+    }
+
+    private static func ensureFailureMessage(_ errorText: String, for pill: AgentPill) {
+        let text = errorText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let failureMessage = ChatMessage(text: "Failed: \(text)", sender: .ai)
+        if pill.conversationMessages.isEmpty {
+            pill.conversationMessages = [
+                ChatMessage(text: pill.query, sender: .user),
+                failureMessage,
+            ]
+        } else if !pill.conversationMessages.contains(where: { message in
+            message.sender == .ai
+                && message.text.trimmingCharacters(in: .whitespacesAndNewlines) == failureMessage.text
+        }) {
+            pill.conversationMessages.append(failureMessage)
+        }
+        pill.aiMessage = failureMessage
     }
 
     private static func apply(projection: AgentRunProjection, to pill: AgentPill) {
@@ -1015,10 +1204,11 @@ final class AgentPillsManager: ObservableObject {
                 }
             }
         case .failed, .timedOut, .orphaned:
-            let message = projection.errorMessage ?? "Agent failed"
+            let message = projection.failure?.displayMessage ?? projection.errorMessage ?? "Agent failed"
             pill.status = .failed(message)
             pill.latestActivity = message
             pill.completedAt = projection.completedAt ?? Date()
+            ensureFailureMessage(message, for: pill)
             pill.markContentChanged()
         case .cancelled:
             pill.status = .failed("Stopped by user")

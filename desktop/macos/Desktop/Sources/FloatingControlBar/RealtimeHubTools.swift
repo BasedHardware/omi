@@ -7,7 +7,7 @@ import Foundation
 // declared to both providers (OpenAI Realtime `tools`, Gemini `functionDeclarations`);
 // `RealtimeHubController` executes them by calling EXISTING app code / endpoints.
 // Reads (get_tasks, get_memories, search_memories, search_conversations) and simple
-// writes (create_action_item, update_action_item) run synchronously and speak their
+// writes (create_action_item, update_action_item, create_calendar_event) run synchronously and speak their
 // result; multi-step / other-app work still goes to spawn_agent.
 
 enum HubTool: String {
@@ -60,6 +60,8 @@ enum HubTool: String {
   case createActionItem = "create_action_item"
   /// Update an existing task (mark done, change text/due). Needs the task id from get_tasks.
   case updateActionItem = "update_action_item"
+  /// Create a Google Calendar event through the backend calendar tool.
+  case createCalendarEvent = "create_calendar_event"
   /// Capture the user's screen so the model can see what they're looking at.
   case screenshot = "screenshot"
   /// Click at on-screen coordinates (local).
@@ -67,6 +69,24 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
+  private static func currentCalendarContext(now: Date = Date(), timeZone: TimeZone = .current) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone]
+    formatter.timeZone = timeZone
+    let offset = timeZone.secondsFromGMT(for: now)
+    let sign = offset >= 0 ? "+" : "-"
+    let absOffset = abs(offset)
+    let hours = absOffset / 3600
+    let minutes = (absOffset % 3600) / 60
+    return String(
+      format: "Current local datetime: %@. Current timezone: %@ (UTC%@%02d:%02d).",
+      formatter.string(from: now),
+      timeZone.identifier,
+      sign,
+      hours,
+      minutes
+    )
+  }
 
   static func systemInstruction(aboutUser: String) -> String {
     """
@@ -79,14 +99,17 @@ enum RealtimeHubTools {
 
     \(aboutUser)
 
+    \(currentCalendarContext())
+
     \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)
 
     IMPORTANT: You CAN read the user's Omi data directly with fast tools — their tasks \
     (get_tasks), what Omi knows about them / their memories & facts (get_memories, \
     search_memories), their past conversations (search_conversations), what they DID on \
     their Mac (get_daily_recap), and their on-screen history (search_screen_history) — and \
-    you can make simple task changes (create_action_item, update_action_item). For anything in \
-    their OTHER apps (calendar, notes, emails, messages, files, reminders, browser) or any \
+    you can make simple task changes (create_action_item, update_action_item) and create a \
+    straightforward calendar event (create_calendar_event). For anything else in their OTHER \
+    apps (notes, emails, messages, files, reminders, browser, or multi-step calendar work) or any \
     multi-step "do X for me" work, use spawn_agent — it hands the request to a background \
     agent that has those tools and can act in the user's apps.
 
@@ -145,7 +168,14 @@ enum RealtimeHubTools {
     call create_action_item with a clear `description` (and `due_at` if a time was given), \
     then confirm out loud. CHANGE an existing task (mark done, edit, reschedule): first \
     call get_tasks to get the matching task's id, then call update_action_item with that id.
-    - DOING something for the user in their OTHER apps (calendar, notes, emails, messages, \
+    - ADD a calendar event / schedule a specific meeting ("put lunch on my calendar", \
+    "schedule demo review tomorrow 2-3pm"): call create_calendar_event with `title`, \
+    `start_time`, and `end_time` as ISO-8601 strings WITH timezone. Include `attendees`, \
+    `location`, and `description` only if the user provided them. If the user gives no end time, \
+    choose a reasonable duration from context (usually 30 minutes for meetings, 1 hour otherwise) \
+    rather than spawning an agent just to ask. Resolve relative dates like "today", "tomorrow", \
+    and weekdays from the current local datetime/timezone above.
+    - DOING something else for the user in their OTHER apps (notes, emails, messages, \
     files, browser) or any multi-step work — create/send/open/edit/search/schedule/automate/ \
     "do X for me": you CANNOT do these yourself. You MUST actually EMIT the spawn_agent \
     function call (with a clear, self-contained `brief` and a short `title`). That function \
@@ -154,6 +184,8 @@ enum RealtimeHubTools {
     user. So always emit the spawn_agent call. You may add one short natural sentence as you \
     call it, but never instead of it. Do NOT ask clarifying questions before spawning — spawn \
     with what you have. Do NOT wait for it, narrate its steps, refuse, or claim you can't.
+    - If the user asks to use/ask OpenClaw or Hermes, call spawn_agent with provider set to \
+    "openclaw" or "hermes". Treat those as available local providers, not as sessions to inspect.
     - Everything else — general questions, facts, chit-chat, explanations, advice, jokes, \
     and creative or long-form requests (stories, brainstorming, drafts): ANSWER YOURSELF. \
     You are fully capable; do it directly, even when the ask is long or open-ended. Do \
@@ -487,6 +519,36 @@ enum RealtimeHubTools {
       ],
       [
         "type": "function",
+        "name": HubTool.createCalendarEvent.rawValue,
+        "description":
+          "Create a Google Calendar event for the user. Use for simple calendar requests like "
+          + "'put this on my calendar', 'schedule lunch tomorrow', or 'create an event'. Requires "
+          + "start_time and end_time as ISO-8601 strings with timezone. Use spawn_agent instead "
+          + "for multi-step scheduling, finding availability, rescheduling, deleting, or coordinating with people.",
+        "parameters": [
+          "type": "object",
+          "properties": [
+            "title": ["type": "string", "description": "Event title."],
+            "start_time": [
+              "type": "string",
+              "description": "Event start time in ISO-8601 with timezone, e.g. 2026-06-28T14:00:00-04:00.",
+            ],
+            "end_time": [
+              "type": "string",
+              "description": "Event end time in ISO-8601 with timezone, e.g. 2026-06-28T15:00:00-04:00.",
+            ],
+            "description": ["type": "string", "description": "Optional event description."],
+            "location": ["type": "string", "description": "Optional event location."],
+            "attendees": [
+              "type": "string",
+              "description": "Optional comma-separated attendee names or email addresses.",
+            ],
+          ],
+          "required": ["title", "start_time", "end_time"],
+        ],
+      ],
+      [
+        "type": "function",
         "name": HubTool.spawnAgent.rawValue,
         "description":
           "Hand a task to a background agent that CAN access the user's Omi data (tasks, to-dos, "
@@ -504,6 +566,11 @@ enum RealtimeHubTools {
               "description":
                 "A short Title Case label for the task pill (≤ ~5 words, no trailing "
                 + "punctuation), e.g. 'Draft Launch Email'.",
+            ],
+            "provider": [
+              "type": "string",
+              "enum": ["openclaw", "hermes"],
+              "description": "Optional local provider to run this background agent through.",
             ],
           ],
           "required": ["brief"],

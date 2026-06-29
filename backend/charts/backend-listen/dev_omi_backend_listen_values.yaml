@@ -106,6 +106,13 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: OPENAI_API_KEY
+  - name: OMI_LLM_GATEWAY_URL
+    value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
+  - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -371,6 +378,31 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: X_OAUTH_REDIRECT_URI
+  - name: MCP_AUTHORIZATION_SERVER_URL
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_AUTHORIZATION_SERVER_URL
+  - name: MCP_RESOURCE_URL
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_RESOURCE_URL
+  - name: MCP_OAUTH_CHATGPT_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_CLIENT_ID
+  - name: MCP_OAUTH_CHATGPT_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_CLIENT_SECRET
+  - name: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

@@ -106,6 +106,7 @@ _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticO
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
+_install_module('utils.byok', get_byok_key=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -167,6 +168,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'database',",
         "    'database._client',",
         "    'database.llm_usage',",
+        "    'models.structured_extraction',",
         "]:",
         "    sys.modules.setdefault(module_name, MagicMock())",
         "os.environ['OPENAI_API_KEY'] = 'sk-test'",
@@ -180,7 +182,6 @@ def _clients_subprocess_script(assertion: str) -> str:
 from utils.llm.clients import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
-    _CACHE_KEY_MODELS,
     _PERPLEXITY_ONLY_FEATURES,
     _PINNED_FEATURES,
     _STRUCTURED_OUTPUT_FEATURES,
@@ -197,6 +198,7 @@ from utils.llm.clients import (
     get_model,
     get_provider,
     get_qos_info,
+    supports_prompt_cache,
 )
 
 # ---------------------------------------------------------------------------
@@ -396,9 +398,9 @@ class TestGetLlm:
         assert hasattr(llm_with_key, 'invoke')
 
     def test_cache_key_ignored_for_non_cacheable_model(self):
-        # memories uses gpt-4.1-mini which is not in _CACHE_KEY_MODELS
-        llm_with_key = get_llm('memories', cache_key='omi-test-key')
-        llm_without_key = get_llm('memories')
+        # followup uses Gemini in the premium profile, which does not support OpenAI prompt_cache_key.
+        llm_with_key = get_llm('followup', cache_key='omi-test-key')
+        llm_without_key = get_llm('followup')
         assert llm_with_key is llm_without_key
 
     def test_new_features_return_clients(self):
@@ -539,8 +541,9 @@ class TestCacheKeySafety:
     """Verify cache_key is only applied when the model supports it."""
 
     def test_cache_key_models_contains_expected(self):
-        assert 'gpt-5.4' in _CACHE_KEY_MODELS
-        assert 'gpt-5.4-mini' in _CACHE_KEY_MODELS
+        assert supports_prompt_cache('gpt-5.4')
+        assert supports_prompt_cache('gpt-5.4-mini')
+        assert not supports_prompt_cache('claude-sonnet-4-6')
 
 
 class TestGetQosInfo:
@@ -1107,8 +1110,8 @@ class TestGeminiThinkingBudget:
 
         try:
             with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.clients.ChatGoogleGenerativeAI', side_effect=fake_genai
-            ), _patch('utils.llm.clients.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
                 _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
             assert captured.get('thinking_budget') == 0, 'native ChatGoogleGenerativeAI must receive thinking_budget'
         finally:
@@ -1128,8 +1131,8 @@ class TestGeminiThinkingBudget:
 
         try:
             with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.clients.ChatGoogleGenerativeAI', side_effect=fake_genai
-            ), _patch('utils.llm.clients.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
                 _get_or_create_gemini_llm('gemini-3-flash-preview', thinking_budget=0)
             assert 'thinking_budget' not in captured, 'thinking_budget only applies to gemini-2.5* models'
         finally:

@@ -106,11 +106,28 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
             case .text(let id, let text):
                 encoded.append(["type": "text", "id": id, "text": text])
             case .toolCall(let id, let name, let status, let toolUseId, let input, let output):
+                // Three-way mapping: in-flight (.running, .slow, .stalled)
+                // persists as "running" so reload resumes the spinner;
+                // .completed → "completed"; .failed → "failed". .stalled
+                // doesn't get its own code because it's a transient
+                // detector-promoted state — on reload, a stalled turn is
+                // already over and re-classifying as "failed" would be a
+                // semantic change; keep it as "running" so existing UI
+                // semantics persist. If the turn ended cleanly while the
+                // tool was .slow/.stalled, completeRemainingToolCalls
+                // would have already collapsed it to .completed before
+                // persistence.
+                let statusCode: String
+                switch status {
+                case .running, .slow, .stalled: statusCode = "running"
+                case .completed: statusCode = "completed"
+                case .failed: statusCode = "failed"
+                }
                 var dict: [String: Any] = [
                     "type": "toolCall",
                     "id": id,
                     "name": name,
-                    "status": status == .completed ? "completed" : "running"
+                    "status": statusCode
                 ]
                 if let toolUseId { dict["toolUseId"] = toolUseId }
                 if let input {
@@ -147,7 +164,16 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
             case "toolCall":
                 let name = dict["name"] as? String ?? ""
                 let statusStr = dict["status"] as? String ?? "completed"
-                let status: ToolCallStatus = statusStr == "running" ? .running : .completed
+                // Reverse of the three-way write mapping. Unknown
+                // strings fall back to .completed for forward-compat
+                // with future status codes.
+                let status: ToolCallStatus
+                switch statusStr {
+                case "running": status = .running
+                case "completed": status = .completed
+                case "failed": status = .failed
+                default: status = .completed
+                }
                 let toolUseId = dict["toolUseId"] as? String
                 let input: ToolCallInput?
                 if let summary = dict["inputSummary"] as? String {

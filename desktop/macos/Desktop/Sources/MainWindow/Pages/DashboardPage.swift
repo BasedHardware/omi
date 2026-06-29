@@ -245,11 +245,15 @@ struct DashboardPage: View {
             return .blocked
         }
 
-        if screenAnalysisEnabled && isCaptureMonitoring {
+        if isCaptureLive {
             return .active
         }
 
         return .inactive
+    }
+
+    private var isCaptureLive: Bool {
+        isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
     }
 
     private var hasOmiDeviceHistory: Bool {
@@ -721,7 +725,8 @@ struct DashboardPage: View {
     }
 
     private func toggleCapture() {
-        let enabled = !screenAnalysisEnabled
+        syncCaptureState()
+        let enabled = !isCaptureLive
         isTogglingCapture = true
 
         if enabled {
@@ -1052,8 +1057,13 @@ private enum HomePalette {
     static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
     static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
     static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-    static let glow = Color(red: 0.95, green: 0.33, blue: 0.45)
-    static let glowSoft = Color(red: 0.52, green: 0.18, blue: 0.27)
+    // Home ambient glow is PURPLE per Nik's explicit, repeated preference — the rose/red
+    // variant (0.95,0.33,0.45) was disliked. The purple VALUE lives on `.glow` on purpose:
+    // earlier purple fixes kept getting reverted by "HomePalette.purple → .glow" merge
+    // cleanups (e.g. 317424f57), so we put the purple on the name those reverts converge to.
+    // Do NOT change this back to red/rose.
+    static let glow = Color(red: 0.48, green: 0.30, blue: 0.95)      // purple
+    static let glowSoft = Color(red: 0.28, green: 0.17, blue: 0.57)  // purpleSoft
     static let flowPink = Color(red: 1.0, green: 0.16, blue: 0.44)
 }
 

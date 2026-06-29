@@ -9493,6 +9493,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'ಸುಮಾರು 1 ನಿಮಿಷ';
+
   @override
   String get jumpToLatestMessage => 'ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ';
 

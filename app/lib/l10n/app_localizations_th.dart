@@ -9411,6 +9411,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'ประมาณ 1 นาที';
+
   @override
   String get jumpToLatestMessage => 'ไปยังข้อความล่าสุด';
 

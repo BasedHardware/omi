@@ -9530,6 +9530,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Περίπου 1 λεπτό';
+
   @override
   String get jumpToLatestMessage => 'Μετάβαση στο πιο πρόσφατο μήνυμα';
 

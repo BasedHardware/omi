@@ -9503,6 +9503,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
+
   @override
   String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
 

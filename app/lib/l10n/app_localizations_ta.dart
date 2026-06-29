@@ -9531,6 +9531,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'சுமார் 1 நிமிடம்';
+
   @override
   String get jumpToLatestMessage => 'சமீபத்திய செய்திக்குச் செல்';
 

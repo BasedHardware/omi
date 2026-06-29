@@ -9469,6 +9469,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'প্রায় ১ মিনিট';
+
   @override
   String get jumpToLatestMessage => 'সর্বশেষ বার্তায় যান';
 

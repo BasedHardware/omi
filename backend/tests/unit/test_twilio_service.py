@@ -112,18 +112,22 @@ def test_install_phone_calls_stub_completes_existing_module():
 def test_twilio_stub_dial_appends_multiple_numbers():
     from twilio.twiml.voice_response import Dial, VoiceResponse
 
+    def without_xml_declaration(value):
+        return str(value).replace('<?xml version="1.0" encoding="UTF-8"?>', '')
+
     dial = Dial(caller_id='+15550000000')
     first_number = dial.number('+15551111111')
     second_number = dial.number('+15552222222')
 
-    assert str(first_number) == '<Number>+15551111111</Number>'
-    assert str(second_number) == '<Number>+15552222222</Number>'
+    assert without_xml_declaration(first_number) == '<Number>+15551111111</Number>'
+    assert without_xml_declaration(second_number) == '<Number>+15552222222</Number>'
 
     response = VoiceResponse()
     response.append(dial)
 
+    response_xml = str(response).replace('encoding="UTF-8"', 'encoding="utf-8"')
     assert (
-        str(response) == '<?xml version="1.0" encoding="utf-8"?><Response><Dial callerId="+15550000000">'
+        response_xml == '<?xml version="1.0" encoding="utf-8"?><Response><Dial callerId="+15550000000">'
         '<Number>+15551111111</Number><Number>+15552222222</Number></Dial></Response>'
     )
 

@@ -34,4 +34,29 @@ describe("LegacyPermissionPolicy", () => {
 
     expect(policy.resolveAcpPermission({ options: [] }).optionId).toBe("allow");
   });
+
+  it("keeps external ACP adapters off permanent auto-approval", () => {
+    const policy = new LegacyPermissionPolicy();
+
+    const once = policy.resolveExternalAcpPermission({
+      adapterId: "hermes",
+      options: [
+        { kind: "allow_always", optionId: "always" },
+        { kind: "allow_once", optionId: "once" },
+      ],
+    });
+    expect("acpResult" in once ? once.acpResult.outcome.optionId : "").toBe("once");
+
+    const rejected = policy.resolveExternalAcpPermission({
+      adapterId: "openclaw",
+      requestId: 9,
+      options: [{ kind: "allow_always", optionId: "always" }],
+    });
+    expect("acpError" in rejected ? rejected.acpError.code : 0).toBe(-32001);
+    expect(rejected.auditEvent).toMatchObject({
+      policy: "external_constrained",
+      adapterId: "openclaw",
+      requestId: 9,
+    });
+  });
 });

@@ -9511,6 +9511,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'సుమారు 1 నిమిషం';
+
   @override
   String get jumpToLatestMessage => 'తాజా సందేశానికి వెళ్ళు';
 

@@ -1428,6 +1428,19 @@ extension APIClient {
       return nil
     }
   }
+
+  /// Finalize a specific backend conversation id. This avoids the global Redis-backed
+  /// force-process endpoint, which can act on a newer in-progress recording after rotation.
+  func finalizeConversation(id conversationId: String) async throws -> ServerConversation {
+    struct EmptyBody: Encodable {}
+
+    let response: ForceProcessConversationResponse = try await post(
+      "v1/conversations/\(conversationId)/finalize",
+      body: EmptyBody(),
+      customBaseURL: nil
+    )
+    return response.conversation
+  }
 }
 
 // MARK: - Create Conversation From Segments (on-device transcription upload)
@@ -1450,6 +1463,7 @@ extension APIClient {
     let started_at: String?  // ISO8601
     let finished_at: String?  // ISO8601
     let language: String
+    let client_conversation_id: String?
   }
 
   struct CreateConversationFromSegmentsResponse: Decodable {
@@ -5102,6 +5116,24 @@ extension APIClient {
     }
   }
 
+  struct CreateCalendarEventRequest: Encodable {
+    let title: String
+    let startTime: String
+    let endTime: String
+    let description: String?
+    let location: String?
+    let attendees: String?
+
+    enum CodingKeys: String, CodingKey {
+      case title
+      case startTime = "start_time"
+      case endTime = "end_time"
+      case description
+      case location
+      case attendees
+    }
+  }
+
   /// Percent-encode a date string for use in query parameters.
   /// `.urlQueryAllowed` does not encode `+`, but servers decode `+` as space in query strings.
   /// This encodes `+` as `%2B` so timezone offsets like `+07:00` survive round-trip.
@@ -5186,6 +5218,25 @@ extension APIClient {
   ) async throws -> ToolResponse {
     let body = UpdateActionItemRequest(completed: completed, description: description, dueAt: dueAt)
     return try await patch("v1/tools/action-items/\(id)", body: body, customBaseURL: nil)
+  }
+
+  func toolCreateCalendarEvent(
+    title: String,
+    startTime: String,
+    endTime: String,
+    description: String? = nil,
+    location: String? = nil,
+    attendees: String? = nil
+  ) async throws -> ToolResponse {
+    let body = CreateCalendarEventRequest(
+      title: title,
+      startTime: startTime,
+      endTime: endTime,
+      description: description,
+      location: location,
+      attendees: attendees
+    )
+    return try await post("v1/tools/calendar-events", body: body, customBaseURL: nil)
   }
 
   // MARK: - X (Twitter) Connector

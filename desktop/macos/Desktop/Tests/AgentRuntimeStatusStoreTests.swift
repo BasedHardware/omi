@@ -41,6 +41,24 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     XCTAssertNil(projection?.completedAt)
   }
 
+  func testErrorProjectionUsesStructuredFailure() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"error","protocolVersion":2,"requestId":"req","sessionId":"ses-failed","runId":"run-failed","attemptId":"attempt-failed","message":"legacy text","failure":{"code":"adapter_process_exited","source":"adapter_process","adapterId":"openclaw","provider":"openai","retryable":true,"userMessage":"OpenClaw failed: OpenAI API error: upstream unavailable","technicalMessage":"OpenAI API error: upstream unavailable"}}"#
+    )!
+
+    store.ingest(message: message, surface: surface)
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.status, .failed)
+    XCTAssertEqual(projection?.errorMessage, "OpenClaw failed: OpenAI API error: upstream unavailable")
+    XCTAssertEqual(projection?.failure?.code, "adapter_process_exited")
+    XCTAssertEqual(projection?.failure?.adapterId, "openclaw")
+    XCTAssertEqual(projection?.failure?.provider, "openai")
+    XCTAssertEqual(projection?.failure?.retryable, true)
+  }
+
   func testUpdateActivityDoesNotReviveTerminalProjection() {
     let store = AgentRuntimeStatusStore()
     let surface = AgentSurfaceReference.taskChat(taskId: "task-terminal")
@@ -114,6 +132,37 @@ final class AgentRuntimeStatusStoreTests: XCTestCase {
     // Terminal result text "done" replaces the stale running text "Working...".
     XCTAssertEqual(projection?.statusText, "done")
     XCTAssertNotNil(projection?.completedAt)
+  }
+
+  func testToolResultDisplayDoesNotSurfaceRawOutput() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"tool_result_display","protocolVersion":2,"requestId":"req","name":"Bash","output":"TOKEN=secret-value\n/private/tmp/user-file"}"#
+    )!
+
+    store.ingest(message: message, surface: surface)
+
+    let projection = store.projection(for: surface)
+    XCTAssertEqual(projection?.status, .running)
+    XCTAssertEqual(projection?.statusText, "Running command")
+    XCTAssertFalse(projection?.statusText?.contains("secret-value") ?? true)
+  }
+
+  func testToolResultDisplayDoesNotOverwriteCancellation() {
+    let store = AgentRuntimeStatusStore()
+    let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
+    let cancel = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"cancel_ack","protocolVersion":2,"requestId":"req","accepted":true}"#
+    )!
+    let resultDisplay = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"tool_result_display","protocolVersion":2,"requestId":"req","name":"Bash","output":"done"}"#
+    )!
+
+    store.ingest(message: cancel, surface: surface)
+    store.ingest(message: resultDisplay, surface: surface)
+
+    XCTAssertEqual(store.projection(for: surface)?.status, .cancelling)
   }
 
   func testTaskRegistryMarkCompletedDoesNotCreateSuccessWithoutRuntimeResult() throws {

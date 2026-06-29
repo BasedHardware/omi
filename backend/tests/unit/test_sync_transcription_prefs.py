@@ -92,6 +92,20 @@ _pydub = ModuleType('pydub')
 _pydub.AudioSegment = MagicMock
 sys.modules.setdefault('pydub', _pydub)
 
+_fal_client = ModuleType('fal_client')
+_fal_client.subscribe = MagicMock()
+sys.modules.setdefault('fal_client', _fal_client)
+
+sys.modules.setdefault('stripe', ModuleType('stripe'))
+
+_python_multipart = ModuleType('python_multipart')
+_python_multipart.__version__ = '0.0.99'
+sys.modules.setdefault('python_multipart', _python_multipart)
+
+_python_multipart_parser = ModuleType('python_multipart.multipart')
+_python_multipart_parser.parse_options_header = MagicMock(return_value={})
+sys.modules.setdefault('python_multipart.multipart', _python_multipart_parser)
+
 _process_conversation = ModuleType('utils.conversations.process_conversation')
 _process_conversation.process_conversation = MagicMock()
 sys.modules['utils.conversations.process_conversation'] = _process_conversation
@@ -129,10 +143,21 @@ _speaker_embedding.compare_embeddings = _compare_embeddings
 _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
 sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
 
+_cloud_tasks = ModuleType('utils.cloud_tasks')
+_cloud_tasks.enqueue_audio_merge_job = MagicMock()
+_cloud_tasks.enqueue_sync_job = MagicMock()
+_cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
+_cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+_cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+_cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
+sys.modules['utils.cloud_tasks'] = _cloud_tasks
+
 # Stub google.cloud.storage.Client to avoid GCS credentials
 import google.cloud as _google_cloud
 import google.cloud.storage as _gcs
 
+if not hasattr(_gcs, 'Client'):
+    _gcs.Client = MagicMock
 _orig_storage_client = _gcs.Client
 _gcs.Client = MagicMock
 
@@ -346,7 +371,7 @@ class TestDeepgramPrerecordedKeywords:
 # ---------------------------------------------------------------------------
 
 
-@patch('routers.sync.submit_with_context', MagicMock())
+@patch('routers.sync.run_blocking', MagicMock())
 class TestProcessSegmentPreferences:
     """Verify process_segment applies user transcription preferences."""
 
@@ -573,6 +598,37 @@ class TestProcessSegmentPreferences:
         # The language arg is the second positional argument
         assert call_args[0][1] == 'en', "Should use user's language 'en', not Deepgram's detected 'fr'"
 
+    @patch('routers.sync.process_conversation')
+    @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
+    @patch('routers.sync.prerecorded')
+    @patch('routers.sync.delete_syncing_temporal_file')
+    @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_private_cloud_sync_flag_passed_to_new_conversation(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        """New offline sync conversations must retain private-cloud audio metadata intent."""
+        from routers.sync import process_segment
+
+        mock_dg.return_value = (self._make_mock_words(), 'en')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        process_segment(
+            'test/path.bin',
+            'uid123',
+            response,
+            lock,
+            errors,
+            private_cloud_sync_enabled=True,
+        )
+
+        create_conversation = mock_process.call_args[0][2]
+        assert create_conversation.private_cloud_sync_enabled is True
+
 
 # ---------------------------------------------------------------------------
 # Structural: endpoint wires transcription_prefs into threads
@@ -601,6 +657,22 @@ class TestSyncEndpointPrefsWiring:
         fn_start = source.index('async def sync_local_files(')
         fn_body = source[fn_start:]
         assert 'transcription_prefs' in fn_body
+
+    def test_endpoint_forwards_private_cloud_and_data_protection(self):
+        """Private-cloud v1 sync must persist chunks with the user's protection level and finalize audio metadata."""
+        source = self._read_sync_source()
+        fn_start = source.index('async def sync_local_files(')
+        fn_end = source.index(
+            '# ---------------------------------------------------------------------------\n# v2 async sync-local-files',
+            fn_start,
+        )
+        fn_body = source[fn_start:fn_end]
+
+        assert 'get_user_private_cloud_sync_enabled' in fn_body
+        assert 'get_data_protection_level' in fn_body
+        assert 'private_cloud_sync_enabled=private_cloud_sync_enabled' in fn_body
+        assert 'data_protection_level=data_protection_level' in fn_body
+        assert '_finalize_sync_audio_files' in fn_body
 
 
 # ---------------------------------------------------------------------------
@@ -1170,7 +1242,7 @@ class TestIdentifySpeakersForSegments:
         assert segments[1].person_id == 'p2'
 
 
-@patch('routers.sync.submit_with_context', MagicMock())
+@patch('routers.sync.run_blocking', MagicMock())
 class TestProcessSegmentSpeakerIdIntegration:
     """Verify process_segment wires speaker identification correctly."""
 
@@ -1306,7 +1378,7 @@ class TestDownloadAudioBytes:
         assert result is None
 
 
-@patch('routers.sync.submit_with_context', MagicMock())
+@patch('routers.sync.run_blocking', MagicMock())
 class TestSpeakerIdExceptionHandling:
     """Verify process_segment swallows speaker ID exceptions gracefully."""
 

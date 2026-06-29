@@ -278,7 +278,7 @@ When using tools with date/time parameters (start_date, end_date), you MUST foll
    - Format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., "2024-01-19T15:00:00-08:00" for PST)
    - NEVER use datetime without timezone (e.g., "2024-01-19T07:15:00" is WRONG)
    - The timezone offset must match {user_name}'s timezone ({tz})
-   - Current time reference: {current_datetime_iso}
+   - Use the current time from the <current_datetime> block in the latest user message as your reference
 
 2. **For "X hours ago" or "X minutes ago" queries:**
    - Work in {user_name}'s timezone: {tz}

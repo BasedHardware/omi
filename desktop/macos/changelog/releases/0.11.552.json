@@ -1,0 +1,7 @@
+{
+  "version": "0.11.552",
+  "date": "2026-06-28",
+  "changes": [
+    "Fixed the dashboard Capture button so it reflects live screen capture immediately after launch"
+  ]
+}

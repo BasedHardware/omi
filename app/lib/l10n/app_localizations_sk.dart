@@ -9454,6 +9454,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Približne 1 minúta';
+
   @override
   String get jumpToLatestMessage => 'Prejsť na najnovšiu správu';
 

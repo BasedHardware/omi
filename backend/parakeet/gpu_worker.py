@@ -5,10 +5,12 @@ import os
 import queue
 import threading
 import time
+import wave as _wave
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
+import soundfile as sf
 import torch
 
 try:
@@ -28,6 +30,12 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 _MAX_GPU_QUEUE = 512
+
+_VALID_ATTN_MODES = ("full", "local", "auto")
+
+
+class AudioDurationExceededError(Exception):
+    pass
 
 
 class WorkType(Enum):
@@ -61,6 +69,15 @@ class GPUWorker:
         self._ready = threading.Event()
         self._load_error: Optional[Exception] = None
         self._running = False
+        self._attn_mode = os.getenv("PARAKEET_ATTENTION_MODE", "full").lower()
+        if self._attn_mode not in _VALID_ATTN_MODES:
+            raise ValueError(f"PARAKEET_ATTENTION_MODE must be one of {_VALID_ATTN_MODES}, got '{self._attn_mode}'")
+        self._attn_auto_threshold_sec = float(os.getenv("PARAKEET_AUTO_ATTN_THRESHOLD", "300"))
+        ctx_raw = os.getenv("PARAKEET_LOCAL_ATTN_CONTEXT", "128,128")
+        self._attn_local_context = [int(x.strip()) for x in ctx_raw.split(",")]
+        self._attn_is_local = False
+        self._model_dtype = None
+        self._max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
 
     @property
     def is_ready(self) -> bool:
@@ -212,6 +229,7 @@ class GPUWorker:
         if use_bf16:
             logger.info(f"Converting {model_name} to BF16 (halves GPU memory)")
             model = model.to(torch.bfloat16)
+            self._model_dtype = torch.bfloat16
         model.eval()
 
         if disable_cuda_graphs:
@@ -219,9 +237,29 @@ class GPUWorker:
                 disabled = model.decoding.decoding.disable_cuda_graphs()
                 logger.info(f"CUDA graph decoding disabled (was active: {disabled})")
 
-        if do_compile:
+        if self._attn_mode == "local":
+            model.change_attention_model("rel_pos_local_attn", self._attn_local_context)
+            model.change_subsampling_conv_chunking_factor(1)
+            if self._model_dtype is not None:
+                model.to(self._model_dtype)
+            self._attn_is_local = True
+            logger.info(f"Attention mode: local (context={self._attn_local_context}) — linear VRAM scaling")
+        elif self._attn_mode == "auto":
+            logger.info(
+                f"Attention mode: auto — full for <{self._attn_auto_threshold_sec}s, "
+                f"local for >={self._attn_auto_threshold_sec}s (torch.compile disabled for auto mode)"
+            )
+        else:
+            logger.info("Attention mode: full (default)")
+
+        if self._max_file_duration_sec > 0:
+            logger.info(f"Max file duration guard: {self._max_file_duration_sec}s")
+
+        if do_compile and self._attn_mode != "auto":
             logger.info("Compiling batch model with torch.compile")
             model = torch.compile(model)
+        elif do_compile and self._attn_mode == "auto":
+            logger.info("Skipping torch.compile — incompatible with auto attention switching")
 
         self._model = model
         torch.cuda.empty_cache()
@@ -268,11 +306,57 @@ class GPUWorker:
         sample_rate = payload["sample_rate"]
         return self._embedding_model({"waveform": waveform, "sample_rate": sample_rate})
 
+    def _get_audio_duration_sec(self, path: str) -> float:
+        try:
+            info = sf.info(path)
+            return info.duration
+        except Exception:
+            pass
+        try:
+            with _wave.open(path) as wf:
+                return wf.getnframes() / wf.getframerate()
+        except Exception as exc:
+            logger.warning(f"Cannot determine audio duration for {path}: {exc}")
+            if self._max_file_duration_sec > 0:
+                return float('inf')
+            return 0.0
+
+    def _switch_attention(self, to_local: bool) -> None:
+        if to_local == self._attn_is_local:
+            return
+        if to_local:
+            self._model.change_attention_model("rel_pos_local_attn", self._attn_local_context)
+            self._model.change_subsampling_conv_chunking_factor(1)
+            self._attn_is_local = True
+        else:
+            self._model.change_attention_model("rel_pos")
+            self._attn_is_local = False
+        if self._model_dtype is not None:
+            self._model.to(self._model_dtype)
+
     @torch.inference_mode()
     def _batch_transcribe(self, payload: dict) -> list:
         audio_paths = payload["audio_paths"]
         timestamps = payload.get("timestamps", True)
         batch_size = payload.get("batch_size", len(audio_paths))
+
+        if self._max_file_duration_sec > 0:
+            for path in audio_paths:
+                dur = self._get_audio_duration_sec(path)
+                if dur > self._max_file_duration_sec:
+                    raise AudioDurationExceededError(
+                        f"Audio file {dur:.0f}s exceeds max duration "
+                        f"({self._max_file_duration_sec:.0f}s). Use shorter files or "
+                        f"set PARAKEET_ATTENTION_MODE=local/auto for longer audio."
+                    )
+
+        if self._attn_mode == "auto":
+            max_dur = max((self._get_audio_duration_sec(p) for p in audio_paths), default=0.0)
+            need_local = max_dur >= self._attn_auto_threshold_sec
+            if need_local != self._attn_is_local:
+                mode_name = "local" if need_local else "full"
+                logger.info(f"Auto-switching attention to {mode_name} (longest file: {max_dur:.0f}s)")
+                self._switch_attention(need_local)
 
         results = self._model.transcribe(
             audio_paths,

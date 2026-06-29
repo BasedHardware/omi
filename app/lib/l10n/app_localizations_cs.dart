@@ -9463,6 +9463,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Přibližně 1 minuta';
+
   @override
   String get jumpToLatestMessage => 'Přejít na nejnovější zprávu';
 

@@ -9472,6 +9472,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'सुमारे 1 मिनिट';
+
   @override
   String get jumpToLatestMessage => 'नवीनतम संदेशावर जा';
 

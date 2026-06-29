@@ -86,7 +86,7 @@ class ActionFieldsWidget extends StatelessWidget {
                                       provider.removeActionByType(actionType.id);
                                     }
                                   },
-                                  activeColor: const Color(0xFF6366F1),
+                                  activeThumbColor: const Color(0xFF6366F1),
                                 ),
                               ],
                             ),

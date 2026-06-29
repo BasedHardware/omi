@@ -9551,6 +9551,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Mga 1 minuto';
+
   @override
   String get jumpToLatestMessage => 'Tumalon sa pinakabagong mensahe';
 

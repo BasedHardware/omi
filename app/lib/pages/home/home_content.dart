@@ -173,12 +173,11 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       PlatformManager.instance.analytics.phoneMicRecordingStarted();
     }
     if (!context.mounted) return;
-    final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
-        ? captureProvider.conversationProvider!.conversations.first.id
-        : null;
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
+      MaterialPageRoute(
+        builder: (context) => ConversationCapturingPage(topConversationId: captureProvider.topConversationId),
+      ),
     );
   }
 
@@ -482,6 +481,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
   Widget _buildMindMapPreview(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),

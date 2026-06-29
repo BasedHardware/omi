@@ -122,6 +122,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationSpacing: CGFloat = 8
     private static let askOmiAnimationDuration: TimeInterval = 0.055
     private static let askOmiSettleDelay: TimeInterval = 0.065
+    private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
     private static let topInset: CGFloat = 40
     private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
     /// Minimum window height when AI response first appears.
@@ -157,9 +158,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
     private var frameAnimationToken: Int = 0
+    private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
 
     private var notchModeEnabled: Bool {
-        ShortcutSettings.shared.notchModeEnabled && Self.screenHasCameraHousing(screenForPlacement)
+        Self.screenHasCameraHousing(screenForPlacement)
     }
     var usesNotchIslandForCurrentScreen: Bool { notchModeEnabled }
     private var screenForPlacement: NSScreen? {
@@ -253,8 +255,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         contentRect: NSRect, styleMask style: NSWindow.StyleMask,
         backing backingStoreType: NSWindow.BackingStoreType = .buffered, defer flag: Bool = false
     ) {
-        let initialSize = ShortcutSettings.shared.notchModeEnabled
-            && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+        let initialSize = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
             ? NSSize(
                 width: FloatingControlBarWindow.notchHiddenCenterWidth(for: NSScreen.main ?? NSScreen.screens.first)
                     + FloatingControlBarWindow.notchCompactSideWidth * 2,
@@ -274,8 +275,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
-        self.level = ShortcutSettings.shared.notchModeEnabled
-            && FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first) ? .statusBar : .floating
+        self.level = FloatingControlBarWindow.screenHasCameraHousing(NSScreen.main ?? NSScreen.screens.first)
+            ? .statusBar
+            : .floating
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = false
         self.acceptsMouseMovedEvents = true
@@ -304,6 +306,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else {
             centerOnMainScreen()
         }
+        scheduleStartupDisplayRevalidation()
     }
 
     /// Clamp `rect` so it stays entirely inside `visible`. visibleFrame already
@@ -462,7 +465,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.validatePositionOnScreenChange()
+                self?.validatePositionOnScreenChange(reason: "screen_parameters_changed")
             }
         }
 
@@ -755,8 +758,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let currentVisible = currentScreen?.visibleFrame ?? .zero
         let targetVisible = targetScreen.visibleFrame
 
-        let targetUsesNotchIsland = ShortcutSettings.shared.notchModeEnabled
-            && Self.screenHasCameraHousing(targetScreen)
+        let targetUsesNotchIsland = Self.screenHasCameraHousing(targetScreen)
 
         if targetUsesNotchIsland {
             growOutFromNotch(on: targetScreen)
@@ -1543,9 +1545,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private var topInsetForPillFallback: CGFloat {
-        ShortcutSettings.shared.notchModeEnabled
-            ? Self.topInsetWhenNotchModeFallsBackToPill
-            : Self.topInset
+        Self.topInsetWhenNotchModeFallsBackToPill
     }
 
     /// Center the bar near the top of the main screen.
@@ -1556,7 +1556,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             self.center()
             return
         }
-        if ShortcutSettings.shared.notchModeEnabled && Self.screenHasCameraHousing(screen) {
+        if Self.screenHasCameraHousing(screen) {
             let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: true)
             self.setFrame(targetFrame, display: true, animate: false)
             log("FloatingControlBarWindow: centered notch island at \(targetFrame.origin) on screen \(screen.frame)")
@@ -1578,11 +1578,25 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Called when monitors are connected/disconnected. Re-center if the bar is no longer
     /// fully visible on any screen.
-    private func validatePositionOnScreenChange() {
+    private func scheduleStartupDisplayRevalidation() {
+        startupDisplayRevalidationWorkItems.forEach { $0.cancel() }
+        startupDisplayRevalidationWorkItems = Self.startupDisplayRevalidationDelays.map { delay in
+            let workItem = DispatchWorkItem { [weak self] in
+                Task { @MainActor in
+                    self?.validatePositionOnScreenChange(reason: "startup_display_revalidation")
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+            return workItem
+        }
+    }
+
+    private func validatePositionOnScreenChange(reason: String) {
+        guard !isUserDragging else { return }
         updateNotchIslandState()
         // Non-draggable mode: always restore to default position on screen change
         if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
-            log("FloatingControlBarWindow: non-draggable mode, re-centering after monitor change")
+            log("FloatingControlBarWindow: re-centering after display revalidation reason=\(reason) usesNotch=\(notchModeEnabled)")
             centerOnMainScreen()
             return
         }
@@ -1597,12 +1611,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if let targetScreen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(barFrame) }) {
             let clamped = FloatingControlBarWindow.clamp(barFrame, to: targetScreen.visibleFrame)
             if clamped != barFrame {
-                log("FloatingControlBarWindow: clamping bar \(barFrame) to \(targetScreen.visibleFrame) after monitor change")
+                log("FloatingControlBarWindow: clamping bar \(barFrame) to \(targetScreen.visibleFrame) after display revalidation reason=\(reason)")
                 self.setFrameOrigin(clamped.origin)
                 UserDefaults.standard.set(NSStringFromPoint(clamped.origin), forKey: FloatingControlBarWindow.positionKey)
             }
         } else {
-            log("FloatingControlBarWindow: bar frame \(barFrame) does not intersect any visible screen, re-centering")
+            log("FloatingControlBarWindow: bar frame \(barFrame) does not intersect any visible screen, re-centering reason=\(reason)")
             UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
             centerOnMainScreen()
         }
@@ -2498,8 +2512,12 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         presentation: QueryPresentation
     ) async {
+        let directive = AgentPillsManager.providerDirective(
+            from: message,
+            contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)
+        )
         let handoff = AgentPillsManager.floatingAgentHandoff(for: message)
-        if provider.isSending, handoff == nil {
+        if provider.isSending, directive == nil, handoff == nil {
             pendingFollowUpQuery = PendingFollowUpQuery(text: message, presentation: presentation)
             if case .visible(let fromVoice) = presentation {
                 prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
@@ -2516,6 +2534,41 @@ class FloatingControlBarManager {
         }
 
         let routerTracer = QueryTracerContext.current
+        if let directive {
+            if provider.isSending {
+                pendingFollowUpQuery = nil
+                provider.stopAgent()
+            }
+            routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
+            let pill = AgentPillsManager.shared.spawnFromUserQuery(
+                directive.rewrittenQuery,
+                model: selectedFloatingModel,
+                fromVoice: presentation.fromVoice,
+                preFetchedTitle: directive.title,
+                preFetchedAck: directive.ack,
+                bridgeHarnessOverride: directive.provider.harnessMode
+            )
+            let assistantText = "I started \(directive.provider.displayName) in a background agent titled \"\(pill.title)\"."
+            let recordedTurn = provider.recordCompletedTurn(
+                userText: message,
+                assistantText: assistantText,
+                logLabel: "floating-agent-provider"
+            )
+            switch presentation {
+            case .visible:
+                completeVisibleAgentHandoff(
+                    .init(originalRequest: message, agentTask: directive.rewrittenQuery),
+                    assistantMessage: recordedTurn.assistant,
+                    assistantText: assistantText,
+                    barWindow: barWindow
+                )
+            case .voiceOnly:
+                barWindow.state.currentQueryFromVoice = false
+                barWindow.state.isVoiceResponseActive = false
+            }
+            return
+        }
+
         if let handoff {
             if provider.isSending {
                 pendingFollowUpQuery = nil
@@ -2598,6 +2651,16 @@ class FloatingControlBarManager {
 
         // Chat route: continue with the requested delivery surface.
         await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
+    }
+
+    private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String? {
+        let displayed = barWindow.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !displayed.isEmpty {
+            return displayed
+        }
+        return barWindow.state.chatHistory.reversed().compactMap { exchange in
+            exchange.question?.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.first { !$0.isEmpty }
     }
 
     private func dispatchChatQuery(

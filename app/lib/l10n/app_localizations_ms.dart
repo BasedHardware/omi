@@ -9488,6 +9488,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Kira-kira 1 minit';
+
   @override
   String get jumpToLatestMessage => 'Lompat ke mesej terkini';
 

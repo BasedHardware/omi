@@ -11,12 +11,11 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
-from models.structured import Structured
+from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key, get_byok_custom_provider
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
-    _CACHE_KEY_MODELS,
     _DEFAULT_CONFIG,
     _OPENROUTER_TEMPERATURES,
     _PERPLEXITY_ONLY_FEATURES,
@@ -38,6 +37,7 @@ from utils.llm.model_config import (
     is_anthropic_only_feature,
     is_perplexity_only_feature,
     is_structured_output_feature,
+    supports_cache_retention,
     supports_prompt_cache,
     _get_model_config,
 )
@@ -185,7 +185,7 @@ def _create_byok_client(
 ) -> Optional[ChatOpenAI]:
     """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
     kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'request_timeout': 120, 'max_retries': 1}
-    if model == 'gpt-5.1':
+    if supports_cache_retention(model):
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
     if streaming:
         kwargs['streaming'] = True
@@ -262,7 +262,7 @@ def _effective_byok_provider(model: str, provider: str) -> str:
 # lives in providers.py.
 def _get_or_create_openai_llm(model_name: str, streaming: bool = False) -> ChatOpenAI:
     options: Dict[str, Any] = {}
-    if model_name == 'gpt-5.1':
+    if supports_cache_retention(model_name):
         options['extra_body'] = {"prompt_cache_retention": "24h"}
     return get_or_create_openai_compatible_llm('openai', model_name, streaming, options)
 
@@ -402,7 +402,7 @@ embeddings = _OpenAIEmbeddingsProxy(
     default=_embeddings_default,
     ctor_kwargs={},
 )
-parser = PydanticOutputParser(pydantic_object=Structured)
+parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
 
 encoding = tiktoken.encoding_for_model('gpt-4')
 

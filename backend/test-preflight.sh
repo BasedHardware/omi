@@ -60,7 +60,7 @@ echo ""
 echo "Python packages:"
 
 missing_pkgs=()
-for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram_sdk openpipe; do
+for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram_sdk openpipe pytest_asyncio; do
   if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -c "import $pkg" &>/dev/null 2>&1; then
     ok "$pkg"
   else
@@ -132,19 +132,12 @@ else
   bad "No unit test files found in tests/unit/"
 fi
 
-# Check if test.sh test files all exist
-missing_tests=()
-while IFS= read -r line; do
-  test_file=$(echo "$line" | sed 's/pytest //' | sed 's/ -v//')
-  if [[ ! -f "$test_file" ]]; then
-    missing_tests+=("$test_file")
-  fi
-done < <(grep '^pytest tests/' test.sh 2>/dev/null)
-
-if [[ ${#missing_tests[@]} -gt 0 ]]; then
-  bad "test.sh references missing files: ${missing_tests[*]}"
+# Check if the discovered full unit suite resolves cleanly.
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" scripts/select_backend_unit_tests.py --all >/tmp/backend-unit-tests-preflight.txt; then
+  selected_test_count=$(wc -l </tmp/backend-unit-tests-preflight.txt | tr -d ' ')
+  ok "$selected_test_count backend unit test files selected"
 else
-  ok "All test.sh references resolve to existing files"
+  bad "backend unit test selection failed"
 fi
 
 # ── Summary ──
