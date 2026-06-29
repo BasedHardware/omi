@@ -70,6 +70,30 @@ app = FastAPI(
 
 
 # ---------------------------------------------------------------------------
+# /.well-known/omi-tools.json — Omi Chat Tools manifest
+# ---------------------------------------------------------------------------
+# Per docs/doc/developer/apps/ChatTools.mdx, AI Clone plugins expose a
+# static manifest at this well-known path so the Omi desktop/mobile app
+# can discover the tools on install. Each plugin owns its own manifest
+# (TOOLS_MANIFEST in main.py) because the JSON-Schema properties must
+# exactly match the plugin's /toggle ToggleRequest field names — the chat
+# assistant will faithfully build the request from this schema.
+# Unauthenticated — manifest discovery is public; the underlying /toggle
+# endpoint is auth-gated separately by the bot_token parameter.
+@app.get("/.well-known/omi-tools.json", include_in_schema=False)
+async def omi_tools_manifest():
+    """Return the Omi Chat Tools manifest for this plugin.
+
+    No auth: the manifest is public metadata. Each tool declared here
+    has its own `auth_required` flag and uses request-body credentials for
+    actual authorization.
+    """
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(content=get_omi_tools_manifest())
+
+
+# ---------------------------------------------------------------------------
 # /health
 # ---------------------------------------------------------------------------
 @app.get("/health")
@@ -307,12 +331,66 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
         logger.error("persona chat timeout for chat %s: %s", chat_id, type(e).__name__)
         return
 
-    if not reply:
-        logger.info("persona chat returned empty reply for chat %s (skipping send)", chat_id)
-        return
 
-    await telegram_client.send_message(user["bot_token"], chat_id, reply)
-    logger.info("auto-reply sent to chat %s (%d chars)", chat_id, len(reply))
+# ---------------------------------------------------------------------------
+# Omi Chat Tools manifest — served at `GET /.well-known/omi-tools.json`.
+# Schema per docs/doc/developer/apps/ChatTools.mdx. Each plugin has its own
+# manifest because the parameter NAMES must match that plugin's /toggle
+# ToggleRequest model (Telegram uses `chat_id`/`bot_token`; WhatsApp uses
+# `phone`/`access_token`). The chat assistant will faithfully build a
+# request from this schema, so the JSON-Schema `properties` keys MUST
+# exactly match the field names the corresponding /toggle endpoint accepts.
+# ---------------------------------------------------------------------------
+TOOLS_MANIFEST = {
+    "tools": [
+        {
+            "name": "toggle_auto_reply",
+            "description": (
+                "Turn the AI Clone auto-reply on or off for a connected "
+                "Telegram chat. Use this when the user wants to enable or "
+                "disable Omi's automatic responses in a specific Telegram "
+                "conversation. The bot_token parameter is the bot's token "
+                "(from @BotFather) used to authenticate the toggle call."
+            ),
+            "endpoint": "/toggle",
+            "method": "POST",
+            "parameters": {
+                "properties": {
+                    "chat_id": {
+                        "type": "string",
+                        "description": "Telegram chat_id of the conversation.",
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": ("True to enable AI Clone auto-reply for the " "chat, false to disable it."),
+                    },
+                    "bot_token": {
+                        "type": "string",
+                        "description": (
+                            "Telegram bot_token (from @BotFather). Used to " "authenticate the /toggle call."
+                        ),
+                    },
+                },
+                "required": ["chat_id", "enabled", "bot_token"],
+            },
+            "auth_required": True,
+            "status_message": "Toggling Telegram auto-reply...",
+        }
+    ],
+    "chat_messages": {
+        "enabled": False,
+        "target": "app",
+        "notify": False,
+    },
+}
+
+
+def get_omi_tools_manifest() -> dict:
+    """Return a fresh deep copy of the manifest so callers can't mutate
+    the shared constant. v0.1 manifest is <1KB so copy cost is trivial."""
+    import copy
+
+    return copy.deepcopy(TOOLS_MANIFEST)
 
 
 def _is_group_or_channel(update: dict) -> bool:
