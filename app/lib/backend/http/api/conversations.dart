@@ -91,9 +91,8 @@ Future<({List<ServerConversation> items, bool ok})> getConversationsResult({
   if (response.statusCode == 200) {
     // decode body bytes to utf8 string and then parse json so as to avoid utf8 char issues
     var body = utf8.decode(response.bodyBytes);
-    var memories = (jsonDecode(body) as List<dynamic>)
-        .map((conversation) => ServerConversation.fromJson(conversation))
-        .toList();
+    var memories =
+        (jsonDecode(body) as List<dynamic>).map((conversation) => ServerConversation.fromJson(conversation)).toList();
     Logger.debug('getConversations length: ${memories.length}');
     return (items: memories, ok: true);
   }
@@ -198,7 +197,12 @@ Future<List<CalendarEventLink>> listGoogleCalendarEvents({
     url += '&q=${Uri.encodeComponent(query)}';
   }
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
+  var response = await makeApiCall(
+    url: url,
+    headers: {},
+    method: 'GET',
+    body: '',
+  );
   if (response == null) return [];
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
@@ -277,9 +281,8 @@ class TranscriptsResponse {
       deepgram: (json['deepgram'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       soniox: (json['soniox'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
       whisperx: (json['whisperx'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
-      speechmatics: (json['speechmatics'] as List<dynamic>)
-          .map((segment) => TranscriptSegment.fromJson(segment))
-          .toList(),
+      speechmatics:
+          (json['speechmatics'] as List<dynamic>).map((segment) => TranscriptSegment.fromJson(segment)).toList(),
     );
   }
 }
@@ -495,19 +498,13 @@ Future<SyncJobFetch> fetchSyncJobStatus(String jobId) async {
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
   if (response.statusCode == 404 || response.statusCode == 403) {
-    DebugLogManager.logEvent('fetch_sync_job_status', {
-      'jobId': jobId,
-      'httpStatus': response.statusCode,
-      'outcome': 'notFound',
-    });
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'notFound'});
     return const SyncJobFetch(SyncJobFetchOutcome.notFound);
   }
   if (response.statusCode != 200) {
-    DebugLogManager.logEvent('fetch_sync_job_status', {
-      'jobId': jobId,
-      'httpStatus': response.statusCode,
-      'outcome': 'transient',
-    });
+    DebugLogManager.logEvent(
+        'fetch_sync_job_status', {'jobId': jobId, 'httpStatus': response.statusCode, 'outcome': 'transient'});
     return const SyncJobFetch(SyncJobFetchOutcome.transient);
   }
   try {

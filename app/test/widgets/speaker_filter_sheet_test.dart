@@ -5,9 +5,17 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/pages/conversations/widgets/speaker_filter_sheet.dart';
 
 void main() {
-  final person = Person(id: 'person-1', name: 'Alex', createdAt: DateTime(2026), updatedAt: DateTime(2026));
+  final person = Person(
+    id: 'person-1',
+    name: 'Alex',
+    createdAt: DateTime(2026),
+    updatedAt: DateTime(2026),
+  );
 
-  Widget buildSheet({String? selectedSpeakerId, required SpeakerSelected onSelected}) {
+  Widget buildSheet({
+    String? selectedSpeakerId,
+    required SpeakerSelected onSelected,
+  }) {
     return MaterialApp(
       theme: ThemeData.dark(),
       home: Scaffold(

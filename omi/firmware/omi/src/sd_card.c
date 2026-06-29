@@ -99,8 +99,7 @@ static int wait_for_sd_worker_response(struct k_sem *sem, int timeout_ms, const 
         return 0;
     }
 
-    LOG_WRN("%s timed out after %d ms waiting for SD worker; subsequent calls may return -EBUSY until the pending "
-            "request completes",
+        LOG_WRN("%s timed out after %d ms waiting for SD worker; subsequent calls may return -EBUSY until the pending request completes",
             op_name,
             timeout_ms);
     return -ETIMEDOUT;
@@ -245,7 +244,7 @@ static uint64_t ring_used_bytes(void)
 static uint32_t batch_sector_for_base_seq(uint64_t base_seq)
 {
     uint64_t batch_index = base_seq / RAW_PACKETS_PER_BATCH;
-    uint32_t slot = (uint32_t) (batch_index % data_batch_count);
+    uint32_t slot = (uint32_t)(batch_index % data_batch_count);
     return RAW_META_SECTORS + (slot * RAW_BATCH_SECTORS);
 }
 
@@ -397,7 +396,7 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
 
     memcpy(header, buffer, sizeof(*header));
     if (!batch_header_valid(header)) {
-        LOG_ERR("invalid batch header for seq %llu", (unsigned long long) seq);
+        LOG_ERR("invalid batch header for seq %llu", (unsigned long long)seq);
         return -EIO;
     }
 
@@ -408,20 +407,20 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
             if (ring_state.read_seq < overwritten_end_seq) {
                 ring_state.dropped_packets += overwritten_end_seq - ring_state.read_seq;
                 ring_state.read_seq = overwritten_end_seq;
-                (void) persist_ring_metadata();
+                (void)persist_ring_metadata();
             }
 
             LOG_WRN("stale read window for seq %llu: slot now holds batch %llu, advancing read_seq to %llu",
-                    (unsigned long long) seq,
-                    (unsigned long long) header->start_seq,
-                    (unsigned long long) ring_state.read_seq);
+                    (unsigned long long)seq,
+                    (unsigned long long)header->start_seq,
+                    (unsigned long long)ring_state.read_seq);
             return -ERANGE;
         }
 
         LOG_ERR("batch start mismatch for seq %llu: hdr=%llu base=%llu",
-                (unsigned long long) seq,
-                (unsigned long long) header->start_seq,
-                (unsigned long long) base_seq);
+                (unsigned long long)seq,
+                (unsigned long long)header->start_seq,
+                (unsigned long long)base_seq);
         return -EIO;
     }
 
@@ -437,7 +436,7 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
 
 static int restore_tail_batch(void)
 {
-    uint32_t partial_packets = (uint32_t) (ring_state.write_seq % RAW_PACKETS_PER_BATCH);
+    uint32_t partial_packets = (uint32_t)(ring_state.write_seq % RAW_PACKETS_PER_BATCH);
     if (partial_packets == 0U) {
         start_empty_batch(ring_state.write_seq);
         return 0;
@@ -452,18 +451,20 @@ static int restore_tail_batch(void)
         if (ring_state.read_seq > ring_state.write_seq) {
             ring_state.read_seq = ring_state.write_seq;
         }
-        (void) persist_ring_metadata();
+        (void)persist_ring_metadata();
         start_empty_batch(ring_state.write_seq);
         return ret;
     }
 
     if (header.packet_count != partial_packets) {
-        LOG_WRN("tail packet count mismatch, truncating tail from %u to %u", partial_packets, header.packet_count);
+        LOG_WRN("tail packet count mismatch, truncating tail from %u to %u",
+                partial_packets,
+                header.packet_count);
         ring_state.write_seq = header.start_seq + header.packet_count;
         if (ring_state.read_seq > ring_state.write_seq) {
             ring_state.read_seq = ring_state.write_seq;
         }
-        (void) persist_ring_metadata();
+        (void)persist_ring_metadata();
     }
 
     current_batch_base_seq = header.start_seq;
@@ -477,7 +478,7 @@ static int flush_current_batch(bool sync_requested)
 {
     if (!current_batch_loaded || !current_batch_dirty || current_batch_packets == 0U) {
         if (sync_requested) {
-            (void) sync_media();
+            (void)sync_media();
         }
         return 0;
     }
@@ -525,7 +526,7 @@ static int flush_current_batch(bool sync_requested)
     }
 
     if (sync_requested) {
-        (void) sync_media();
+        (void)sync_media();
     }
 
     current_batch_dirty = false;
@@ -556,7 +557,7 @@ static int clear_ring_internal(bool sync_requested)
     }
 
     if (sync_requested) {
-        (void) sync_media();
+        (void)sync_media();
     }
 
     return 0;
@@ -596,8 +597,8 @@ static int read_packets_internal(uint64_t start_seq,
 
     uint32_t max_packets = max_bytes / RAW_AUDIO_PACKET_BYTES;
     uint64_t available_packets = ring_state.write_seq - start_seq;
-    if ((uint64_t) max_packets > available_packets) {
-        max_packets = (uint32_t) available_packets;
+    if ((uint64_t)max_packets > available_packets) {
+        max_packets = (uint32_t)available_packets;
     }
 
     uint64_t seq = start_seq;
@@ -615,18 +616,18 @@ static int read_packets_internal(uint64_t start_seq,
             loaded_batch_base = batch_base;
         }
 
-        uint32_t packet_offset = (uint32_t) (seq - loaded_header.start_seq);
+        uint32_t packet_offset = (uint32_t)(seq - loaded_header.start_seq);
         if (packet_offset >= loaded_header.packet_count) {
             return -EIO;
         }
 
         uint32_t remaining_in_batch = loaded_header.packet_count - packet_offset;
         uint32_t copy_packets = MIN(max_packets - copied_packets, remaining_in_batch);
-        size_t src_offset = RAW_BATCH_HEADER_BYTES + ((size_t) packet_offset * RAW_AUDIO_PACKET_BYTES);
-        size_t copy_bytes = (size_t) copy_packets * RAW_AUDIO_PACKET_BYTES;
+        size_t src_offset = RAW_BATCH_HEADER_BYTES + ((size_t)packet_offset * RAW_AUDIO_PACKET_BYTES);
+        size_t copy_bytes = (size_t)copy_packets * RAW_AUDIO_PACKET_BYTES;
         memcpy(out_buf + (*bytes_read), batch_read_buffer + src_offset, copy_bytes);
 
-        *bytes_read += (uint32_t) copy_bytes;
+        *bytes_read += (uint32_t)copy_bytes;
         copied_packets += copy_packets;
         seq += copy_packets;
     }
@@ -652,7 +653,7 @@ static int advance_read_seq_internal(uint64_t new_read_seq, bool sync_requested)
     }
 
     if (sync_requested) {
-        (void) sync_media();
+        (void)sync_media();
     }
 
     return 0;
@@ -665,7 +666,7 @@ static void process_write_data_req(const sd_req_t *req)
     }
 
     if (req->u.write.len != MAX_WRITE_SIZE) {
-        LOG_WRN("unexpected write size %u", (unsigned) req->u.write.len);
+        LOG_WRN("unexpected write size %u", (unsigned)req->u.write.len);
         return;
     }
 
@@ -686,7 +687,7 @@ static void process_write_data_req(const sd_req_t *req)
         start_empty_batch(ring_state.write_seq);
     }
 
-    size_t dst_offset = RAW_BATCH_HEADER_BYTES + ((size_t) current_batch_packets * RAW_AUDIO_PACKET_BYTES);
+    size_t dst_offset = RAW_BATCH_HEADER_BYTES + ((size_t)current_batch_packets * RAW_AUDIO_PACKET_BYTES);
     sys_put_be32(timestamp, current_batch + dst_offset);
     memcpy(current_batch + dst_offset + RAW_AUDIO_TIMESTAMP_BYTES, req->u.write.buf, MAX_WRITE_SIZE);
     current_batch_packets++;
@@ -697,7 +698,7 @@ static void process_write_data_req(const sd_req_t *req)
     bool queue_pressure_high = k_msgq_num_used_get(&sd_msgq) >= (SD_REQ_QUEUE_MSGS / 3);
     if (current_batch_packets >= RAW_PACKETS_PER_BATCH || queue_pressure_high) {
         sd_set_io_low_power(false);
-        (void) flush_current_batch(false);
+        (void)flush_current_batch(false);
         sd_set_io_low_power(true);
     }
 }
@@ -816,7 +817,7 @@ static int sd_mount(void)
         }
 
         LOG_WRN("SD CTRL_INIT attempt %d/5 failed: %d", attempt, ret);
-        (void) disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_CTRL_DEINIT, NULL);
+        (void)disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_CTRL_DEINIT, NULL);
         sd_enable_power(false);
         k_msleep(50);
     }
@@ -826,8 +827,8 @@ static int sd_mount(void)
         return ret;
     }
 
-    (void) disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_GET_SECTOR_COUNT, &disk_sector_count);
-    (void) disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_GET_SECTOR_SIZE, &sector_size);
+    (void)disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_GET_SECTOR_COUNT, &disk_sector_count);
+    (void)disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_GET_SECTOR_SIZE, &sector_size);
 
     if (sector_size != DISK_SECTOR_SIZE || disk_sector_count <= RAW_META_SECTORS) {
         LOG_ERR("unexpected SD layout: sectors=%u size=%u", disk_sector_count, sector_size);
@@ -851,7 +852,7 @@ static int sd_mount(void)
         return ret;
     }
 
-    (void) restore_tail_batch();
+    (void)restore_tail_batch();
     is_mounted = true;
 
     LOG_INF("Raw SD ring mounted: sectors=%u, batches=%u, capacity=%u packets",
@@ -864,13 +865,13 @@ static int sd_mount(void)
 static int sd_unmount(void)
 {
     if (current_batch_dirty) {
-        (void) flush_current_batch(true);
+        (void)flush_current_batch(true);
     } else {
-        (void) sync_media();
+        (void)sync_media();
     }
 
     if (is_mounted) {
-        (void) disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_CTRL_DEINIT, NULL);
+        (void)disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_CTRL_DEINIT, NULL);
         is_mounted = false;
     }
 
@@ -909,7 +910,7 @@ void sd_worker_thread(void)
     }
 
     atomic_set(&sd_boot_ready, 1);
-    LOG_INF("[SD_BOOT] raw ring ready (used=%llu bytes)", (unsigned long long) ring_used_bytes());
+    LOG_INF("[SD_BOOT] raw ring ready (used=%llu bytes)", (unsigned long long)ring_used_bytes());
     sd_set_io_low_power(true);
 
     while (1) {
@@ -927,13 +928,13 @@ void sd_worker_thread(void)
         if (k_msgq_get(&sd_msgq, &req, write_wait) != 0) {
             if (current_batch_dirty && (k_uptime_get() - last_batch_activity_ms) >= RAW_FLUSH_INTERVAL_MS) {
                 sd_set_io_low_power(false);
-                (void) flush_current_batch(false);
+                (void)flush_current_batch(false);
                 sd_set_io_low_power(true);
             }
             continue;
         }
 
-    handle_req:
+handle_req:
         if (req.type != REQ_WRITE_DATA) {
             sd_set_io_low_power(false);
         }
@@ -959,7 +960,7 @@ void sd_worker_thread(void)
 
         case REQ_GET_RING_INFO:
             if (current_batch_dirty) {
-                (void) flush_current_batch(false);
+                (void)flush_current_batch(false);
             }
             if (req.u.info.resp) {
                 req.u.info.resp->info = ring_state;
@@ -1003,7 +1004,7 @@ void sd_worker_thread(void)
                 k_sem_give(&req.u.status.resp->sem);
                 release_resp_busy(req.u.status.resp->busy_flag);
             } else {
-                (void) flush_current_batch(true);
+                (void)flush_current_batch(true);
             }
             break;
 
@@ -1033,7 +1034,7 @@ int app_sd_init(void)
         sd_worker_tid = k_thread_create(&sd_worker_thread_data,
                                         sd_worker_stack,
                                         SD_WORKER_STACK_SIZE,
-                                        (k_thread_entry_t) sd_worker_thread,
+                                        (k_thread_entry_t)sd_worker_thread,
                                         NULL,
                                         NULL,
                                         NULL,
@@ -1222,7 +1223,11 @@ int sd_ring_get_info(sd_ring_info_t *info)
     return resp.res;
 }
 
-int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t *bytes_read, uint32_t *packets_read)
+int sd_ring_read(uint64_t start_seq,
+                 uint8_t *buf,
+                 uint32_t max_bytes,
+                 uint32_t *bytes_read,
+                 uint32_t *packets_read)
 {
     if (!buf || !bytes_read || !packets_read) {
         return -EINVAL;
@@ -1361,7 +1366,7 @@ int sd_flush_current_file(void)
 uint32_t get_file_size(void)
 {
     uint64_t used = ring_used_bytes();
-    return (used > UINT32_MAX) ? UINT32_MAX : (uint32_t) used;
+    return (used > UINT32_MAX) ? UINT32_MAX : (uint32_t)used;
 }
 
 int get_current_filename(char *buf, size_t buf_size)
@@ -1459,7 +1464,7 @@ int get_audio_file_list_with_sizes(char filenames[][MAX_FILENAME_LEN], uint32_t 
 
         if (sizes) {
             uint64_t used = (info.write_seq - info.read_seq) * RAW_AUDIO_PACKET_BYTES;
-            sizes[0] = (used > UINT32_MAX) ? UINT32_MAX : (uint32_t) used;
+            sizes[0] = (used > UINT32_MAX) ? UINT32_MAX : (uint32_t)used;
         }
 
         *count = 1;
@@ -1495,13 +1500,13 @@ int read_audio_data(const char *filename, uint8_t *buf, int amount, int offset)
     }
 
     uint64_t stream_bytes = (info.write_seq - info.read_seq) * RAW_AUDIO_PACKET_BYTES;
-    if ((uint64_t) offset >= stream_bytes) {
+    if ((uint64_t)offset >= stream_bytes) {
         return 0;
     }
 
     static uint8_t compat_buffer[RAW_AUDIO_PACKET_BYTES * 8U];
-    uint64_t seq = info.read_seq + ((uint32_t) offset / RAW_AUDIO_PACKET_BYTES);
-    uint32_t inner_offset = (uint32_t) offset % RAW_AUDIO_PACKET_BYTES;
+    uint64_t seq = info.read_seq + ((uint32_t)offset / RAW_AUDIO_PACKET_BYTES);
+    uint32_t inner_offset = (uint32_t)offset % RAW_AUDIO_PACKET_BYTES;
     int total_read = 0;
 
     while (total_read < amount && seq < info.write_seq) {
@@ -1516,9 +1521,9 @@ int read_audio_data(const char *filename, uint8_t *buf, int amount, int offset)
         }
 
         uint32_t available = bytes_read - inner_offset;
-        uint32_t copy_bytes = MIN((uint32_t) (amount - total_read), available);
+        uint32_t copy_bytes = MIN((uint32_t)(amount - total_read), available);
         memcpy(buf + total_read, compat_buffer + inner_offset, copy_bytes);
-        total_read += (int) copy_bytes;
+        total_read += (int)copy_bytes;
         seq += packets_read;
         inner_offset = 0;
     }

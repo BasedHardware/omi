@@ -95,7 +95,12 @@ class SpeakerFilterSheet extends StatelessWidget {
     );
   }
 
-  Widget _speakerTile({required Key key, required String name, required String? speakerId, required IconData icon}) {
+  Widget _speakerTile({
+    required Key key,
+    required String name,
+    required String? speakerId,
+    required IconData icon,
+  }) {
     final selected = speakerId == selectedSpeakerId;
     return ListTile(
       key: key,
