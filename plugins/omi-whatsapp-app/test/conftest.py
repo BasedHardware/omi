@@ -156,6 +156,14 @@ def _whatsapp_sys_modules_isolation():
     for name, module in our_modules.items():
         sys.modules[name] = module
 
+    # Reset module-level state that would otherwise leak across tests. Added
+    # when the cubic P2 dedup fix was applied (the in-memory _seen_wamids
+    # OrderedDict was retaining entries between tests because the module
+    # object is shared across the test process).
+    main_module = our_modules["main"]
+    if hasattr(main_module, "_seen_wamids"):
+        main_module._seen_wamids.clear()
+
     try:
         yield
     finally:

@@ -56,14 +56,27 @@ async def set_webhook(bot_token: str, url: str, secret_token: str) -> dict:
 
 
 async def get_me(bot_token: str) -> dict:
-    """Return the bot's user object: {username, id, ...}.
+    """Return the full Telegram API response envelope: {ok, result, ...}.
 
-    Raises httpx.HTTPStatusError on failure (bad token, etc.).
+    Identified by cubic (P2): the docstring previously claimed this returns
+    the bot user object {username, id, ...} but the implementation actually
+    returns resp.json() — the full envelope. The caller in main.py already
+    works around this by reading me.get("result"). The correct shape to
+    document is the envelope; the caller continues to unwrap it.
+
+    Raises httpx.HTTPStatusError on 4xx/5xx and ValueError on malformed JSON
+    (the Telegram API contract is JSON-only, but a partial 2xx with no body
+    would otherwise slip past raise_for_status and explode later).
     """
     client = _get_client()
     resp = await client.post(f"{TELEGRAM_API_BASE}/bot{bot_token}/getMe")
     resp.raise_for_status()
-    return resp.json()
+    try:
+        return resp.json()
+    except ValueError as e:
+        # 2xx with no/garbage body — surface as a generic error rather than
+        # letting the caller try to read .get("result") on a non-dict.
+        raise httpx.HTTPError(f"getMe returned non-JSON body: {e!s}") from e
 
 
 async def send_message(bot_token: str, chat_id: int | str, text: str) -> Optional[dict]:
@@ -94,7 +107,18 @@ async def send_message(bot_token: str, chat_id: int | str, text: str) -> Optiona
             json={"chat_id": chat_id, "text": text},
         )
         resp.raise_for_status()
-        return resp.json()
+        try:
+            return resp.json()
+        except ValueError:
+            # Identified by cubic (P2): resp.json() can raise
+            # json.JSONDecodeError (a ValueError subclass) on an invalid or
+            # empty 2xx response body. Without this catch the exception
+            # bypasses both except clauses (HTTPStatusError/HTTPError) and
+            # leaks out of a function whose docstring promises "Does not
+            # raise." Callers in the webhook handler rely on this contract
+            # and do not wrap the call in any outer catch.
+            logger.error("send_message returned non-JSON body for chat_id=%s", chat_id)
+            return None
     except httpx.HTTPStatusError as e:
         # httpx.HTTPStatusError.__str__ includes the full request URL — which
         # contains the bot token. Log only the status code + chat_id to keep
