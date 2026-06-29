@@ -84,6 +84,7 @@ pytest tests/unit/test_location_maps_status_guard.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_retrieval_semantics.py -v
+pytest tests/unit/test_screen_activity_search_utc.py -v
 pytest tests/unit/test_conversation_tool_date_range_bound.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v

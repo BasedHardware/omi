@@ -3,7 +3,7 @@ Tools for accessing screen/computer activity data from the desktop app.
 """
 
 import contextvars
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from langchain_core.tools import tool
@@ -208,7 +208,7 @@ def search_screen_activity_tool(
         score = scores_by_id.get(sid, 0)
         app_name = app_by_id.get(sid, 'Unknown')
         ts = ts_by_id.get(sid, 0)
-        ts_str = datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else 'Unknown'
+        ts_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S') if ts else 'Unknown'
 
         # Fetch OCR text from Firestore
         ocr_text = ''
