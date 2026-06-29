@@ -1,0 +1,3 @@
+{
+  "change": "Fixed desktop recording reconciliation so cloud sessions use a durable client id and recover from missing backend matches"
+}

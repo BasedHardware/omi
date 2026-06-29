@@ -37,6 +37,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
         custom_stt_mode=None,
         onboarding_mode=False,
         call_id=None,
+        client_conversation_id=None,
     ):
         captured.update(
             {
@@ -52,6 +53,7 @@ def test_web_listen_custom_stt_dispatches_to_stream_handler(client, monkeypatch)
                 "custom_stt_mode": getattr(custom_stt_mode, "value", str(custom_stt_mode)),
                 "onboarding_mode": onboarding_mode,
                 "call_id": call_id,
+                "client_conversation_id": client_conversation_id,
             }
         )
         await websocket.send_json({"type": "fake_stt_ready", "uid": uid, "custom_stt": captured["custom_stt_mode"]})
@@ -168,3 +170,47 @@ def test_web_listen_reconnect_emits_existing_conversation_session_id(client, tes
         get_mock_firestore().collection("users").document(test_uid).collection("conversations").stream()
     )
     assert [conversation.id for conversation in conversations] == [first_event["conversation_id"]]
+
+
+def test_listen_client_conversation_id_creates_requested_conversation(client, test_uid):
+    seed_listen_user(test_uid)
+    client_conversation_id = str(uuid.uuid4())
+
+    with client.websocket_connect(
+        "/v4/web/listen?"
+        f"custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=120"
+        f"&source=desktop&client_conversation_id={client_conversation_id}"
+    ) as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        session_event = receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+    assert session_event["conversation_id"] == client_conversation_id
+    conversation = read_conversation(test_uid, client_conversation_id)
+    assert conversation is not None
+    assert conversation["id"] == client_conversation_id
+    assert getattr(conversation["source"], "value", conversation["source"]) == "desktop"
+    assert getattr(conversation["status"], "value", conversation["status"]) == "in_progress"
+
+
+def test_listen_client_conversation_id_reconnects_same_session(client, test_uid):
+    seed_listen_user(test_uid)
+    client_conversation_id = str(uuid.uuid4())
+
+    for _ in range(2):
+        with client.websocket_connect(
+            "/v4/web/listen?"
+            f"custom_stt=enabled&sample_rate=8000&codec=pcm8&conversation_timeout=120"
+            f"&source=desktop&client_conversation_id={client_conversation_id}"
+        ) as websocket:
+            websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+            assert websocket.receive_json() == {"type": "auth_response", "success": True}
+            session_event = receive_until(websocket, is_conversation_session_event)
+            receive_until(websocket, is_ready_event)
+            assert session_event["conversation_id"] == client_conversation_id
+
+    conversations = list(
+        get_mock_firestore().collection("users").document(test_uid).collection("conversations").stream()
+    )
+    assert [conversation.id for conversation in conversations] == [client_conversation_id]
