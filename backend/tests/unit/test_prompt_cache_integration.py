@@ -105,15 +105,28 @@ clients_mod.encoding = MagicMock()
 clients_mod.num_tokens_from_string = MagicMock(return_value=100)
 clients_mod.parser = MagicMock()
 
+providers_mod = _stub_module("utils.llm.providers")
+providers_mod.ChatGoogleGenerativeAI = MagicMock
+providers_mod.GEMINI_OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+providers_mod.get_default_client = MagicMock(return_value=mock_llm)
+providers_mod.get_or_create_gemini_llm = MagicMock(return_value=mock_llm)
+providers_mod.get_or_create_openai_compatible_llm = MagicMock(return_value=mock_llm)
+providers_mod._llm_cache = {}
+
 llm_mod = _stub_module("utils.llm")
 if not hasattr(llm_mod, "__path__"):
-    llm_mod.__path__ = []
+    llm_mod.__path__ = [str(BACKEND_DIR / "utils" / "llm")]
 tracker_mod = _stub_module("utils.llm.usage_tracker")
 tracker_mod.get_usage_callback = MagicMock(return_value=[])
 tracker_mod.set_usage_context = MagicMock()
 tracker_mod.reset_usage_context = MagicMock()
 tracker_mod.Features = MagicMock()
 tracker_mod.track_usage = MagicMock()
+
+gateway_mod = _stub_module("utils.llm.gateway_client")
+gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
+gateway_mod.is_auto_lane_id = lambda value: isinstance(value, str) and value.startswith('omi:auto:')
+gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 
 # --- langchain core stubs ---
 langchain_core_mod = _stub_module("langchain_core")

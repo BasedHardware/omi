@@ -154,6 +154,9 @@ class ChatToolExecutor {
     case "capture_screen":
       return await executeCaptureScreen()
 
+    case "fill_cloud_connector_form":
+      return await CloudConnectorFormAutomation.fill(toolCall.arguments)
+
     // Backend RAG tools — call Python backend /v1/tools/* endpoints
     case "get_conversations":
       return await executeBackendTool(toolCall)
