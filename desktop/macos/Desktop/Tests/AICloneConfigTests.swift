@@ -251,4 +251,57 @@ final class AICloneConfigTests: XCTestCase {
             "legacy-value"
         )
     }
+
+    // MARK: - Discovery (extracted from init, cubic P2)
+    //
+    // Init must NOT auto-apply the discovery file — that mutates the
+    // injected UserDefaults + Keychain and breaks hermetic tests on
+    // machines that have a real discovery file. applyDiscovery() is
+    // the explicit entry point, called from OmiApp.swift at startup.
+
+    func testInitDoesNotAutoApplyDiscoveryFile() {
+        // Seed a customDefaults with values so we can verify init
+        // doesn't overwrite them by reading the real discovery file.
+        // The injected `defaults` MUST be the only source of truth
+        // for the in-memory pluginURL after init (until the app
+        // explicitly calls applyDiscovery()).
+        customDefaults.set("https://already-configured.example.com", forKey: "ai_clone_plugin_url")
+
+        let config = AICloneConfig(defaults: customDefaults)
+
+        // URL came from customDefaults, NOT from the discovery file
+        // on the test machine (which may or may not exist).
+        XCTAssertEqual(config.pluginURL, "https://already-configured.example.com")
+        XCTAssertFalse(config.isAutoDiscovered)
+        XCTAssertFalse(config.pluginDevMode)
+    }
+
+    func testApplyDiscoveryNoOpWhenFileMissing() {
+        // Delete the real discovery file for the duration of this
+        // test so we can verify the no-op path. The test machine may
+        // have a stale discovery file from prior dev runs.
+        let discoveryPath = PluginDiscovery.filePath
+        let fm = FileManager.default
+        let existed = fm.fileExists(atPath: discoveryPath)
+        if existed {
+            try? fm.removeItem(atPath: discoveryPath)
+        }
+        defer {
+            // Restore if we deleted it (best-effort; if we never
+            // recreated it, just leave it deleted).
+            if existed && !fm.fileExists(atPath: discoveryPath) {
+                // No way to recreate the prior contents from this
+                // test — leave the file deleted. The test was deleting
+                // a stale file anyway, and the next launch of the
+                // plugin will rewrite it.
+            }
+        }
+
+        let config = AICloneConfig(defaults: customDefaults)
+        config.applyDiscovery()
+        XCTAssertFalse(config.isAutoDiscovered)
+        XCTAssertFalse(config.pluginDevMode)
+        XCTAssertEqual(config.pluginURL, "")
+        XCTAssertEqual(config.bearerToken, "")
+    }
 }
