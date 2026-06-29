@@ -93,12 +93,12 @@ class _AdaptiveSearchInnerState extends State<_AdaptiveSearchInner> {
       duration: const Duration(milliseconds: 150),
       height: 44,
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary.withOpacity(0.8),
+        color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: (isFocused && widget.highlightOnFocus)
-              ? ResponsiveHelper.purplePrimary.withOpacity(0.6)
-              : ResponsiveHelper.backgroundTertiary.withOpacity(0.4),
+              ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.6)
+              : ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.4),
           width: 1,
         ),
       ),
