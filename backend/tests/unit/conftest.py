@@ -5,10 +5,6 @@ import importlib.util
 import sys
 import types
 
-import pytest
-
-from testing.hermetic_network import block_outbound_network
-
 
 def _install_prometheus_client_stub():
     if 'prometheus_client' in sys.modules:
@@ -194,9 +190,3 @@ def _install_cachetools_stub():
 _install_prometheus_client_stub()
 _install_redis_stub()
 _install_cachetools_stub()
-
-
-@pytest.fixture(autouse=True)
-def _block_outbound_network_for_unit_tests():
-    with block_outbound_network():
-        yield

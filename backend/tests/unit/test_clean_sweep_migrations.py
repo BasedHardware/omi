@@ -319,7 +319,11 @@ class TestChatUtilsExecutorMigration:
 
     def test_uses_storage_executor(self):
         src = _read_source('utils/chat.py')
+        storage_src = _read_source('utils/other/storage.py')
         assert 'schedule_syncing_temporal_file_deletion' in src
+        assert 'time.sleep(480)' not in src
+        assert 'DeferredDeleter' in storage_src
+        assert 'def schedule_syncing_temporal_file_deletion' in storage_src
 
 
 class TestPostprocessExecutorMigration:

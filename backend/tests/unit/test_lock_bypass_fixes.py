@@ -356,15 +356,15 @@ class TestFolderConversationRedaction:
 
         result = get_folder_conversations(folder_id='f1', limit=100, offset=0, include_discarded=False, uid='test-uid')
 
-        locked = result[0]
-        assert locked.structured.action_items == []
-        assert locked.structured.events == []
-        assert locked.apps_results == []
-        assert locked.transcript_segments == []
+        locked = result[0].model_dump()
+        assert locked['structured']['action_items'] == []
+        assert locked['structured']['events'] == []
+        assert locked['apps_results'] == []
+        assert locked['transcript_segments'] == []
 
-        unlocked = result[1]
-        assert len(unlocked.structured.action_items) == 1
-        assert len(unlocked.transcript_segments) == 1
+        unlocked = result[1].model_dump()
+        assert len(unlocked['structured']['action_items']) == 1
+        assert len(unlocked['transcript_segments']) == 1
 
     def test_folder_endpoint_preserves_title_for_locked(self):
         """Locked conversations should still show title/overview."""
@@ -376,7 +376,7 @@ class TestFolderConversationRedaction:
         from routers.folders import get_folder_conversations
 
         result = get_folder_conversations(folder_id='f1', limit=100, offset=0, include_discarded=False, uid='test-uid')
-        assert result[0].structured.title == 'Test Conversation'
+        assert result[0].model_dump()['structured']['title'] == 'Test Conversation'
 
 
 # =============================================================================
@@ -981,8 +981,13 @@ class TestMcpRestLockRedaction:
         assert conversations[0]['transcript_segments'] == []
         assert len(conversations[1]['structured']['action_items']) == 1
         assert len(conversations[1]['transcript_segments']) == 1
-        assert result[0].structured.title == 'Test Conversation'
-        assert result[1].structured.title == 'Test Conversation'
+        locked_response = result[0].model_dump()
+        unlocked_response = result[1].model_dump()
+        assert locked_response['structured']['title'] == 'Test Conversation'
+        assert unlocked_response['structured']['title'] == 'Test Conversation'
+        assert 'action_items' not in locked_response['structured']
+        assert 'events' not in locked_response['structured']
+        assert 'transcript_segments' not in locked_response
 
 
 # =============================================================================
