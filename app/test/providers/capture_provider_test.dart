@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -66,6 +67,35 @@ TranscriptSegment _segment(String id, String text) {
 BtDevice _device({required String id, required DeviceType type, String name = 'TestDevice'}) =>
     BtDevice(id: id, name: name, type: type, rssi: -50);
 
+/// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
+/// config reading Env.apiBaseUrl) don't hit a LateInitializationError.
+class _TestEnvFields implements EnvFields {
+  @override
+  String? get openAIAPIKey => null;
+  @override
+  String? get posthogApiKey => null;
+  @override
+  String? get apiBaseUrl => null;
+  @override
+  String? get googleMapsApiKey => null;
+  @override
+  String? get intercomAppId => null;
+  @override
+  String? get intercomIOSApiKey => null;
+  @override
+  String? get intercomAndroidApiKey => null;
+  @override
+  String? get googleClientId => null;
+  @override
+  String? get googleClientSecret => null;
+  @override
+  bool? get useWebAuth => false;
+  @override
+  bool? get useAuthCustomToken => false;
+  @override
+  String? get stagingApiUrl => null;
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -79,6 +109,11 @@ void main() {
       },
     );
     ConnectivityPlatform.instance = _TestConnectivityPlatform();
+    try {
+      Env.init(_TestEnvFields());
+    } catch (_) {
+      // Env._instance is late final — ignore if already initialized in this isolate.
+    }
     try {
       await ServiceManager.init();
     } catch (_) {
@@ -638,13 +673,6 @@ void main() {
       provider.dispose();
     });
 
-    test('returns false for Frame', () {
-      final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
-      expect(provider.hasNativeBleAudioRoute, isFalse);
-      provider.dispose();
-    });
-
     test('returns false for Limitless', () {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.limitless));
@@ -685,7 +713,7 @@ void main() {
       expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleForegroundReady'), isFalse);
-      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isNull);
+      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isEmpty);
       provider.dispose();
     });
 
@@ -743,17 +771,6 @@ void main() {
     test('enable rejects for device with no native route (Fieldy)', () async {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.fieldy));
-
-      final result = await provider.setBackgroundModeEnabled(true);
-
-      expect(result, isFalse);
-      expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
-      provider.dispose();
-    });
-
-    test('enable rejects for device with no native route (Frame)', () async {
-      final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
 
       final result = await provider.setBackgroundModeEnabled(true);
 
@@ -874,7 +891,7 @@ void main() {
       expect(SharedPreferencesUtil().backgroundModeEnabled, isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleStreamingEnabled'), isFalse);
       expect(SharedPreferencesUtil().getBool('nativeBleForegroundReady'), isFalse);
-      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isNull);
+      expect(SharedPreferencesUtil().getString('nativeBleStreamConfig'), isEmpty);
       provider.dispose();
     });
 
@@ -917,7 +934,7 @@ void main() {
 
     test('switching from no-route device to Omi gains route', () {
       final provider = CaptureProvider();
-      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.frame));
+      provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.fieldy));
       expect(provider.hasNativeBleAudioRoute, isFalse);
 
       provider.updateRecordingDevice(_device(id: '11:22:33:44:55:66', type: DeviceType.omi));

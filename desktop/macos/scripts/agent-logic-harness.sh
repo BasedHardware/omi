@@ -170,6 +170,10 @@ run_swift_focus() {
 
 run_agent_runtime_focus() {
   (
+    cd "$DESKTOP_DIR"
+    scripts/test-tool-surfaces.sh
+  )
+  (
     cd "$DESKTOP_DIR/agent"
     npm test -- --run \
       tests/codemagic-pi-mono-extension-ci.test.ts \
