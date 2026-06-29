@@ -102,11 +102,19 @@ pub enum MemoryCategory {
     Interesting,
     /// Manually added by user
     Manual,
+    /// Workflow-generated memory
+    Workflow,
     // Legacy categories for backward compatibility with old data
     Core,
     Hobbies,
     Lifestyle,
     Interests,
+    Habits,
+    Work,
+    Skills,
+    Learnings,
+    Other,
+    Auto,
 }
 
 impl Default for MemoryCategory {

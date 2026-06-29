@@ -1,5 +1,188 @@
 use super::*;
 
+pub(super) fn build_conversations_query(
+    limit: usize,
+    offset: usize,
+    include_discarded: bool,
+    statuses: &[String],
+    categories: Option<&[String]>,
+    starred: Option<bool>,
+    folder_id: Option<&str>,
+    start_date: Option<&str>,
+    end_date: Option<&str>,
+    date_field: &str,
+) -> Value {
+    let mut filters: Vec<Value> = Vec::new();
+
+    if !include_discarded {
+        filters.push(json!({
+            "fieldFilter": {
+                "field": {"fieldPath": "discarded"},
+                "op": "EQUAL",
+                "value": {"booleanValue": false}
+            }
+        }));
+    }
+
+    if let Some(category_values) = categories {
+        if !category_values.is_empty() {
+            filters.push(json!({
+                "fieldFilter": {
+                    "field": {"fieldPath": "structured.category"},
+                    "op": "IN",
+                    "value": {
+                        "arrayValue": {
+                            "values": category_values.iter().map(|s| json!({"stringValue": s})).collect::<Vec<_>>()
+                        }
+                    }
+                }
+            }));
+        }
+    }
+
+    if !statuses.is_empty() {
+        filters.push(json!({
+            "fieldFilter": {
+                "field": {"fieldPath": "status"},
+                "op": "IN",
+                "value": {
+                    "arrayValue": {
+                        "values": statuses.iter().map(|s| json!({"stringValue": s})).collect::<Vec<_>>()
+                    }
+                }
+            }
+        }));
+    }
+
+    if let Some(starred_val) = starred {
+        filters.push(json!({
+            "fieldFilter": {
+                "field": {"fieldPath": "starred"},
+                "op": "EQUAL",
+                "value": {"booleanValue": starred_val}
+            }
+        }));
+    }
+
+    if let Some(fid) = folder_id {
+        filters.push(json!({
+            "fieldFilter": {
+                "field": {"fieldPath": "folder_id"},
+                "op": "EQUAL",
+                "value": {"stringValue": fid}
+            }
+        }));
+    }
+
+    if let Some(start) = start_date {
+        filters.push(json!({
+            "fieldFilter": {
+                "field": {"fieldPath": date_field},
+                "op": "GREATER_THAN_OR_EQUAL",
+                "value": {"timestampValue": start}
+            }
+        }));
+    }
+
+    if let Some(end) = end_date {
+        filters.push(json!({
+            "fieldFilter": {
+                "field": {"fieldPath": date_field},
+                "op": "LESS_THAN_OR_EQUAL",
+                "value": {"timestampValue": end}
+            }
+        }));
+    }
+
+    let where_clause = if filters.is_empty() {
+        None
+    } else if filters.len() == 1 {
+        filters.into_iter().next()
+    } else {
+        Some(json!({
+            "compositeFilter": {
+                "op": "AND",
+                "filters": filters
+            }
+        }))
+    };
+
+    let sort_field = if start_date.is_some() || end_date.is_some() {
+        date_field
+    } else {
+        "created_at"
+    };
+
+    let mut structured_query = json!({
+        "from": [{"collectionId": CONVERSATIONS_SUBCOLLECTION}],
+        "orderBy": [{"field": {"fieldPath": sort_field}, "direction": "DESCENDING"}],
+        "limit": limit,
+        "offset": offset
+    });
+
+    if let Some(where_filter) = where_clause {
+        structured_query["where"] = where_filter;
+    }
+
+    json!({ "structuredQuery": structured_query })
+}
+
+pub(super) fn update_mask_query(field_paths: impl IntoIterator<Item = String>) -> String {
+    field_paths
+        .into_iter()
+        .map(|field| format!("updateMask.fieldPaths={}", urlencoding::encode(&field)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
+pub(super) fn conversation_update_mask_query(doc: &Value) -> String {
+    let mut field_paths = doc
+        .get("fields")
+        .and_then(Value::as_object)
+        .map(|fields| {
+            fields
+                .keys()
+                .filter(|field| field.as_str() != "structured")
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    field_paths.extend(conversation_structured_leaf_paths(doc));
+    update_mask_query(field_paths)
+}
+
+pub(super) fn conversation_structured_leaf_paths(doc: &Value) -> Vec<String> {
+    doc.get("fields")
+        .and_then(|fields| fields.get("structured"))
+        .and_then(|structured| structured.get("mapValue"))
+        .and_then(|map| map.get("fields"))
+        .and_then(Value::as_object)
+        .map(|fields| {
+            fields
+                .keys()
+                .map(|field| format!("structured.{}", field))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+pub(super) fn conversation_patch_url(
+    base_url: &str,
+    uid: &str,
+    conversation_id: &str,
+    doc: &Value,
+) -> String {
+    format!(
+        "{}/{}/{}/{}/{}?{}",
+        base_url,
+        USERS_COLLECTION,
+        uid,
+        CONVERSATIONS_SUBCOLLECTION,
+        conversation_id,
+        conversation_update_mask_query(doc)
+    )
+}
+
 impl FirestoreService {
     pub async fn get_conversations(
         &self,
@@ -8,114 +191,25 @@ impl FirestoreService {
         offset: usize,
         include_discarded: bool,
         statuses: &[String],
+        categories: Option<&[String]>,
         starred: Option<bool>,
         folder_id: Option<&str>,
         start_date: Option<&str>,
         end_date: Option<&str>,
+        date_field: &str,
     ) -> Result<Vec<Conversation>, Box<dyn std::error::Error + Send + Sync>> {
-        // Build filters array (match Python behavior)
-        let mut filters: Vec<Value> = Vec::new();
-
-        // Python: if not include_discarded: where(discarded == False)
-        // Only filter when include_discarded is false
-        if !include_discarded {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "discarded"},
-                    "op": "EQUAL",
-                    "value": {"booleanValue": false}
-                }
-            }));
-        }
-
-        // Python: if len(statuses) > 0: where(status in statuses)
-        if !statuses.is_empty() {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "status"},
-                    "op": "IN",
-                    "value": {
-                        "arrayValue": {
-                            "values": statuses.iter().map(|s| json!({"stringValue": s})).collect::<Vec<_>>()
-                        }
-                    }
-                }
-            }));
-        }
-
-        // Filter by starred status
-        if let Some(starred_val) = starred {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "starred"},
-                    "op": "EQUAL",
-                    "value": {"booleanValue": starred_val}
-                }
-            }));
-        }
-
-        // Filter by folder_id
-        if let Some(fid) = folder_id {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "folder_id"},
-                    "op": "EQUAL",
-                    "value": {"stringValue": fid}
-                }
-            }));
-        }
-
-        // Filter by date range
-        if let Some(start) = start_date {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "created_at"},
-                    "op": "GREATER_THAN_OR_EQUAL",
-                    "value": {"timestampValue": start}
-                }
-            }));
-        }
-
-        if let Some(end) = end_date {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "created_at"},
-                    "op": "LESS_THAN",
-                    "value": {"timestampValue": end}
-                }
-            }));
-        }
-
-        // Build the where clause based on number of filters
-        let where_clause = if filters.is_empty() {
-            None
-        } else if filters.len() == 1 {
-            filters.into_iter().next()
-        } else {
-            // Multiple filters need compositeFilter with AND
-            Some(json!({
-                "compositeFilter": {
-                    "op": "AND",
-                    "filters": filters
-                }
-            }))
-        };
-
-        // Build structured query
-        let mut structured_query = json!({
-            "from": [{"collectionId": CONVERSATIONS_SUBCOLLECTION}],
-            "orderBy": [{"field": {"fieldPath": "created_at"}, "direction": "DESCENDING"}],
-            "limit": limit,
-            "offset": offset
-        });
-
-        if let Some(where_filter) = where_clause {
-            structured_query["where"] = where_filter;
-        }
-
-        let query = json!({
-            "structuredQuery": structured_query
-        });
+        let query = build_conversations_query(
+            limit,
+            offset,
+            include_discarded,
+            statuses,
+            categories,
+            starred,
+            folder_id,
+            start_date,
+            end_date,
+            date_field,
+        );
 
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
@@ -302,16 +396,8 @@ impl FirestoreService {
         uid: &str,
         conversation: &Conversation,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let url = format!(
-            "{}/{}/{}/{}/{}",
-            self.base_url(),
-            USERS_COLLECTION,
-            uid,
-            CONVERSATIONS_SUBCOLLECTION,
-            conversation.id
-        );
-
         let doc = self.conversation_to_firestore(conversation, uid);
+        let url = conversation_patch_url(&self.base_url(), uid, &conversation.id, &doc);
 
         let response = self
             .build_request(reqwest::Method::PATCH, &url)
@@ -566,5 +652,228 @@ impl FirestoreService {
             uid
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn fixture() -> Value {
+        let path = format!(
+            "{}/../../../contract_tests/fixtures/conversations.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    fn field_filter<'a>(filters: &'a [Value], field: &str) -> &'a Value {
+        filters
+            .iter()
+            .find(|filter| filter["fieldFilter"]["field"]["fieldPath"].as_str() == Some(field))
+            .unwrap()
+    }
+
+    #[test]
+    fn contract_conversation_query_matches_python_semantics() {
+        let data = fixture();
+        let query_fixture = &data["query"];
+        let categories = vec!["work".to_string(), "technology".to_string()];
+        let query = build_conversations_query(
+            query_fixture["limit"].as_u64().unwrap() as usize,
+            query_fixture["offset"].as_u64().unwrap() as usize,
+            false,
+            &["completed".to_string(), "in_progress".to_string()],
+            Some(&categories),
+            Some(true),
+            Some("folder-1"),
+            query_fixture["start_date"].as_str(),
+            query_fixture["end_date"].as_str(),
+            query_fixture["date_field"].as_str().unwrap(),
+        );
+        let structured = &query["structuredQuery"];
+        let filters = structured["where"]["compositeFilter"]["filters"]
+            .as_array()
+            .unwrap();
+
+        assert_eq!(
+            field_filter(filters, "discarded")["fieldFilter"]["op"],
+            "EQUAL"
+        );
+        assert_eq!(
+            field_filter(filters, "structured.category")["fieldFilter"]["op"],
+            "IN"
+        );
+        assert_eq!(field_filter(filters, "status")["fieldFilter"]["op"], "IN");
+        assert_eq!(
+            field_filter(filters, "starred")["fieldFilter"]["op"],
+            "EQUAL"
+        );
+        assert_eq!(
+            field_filter(filters, "folder_id")["fieldFilter"]["op"],
+            "EQUAL"
+        );
+        assert_eq!(
+            field_filter(filters, "finished_at")["fieldFilter"]["op"],
+            "GREATER_THAN_OR_EQUAL"
+        );
+        assert!(filters.iter().any(|filter| {
+            filter["fieldFilter"]["field"]["fieldPath"].as_str() == Some("finished_at")
+                && filter["fieldFilter"]["op"] == "LESS_THAN_OR_EQUAL"
+        }));
+        assert_eq!(
+            structured["orderBy"][0]["field"]["fieldPath"],
+            query_fixture["date_field"]
+        );
+        assert_eq!(structured["limit"], query_fixture["limit"]);
+        assert_eq!(structured["offset"], query_fixture["offset"]);
+
+        let default_query =
+            build_conversations_query(2, 1, false, &[], None, None, None, None, None, "created_at");
+        assert_eq!(
+            default_query["structuredQuery"]["orderBy"][0]["field"]["fieldPath"],
+            "created_at"
+        );
+
+        let custom_date_without_range = build_conversations_query(
+            2,
+            1,
+            false,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+            "finished_at",
+        );
+        assert_eq!(
+            custom_date_without_range["structuredQuery"]["orderBy"][0]["field"]["fieldPath"],
+            "created_at"
+        );
+    }
+
+    #[test]
+    fn contract_conversation_save_path_uses_update_mask_to_preserve_python_fields() {
+        let service = FirestoreService::new_for_contract(None);
+        let now = Utc.timestamp_opt(1_767_323_045, 0).unwrap();
+        let conversation = Conversation {
+            id: "conversation-1".to_string(),
+            created_at: now,
+            started_at: now,
+            finished_at: now,
+            source: crate::models::conversation::ConversationSource::Desktop,
+            language: "en".to_string(),
+            status: crate::models::conversation::ConversationStatus::Completed,
+            discarded: false,
+            deleted: false,
+            starred: false,
+            is_locked: false,
+            folder_id: None,
+            structured: Structured {
+                title: "Rust title".to_string(),
+                overview: "Rust overview".to_string(),
+                emoji: "R".to_string(),
+                category: Category::Technology,
+                action_items: vec![],
+                events: vec![],
+            },
+            transcript_segments: vec![],
+            apps_results: vec![],
+            geolocation: None,
+            photos: vec![],
+            input_device_name: None,
+        };
+        let doc = service.conversation_to_firestore(&conversation, "contract-user-8547");
+
+        let url = conversation_patch_url(
+            "https://firestore.googleapis.com/v1/projects/contract/databases/(default)/documents",
+            "contract-user-8547",
+            "conversation-1",
+            &doc,
+        );
+
+        assert!(url.contains("updateMask.fieldPaths=id"));
+        assert!(url.contains("updateMask.fieldPaths=created_at"));
+        assert!(!url.contains("updateMask.fieldPaths=structured&"));
+        assert!(url.contains("updateMask.fieldPaths=structured.title"));
+        assert!(url.contains("updateMask.fieldPaths=structured.overview"));
+        assert!(url.contains("updateMask.fieldPaths=structured.emoji"));
+        assert!(url.contains("updateMask.fieldPaths=structured.category"));
+        assert!(url.contains("updateMask.fieldPaths=transcript_segments"));
+        assert!(!url.contains("plugins_results"));
+        assert!(!url.contains("python_owned_field"));
+
+        let existing = json!({
+            "fields": {
+                "python_owned_field": {"stringValue": "keep"},
+                "structured": {
+                    "mapValue": {
+                        "fields": {
+                            "title": {"stringValue": "old"},
+                            "python_nested_field": {"stringValue": "keep nested"}
+                        }
+                    }
+                }
+            }
+        });
+        let patched =
+            apply_update_mask_for_contract(existing, &doc, &conversation_update_mask_query(&doc));
+        assert_eq!(
+            patched["fields"]["python_owned_field"]["stringValue"],
+            "keep"
+        );
+        assert_eq!(
+            patched["fields"]["structured"]["mapValue"]["fields"]["python_nested_field"]
+                ["stringValue"],
+            "keep nested"
+        );
+        assert_eq!(
+            patched["fields"]["structured"]["mapValue"]["fields"]["title"]["stringValue"],
+            "Rust title"
+        );
+    }
+
+    fn apply_update_mask_for_contract(
+        mut existing: Value,
+        patch: &Value,
+        mask_query: &str,
+    ) -> Value {
+        for field in mask_query
+            .split('&')
+            .filter_map(|part| part.strip_prefix("updateMask.fieldPaths="))
+            .map(|part| urlencoding::decode(part).unwrap().into_owned())
+        {
+            let patch_value = value_at_field_path(&patch["fields"], &field).cloned();
+            if let Some(value) = patch_value {
+                set_value_at_field_path(&mut existing["fields"], &field, value);
+            }
+        }
+        existing
+    }
+
+    fn value_at_field_path<'a>(fields: &'a Value, field_path: &str) -> Option<&'a Value> {
+        let mut current = fields;
+        for (index, segment) in field_path.split('.').enumerate() {
+            if index == 0 {
+                current = current.get(segment)?;
+            } else {
+                current = current.get("mapValue")?.get("fields")?.get(segment)?;
+            }
+        }
+        Some(current)
+    }
+
+    fn set_value_at_field_path(fields: &mut Value, field_path: &str, value: Value) {
+        let mut current = fields;
+        let parts = field_path.split('.').collect::<Vec<_>>();
+        for (index, segment) in parts.iter().enumerate() {
+            if index == parts.len() - 1 {
+                current[*segment] = value;
+                return;
+            }
+            current = &mut current[*segment]["mapValue"]["fields"];
+        }
     }
 }

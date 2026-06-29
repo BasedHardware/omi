@@ -1,4 +1,436 @@
+use super::values::{conversation_source_wire, memory_category_wire, memory_is_active};
 use super::*;
+
+pub(super) fn build_memories_query(
+    limit: usize,
+    offset: usize,
+    categories: Option<&[String]>,
+    start_date: Option<&str>,
+    end_date: Option<&str>,
+    tags: Option<&[String]>,
+) -> Value {
+    let mut filters: Vec<Value> = Vec::new();
+
+    if let Some(category_values) = categories {
+        if !category_values.is_empty() {
+            filters.push(json!({
+                "fieldFilter": {
+                    "field": {"fieldPath": "category"},
+                    "op": "IN",
+                    "value": {
+                        "arrayValue": {
+                            "values": category_values.iter().map(|s| json!({"stringValue": s})).collect::<Vec<_>>()
+                        }
+                    }
+                }
+            }));
+        }
+    }
+
+    if let Some(start) = start_date {
+        filters.push(json!({
+            "fieldFilter": {
+                "field": {"fieldPath": "created_at"},
+                "op": "GREATER_THAN_OR_EQUAL",
+                "value": {"timestampValue": start}
+            }
+        }));
+    }
+
+    if let Some(end) = end_date {
+        filters.push(json!({
+            "fieldFilter": {
+                "field": {"fieldPath": "created_at"},
+                "op": "LESS_THAN_OR_EQUAL",
+                "value": {"timestampValue": end}
+            }
+        }));
+    }
+
+    if let Some(filter_tags) = tags {
+        if let Some(first_tag) = filter_tags.first() {
+            filters.push(json!({
+                "fieldFilter": {
+                    "field": {"fieldPath": "tags"},
+                    "op": "ARRAY_CONTAINS",
+                    "value": {"stringValue": first_tag}
+                }
+            }));
+        }
+    }
+
+    let where_clause = if filters.is_empty() {
+        None
+    } else if filters.len() == 1 {
+        filters.into_iter().next()
+    } else {
+        Some(json!({
+            "compositeFilter": {
+                "op": "AND",
+                "filters": filters
+            }
+        }))
+    };
+
+    let mut structured_query = json!({
+        "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
+        "orderBy": [
+            {"field": {"fieldPath": "scoring"}, "direction": "DESCENDING"},
+            {"field": {"fieldPath": "created_at"}, "direction": "DESCENDING"}
+        ],
+        "limit": limit,
+        "offset": offset
+    });
+
+    if let Some(where_filter) = where_clause {
+        structured_query["where"] = where_filter;
+    }
+
+    json!({ "structuredQuery": structured_query })
+}
+
+pub(super) fn memory_passes_default_filters(
+    memory: &MemoryDB,
+    include_dismissed: bool,
+    include_invalidated: bool,
+    tags: Option<&[String]>,
+) -> bool {
+    if !memory_is_active(memory, include_invalidated) {
+        return false;
+    }
+    if !include_dismissed && memory.is_dismissed {
+        return false;
+    }
+    match tags {
+        Some(filter_tags) if filter_tags.len() > 1 => {
+            filter_tags[1..].iter().all(|tag| memory.tags.contains(tag))
+        }
+        _ => true,
+    }
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    fn fixture() -> Value {
+        let path = format!(
+            "{}/../../../contract_tests/fixtures/memories.json",
+            env!("CARGO_MANIFEST_DIR")
+        );
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    fn memory(
+        id: &str,
+        user_review: Option<bool>,
+        invalidated: bool,
+        tags: Vec<String>,
+    ) -> MemoryDB {
+        let created_at = Utc.timestamp_opt(1_767_323_045, 0).unwrap();
+        MemoryDB {
+            id: id.to_string(),
+            uid: "contract-user-8547".to_string(),
+            content: id.to_string(),
+            category: MemoryCategory::System,
+            created_at,
+            updated_at: created_at,
+            memory_id: None,
+            conversation_id: None,
+            reviewed: false,
+            user_review,
+            visibility: "public".to_string(),
+            manually_added: false,
+            scoring: None,
+            source: None,
+            input_device_name: None,
+            confidence: None,
+            source_app: None,
+            context_summary: None,
+            is_read: false,
+            is_dismissed: false,
+            tags,
+            reasoning: None,
+            current_activity: None,
+            window_title: None,
+            data_protection_level: None,
+            valid_at: Some(created_at),
+            invalid_at: invalidated.then_some(created_at),
+            superseded_by: None,
+            edited: false,
+            is_locked: false,
+            kg_extracted: false,
+            app_id: None,
+        }
+    }
+
+    fn field_filter<'a>(filters: &'a [Value], field: &str) -> &'a Value {
+        filters
+            .iter()
+            .find(|filter| filter["fieldFilter"]["field"]["fieldPath"].as_str() == Some(field))
+            .unwrap()
+    }
+
+    fn memory_doc(id: &str, user_review: Option<bool>, invalidated: bool) -> Value {
+        let created_at = "2026-01-02T03:04:05+00:00";
+        let mut fields = json!({
+            "content": {"stringValue": id},
+            "category": {"stringValue": "system"},
+            "created_at": {"timestampValue": created_at},
+            "updated_at": {"timestampValue": created_at}
+        });
+        if let Some(review) = user_review {
+            fields["user_review"] = json!({"booleanValue": review});
+        } else {
+            fields["user_review"] = json!({"nullValue": null});
+        }
+        if invalidated {
+            fields["invalid_at"] = json!({"timestampValue": "2026-01-03T00:00:00+00:00"});
+        }
+        json!({
+            "document": {
+                "name": format!("projects/contract/databases/(default)/documents/users/contract-user-8547/memories/{}", id),
+                "fields": fields
+            }
+        })
+    }
+
+    #[test]
+    fn contract_memories_query_and_filter_semantics_match_python() {
+        let data = fixture();
+        let query_fixture = &data["query"];
+        let tags = vec!["first".to_string(), "second".to_string()];
+        let categories = query_fixture["categories"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_string())
+            .collect::<Vec<_>>();
+        let query = build_memories_query(
+            query_fixture["limit"].as_u64().unwrap() as usize,
+            query_fixture["offset"].as_u64().unwrap() as usize,
+            Some(&categories),
+            query_fixture["start_date"].as_str(),
+            query_fixture["end_date"].as_str(),
+            Some(&tags),
+        );
+        let structured = &query["structuredQuery"];
+        let filters = structured["where"]["compositeFilter"]["filters"]
+            .as_array()
+            .unwrap();
+
+        assert_eq!(field_filter(filters, "category")["fieldFilter"]["op"], "IN");
+        assert_eq!(
+            field_filter(filters, "created_at")["fieldFilter"]["op"],
+            "GREATER_THAN_OR_EQUAL"
+        );
+        assert!(filters.iter().any(|filter| {
+            filter["fieldFilter"]["field"]["fieldPath"].as_str() == Some("created_at")
+                && filter["fieldFilter"]["op"] == "LESS_THAN_OR_EQUAL"
+        }));
+        assert_eq!(
+            field_filter(filters, "category")["fieldFilter"]["value"]["arrayValue"]["values"][1]
+                ["stringValue"],
+            "workflow"
+        );
+        assert_eq!(
+            field_filter(filters, "tags")["fieldFilter"]["op"],
+            "ARRAY_CONTAINS"
+        );
+        assert_eq!(structured["orderBy"][0]["field"]["fieldPath"], "scoring");
+        assert_eq!(structured["orderBy"][1]["field"]["fieldPath"], "created_at");
+        assert_eq!(structured["limit"], query_fixture["limit"]);
+        assert_eq!(structured["offset"], query_fixture["offset"]);
+
+        let paged_query = build_memories_query(2, 1, None, None, None, None);
+        assert_eq!(paged_query["structuredQuery"]["limit"], 2);
+        assert_eq!(paged_query["structuredQuery"]["offset"], 1);
+
+        assert!(memory_passes_default_filters(
+            &memory(
+                "active",
+                None,
+                false,
+                vec!["first".to_string(), "second".to_string()]
+            ),
+            false,
+            false,
+            Some(&tags)
+        ));
+        assert!(memory_passes_default_filters(
+            &memory("invalidated", None, true, tags.clone()),
+            false,
+            true,
+            Some(&tags)
+        ));
+        assert!(!memory_passes_default_filters(
+            &memory("rejected", Some(false), false, tags.clone()),
+            false,
+            false,
+            Some(&tags)
+        ));
+        assert!(!memory_passes_default_filters(
+            &memory("invalidated", None, true, tags.clone()),
+            false,
+            false,
+            Some(&tags)
+        ));
+        assert!(!memory_passes_default_filters(
+            &memory("missing-tag", None, false, vec!["first".to_string()]),
+            false,
+            false,
+            Some(&tags)
+        ));
+
+        let service = FirestoreService::new_for_contract(None);
+        let page_results = vec![
+            memory_doc("rejected-in-page", Some(false), false),
+            memory_doc("active-in-page", None, false),
+        ];
+        let filtered = service.parse_memory_query_results(
+            "contract-user-8547",
+            page_results,
+            false,
+            false,
+            None,
+        );
+        assert_eq!(
+            filtered
+                .iter()
+                .map(|memory| memory.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["active-in-page"]
+        );
+    }
+
+    #[test]
+    fn contract_create_memory_path_writes_manual_true_and_extracted_null_user_review() {
+        let now = Utc.timestamp_opt(1_767_323_045, 0).unwrap();
+        let fields = build_create_memory_fields(
+            "memory-1",
+            "contract-user-8547",
+            "content",
+            "public",
+            &MemoryCategory::Workflow,
+            false,
+            "00_998_1767323045",
+            now,
+            &["contract".to_string()],
+        );
+
+        assert_eq!(fields["category"]["stringValue"], "workflow");
+        assert_eq!(fields["valid_at"]["timestampValue"], now.to_rfc3339());
+        assert_eq!(fields["edited"]["booleanValue"], false);
+        assert_eq!(fields["is_locked"]["booleanValue"], false);
+        assert_eq!(fields["kg_extracted"]["booleanValue"], false);
+        assert_eq!(fields["reviewed"]["booleanValue"], false);
+        assert_eq!(fields["user_review"]["nullValue"], Value::Null);
+
+        let fields = build_create_memory_fields(
+            "memory-manual",
+            "contract-user-8547",
+            "content",
+            "public",
+            &MemoryCategory::Manual,
+            true,
+            "01_998_1767323045",
+            now,
+            &[],
+        );
+
+        assert_eq!(fields["reviewed"]["booleanValue"], true);
+        assert_eq!(fields["user_review"]["booleanValue"], true);
+
+        let memory = Memory {
+            content: "saved".to_string(),
+            category: MemoryCategory::Workflow,
+            tags: vec![],
+        };
+        let fields = build_save_memory_fields(
+            "memory-2",
+            "contract-user-8547",
+            "conversation-1",
+            &memory,
+            "00_998_1767323045",
+            now,
+        );
+
+        assert_eq!(fields["category"]["stringValue"], "workflow");
+        assert_eq!(fields["valid_at"]["timestampValue"], now.to_rfc3339());
+        assert_eq!(fields["user_review"]["nullValue"], Value::Null);
+        assert_eq!(fields["memory_id"]["stringValue"], "conversation-1");
+    }
+}
+
+pub(super) fn build_create_memory_fields(
+    memory_id: &str,
+    uid: &str,
+    content: &str,
+    visibility: &str,
+    category: &MemoryCategory,
+    manually_added: bool,
+    scoring: &str,
+    now: DateTime<Utc>,
+    tags: &[String],
+) -> Value {
+    let tags_values: Vec<Value> = tags.iter().map(|t| json!({"stringValue": t})).collect();
+    let mut fields = json!({
+        "id": {"stringValue": memory_id},
+        "uid": {"stringValue": uid},
+        "content": {"stringValue": content},
+        "category": {"stringValue": memory_category_wire(category)},
+        "created_at": {"timestampValue": now.to_rfc3339()},
+        "updated_at": {"timestampValue": now.to_rfc3339()},
+        "valid_at": {"timestampValue": now.to_rfc3339()},
+        "reviewed": {"booleanValue": manually_added},
+        "visibility": {"stringValue": visibility},
+        "manually_added": {"booleanValue": manually_added},
+        "scoring": {"stringValue": scoring},
+        "is_read": {"booleanValue": false},
+        "is_dismissed": {"booleanValue": false},
+        "edited": {"booleanValue": false},
+        "is_locked": {"booleanValue": false},
+        "kg_extracted": {"booleanValue": false},
+        "tags": {"arrayValue": {"values": tags_values}}
+    });
+    if manually_added {
+        fields["user_review"] = json!({"booleanValue": true});
+    } else {
+        fields["user_review"] = json!({"nullValue": null});
+    }
+    fields
+}
+
+pub(super) fn build_save_memory_fields(
+    memory_id: &str,
+    uid: &str,
+    conversation_id: &str,
+    memory: &Memory,
+    scoring: &str,
+    now: DateTime<Utc>,
+) -> Value {
+    json!({
+        "id": {"stringValue": memory_id},
+        "uid": {"stringValue": uid},
+        "content": {"stringValue": memory.content},
+        "category": {"stringValue": memory_category_wire(&memory.category)},
+        "created_at": {"timestampValue": now.to_rfc3339()},
+        "updated_at": {"timestampValue": now.to_rfc3339()},
+        "valid_at": {"timestampValue": now.to_rfc3339()},
+        "conversation_id": {"stringValue": conversation_id},
+        "memory_id": {"stringValue": conversation_id},
+        "reviewed": {"booleanValue": false},
+        "user_review": {"nullValue": null},
+        "visibility": {"stringValue": "private"},
+        "manually_added": {"booleanValue": false},
+        "edited": {"booleanValue": false},
+        "is_locked": {"booleanValue": false},
+        "kg_extracted": {"booleanValue": false},
+        "scoring": {"stringValue": scoring},
+        "tags": {"arrayValue": {"values": []}}
+    })
+}
 
 impl FirestoreService {
     pub async fn get_memories_filtered(
@@ -6,141 +438,64 @@ impl FirestoreService {
         uid: &str,
         limit: usize,
         offset: usize,
-        category: Option<&str>,
+        categories: Option<&[String]>,
+        start_date: Option<&str>,
+        end_date: Option<&str>,
         tags: Option<&[String]>,
         include_dismissed: bool,
+        include_invalidated: bool,
     ) -> Result<Vec<MemoryDB>, Box<dyn std::error::Error + Send + Sync>> {
         let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
 
-        // Build filters
-        let mut filters: Vec<Value> = Vec::new();
+        let query = build_memories_query(limit, offset, categories, start_date, end_date, tags);
 
-        // Filter by category if specified
-        if let Some(cat) = category {
-            filters.push(json!({
-                "fieldFilter": {
-                    "field": {"fieldPath": "category"},
-                    "op": "EQUAL",
-                    "value": {"stringValue": cat}
-                }
-            }));
+        let response = self
+            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
+            .await?
+            .json(&query)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            tracing::error!("Firestore query error for memories: {}", error_text);
+            return Err(format!("Firestore query error: {}", error_text).into());
         }
 
-        // Filter by first tag in Firestore (ARRAY_CONTAINS supports one tag per query).
-        // Additional tags (if any) are still filtered in-memory below.
-        if let Some(filter_tags) = tags {
-            if let Some(first_tag) = filter_tags.first() {
-                filters.push(json!({
-                    "fieldFilter": {
-                        "field": {"fieldPath": "tags"},
-                        "op": "ARRAY_CONTAINS",
-                        "value": {"stringValue": first_tag}
-                    }
-                }));
-            }
-        }
-
-        // NOTE: We do NOT filter is_dismissed in Firestore query because existing memories
-        // don't have this field. Firestore only returns documents where the field EXISTS and
-        // matches the value. Instead, we filter in-memory below (matching Python behavior).
-
-        // Build the where clause
-        let where_clause = if filters.is_empty() {
-            None
-        } else if filters.len() == 1 {
-            filters.into_iter().next()
-        } else {
-            Some(json!({
-                "compositeFilter": {
-                    "op": "AND",
-                    "filters": filters
-                }
-            }))
-        };
-
-        // Fetch from Firestore in a loop to handle post-query filtering (rejected, dismissed, tags).
-        // These can't be reliably filtered in Firestore (fields may not exist on all docs),
-        // so we filter in Rust. Keep fetching until we have enough or Firestore is exhausted.
-        let order_by = json!([
-            {"field": {"fieldPath": "scoring"}, "direction": "DESCENDING"},
-            {"field": {"fieldPath": "created_at"}, "direction": "DESCENDING"}
-        ]);
-        let mut memories: Vec<MemoryDB> = Vec::new();
-        let mut current_offset = offset;
-        let fetch_batch = limit.max(500);
-
-        loop {
-            let mut structured_query = json!({
-                "from": [{"collectionId": MEMORIES_SUBCOLLECTION}],
-                "orderBy": order_by.clone(),
-                "limit": fetch_batch,
-                "offset": current_offset
-            });
-
-            if let Some(ref where_filter) = where_clause {
-                structured_query["where"] = where_filter.clone();
-            }
-
-            let query = json!({
-                "structuredQuery": structured_query
-            });
-
-            let response = self
-                .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
-                .await?
-                .json(&query)
-                .send()
-                .await?;
-
-            if !response.status().is_success() {
-                let error_text = response.text().await?;
-                tracing::error!("Firestore query error for memories: {}", error_text);
-                return Err(format!("Firestore query error: {}", error_text).into());
-            }
-
-            let results: Vec<Value> = response.json().await?;
-            let fetched_count = results
-                .iter()
-                .filter(|doc| doc.get("document").is_some())
-                .count();
-
-            let batch: Vec<MemoryDB> = results
-                .into_iter()
-                .filter_map(|doc| {
-                    doc.get("document")
-                        .and_then(|d| self.parse_memory(d, uid).ok())
-                })
-                // Filter out rejected memories (matches Python behavior)
-                .filter(|m| m.user_review != Some(false))
-                // Filter out dismissed memories in-memory (not in Firestore query, since existing
-                // memories don't have is_dismissed field - Firestore requires field to exist for filters)
-                .filter(|m| include_dismissed || !m.is_dismissed)
-                // Filter by remaining tags in-memory (first tag is already filtered by Firestore ARRAY_CONTAINS)
-                .filter(|m| match tags {
-                    Some(filter_tags) if filter_tags.len() > 1 => {
-                        filter_tags[1..].iter().all(|tag| m.tags.contains(tag))
-                    }
-                    _ => true,
-                })
-                .collect();
-
-            memories.extend(batch);
-            if memories.len() >= limit {
-                memories.truncate(limit);
-                break;
-            }
-            current_offset += fetched_count;
-
-            // Stop if Firestore returned fewer than requested (no more data)
-            if fetched_count < fetch_batch {
-                break;
-            }
-        }
+        let results: Vec<Value> = response.json().await?;
+        let mut memories = self.parse_memory_query_results(
+            uid,
+            results,
+            include_dismissed,
+            include_invalidated,
+            tags,
+        );
 
         // Enrich memories with source from linked conversations
         self.enrich_memories_with_source(uid, &mut memories).await;
 
         Ok(memories)
+    }
+
+    pub(super) fn parse_memory_query_results(
+        &self,
+        uid: &str,
+        results: Vec<Value>,
+        include_dismissed: bool,
+        include_invalidated: bool,
+        tags: Option<&[String]>,
+    ) -> Vec<MemoryDB> {
+        results
+            .into_iter()
+            .filter_map(|doc| {
+                doc.get("document")
+                    .and_then(|d| self.parse_memory(d, uid).ok())
+            })
+            // Match Python: Firestore limit/offset already applied, then rejected/invalidated docs are filtered.
+            .filter(|m| {
+                memory_passes_default_filters(m, include_dismissed, include_invalidated, tags)
+            })
+            .collect()
     }
 
     /// Get memories for a user (simple version for backward compatibility)
@@ -151,7 +506,7 @@ impl FirestoreService {
         uid: &str,
         limit: usize,
     ) -> Result<Vec<MemoryDB>, Box<dyn std::error::Error + Send + Sync>> {
-        self.get_memories_filtered(uid, limit, 0, None, None, false)
+        self.get_memories_filtered(uid, limit, 0, None, None, None, None, false, false)
             .await
     }
 
@@ -185,7 +540,7 @@ impl FirestoreService {
 
             for (id, result) in chunk.iter().zip(results) {
                 if let Ok(Some(conv)) = result {
-                    let source_str = format!("{:?}", conv.source).to_lowercase();
+                    let source_str = conversation_source_wire(&conv.source);
                     source_map.insert(id.to_string(), (source_str, conv.input_device_name.clone()));
                 }
             }
@@ -417,16 +772,7 @@ impl FirestoreService {
         let actual_category = category.unwrap_or(MemoryCategory::Manual);
         let scoring = MemoryDB::calculate_scoring(&actual_category, &now, is_manual);
 
-        let category_str = match actual_category {
-            MemoryCategory::System => "system",
-            MemoryCategory::Interesting => "interesting",
-            MemoryCategory::Manual => "manual",
-            // Legacy categories - preserve original value
-            MemoryCategory::Core => "core",
-            MemoryCategory::Hobbies => "hobbies",
-            MemoryCategory::Lifestyle => "lifestyle",
-            MemoryCategory::Interests => "interests",
-        };
+        let category_str = memory_category_wire(&actual_category);
 
         let url = format!(
             "{}/{}/{}/{}/{}",
@@ -437,33 +783,17 @@ impl FirestoreService {
             memory_id
         );
 
-        // Build tags array for Firestore
-        let tags_values: Vec<Value> = tags.iter().map(|t| json!({"stringValue": t})).collect();
-
-        // Build fields - always include base fields
-        // CRITICAL: Include all fields that Python expects (matching save_memories)
-        let mut fields = json!({
-            // CRITICAL: id field required - Python model requires this
-            "id": {"stringValue": &memory_id},
-            // CRITICAL: uid field required - Python model requires this
-            "uid": {"stringValue": uid},
-            "content": {"stringValue": content},
-            "category": {"stringValue": category_str},
-            "created_at": {"timestampValue": now.to_rfc3339()},
-            "updated_at": {"timestampValue": now.to_rfc3339()},
-            "reviewed": {"booleanValue": is_manual},
-            "user_review": {"booleanValue": is_manual},
-            "visibility": {"stringValue": visibility},
-            "manually_added": {"booleanValue": is_manual},
-            "scoring": {"stringValue": scoring},
-            "is_read": {"booleanValue": false},
-            "is_dismissed": {"booleanValue": false},
-            // Additional fields for Python compatibility
-            "edited": {"booleanValue": false},
-            "is_locked": {"booleanValue": false},
-            "kg_extracted": {"booleanValue": false},
-            "tags": {"arrayValue": {"values": tags_values}}
-        });
+        let mut fields = build_create_memory_fields(
+            &memory_id,
+            uid,
+            content,
+            visibility,
+            &actual_category,
+            is_manual,
+            &scoring,
+            now,
+            tags,
+        );
 
         // Add optional fields if present
         if let Some(conf) = confidence {
@@ -840,31 +1170,14 @@ impl FirestoreService {
             );
 
             let doc = json!({
-                "fields": {
-                    // CRITICAL: Include id field - Python model requires this
-                    "id": {"stringValue": memory_id},
-                    // Include uid - Python model requires this
-                    "uid": {"stringValue": uid},
-                    "content": {"stringValue": memory.content},
-                    "category": {"stringValue": format!("{:?}", memory.category).to_lowercase()},
-                    "created_at": {"timestampValue": now.to_rfc3339()},
-                    "updated_at": {"timestampValue": now.to_rfc3339()},
-                    "conversation_id": {"stringValue": conversation_id},
-                    // Legacy field - same as conversation_id, used by get_memory_ids_for_conversation
-                    "memory_id": {"stringValue": conversation_id},
-                    "reviewed": {"booleanValue": false},
-                    // CRITICAL: user_review must exist - Python filters on memory['user_review'] is not False
-                    // None/null means not yet reviewed by user (different from False which means rejected)
-                    "user_review": {"nullValue": null},
-                    "visibility": {"stringValue": "private"},
-                    "manually_added": {"booleanValue": false},
-                    "edited": {"booleanValue": false},
-                    "is_locked": {"booleanValue": false},
-                    "kg_extracted": {"booleanValue": false},
-                    "scoring": {"stringValue": scoring},
-                    // Empty tags array
-                    "tags": {"arrayValue": {"values": []}}
-                }
+                "fields": build_save_memory_fields(
+                    &memory_id,
+                    uid,
+                    conversation_id,
+                    memory,
+                    &scoring,
+                    now,
+                )
             });
 
             let response = self

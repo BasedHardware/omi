@@ -103,6 +103,10 @@ if [[ ${#unit_tests[@]} -gt 0 ]]; then
   done
 fi
 
+if [[ -d testing/contracts ]]; then
+  run_pytest_group "backend contract tests" testing/contracts
+fi
+
 # Optional fair-use integration tests require Redis and are intentionally outside
 # the deterministic unit signal.
 if [[ "${RUN_BACKEND_INTEGRATION_TESTS:-0}" == "1" ]]; then
