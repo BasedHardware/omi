@@ -54,7 +54,9 @@ def get_omi_product_info_tool(query: str) -> str:
 
     if not context:
         # An empty result (e.g. the GitHub API returned non-200) would otherwise produce a docs
-        # string with no real content, which misleads the model into answering from nothing.
+        # string with no real content, which misleads the model into answering from nothing. Log it
+        # so a silent "no docs" state is diagnosable in prod, not only visible to the user.
+        logger.warning("get_omi_product_info_tool - product docs fetch returned no content")
         return (
             "No Omi product documentation is available right now. Tell the user that product "
             "information is temporarily unavailable and to try again in a little while."
