@@ -360,7 +360,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               useMaterial3: false,
               colorScheme: const ColorScheme.dark(
                 primary: Colors.black,
-                secondary: Colors.deepPurple,
+                secondary: Color(0xFF35343B),
                 surface: Colors.black38,
               ),
               snackBarTheme: const SnackBarThemeData(
@@ -375,7 +375,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ),
               textSelectionTheme: const TextSelectionThemeData(
                 cursorColor: Colors.white,
-                selectionColor: Colors.deepPurple,
+                selectionColor: Colors.white24,
                 selectionHandleColor: Colors.white,
               ),
               cupertinoOverrideTheme: const CupertinoThemeData(

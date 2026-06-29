@@ -990,7 +990,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
 
 
 @router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'])
-async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
+async def stripe_connect_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 
     try:

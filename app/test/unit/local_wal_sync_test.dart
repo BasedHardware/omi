@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -35,6 +38,13 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (MethodCall call) async {
+        if (call.method == 'getApplicationDocumentsDirectory') return Directory.systemTemp.path;
+        return null;
+      },
+    );
 
     listener = _MockListener();
     sync = LocalWalSyncImpl(listener);
@@ -377,6 +387,28 @@ void main() {
       // No firmware header in stored data
       expect(chunk[0].length, 3);
       expect(chunk[0][0], 0xAA); // First byte is audio, not header
+    });
+  });
+
+  group('syncWal — orphan WAL guard', () {
+    // A WAL the user taps "sync" on may already be gone from `_wals` (a
+    // concurrent delete/reload). Previously `.first` on the empty match list
+    // threw an uncaught StateError; the guard now bails out to null instead.
+    test('LocalWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
+      final orphan = Wal(timerStart: 123, codec: BleAudioCodec.opus, seconds: 10);
+
+      final result = await sync.syncWal(wal: orphan);
+
+      expect(result, isNull);
+    });
+
+    test('FlashPageWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
+      final flashSync = FlashPageWalSyncImpl(listener);
+      final orphan = Wal(timerStart: 456, codec: BleAudioCodec.opus, seconds: 10);
+
+      final result = await flashSync.syncWal(wal: orphan);
+
+      expect(result, isNull);
     });
   });
 }
