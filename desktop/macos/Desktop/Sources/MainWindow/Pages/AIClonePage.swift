@@ -56,13 +56,13 @@ struct AIClonePage: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                infoStep(number: "1", text: "Start the plugin service on your machine (it auto-configures the desktop)")
+                infoStep(number: "1", text: "Start the plugin service on your machine")
                 infoStep(number: "2", text: "Connect a messaging app — you'll get a link to open on your phone")
                 infoStep(number: "3", text: "Send a message and Omi replies using your persona")
             }
             .padding(.leading, 4)
 
-            Text("Credentials are stored in the macOS Keychain. Messages are processed by the Omi persona engine.")
+            Text("Credentials are stored in the macOS Keychain. The plugin URL and bearer token are auto-filled when the plugin is running locally; your developer API key is still entered manually unless the plugin runs in dev mode.")
                 .scaledFont(size: 11)
                 .foregroundColor(OmiColors.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
