@@ -39,6 +39,13 @@ private let logger = Logger(subsystem: "omi.desktop", category: "ai-clone")
 /// Shared "connect this plugin" sheet — handles credential entry, POST /setup,
 /// deep-link display, and handshake polling.
 ///
+/// Tier 1 UX improvements (see Telegram onboarding plan):
+/// - Clipboard auto-detect (ClipboardWatcher)
+/// - Real-time token validation (TelegramTokenValidator)
+/// - QR code alongside the deep link (QRCodeGenerator)
+/// - Two-step progress indicator with countdown
+/// - "Open @BotFather" deep link (Telegram only)
+///
 /// Works for any AIPlugin; the form fields are driven by the plugin's
 /// `credentialFields` array, so adding a new plugin doesn't require new UI.
 struct ConnectSheet: View {
@@ -52,8 +59,25 @@ struct ConnectSheet: View {
     @State private var setupResult: SetupResponse?
     @State private var pollingForHandshake = false
     @State private var pollCount = 0
+    @State private var handshakeSecondsRemaining: Int = 0
 
-    private static let maxPollIterations = 20  // 20 × 3s = 60s timeout
+    /// Bumped when the user types in a credential field. While set,
+    /// the clipboard watcher won't auto-fill that field — protects
+    /// against the watcher overwriting the user's manual edits.
+    @State private var userEditedFields: Set<String> = []
+
+    /// Set briefly after the clipboard watcher auto-fills a field, so
+    /// we can show a "✓ Telegram bot token detected from clipboard"
+    /// confirmation to the user. Cleared after a few seconds.
+    @State private var lastClipboardAutofillKey: String?
+    @State private var clipboardAutofillBannerClearTask: Task<Void, Never>?
+
+    /// Clipboard watcher (only set while sheet is visible).
+    /// Strongly held — the sheet is the lifecycle owner.
+    @State private var clipboardWatcher: ClipboardWatcher?
+
+    private static let maxPollIterations = 15  // 15 × 3s = 45s (was 60s)
+    private static let botFatherURL = URL(string: "https://t.me/BotFather")!
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -99,6 +123,9 @@ struct ConnectSheet: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
+                    // Tier 1 improvement (2): disable until ALL required
+                    // fields are in the .valid state. Previously any
+                    // non-empty string let the user submit.
                     .disabled(submitting || !isFormValid)
                 } else {
                     Button("Done") { isPresented = false }
@@ -107,12 +134,25 @@ struct ConnectSheet: View {
             }
             .padding(20)
         }
-        .frame(width: 520, height: 540)
+        .frame(width: 520, height: 600)
         .onAppear {
             // Pre-fill empty strings for each field so bindings are wired up.
             for field in plugin.credentialFields where credentialValues[field.key] == nil {
                 credentialValues[field.key] = ""
             }
+            // Tier 1 improvement (1): start the clipboard watcher so the
+            // user can paste/auto-fill from @BotFather. The watcher
+            // is scoped to the sheet's lifetime.
+            startClipboardWatcher()
+        }
+        .onDisappear {
+            // Be a good citizen — stop polling when the sheet closes.
+            clipboardWatcher?.stop()
+            clipboardWatcher = nil
+            clipboardAutofillBannerClearTask?.cancel()
+            clipboardAutofillBannerClearTask = nil
+            handshakeTimerTask?.cancel()
+            handshakeTimerTask = nil
         }
     }
 
@@ -126,30 +166,23 @@ struct ConnectSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             ForEach(plugin.credentialFields) { field in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(field.label)
-                        .scaledFont(size: 13, weight: .medium)
-                        .foregroundColor(OmiColors.textPrimary)
-                    if field.isSecure {
-                        SecureField(
-                            field.placeholder,
-                            text: Binding(
-                                get: { credentialValues[field.key] ?? "" },
-                                set: { credentialValues[field.key] = $0 }
-                            )
-                        )
-                        .textFieldStyle(.roundedBorder)
-                    } else {
-                        TextField(
-                            field.placeholder,
-                            text: Binding(
-                                get: { credentialValues[field.key] ?? "" },
-                                set: { credentialValues[field.key] = $0 }
-                            )
-                        )
-                        .textFieldStyle(.roundedBorder)
+                credentialFieldRow(field)
+            }
+
+            // Tier 1 improvement: "Create Telegram Bot" button. Telegram
+            // users almost always need to look up @BotFather — this
+            // one-click button eliminates that discovery step.
+            if plugin == .telegram {
+                Button(action: { openBotFather() }) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.up.forward.app.fill")
+                            .scaledFont(size: 12)
+                        Text("Create Telegram Bot")
+                            .scaledFont(size: 13)
                     }
                 }
+                .buttonStyle(.bordered)
+                .help("Open @BotFather in your browser to create a new bot and copy its token.")
             }
 
             if let error {
@@ -162,40 +195,171 @@ struct ConnectSheet: View {
         .padding(20)
     }
 
+    /// Renders one credential field with the Tier 1 ✓ / ⚠ state
+    /// indicator alongside. Encapsulated in a helper so the per-field
+    /// layout (icon + label + status) can be unit-tested visually.
+    @ViewBuilder
+    private func credentialFieldRow(_ field: AICredentialField) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(field.label)
+                .scaledFont(size: 13, weight: .medium)
+                .foregroundColor(OmiColors.textPrimary)
+            HStack(spacing: 8) {
+                Group {
+                    if field.isSecure {
+                        SecureField(
+                            field.placeholder,
+                            text: Binding(
+                                get: { credentialValues[field.key] ?? "" },
+                                set: {
+                                    credentialValues[field.key] = $0
+                                    markUserEdited(field.key)
+                                }
+                            )
+                        )
+                    } else {
+                        TextField(
+                            field.placeholder,
+                            text: Binding(
+                                get: { credentialValues[field.key] ?? "" },
+                                set: {
+                                    credentialValues[field.key] = $0
+                                    markUserEdited(field.key)
+                                }
+                            )
+                        )
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+
+                // Tier 1 improvement (2): real-time ✓ / ⚠ indicator.
+                tokenStateIndicator(for: field)
+            }
+            // Show a small confirmation banner when the clipboard
+            // watcher auto-filled this field. Cleared on next edit.
+            if lastClipboardAutofillKey == field.key {
+                HStack(spacing: 4) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.success)
+                    Text("Detected from clipboard")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.success)
+                }
+            }
+        }
+    }
+
+    /// Renders a small ✓ / ⚠ / blank indicator to the right of each
+    /// field. Currently only Telegram tokens have a validator; other
+    /// plugin credential fields render an empty Spacer.
+    @ViewBuilder
+    private func tokenStateIndicator(for field: AICredentialField) -> some View {
+        // Only the Telegram bot_token field has a client-side
+        // validator for now. Future: per-plugin validators.
+        if plugin == .telegram, field.key == "bot_token" {
+            switch TelegramTokenValidator.state(credentialValues[field.key]) {
+            case .empty:
+                EmptyView()
+            case .valid:
+                Image(systemName: "checkmark.circle.fill")
+                    .scaledFont(size: 16)
+                    .foregroundColor(OmiColors.success)
+                    .help("Looks like a valid Telegram bot token")
+            case .invalid:
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .scaledFont(size: 16)
+                    .foregroundColor(OmiColors.error)
+                    .help("Expected format: 123456789:AA… (numeric id + colon + 35+ alphanumerics)")
+            }
+        } else {
+            EmptyView()
+        }
+    }
+
     // MARK: - Success
 
     private func successBody(_ result: SetupResponse) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(OmiColors.success)
-                Text("Credentials registered")
-                    .scaledFont(size: 14, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+            // Tier 1 improvement (4): two-step progress.
+            // Step 1 — webhook registered, instant.
+            // Step 2 — waiting for handshake.
+            VStack(alignment: .leading, spacing: 10) {
+                stepRow(
+                    step: 1,
+                    state: .complete,
+                    title: "Bot configured",
+                    subtitle: "Webhook registered with \(plugin.displayName)"
+                )
+
+                Divider().padding(.leading, 22)
+
+                stepRow(
+                    step: 2,
+                    state: pollingForHandshake ? .inProgress : .pending,
+                    title: pollingForHandshake
+                        ? "Waiting for you to send /start in \(plugin.displayName)…"
+                        : "Waiting for handshake",
+                    subtitle: pollingForHandshake
+                        ? "\(handshakeSecondsRemaining)s remaining — open the link below"
+                        : "Use the QR code or deep link below to open \(plugin.displayName) on your phone."
+                )
+
+                if !pollingForHandshake && setupResult != nil {
+                    // Final success state after handshake completes.
+                    HStack(spacing: 6) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(OmiColors.success)
+                        Text("Connected")
+                            .scaledFont(size: 14, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                    }
+                    .padding(.top, 4)
+                }
             }
 
-            Text("Open the link below in \(plugin.displayName) to complete the handshake. After you send the pre-filled message, this window will detect the connection automatically.")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Divider().padding(.vertical, 4)
 
+            // Tier 1 improvement (3): QR code alongside the deep link.
+            // QR lets users with Telegram-on-phone scan instead of
+            // copy/paste the deep link into a phone browser.
+            deepLinkWithQR(result.deepLink)
+
+            if let error {
+                Text(error)
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.error)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(20)
+    }
+
+    /// Render the deep link with a clickable Open button, a copy
+    /// button, AND a scannable QR code. QR is the killer feature for
+    /// the common case (Telegram is on the phone, Omi Desktop is on
+    /// the laptop).
+    @ViewBuilder
+    private func deepLinkWithQR(_ deepLink: String) -> some View {
+        VStack(spacing: 12) {
+            // Row: deep link text + Open + Copy
             VStack(alignment: .leading, spacing: 8) {
                 Text("Deep link")
                     .scaledFont(size: 12, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
                 HStack {
-                    Text(result.deepLink)
+                    Text(deepLink)
                         .scaledFont(size: 12, design: .monospaced)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
-                    Button(action: { copyToClipboard(result.deepLink) }) {
+                    Button(action: { copyToClipboard(deepLink) }) {
                         Image(systemName: "doc.on.doc")
                     }
                     .buttonStyle(.borderless)
                     .help("Copy deep link")
-                    Button(action: { openURL(result.deepLink) }) {
+                    Button(action: { openURL(deepLink) }) {
                         Text("Open")
                     }
                     .buttonStyle(.borderedProminent)
@@ -205,24 +369,162 @@ struct ConnectSheet: View {
             .background(OmiColors.backgroundTertiary)
             .cornerRadius(8)
 
-            HStack(spacing: 6) {
-                if pollingForHandshake {
-                    ProgressView().controlSize(.small)
-                }
-                Text(pollingForHandshake ? "Waiting for \(plugin.displayName) handshake…" : "Waiting for you to send the message in \(plugin.displayName).")
-                    .scaledFont(size: 12)
+            // Divider + QR (Tier 1)
+            HStack(alignment: .center, spacing: 12) {
+                Rectangle()
+                    .fill(OmiColors.textTertiary.opacity(0.3))
+                    .frame(height: 1)
+                Text("or scan with your phone")
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.textTertiary)
+                Rectangle()
+                    .fill(OmiColors.textTertiary.opacity(0.3))
+                    .frame(height: 1)
+            }
+
+            if let qrImage = QRCodeGenerator.generate(deepLink, size: 160) {
+                Image(nsImage: qrImage)
+                    .interpolation(.none)  // crisp pixel edges
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 160, height: 160)
+                    .padding(8)
+                    .background(Color.white)
+                    .cornerRadius(8)
+                    .help("Scan with your phone camera to open the Telegram deep link")
+            } else {
+                Text("(QR generation failed)")
+                    .scaledFont(size: 11)
                     .foregroundColor(OmiColors.textTertiary)
             }
         }
-        .padding(20)
+    }
+
+    /// Renders one numbered step in the progress indicator.
+    @ViewBuilder
+    private func stepRow(step: Int, state: StepState, title: String, subtitle: String?) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(state.circleColor)
+                    .frame(width: 22, height: 22)
+                switch state {
+                case .complete:
+                    Image(systemName: "checkmark")
+                        .scaledFont(size: 11, weight: .bold)
+                        .foregroundColor(.white)
+                case .inProgress:
+                    ProgressView().controlSize(.small).scaleEffect(0.7)
+                case .pending:
+                    Text("\(step)")
+                        .scaledFont(size: 11, weight: .bold)
+                        .foregroundColor(.white)
+                }
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .scaledFont(size: 13, weight: .medium)
+                    .foregroundColor(state.titleColor)
+                if let subtitle {
+                    Text(subtitle)
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer()
+        }
+    }
+
+    private enum StepState {
+        case complete, inProgress, pending
+        var circleColor: Color {
+            switch self {
+            case .complete: return OmiColors.success
+            case .inProgress: return OmiColors.purplePrimary
+            case .pending: return OmiColors.textTertiary.opacity(0.3)
+            }
+        }
+        var titleColor: Color {
+            switch self {
+            case .complete, .inProgress: return OmiColors.textPrimary
+            case .pending: return OmiColors.textSecondary
+            }
+        }
+    }
+
+    // MARK: - Clipboard watcher
+
+    /// Start watching the system clipboard for a Telegram bot token.
+    /// Called from `.onAppear`. The watcher:
+    /// - Emits when the clipboard string content changes
+    /// - We auto-fill the first empty + non-user-edited credential field
+    ///   whose value validates as a Telegram token
+    /// - We show a "Detected from clipboard" confirmation banner
+    private func startClipboardWatcher() {
+        clipboardWatcher?.stop()
+        let watcher = ClipboardWatcher { content in
+            handleClipboardChange(content)
+        }
+        watcher.start()
+        clipboardWatcher = watcher
+    }
+
+    private func handleClipboardChange(_ content: String) {
+        // Only auto-fill fields the user hasn't edited manually.
+        // Auto-fill targets: credential fields that are currently empty.
+        guard TelegramTokenValidator.isValid(content) else { return }
+
+        // Find the first auto-fillable field: empty + not user-edited.
+        // (Telegram's first credential field is bot_token; WhatsApp has
+        // multiple. We fill the first that matches.)
+        guard let target = plugin.credentialFields.first(where: { field in
+            credentialValues[field.key]?.isEmpty != false
+                && !userEditedFields.contains(field.key)
+        }) else { return }
+
+        credentialValues[target.key] = content
+        lastClipboardAutofillKey = target.key
+
+        // Clear the confirmation banner after a few seconds so it
+        // doesn't linger forever.
+        clipboardAutofillBannerClearTask?.cancel()
+        clipboardAutofillBannerClearTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if !Task.isCancelled {
+                lastClipboardAutofillKey = nil
+            }
+        }
+    }
+
+    private func markUserEdited(_ fieldKey: String) {
+        // Once the user types into a field, don't let the clipboard
+        // watcher overwrite their input.
+        userEditedFields.insert(fieldKey)
+        // Clear the auto-fill confirmation banner if the user edits
+        // the field we just auto-filled.
+        if lastClipboardAutofillKey == fieldKey {
+            clipboardAutofillBannerClearTask?.cancel()
+            lastClipboardAutofillKey = nil
+        }
     }
 
     // MARK: - Helpers
 
     private var isFormValid: Bool {
-        plugin.credentialFields.allSatisfy {
-            let value = credentialValues[$0.key] ?? ""
-            return !value.trimmingCharacters(in: .whitespaces).isEmpty
+        plugin.credentialFields.allSatisfy { field in
+            let value = credentialValues[field.key] ?? ""
+            // Trim and check non-empty.
+            guard !value.trimmingCharacters(in: .whitespaces).isEmpty else {
+                return false
+            }
+            // Tier 1 improvement (2): for the Telegram bot_token field,
+            // also require the value to pass TelegramTokenValidator.
+            // This catches typos before the round-trip to the plugin.
+            if plugin == .telegram, field.key == "bot_token" {
+                return TelegramTokenValidator.isValid(value)
+            }
+            return true
         }
     }
 
@@ -260,16 +562,26 @@ struct ConnectSheet: View {
         }
     }
 
+    @State private var handshakeTimerTask: Task<Void, Never>?
+
     private func startHandshakePolling() {
         pollingForHandshake = true
         pollCount = 0
+        // Tier 1 improvement (4): countdown timer for the user.
+        handshakeSecondsRemaining = ConnectSheet.maxPollIterations * 3
+        handshakeTimerTask?.cancel()
+        handshakeTimerTask = Task { @MainActor in
+            while !Task.isCancelled,
+                  handshakeSecondsRemaining > 0,
+                  pollingForHandshake {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if !Task.isCancelled {
+                    handshakeSecondsRemaining -= 1
+                }
+            }
+        }
+
         Task {
-            // C3 fix: actually poll the plugin service. We can't tell from
-            // /health alone whether the user's handshake has completed (the
-            // plugin doesn't yet expose per-user state via /health), so we
-            // also reach for /setup with a HEAD-style check. For v0.1 we
-            // poll /health every 3s; if it stays unreachable we abort early.
-            // When the plugins land a /status endpoint, swap this for that.
             while pollCount < ConnectSheet.maxPollIterations {
                 pollCount += 1
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -280,12 +592,14 @@ struct ConnectSheet: View {
                 if reachable {
                     await MainActor.run {
                         pollingForHandshake = false
+                        handshakeTimerTask?.cancel()
                     }
                     break
                 }
             }
             await MainActor.run {
                 pollingForHandshake = false
+                handshakeTimerTask?.cancel()
             }
         }
     }
@@ -324,6 +638,15 @@ struct ConnectSheet: View {
         guard let url = URL(string: s) else { return }
         #if os(macOS)
         NSWorkspace.shared.open(url)
+        #endif
+    }
+
+    private func openBotFather() {
+        // @BotFather is the canonical Telegram bot-creation entry point.
+        // Hardcoded URL — there's no plugin-provided URL here, so this
+        // can't be phished. Deep-link scheme is https (in DeepLinkSafeScheme).
+        #if os(macOS)
+        NSWorkspace.shared.open(ConnectSheet.botFatherURL)
         #endif
     }
 
