@@ -34,6 +34,11 @@ These rules apply to every AI agent working in this repository. This file is the
 
 - **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions.
 
+### Deferred Work Markers
+
+- New `TODO`, `FIXME`, and `HACK` comments must reference a tracking issue or be resolved before merge.
+- Existing markers are legacy debt; only delete or annotate them when the owner and next action are clear.
+
 ### Backend (Python)
 
 - **No in-function imports** — all imports at module top level.
