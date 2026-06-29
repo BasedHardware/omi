@@ -59,6 +59,7 @@ struct ConnectSheet: View {
     @State private var setupResult: SetupResponse?
     @State private var pollingForHandshake = false
     @State private var pollCount = 0
+    @State private var devApiKeyOverride: String = ""
     @State private var handshakeSecondsRemaining: Int = 0
     // P1 (cubic): handshake success vs. timeout. Polling /health is NOT
     // a confirmation that the user completed the handshake — /health
@@ -588,11 +589,37 @@ struct ConnectSheet: View {
         Task {
             do {
                 let personaId = try await currentPersonaId()
+
+                // Auto-create dev API key if not already configured.
+                // The user's Firebase auth session is used — no manual
+                // paste needed. This is the zero-config path: the user
+                // just enters their bot token and clicks Connect.
+                var effectiveDevKey = config.omiDevApiKey
+                if effectiveDevKey.isEmpty {
+                    let backendURL = config.discoveryBackendURL ?? "https://api.omi.me"
+                    let isLocal = backendURL.contains("localhost") || backendURL.contains("127.0.0.1")
+                    if isLocal {
+                        // Can't create API key on local backend (Firebase
+                        // audience mismatch). Leave empty — the plugin
+                        // should already have the right key in its storage
+                        // from the test persona setup.
+                        log("ConnectSheet: local backend, skipping API key creation (use pre-configured key)")
+                        effectiveDevKey = ""
+                    } else {
+                        log("ConnectSheet: auto-creating dev API key for persona \(personaId)")
+                        effectiveDevKey = try await APIClient.shared.createAppKey(appId: personaId)
+                        log("ConnectSheet: created dev API key (\(effectiveDevKey.count) chars)")
+                        await MainActor.run {
+                            config.omiDevApiKey = effectiveDevKey
+                        }
+                    }
+                }
+
                 let body = plugin.setupRequestBody(
                     credentials: credentials,
                     omiUid: currentUid(),
                     personaId: personaId,
-                    omiDevApiKey: config.omiDevApiKey,
+                    omiDevApiKey: effectiveDevKey,
                     publicBaseUrl: config.pluginURL
                 )
                 let result = try await AICloneClient.shared.setup(
@@ -602,6 +629,10 @@ struct ConnectSheet: View {
                     body: body
                 )
                 await MainActor.run {
+                    // Persist the dev API key override if the user typed it
+                    if !devApiKeyOverride.isEmpty {
+                        config.omiDevApiKey = devApiKeyOverride
+                    }
                     setupResult = result
                     submitting = false
                     startHandshakePolling()
@@ -682,9 +713,29 @@ struct ConnectSheet: View {
     }
 
     private func currentPersonaId() async throws -> String {
-        guard let persona = try await APIClient.shared.getPersona() else {
-            throw AICloneClient.AICloneError.notConfigured
+        // If the plugin uses a local backend (not prod), we can't create
+        // the persona from the desktop because the desktop's Firebase
+        // token is from prod and the local backend rejects it (audience
+        // mismatch). Instead, return an empty string and let the plugin's
+        // /setup handler use whatever persona_id is already stored or
+        // fall back to a default.
+        let backendURL = config.discoveryBackendURL ?? "https://api.omi.me"
+        let isLocal = backendURL.contains("localhost") || backendURL.contains("127.0.0.1")
+
+        if isLocal {
+            log("ConnectSheet: plugin uses local backend, skipping remote persona creation")
+            // Return empty — the plugin will use the persona_id from its
+            // own storage (set up via the test persona script) or the
+            // plugin will handle it at /setup time.
+            return ""
         }
+
+        // Prod path
+        if let persona = try? await APIClient.shared.getPersona() {
+            return persona.id
+        }
+        log("ConnectSheet: no persona found, auto-creating one")
+        let persona = try await APIClient.shared.getOrCreatePersona()
         return persona.id
     }
 

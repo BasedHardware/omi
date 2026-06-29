@@ -82,6 +82,10 @@ final class AICloneConfig: ObservableObject {
     /// said so). In dev mode, the dev API key is optional because the
     /// local mock persona doesn't validate it.
     @Published var pluginDevMode: Bool = false
+    /// The backend URL the plugin uses for persona calls. When the
+    /// plugin is local (localhost), the desktop creates the persona + API
+    /// key on that backend instead of prod. Prevents persona_id mismatch.
+    @Published var discoveryBackendURL: String? = nil
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -133,10 +137,10 @@ final class AICloneConfig: ObservableObject {
         // Use the LOCAL pluginURL (not the tunnel publicURL) for the
         // desktop client's API base URL. Desktop and plugin run on the
         // same machine, so /health, /setup, /toggle should hit the
-        // direct local URL — avoids tunnel dependency, rate limits on
-        // the tunnel, and 60s handshake polling hitting an external
-        // service. P1 (cubic).
-        let discoveryURL = discovery.pluginURL
+        // Prefer public_url (the tunnel URL) — Telegram/Meta need HTTPS
+        // to reach the plugin from outside. Falls back to plugin_url
+        // (localhost) for same-machine-only testing.
+        let discoveryURL = discovery.publicURL ?? discovery.pluginURL
 
         var changed = false
 
@@ -162,6 +166,7 @@ final class AICloneConfig: ObservableObject {
             log("AICloneConfig: auto-discovered plugin at \(discoveryURL) (type=\(discovery.pluginType), devMode=\(discovery.devMode))")
             self.isAutoDiscovered = true
             self.pluginDevMode = discovery.devMode
+            self.discoveryBackendURL = discovery.omiBaseURL
         }
     }
 
@@ -193,13 +198,26 @@ final class AICloneConfig: ObservableObject {
     /// True if the dev API key is set (non-empty).
     var isDevApiKeyConfigured: Bool { !omiDevApiKey.isEmpty }
 
-    /// True if all values needed to call the plugin are present.
+    /// True if the plugin service is reachable (URL + bearer configured).
+    /// The dev API key is NOT required for this check — it's only needed
+    /// at /setup time (inside the Connect sheet). The Connect button is
+    /// gated on this property, so requiring the dev API key here would
+    /// prevent the user from even opening the Connect sheet.
+    var isPluginReady: Bool {
+        isPluginURLConfigured && isBearerTokenConfigured
+    }
+
+    /// True if all values needed to call the plugin are present,
+    /// INCLUDING the dev API key. Used for the status indicator in
+    /// PluginURLCard (shows whether the user still needs to provide
+    /// the dev API key), NOT for gating the Connect button.
+    ///
     /// In dev mode (plugin paired with local mock persona), the dev API
     /// key is optional — the mock doesn't validate it.
     var isFullyConfigured: Bool {
         if pluginDevMode {
-            return isPluginURLConfigured && isBearerTokenConfigured
+            return isPluginReady
         }
-        return isPluginURLConfigured && isBearerTokenConfigured && isDevApiKeyConfigured
+        return isPluginReady && isDevApiKeyConfigured
     }
 }

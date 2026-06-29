@@ -1,15 +1,16 @@
 import SwiftUI
 
 /// Per-plugin connection card for the AI Clone page.
-///
-/// One parameterized card drives both the Telegram and WhatsApp tiles.
-/// Shows connection status, auto-reply toggle, and disconnect button.
 struct PluginCard: View {
     let plugin: AIPlugin
     @ObservedObject var config: AICloneConfig
     @State private var showingConnect = false
     @State private var connectionState: ConnectionState = .notConnected
     @State private var autoReplyEnabled = false
+    @State private var toggleInFlight = false
+    @State private var checkingStatus = false
+    @State private var connectedChatId: String? = nil
+    @State private var connectedBotName: String? = nil
 
     enum ConnectionState: Equatable {
         case notConnected
@@ -28,8 +29,14 @@ struct PluginCard: View {
 
     var body: some View {
         pluginCardChrome { content }
-            .sheet(isPresented: $showingConnect) {
+            .sheet(isPresented: $showingConnect, onDismiss: {
+                // Re-check status after ConnectSheet closes
+                Task { await checkStatus() }
+            }) {
                 ConnectSheet(plugin: plugin, config: config, isPresented: $showingConnect)
+            }
+            .task {
+                await checkStatus()
             }
     }
 
@@ -60,22 +67,25 @@ struct PluginCard: View {
                     .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 HStack(spacing: 4) {
-                    Circle()
-                        .fill(connectionState.isConnected ? OmiColors.success : OmiColors.textTertiary)
-                        .frame(width: 6, height: 6)
+                    if checkingStatus {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Circle()
+                            .fill(connectionState.isConnected ? OmiColors.success : OmiColors.textTertiary)
+                            .frame(width: 6, height: 6)
+                    }
                     Text(connectionState.displayStatus)
                         .scaledFont(size: 12)
                         .foregroundColor(statusColor)
+                    if let botName = connectedBotName, !botName.isEmpty, connectionState.isConnected {
+                        Text("\u{00B7} @\(botName)")
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textTertiary)
+                    }
                 }
             }
 
             Spacer()
-
-            if case .connected(let since) = connectionState {
-                Text(connectedSinceText(since))
-                    .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
-            }
         }
     }
 
@@ -91,42 +101,36 @@ struct PluginCard: View {
                     .scaledFont(size: 13, weight: .medium)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!config.isFullyConfigured)
-            .help(config.isFullyConfigured ? "" : "Configure the plugin service first")
+            .disabled(!config.isPluginReady)
+            .help(config.isPluginReady ? "" : "Plugin service not configured")
         }
     }
 
     private var connectedControls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Auto-reply toggle row \u2014 disabled for v0.1.
-            //
-            // The desktop doesn't know the user's chat_id/phone (those
-            // are bound on the plugin side after the user sends /start
-            // from their phone). Toggling requires a real chatId, not
-            // the placeholder "global" sentinel we used to send \u2014
-            // both /toggle endpoints (Telegram + WhatsApp) return 403
-            // for unknown chat_id. P1 (cubic).
-            //
-            // Per-chat toggles ship in a follow-up once the plugin
-            // exposes a chat list API the desktop can enumerate.
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Auto-reply")
                         .scaledFont(size: 13, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
-                    Text("Manage from your phone — send /start in Telegram or the connected WhatsApp chat")
+                    Text(autoReplyEnabled ? "Omi replies to messages automatically" : "Omi won't reply until you enable this")
                         .scaledFont(size: 11)
-                        .foregroundColor(OmiColors.textTertiary)
+                        .foregroundColor(autoReplyEnabled ? OmiColors.success : OmiColors.textTertiary)
                 }
                 Spacer()
+                if toggleInFlight {
+                    ProgressView().controlSize(.small)
+                }
                 Toggle("", isOn: $autoReplyEnabled)
                     .labelsHidden()
-                    .disabled(true)
+                    .disabled(toggleInFlight)
+                    .onChange(of: autoReplyEnabled) { _, newValue in
+                        Task { await flipAutoReply(enabled: newValue) }
+                    }
             }
 
             Divider()
 
-            // Disconnect
             HStack {
                 Spacer()
                 Button("Disconnect", role: .destructive) {
@@ -136,6 +140,64 @@ struct PluginCard: View {
                 .buttonStyle(.bordered)
                 .scaledFont(size: 12)
             }
+        }
+    }
+
+    // MARK: - Status check
+
+    private func checkStatus() async {
+        // Only check status if this card's plugin type matches the
+        // discovered plugin type. The /status endpoint is plugin-specific
+        // (Telegram plugin returns Telegram chats, WhatsApp returns
+        // WhatsApp chats). Without this guard, both cards would call
+        // the same endpoint and both show "Connected" even if only
+        // one is actually connected.
+        guard config.isPluginReady else { return }
+        
+        // Check if the discovery file's plugin_type matches this card
+        // If the plugin is Telegram, only the Telegram card checks status
+        // If no discovery (manual config), only Telegram checks (the
+        // currently implemented plugin)
+        if let discovery = PluginDiscovery.read() {
+            let discoveredType = discovery.pluginType.lowercased()
+            let cardType: String
+            switch plugin {
+            case .telegram: cardType = "telegram"
+            case .whatsapp: cardType = "whatsapp"
+            }
+            guard discoveredType == cardType else {
+                // This card's plugin type doesn't match the running plugin
+                return
+            }
+        } else {
+            // No discovery file — only Telegram checks status
+            guard plugin == .telegram else { return }
+        }
+        
+        checkingStatus = true
+        defer { checkingStatus = false }
+        do {
+            let status = try await AICloneClient.shared.status(
+                baseURL: config.pluginURL,
+                bearerToken: config.bearerToken
+            )
+            if status.connectedChats > 0 {
+                await MainActor.run {
+                    connectionState = .connected(since: Date())
+                    autoReplyEnabled = status.autoReplyEnabled
+                    connectedChatId = status.firstChatId
+                    connectedBotName = status.botUsername
+                }
+            } else {
+                await MainActor.run {
+                    connectionState = .notConnected
+                    connectedChatId = nil
+                    connectedBotName = nil
+                }
+            }
+        } catch {
+            // Status check failed — don't change the state, might be a
+            // transient network issue
         }
     }
 
@@ -149,10 +211,30 @@ struct PluginCard: View {
         }
     }
 
-    private func connectedSinceText(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .short
-        return formatter.localizedString(for: date, relativeTo: Date())
+    private func flipAutoReply(enabled: Bool) async {
+        toggleInFlight = true
+        defer { toggleInFlight = false }
+        guard let chatId = connectedChatId else {
+            log("PluginCard: no connected chat_id for toggle")
+            await MainActor.run { autoReplyEnabled = !enabled }
+            return
+        }
+        do {
+            let body = plugin.toggleRequestBody(
+                chatId: "all",
+                enabled: enabled
+            )
+            _ = try await AICloneClient.shared.toggle(
+                baseURL: config.pluginURL,
+                bearerToken: config.bearerToken,
+                plugin: plugin,
+                body: body
+            )
+            log("PluginCard: toggle auto-reply \(enabled ? "ON" : "OFF") for \(plugin.displayName) (chat_id=\(chatId))")
+        } catch {
+            log("PluginCard: toggle failed: \(error)")
+            await MainActor.run { autoReplyEnabled = !enabled }
+        }
     }
 }
 

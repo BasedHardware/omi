@@ -37,6 +37,7 @@ struct PluginDiscovery {
         let pluginType: String
         let instanceID: String
         let startedAt: TimeInterval
+        let omiBaseURL: String?
     }
 
     /// Path: `~/.config/omi/ai-clone-plugin.json`
@@ -120,7 +121,8 @@ struct PluginDiscovery {
             devMode: json["dev_mode"] as? Bool ?? false,
             pluginType: json["plugin_type"] as? String ?? "unknown",
             instanceID: json["instance_id"] as? String ?? "",
-            startedAt: json["started_at"] as? TimeInterval ?? 0
+            startedAt: json["started_at"] as? TimeInterval ?? 0,
+            omiBaseURL: json["omi_base_url"] as? String
         )
     }
 

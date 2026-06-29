@@ -10,15 +10,7 @@ struct AIClonePage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 10) {
-                    Image(systemName: "bubble.left.and.bubble.right.fill")
-                        .scaledFont(size: 28, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
-                    Text("AI Clone")
-                        .scaledFont(size: 28, weight: .bold)
-                        .foregroundColor(OmiColors.textPrimary)
-                }
+            VStack(alignment: .leading, spacing: 0) {
                 Text("Omi replies to messages on your behalf using your persona. Connect a messaging app to get started.")
                     .scaledFont(size: 14)
                     .foregroundColor(OmiColors.textSecondary)
