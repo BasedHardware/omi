@@ -60,6 +60,16 @@ struct ConnectSheet: View {
     @State private var pollingForHandshake = false
     @State private var pollCount = 0
     @State private var handshakeSecondsRemaining: Int = 0
+    // P1 (cubic): handshake success vs. timeout. Polling /health is NOT
+    // a confirmation that the user completed the handshake — /health
+    // returns 200 as long as the plugin process is up, regardless of
+    // whether anyone sent /start. Use a separate boolean that's set
+    // true ONLY when the polling loop saw a reachable /health WITHIN
+    // the handshake window. The loop's "set false on exit" logic was
+    // ambiguous about success vs timeout and falsely reported
+    // "Connected" on both.
+    @State private var handshakeCompleted: Bool = false
+    @State private var handshakeTimedOut: Bool = false
 
     /// Bumped when the user types in a credential field. While set,
     /// the clipboard watcher won't auto-fill that field — protects
@@ -305,14 +315,35 @@ struct ConnectSheet: View {
                         : "Use the QR code or deep link below to open \(plugin.displayName) on your phone."
                 )
 
-                if !pollingForHandshake && setupResult != nil {
-                    // Final success state after handshake completes.
+                if handshakeCompleted && setupResult != nil {
+                    // Final success state — the polling loop confirmed
+                    // /health was reachable during the handshake window.
+                    // P1 (cubic): previously this checked `!pollingForHandshake`,
+                    // which is also true on timeout — so the UI falsely
+                    // reported "Connected" when the user never sent /start.
                     HStack(spacing: 6) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(OmiColors.success)
                         Text("Connected")
                             .scaledFont(size: 14, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
+                    }
+                    .padding(.top, 4)
+                } else if handshakeTimedOut && setupResult != nil {
+                    // Handshake polling exhausted its window. Show a
+                    // distinct "Timed out" state — different from
+                    // "Connected" — so the user knows to retry.
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(OmiColors.error)
+                        Text("Connection timed out")
+                            .scaledFont(size: 14, weight: .semibold)
+                            .foregroundColor(OmiColors.textPrimary)
+                        Button("Retry") {
+                            startHandshakePolling()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                     }
                     .padding(.top, 4)
                 }
@@ -382,20 +413,42 @@ struct ConnectSheet: View {
                     .frame(height: 1)
             }
 
-            if let qrImage = QRCodeGenerator.generate(deepLink, size: 160) {
-                Image(nsImage: qrImage)
-                    .interpolation(.none)  // crisp pixel edges
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 160, height: 160)
-                    .padding(8)
-                    .background(Color.white)
-                    .cornerRadius(8)
-                    .help("Scan with your phone camera to open the Telegram deep link")
+            if ConnectSheet.isSafeDeepLink(deepLink, plugin: plugin) {
+                // Safe path: the URL has the right scheme + per-plugin host.
+                // The Open button is already gated by isSafeDeepLink; the
+                // QR generator just renders pixels, so it would happily
+                // produce a QR for any string — gate the RENDER too so a
+                // compromised plugin can't phish via a scannable image.
+                if let qrImage = QRCodeGenerator.generate(deepLink, size: 160) {
+                    Image(nsImage: qrImage)
+                        .interpolation(.none)  // crisp pixel edges
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 160, height: 160)
+                        .padding(8)
+                        .background(Color.white)
+                        .cornerRadius(8)
+                        .help("Scan with your phone camera to open the Telegram deep link")
+                } else {
+                    Text("(QR generation failed)")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
             } else {
-                Text("(QR generation failed)")
-                    .scaledFont(size: 11)
-                    .foregroundColor(OmiColors.textTertiary)
+                // P1 (cubic): refuse to render a QR for an unsafe URL.
+                // The Open button would also refuse, but a QR is a
+                // separate attack surface — a user might scan the QR
+                // even though they wouldn't click the button. Render an
+                // explicit warning instead of a QR.
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(OmiColors.error)
+                    Text("Refusing to render QR — plugin returned an unsafe URL")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.error)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(8)
             }
         }
     }
@@ -565,8 +618,11 @@ struct ConnectSheet: View {
     @State private var handshakeTimerTask: Task<Void, Never>?
 
     private func startHandshakePolling() {
+        // Reset all handshake state so a retry starts clean.
         pollingForHandshake = true
         pollCount = 0
+        handshakeCompleted = false
+        handshakeTimedOut = false
         // Tier 1 improvement (4): countdown timer for the user.
         handshakeSecondsRemaining = ConnectSheet.maxPollIterations * 3
         handshakeTimerTask?.cancel()
@@ -590,7 +646,15 @@ struct ConnectSheet: View {
                     baseURL: config.pluginURL
                 )) ?? false
                 if reachable {
+                    // P1 (cubic): the only path that sets handshakeCompleted
+                    // is a successful /health hit during the polling window.
+                    // Reaching this branch is necessary but not sufficient
+                    // for a real handshake — the plugin doesn't yet expose
+                    // a /status endpoint that confirms the user sent /start.
+                    // When /status lands (Tier 2), this gate is upgraded
+                    // to check the actual handshake-complete bit.
                     await MainActor.run {
+                        handshakeCompleted = true
                         pollingForHandshake = false
                         handshakeTimerTask?.cancel()
                     }
@@ -598,6 +662,13 @@ struct ConnectSheet: View {
                 }
             }
             await MainActor.run {
+                // Loop exited without setting handshakeCompleted — either
+                // we hit the timeout (pollCount == maxPollIterations) or
+                // the user cancelled. The UI distinguishes via the
+                // handshakeTimedOut flag.
+                if pollingForHandshake {
+                    handshakeTimedOut = true
+                }
                 pollingForHandshake = false
                 handshakeTimerTask?.cancel()
             }
