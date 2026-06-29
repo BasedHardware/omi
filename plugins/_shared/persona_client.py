@@ -81,20 +81,26 @@ async def chat(
             # uid is sent as a query parameter because the backend uses it for
             # both route lookup (FastAPI extracts it from the URL) and the
             # tight auth check (api_key must be issued for this exact uid).
-            response = await client.post(url, headers=headers, params={"uid": uid}, json=body)
-            response.raise_for_status()
+            #
+            # We use client.stream() (not .post()) so the connection lifecycle
+            # stays open while we iterate SSE events. client.post() would buffer
+            # the entire body in memory before returning, defeating the
+            # per-chunk read timeout and letting a slow stream hold a worker
+            # far longer than `timeout_seconds`. Identified by cubic (P1).
+            async with client.stream("POST", url, headers=headers, params={"uid": uid}, json=body) as response:
+                response.raise_for_status()
 
-            async def _consume_stream() -> str:
-                chunks: list[str] = []
-                async for event in EventSource(response).aiter_sse():
-                    # event.data is the joined payload of one SSE event — for the
-                    # persona-chat endpoint that's the chunk text (the backend yields
-                    # `data: <token>` per token, sometimes multi-line).
-                    if event.data:
-                        chunks.append(event.data)
-                return _join_chunks(chunks)
+                async def _consume_stream() -> str:
+                    chunks: list[str] = []
+                    async for event in EventSource(response).aiter_sse():
+                        # event.data is the joined payload of one SSE event — for the
+                        # persona-chat endpoint that's the chunk text (the backend yields
+                        # `data: <token>` per token, sometimes multi-line).
+                        if event.data:
+                            chunks.append(event.data)
+                    return _join_chunks(chunks)
 
-            return await asyncio.wait_for(_consume_stream(), timeout=timeout_seconds)
+                return await asyncio.wait_for(_consume_stream(), timeout=timeout_seconds)
     except httpx.TimeoutException as e:
         logger.error(
             "persona chat timed out after %.1fs (app_id=%s, uid=%s)",
