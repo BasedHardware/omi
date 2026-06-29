@@ -22,6 +22,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# `COPY . .` is intentionally broad here — the matching .dockerignore
+# (in this same directory) excludes test/, .venv/, .env, users_data.json,
+# pending_setups.json, scripts/, E2E_RUNBOOK.md, etc. The build-context
+# requirement (header comment above) is the second line of defence.
+# Identified by cubic (P2) on PR #8531.
 COPY . .
 
 ENV STORAGE_DIR=/app/data
