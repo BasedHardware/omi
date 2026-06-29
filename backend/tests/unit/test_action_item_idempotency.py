@@ -19,7 +19,10 @@ backwards compat) and the router-layer key derivation.
 
 import sys
 import types
+from pathlib import Path
 from unittest.mock import MagicMock
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 def _ensure_module(name):
@@ -32,12 +35,17 @@ for mod_name in [
     'firebase_admin',
     'firebase_admin.auth',
     'google',
+    'google.api_core',
+    'google.api_core.exceptions',
     'google.cloud',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
     'google.cloud.firestore_v1.base_query',
 ]:
     _ensure_module(mod_name)
+
+database_pkg = _ensure_module('database')
+database_pkg.__path__ = [str(BACKEND_DIR / 'database')]
 
 
 class _FakeFirestoreClient:
@@ -63,6 +71,7 @@ class _FieldFilter:
 sys.modules['google.cloud.firestore'].FieldFilter = _FieldFilter
 sys.modules['google.cloud.firestore_v1'].FieldFilter = _FieldFilter
 sys.modules['google.cloud.firestore_v1.base_query'].FieldFilter = _FieldFilter
+sys.modules['google.api_core.exceptions'].NotFound = type('NotFound', (Exception,), {})
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
 # Stub firestore client singleton.

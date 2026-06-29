@@ -502,7 +502,7 @@ Complete reference for all `.env` variables:
 </Tabs>
 
 <Warning>
-The `ENCRYPTION_SECRET` in `.env.template` is for development only. **Generate a new secure key for production!**
+`.env.template` intentionally leaves `ENCRYPTION_SECRET` blank. Generate a unique securely managed value of at least 32 bytes for every real environment.
 </Warning>
 
 ---

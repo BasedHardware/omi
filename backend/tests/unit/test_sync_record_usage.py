@@ -141,7 +141,7 @@ class TestV2RecordUsage:
         body = self._get_v2_body()
         record_idx = body.find('record_usage,')
         preceding = body[max(0, record_idx - 300) : record_idx]
-        assert 'successful_segments > 0' in preceding, "record_usage must be guarded by successful_segments > 0"
+        assert 'usage_seconds > 0' in preceding, "record_usage must be guarded by positive usage seconds"
 
     def test_record_usage_before_final_mark_job_completed(self):
         """record_usage must run before the final mark_job_completed (after segment processing)."""
