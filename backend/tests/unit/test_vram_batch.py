@@ -3,10 +3,35 @@
 import asyncio
 import os
 import struct
+import sys
 import tempfile
 import time
 import unittest
 from unittest.mock import MagicMock, patch
+
+os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
+os.environ.setdefault("PARAKEET_DEVICE", "cpu")
+os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
+os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
+
+_torch = MagicMock()
+_torch.cuda.is_available.return_value = False
+_torch.cuda.memory_allocated.return_value = 0
+_torch_props = MagicMock()
+_torch_props.total_memory = 16 * 1024**3
+_torch.cuda.get_device_properties.return_value = _torch_props
+_torch.cuda.empty_cache = MagicMock()
+_torch.inference_mode = lambda: (lambda fn: fn)
+_torch.compile = lambda m: m
+_torch.backends.cudnn = MagicMock()
+sys.modules.setdefault("torch", _torch)
+
+for _mod in ["nemo", "nemo.collections", "nemo.collections.asr"]:
+    sys.modules.setdefault(_mod, MagicMock())
+for _mod in ["pyannote", "pyannote.audio", "pyannote.audio.core", "pyannote.audio.core.model"]:
+    sys.modules.setdefault(_mod, MagicMock())
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
 from batch_engine import BatchEngine, PendingRequest
 
@@ -98,11 +123,11 @@ class TestEstimateMaxBatch(unittest.TestCase):
         self.assertLessEqual(result, 8)
         self.assertGreaterEqual(result, 5)
 
-    def test_very_long_files_cap_to_one(self):
-        # 600s: T=7500, per_file = 136.6 * 7500^2 / 1024^2 = 7329 MB
-        # 12718 / 7329 = 1
+    def test_very_long_files_skip_limit_in_auto(self):
+        # 600s >= 300s threshold, auto mode switches to local attention
+        # so VRAM cap is bypassed (linear scaling, no quadratic issue)
         result = self.engine._estimate_max_batch(600.0)
-        self.assertLessEqual(result, 2)
+        self.assertEqual(result, 32)
 
     def test_disabled_returns_max(self):
         engine = _make_engine(vram_safety_factor=0)
@@ -115,6 +140,35 @@ class TestEstimateMaxBatch(unittest.TestCase):
     def test_zero_duration_returns_max(self):
         result = self.engine._estimate_max_batch(0.0)
         self.assertEqual(result, 32)
+
+    def test_local_attention_skips_limit(self):
+        engine = _make_engine(attention_mode="local")
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(engine.start())
+        loop.close()
+        result = engine._estimate_max_batch(600.0)
+        self.assertEqual(result, 32)
+
+    def test_auto_mode_long_file_skips_limit(self):
+        result = self.engine._estimate_max_batch(400.0)
+        self.assertEqual(result, 32)
+
+    def test_auto_mode_short_file_applies_limit(self):
+        result = self.engine._estimate_max_batch(250.0)
+        self.assertLess(result, 32)
+
+    def test_auto_unknown_duration_not_bypassed(self):
+        result = self.engine._estimate_max_batch(300.0, duration_known=False)
+        self.assertLess(result, 32)
+
+    def test_negative_budget_caps_to_one(self):
+        engine = _make_engine(vram_safety_factor=0.1)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(engine.start())
+        loop.close()
+        engine._vram_available_mb = 0.0
+        result = engine._estimate_max_batch(300.0)
+        self.assertEqual(result, 1)
 
 
 class TestFormVramSafeBatch(unittest.TestCase):
