@@ -122,6 +122,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationSpacing: CGFloat = 8
     private static let askOmiAnimationDuration: TimeInterval = 0.055
     private static let askOmiSettleDelay: TimeInterval = 0.065
+    private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
     private static let topInset: CGFloat = 40
     private static let topInsetWhenNotchModeFallsBackToPill: CGFloat = 4
     /// Minimum window height when AI response first appears.
@@ -157,6 +158,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
     private var frameAnimationToken: Int = 0
+    private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
 
     private var notchModeEnabled: Bool {
         Self.screenHasCameraHousing(screenForPlacement)
@@ -304,6 +306,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else {
             centerOnMainScreen()
         }
+        scheduleStartupDisplayRevalidation()
     }
 
     /// Clamp `rect` so it stays entirely inside `visible`. visibleFrame already
@@ -462,7 +465,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.validatePositionOnScreenChange()
+                self?.validatePositionOnScreenChange(reason: "screen_parameters_changed")
             }
         }
 
@@ -1575,11 +1578,25 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Called when monitors are connected/disconnected. Re-center if the bar is no longer
     /// fully visible on any screen.
-    private func validatePositionOnScreenChange() {
+    private func scheduleStartupDisplayRevalidation() {
+        startupDisplayRevalidationWorkItems.forEach { $0.cancel() }
+        startupDisplayRevalidationWorkItems = Self.startupDisplayRevalidationDelays.map { delay in
+            let workItem = DispatchWorkItem { [weak self] in
+                Task { @MainActor in
+                    self?.validatePositionOnScreenChange(reason: "startup_display_revalidation")
+                }
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+            return workItem
+        }
+    }
+
+    private func validatePositionOnScreenChange(reason: String) {
+        guard !isUserDragging else { return }
         updateNotchIslandState()
         // Non-draggable mode: always restore to default position on screen change
         if !ShortcutSettings.shared.draggableBarEnabled || notchModeEnabled {
-            log("FloatingControlBarWindow: non-draggable mode, re-centering after monitor change")
+            log("FloatingControlBarWindow: re-centering after display revalidation reason=\(reason) usesNotch=\(notchModeEnabled)")
             centerOnMainScreen()
             return
         }
@@ -1594,12 +1611,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if let targetScreen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(barFrame) }) {
             let clamped = FloatingControlBarWindow.clamp(barFrame, to: targetScreen.visibleFrame)
             if clamped != barFrame {
-                log("FloatingControlBarWindow: clamping bar \(barFrame) to \(targetScreen.visibleFrame) after monitor change")
+                log("FloatingControlBarWindow: clamping bar \(barFrame) to \(targetScreen.visibleFrame) after display revalidation reason=\(reason)")
                 self.setFrameOrigin(clamped.origin)
                 UserDefaults.standard.set(NSStringFromPoint(clamped.origin), forKey: FloatingControlBarWindow.positionKey)
             }
         } else {
-            log("FloatingControlBarWindow: bar frame \(barFrame) does not intersect any visible screen, re-centering")
+            log("FloatingControlBarWindow: bar frame \(barFrame) does not intersect any visible screen, re-centering reason=\(reason)")
             UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
             centerOnMainScreen()
         }
