@@ -287,6 +287,11 @@ def get_action_items(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Get action items for the current user."""
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
+    if due_start_date is not None and due_end_date is not None and due_start_date > due_end_date:
+        raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
+
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
