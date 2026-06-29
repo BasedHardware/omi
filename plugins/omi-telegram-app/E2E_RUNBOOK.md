@@ -166,9 +166,14 @@ INFO:     127.0.0.1:XXXXX - "POST /webhook HTTP/1.1" 200 OK
 
 ### Step 6: Verify the chat_id binding
 
-The `/start` path of the webhook handler will try to look up a pending setup token. Since we didn't go through `/setup`, it has no token to match, so it sends a "this setup link is invalid" reply and returns 200. You'll see the bot reply to you on Telegram with the rejection message.
+The `/start` path of the webhook handler will try to look up a pending setup token. Since we didn't go through `/setup`, it has no token to match. **The plugin will look up a `bot_token` for the chat, find nothing, and `telegram_client.send_message` will be called with an empty token — Telegram returns 404, the call fails silently, and no reply reaches your phone.** In the plugin log you'll see:
 
-That confirms the round-trip works. To actually bind the chat for auto-reply, you need to use `/setup` first (Layer 3).
+```
+INFO httpx: HTTP Request: POST https://api.telegram.org/bot/sendMessage "HTTP/1.1 404 Not Found"
+ERROR telegram_client: send_message failed for chat_id=999999: HTTP 404
+```
+
+The `/webhook` itself returns `200 OK` to Telegram (Telegram needs that — anything else triggers an infinite retry). So the **only** Layer 2 signal that the round-trip works is the `200 OK` in the plugin log, not anything on your phone. To actually see a Telegram reply from your bot, you need Layer 3 (which wires `/setup` first).
 
 ### Stopping
 
