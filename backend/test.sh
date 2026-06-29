@@ -94,6 +94,7 @@ pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
 pytest tests/unit/test_conversations_date_range_validation.py -v
 pytest tests/unit/test_calendar_autolink_invalid_timestamp.py -v
+pytest tests/unit/test_calendar_timezone.py -v
 pytest tests/unit/test_prompt_cache_optimization.py -v
 pytest tests/unit/test_prompt_cache_integration.py -v
 pytest tests/unit/test_firestore_cache.py -v
