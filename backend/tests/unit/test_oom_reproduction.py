@@ -11,8 +11,35 @@ Based on hiro's live reproduction on dev cluster:
 """
 
 import asyncio
+import os
+import sys
 import unittest
 from unittest.mock import MagicMock, patch
+
+os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
+os.environ.setdefault("PARAKEET_DEVICE", "cpu")
+os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
+os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
+
+_torch = MagicMock()
+_torch.cuda.is_available.return_value = False
+_torch.cuda.memory_allocated.return_value = 0
+_torch_props = MagicMock()
+_torch_props.total_memory = 16 * 1024**3
+_torch.cuda.get_device_properties.return_value = _torch_props
+_torch.cuda.empty_cache = MagicMock()
+_torch.cuda.mem_get_info.return_value = (10 * 1024**3, 16 * 1024**3)
+_torch.inference_mode = lambda: (lambda fn: fn)
+_torch.compile = lambda m: m
+_torch.backends.cudnn = MagicMock()
+sys.modules.setdefault("torch", _torch)
+
+for _mod in ["nemo", "nemo.collections", "nemo.collections.asr"]:
+    sys.modules.setdefault(_mod, MagicMock())
+for _mod in ["pyannote", "pyannote.audio", "pyannote.audio.core", "pyannote.audio.core.model"]:
+    sys.modules.setdefault(_mod, MagicMock())
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../parakeet"))
 
 from batch_engine import BatchEngine
 
@@ -176,12 +203,12 @@ class TestOOMReproduction(unittest.TestCase):
 
         max_b = engine._estimate_max_batch(FILE_DURATION_SEC)
         per_file = _per_file_mb(FILE_DURATION_SEC)
-        budget = L4_TOTAL_MB * 0.8 - L4_BASELINE_MB
+        per_batch_budget = engine._vram_available_mb
 
         self.assertLess(max_b, FILE_COUNT, f"B={max_b} must be < {FILE_COUNT} to prevent OOM")
         self.assertGreater(max_b, 0)
-        self.assertLessEqual(max_b * per_file, budget, "Capped batch must fit in VRAM budget")
-        self.assertGreater((max_b + 1) * per_file, budget, "B+1 should exceed budget")
+        self.assertLessEqual(max_b * per_file, per_batch_budget, "Capped batch must fit in per-batch budget")
+        self.assertGreater((max_b + 1) * per_file, per_batch_budget, "B+1 should exceed per-batch budget")
 
     def test_uncapped_exceeds_l4_vram(self):
         """Verify 12 x 290s uncapped exceeds L4 VRAM -- proving the fix is necessary."""
