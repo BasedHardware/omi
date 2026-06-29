@@ -16,6 +16,8 @@ environments:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
     cloud_run:
+      workflow_files:
+        - .github/workflows/gcp_backend_auto_dev.yml
       services:
         backend:
           env:
