@@ -25,6 +25,7 @@ EXCLUDED_DIR_NAMES = {
 }
 
 NORMALIZED_EXCLUDED_DIR_NAMES = {
+    ".pio",
     "Generated",
     "generated",
     "vendor",
@@ -108,7 +109,7 @@ def count_markers(root: Path, raw: bool) -> tuple[dict[str, int], dict[str, int]
         except UnicodeDecodeError:
             try:
                 text = path.read_text(encoding="latin-1")
-            except UnicodeDecodeError:
+            except OSError:
                 continue
         except OSError:
             continue
