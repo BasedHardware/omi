@@ -185,42 +185,62 @@ final class ConnectSheetDeepLinkSafetyTests: XCTestCase {
     private typealias Safe = ConnectSheet
 
     func testAllowsTelegramDeepLink() {
-        XCTAssertTrue(Safe.isSafeDeepLink("https://t.me/mybot?start=abc123"))
+        XCTAssertTrue(Safe.isSafeDeepLink("https://t.me/mybot?start=abc123", plugin: .telegram))
     }
 
     func testAllowsWhatsAppDeepLink() {
-        XCTAssertTrue(Safe.isSafeDeepLink("https://wa.me/15550001111?text=/start%20token"))
+        XCTAssertTrue(Safe.isSafeDeepLink("https://wa.me/15550001111?text=/start%20token", plugin: .whatsapp))
     }
 
     func testAllowsHttpForDev() {
         // http is in the scheme allowlist (validation lives in AICloneConfig
         // for the *plugin URL*; the deep-link allowlist is intentionally
         // permissive for http because dev environments use it).
-        XCTAssertTrue(Safe.isSafeDeepLink("http://t.me/mybot?start=token"))
+        XCTAssertTrue(Safe.isSafeDeepLink("http://t.me/mybot?start=token", plugin: .telegram))
     }
 
     func testRejectsEvilHost() {
         // https is the right scheme, but the host isn't in the allowlist.
-        XCTAssertFalse(Safe.isSafeDeepLink("https://evil.com/phishing"))
+        XCTAssertFalse(Safe.isSafeDeepLink("https://evil.com/phishing", plugin: .telegram))
     }
 
     func testRejectsFileScheme() {
-        XCTAssertFalse(Safe.isSafeDeepLink("file:///etc/passwd"))
+        XCTAssertFalse(Safe.isSafeDeepLink("file:///etc/passwd", plugin: .telegram))
     }
 
     func testRejectsSSHScheme() {
-        XCTAssertFalse(Safe.isSafeDeepLink("ssh://attacker.example"))
+        XCTAssertFalse(Safe.isSafeDeepLink("ssh://attacker.example", plugin: .telegram))
     }
 
     func testRejectsJavaScriptScheme() {
-        XCTAssertFalse(Safe.isSafeDeepLink("javascript:alert(1)"))
+        XCTAssertFalse(Safe.isSafeDeepLink("javascript:alert(1)", plugin: .telegram))
     }
 
     func testRejectsMalformedURL() {
-        XCTAssertFalse(Safe.isSafeDeepLink("not a url at all"))
+        XCTAssertFalse(Safe.isSafeDeepLink("not a url at all", plugin: .telegram))
     }
 
     func testRejectsEmptyString() {
-        XCTAssertFalse(Safe.isSafeDeepLink(""))
+        XCTAssertFalse(Safe.isSafeDeepLink("", plugin: .telegram))
+    }
+
+    // P1 cubic follow-up: the host check is bound to the active plugin.
+    // A Telegram deep link must NOT be accepted in a WhatsApp connect
+    // sheet (and vice versa) — a compromised plugin service could try
+    // to phish by returning the other platform's host. Both directions
+    // are tested.
+
+    func testRejectsTelegramHostInWhatsAppContext() {
+        let telegramURL = "https://t.me/mybot?start=abc123"
+        XCTAssertTrue(Safe.isSafeDeepLink(telegramURL, plugin: .telegram))
+        XCTAssertFalse(Safe.isSafeDeepLink(telegramURL, plugin: .whatsapp),
+                       "t.me URL must not open in a WhatsApp connect sheet")
+    }
+
+    func testRejectsWhatsAppHostInTelegramContext() {
+        let whatsappURL = "https://wa.me/15550001111?text=/start%20token"
+        XCTAssertTrue(Safe.isSafeDeepLink(whatsappURL, plugin: .whatsapp))
+        XCTAssertFalse(Safe.isSafeDeepLink(whatsappURL, plugin: .telegram),
+                       "wa.me URL must not open in a Telegram connect sheet")
     }
 }
