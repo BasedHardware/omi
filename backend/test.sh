@@ -85,6 +85,7 @@ pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_retrieval_semantics.py -v
 pytest tests/unit/test_conversation_tool_date_range_bound.py -v
+pytest tests/unit/test_search_conversations_utc_timestamps.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
