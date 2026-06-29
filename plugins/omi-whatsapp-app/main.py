@@ -14,6 +14,8 @@ swapped for the Meta WhatsApp Business Cloud API (graph.facebook.com/v22.0).
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -104,8 +106,6 @@ async def webhook_verify(
     Meta retries verification indefinitely on non-2xx, so 403 is the right
     response to a wrong token (lets the user know their config is bad).
     """
-    import simple_storage  # local import to avoid pulling storage into /health
-
     if hub_mode != "subscribe":
         # Not a verification request — could be a manual GET. Treat as 404.
         raise HTTPException(status_code=404, detail="Not Found")
@@ -146,9 +146,6 @@ async def webhook_delivery(
     # Optional HMAC verification. If WHATSAPP_APP_SECRET is set, we verify the
     # signature. If unset (dev), we skip — production must set this.
     if _WHATSAPP_APP_SECRET:
-        import hmac
-        import hashlib
-
         if not x_hub_signature_256:
             raise HTTPException(status_code=401, detail="Missing X-Hub-Signature-256")
         # Header format: "sha256=<hex>"
@@ -161,10 +158,16 @@ async def webhook_delivery(
             hashlib.sha256,
         ).hexdigest()
         if not hmac.compare_digest(presented_sig, expected_sig):
+            # Do NOT log the full presented/expected sigs — they are
+            # derived from WHATSAPP_APP_SECRET and should not appear in
+            # logs (any reader of /tmp/omi-dev.log could correlate them
+            # back to the secret). A generic mismatch + short correlation
+            # id is enough for debugging. Maintainer-flagged on PR #8528.
+            correlation_id = presented_sig[:8]
             logger.warning(
-                "webhook signature mismatch (presented=%s expected=%s)",
-                presented_sig,
-                expected_sig,
+                "webhook signature mismatch (correlation_id=%s, len_presented=%d)",
+                correlation_id,
+                len(presented_sig),
             )
             raise HTTPException(status_code=401, detail="Invalid signature")
 
