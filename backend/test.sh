@@ -110,6 +110,7 @@ pytest tests/unit/test_file_upload_security.py -v
 pytest tests/unit/test_file_upload_endpoint_security.py -v
 pytest tests/unit/test_auth_redirect_uri.py -v
 pytest tests/unit/test_integrations_oauth_async_offload.py -v
+pytest tests/unit/test_oauth_state_atomic_consume.py -v
 pytest tests/unit/test_pusher_heartbeat.py -v
 pytest tests/unit/test_pusher_conversation_retry.py -v
 pytest tests/unit/utils/test_listen_pusher_session.py -v
