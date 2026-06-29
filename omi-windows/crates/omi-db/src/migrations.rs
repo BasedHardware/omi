@@ -53,6 +53,12 @@ pub fn run(conn: &Connection) -> Result<()> {
         conn.execute("INSERT INTO schema_version (version) VALUES (6)", [])?;
     }
 
+    if current < 7 {
+        tracing::info!("Running migration v7: app_usage");
+        conn.execute_batch(MIGRATION_V7)?;
+        conn.execute("INSERT INTO schema_version (version) VALUES (7)", [])?;
+    }
+
     Ok(())
 }
 
@@ -181,4 +187,16 @@ CREATE TABLE IF NOT EXISTS goals (
 );
 
 CREATE INDEX IF NOT EXISTS idx_goals_status ON goals(status);
+";
+
+const MIGRATION_V7: &str = "
+CREATE TABLE IF NOT EXISTS app_usage (
+    id TEXT PRIMARY KEY,
+    app_name TEXT NOT NULL,
+    date TEXT NOT NULL,
+    total_seconds INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(app_name, date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_usage_date ON app_usage(date DESC);
 ";
