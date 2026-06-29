@@ -61,9 +61,11 @@ class FakeEnc:
 
     @staticmethod
     def decrypt(ciphertext, uid):
+        # Mirror production utils.encryption.decrypt: on failure (wrong key / corrupt data) it does
+        # NOT raise, it returns the input ciphertext unchanged. The migration must detect that.
         prefix = f"{uid}::"
         if not isinstance(ciphertext, str) or not ciphertext.startswith(prefix):
-            raise ValueError("key mismatch")
+            return ciphertext
         return ciphertext[len(prefix) :]
 
 

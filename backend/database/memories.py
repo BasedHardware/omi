@@ -443,14 +443,15 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
         # Enhanced memories are encrypted with a per-user key (the uid is the HKDF salt), so content
         # encrypted for prev_uid is unreadable to new_uid. Decrypt with the previous user's key and
         # re-encrypt with the new user's key before copying, so the new owner can read them.
-        if memory.get('data_protection_level') == 'enhanced' and isinstance(memory.get('content'), str):
-            try:
-                plaintext = encryption.decrypt(memory['content'], prev_uid)
-            except Exception:
-                # The content cannot be decrypted with the source user's key (e.g. already-corrupted
-                # ciphertext). Copy it unchanged and log it, rather than re-encrypting the ciphertext
-                # under the new key, which would mask the corruption as a value the new owner can
-                # "decrypt".
+        content = memory.get('content')
+        if memory.get('data_protection_level') == 'enhanced' and isinstance(content, str) and content:
+            plaintext = encryption.decrypt(content, prev_uid)
+            if plaintext == content:
+                # encryption.decrypt returns its input unchanged when it cannot decrypt (wrong key or
+                # corrupted ciphertext) rather than raising, so an unchanged value means decryption
+                # failed. Copy the memory as-is and log it, rather than re-encrypting the still-
+                # encrypted content under new_uid (which the new owner could "decrypt" back to the old
+                # ciphertext, masking the corruption).
                 logger.warning(f"migrate_memories: could not decrypt memory {memory.get('id')}; copying as-is")
             else:
                 memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
