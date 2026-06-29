@@ -1,0 +1,251 @@
+"""Tests for VRAM-aware batch sizing in batch_engine.py."""
+
+import asyncio
+import os
+import struct
+import tempfile
+import time
+import unittest
+from unittest.mock import MagicMock, patch
+
+from batch_engine import BatchEngine, PendingRequest
+
+
+def _make_wav(duration_sec, sample_rate=16000):
+    num_samples = int(duration_sec * sample_rate)
+    data_size = num_samples * 2
+    header = b"RIFF"
+    header += struct.pack("<I", 36 + data_size)
+    header += b"WAVE"
+    header += b"fmt "
+    header += struct.pack("<IHHIIHH", 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
+    header += b"data"
+    header += struct.pack("<I", data_size)
+    return header + b"\x00" * data_size
+
+
+def _make_engine(
+    vram_total_mb=23034,
+    vram_baseline_mb=5709,
+    attention_mode="auto",
+    auto_threshold_sec=300,
+    max_batch_size=32,
+    vram_safety_factor=0.8,
+    vram_bytes_per_t2=136.6,
+    starvation_timeout_sec=5.0,
+):
+    gpu = MagicMock()
+    gpu.vram_info = {
+        "total_mb": vram_total_mb,
+        "baseline_mb": vram_baseline_mb,
+        "attention_mode": attention_mode,
+        "auto_threshold_sec": auto_threshold_sec,
+    }
+    engine = BatchEngine(
+        gpu_worker=gpu,
+        max_batch_size=max_batch_size,
+        vram_safety_factor=vram_safety_factor,
+        vram_bytes_per_t2=vram_bytes_per_t2,
+        starvation_timeout_sec=starvation_timeout_sec,
+    )
+    return engine
+
+
+def _pending(duration_sec=None, age_sec=0.0):
+    req = PendingRequest.__new__(PendingRequest)
+    req.audio_path = f"test_{duration_sec}s.wav"
+    req.timestamps = False
+    req.future = MagicMock()
+    req.owns_file = False
+    req.submitted_at = time.monotonic() - age_sec
+    req.duration_sec = duration_sec
+    return req
+
+
+class TestEstimateMaxBatch(unittest.TestCase):
+    """Test _estimate_max_batch VRAM formula."""
+
+    def setUp(self):
+        self.engine = _make_engine()
+        # Budget: 23034 * 0.8 - 5709 = 12718.2 MB
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(self.engine.start())
+        loop.close()
+
+    def test_short_files_allow_full_batch(self):
+        # 30s files: T=375, per_file = 136.6 * 375^2 / 1024^2 = 18.3 MB
+        # 12718 / 18.3 = 694 → capped at 32
+        result = self.engine._estimate_max_batch(30.0)
+        self.assertEqual(result, 32)
+
+    def test_medium_files_cap_batch(self):
+        # 120s: T=1500, per_file = 136.6 * 1500^2 / 1024^2 = 293 MB
+        # 12718 / 293 = 43 → capped at 32
+        result = self.engine._estimate_max_batch(120.0)
+        self.assertEqual(result, 32)
+
+    def test_long_files_severely_cap(self):
+        # 250s: T=3125, per_file = 136.6 * 3125^2 / 1024^2 = 1272 MB
+        # 12718 / 1272 = 9
+        result = self.engine._estimate_max_batch(250.0)
+        self.assertLessEqual(result, 10)
+        self.assertGreaterEqual(result, 8)
+
+    def test_near_threshold_files_cap_to_one_or_two(self):
+        # 290s: T=3625, per_file = 136.6 * 3625^2 / 1024^2 = 1712 MB
+        # 12718 / 1712 = 7
+        result = self.engine._estimate_max_batch(290.0)
+        self.assertLessEqual(result, 8)
+        self.assertGreaterEqual(result, 5)
+
+    def test_very_long_files_cap_to_one(self):
+        # 600s: T=7500, per_file = 136.6 * 7500^2 / 1024^2 = 7329 MB
+        # 12718 / 7329 = 1
+        result = self.engine._estimate_max_batch(600.0)
+        self.assertLessEqual(result, 2)
+
+    def test_disabled_returns_max(self):
+        engine = _make_engine(vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(engine.start())
+        loop.close()
+        result = engine._estimate_max_batch(600.0)
+        self.assertEqual(result, 32)
+
+    def test_zero_duration_returns_max(self):
+        result = self.engine._estimate_max_batch(0.0)
+        self.assertEqual(result, 32)
+
+
+class TestFormVramSafeBatch(unittest.TestCase):
+    """Test _form_vram_safe_batch batch formation logic."""
+
+    def setUp(self):
+        self.engine = _make_engine()
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(self.engine.start())
+        loop.close()
+
+    def test_short_files_batch_fully(self):
+        candidates = [_pending(30.0) for _ in range(10)]
+        batch = self.engine._form_vram_safe_batch(candidates)
+        self.assertEqual(len(batch), 10)
+
+    def test_long_files_capped(self):
+        candidates = [_pending(250.0) for _ in range(20)]
+        batch = self.engine._form_vram_safe_batch(candidates)
+        self.assertLess(len(batch), 20)
+        self.assertGreater(len(batch), 0)
+
+    def test_mixed_durations_sorted_short_first(self):
+        candidates = [_pending(250.0), _pending(30.0), _pending(60.0)]
+        batch = self.engine._form_vram_safe_batch(candidates)
+        # Sorted by duration — short files should be first
+        self.assertEqual(batch[0].duration_sec, 30.0)
+
+    def test_unknown_duration_treated_conservatively(self):
+        candidates = [_pending(None) for _ in range(10)]
+        batch = self.engine._form_vram_safe_batch(candidates)
+        # Unknown uses auto_threshold_sec (300s) as effective duration
+        self.assertLess(len(batch), 10)
+
+    def test_starved_request_gets_priority(self):
+        old = _pending(250.0, age_sec=10.0)
+        new_items = [_pending(30.0) for _ in range(5)]
+        candidates = new_items + [old]
+        batch = self.engine._form_vram_safe_batch(candidates)
+        # Old request must be in batch
+        self.assertIn(old, batch)
+
+    def test_empty_candidates(self):
+        batch = self.engine._form_vram_safe_batch([])
+        self.assertEqual(len(batch), 0)
+
+    def test_single_candidate(self):
+        batch = self.engine._form_vram_safe_batch([_pending(600.0)])
+        self.assertEqual(len(batch), 1)
+
+    def test_vram_disabled_returns_max_slice(self):
+        engine = _make_engine(vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(engine.start())
+        loop.close()
+        candidates = [_pending(600.0) for _ in range(10)]
+        batch = engine._form_vram_safe_batch(candidates)
+        self.assertEqual(len(batch), 10)
+
+
+class TestDurationProbe(unittest.TestCase):
+    """Test _get_audio_duration for WAV files."""
+
+    def test_wav_duration(self):
+        wav = _make_wav(5.0)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(wav)
+            path = f.name
+        try:
+            dur = BatchEngine._get_audio_duration(path)
+            self.assertIsNotNone(dur)
+            self.assertAlmostEqual(dur, 5.0, places=1)
+        finally:
+            os.unlink(path)
+
+    def test_invalid_file_returns_none(self):
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            f.write(b"not a wav file")
+            path = f.name
+        try:
+            dur = BatchEngine._get_audio_duration(path)
+            self.assertIsNone(dur)
+        finally:
+            os.unlink(path)
+
+    def test_missing_file_returns_none(self):
+        dur = BatchEngine._get_audio_duration("/nonexistent/file.wav")
+        self.assertIsNone(dur)
+
+
+class TestProdOOMScenario(unittest.TestCase):
+    """Validate the VRAM formula against the actual prod OOM data."""
+
+    def test_prod_oom_prevented(self):
+        # Prod config: L4 22GB, baseline 5709 MiB, auto mode
+        engine = _make_engine(
+            vram_total_mb=22563,  # L4 total (from prod log)
+            vram_baseline_mb=5709,
+            attention_mode="auto",
+            auto_threshold_sec=300,
+        )
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(engine.start())
+        loop.close()
+
+        # The OOM batch was 12 files at ~250s each
+        # Formula should cap to < 12
+        max_b = engine._estimate_max_batch(250.0)
+        self.assertLess(max_b, 12, f"max_batch={max_b} would still OOM (prod had 12)")
+
+        # For 290s files (near threshold), should be even more restrictive
+        max_b_290 = engine._estimate_max_batch(290.0)
+        self.assertLess(max_b_290, max_b)
+
+    def test_short_files_still_efficient(self):
+        engine = _make_engine(
+            vram_total_mb=22563,
+            vram_baseline_mb=5709,
+        )
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(engine.start())
+        loop.close()
+
+        # 30s files should still allow large batches
+        max_b = engine._estimate_max_batch(30.0)
+        self.assertEqual(max_b, 32)
+
+        # 77s files (prod average) should allow decent batches
+        max_b_77 = engine._estimate_max_batch(77.0)
+        self.assertGreaterEqual(max_b_77, 10)
+
+
+if __name__ == "__main__":
+    unittest.main()
