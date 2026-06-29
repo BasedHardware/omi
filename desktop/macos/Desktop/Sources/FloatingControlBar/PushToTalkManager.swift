@@ -311,6 +311,10 @@ class PushToTalkManager: ObservableObject {
 
     let isFollowUp = isCurrentSessionFollowUp
     AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
+    DesktopDiagnosticsManager.shared.recordPTTStarted(
+      mode: isFollowUp ? "follow_up_hold" : "hold",
+      hubActive: RealtimeHubController.shared.isActive,
+      micPermissionGranted: hasMicPermission)
     let preOverlayImage = ScreenCaptureManager.captureScreenImage()
     updateBarState()
 
@@ -338,6 +342,10 @@ class PushToTalkManager: ObservableObject {
 
     let isFollowUp = isCurrentSessionFollowUp
     AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_locked" : "locked")
+    DesktopDiagnosticsManager.shared.recordPTTStarted(
+      mode: isFollowUp ? "follow_up_locked" : "locked",
+      hubActive: RealtimeHubController.shared.isActive,
+      micPermissionGranted: hasMicPermission)
 
     // If we were already listening from the first tap, keep going.
     // Otherwise start fresh.
@@ -611,6 +619,16 @@ class PushToTalkManager: ObservableObject {
       if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
         let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+        DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+          source: "hub",
+          mode: finalizedMode,
+          audioSeconds: totalSec,
+          voicedSeconds: nil,
+          peak: peak,
+          rms: rms,
+          deviceDescription: dev,
+          micPermissionGranted: hasMicPermission,
+          hubActive: true)
         log(
           "PushToTalkManager: discarding hub turn — audio \(String(format: "%.2f", totalSec))s "
             + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] "
@@ -629,6 +647,7 @@ class PushToTalkManager: ObservableObject {
       // itself; no transcript/router/LLM hop here.
       RealtimeHubController.shared.commitTurn()
       silentMicRecoveryPolicy.recordSuccessfulHubTurn()
+      DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       // Collapse the bar on release — the hub speaks its reply as audio (no inline
       // status UI), the same as the legacy voice path.
       updateBarState()
@@ -650,6 +669,17 @@ class PushToTalkManager: ObservableObject {
       batchAudioLock.unlock()
       let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: turnAudio)
       if totalSec < Self.minTurnAudioSeconds || voicedSec < Self.minVoicedSeconds {
+        let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
+        DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+          source: isOmniSTT ? "omni_stt" : "batch_stt",
+          mode: finalizedMode,
+          audioSeconds: totalSec,
+          voicedSeconds: voicedSec,
+          peak: peak,
+          rms: rms,
+          deviceDescription: audioCaptureService?.currentDeviceDescription,
+          micPermissionGranted: hasMicPermission,
+          hubActive: false)
         log(
           "PushToTalkManager: discarding silent turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not transcribing"
         )
@@ -795,6 +825,9 @@ class PushToTalkManager: ObservableObject {
       hadTranscript: hasQuery,
       transcriptLength: query.count
     )
+    if hasQuery {
+      DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: false)
+    }
 
     isCurrentSessionFollowUp = false
 
@@ -1012,6 +1045,16 @@ class PushToTalkManager: ObservableObject {
     if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
       let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
       let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+      DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+        source: "buffered_hub",
+        mode: finalizedMode,
+        audioSeconds: totalSec,
+        voicedSeconds: nil,
+        peak: peak,
+        rms: rms,
+        deviceDescription: dev,
+        micPermissionGranted: hasMicPermission,
+        hubActive: true)
       log(
         "PushToTalkManager: discarding buffered hub turn — audio \(String(format: "%.2f", totalSec))s "
           + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] — not committing")
@@ -1023,6 +1066,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
     RealtimeHubController.shared.commitTurn()
+    DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
     state = .idle
     updateBarState()
     AnalyticsManager.shared.floatingBarPTTEnded(
@@ -1036,6 +1080,17 @@ class PushToTalkManager: ObservableObject {
     batchAudioLock.unlock()
     let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: audio)
     guard totalSec >= Self.minTurnAudioSeconds, voicedSec >= Self.minVoicedSeconds else {
+      let (peak, rms) = Self.audioEnergy(pcm16k: audio)
+      DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+        source: "warm_wait_fallback",
+        mode: finalizedMode,
+        audioSeconds: totalSec,
+        voicedSeconds: voicedSec,
+        peak: peak,
+        rms: rms,
+        deviceDescription: audioCaptureService?.currentDeviceDescription,
+        micPermissionGranted: hasMicPermission,
+        hubActive: false)
       log(
         "PushToTalkManager: discarding warm-wait fallback turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s)")
       AnalyticsManager.shared.floatingBarPTTEnded(

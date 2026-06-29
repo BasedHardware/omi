@@ -330,6 +330,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       guard let self else { return }
       self.minting = false
       guard let token else {
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: "unknown",
+          phase: "warm")
         // Mint failed for this provider — try the OTHER realtime provider before the
         // legacy Claude cascade.
         if !self.failoverToAlternateProvider() {
@@ -1044,6 +1048,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       hasActiveTurn: hasActiveTurn)
     let categoryText = closeCategory.map { " category=\($0.rawValue)" } ?? ""
     let safeMessage = closeCategory == .providerPolicyCloseFast ? "" : " \(message)"
+    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+      provider: providerTag,
+      category: closeCategory?.rawValue,
+      aliveFor: aliveFor,
+      activeTurn: hasActiveTurn)
     if RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory) {
       logError("RealtimeHub: session error —\(categoryText) provider=\(providerTag)\(safeMessage)")
     } else {
