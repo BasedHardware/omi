@@ -21,6 +21,7 @@ import logging
 import os
 import sys
 import urllib.parse
+from collections import OrderedDict
 from typing import Optional
 
 # Add plugins/_shared to sys.path so `from persona_client import chat` works.
@@ -218,7 +219,15 @@ async def webhook_delivery(
 
     # Process each inbound message independently. /start handshake binds
     # the phone; subsequent messages dispatch to the persona.
+    #
+    # Skip messages whose wamid we have already seen — Meta retries carry the
+    # same id and we don't want to fire the persona twice for one user
+    # message. See _already_processed for the bounded FIFO set.
     for msg in inbound_messages:
+        wamid = msg.get("id")
+        if wamid and _already_processed(wamid):
+            logger.info("skipping duplicate wamid=%s", wamid)
+            continue
         await _handle_inbound_message(msg)
 
     return {"ok": True}
@@ -285,6 +294,40 @@ async def _handle_inbound_message(msg: dict) -> None:
         return
 
     await _dispatch_auto_reply(user, str(from_phone), text)
+
+
+# ---------------------------------------------------------------------------
+# Inbound-message deduplication.
+#
+# Meta's webhook delivery is at-least-once: a webhook that returns non-2xx (or
+# times out before Meta sees the response) is retried, potentially forever.
+# The retry carries the same `wamid` — Meta's unique message id. Without
+# dedup, a flaky network or a webhook handler that crashed after we
+# dispatched to the persona would trigger a duplicate persona call and a
+# duplicate outbound reply on every retry. Identified by cubic (P2).
+#
+# We keep a bounded in-memory OrderedDict of recently-seen wamids. FIFO
+# eviction at MAX_SEEN_WAMIDS bounds memory at ~10k entries, well under 1
+# MB and large enough to cover any plausible retry burst. On plugin restart
+# the set is empty — a restart is rare enough that re-firing one or two
+# persona calls is acceptable, and persisting dedup state to disk would
+# risk replaying messages that were already replied to in a previous
+# process lifetime.
+# ---------------------------------------------------------------------------
+MAX_SEEN_WAMIDS = 10_000
+_seen_wamids: "OrderedDict[str, None]" = OrderedDict()
+
+
+def _already_processed(wamid: str) -> bool:
+    """True if `wamid` was processed recently. Marks it as seen on first call."""
+    if wamid in _seen_wamids:
+        # Touch to keep most-recent order.
+        _seen_wamids.move_to_end(wamid)
+        return True
+    _seen_wamids[wamid] = None
+    while len(_seen_wamids) > MAX_SEEN_WAMIDS:
+        _seen_wamids.popitem(last=False)
+    return False
 
 
 def _iter_inbound_messages(payload: dict):
@@ -591,11 +634,19 @@ async def toggle(req: ToggleRequest):
     access_token, so callers can't enumerate which phones are registered by
     distinguishing 404 (unknown) from 403 (wrong token).
     """
-    user = simple_storage.get_user_by_phone(req.phone)
+    # Identified by cubic (P2): the previous version did an exact string
+    # match on `req.phone`, so users passing an E.164 variant (`+15550001111`,
+    # formatted with dashes / parens, etc.) would get a 403 even though their
+    # phone is registered. Normalize to digits-only before lookup; if the
+    # normalized form is too short to be a real number, reject with 403.
+    normalized = _normalize_e164(req.phone)
+    if not normalized:
+        raise HTTPException(status_code=403, detail="Invalid phone or access_token")
+    user = simple_storage.get_user_by_phone(normalized)
     # Same response for both 'unknown phone' and 'wrong access_token' so the
     # endpoint doesn't leak which phones exist (phone numbers are exposed in
     # Meta update payloads and could be enumerated otherwise).
     if user is None or not secrets.compare_digest(req.access_token, user["access_token"]):
         raise HTTPException(status_code=403, detail="Invalid phone or access_token")
-    simple_storage.update_auto_reply(req.phone, req.enabled)
-    return ToggleResponse(phone=req.phone, auto_reply_enabled=req.enabled)
+    simple_storage.update_auto_reply(normalized, req.enabled)
+    return ToggleResponse(phone=normalized, auto_reply_enabled=req.enabled)
