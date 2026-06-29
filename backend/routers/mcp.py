@@ -168,7 +168,10 @@ def mcp_get_folders(uid: str = Depends(get_uid_from_mcp_api_key)):
 
 
 @router.post("/v1/mcp/folders", tags=["mcp"])
-def mcp_create_folder(request: McpCreateFolder, uid: str = Depends(get_uid_from_mcp_api_key)):
+def mcp_create_folder(
+    request: McpCreateFolder,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "folders:write")),
+):
     try:
         folder = mcp_folders.create_folder(
             uid, name=request.name, description=request.description, color=request.color, icon=request.icon

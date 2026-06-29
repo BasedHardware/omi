@@ -174,6 +174,24 @@ def test_every_supported_scope_has_consent_permission_text():
     assert not missing, f"scopes missing SCOPE_PERMISSION_TEXT entries: {missing}"
 
 
+def test_folder_create_rate_limit_not_looser_than_memories():
+    # mcp_create_folder is a Firestore write an agent can loop on, so it sits behind
+    # with_rate_limit(..., "folders:write"). That policy must exist (or the dependency raises) and
+    # must not be easier to spam than memories:create (the MCP create-surface rate-limit convention).
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        'rate_limit_config_under_test', os.path.join(_BACKEND_DIR, 'utils', 'rate_limit_config.py')
+    )
+    rlc = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rlc)
+
+    assert 'folders:write' in rlc.RATE_POLICIES
+    folders_max, folders_window = rlc.RATE_POLICIES['folders:write']
+    mem_max, mem_window = rlc.RATE_POLICIES['memories:create']
+    assert folders_max / folders_window <= mem_max / mem_window
+
+
 def test_sse_tool_call_returns_mcp_auth_challenge_when_scope_missing():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     response, _ = sse.handle_mcp_message(
