@@ -1,3 +1,16 @@
+# IMPORTANT: Build context must be this plugin's directory, NOT the
+# repository root. Docker reads .dockerignore from the build-context
+# root — if you `docker build -f plugins/omi-whatsapp-app/Dockerfile .`
+# from the repo root, the .env / users_data.json / pending_setups.json
+# exclusions in plugins/omi-whatsapp-app/.dockerignore will NOT take
+# effect, and any locally-written secret files will be baked into the
+# image.
+#
+# Correct invocation from the repo root:
+#   docker build -f plugins/omi-whatsapp-app/Dockerfile plugins/omi-whatsapp-app/
+#
+# Correct invocation from this directory:
+#   docker build .
 FROM python:3.11-slim
 
 # Create non-root user early so owned dirs/files get correct uid/gid
