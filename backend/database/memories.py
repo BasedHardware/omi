@@ -444,7 +444,16 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
         # encrypted for prev_uid is unreadable to new_uid. Decrypt with the previous user's key and
         # re-encrypt with the new user's key before copying, so the new owner can read them.
         if memory.get('data_protection_level') == 'enhanced' and isinstance(memory.get('content'), str):
-            memory = _encrypt_memory_data(_prepare_memory_for_read(memory, prev_uid), new_uid)
+            try:
+                plaintext = encryption.decrypt(memory['content'], prev_uid)
+            except Exception:
+                # The content cannot be decrypted with the source user's key (e.g. already-corrupted
+                # ciphertext). Copy it unchanged and log it, rather than re-encrypting the ciphertext
+                # under the new key, which would mask the corruption as a value the new owner can
+                # "decrypt".
+                logger.warning(f"migrate_memories: could not decrypt memory {memory.get('id')}; copying as-is")
+            else:
+                memory = {**memory, 'content': encryption.encrypt(plaintext, new_uid)}
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
 

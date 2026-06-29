@@ -141,6 +141,21 @@ def test_standard_memory_is_copied_unchanged():
     assert written["content"] == "plain text"
 
 
+def test_undecryptable_content_is_copied_as_is_not_double_wrapped():
+    # If the content cannot be decrypted with the source user's key (already-corrupted ciphertext),
+    # it must be copied unchanged, NOT re-encrypted under the new key (which would mask the
+    # corruption as a value the new owner can "decrypt").
+    poisoned = FakeEnc.encrypt("secret", "someone-else")  # not decryptable with prevuid
+    src = [{"id": "m1", "content": poisoned, "data_protection_level": "enhanced"}]
+    db, batch = _make_db(src)
+    with patch.object(memories, "db", db), patch.object(memories, "encryption", FakeEnc):
+        memories.migrate_memories("prevuid", "newuid")
+
+    written = _written(batch)[0]
+    assert written["content"] == poisoned
+    assert written["content"] != FakeEnc.encrypt(poisoned, "newuid")
+
+
 def test_mixed_batch_rekeys_only_enhanced():
     src = [
         {"id": "m1", "content": FakeEnc.encrypt("alpha", "prevuid"), "data_protection_level": "enhanced"},
