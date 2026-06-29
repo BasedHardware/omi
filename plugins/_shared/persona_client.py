@@ -100,13 +100,19 @@ async def chat(
                     response.raise_for_status()
                     chunks: list[str] = []
                     async for event in EventSource(response).aiter_sse():
-                        # event.data is the joined payload of one SSE event — for the
-                        # persona-chat endpoint that's the chunk text (the backend yields
-                        # `data: <token>` per token, sometimes multi-line).
-                        # Skip the [DONE] terminator — it signals end of stream,
-                        # not part of the reply text.
-                        if event.data and event.data.strip() != "[DONE]":
-                            chunks.append(event.data)
+                        # event.data is the joined payload of one SSE event.
+                        # Treat [DONE] as terminal: break immediately so we
+                        # return the accumulated reply without waiting for
+                        # the stream to close. Without this break, if the
+                        # server/proxy keeps the connection open after [DONE]
+                        # (e.g. heartbeats), asyncio.wait_for fires and the
+                        # function returns "", discarding the reply.
+                        # Identified by cubic + maintainer review.
+                        if not event.data:
+                            continue
+                        if event.data.strip() == "[DONE]":
+                            break
+                        chunks.append(event.data)
                     return _join_chunks(chunks)
 
             return await asyncio.wait_for(_do_request(), timeout=timeout_seconds)

@@ -90,6 +90,7 @@ def save_user(
     omi_dev_api_key: str,
     bot_token: str,
     auto_reply_enabled: bool = False,
+    bot_username: str = "",
 ) -> None:
     existing = users.get(chat_id, {})
     users[chat_id] = {
@@ -99,6 +100,7 @@ def save_user(
         "omi_dev_api_key": omi_dev_api_key,
         "bot_token": bot_token,
         "auto_reply_enabled": auto_reply_enabled,
+        "bot_username": bot_username or existing.get("bot_username", ""),
         "created_at": existing.get("created_at", datetime.utcnow().isoformat()),
         "updated_at": datetime.utcnow().isoformat(),
         # last_nudge_at tracks when we last told the user their auto-reply was off,

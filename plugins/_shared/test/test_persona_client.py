@@ -307,7 +307,74 @@ class TestSseParsing:
 
 
 # ---------------------------------------------------------------------------
-# 3. Error paths
+# 3. [DONE] terminator regression
+# ---------------------------------------------------------------------------
+class TestDoneTerminator:
+    """Regression: [DONE] must break the SSE loop immediately.
+
+    Identified by cubic + maintainer review on PR #8531: filtering [DONE]
+    from chunks but not breaking the loop means the client keeps waiting
+    for the stream to close. If the server/proxy sends heartbeats after
+    [DONE], asyncio.wait_for fires and the accumulated reply is lost.
+    """
+
+    @pytest.mark.asyncio
+    async def test_done_breaks_loop_and_returns_reply(self):
+        """Events: 'hello', '[DONE]' → reply should be 'hello', not ''.
+
+        The mock body has 'data: hello\n\n' followed by 'data: [DONE]\n\n'
+        and then nothing else. If the consumer doesn't break on [DONE],
+        it will wait for more events until the read timeout fires,
+        returning ''.
+        """
+        body = "data: hello\n\ndata: [DONE]\n\n"
+        request = httpx.Request("POST", "https://api.omi.me/v2/integrations/app-1/user/persona-chat")
+        resp = httpx.Response(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            content=body.encode("utf-8"),
+            request=request,
+        )
+        client = _mock_async_client_post(resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            reply = await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+                uid="u-1",
+                timeout_seconds=5.0,
+            )
+        assert reply == "hello", f"Expected 'hello', got {reply!r}"
+
+    @pytest.mark.asyncio
+    async def test_done_not_included_in_reply(self):
+        """[DONE] must never appear in the reply text."""
+        body = "data: hello\n\ndata: world\n\ndata: [DONE]\n\n"
+        request = httpx.Request("POST", "https://api.omi.me/v2/integrations/app-1/user/persona-chat")
+        resp = httpx.Response(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            content=body.encode("utf-8"),
+            request=request,
+        )
+        client = _mock_async_client_post(resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            reply = await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+                uid="u-1",
+            )
+        assert "[DONE]" not in reply
+        assert reply == "hello world"
+
+
+# ---------------------------------------------------------------------------
+# 4. Error paths
 # ---------------------------------------------------------------------------
 class TestChatErrors:
     @pytest.mark.asyncio

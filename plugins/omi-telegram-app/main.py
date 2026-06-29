@@ -383,10 +383,8 @@ async def webhook(
             omi_dev_api_key=payload["omi_dev_api_key"],
             bot_token=payload["bot_token"],
             auto_reply_enabled=False,
+            bot_username=payload.get("bot_username", ""),
         )
-        # Store bot_username for /status display
-        simple_storage.users[str(chat_id)]["bot_username"] = payload.get("bot_username", "")
-        simple_storage._save(simple_storage.USERS_FILE, simple_storage.users)
         await telegram_client.send_message(
             payload["bot_token"],
             chat_id,
