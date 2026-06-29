@@ -63,3 +63,93 @@ enum AgentRuntimeRouting {
         }
     }
 }
+
+struct LocalAgentProviderAvailability: Equatable {
+    enum Status: Equatable {
+        case available(command: String)
+        case missing
+    }
+
+    let provider: AgentPillsManager.DirectedProvider
+    let status: Status
+
+    var isAvailable: Bool {
+        if case .available = status { return true }
+        return false
+    }
+
+    var setupPrompt: String {
+        switch provider {
+        case .hermes:
+            return "I don't see Hermes on your PATH. Install Hermes or set OMI_HERMES_ADAPTER_COMMAND."
+        case .openclaw:
+            return "I don't see OpenClaw on your PATH. Install OpenClaw or set OMI_OPENCLAW_ADAPTER_COMMAND."
+        }
+    }
+}
+
+enum LocalAgentProviderDetector {
+    static func availability(
+        for provider: AgentPillsManager.DirectedProvider,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default,
+        homeDirectory: String = NSHomeDirectory()
+    ) -> LocalAgentProviderAvailability {
+        if let command = configuredCommand(for: provider, environment: environment) {
+            return LocalAgentProviderAvailability(provider: provider, status: .available(command: command))
+        }
+
+        if let path = firstExecutable(
+            named: provider.executableName,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        ) {
+            return LocalAgentProviderAvailability(provider: provider, status: .available(command: path))
+        }
+
+        return LocalAgentProviderAvailability(provider: provider, status: .missing)
+    }
+
+    static func isAvailable(
+        _ provider: AgentPillsManager.DirectedProvider,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default,
+        homeDirectory: String = NSHomeDirectory()
+    ) -> Bool {
+        availability(for: provider, environment: environment, fileManager: fileManager, homeDirectory: homeDirectory).isAvailable
+    }
+
+    private static func configuredCommand(
+        for provider: AgentPillsManager.DirectedProvider,
+        environment: [String: String]
+    ) -> String? {
+        let key = provider.commandEnvironmentName
+        let value = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return value.isEmpty ? nil : value
+    }
+
+    private static func firstExecutable(
+        named name: String,
+        fileManager: FileManager,
+        homeDirectory: String
+    ) -> String? {
+        for dir in adapterActivationSearchDirectories(homeDirectory: homeDirectory) {
+            let path = (dir as NSString).appendingPathComponent(name)
+            if fileManager.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+        return nil
+    }
+
+    private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
+        [
+            "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
+            "\(homeDirectory)/.hermes/node/bin",
+            "\(homeDirectory)/.hermes/hermes-agent",
+            "\(homeDirectory)/.local/bin",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+        ]
+    }
+}

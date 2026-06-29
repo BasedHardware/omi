@@ -9,6 +9,7 @@ import importlib.util
 import os
 import shutil as _shutil
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1400,6 +1401,9 @@ class TestWsBudgetAndSessionCap:
                             with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                 # Send 32000 bytes = 1s at 16kHz mono
                                 ws.send_bytes(b'\x00' * 32000)
+                                deadline = time.time() + 1.0
+                                while not mock_dg_socket.send.called and time.time() < deadline:
+                                    time.sleep(0.01)
                             # After WS close, finally block should have called record_actual_duration
                             mock_record.assert_called_once()
                             call_args = mock_record.call_args[0]

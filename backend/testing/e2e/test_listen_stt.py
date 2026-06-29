@@ -4,11 +4,12 @@ import json
 import uuid
 
 from fakes.firestore import get_mock_firestore, read_conversation
-from fakes.stt import fake_suggested_transcript_event
+from fakes.stt import fake_suggested_transcript_event, install_streaming_stt_fake
 from listen_test_helpers import (
     is_conversation_session_event,
     is_ready_event,
     is_segment_batch,
+    is_streaming_segment_batch,
     receive_until,
     seed_listen_user,
 )
@@ -214,3 +215,91 @@ def test_listen_client_conversation_id_reconnects_same_session(client, test_uid)
         get_mock_firestore().collection("users").document(test_uid).collection("conversations").stream()
     )
     assert [conversation.id for conversation in conversations] == [client_conversation_id]
+
+
+def test_web_listen_streaming_stt_happy_path_persists_segments(client, auth_headers, test_uid, monkeypatch):
+    seed_listen_user(test_uid, uses_custom_stt=False)
+    sockets = install_streaming_stt_fake(monkeypatch)
+
+    with client.websocket_connect("/v4/web/listen?sample_rate=8000&codec=pcm8&source=desktop") as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        session_event = receive_until(websocket, is_conversation_session_event)
+        uuid.UUID(session_event["conversation_id"])
+        receive_until(websocket, is_ready_event)
+
+        websocket.send_bytes(b"\x80" * 320)
+        emitted_segments = receive_until(websocket, is_streaming_segment_batch)
+
+    assert len(sockets) == 1
+    assert sockets[0].sent_chunks
+    assert sockets[0].drain_calls == 1
+    assert sockets[0].finish_calls == 1
+
+    expected_segment = {
+        "id": "seg-streaming-stt-1",
+        "text": "Hermetic streaming STT transcript from the fake socket.",
+        "speaker": "SPEAKER_00",
+        "speaker_id": 0,
+        "is_user": True,
+        "person_id": None,
+        "translations": [],
+        "speech_profile_processed": True,
+        "stt_provider": "e2e-streaming-stt",
+    }
+    assert len(emitted_segments) == 1
+    assert {k: emitted_segments[0][k] for k in expected_segment} == expected_segment
+
+    persisted = client.get(f"/v1/conversations/{session_event['conversation_id']}", headers=auth_headers)
+    assert persisted.status_code == 200, persisted.text
+    body = persisted.json()
+    assert body["source"] == "desktop"
+    assert body["status"] == "in_progress"
+    assert body["transcript_segments"] == emitted_segments
+
+
+def test_web_listen_reconnect_reuses_active_conversation_id(client, test_uid, monkeypatch):
+    seed_listen_user(test_uid, uses_custom_stt=False)
+    sockets = install_streaming_stt_fake(monkeypatch)
+
+    with client.websocket_connect(
+        "/v4/web/listen?sample_rate=8000&codec=pcm8&conversation_timeout=120&source=desktop"
+    ) as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        first_event = receive_until(websocket, is_conversation_session_event)
+        uuid.UUID(first_event["conversation_id"])
+        receive_until(websocket, is_ready_event)
+
+    with client.websocket_connect(
+        "/v4/web/listen?sample_rate=8000&codec=pcm8&conversation_timeout=120&source=desktop"
+    ) as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        second_event = receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+
+    assert second_event["conversation_id"] == first_event["conversation_id"]
+    assert len(sockets) == 2
+    conversations = list(
+        get_mock_firestore().collection("users").document(test_uid).collection("conversations").stream()
+    )
+    assert [conversation.id for conversation in conversations] == [first_event["conversation_id"]]
+
+
+def test_web_listen_teardown_drains_and_finishes_stt_socket(client, test_uid, monkeypatch):
+    seed_listen_user(test_uid, uses_custom_stt=False)
+    sockets = install_streaming_stt_fake(monkeypatch)
+
+    with client.websocket_connect("/v4/web/listen?sample_rate=8000&codec=pcm8&source=desktop") as websocket:
+        websocket.send_text(json.dumps({"type": "auth", "token": "dev-token"}))
+        assert websocket.receive_json() == {"type": "auth_response", "success": True}
+        receive_until(websocket, is_conversation_session_event)
+        receive_until(websocket, is_ready_event)
+        websocket.send_bytes(b"\x80" * 320)
+        receive_until(websocket, is_streaming_segment_batch)
+
+    assert len(sockets) == 1
+    assert sockets[0].sent_chunks
+    assert sockets[0].drain_calls == 1
+    assert sockets[0].finish_calls == 1

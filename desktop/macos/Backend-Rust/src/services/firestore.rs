@@ -109,6 +109,17 @@ pub struct FirestoreService {
 }
 
 impl FirestoreService {
+    #[cfg(test)]
+    pub(super) fn new_for_contract(encryption_secret: Option<Vec<u8>>) -> Self {
+        Self {
+            client: Client::new(),
+            project_id: "contract-tests".to_string(),
+            credentials: None,
+            cached_token: Arc::new(RwLock::new(None)),
+            encryption_secret,
+        }
+    }
+
     /// Create a new Firestore service
     pub async fn new(
         project_id: String,

@@ -22,6 +22,21 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("speak(ack)"))
   }
 
+  func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directedProvider)"))
+    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
+    XCTAssertTrue(source.contains("assistantText = setupPrompt"))
+    XCTAssertTrue(source.contains("output: setupPrompt"))
+    XCTAssertTrue(source.contains("""
+          sendToolResultIfCurrent(
+            source: source, callId: callId, name: name,
+            output: setupPrompt)
+          return
+"""))
+  }
+
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {
     let source = try agentControlServiceSource()
 

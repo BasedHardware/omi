@@ -1,0 +1,39 @@
+{
+  "uid": "contract-user-8547",
+  "encryption_secret": "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+  "segments": [
+    {
+      "id": "seg-1",
+      "text": "Hello from desktop",
+      "speaker": "SPEAKER_00",
+      "speaker_id": 0,
+      "is_user": true,
+      "person_id": "person-user",
+      "start": 0,
+      "end": 1.25
+    },
+    {
+      "id": "seg-2",
+      "text": "Rust and Python should agree",
+      "speaker": "SPEAKER_01",
+      "speaker_id": 1,
+      "is_user": false,
+      "start": 1.25,
+      "end": 3.5
+    }
+  ],
+  "standard_compressed_transcript_b64": "eJx1jssKgzAQRX9lyFpFLW6660IodCN2WYoEMj4wTSSTQEvx32uslJTS5dx77nAuTzYItgdG2MUZi4BZvFsfHFFKDa3RNxBIo9WTb2lCPqLxwLkqD6eybtI0KJr1W7oEAzWOVtIah0swoSGt3sB2xCvh15Ybuw1ReSJL8mKOINTLQ73akQWuBFQP22sF1GsnBfDOIP4TzX5Esy/RlkvCwMY7fIR2STFfX2ihWsE=",
+  "enhanced_encrypted_transcript": "AAECAwQFBgcICQoLJBF/bml9IYvujqZv4oTwjU2+neJ5kICizDxOyOkrqw9hfcTtX7vSERBe9oqyb9sdLuDeHrrsxhLEedJ5NIBquK1yQUSSg3hEFJCMDhPfr2xhbOL+CKsHh1gOFancnjkunmkXBkIKSJB4MFhKPot08PyY6P0S2MuCjbWYHeawG8+f+C7MuB8y8OcX8MtI0dzsNyhKatdkfhdCVxpPPzbyveA9Yg7q0NLdPPNpQvUyQ7O3KrYlpozxWEIj49TeWYxamKMiNgHSgsGaw7w8rs3YtT7Jge1XMksd87Kc/vEHLDN3yukqfiSn7wZ+JBrzy5XMUTiqX8XJroIKO2Tcgl/ELRrxeChSGqbl/F6wnLwO3m6RcuZt1915TgIcv/L/kiOAMYHjnBjUvYuu16ALtwu9OerNAmTsq7EM087bru4sxTxpujVj5BIRlpQDzhMUElB1d/FVYAfcqy93vgS5Z8ANN1U1tY5Q94asuFg=",
+  "query": {
+    "limit": 7,
+    "offset": 3,
+    "start_date": "2026-01-02T03:04:05+00:00",
+    "end_date": "2026-02-03T04:05:06+00:00",
+    "date_field": "finished_at"
+  },
+  "wire_values": {
+    "source_external_integration": "external_integration",
+    "status_in_progress": "in_progress",
+    "category_romance": "romantic"
+  }
+}
