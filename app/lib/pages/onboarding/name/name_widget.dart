@@ -73,7 +73,7 @@ class _NameWidgetState extends State<NameWidget> {
                 // Text(
                 //   'Tell us how you\'d like to be addressed.\nThis helps personalize your Omi experience.',
                 //   style: TextStyle(
-                //     color: Colors.white.withOpacity(0.6),
+                //     color: Colors.white.withValues(alpha: 0.6),
                 //     fontSize: 16,
                 //     fontFamily: 'Manrope',
                 //     height: 1.5,
@@ -151,7 +151,7 @@ class _NameWidgetState extends State<NameWidget> {
                 //         child: Text(
                 //           'Need Help?',
                 //           style: TextStyle(
-                //             color: Colors.white.withOpacity(0.6),
+                //             color: Colors.white.withValues(alpha: 0.6),
                 //             fontSize: 14,
                 //             fontFamily: 'Manrope',
                 //             decoration: TextDecoration.underline,

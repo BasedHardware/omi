@@ -257,7 +257,7 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                               width: 24,
                               height: 24,
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Icon(Icons.check, color: Colors.white, size: 16),
@@ -265,16 +265,16 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                           ],
                         )
                       : _isDragging && progress > 0.3
-                      ? Text(
-                          context.l10n.release,
-                          key: const ValueKey('release'),
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
-                        )
-                      : Text(
-                          context.l10n.slideToUpdate,
-                          key: const ValueKey('slide'),
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
+                          ? Text(
+                              context.l10n.release,
+                              key: const ValueKey('release'),
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
+                            )
+                          : Text(
+                              context.l10n.slideToUpdate,
+                              key: const ValueKey('slide'),
+                              style: TextStyle(color: Colors.grey.shade400, fontSize: 16, fontWeight: FontWeight.w500),
+                            ),
                 ),
               ),
               // Draggable button
@@ -327,7 +327,8 @@ class _SwipeToConfirmState extends State<SwipeToConfirm> with SingleTickerProvid
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(_buttonSize / 2),
                         boxShadow: [
-                          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 2)),
+                          BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 2)),
                         ],
                       ),
                       child: const Center(
