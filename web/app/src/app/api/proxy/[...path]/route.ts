@@ -72,7 +72,7 @@ async function handleRequest(
       headers['X-Device-Id-Hash'] = deviceIdHash;
     }
 
-    if (!isMultipart && request.method !== 'GET' && request.method !== 'DELETE') {
+    if (!isMultipart && request.method !== 'GET') {
       headers['Content-Type'] = 'application/json';
     }
 
@@ -81,8 +81,8 @@ async function handleRequest(
       headers,
     };
 
-    // Include body for POST/PATCH requests
-    if (request.method === 'POST' || request.method === 'PATCH') {
+    // Include body for POST/PATCH/DELETE requests
+    if (request.method === 'POST' || request.method === 'PATCH' || request.method === 'DELETE') {
       if (isMultipart) {
         // For multipart, forward the FormData directly
         const formData = await request.formData();
