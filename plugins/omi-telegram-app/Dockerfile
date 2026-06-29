@@ -1,3 +1,16 @@
+# IMPORTANT: Build context must be this plugin's directory, NOT the
+# repository root. Docker reads .dockerignore from the build-context
+# root — if you `docker build -f plugins/omi-telegram-app/Dockerfile .`
+# from the repo root, the .env / users_data.json / pending_setups.json
+# exclusions in plugins/omi-telegram-app/.dockerignore will NOT take
+# effect, and any locally-written secret files will be baked into the
+# image. (Identified by cubic P2.)
+#
+# Correct invocation from the repo root:
+#   docker build -f plugins/omi-telegram-app/Dockerfile plugins/omi-telegram-app/
+#
+# Correct invocation from this directory:
+#   docker build .
 FROM python:3.11-slim
 
 # Create non-root user early so owned dirs/files get correct uid/gid
