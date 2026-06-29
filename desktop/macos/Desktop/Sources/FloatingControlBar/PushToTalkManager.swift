@@ -309,13 +309,17 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
-    let isFollowUp = isCurrentSessionFollowUp
-    AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_hold" : "hold")
+    let mode = currentPTTMode()
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: mode)
+    DesktopDiagnosticsManager.shared.recordPTTStarted(
+      mode: mode,
+      hubActive: RealtimeHubController.shared.isActive,
+      micPermissionGranted: refreshedMicPermission())
     let preOverlayImage = ScreenCaptureManager.captureScreenImage()
     updateBarState()
 
     captureContextAndStartAudio(preOverlayImage: preOverlayImage)
-    log("PushToTalkManager: started listening (hold mode, followUp=\(isFollowUp))")
+    log("PushToTalkManager: started listening (mode=\(mode))")
   }
 
   private func enterLockedListening() {
@@ -336,8 +340,12 @@ class PushToTalkManager: ObservableObject {
       sound?.play()
     }
 
-    let isFollowUp = isCurrentSessionFollowUp
-    AnalyticsManager.shared.floatingBarPTTStarted(mode: isFollowUp ? "follow_up_locked" : "locked")
+    let mode = currentPTTMode()
+    AnalyticsManager.shared.floatingBarPTTStarted(mode: mode)
+    DesktopDiagnosticsManager.shared.recordPTTStarted(
+      mode: mode,
+      hubActive: RealtimeHubController.shared.isActive,
+      micPermissionGranted: refreshedMicPermission())
 
     // If we were already listening from the first tap, keep going.
     // Otherwise start fresh.
@@ -351,7 +359,7 @@ class PushToTalkManager: ObservableObject {
     }
 
     updateBarState()
-    log("PushToTalkManager: entered locked listening mode (followUp=\(isFollowUp))")
+    log("PushToTalkManager: entered locked listening mode (mode=\(mode))")
   }
 
   private func enterPendingLockDecision() {
@@ -445,6 +453,16 @@ class PushToTalkManager: ObservableObject {
   }
 
   private var finalizedMode: String = "hold"
+
+  private func currentPTTMode() -> String {
+    let baseMode = state == .lockedListening ? "locked" : "hold"
+    return isCurrentSessionFollowUp ? "follow_up_\(baseMode)" : baseMode
+  }
+
+  private func refreshedMicPermission() -> Bool {
+    hasMicPermission = AudioCaptureService.checkPermission()
+    return hasMicPermission
+  }
 
   // MARK: - QueryTracer
 
@@ -578,7 +596,7 @@ class PushToTalkManager: ObservableObject {
     lastOptionUpTime = 0
     // Dictation is over — restore any audio we muted so the track resumes immediately.
     SystemAudioMuteController.shared.restore()
-    finalizedMode = state == .lockedListening ? "locked" : "hold"
+    finalizedMode = currentPTTMode()
     state = .finalizing
     finalizeWorkItem?.cancel()
     finalizeWorkItem = nil
@@ -611,6 +629,16 @@ class PushToTalkManager: ObservableObject {
       if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
         let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+        DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+          source: "hub",
+          mode: finalizedMode,
+          audioSeconds: totalSec,
+          voicedSeconds: nil,
+          peak: peak,
+          rms: rms,
+          deviceDescription: dev,
+          micPermissionGranted: hasMicPermission,
+          hubActive: true)
         log(
           "PushToTalkManager: discarding hub turn — audio \(String(format: "%.2f", totalSec))s "
             + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] "
@@ -629,6 +657,7 @@ class PushToTalkManager: ObservableObject {
       // itself; no transcript/router/LLM hop here.
       RealtimeHubController.shared.commitTurn()
       silentMicRecoveryPolicy.recordSuccessfulHubTurn()
+      DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       // Collapse the bar on release — the hub speaks its reply as audio (no inline
       // status UI), the same as the legacy voice path.
       updateBarState()
@@ -650,6 +679,17 @@ class PushToTalkManager: ObservableObject {
       batchAudioLock.unlock()
       let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: turnAudio)
       if totalSec < Self.minTurnAudioSeconds || voicedSec < Self.minVoicedSeconds {
+        let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
+        DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+          source: isOmniSTT ? "omni_stt" : "batch_stt",
+          mode: finalizedMode,
+          audioSeconds: totalSec,
+          voicedSeconds: voicedSec,
+          peak: peak,
+          rms: rms,
+          deviceDescription: audioCaptureService?.currentDeviceDescription,
+          micPermissionGranted: hasMicPermission,
+          hubActive: false)
         log(
           "PushToTalkManager: discarding silent turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not transcribing"
         )
@@ -795,6 +835,9 @@ class PushToTalkManager: ObservableObject {
       hadTranscript: hasQuery,
       transcriptLength: query.count
     )
+    if hasQuery {
+      DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: false)
+    }
 
     isCurrentSessionFollowUp = false
 
@@ -1012,6 +1055,16 @@ class PushToTalkManager: ObservableObject {
     if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
       let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
       let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+      DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+        source: "buffered_hub",
+        mode: finalizedMode,
+        audioSeconds: totalSec,
+        voicedSeconds: nil,
+        peak: peak,
+        rms: rms,
+        deviceDescription: dev,
+        micPermissionGranted: hasMicPermission,
+        hubActive: true)
       log(
         "PushToTalkManager: discarding buffered hub turn — audio \(String(format: "%.2f", totalSec))s "
           + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] — not committing")
@@ -1023,6 +1076,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
     RealtimeHubController.shared.commitTurn()
+    DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
     state = .idle
     updateBarState()
     AnalyticsManager.shared.floatingBarPTTEnded(
@@ -1036,6 +1090,17 @@ class PushToTalkManager: ObservableObject {
     batchAudioLock.unlock()
     let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: audio)
     guard totalSec >= Self.minTurnAudioSeconds, voicedSec >= Self.minVoicedSeconds else {
+      let (peak, rms) = Self.audioEnergy(pcm16k: audio)
+      DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+        source: "warm_wait_fallback",
+        mode: finalizedMode,
+        audioSeconds: totalSec,
+        voicedSeconds: voicedSec,
+        peak: peak,
+        rms: rms,
+        deviceDescription: audioCaptureService?.currentDeviceDescription,
+        micPermissionGranted: hasMicPermission,
+        hubActive: false)
       log(
         "PushToTalkManager: discarding warm-wait fallback turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s)")
       AnalyticsManager.shared.floatingBarPTTEnded(
@@ -1064,9 +1129,18 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  private func startMicCapture(batchMode: Bool = false, overrideDeviceID: AudioDeviceID? = nil) {
+  private func startMicCapture(
+    batchMode: Bool = false,
+    overrideDeviceID: AudioDeviceID? = nil,
+    diagnosticRecoveryAction: String? = nil
+  ) {
     guard !micCaptureStartInFlight && !(audioCaptureService?.capturing ?? false) else {
       log("PushToTalkManager: mic capture start ignored — already active")
+      if let diagnosticRecoveryAction {
+        DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+          recoveryAction: diagnosticRecoveryAction,
+          recoveryResult: "ignored_already_active")
+      }
       return
     }
     micCaptureStartInFlight = true
@@ -1140,10 +1214,20 @@ class PushToTalkManager: ObservableObject {
           if isCurrentGeneration {
             self.micCaptureStartInFlight = false
           }
+          if let diagnosticRecoveryAction {
+            DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+              recoveryAction: diagnosticRecoveryAction,
+              recoveryResult: "ignored_turn_ended")
+          }
           log("PushToTalkManager: mic capture start completed after turn ended — stopped")
           return
         }
         self.micCaptureStartInFlight = false
+        if let diagnosticRecoveryAction {
+          DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+            recoveryAction: diagnosticRecoveryAction,
+            recoveryResult: "succeeded")
+        }
         log("PushToTalkManager: mic capture started (batch=\(batchMode))")
       } catch {
         guard self.micCaptureGeneration == generation else {
@@ -1151,6 +1235,11 @@ class PushToTalkManager: ObservableObject {
           return
         }
         self.micCaptureStartInFlight = false
+        if let diagnosticRecoveryAction {
+          DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+            recoveryAction: diagnosticRecoveryAction,
+            recoveryResult: "failed")
+        }
         logError("PushToTalkManager: mic capture failed", error: error)
         self.stopListening()
       }
@@ -1173,12 +1262,18 @@ class PushToTalkManager: ObservableObject {
       silentMicRecoveryPolicy.recordCaptureRebuild()
       stopMicCapture()
       clearBufferedTurnAudio()
-      startMicCapture(batchMode: batchMode, overrideDeviceID: builtInID)
+      startMicCapture(
+        batchMode: batchMode,
+        overrideDeviceID: builtInID,
+        diagnosticRecoveryAction: "switch_to_built_in_mic")
       return
     }
 
     if detection.suggestedAction == .fallbackToBuiltIn {
       log("PushToTalkManager: silent-mic detected but no built-in mic to fall back to")
+      DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+        recoveryAction: "switch_to_built_in_mic",
+        recoveryResult: "no_built_in_mic")
     }
 
     requestCoreAudioCaptureRecovery(
