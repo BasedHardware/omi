@@ -3,6 +3,14 @@ import Foundation
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
 
+  nonisolated static func shouldEnablePlaywrightExtension(
+    useExtension: Bool,
+    token: String,
+    targetHasExtension: Bool
+  ) -> Bool {
+    useExtension && !token.isEmpty && targetHasExtension
+  }
+
   struct WarmupSessionConfig {
     let key: String
     let model: String?
@@ -479,11 +487,22 @@ actor AgentRuntimeProcess {
     let useExtension =
       defaults.object(forKey: "playwrightUseExtension") == nil
       || defaults.bool(forKey: "playwrightUseExtension")
-    if useExtension {
+    let playwrightToken = defaults.string(forKey: "playwrightExtensionToken") ?? ""
+    let playwrightTarget = BrowserAutomationTargetResolver.preferredTarget()
+    let hasInstalledPlaywrightBridge =
+      playwrightTarget.map { BrowserAutomationTargetResolver.isExtensionInstalled(in: $0) } ?? false
+    if Self.shouldEnablePlaywrightExtension(
+      useExtension: useExtension,
+      token: playwrightToken,
+      targetHasExtension: hasInstalledPlaywrightBridge)
+    {
+      env["PLAYWRIGHT_MCP_ENABLED"] = "true"
       env["PLAYWRIGHT_USE_EXTENSION"] = "true"
-      if let token = defaults.string(forKey: "playwrightExtensionToken"), !token.isEmpty {
-        env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = token
-      }
+      env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = playwrightToken
+    } else {
+      env.removeValue(forKey: "PLAYWRIGHT_MCP_ENABLED")
+      env.removeValue(forKey: "PLAYWRIGHT_USE_EXTENSION")
+      env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
 
     proc.environment = env

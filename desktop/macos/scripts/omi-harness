@@ -152,6 +152,14 @@ def expectation_matches(data: dict[str, typing.Any], expectations: dict[str, typ
     return all(nested_get(data, key) == value for key, value in expectations.items())
 
 
+def expectation_mismatches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    return {
+        key: {"expected": value, "actual": nested_get(data, key)}
+        for key, value in expectations.items()
+        if nested_get(data, key) != value
+    }
+
+
 def wait_for_state(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, dict[str, typing.Any]]:
     deadline = time.monotonic() + timeout
     latest: dict[str, typing.Any] = {}
@@ -491,6 +499,14 @@ def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -
             result.update(operation="bridge.action", response_path=str(response_path), ok=bool(response.get("ok")))
             if not result["ok"]:
                 result["error"] = response.get("error")
+            expectations = step.get("expect")
+            if result["ok"] and expectations is not None:
+                if not isinstance(expectations, dict):
+                    result.update(ok=False, error="bridge.action expect requires a mapping")
+                else:
+                    mismatches = expectation_mismatches(response, expectations)
+                    if mismatches:
+                        result.update(ok=False, error=f"bridge.action expectations failed: {mismatches}")
 
         elif "visual.export" in step:
             if ctx.lane not in {"visual", "ui"}:

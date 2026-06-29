@@ -1428,6 +1428,19 @@ extension APIClient {
       return nil
     }
   }
+
+  /// Finalize a specific backend conversation id. This avoids the global Redis-backed
+  /// force-process endpoint, which can act on a newer in-progress recording after rotation.
+  func finalizeConversation(id conversationId: String) async throws -> ServerConversation {
+    struct EmptyBody: Encodable {}
+
+    let response: ForceProcessConversationResponse = try await post(
+      "v1/conversations/\(conversationId)/finalize",
+      body: EmptyBody(),
+      customBaseURL: nil
+    )
+    return response.conversation
+  }
 }
 
 // MARK: - Create Conversation From Segments (on-device transcription upload)
@@ -1450,6 +1463,7 @@ extension APIClient {
     let started_at: String?  // ISO8601
     let finished_at: String?  // ISO8601
     let language: String
+    let client_conversation_id: String?
   }
 
   struct CreateConversationFromSegmentsResponse: Decodable {

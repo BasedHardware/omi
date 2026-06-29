@@ -114,6 +114,8 @@ _install_module(
     record_model_route_run=MagicMock(),
 )
 _install_module('utils.other.endpoints', get_current_user_uid=lambda: 'uid')
+_install_module('models.structured', Structured=MagicMock())
+_install_module('utils.byok', get_byok_key=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -630,9 +632,9 @@ class TestGetLlm:
         assert hasattr(llm_with_key, 'invoke')
 
     def test_cache_key_ignored_for_non_cacheable_model(self):
-        # session_titles uses gemini-2.5-flash-lite, which does not support OpenAI prompt cache
-        llm_with_key = get_llm('session_titles', cache_key='omi-test-key')
-        llm_without_key = get_llm('session_titles')
+        # followup uses Gemini in the premium profile, which does not support OpenAI prompt_cache_key.
+        llm_with_key = get_llm('followup', cache_key='omi-test-key')
+        llm_without_key = get_llm('followup')
         assert llm_with_key is llm_without_key
 
     def test_new_features_return_clients(self):
@@ -772,11 +774,10 @@ class TestOpenRouterClient:
 class TestCacheKeySafety:
     """Verify cache_key is only applied when the model supports it."""
 
-    def test_cacheable_models_supported(self):
-        # Caching is gated by model-family capability (supports_prompt_cache) rather than an
-        # exact-name set; the premium/max tier models must still be recognized as cacheable.
+    def test_cache_key_models_contains_expected(self):
         assert supports_prompt_cache('gpt-5.4')
         assert supports_prompt_cache('gpt-5.4-mini')
+        assert not supports_prompt_cache('claude-sonnet-4-6')
 
 
 class TestGetQosInfo:
@@ -1343,8 +1344,8 @@ class TestGeminiThinkingBudget:
 
         try:
             with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.clients.ChatGoogleGenerativeAI', side_effect=fake_genai
-            ), _patch('utils.llm.clients.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
                 _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
             assert captured.get('thinking_budget') == 0, 'native ChatGoogleGenerativeAI must receive thinking_budget'
         finally:
@@ -1364,8 +1365,8 @@ class TestGeminiThinkingBudget:
 
         try:
             with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
-                'utils.llm.clients.ChatGoogleGenerativeAI', side_effect=fake_genai
-            ), _patch('utils.llm.clients.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
                 _get_or_create_gemini_llm('gemini-3-flash-preview', thinking_budget=0)
             assert 'thinking_budget' not in captured, 'thinking_budget only applies to gemini-2.5* models'
         finally:
