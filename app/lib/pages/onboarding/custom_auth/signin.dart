@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
@@ -44,11 +42,6 @@ class CustomAuthSignUpState extends State<CustomAuthSignUp> {
   void _submitForm() {
     if (_formKey.currentState!.validate()) {
       // Form is valid, proceed further
-      Map<String, String> formData = {'email': _emailController.text, 'password': _passwordController.text};
-
-      String jsonString = jsonEncode(formData);
-      print(jsonString);
-
       // You can show a success message or navigate to another page here
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.signInSuccess)));
     }
