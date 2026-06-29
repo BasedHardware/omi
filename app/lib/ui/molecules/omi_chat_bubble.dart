@@ -23,11 +23,11 @@ class OmiChatBubble extends AdaptiveWidget {
     return Container(
       decoration: BoxDecoration(
         color: isIncoming
-            ? const Color.fromARGB(255, 255, 255, 255).withOpacity(0.05)
-            : ResponsiveHelper.purplePrimary.withOpacity(0.15),
+            ? const Color.fromARGB(255, 255, 255, 255).withValues(alpha: 0.05)
+            : ResponsiveHelper.purplePrimary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3), width: 1),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3), width: 1),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 8, offset: const Offset(0, 2))],
       ),
       padding: padding,
       child: child,

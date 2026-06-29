@@ -15,8 +15,10 @@ from utils.http_client import (
 )
 from utils.executors import db_executor, run_blocking
 from utils.async_tasks import gather_safe
+import utils.dev_cache as dev_cache
 
 import database.notifications as notification_db
+import database.dev_api_key as dev_api_key_db
 from database import mem_db
 from database import redis_db
 from database.apps import get_app_by_id_db, record_app_usage
@@ -316,6 +318,34 @@ def _set_proactive_noti_sent_at(uid: str, app: App):
     redis_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
 
 
+def _is_developer(uid: str) -> bool:
+    """A user with at least one developer API key is treated as a developer and
+    is exempt from the daily proactive-notification cap (#3346), so building and
+    testing an app is not throttled. Result is cached (in ``utils.dev_cache``, and
+    invalidated on dev-key changes) to keep the cap check off the Firestore hot
+    path. Fails closed (treats the user as a non-developer, and does not cache the
+    failure) so a lookup error never silently lifts the cap for everyone."""
+    cached = dev_cache.get_cached_developer(uid)
+    if cached is not None:
+        return cached
+    try:
+        result = bool(dev_api_key_db.get_dev_keys_for_user(uid))
+    except Exception as e:
+        logger.warning(f"proactive daily cap: developer check failed uid={uid}, applying cap: {e}")
+        return False
+    dev_cache.set_cached_developer(uid, result)
+    return result
+
+
+def _proactive_daily_cap_reached(uid: str) -> bool:
+    """True when the user has already received the day's allotment of proactive
+    notifications. Counts every proactive source together (mentor + third-party
+    apps) against one per-user daily budget, and exempts developers (#3346)."""
+    if _is_developer(uid):
+        return False
+    return (get_daily_notification_count(uid) or 0) >= MAX_DAILY_NOTIFICATIONS
+
+
 MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
 
 
@@ -349,10 +379,9 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.info(f"mentor_proactive rate_limited_remote uid={uid}")
         return None
 
-    # 3. Daily cap check
-    daily_count = get_daily_notification_count(uid) or 0
-    if daily_count >= MAX_DAILY_NOTIFICATIONS:
-        logger.info(f"mentor_proactive daily_cap_reached uid={uid} count={daily_count}")
+    # 3. Daily cap check (shared budget across all proactive sources; devs exempt)
+    if _proactive_daily_cap_reached(uid):
+        logger.info(f"mentor_proactive daily_cap_reached uid={uid}")
         return None
 
     # 4. Gather lightweight context (no vector search yet — save for step 2)
@@ -528,6 +557,13 @@ def _process_proactive_notification(uid: str, app: App, data):
         logger.info(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s {uid}")
         return None
 
+    # Daily cap: third-party proactive notifications share the same per-user daily
+    # budget as mentor notifications, so a user with several proactive apps cannot
+    # blow past the limit. Developers are exempt (#3346).
+    if _proactive_daily_cap_reached(uid):
+        logger.info(f"App {app.id} proactive daily_cap_reached {uid}")
+        return None
+
     max_prompt_char_limit = 128000
     min_message_char_limit = 5
 
@@ -580,6 +616,9 @@ def _process_proactive_notification(uid: str, app: App, data):
     send_app_notification(uid, app.name, app.id, message)
 
     _set_proactive_noti_sent_at(uid, app)
+    # Count this against the user's daily proactive budget so mentor + app
+    # notifications share one ceiling rather than each having their own.
+    incr_daily_notification_count(uid)
     return message
 
 

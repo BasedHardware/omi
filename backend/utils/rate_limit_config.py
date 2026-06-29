@@ -62,6 +62,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # a reconnect storm into a 429 death-spiral, so this is sized for heavy multi-session
     # use rather than a single client. Tune via RATE_LIMIT_BOOST for events.
     "mcp:sse": (2000, 3600),
+    # Action items — lightweight Firestore writes from MCP clients (no LLM), but
+    # an agent can loop, so cap creation per hour. Complete/update/delete operate
+    # on existing tasks and ride the shared mcp:sse / per-request auth limits.
+    "action_items:write": (120, 3600),
     # Memories — single LLM call each
     "memories:create": (60, 3600),
     # Memory batch writes — each request can create up to 100 memories, so the

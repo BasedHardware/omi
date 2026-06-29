@@ -126,6 +126,17 @@ enum DesktopCapabilityRegistry {
         "Find the task first, then update the matching id. Do not guess task ids."
       ]),
     Capability(
+      toolName: "create_calendar_event",
+      title: "Create Calendar Event",
+      latency: .fastNetwork,
+      surfaces: [.realtimeHub],
+      summary: "Create a new Google Calendar event.",
+      bullets: [
+        "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
+        "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
+        "Use spawn_agent for multi-step calendar work such as finding availability or coordinating with people."
+      ]),
+    Capability(
       toolName: "complete_task",
       title: "Complete Task",
       latency: .fastLocal,
@@ -397,6 +408,7 @@ enum DesktopCapabilityRegistry {
     """
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
+    - You can create a straightforward calendar event with create_calendar_event when the user gives the event details.
     - You can inspect your local task-chat agents/subagents and floating agent pills with get_task_agent_status. If the user asks about your subagents, background agents, running agents, finished agents, or task-agent errors/timeouts, call it before answering.
     - You can inspect and stop canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run. Use these for agents created in chat, PTT/realtime, task chat, or any other Omi surface when a canonical run id is available.
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.

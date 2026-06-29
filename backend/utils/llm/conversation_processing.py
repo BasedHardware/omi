@@ -13,6 +13,8 @@ from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
 from .clients import get_llm, parser
+from utils.byok import has_byok_keys
+from utils.llm.gateway_client import invoke_chat_structured_gateway, record_chat_extraction_gateway_result
 from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
 import logging
 
@@ -31,6 +33,13 @@ class DiscardConversation(BaseModel):
 
 class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
+
+
+def _invoke_gateway_unless_byok(prompt: str, output_model: type[BaseModel], *, feature: str) -> BaseModel | None:
+    if has_byok_keys():
+        record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
+        return None
+    return invoke_chat_structured_gateway(prompt, output_model, feature=feature)
 
 
 def _word_count(text: str) -> int:
@@ -78,10 +87,7 @@ def should_discard_conversation(
                 "Generic filler words, acknowledgments, or incomplete thoughts in short conversations should be discarded."
             )
 
-    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory.
+    prompt_template = '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory.
 
 Task: Decide if the content should be saved as conversation summary.
 {duration_context}
@@ -110,19 +116,27 @@ Content:
 {full_context}
 
 {format_instructions}'''.replace(
-                '    ', ''
-            ).strip()
-        ]
+        '    ', ''
+    ).strip()
+    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
+    prompt_values = {
+        'full_context': full_context,
+        'duration_context': duration_context,
+        'format_instructions': custom_parser.get_format_instructions(),
+    }
+
+    gateway_response = _invoke_gateway_unless_byok(
+        prompt_template.format(**prompt_values),
+        DiscardConversation,
+        feature='conversation_discard.should_discard',
     )
+    if gateway_response is not None:
+        return gateway_response.discard
+
+    prompt = ChatPromptTemplate.from_messages([prompt_template])
     chain = prompt | get_llm('conv_discard') | custom_parser
     try:
-        response: DiscardConversation = chain.invoke(
-            {
-                'full_context': full_context,
-                'duration_context': duration_context,
-                'format_instructions': custom_parser.get_format_instructions(),
-            }
-        )
+        response: DiscardConversation = chain.invoke(prompt_values)
         return response.discard
 
     except Exception as e:
@@ -433,20 +447,25 @@ def extract_action_items(
         user_tz
     )
     current_time_local = current_time.astimezone(user_tz)
+    prompt_values = {
+        'conversation_context': conversation_context,
+        'format_instructions': action_items_parser.get_format_instructions(),
+        'language_code': language_code,
+        'response_language': response_language,
+        'started_at_local': started_at_local.replace(tzinfo=None).isoformat(),
+        'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
+        'tz': tz or 'UTC',
+        'existing_items_context': existing_items_context,
+    }
+
+    _invoke_gateway_unless_byok(
+        f'{instructions_text}\n\n{context_message.format(**prompt_values)}',
+        ActionItemsExtraction,
+        feature='conversation_action_items.extract.shadow',
+    )
 
     try:
-        response = chain.invoke(
-            {
-                'conversation_context': conversation_context,
-                'format_instructions': action_items_parser.get_format_instructions(),
-                'language_code': language_code,
-                'response_language': response_language,
-                'started_at_local': started_at_local.replace(tzinfo=None).isoformat(),
-                'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
-                'tz': tz or 'UTC',
-                'existing_items_context': existing_items_context,
-            }
-        )
+        response = chain.invoke(prompt_values)
 
         # Set created_at for action items if not already set
         now = current_time

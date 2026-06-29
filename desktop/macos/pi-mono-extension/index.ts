@@ -28,10 +28,11 @@ import {
   type ToolResultEvent,
 } from "@mariozechner/pi-coding-agent";
 import { Type } from "@mariozechner/pi-ai";
-import { appendFile, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { createConnection, type Socket } from "node:net";
 import { dirname, join, resolve } from "node:path";
+import { isSafeSkillName, loadSkillInstructions } from "../agent/src/runtime/node-tools.ts";
 import {
   buildToolAvailabilitySnapshot,
   toolNamesForAdapter,
@@ -567,9 +568,7 @@ async function omiContextFileCorrelation(): Promise<Record<string, string | numb
 export const OMI_TOOL_TIMEOUT_MS = 30_000;
 export const OMI_LONG_CONTROL_TOOL_TIMEOUT_MS = 10 * 60_000;
 
-export function isSafeSkillName(name: string): boolean {
-  return /^[A-Za-z0-9._-]+$/.test(name) && name !== "." && name !== ".." && !name.includes("..");
-}
+export { isSafeSkillName };
 
 // ---------------------------------------------------------------------------
 // Omi tool definitions — pi-mono defineTool() with TypeBox schemas
@@ -584,14 +583,12 @@ function omiTool<T extends Parameters<typeof Type.Object>[0]>(spec: {
   promptGuidelines?: string[];
   properties: T;
   required: (keyof T)[];
-  schemaOptions?: Record<string, unknown>;
   timeoutMs?: number;
 }) {
   const parameters = Type.Object(
     spec.properties,
     { additionalProperties: false },
   );
-  Object.assign(parameters, spec.schemaOptions);
   const tool = defineTool({
     name: spec.name,
     label: spec.label,
@@ -664,18 +661,8 @@ function omiManifestTool(tool: OmiToolManifestEntry) {
     promptGuidelines: tool.promptGuidelines,
     properties: typeBoxPropertiesForInputSchema(tool.inputSchema),
     required: (tool.inputSchema.required ?? []) as never[],
-    schemaOptions: schemaOptionsForInputSchema(tool.inputSchema),
     timeoutMs: tool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS,
   });
-}
-
-function schemaOptionsForInputSchema(schema: OmiToolInputSchema): Record<string, unknown> {
-  const options: Record<string, unknown> = {};
-  for (const key of ["anyOf", "allOf", "oneOf", "if", "then"] as const) {
-    const value = schema[key];
-    if (value !== undefined) options[key] = value;
-  }
-  return options;
 }
 
 function loadSkillTool() {
@@ -698,39 +685,10 @@ function loadSkillTool() {
           details: undefined,
         };
       }
-      const workspace = process.env.OMI_WORKSPACE || "";
-      const roots = [
-        workspace ? resolve(workspace, ".claude", "skills") : "",
-        resolve(homedir(), ".claude", "skills"),
-      ].filter(Boolean);
-
-      let content: string | null = null;
-      for (const root of roots) {
-        let realRoot: string;
-        let realFilePath: string;
-        try {
-          realRoot = await realpath(root);
-          realFilePath = await realpath(resolve(root, name, "SKILL.md"));
-        } catch {
-          continue;
-        }
-        if (!realFilePath.startsWith(`${realRoot}/`)) {
-          continue;
-        }
-        try {
-          content = await readFile(realFilePath, "utf8");
-          break;
-        } catch {
-          // Try the next configured skill location.
-        }
-      }
-      if (content && name === "dev-mode" && workspace) {
-        content = `Workspace: ${workspace}\n\n${content}`;
-      }
       return {
         content: [{
           type: "text" as const,
-          text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
+          text: await loadSkillInstructions(name),
         }],
         details: undefined,
       };

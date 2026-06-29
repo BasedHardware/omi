@@ -1,3 +1,4 @@
+import os
 import re
 from typing import List, Optional
 
@@ -260,11 +261,31 @@ FREQUENCY_GUIDANCE = {
     1: "Ultra selective. Only prevent clear mistakes or truly critical insights. 1-3 per day max.",
     2: "Very selective. Only non-obvious insights tied to specific goals or history. 3-5 per day.",
     3: "Balanced. Only when you have a specific, actionable insight the user would miss. 5-8 per day.",
-    4: "Proactive. Share specific insights connecting this conversation to goals/history. 8-12 per day.",
-    5: "Very proactive. Share insights when you spot non-obvious connections. Up to 12 per day.",
+    4: "Proactive. Share specific insights connecting this conversation to goals/history. 6-9 per day.",
+    5: "Very proactive. Share insights when you spot non-obvious connections. Up to 9 per day.",
 }
 
-MAX_DAILY_NOTIFICATIONS = 12
+
+def _resolve_daily_cap(default: int = 9, minimum: int = 1, maximum: int = 1000) -> int:
+    """Read the daily-cap override, clamped to a sane range.
+
+    A non-integer or unset value falls back to the default, and the result is
+    bounded so a typo cannot silently disable proactive notifications (0/negative)
+    or remove throttling entirely (an accidental huge value)."""
+    raw = os.getenv('MAX_DAILY_NOTIFICATIONS')
+    if raw is None:
+        return default
+    try:
+        return max(minimum, min(int(raw), maximum))
+    except (TypeError, ValueError):
+        return default
+
+
+# Hard ceiling on proactive notifications per user per day, across every source
+# (mentor + third-party proactive apps). Defaults to 9 to keep the user under the
+# "less than 10 daily notifs" target in #4859; override with the env var to tune
+# without a code change.
+MAX_DAILY_NOTIFICATIONS = _resolve_daily_cap()
 
 
 # ---------------------------------------------------------------------------

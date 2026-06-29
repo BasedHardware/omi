@@ -4,6 +4,7 @@ import sys
 import types
 import logging
 from contextlib import contextmanager
+from datetime import datetime, timezone
 
 import pytest
 
@@ -36,10 +37,12 @@ sys.modules.setdefault('utils.llms.memory', memory_stub)
 
 clients_stub = types.ModuleType('utils.llm.clients')
 clients_stub.get_llm = lambda feature: None
+clients_stub.parser = object()
 sys.modules.setdefault('utils.llm.clients', clients_stub)
 
 from utils import byok
 from utils.llm import chat, gateway_client
+from utils.llm import conversation_processing
 
 
 class FakeParser:
@@ -277,3 +280,144 @@ def test_chat_structured_gateway_failure_does_not_log_raw_prompt_or_response(mon
     assert result is None
     assert 'raw user question should not be logged' not in caplog.text
     assert 'raw provider body should not be logged' not in caplog.text
+
+
+def test_conversation_discard_gateway_success_returns_without_legacy_llm(monkeypatch):
+    captured = {}
+
+    def fake_gateway(prompt, output_model, *, feature):
+        captured.update({'prompt': prompt, 'output_model': output_model, 'feature': feature})
+        return output_model(discard=True)
+
+    monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(
+        conversation_processing,
+        'get_llm',
+        lambda feature, **kwargs: pytest.fail('legacy discard path should not be called after gateway success'),
+    )
+
+    assert conversation_processing.should_discard_conversation('hello there', duration_seconds=15) is True
+    assert captured['output_model'] is conversation_processing.DiscardConversation
+    assert captured['feature'] == 'conversation_discard.should_discard'
+    assert 'hello there' in captured['prompt']
+
+
+def test_conversation_discard_byok_skips_gateway_and_uses_legacy_llm(monkeypatch):
+    class FakeParser:
+        def __init__(self, pydantic_object):
+            self.pydantic_object = pydantic_object
+
+        def get_format_instructions(self):
+            return 'return structured output'
+
+    class FakePrompt:
+        def __or__(self, other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, other):
+            return self
+
+        def invoke(self, values):
+            assert 'hello there' in values['full_context']
+            return conversation_processing.DiscardConversation(discard=False)
+
+    byok.set_byok_keys({'openai': 'secret'})
+    counter = FakeCounter()
+    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(
+        conversation_processing,
+        'invoke_chat_structured_gateway',
+        lambda *args, **kwargs: pytest.fail('gateway should not be called for BYOK requests'),
+    )
+    monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
+    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
+
+    assert conversation_processing.should_discard_conversation('hello there', duration_seconds=15) is False
+    assert counter.calls == [
+        (
+            {
+                'feature': 'conversation_discard.should_discard',
+                'outcome': 'skipped',
+                'reason': 'byok',
+            },
+            1,
+        )
+    ]
+
+
+def test_conversation_discard_gateway_failure_falls_back_to_legacy_llm(monkeypatch):
+    class FakeParser:
+        def __init__(self, pydantic_object):
+            self.pydantic_object = pydantic_object
+
+        def get_format_instructions(self):
+            return 'return structured output'
+
+    class FakePrompt:
+        def __or__(self, other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, other):
+            return self
+
+        def invoke(self, values):
+            assert 'hello there' in values['full_context']
+            return conversation_processing.DiscardConversation(discard=False)
+
+    monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', lambda *args, **kwargs: None)
+    monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
+    monkeypatch.setattr(
+        conversation_processing.ChatPromptTemplate,
+        'from_messages',
+        lambda messages: FakePrompt(),
+    )
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
+
+    assert conversation_processing.should_discard_conversation('hello there', duration_seconds=15) is False
+
+
+def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
+    captured = {}
+
+    class FakeParser:
+        def __init__(self, pydantic_object):
+            self.pydantic_object = pydantic_object
+
+        def get_format_instructions(self):
+            return 'return structured output'
+
+    class FakePrompt:
+        def __or__(self, other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, other):
+            return self
+
+        def invoke(self, values):
+            assert 'submit report by Friday' in values['conversation_context']
+            return conversation_processing.ActionItemsExtraction(action_items=[])
+
+    def fake_gateway(prompt, output_model, *, feature):
+        captured.update({'prompt': prompt, 'output_model': output_model, 'feature': feature})
+        return output_model(action_items=[])
+
+    monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
+    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
+    monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+
+    result = conversation_processing.extract_action_items(
+        'submit report by Friday',
+        datetime(2026, 6, 28, tzinfo=timezone.utc),
+        'en',
+        'UTC',
+    )
+
+    assert result == []
+    assert captured['output_model'] is conversation_processing.ActionItemsExtraction
+    assert captured['feature'] == 'conversation_action_items.extract.shadow'
+    assert 'submit report by Friday' in captured['prompt']

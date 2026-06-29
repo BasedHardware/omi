@@ -15,13 +15,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _resolve_display_tz(tz: str | None):
-    """Return (tzinfo, label) for formatting timestamps. Falls back to UTC on a missing/invalid zone."""
+def resolve_display_tz(tz: str | None):
+    """Return ``(tzinfo, label)`` for rendering timestamps in a user's local timezone.
+
+    Falls back to ``(UTC, "UTC")`` when the zone is missing or not a valid IANA name.
+    Shared by the chat retrieval tools so every user-facing timestamp is shown in the
+    user's local time rather than UTC (see issue #4643).
+    """
     if tz:
         try:
             return ZoneInfo(tz), tz
         except (ZoneInfoNotFoundError, ValueError):
-            logger.warning(f"conversations_to_string: invalid timezone '{tz}', falling back to UTC")
+            logger.warning(f"resolve_display_tz: invalid timezone '{tz}', falling back to UTC")
     return timezone.utc, "UTC"
 
 
@@ -158,7 +163,7 @@ def conversations_to_string(
     """
     result = []
     people_map = {p.id: p for p in people} if people else {}
-    display_tz, tz_label = _resolve_display_tz(tz)
+    display_tz, tz_label = resolve_display_tz(tz)
     for i, conversation in enumerate(conversations):
         formatted_date = conversation.created_at.astimezone(display_tz).strftime("%d %b %Y at %H:%M") + f" {tz_label}"
         conversation_str = (
