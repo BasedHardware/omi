@@ -38,7 +38,6 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 
 from utils.llm.clients import (
     MODEL_QOS_PROFILES,
-    _CACHE_KEY_MODELS,
     _STRUCTURED_OUTPUT_FEATURES,
     _active_profile,
     _active_profile_name,
@@ -54,6 +53,7 @@ from utils.llm.clients import (
     get_model,
     get_provider,
     get_qos_info,
+    supports_prompt_cache,
 )
 
 SIMPLE_PROMPT = "Reply with exactly one word: hello"
@@ -263,20 +263,21 @@ class TestP7_PromptCaching:
     """P7: cache_key binding works and produces valid responses."""
 
     def test_cache_key_with_cacheable_model(self):
-        """conv_structure uses gpt-5.4-mini (in _CACHE_KEY_MODELS) — cache_key should bind."""
+        """conv_structure uses gpt-5.4-mini (supports prompt cache), so cache_key should bind."""
         llm = get_llm('conv_structure', cache_key='omi-test-cp9')
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip()
         print(f"  P7 cache_key bound: {response.content.strip()[:60]}")
 
     def test_cache_key_ignored_for_non_cacheable(self):
-        """memories uses gpt-4.1-mini (not in _CACHE_KEY_MODELS) — cache_key is no-op."""
-        llm_with = get_llm('memories', cache_key='omi-test-cp9')
-        llm_without = get_llm('memories')
+        """session_titles uses gemini-2.5-flash-lite (no OpenAI prompt cache), so cache_key is a no-op."""
+        llm_with = get_llm('session_titles', cache_key='omi-test-cp9')
+        llm_without = get_llm('session_titles')
         assert llm_with is llm_without  # same instance, cache_key was a no-op
 
-    def test_cache_key_models_set(self):
-        assert _CACHE_KEY_MODELS == {'gpt-5.4', 'gpt-5.4-mini'}
+    def test_cacheable_models_supported(self):
+        assert supports_prompt_cache('gpt-5.4')
+        assert supports_prompt_cache('gpt-5.4-mini')
 
 
 # ---------------------------------------------------------------------------
