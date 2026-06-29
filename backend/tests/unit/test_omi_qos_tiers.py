@@ -114,7 +114,6 @@ _install_module(
     record_model_route_run=MagicMock(),
 )
 _install_module('utils.other.endpoints', get_current_user_uid=lambda: 'uid')
-_install_module('models.structured', Structured=MagicMock())
 _install_module('utils.byok', get_byok_key=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
@@ -177,6 +176,7 @@ def _clients_subprocess_script(assertion: str) -> str:
         "    'database',",
         "    'database._client',",
         "    'database.llm_usage',",
+        "    'models.structured_extraction',",
         "]:",
         "    sys.modules.setdefault(module_name, MagicMock())",
         "os.environ['OPENAI_API_KEY'] = 'sk-test'",

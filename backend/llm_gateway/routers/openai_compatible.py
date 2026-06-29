@@ -13,7 +13,7 @@ from llm_gateway.gateway.errors import (
     GatewayErrorCode,
     GatewayInvalidRequestError,
 )
-from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
+from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, selected_serving_route_artifact_id
 from llm_gateway.gateway.metrics import observe_error, observe_success, time_request
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
@@ -43,7 +43,7 @@ async def create_chat_completion(
                 lambda: observe_error(
                     started_at,
                     lane_id=resolved_route.lane.lane_id,
-                    route_artifact_id=resolved_route.active_route.route_artifact_id,
+                    route_artifact_id=selected_serving_route_artifact_id(resolved_route),
                     error=exc,
                 )
             )
