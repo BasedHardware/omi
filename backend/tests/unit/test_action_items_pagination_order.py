@@ -1,0 +1,103 @@
+"""get_action_items must paginate AFTER the final sort, not on the Firestore query.
+
+The query orders by due_at/created_at DESC and applied offset/limit at the Firestore level, but then
+re-sorted the page client-side into a different order (due_at ascending, items without a due date
+last). So offset/limit sliced the Firestore-ordered set and the re-sort only reordered that slice --
+every page, even page 0 with a limit, returned the wrong items. A user paging their tasks could miss
+soon-due items that were created earlier. Pagination now runs after the sort, so it matches the
+returned order.
+
+database.action_items constructs a Firestore client at module load, so database._client is stubbed
+before import and the query chain is replaced with a stand-in whose stream() mimics Firestore
+slicing -- the pre-fix code (which calls offset()/limit() on the query) therefore fails these tests.
+"""
+
+import os
+import sys
+import types
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
+
+os.environ.setdefault(
+    'ENCRYPTION_SECRET',
+    'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
+)
+
+_client_stub = types.ModuleType('database._client')
+_client_stub.db = MagicMock(name='db')
+sys.modules['database._client'] = _client_stub
+
+import database.action_items as action_items  # noqa: E402
+
+BASE = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+class _Doc:
+    def __init__(self, doc_id, created_at, due_at):
+        self.id = doc_id
+        self._data = {'created_at': created_at, 'due_at': due_at}
+
+    def to_dict(self):
+        return dict(self._data)
+
+
+class _Query:
+    """Firestore query stand-in. stream() returns docs sliced the way Firestore would if offset()/
+    limit() were applied, so the pre-fix code (which paginates on the query) sees a pre-sliced set."""
+
+    def __init__(self, docs):
+        self._docs = docs
+        self._offset = 0
+        self._limit = None
+
+    def where(self, *a, **k):
+        return self
+
+    def order_by(self, *a, **k):
+        return self
+
+    def offset(self, n):
+        self._offset = n
+        return self
+
+    def limit(self, n):
+        self._limit = n
+        return self
+
+    def stream(self):
+        d = self._docs[self._offset :]
+        if self._limit is not None:
+            d = d[: self._limit]
+        return iter(d)
+
+
+# Docs in created_at DESC order (the Firestore order for the default path). The due dates make the
+# final sort order (soonest due first, no-due last) different from created_at DESC.
+DOCS = [
+    _Doc('A', BASE + timedelta(minutes=5), None),
+    _Doc('B', BASE + timedelta(minutes=4), BASE + timedelta(days=10)),
+    _Doc('C', BASE + timedelta(minutes=3), BASE + timedelta(days=1)),
+    _Doc('D', BASE + timedelta(minutes=2), BASE + timedelta(days=5)),
+    _Doc('E', BASE + timedelta(minutes=1), None),
+]
+# Firestore order: A, B, C, D, E ; final sorted order: C, D, B, A, E
+
+
+def _ids(**kwargs):
+    query = _Query(list(DOCS))
+    action_items.db.collection.return_value.document.return_value.collection.return_value = query
+    return [item['id'] for item in action_items.get_action_items('uid1', **kwargs)]
+
+
+def test_full_order_no_pagination():
+    assert _ids() == ['C', 'D', 'B', 'A', 'E']
+
+
+def test_first_page_returns_soonest_due_not_newest_created():
+    # offset=0, limit=2 -> first two of the final order (soonest due), not the two newest-created.
+    assert _ids(limit=2, offset=0) == ['C', 'D']
+
+
+def test_second_page_continues_final_order():
+    # offset=2, limit=2 -> the next two of the final order.
+    assert _ids(limit=2, offset=2) == ['B', 'A']
