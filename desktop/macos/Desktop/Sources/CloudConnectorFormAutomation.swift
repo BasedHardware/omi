@@ -321,6 +321,7 @@ enum CloudConnectorFormAutomation {
 
     let candidates = claudeAddGuidanceCandidates(
       windowFrame: windowFrame,
+      windowTopLeftFrame: rawWindowFrame,
       nodes: target.nodes,
       screen: screen
     )
@@ -493,6 +494,7 @@ enum CloudConnectorFormAutomation {
   /// return [] and the caller suppresses the overlay.
   private static func claudeAddGuidanceCandidates(
     windowFrame: CGRect,
+    windowTopLeftFrame: CGRect,
     nodes: [AccessibleNode],
     screen: SpatialOverlayScreen
   ) -> [SpatialOverlayAnchorCandidate] {
@@ -542,8 +544,11 @@ enum CloudConnectorFormAutomation {
 
     // 3) Neither button is located, but the modal's form fields are. Point at the
     //    located modal's footer (where Add lives) instead of guessing against the window.
-    if let modalTopLeft = locatedClaudeModalRect(in: nodes, within: windowFrame),
-      let footer = claudeAddFallbackFooterTarget(modalTopLeft: modalTopLeft, window: windowFrame)
+    if let modalTopLeft = locatedClaudeModalRect(in: nodes, within: windowTopLeftFrame),
+      let footer = claudeAddFallbackFooterTarget(
+        modalTopLeft: modalTopLeft,
+        window: windowTopLeftFrame
+      )
     {
       // Treat the located modal as a hard exclusion zone so the bubble is placed beside
       // it rather than on top of the form, while the arrow still reaches the footer.
