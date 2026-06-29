@@ -68,6 +68,7 @@ class _FakeDb:
 def _load_memories_module(memory_ref):
     client_mod = types.ModuleType('database._client')
     client_mod.db = _FakeDb(memory_ref)
+    setattr(client_mod, 'get_firestore_client', lambda: client_mod.db)
     sys.modules['database._client'] = client_mod
     sys.modules.pop('database.memories', None)
     return importlib.import_module('database.memories')

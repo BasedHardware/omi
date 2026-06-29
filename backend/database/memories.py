@@ -6,8 +6,7 @@ from google.api_core.exceptions import NotFound as FirestoreNotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from ._client import db
-from database import users as users_db
+from ._client import get_firestore_client
 from utils import encryption
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging
@@ -18,8 +17,20 @@ memories_collection = 'memories'
 users_collection = 'users'
 
 
-def _update_memory_if_exists(uid: str, memory_id: str, update_payload: Dict[str, Any], operation: str) -> bool:
-    user_ref = db.collection(users_collection).document(uid)
+def _get_db(firestore_client=None):
+    return firestore_client if firestore_client is not None else get_firestore_client()
+
+
+def _update_memory_if_exists(
+    uid: str,
+    memory_id: str,
+    update_payload: Dict[str, Any],
+    operation: str,
+    *,
+    firestore_client=None,
+) -> bool:
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     try:
@@ -30,11 +41,12 @@ def _update_memory_if_exists(uid: str, memory_id: str, update_payload: Dict[str,
         return False
 
 
-def get_memory_ids(uid: str) -> List[str]:
+def get_memory_ids(uid: str, *, firestore_client=None) -> List[str]:
     """Return all memory document IDs for a user without decrypting any fields (IDs-only projection).
 
     Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
-    coll = db.collection(users_collection).document(uid).collection(memories_collection)
+    database = _get_db(firestore_client)
+    coll = database.collection(users_collection).document(uid).collection(memories_collection)
     return [doc.id for doc in coll.select([]).stream()]
 
 
@@ -94,9 +106,12 @@ def get_memories(
     end_date: Optional[datetime] = None,
     include_invalidated: bool = False,
     sort: str = 'scoring_desc',
+    *,
+    firestore_client=None,
 ):
     logger.info(f'get_memories db {uid} {limit} {offset} {categories} {start_date} {end_date} {sort}')
-    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
 
     if categories:
         memories_ref = memories_ref.where(filter=FieldFilter('category', 'in', categories))
@@ -131,10 +146,11 @@ def get_memories(
 
 
 @prepare_for_read(decrypt_func=_prepare_memory_for_read)
-def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
+def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0, *, firestore_client=None):
     logger.info(f'get_public_memories {limit} {offset}')
 
-    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = memories_ref.order_by('scoring', direction=firestore.Query.DESCENDING).order_by(
         'created_at', direction=firestore.Query.DESCENDING
     )
@@ -150,9 +166,10 @@ def get_user_public_memories(uid: str, limit: int = 100, offset: int = 0):
 
 
 @prepare_for_read(decrypt_func=_prepare_memory_for_read)
-def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
+def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0, *, firestore_client=None):
     logger.info(f'get_non_filtered_memories {uid} {limit} {offset}')
-    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     memories_ref = memories_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
     memories_ref = memories_ref.limit(limit).offset(offset)
     memories = [doc.to_dict() for doc in memories_ref.stream()]
@@ -161,8 +178,9 @@ def get_non_filtered_memories(uid: str, limit: int = 100, offset: int = 0):
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
-def create_memory(uid: str, data: dict):
-    user_ref = db.collection(users_collection).document(uid)
+def create_memory(uid: str, data: dict, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(data['id'])
     memory_ref.set(data)
@@ -170,12 +188,13 @@ def create_memory(uid: str, data: dict):
 
 @set_data_protection_level(data_arg_name='data')
 @prepare_for_write(data_arg_name='data', prepare_func=_prepare_data_for_write)
-def save_memories(uid: str, data: List[dict]):
+def save_memories(uid: str, data: List[dict], *, firestore_client=None):
     if not data:
         return
 
-    batch = db.batch()
-    user_ref = db.collection(users_collection).document(uid)
+    database = _get_db(firestore_client)
+    batch = database.batch()
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     for memory in data:
         memory_ref = memories_ref.document(memory['id'])
@@ -183,9 +202,10 @@ def save_memories(uid: str, data: List[dict]):
     batch.commit()
 
 
-def delete_memories(uid: str):
-    batch = db.batch()
-    user_ref = db.collection(users_collection).document(uid)
+def delete_memories(uid: str, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    batch = database.batch()
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
@@ -193,15 +213,16 @@ def delete_memories(uid: str):
 
 
 @prepare_for_read(decrypt_func=_prepare_memory_for_read)
-def get_memory(uid: str, memory_id: str):
-    user_ref = db.collection(users_collection).document(uid)
+def get_memory(uid: str, memory_id: str, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_data = memory_ref.get().to_dict()
     return memory_data
 
 
-def get_memories_by_ids(uid: str, memory_ids: List[str]) -> List[dict]:
+def get_memories_by_ids(uid: str, memory_ids: List[str], *, firestore_client=None) -> List[dict]:
     """
     Batch fetch multiple memories by their IDs.
     Uses Firestore's get_all for efficient batch retrieval.
@@ -209,11 +230,12 @@ def get_memories_by_ids(uid: str, memory_ids: List[str]) -> List[dict]:
     if not memory_ids:
         return []
 
-    user_ref = db.collection(users_collection).document(uid)
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
 
     doc_refs = [memories_ref.document(memory_id) for memory_id in memory_ids]
-    docs = db.get_all(doc_refs)
+    docs = database.get_all(doc_refs)
 
     memories = []
     for doc in docs:
@@ -227,30 +249,33 @@ def get_memories_by_ids(uid: str, memory_ids: List[str]) -> List[dict]:
     return memories
 
 
-def review_memory(uid: str, memory_id: str, value: bool):
-    user_ref = db.collection(users_collection).document(uid)
+def review_memory(uid: str, memory_id: str, value: bool, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'reviewed': True, 'user_review': value})
 
 
-def set_memory_kg_extracted(uid: str, memory_id: str):
-    _update_memory_if_exists(uid, memory_id, {'kg_extracted': True}, 'kg_extracted')
+def set_memory_kg_extracted(uid: str, memory_id: str, *, firestore_client=None):
+    _update_memory_if_exists(uid, memory_id, {'kg_extracted': True}, 'kg_extracted', firestore_client=firestore_client)
 
 
-def change_memory_visibility(uid: str, memory_id: str, value: str):
-    user_ref = db.collection(users_collection).document(uid)
+def change_memory_visibility(uid: str, memory_id: str, value: str, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.update({'visibility': value})
 
 
-def update_memory_fields(uid: str, memory_id: str, data: dict):
+def update_memory_fields(uid: str, memory_id: str, data: dict, *, firestore_client=None):
     """Updates specified fields for a memory and sets the updated_at timestamp."""
     if not data:
         return
 
-    user_ref = db.collection(users_collection).document(uid)
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
 
@@ -259,8 +284,9 @@ def update_memory_fields(uid: str, memory_id: str, data: dict):
     memory_ref.update(update_payload)
 
 
-def edit_memory(uid: str, memory_id: str, value: str):
-    user_ref = db.collection(users_collection).document(uid)
+def edit_memory(uid: str, memory_id: str, value: str, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
 
@@ -277,7 +303,12 @@ def edit_memory(uid: str, memory_id: str, value: str):
 
 
 def invalidate_memory(
-    uid: str, memory_id: str, superseded_by: Optional[str] = None, invalid_at: Optional[datetime] = None
+    uid: str,
+    memory_id: str,
+    superseded_by: Optional[str] = None,
+    invalid_at: Optional[datetime] = None,
+    *,
+    firestore_client=None,
 ):
     """Soft-invalidate a memory that has been superseded or retracted.
 
@@ -288,31 +319,34 @@ def invalidate_memory(
     """
     if invalid_at is None:
         invalid_at = datetime.now(timezone.utc)
-    update_payload = {'invalid_at': invalid_at, 'updated_at': datetime.now(timezone.utc)}
+    update_payload: Dict[str, Any] = {'invalid_at': invalid_at, 'updated_at': datetime.now(timezone.utc)}
     if superseded_by is not None:
         update_payload['superseded_by'] = superseded_by
-    _update_memory_if_exists(uid, memory_id, update_payload, 'invalidate')
+    _update_memory_if_exists(uid, memory_id, update_payload, 'invalidate', firestore_client=firestore_client)
 
 
-def delete_memory(uid: str, memory_id: str):
-    user_ref = db.collection(users_collection).document(uid)
+def delete_memory(uid: str, memory_id: str, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     memory_ref = memories_ref.document(memory_id)
     memory_ref.delete()
 
 
-def delete_all_memories(uid: str):
-    user_ref = db.collection(users_collection).document(uid)
+def delete_all_memories(uid: str, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
-    batch = db.batch()
+    batch = database.batch()
     for doc in memories_ref.stream():
         batch.delete(doc.reference)
     batch.commit()
 
 
-def get_memory_ids_for_conversation(uid: str, conversation_id: str) -> List[str]:
+def get_memory_ids_for_conversation(uid: str, conversation_id: str, *, firestore_client=None) -> List[str]:
     """Get all memory IDs associated with a conversation."""
-    user_ref = db.collection(users_collection).document(uid)
+    database = _get_db(firestore_client)
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     query = memories_ref.where(filter=FieldFilter('memory_id', '==', conversation_id))
 
@@ -320,9 +354,10 @@ def get_memory_ids_for_conversation(uid: str, conversation_id: str) -> List[str]
     return memory_ids
 
 
-def delete_memories_for_conversation(uid: str, memory_id: str):
-    batch = db.batch()
-    user_ref = db.collection(users_collection).document(uid)
+def delete_memories_for_conversation(uid: str, memory_id: str, *, firestore_client=None):
+    database = _get_db(firestore_client)
+    batch = database.batch()
+    user_ref = database.collection(users_collection).document(uid)
     memories_ref = user_ref.collection(memories_collection)
     query = memories_ref.where(filter=FieldFilter('memory_id', '==', memory_id))
 
@@ -334,14 +369,15 @@ def delete_memories_for_conversation(uid: str, memory_id: str):
     logger.info(f'delete_memories_for_conversation {memory_id} {len(removed_ids)}')
 
 
-def unlock_all_memories(uid: str):
+def unlock_all_memories(uid: str, *, firestore_client=None):
     """
     Finds all memories for a user with is_locked: True and updates them to is_locked = False.
     """
-    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     locked_memories_query = memories_ref.where(filter=FieldFilter('is_locked', '==', True))
 
-    batch = db.batch()
+    batch = database.batch()
     docs = locked_memories_query.stream()
     count = 0
     for doc in docs:
@@ -349,7 +385,7 @@ def unlock_all_memories(uid: str):
         count += 1
         if count >= 499:  # Firestore batch limit is 500
             batch.commit()
-            batch = db.batch()
+            batch = database.batch()
             count = 0
     if count > 0:
         batch.commit()
@@ -361,13 +397,14 @@ def unlock_all_memories(uid: str):
 # **************************************
 
 
-def get_memories_to_migrate(uid: str, target_level: str) -> List[dict]:
+def get_memories_to_migrate(uid: str, target_level: str, *, firestore_client=None) -> List[dict]:
     """
     Finds all memories that are not at the target protection level by fetching all documents
     and filtering them in memory. This simplifies the code but may be less performant for
     users with a very large number of documents.
     """
-    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    database = _get_db(firestore_client)
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     all_memories = memories_ref.select(['data_protection_level']).stream()
 
     to_migrate = []
@@ -380,14 +417,15 @@ def get_memories_to_migrate(uid: str, target_level: str) -> List[dict]:
     return to_migrate
 
 
-def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: str):
+def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: str, *, firestore_client=None):
     """
     Migrates a batch of memories to the target protection level.
     """
-    batch = db.batch()
-    memories_ref = db.collection(users_collection).document(uid).collection(memories_collection)
+    database = _get_db(firestore_client)
+    batch = database.batch()
+    memories_ref = database.collection(users_collection).document(uid).collection(memories_collection)
     doc_refs = [memories_ref.document(mem_id) for mem_id in memory_ids]
-    doc_snapshots = db.get_all(doc_refs)
+    doc_snapshots = database.get_all(doc_refs)
 
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
@@ -416,7 +454,7 @@ def migrate_memories_level_batch(uid: str, memory_ids: List[str], target_level: 
     batch.commit()
 
 
-def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
+def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None, *, firestore_client=None):
     """
     Migrate memories from one user to another.
     If app_id is provided, only migrate memories related to that app.
@@ -424,7 +462,8 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
     logger.info(f'Migrating memories from {prev_uid} to {new_uid}')
 
     # Get source memories
-    prev_user_ref = db.collection(users_collection).document(prev_uid)
+    database = _get_db(firestore_client)
+    prev_user_ref = database.collection(users_collection).document(prev_uid)
     prev_memories_ref = prev_user_ref.collection(memories_collection)
 
     # Apply app_id filter if provided
@@ -441,8 +480,8 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
         return 0
 
     # Create batch for destination user
-    batch = db.batch()
-    new_user_ref = db.collection(users_collection).document(new_uid)
+    batch = database.batch()
+    new_user_ref = database.collection(users_collection).document(new_uid)
     new_memories_ref = new_user_ref.collection(memories_collection)
 
     # Add memories to batch
