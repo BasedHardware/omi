@@ -487,10 +487,19 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
 # Omi Chat Tools manifest — served at `GET /.well-known/omi-tools.json`.
 # Schema per docs/doc/developer/apps/ChatTools.mdx. Each plugin has its own
 # manifest because the parameter NAMES must match that plugin's /toggle
-# ToggleRequest model (Telegram uses `chat_id`/`bot_token`; WhatsApp uses
-# `phone`/`access_token`). The chat assistant will faithfully build a
-# request from this schema, so the JSON-Schema `properties` keys MUST
-# exactly match the field names the corresponding /toggle endpoint accepts.
+# ToggleRequest model.
+#
+# SECURITY: the manifest is public discovery metadata read by the chat
+# assistant. It must NEVER advertise long-lived platform credentials as
+# tool parameters — the chat assistant would faithfully prompt the user
+# to paste them in chat, and those secrets would then live in chat
+# history, tool-call logs, traces, screenshots, and model context.
+#
+# The plugin bearer token (in `Authorization: Bearer`) gates the call.
+# The chat_id / phone is a NON-SECRET reference the plugin uses to look
+# up which user the call applies to (the binding was made at /start
+# handshake time). The platform credential is held by the plugin in
+# its storage; the chat tool never sees it.
 # ---------------------------------------------------------------------------
 TOOLS_MANIFEST = {
     "tools": [
@@ -500,8 +509,7 @@ TOOLS_MANIFEST = {
                 "Turn the AI Clone auto-reply on or off for a connected "
                 "Telegram chat. Use this when the user wants to enable or "
                 "disable Omi's automatic responses in a specific Telegram "
-                "conversation. The bot_token parameter is the bot's token "
-                "(from @BotFather) used to authenticate the toggle call."
+                "conversation."
             ),
             "endpoint": "/toggle",
             "method": "POST",
@@ -509,20 +517,19 @@ TOOLS_MANIFEST = {
                 "properties": {
                     "chat_id": {
                         "type": "string",
-                        "description": "Telegram chat_id of the conversation.",
+                        "description": (
+                            "Telegram chat_id of the conversation. The "
+                            "plugin uses this to look up the bound user "
+                            "from the prior /start handshake — it is NOT "
+                            "a secret and never identifies the user."
+                        ),
                     },
                     "enabled": {
                         "type": "boolean",
                         "description": ("True to enable AI Clone auto-reply for the " "chat, false to disable it."),
                     },
-                    "bot_token": {
-                        "type": "string",
-                        "description": (
-                            "Telegram bot_token (from @BotFather). Used to " "authenticate the /toggle call."
-                        ),
-                    },
                 },
-                "required": ["chat_id", "enabled", "bot_token"],
+                "required": ["chat_id", "enabled"],
             },
             "auth_required": True,
             "status_message": "Toggling Telegram auto-reply...",
