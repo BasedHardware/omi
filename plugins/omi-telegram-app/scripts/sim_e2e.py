@@ -10,23 +10,34 @@ reply) requires a real bot token from @BotFather, a real persona, and the
 Telegram user to actually send a message. See ../E2E_RUNBOOK.md for those.
 
 Usage:
-    # 1. Start the plugin in one terminal
-    STORAGE_DIR=/tmp/omi-tg-e2e \
-    TELEGRAM_WEBHOOK_SECRET=test-secret-e2e \
-    OMI_BASE_URL=https://api.omi.me \
-      uvicorn --app-dir plugins/omi-telegram-app main:app \
-              --host 127.0.0.1 --port 18800 --log-level info
+    # 1. Start the plugin in one terminal (export the var so step 2
+    #    can reuse it without re-deriving the path).
+    export STORAGE_DIR=/tmp/omi-tg-e2e
+    export TELEGRAM_WEBHOOK_SECRET=test-secret-e2e
+    export OMI_BASE_URL=https://api.omi.me
+    mkdir -p "$STORAGE_DIR"
+    uvicorn --app-dir plugins/omi-telegram-app main:app \
+            --host 127.0.0.1 --port 18800 --log-level info \
+            > "$STORAGE_DIR/plugin.log" 2>&1 &
 
-    # 2. In another terminal, seed a user file (the /start handshake does
-    #    this in production; we skip it here):
+    # 2. In another terminal, seed a user file (the /start handshake
+    #    does this in production; we skip it here). Use the same
+    #    absolute path that step 1 used — the script's log-tailing
+    #    depends on $STORAGE_DIR being set in BOTH terminals.
     echo '{"999001":{"chat_id":"999001","omi_uid":"test-uid-e2e","persona_id":"test-persona-e2e","omi_dev_api_key":"placeholder-key","bot_token":"placeholder-token","auto_reply_enabled":true,"created_at":"2026-06-29T00:00:00","updated_at":"2026-06-29T00:00:00"}}' \
-      > $STORAGE_DIR/users_data.json
+      > "$STORAGE_DIR/users_data.json"
 
     # 3. Bounce the plugin so it loads the file (storage is module-cached)
     #    (kill the uvicorn process, restart it as in step 1)
 
-    # 4. Run this script:
+    # 4. Run this script from the repo root:
     python plugins/omi-telegram-app/scripts/sim_e2e.py
+
+The script's critical dispatch assertion tails $STORAGE_DIR/plugin.log
+to verify both the persona POST and the sendMessage POST fired. Without
+the `> "$STORAGE_DIR/plugin.log"` redirect in step 1, the file won't
+exist (the plugin uses stdout-only logging) and the assertion fails.
+Identified by cubic (P1) on PR #8531.
 
 Why this script exists:
 - The unit tests cover individual functions, but a single end-to-end pass
@@ -82,7 +93,18 @@ def tail_log_for(predicate, *, timeout=15.0, poll=0.5, since=None):
     action you want to observe.
     """
     if not os.path.exists(PLUGIN_LOG):
-        return None
+        # P1 (cubic): the script's success criterion depends on this
+        # file existing. If it doesn't, the dispatcher may STILL be
+        # working — the user just didn't redirect uvicorn's output
+        # to plugin.log. Give them an actionable message instead of
+        # the generic 'sendMessage never appeared'.
+        print(
+            f"   ✗ FAIL plugin log not found at {PLUGIN_LOG}. "
+            f"Start the plugin with stdout/stderr redirected to that "
+            f"file (see step 1 in this script's docstring).",
+            file=sys.stderr,
+        )
+        sys.exit(EXIT_DISPATCH_FAIL)
     with open(PLUGIN_LOG, "rb") as f:
         if since is not None:
             f.seek(since)
@@ -231,7 +253,11 @@ def main():
             file=sys.stderr,
         )
         sys.exit(EXIT_DISPATCH_FAIL)
-    print(f"   ✓ sendMessage observed: {send_match.strip()[:90]}…")
+    # Redact the bot token from the matched URL before printing — the
+    # Telegram Bot API URL contains "/bot<TOKEN>/sendMessage" and the
+    # raw token is a secret. P2 (cubic) on PR #8531.
+    redacted = re.sub(r"/bot[^/\s]+/sendMessage", "/bot<REDACTED>/sendMessage", send_match.strip())
+    print(f"   ✓ sendMessage observed: {redacted[:90]}…")
 
     # /webhook with /start <bogus-token>
     step("POST /webhook — /start <bogus> from unknown chat (expect silent drop)")
