@@ -35,9 +35,17 @@ from conftest import load_main_module  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch):
-    """Strip token + dev mode env. Tests opt in explicitly."""
+    """Strip token + dev mode env. Tests opt in explicitly.
+
+    Also set a placeholder WHATSAPP_APP_SECRET so the plugin's
+    import-time guard (which requires WHATSAPP_APP_SECRET or
+    OMI_DEV_MODE=1) doesn't crash the module load. We're testing
+    the BEARER auth gate here, not the webhook signature — the
+    placeholder value is irrelevant to that test.
+    """
     monkeypatch.delenv("AI_CLONE_PLUGIN_TOKEN", raising=False)
     monkeypatch.delenv("OMI_DEV_MODE", raising=False)
+    monkeypatch.setenv("WHATSAPP_APP_SECRET", "test-placeholder-secret")
     yield
 
 
