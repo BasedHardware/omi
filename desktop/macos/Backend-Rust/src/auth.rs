@@ -125,7 +125,10 @@ impl FirebaseAuth {
     }
 
     /// Verify a Firebase ID token and extract the user ID and name
-    pub async fn verify_token(&self, token: &str) -> Result<(String, Option<String>, Option<String>), AuthError> {
+    pub async fn verify_token(
+        &self,
+        token: &str,
+    ) -> Result<(String, Option<String>, Option<String>), AuthError> {
         // Decode header to get kid
         let header = decode_header(token).map_err(|e| AuthError {
             error: "invalid_token".to_string(),
@@ -153,14 +156,17 @@ impl FirebaseAuth {
         )]);
 
         // Decode and validate token
-        let token_data = decode::<FirebaseClaims>(token, key, &validation).map_err(|e| {
-            AuthError {
+        let token_data =
+            decode::<FirebaseClaims>(token, key, &validation).map_err(|e| AuthError {
                 error: "invalid_token".to_string(),
                 message: format!("Token validation failed: {}", e),
-            }
-        })?;
+            })?;
 
-        Ok((token_data.claims.sub, token_data.claims.name, token_data.claims.email))
+        Ok((
+            token_data.claims.sub,
+            token_data.claims.name,
+            token_data.claims.email,
+        ))
     }
 }
 
@@ -299,10 +305,7 @@ where
         if let Some(byok_ext) = parts.extensions.get::<crate::byok::ByokCacheExt>() {
             // Get the Firestore service from the paywall checker (shares the same Arc)
             if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-                let byok_state = byok_ext
-                    .0
-                    .get_or_fetch(&uid, &checker.0.firestore)
-                    .await;
+                let byok_state = byok_ext.0.get_or_fetch(&uid, &checker.0.firestore).await;
 
                 match crate::byok::validate_byok_request(&uid, &parts.headers, &byok_state) {
                     Ok(crate::byok::ByokValidation::Active) => {
@@ -312,11 +315,7 @@ where
                         byok_stripped = clear_headers;
                     }
                     Err(error_msg) => {
-                        tracing::warn!(
-                            "BYOK validation failed for uid={}: {}",
-                            uid,
-                            error_msg
-                        );
+                        tracing::warn!("BYOK validation failed for uid={}: {}", uid, error_msg);
                         return Err(AuthError {
                             error: "byok_validation_failed".to_string(),
                             message: error_msg,
@@ -329,7 +328,11 @@ where
         // Paywall check — fail open if Firestore is unreachable so a backend
         // outage never makes paying users look paywalled.
         if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-            if checker.0.is_paywalled(&uid, &parts.headers, byok_stripped).await {
+            if checker
+                .0
+                .is_paywalled(&uid, &parts.headers, byok_stripped)
+                .await
+            {
                 return Err(AuthError {
                     error: "trial_expired".to_string(),
                     message: "Desktop trial expired. Upgrade or bring your own keys.".to_string(),
