@@ -74,7 +74,7 @@ def write_discovery(
     bearer_token: str,
     public_url: str | None = None,
     dev_mode: bool = True,
-    plugin_type: str = "telegram",
+    plugin_type: str,
     instance_id: str | None = None,
 ) -> Path:
     """Write the discovery JSON. Atomic via tmp+rename. Returns the path.
@@ -82,8 +82,25 @@ def write_discovery(
     The instance_id parameter is optional — pass it back to
     clear_discovery() to ensure you only delete YOUR file (a leftover
     file from an older plugin instance stays in place).
+
+    `plugin_type` is REQUIRED (no default). The shared module is used
+    by multiple plugin flavors (telegram, whatsapp, imessage, ...) and
+    a Telegram-biased default would silently mislabel other plugin
+    types if a caller omitted the argument. Identified by cubic (P2).
     """
-    DISCOVERY_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # The parent dir holds a bearer token (file mode 0o600 below), so
+    # the directory itself must also be locked down — otherwise a
+    # second local user could read the file via path traversal on a
+    # misconfigured share. Best-effort: if chmod on an EXISTING dir
+    # fails (Windows, NFS, ACL-only volumes) we still write the file
+    # 0o600; on POSIX this narrows the dir to owner-only.
+    try:
+        DISCOVERY_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        # Tighten pre-existing dirs that mkdir(exist_ok=True) won't
+        # re-chmod. Idempotent — safe to call every startup.
+        os.chmod(DISCOVERY_DIR, 0o700)
+    except OSError:
+        pass
 
     payload = {
         "version": DISCOVERY_VERSION,
@@ -98,16 +115,20 @@ def write_discovery(
 
     # Atomic write so the desktop never reads a half-flushed file.
     tmp = DISCOVERY_FILE.with_suffix(".tmp")
-    with open(tmp, "w") as f:
-        json.dump(payload, f, indent=2)
-    # Mode 0o600 — the bearer token must not be world-readable. On
-    # Windows / non-POSIX volumes chmod silently fails; we don't fail
-    # the write because the user can still see the file (and on those
-    # platforms file permissions work differently anyway).
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
-        os.chmod(tmp, 0o600)
-    except OSError:
-        pass
+        with os.fdopen(fd, "w") as f:
+            json.dump(payload, f, indent=2)
+            f.flush()
+    except Exception:
+        # Make sure we don't leave the temp file behind with stale
+        # bearer material. Unlink errors are swallowed — the next
+        # write will overwrite it.
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
     os.replace(tmp, DISCOVERY_FILE)
     return DISCOVERY_FILE
 
