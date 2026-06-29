@@ -110,13 +110,17 @@ class TestBoundedScreenActivityResult:
         body = "**Chrome** ~5 min (100 screenshots)"
         assert sa._bounded_screen_activity_result(body, truncated=False) == body
 
-    def test_oversized_result_is_clipped_at_a_line_boundary_with_note(self):
-        big = "**Chrome** first\n" + ("x" * 30000) + "\n**Slack** second\n" + ("y" * 40000)
+    def test_oversized_result_is_clipped_at_a_record_boundary_with_note(self):
+        rec1 = "**Chrome** ~5 min (100 screenshots)\n  Top windows: a, b\n"
+        rec2 = "**Slack** ~3 min (50 screenshots)\n  Top windows: " + ("x" * 70000) + "\n"
+        big = rec1 + "\n" + rec2 + "\n"  # records separated by a blank line; rec2 overflows the budget
         out = sa._bounded_screen_activity_result(big, truncated=False)
         assert len(out) <= sa.MAX_RESULT_CHARS + 400  # budget plus the appended note
         assert "Summarize what is shown" in out
-        # Clipped back to a line boundary, so the final entry before the note is not sliced
-        # mid-field (the trailing 40k-character run is dropped whole, not cut partway).
+        # Clipped at the app-record boundary: the first complete record is kept and the oversized
+        # second record is dropped whole, never left as a partial "**Slack**" block.
         note_idx = out.index("[Only the most-used apps")
         body = out[:note_idx].rstrip("\n")
-        assert not body.endswith("y")
+        assert "Chrome" in body
+        assert "Slack" not in body
+        assert not body.endswith("x")

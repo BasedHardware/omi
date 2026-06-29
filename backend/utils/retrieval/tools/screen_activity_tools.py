@@ -62,12 +62,13 @@ def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
     """Apply a hard character budget and, when the set was truncated, append a note telling the
     model to summarize what it has and to offer to narrow, so it answers instead of freezing.
 
-    When clipping for size, cut back to the last complete line so an app entry is not sliced
-    mid-field.
+    When clipping for size, cut back to the start of the last complete app record so a partial app
+    block is never left dangling (each record starts with "**<app>**" on its own line, matching the
+    record-boundary clipping the conversations tool uses).
     """
     if len(result) > MAX_RESULT_CHARS:
         clipped = result[:MAX_RESULT_CHARS]
-        boundary = clipped.rfind("\n")
+        boundary = clipped.rfind("\n**")
         result = clipped[:boundary] if boundary > 0 else clipped
         truncated = True
     if truncated:
