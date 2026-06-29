@@ -1,6 +1,7 @@
 const SEARCH_FIELDS = ['ocr_text', 'window_title', 'app'] as const
 
 export const REWIND_SEARCH_TOKEN_LIMIT = 8
+export const REWIND_SEARCH_QUERY_CHAR_LIMIT = 512
 
 export type RewindSearchSql = {
   where: string
@@ -8,7 +9,12 @@ export type RewindSearchSql = {
 }
 
 export function tokenizeRewindSearchQuery(query: string): string[] {
-  return query.trim().split(/\s+/).filter(Boolean).slice(0, REWIND_SEARCH_TOKEN_LIMIT)
+  return query
+    .slice(0, REWIND_SEARCH_QUERY_CHAR_LIMIT)
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, REWIND_SEARCH_TOKEN_LIMIT)
 }
 
 export function escapeRewindSearchLikeToken(token: string): string {
