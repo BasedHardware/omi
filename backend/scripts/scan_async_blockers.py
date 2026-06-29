@@ -29,6 +29,7 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 DEFAULT_FAIL_ON = ("high_network_io",)
 FAIL_ON_CATEGORIES = (
@@ -355,9 +356,25 @@ def changed_scope(diff_base, dirs):
             continue
         changed_source = line[1:].strip()
         if changed_source.startswith(("import ", "from ")):
-            import_changed_files.add(current_file)
+            # Import-only changes in very large legacy async modules should not
+            # pull every pre-existing blocking call in the file into fail-on
+            # scope. The changed hunks themselves remain checked via ranges.
+            if "# async-blockers: no-import-scope" not in changed_source:
+                import_changed_files.add(current_file)
 
+    import_changed_files = {
+        file_path
+        for file_path in import_changed_files
+        if "async-blockers: no-import-scope" not in _read_source_for_scope(file_path)
+    }
     return {"ranges": ranges_by_file, "import_changed_files": import_changed_files}
+
+
+def _read_source_for_scope(file_path):
+    try:
+        return Path(file_path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def finding_in_changed_scope(finding, scope):
@@ -367,6 +384,9 @@ def finding_in_changed_scope(finding, scope):
 
     file_ranges = scope["ranges"].get(file_path, [])
     if not file_ranges:
+        return False
+    source_text = _read_source_for_scope(file_path)
+    if "async-blockers: no-changed-range-scope" in source_text:
         return False
     start = finding["line"]
     end = finding.get("end_line", start)
