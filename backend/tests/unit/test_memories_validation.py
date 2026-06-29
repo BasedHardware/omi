@@ -4,6 +4,7 @@ Regression test for issue #4501: ResponseValidationError after KeyError fix.
 """
 
 import pytest
+import sys
 from datetime import datetime, timezone
 from pydantic import BaseModel, ValidationError, Field
 from typing import Optional, List
@@ -231,3 +232,33 @@ class TestMemoryValidationFiltering:
 
         assert len(valid_memories) == 1
         assert valid_memories[0].id == 'valid'
+
+
+class TestExtractedMemoryValidation:
+    def _ensure_memory_model_dependencies(self):
+        client = sys.modules.get('database._client')
+        if client is not None and not hasattr(client, 'document_id_from_seed'):
+            client.document_id_from_seed = lambda value: f'id-{value}'
+        users = sys.modules.get('database.users')
+        if users is not None and not hasattr(users, 'get_user_language_preference'):
+            users.get_user_language_preference = lambda uid: 'en'
+
+    def test_unknown_llm_category_defaults_to_interesting(self):
+        self._ensure_memory_model_dependencies()
+        from models.memories import MemoryCategory
+        from utils.llm.memories import ExtractedMemory
+
+        extracted = ExtractedMemory(content='User likes short meetings', category='unexpected_llm_category')
+
+        assert extracted.category == MemoryCategory.interesting
+        assert extracted.to_memory().category == MemoryCategory.interesting
+
+    def test_legacy_llm_category_maps_to_current_category(self):
+        self._ensure_memory_model_dependencies()
+        from models.memories import MemoryCategory
+        from utils.llm.memories import ExtractedMemory
+
+        extracted = ExtractedMemory(content='User likes coffee', category='hobbies')
+
+        assert extracted.category == MemoryCategory.system
+        assert extracted.to_memory().category == MemoryCategory.system
