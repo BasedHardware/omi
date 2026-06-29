@@ -210,6 +210,24 @@ final class SpatialOverlayRenderGeometryTests: XCTestCase {
   // MARK: Screen Recording fallback instruction card
 
   @MainActor
+  func testInstructionCardUsesCompactHeightForShortClaudeGuidance() {
+    let compact = CloudConnectorGuidanceOverlay.instructionCardSize(
+      title: "Finish in Claude",
+      subtitle: "Click Add in the connector window to finish creating the Omi connector."
+    )
+    let expanded = CloudConnectorGuidanceOverlay.instructionCardSize(
+      title: "Allow Screen Recording for Omi",
+      subtitle:
+        "Flip the Omi toggle on under Screen & System Audio Recording, then return to Claude and click Add."
+    )
+
+    XCTAssertEqual(compact.width, 420)
+    XCTAssertEqual(compact.height, 88)
+    XCTAssertEqual(expanded.width, 420)
+    XCTAssertEqual(expanded.height, 118)
+  }
+
+  @MainActor
   func testInstructionCardCentersOnAnchorAndStaysOnScreen() {
     let visible = CGRect(x: 0, y: 0, width: 1512, height: 950)
     let settingsWindow = CGRect(x: 380, y: 120, width: 760, height: 700)

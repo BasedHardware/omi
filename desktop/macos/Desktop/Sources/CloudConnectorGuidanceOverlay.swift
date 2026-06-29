@@ -88,7 +88,7 @@ final class CloudConnectorGuidanceOverlay {
     dismissTask?.cancel()
     window?.close()
 
-    let cardSize = CGSize(width: 420, height: 118)
+    let cardSize = Self.instructionCardSize(title: title, subtitle: subtitle)
     let screen = Self.screen(forAnchor: anchor)
     let frame = Self.instructionCardFrame(
       anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
@@ -159,6 +159,12 @@ final class CloudConnectorGuidanceOverlay {
       parts.count == 4, let x = parts[0], let y = parts[1], let w = parts[2], let h = parts[3]
     else { return nil }
     return CGRect(x: x, y: y, width: w, height: h)
+  }
+
+  static func instructionCardSize(title: String, subtitle: String) -> CGSize {
+    let compactThreshold = 86
+    let height: CGFloat = subtitle.count <= compactThreshold ? 88 : 118
+    return CGSize(width: 420, height: height)
   }
 
   static func instructionCardFrame(anchor: CGRect?, cardSize: CGSize, visibleFrame: CGRect)
