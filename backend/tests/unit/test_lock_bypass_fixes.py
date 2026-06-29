@@ -412,10 +412,10 @@ class TestSearchRedaction:
             'found': 2,
         }
 
-        with patch('utils.conversations.search.client', mock_client):
-            from utils.conversations.search import search_conversations
+        from utils.conversations import search as search_module
 
-            result = search_conversations(uid='test-uid', query='test')
+        with patch.object(search_module, '_get_typesense_client', return_value=mock_client):
+            result = search_module.search_conversations(uid='test-uid', query='test')
 
         # Locked item must be excluded entirely (prevents inference leak)
         assert len(result['items']) == 1
@@ -452,10 +452,10 @@ class TestSearchRedaction:
             'found': 2,
         }
 
-        with patch('utils.conversations.search.client', mock_client):
-            from utils.conversations.search import search_conversations
+        from utils.conversations import search as search_module
 
-            result = search_conversations(uid='test-uid', query='test')
+        with patch.object(search_module, '_get_typesense_client', return_value=mock_client):
+            result = search_module.search_conversations(uid='test-uid', query='test')
 
         # Does not raise; only the well-formed hit survives, with ISO-string timestamps.
         assert len(result['items']) == 1
@@ -480,10 +480,10 @@ class TestSearchRedaction:
             'found': 2,
         }
 
-        with patch('utils.conversations.search.client', mock_client):
-            from utils.conversations.search import search_conversations
+        from utils.conversations import search as search_module
 
-            result = search_conversations(uid='test-uid', query='test', page=2)
+        with patch.object(search_module, '_get_typesense_client', return_value=mock_client):
+            result = search_module.search_conversations(uid='test-uid', query='test', page=2)
 
         assert result['items'] == []
         assert result['total_pages'] == 2  # falls back to the page param, not inflated
@@ -517,10 +517,10 @@ class TestSearchRedaction:
             'hits': hits,
             'found': 6,
         }
-        with patch('utils.conversations.search.client', mock_client):
-            from utils.conversations.search import search_conversations
+        from utils.conversations import search as search_module
 
-            result = search_conversations(uid='test-uid', query='test', per_page=5)
+        with patch.object(search_module, '_get_typesense_client', return_value=mock_client):
+            result = search_module.search_conversations(uid='test-uid', query='test', per_page=5)
 
         assert len(result['items']) == 1
         # total_pages derived from visible items (1 < per_page=5), not raw hits or found count
@@ -545,10 +545,10 @@ class TestSearchRedaction:
             'hits': hits,
             'found': 2,
         }
-        with patch('utils.conversations.search.client', mock_client):
-            from utils.conversations.search import search_conversations
+        from utils.conversations import search as search_module
 
-            result = search_conversations(uid='test-uid', query='test', per_page=5)
+        with patch.object(search_module, '_get_typesense_client', return_value=mock_client):
+            result = search_module.search_conversations(uid='test-uid', query='test', per_page=5)
 
         assert len(result['items']) == 0
         # Not a full page → total_pages = current page (1), not found/per_page
