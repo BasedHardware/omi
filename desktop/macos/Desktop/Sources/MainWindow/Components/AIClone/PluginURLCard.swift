@@ -119,6 +119,7 @@ struct PluginURLCard: View {
         }
     }
 
+    @MainActor
     private func checkHealth() async {
         guard config.isPluginURLConfigured else {
             healthStatus = .unknown
