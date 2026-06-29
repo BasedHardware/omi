@@ -151,6 +151,7 @@ backend/scripts/rag/visualizations/
 /backend/scripts/data/
 /backend/pretrained_models/
 */pretrained_models/
+/backend/_temp/
 /backend/_speech_profiles
 
 backend/google-credentials.json

@@ -6,7 +6,7 @@ for each description, and upserts to Pinecone. Same approach as
 005_backfill_memory_vectors.py.
 
 Usage:
-    python 006_backfill_action_item_vectors.py [--dry-run] [--uid USER_ID] [--workers N]
+    python 007_backfill_action_item_vectors.py [--dry-run] [--uid USER_ID] [--workers N]
 
 Environment:
     GOOGLE_APPLICATION_CREDENTIALS: Path to Firebase service account key

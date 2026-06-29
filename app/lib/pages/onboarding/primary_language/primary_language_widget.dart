@@ -262,6 +262,12 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
   }
 
   @override
+  void dispose() {
+    _languageScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
