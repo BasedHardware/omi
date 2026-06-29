@@ -98,20 +98,12 @@ enum AIPlugin: String, CaseIterable, Identifiable {
     /// The `enabled` parameter controls the target state — callers must
     /// pass the desired value, not assume "true". (P2 fix: previously
     /// hardcoded true, preventing disable operations.)
-    func toggleRequestBody(chatId: String, credentialForAuth: String, enabled: Bool) -> [String: Any] {
+    func toggleRequestBody(chatId: String, enabled: Bool) -> [String: Any] {
         switch self {
         case .telegram:
-            return [
-                "chat_id": chatId,
-                "enabled": enabled,
-                "bot_token": credentialForAuth,
-            ]
+            return ["chat_id": chatId, "enabled": enabled]
         case .whatsapp:
-            return [
-                "phone": chatId,
-                "enabled": enabled,
-                "access_token": credentialForAuth,
-            ]
+            return ["phone": chatId, "enabled": enabled]
         }
     }
 

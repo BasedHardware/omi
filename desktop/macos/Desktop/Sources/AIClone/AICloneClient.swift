@@ -46,6 +46,34 @@ actor AICloneClient {
         return http.statusCode == 200
     }
 
+    /// `GET {baseURL}/status` response — used for connection detection +
+    /// auto-reply state + getting the real chat_id for toggling.
+    struct StatusResponse: Decodable {
+        let connectedChats: Int
+        let autoReplyEnabled: Bool
+        let firstChatId: String?
+        let botUsername: String?
+        enum CodingKeys: String, CodingKey {
+            case connectedChats = "connected_chats"
+            case autoReplyEnabled = "auto_reply_enabled"
+            case firstChatId = "first_chat_id"
+            case botUsername = "bot_username"
+        }
+    }
+
+    func status(baseURL: String, bearerToken: String) async throws -> StatusResponse {
+        let url = try endpointURL(baseURL: baseURL, path: "/status")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw AICloneError.network("Plugin returned HTTP \(code)")
+        }
+        return try JSONDecoder().decode(StatusResponse.self, from: data)
+    }
+
     /// `POST {baseURL}/setup` — register the user's credentials. Returns the
     /// deep link + setup token for the user to click.
     func setup(
