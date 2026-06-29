@@ -223,8 +223,39 @@ final class StopReconciliationTests: XCTestCase {
         let capturedBackendId: String? = nil
 
         XCTAssertFalse(
-            capturedBackendId?.isEmpty == false,
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: capturedBackendId,
+                persistedBackendId: nil
+            ),
             "Unbound sessions should not force-process the user's current in-progress pointer"
+        )
+    }
+
+    func testCapturedButUnpersistedBackendIdDoesNotUseGlobalForceProcessFallback() {
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: "backend-conversation-123",
+                persistedBackendId: nil
+            ),
+            "A captured listen id must be durably stored before force-processing is allowed"
+        )
+    }
+
+    func testCapturedBackendIdMustMatchPersistedBackendIdBeforeForceProcess() {
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: "backend-conversation-123",
+                persistedBackendId: "backend-conversation-456"
+            )
+        )
+    }
+
+    func testPersistedCapturedBackendIdAllowsSpecificFinalize() {
+        XCTAssertTrue(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: "backend-conversation-123",
+                persistedBackendId: "backend-conversation-123"
+            )
         )
     }
 

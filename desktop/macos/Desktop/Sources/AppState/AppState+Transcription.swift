@@ -682,9 +682,11 @@ extension AppState {
 
     Task {
       if let sessionId = capturedSessionId {
+        var persistedBackendId: String?
         if let backendId = capturedBackendId, !backendId.isEmpty {
           do {
             try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: backendId)
+            persistedBackendId = try await TranscriptionStorage.shared.getSession(id: sessionId)?.backendId
           } catch {
             logError(
               "Transcription: Failed to persist backend conversation \(backendId) for stopped session \(sessionId)",
@@ -702,7 +704,10 @@ extension AppState {
         await ConversationFinalizationService.shared.finalizeSession(
           id: sessionId,
           reason: .userStop,
-          allowCloudForceProcess: capturedBackendId?.isEmpty == false
+          allowCloudForceProcess: DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+            capturedBackendId: capturedBackendId,
+            persistedBackendId: persistedBackendId
+          )
         )
       }
 
