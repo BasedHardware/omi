@@ -354,6 +354,127 @@ class TestVRAMStress:
         assert successes == len(results), f"Only {successes}/{len(results)} succeeded under production pattern"
 
 
+VRAM_SUSTAINED_DURATION = int(os.getenv("VRAM_SUSTAINED_DURATION", "300"))
+VRAM_SUSTAINED_RPM = int(os.getenv("VRAM_SUSTAINED_RPM", "30"))
+VRAM_SLOPE_THRESHOLD = float(os.getenv("VRAM_SLOPE_THRESHOLD", "50.0"))
+
+
+def _linear_regression(times, values):
+    n = len(times)
+    if n < 3:
+        return 0.0, 0.0, 0.0
+    sum_x = sum(times)
+    sum_y = sum(values)
+    sum_xy = sum(t * v for t, v in zip(times, values))
+    sum_x2 = sum(t * t for t in times)
+    denom = n * sum_x2 - sum_x * sum_x
+    if denom == 0:
+        return 0.0, 0.0, 0.0
+    slope = (n * sum_xy - sum_x * sum_y) / denom
+    intercept = (sum_y - slope * sum_x) / n
+    ss_res = sum((v - (slope * t + intercept)) ** 2 for t, v in zip(times, values))
+    ss_tot = sum((v - sum_y / n) ** 2 for v in values)
+    r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+    return slope, intercept, r_squared
+
+
+class TestVRAMSustainedLeak:
+    """Sustained load test that detects monotonic VRAM accumulation.
+
+    The Phase 2 OOM (PR #8428) showed VRAM ratcheting from 5.7→22 GiB
+    over 22 minutes.  Burst tests missed it because VRAM releases
+    between batches.  This test runs sustained load and checks the
+    VRAM slope — a positive slope above threshold means a leak.
+
+    Default: 5 minutes at 30 req/min (override via env vars for longer runs).
+    """
+
+    @pytest.fixture(scope="class")
+    def gpu_available(self):
+        used, total = _get_gpu_memory()
+        if used is None:
+            pytest.skip("nvidia-smi not available — cannot monitor VRAM")
+        return total
+
+    def test_no_vram_leak_under_sustained_load(self, gpu_available):
+        """VRAM must not monotonically increase under sustained load."""
+        duration = VRAM_SUSTAINED_DURATION
+        rpm = VRAM_SUSTAINED_RPM
+        interval = 60.0 / rpm
+        cc = min(rpm, 64)
+
+        wav_data = _make_speech_wav(60.0)
+        baseline_used, total = _get_gpu_memory()
+        oom_before = _get_oom_count()
+
+        print(f"\n  Sustained leak test: {duration}s at {rpm} req/min")
+        print(f"  Baseline VRAM: {baseline_used:.0f}/{total:.0f} MiB")
+
+        monitor = VRAMMonitor(2.0)
+        monitor.start()
+        start = time.monotonic()
+        results = []
+        results_lock = threading.Lock()
+
+        def fire(req_id):
+            r = _send_request(wav_data, req_id, timeout=300)
+            with results_lock:
+                results.append(r)
+
+        pool = ThreadPoolExecutor(max_workers=cc)
+        req_id = 0
+        try:
+            while time.monotonic() - start < duration:
+                req_id += 1
+                pool.submit(fire, req_id)
+                next_send = start + req_id * interval
+                wait = next_send - time.monotonic()
+                if wait > 0:
+                    time.sleep(wait)
+        except KeyboardInterrupt:
+            pass
+
+        pool.shutdown(wait=False)
+        time.sleep(10)
+        monitor.stop()
+
+        oom_after = _get_oom_count()
+        new_ooms = oom_after - oom_before
+        final_used, _ = _get_gpu_memory()
+
+        with results_lock:
+            ok = sum(1 for r in results if r["status"] == 200)
+            fail = len(results) - ok
+
+        samples = monitor._samples
+        load_samples = [s for s in samples if 30 < (s["time"] - start) < duration]
+
+        if len(load_samples) >= 3:
+            times_min = [(s["time"] - start) / 60.0 for s in load_samples]
+            values_mib = [s["used_mib"] for s in load_samples]
+            slope, _, r_squared = _linear_regression(times_min, values_mib)
+        else:
+            slope, r_squared = 0.0, 0.0
+
+        print(f"  Sent: {req_id}, OK: {ok}, Failed: {fail}")
+        print(f"  Peak VRAM: {monitor.peak_used_mib:.0f} MiB ({monitor.peak_pct:.1f}%)")
+        print(f"  Final VRAM: {final_used:.0f} MiB")
+        print(f"  VRAM slope: {slope:+.1f} MiB/min (R²={r_squared:.3f})")
+        print(f"  OOMs: {new_ooms}")
+
+        recovery_delta = final_used - baseline_used if final_used and baseline_used else 0
+
+        assert new_ooms == 0, f"{new_ooms} OOM events during sustained load"
+        assert slope < VRAM_SLOPE_THRESHOLD, (
+            f"VRAM slope {slope:+.1f} MiB/min exceeds {VRAM_SLOPE_THRESHOLD} MiB/min — "
+            f"monotonic accumulation detected (R²={r_squared:.3f})"
+        )
+        assert recovery_delta < 2000, (
+            f"VRAM did not recover: baseline {baseline_used:.0f} → "
+            f"final {final_used:.0f} MiB (+{recovery_delta:.0f})"
+        )
+
+
 class TestVRAMBaseline:
     """Record VRAM baseline for future comparison.
 
