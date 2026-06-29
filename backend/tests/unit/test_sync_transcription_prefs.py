@@ -156,6 +156,8 @@ sys.modules['utils.cloud_tasks'] = _cloud_tasks
 import google.cloud as _google_cloud
 import google.cloud.storage as _gcs
 
+if not hasattr(_gcs, 'Client'):
+    _gcs.Client = MagicMock
 _orig_storage_client = _gcs.Client
 _gcs.Client = MagicMock
 
@@ -369,7 +371,7 @@ class TestDeepgramPrerecordedKeywords:
 # ---------------------------------------------------------------------------
 
 
-@patch('routers.sync.submit_with_context', MagicMock())
+@patch('routers.sync.run_blocking', MagicMock())
 class TestProcessSegmentPreferences:
     """Verify process_segment applies user transcription preferences."""
 
@@ -1240,7 +1242,7 @@ class TestIdentifySpeakersForSegments:
         assert segments[1].person_id == 'p2'
 
 
-@patch('routers.sync.submit_with_context', MagicMock())
+@patch('routers.sync.run_blocking', MagicMock())
 class TestProcessSegmentSpeakerIdIntegration:
     """Verify process_segment wires speaker identification correctly."""
 
@@ -1376,7 +1378,7 @@ class TestDownloadAudioBytes:
         assert result is None
 
 
-@patch('routers.sync.submit_with_context', MagicMock())
+@patch('routers.sync.run_blocking', MagicMock())
 class TestSpeakerIdExceptionHandling:
     """Verify process_segment swallows speaker ID exceptions gracefully."""
 

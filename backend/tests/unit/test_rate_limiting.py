@@ -39,7 +39,10 @@ sys.modules['redis.exceptions'] = redis_mock.exceptions
 
 # Stub firebase_admin.auth
 firebase_auth = sys.modules['firebase_admin.auth']
+firebase_auth.CertificateFetchError = type('CertificateFetchError', (Exception,), {})
+firebase_auth.ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
 firebase_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+firebase_auth.RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 
 # Stub database.redis_db with real check_rate_limit logic (Lua script mocked)
 redis_db_stub = sys.modules['database.redis_db']

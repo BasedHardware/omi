@@ -18,3 +18,12 @@ def test_external_socket_connect_is_blocked():
             sock.connect(('8.8.8.8', 53))
     finally:
         sock.close()
+
+
+def test_external_dns_resolution_is_blocked():
+    with pytest.raises(BlockedNetworkError):
+        socket.getaddrinfo('example.com', 443)
+
+
+def test_localhost_dns_resolution_is_allowed():
+    assert socket.getaddrinfo('localhost', 80)

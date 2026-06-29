@@ -697,6 +697,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.fair_use'].get_rolling_speech_ms = MagicMock()
         sys.modules['utils.fair_use'].check_soft_caps = MagicMock()
         sys.modules['utils.fair_use'].is_hard_restricted = MagicMock(return_value=False)
+        sys.modules['utils.fair_use'].get_hard_restriction_status = MagicMock(return_value=(False, None))
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
         sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()

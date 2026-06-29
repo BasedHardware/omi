@@ -151,6 +151,11 @@ endpoints_stub.get_current_user_uid = MagicMock()
 endpoints_stub.with_rate_limit = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
 _stub_module("utils.observability")
+request_validation_stub = _stub_module("utils.request_validation")
+request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
+redis_stub = _stub_module("database.redis_db")
+redis_stub.r = MagicMock()
+redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
 # ---------------------------------------------------------------------------
 # Import domain-specific database modules

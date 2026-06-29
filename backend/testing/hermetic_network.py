@@ -42,6 +42,9 @@ def block_outbound_network() -> Iterator[None]:
     original_connect = socket.socket.connect
     original_connect_ex = socket.socket.connect_ex
     original_create_connection = socket.create_connection
+    original_getaddrinfo = socket.getaddrinfo
+    original_gethostbyname = socket.gethostbyname
+    original_gethostbyname_ex = socket.gethostbyname_ex
 
     def guarded_connect(sock: socket.socket, address: object):
         if sock.family != socket.AF_UNIX and not is_local_address(_host_from_address(address)):
@@ -58,12 +61,33 @@ def block_outbound_network() -> Iterator[None]:
             raise BlockedNetworkError(f'Blocked outbound network connection to {address!r}')
         return original_create_connection(address, *args, **kwargs)
 
+    def guarded_getaddrinfo(host: object, *args, **kwargs):
+        if not is_local_address(host):
+            raise BlockedNetworkError(f'Blocked DNS resolution for {host!r}')
+        return original_getaddrinfo(host, *args, **kwargs)
+
+    def guarded_gethostbyname(host: object):
+        if not is_local_address(host):
+            raise BlockedNetworkError(f'Blocked DNS resolution for {host!r}')
+        return original_gethostbyname(host)
+
+    def guarded_gethostbyname_ex(host: object):
+        if not is_local_address(host):
+            raise BlockedNetworkError(f'Blocked DNS resolution for {host!r}')
+        return original_gethostbyname_ex(host)
+
     socket.socket.connect = guarded_connect
     socket.socket.connect_ex = guarded_connect_ex
     socket.create_connection = guarded_create_connection
+    socket.getaddrinfo = guarded_getaddrinfo
+    socket.gethostbyname = guarded_gethostbyname
+    socket.gethostbyname_ex = guarded_gethostbyname_ex
     try:
         yield
     finally:
         socket.socket.connect = original_connect
         socket.socket.connect_ex = original_connect_ex
         socket.create_connection = original_create_connection
+        socket.getaddrinfo = original_getaddrinfo
+        socket.gethostbyname = original_gethostbyname
+        socket.gethostbyname_ex = original_gethostbyname_ex

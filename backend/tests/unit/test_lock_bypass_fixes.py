@@ -357,14 +357,14 @@ class TestFolderConversationRedaction:
         result = get_folder_conversations(folder_id='f1', limit=100, offset=0, include_discarded=False, uid='test-uid')
 
         locked = result[0]
-        assert locked['structured']['action_items'] == []
-        assert locked['structured']['events'] == []
-        assert locked['apps_results'] == []
-        assert locked['transcript_segments'] == []
+        assert locked.structured.action_items == []
+        assert locked.structured.events == []
+        assert locked.apps_results == []
+        assert locked.transcript_segments == []
 
         unlocked = result[1]
-        assert len(unlocked['structured']['action_items']) == 1
-        assert len(unlocked['transcript_segments']) == 1
+        assert len(unlocked.structured.action_items) == 1
+        assert len(unlocked.transcript_segments) == 1
 
     def test_folder_endpoint_preserves_title_for_locked(self):
         """Locked conversations should still show title/overview."""
@@ -376,7 +376,7 @@ class TestFolderConversationRedaction:
         from routers.folders import get_folder_conversations
 
         result = get_folder_conversations(folder_id='f1', limit=100, offset=0, include_discarded=False, uid='test-uid')
-        assert result[0]['structured']['title'] == 'Test Conversation'
+        assert result[0].structured.title == 'Test Conversation'
 
 
 # =============================================================================
@@ -969,19 +969,20 @@ class TestMcpRestLockRedaction:
         """GET /v1/mcp/conversations calls real router and redacts locked fields."""
         import database.conversations as conversations_db
 
-        conversations_db.get_conversations = MagicMock(
-            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        )
+        conversations = [_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
+        conversations_db.get_conversations = MagicMock(return_value=conversations)
 
         from routers.mcp import get_conversations
 
         result = get_conversations(uid='test-uid')
 
-        assert result[0]['structured']['action_items'] == []
-        assert result[0]['structured']['events'] == []
-        assert result[0]['transcript_segments'] == []
-        assert len(result[1]['structured']['action_items']) == 1
-        assert len(result[1]['transcript_segments']) == 1
+        assert conversations[0]['structured']['action_items'] == []
+        assert conversations[0]['structured']['events'] == []
+        assert conversations[0]['transcript_segments'] == []
+        assert len(conversations[1]['structured']['action_items']) == 1
+        assert len(conversations[1]['transcript_segments']) == 1
+        assert result[0].structured.title == 'Test Conversation'
+        assert result[1].structured.title == 'Test Conversation'
 
 
 # =============================================================================
