@@ -22,12 +22,11 @@ class OmiPopupMenuButton<T> extends AdaptiveWidget {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       itemBuilder: itemBuilder,
       onSelected: onSelected,
-      child:
-          child ??
+      child: child ??
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(icon ?? Icons.more_vert, color: ResponsiveHelper.textSecondary, size: 16),
