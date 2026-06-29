@@ -78,10 +78,21 @@ class GPUWorker:
         self._attn_is_local = False
         self._model_dtype = None
         self._max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
+        self._vram_total_mb = 0.0
+        self._vram_baseline_mb = 0.0
 
     @property
     def is_ready(self) -> bool:
         return self._ready.is_set() and self._load_error is None
+
+    @property
+    def vram_info(self) -> dict:
+        return {
+            "total_mb": self._vram_total_mb,
+            "baseline_mb": self._vram_baseline_mb,
+            "attention_mode": self._attn_mode,
+            "auto_threshold_sec": self._attn_auto_threshold_sec,
+        }
 
     def start(self) -> None:
         self._running = True
@@ -266,9 +277,9 @@ class GPUWorker:
 
         self._load_embedding_model()
 
-        vram_used = torch.cuda.memory_allocated() / 1024**2
-        vram_total = torch.cuda.get_device_properties(0).total_memory / 1024**2
-        logger.info(f"VRAM after model load: {vram_used:.0f}MiB / {vram_total:.0f}MiB")
+        self._vram_baseline_mb = torch.cuda.memory_allocated() / 1024**2
+        self._vram_total_mb = torch.cuda.get_device_properties(0).total_memory / 1024**2
+        logger.info(f"VRAM after model load: {self._vram_baseline_mb:.0f}MiB / {self._vram_total_mb:.0f}MiB")
         logger.info("Batch model loaded and ready")
 
     def _load_embedding_model(self) -> None:
