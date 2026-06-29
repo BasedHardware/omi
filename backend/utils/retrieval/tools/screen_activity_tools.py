@@ -37,6 +37,48 @@ def _get_uid(config: RunnableConfig) -> Optional[str]:
         return None
 
 
+# Bound the chat tool result so a wide-range desktop query ("what did I do last month") cannot
+# flood the chat model's context and make it freeze or refuse (issue #4927; the same fix already
+# shipped for the conversations, memories, and action items tools). The summary lists every app the
+# user touched in the range, each with up to five window titles whose length is uncapped, so a long
+# range on a busy machine can run to tens of thousands of characters. Cap the apps shown and the raw
+# character size and tell the model to summarize and narrow.
+MAX_APPS_FOR_LLM = 50
+MAX_RESULT_CHARS = 60000
+
+
+def _cap_apps_for_llm(apps: list):
+    """Keep at most ``MAX_APPS_FOR_LLM`` apps for the chat model.
+
+    Apps arrive sorted most-used first, so this keeps the ones that matter. Returns
+    ``(capped_list, truncated)`` where ``truncated`` is True when some apps were dropped.
+    """
+    if len(apps) > MAX_APPS_FOR_LLM:
+        return apps[:MAX_APPS_FOR_LLM], True
+    return list(apps), False
+
+
+def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
+    """Apply a hard character budget and, when the set was truncated, append a note telling the
+    model to summarize what it has and to offer to narrow, so it answers instead of freezing.
+
+    When clipping for size, cut back to the last complete line so an app entry is not sliced
+    mid-field.
+    """
+    if len(result) > MAX_RESULT_CHARS:
+        clipped = result[:MAX_RESULT_CHARS]
+        boundary = clipped.rfind("\n")
+        result = clipped[:boundary] if boundary > 0 else clipped
+        truncated = True
+    if truncated:
+        result += (
+            "\n\n[Only the most-used apps are shown here to stay within limits; more may exist. "
+            "Summarize what is shown and tell the user they can ask about a specific app or a "
+            "narrower date range for the rest.]"
+        )
+    return result
+
+
 @tool
 def get_screen_activity_tool(
     start_date: str,
@@ -105,6 +147,13 @@ def get_screen_activity_tool(
         if not sorted_apps:
             return f"No screen activity found for app '{app_filter}' in this date range."
 
+    # Bound how many apps go to the chat model so a wide date range on a busy machine cannot
+    # overflow its context (issue #4927). Apps are already sorted most-used first.
+    total_apps = len(sorted_apps)
+    sorted_apps, apps_truncated = _cap_apps_for_llm(sorted_apps)
+    if apps_truncated:
+        result += f"(showing the {len(sorted_apps)} most-used apps of {total_apps})\n\n"
+
     for app_name, data in sorted_apps:
         count = data['count']
         minutes = (count * 3) // 60
@@ -119,7 +168,7 @@ def get_screen_activity_tool(
             result += f"  Top windows: {', '.join(titles[:5])}\n"
         result += "\n"
 
-    return result.strip()
+    return _bounded_screen_activity_result(result.strip(), apps_truncated)
 
 
 @tool
