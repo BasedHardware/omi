@@ -18,9 +18,9 @@ read_test_file_list() {
       echo "ERROR: BACKEND_UNIT_TEST_FILE_LIST does not exist: $test_file_list" >&2
       exit 1
     fi
-    python scripts/select_backend_unit_tests.py --from-test-list "$test_file_list"
+    "$PYTHON_BIN" scripts/select_backend_unit_tests.py --from-test-list "$test_file_list"
   else
-    python scripts/select_backend_unit_tests.py --all
+    "$PYTHON_BIN" scripts/select_backend_unit_tests.py --all
   fi
 }
 

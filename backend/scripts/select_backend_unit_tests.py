@@ -42,6 +42,7 @@ FULL_RUN_PATHS = (
 
 FULL_RUN_PREFIXES = (
     'backend/database/',
+    'backend/models/',
     'backend/testing/',
 )
 
@@ -102,16 +103,6 @@ AREA_TESTS = (
         ),
     ),
     (
-        ('backend/models/',),
-        (),
-        (
-            'tests/unit/test_*model*.py',
-            'tests/unit/test_*schema*.py',
-            'tests/unit/test_*validation*.py',
-            'tests/unit/test_request_validation_contracts.py',
-        ),
-    ),
-    (
         ('backend/routers/conversations', 'backend/services/conversations/', 'backend/utils/conversations'),
         (),
         (
@@ -147,7 +138,7 @@ AREA_TESTS = (
     (
         ('backend/routers/apps', 'backend/services/apps/', 'backend/utils/apps'),
         (),
-        ('tests/unit/test_apps_*.py', 'tests/unit/test_app_*.py'),
+        ('tests/unit/test_apps_*.py', 'tests/unit/test_app_*.py', 'tests/unit/test_create_persona_user_none.py'),
     ),
     (
         ('backend/routers/folders', 'backend/services/folders/', 'backend/utils/folders'),
@@ -213,7 +204,10 @@ def normalize_changed_path(path: str) -> str:
     path = path.strip()
     if not path:
         return ''
-    return path.replace('\\', '/').lstrip('./')
+    path = path.replace('\\', '/')
+    while path.startswith('./'):
+        path = path[2:]
+    return path
 
 
 def is_full_run_path(path: str) -> bool:
