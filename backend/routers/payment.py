@@ -1,5 +1,5 @@
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 from google.api_core.exceptions import NotFound as FirestoreNotFound
@@ -204,7 +204,9 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                 users_db.update_user_subscription(uid, current_subscription.dict())
 
                 # Calculate next billing date
-                next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end']).strftime('%B %d, %Y')
+                next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end'], tz=timezone.utc).strftime(
+                    '%B %d, %Y'
+                )
 
                 return {
                     "status": "reactivated",
