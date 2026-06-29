@@ -289,9 +289,26 @@ class TestWebhook:
         resp = self._post_webhook(update)
         assert resp.status_code == 200
 
-        # The handler should have sent a "not enabled" reply
-        urls_called = [c["url"] for c in telegram_api["calls"]]
-        assert any("sendMessage" in u for u in urls_called)
+        # The handler should have sent a "not enabled" reply AND the body
+        # must mention the user-facing guidance text — otherwise a
+        # regression that sends an empty/stale message would slip past
+        # the URL-only check. P2 (cubic): the URL assertion alone is
+        # insufficient — any sendMessage call would pass.
+        send_calls = [c for c in telegram_api["calls"] if "sendMessage" in c["url"]]
+        assert send_calls, "expected a sendMessage call for the nudge"
+        # The telegram_api fixture records the httpx call kwargs: url, json, etc.
+        bodies = []
+        for c in send_calls:
+            if c.get("json"):
+                body_text = c["json"].get("text", "") if isinstance(c["json"], dict) else ""
+                bodies.append(body_text)
+        assert any(bodies), f"sendMessage call had no body text: {send_calls!r}"
+        # At least one body must include the actionable guidance text
+        # (case-insensitive). The exact wording can change but the user
+        # MUST be told to enable auto-reply in the desktop.
+        assert any("auto-reply" in (b or "").lower() or "auto reply" in (b or "").lower() for b in bodies), (
+            f"nudge body should mention 'auto-reply', got: {bodies!r}"
+        )
 
     def test_webhook_regular_message_from_unknown_chat_does_not_reply(self, telegram_api):
         # /webhook from a chat that has never been set up -> 200, no sendMessage
