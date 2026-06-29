@@ -25,6 +25,13 @@ struct PluginDiscovery {
     struct Info {
         let pluginURL: String
         let publicURL: String?
+        /// publicURL if set + valid, otherwise pluginURL. Convenience
+        /// for callers that just need "the URL the outside world would
+        /// use to reach the plugin" (e.g. the desktop-side settings
+        /// banner). Callers that specifically want the LOCAL URL
+        /// (desktop → plugin /health, /setup, /toggle) should use
+        /// pluginURL, not this field.
+        let effectivePublicURL: String
         let bearerToken: String
         let devMode: Bool
         let pluginType: String
@@ -70,20 +77,62 @@ struct PluginDiscovery {
             return nil
         }
 
-        // Prefer public_url (the tunnel URL) if present — that's what
-        // Telegram/Meta need to reach the plugin from outside. Fall back
-        // to plugin_url (localhost) for same-machine-only testing.
-        let url = (json["public_url"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? pluginURL
+        // Reject the file if plugin_url is not a valid http(s) URL.
+        // The discovery file is auto-applied to settings; auto-filling
+        // an arbitrary non-empty string (e.g. a shell command, an
+        // html blob, a path with a scheme the URLSession client can't
+        // speak) would either crash URLSession, silently fail health
+        // checks, or surface to the user as a non-actionable error.
+        // P2 (cubic).
+        guard Self.isLikelyValidPluginURL(pluginURL) else {
+            NSLog("PluginDiscovery: plugin_url '\(pluginURL)' is not a valid http(s) URL — ignoring")
+            return nil
+        }
+
+        // public_url is optional. Same validation when present, but
+        // empty-string is treated as "not provided" rather than invalid.
+        let rawPublic = json["public_url"] as? String
+        let publicURL: String?
+        if let raw = rawPublic, !raw.isEmpty {
+            guard Self.isLikelyValidPluginURL(raw) else {
+                NSLog("PluginDiscovery: public_url '\(raw)' is not a valid http(s) URL — ignoring")
+                return nil
+            }
+            publicURL = raw
+        } else {
+            publicURL = nil
+        }
+
+        // The desktop client should prefer the LOCAL plugin_url
+        // (http://127.0.0.1:PORT) for /health, /setup, /toggle — those
+        // are desktop-to-plugin calls on the same machine. The public_url
+        // is the TUNNEL URL that Telegram/Meta need to reach the plugin
+        // from outside the user's network. They're different consumers
+        // with different needs; surface both in Info and let the caller
+        // pick. P1 (cubic): publicURL was previously discarded here.
+        let effectivePublicURL = publicURL ?? pluginURL
 
         return Info(
             pluginURL: pluginURL,
-            publicURL: json["public_url"] as? String,
+            publicURL: publicURL,
+            effectivePublicURL: effectivePublicURL,
             bearerToken: bearerToken,
             devMode: json["dev_mode"] as? Bool ?? false,
             pluginType: json["plugin_type"] as? String ?? "unknown",
             instanceID: json["instance_id"] as? String ?? "",
             startedAt: json["started_at"] as? TimeInterval ?? 0
         )
+    }
+
+    /// True iff the given string parses as an http(s) URL with a host.
+    /// Used to reject arbitrary non-empty strings before auto-fill.
+    private static func isLikelyValidPluginURL(_ raw: String) -> Bool {
+        guard let url = URL(string: raw),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = url.host, !host.isEmpty
+        else { return false }
+        return true
     }
 
     /// Check whether the discovery file was written "recently" (within
