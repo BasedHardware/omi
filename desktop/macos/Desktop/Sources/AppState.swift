@@ -89,6 +89,14 @@ enum DesktopConversationMatchPolicy {
     conversationId == boundBackendId && source == .desktop && status != .inProgress
   }
 
+  static func canForceProcessBoundCloudSession(
+    capturedBackendId: String?,
+    persistedBackendId: String?
+  ) -> Bool {
+    guard let capturedBackendId, !capturedBackendId.isEmpty else { return false }
+    return persistedBackendId == capturedBackendId
+  }
+
   static func parseMemoryEventDate(_ value: Any?) -> Date? {
     if let date = value as? Date {
       return date
