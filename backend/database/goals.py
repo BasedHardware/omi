@@ -47,9 +47,12 @@ def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     query = goals_ref.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
     docs = list(query.stream())
 
-    # Sort in Python instead of Firestore (avoids composite index requirement)
+    # Sort in Python instead of Firestore (avoids composite index requirement). Fall back to a
+    # timezone-aware datetime.min (not '') for goals missing created_at, so the key never mixes
+    # datetime and str -- comparing those raises TypeError and crashes the whole list. This mirrors
+    # the fallback already used in create_goal below.
     goals = [_goal_dict(doc) for doc in docs]
-    goals.sort(key=lambda x: x.get('created_at') or '', reverse=False)
+    goals.sort(key=lambda x: x.get('created_at') or datetime.min.replace(tzinfo=timezone.utc), reverse=False)
 
     return goals
 
