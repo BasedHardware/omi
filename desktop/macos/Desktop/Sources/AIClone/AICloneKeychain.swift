@@ -9,18 +9,54 @@ import Security
 ///
 /// Both were previously in `UserDefaults` (along with the non-secret
 /// plugin URL). UserDefaults is a plaintext plist on disk readable by
-/// any process running as the user, so the long-lived secrets should
-/// not have been there in the first place. Identified by maintainer
-/// security review on PR #8528.
+/// any process running as the user (e.g. `defaults read
+/// com.omi.desktop-dev`), so the long-lived secrets should not have
+/// been there in the first place. Identified by maintainer security
+/// review on PR #8528.
 ///
-/// Why not a third-party Keychain wrapper? The native Security
-/// framework is ~30 lines for the operations we need, doesn't require
-/// an extra SwiftPM dependency, and Apple's reference impl handles
-/// the ACL / kSecAttrAccessible policy correctly.
+/// ## What this migration actually provides
 ///
-/// Threading: all Keychain APIs are thread-safe per Apple. We do not
-/// maintain any in-memory cache, so concurrent reads are simple
-/// independent SecItemCopyMatching calls — cheap and correct.
+/// The Keychain improves on the UserDefaults baseline in two ways:
+///
+/// 1. **Opportunistic exposure is blocked.** Other apps running as
+///    the same user can't `cat` the file or `defaults read` the plist
+///    to learn the secret. They would need to know the exact
+///    `kSecAttrService` (bundle id) + `kSecAttrAccount` (secret name)
+///    AND call the Security framework correctly. This raises the bar
+///    from "trivial file read" to "targeted API call".
+///
+/// 2. **Locked-screen gating via `kSecAttrAccessibleWhenUnlocked`.**
+///    The item is unavailable while the screen is locked, reducing
+///    the window of physical-access exposure (someone at an unlocked
+///    Mac can still read it; someone at a locked Mac cannot).
+///
+/// ## What this migration does NOT provide
+///
+/// Stronger isolation would require `com.apple.security.app-sandbox`
+/// (currently `<false/>` in Omi.entitlements) AND a keychain access
+/// group with the `keychain-access-groups` entitlement. Without
+/// sandboxing, SecItem calls go to the legacy file-based keychain
+/// (`~/Library/Keychains/login.keychain-db`), which is readable by any
+/// process running as the same user — so `kSecAttrAccessibleWhenUnlocked`
+/// controls WHEN the item is available (unlocked screen) but NOT WHICH
+/// PROCESS can read it. Other user processes that know the bundle id
+/// and secret name CAN read these items. (Identified by cubic review
+/// on PR #8528.) Sandboxing the app is a project-wide architectural
+/// decision tracked separately; this commit is the realistic
+/// improvement within current entitlements.
+///
+/// ## Why not a third-party Keychain wrapper?
+///
+/// The native Security framework is ~30 lines for the operations we
+/// need, doesn't require an extra SwiftPM dependency, and Apple's
+/// reference impl handles the ACL / `kSecAttrAccessible` policy
+/// correctly.
+///
+/// ## Threading
+///
+/// All Keychain APIs are thread-safe per Apple. We do not maintain
+/// any in-memory cache, so concurrent reads are simple independent
+/// SecItemCopyMatching calls — cheap and correct.
 enum AICloneKeychain {
 
     /// kSecAttrService for our keychain items. Combined with the
@@ -91,9 +127,17 @@ enum AICloneKeychain {
 
         let data = Data(value.utf8)
         var query = baseQuery(for: key)
-        // kSecAttrAccessible: only this app, only when the device is
-        // unlocked. The standard for desktop-app secrets — we don't
-        // need background-accessible items.
+        // kSecAttrAccessible controls WHEN the item is available
+        // (while the keychain is unlocked, i.e. while the user is
+        // logged in / screen is unlocked). It does NOT control which
+        // process can read the item — that requires the app sandbox
+        // entitlement + `keychain-access-groups` (not currently set
+        // on this project; see AICloneKeychain.swift's docstring for
+        // the residual-risk discussion).
+        //
+        // We pick `kSecAttrAccessibleWhenUnlocked` (vs. `AfterFirstUnlock`)
+        // because nothing in the AI Clone flow needs to read secrets
+        // before the user has logged in this session.
         query[kSecValueData as String] = data
         query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
 
