@@ -440,6 +440,11 @@ def migrate_memories(prev_uid: str, new_uid: str, app_id: str = None):
 
     # Add memories to batch
     for memory in memories_to_migrate:
+        # Enhanced memories are encrypted with a per-user key (the uid is the HKDF salt), so content
+        # encrypted for prev_uid is unreadable to new_uid. Decrypt with the previous user's key and
+        # re-encrypt with the new user's key before copying, so the new owner can read them.
+        if memory.get('data_protection_level') == 'enhanced' and isinstance(memory.get('content'), str):
+            memory = _encrypt_memory_data(_prepare_memory_for_read(memory, prev_uid), new_uid)
         memory_ref = new_memories_ref.document(memory['id'])
         batch.set(memory_ref, memory)
 

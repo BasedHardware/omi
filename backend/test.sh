@@ -44,6 +44,7 @@ pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
 pytest tests/unit/test_memories_user_review.py -v
+pytest tests/unit/test_migrate_memories_rekey.py -v
 pytest tests/unit/test_announcement_malformed_type.py -v
 pytest tests/unit/test_llm_gateway_service.py -v
 pytest tests/unit/test_llm_gateway_config.py -v
