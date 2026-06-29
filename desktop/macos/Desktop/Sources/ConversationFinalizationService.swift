@@ -216,7 +216,7 @@ actor ConversationFinalizationService {
       if try await completeCloudConversation(
         id: clientConversationId,
         sessionId: sessionId,
-        allowForceProcess: allowForceProcess
+        allowForceProcess: true
       ) {
         return
       }
