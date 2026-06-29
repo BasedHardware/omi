@@ -1174,11 +1174,6 @@ class PushToTalkManager: ObservableObject {
     )
   }
 
-  private func preferredPTTInputOverrideDeviceID() -> AudioDeviceID? {
-    guard AudioCaptureService.isDefaultOutputBluetooth() else { return nil }
-    return AudioCaptureService.findBuiltInMicDeviceID()
-  }
-
   private func requestCoreAudioCaptureRecovery(reason: String, restartPTT: Bool, batchMode: Bool) {
     log("PushToTalkManager: requesting CoreAudio capture rebuild — \(reason)")
     silentMicRecoveryPolicy.recordCaptureRebuild()
@@ -1193,6 +1188,15 @@ class PushToTalkManager: ObservableObject {
     if restartPTT {
       startMicCapture(batchMode: batchMode, overrideDeviceID: preferredPTTInputOverrideDeviceID())
     }
+  }
+
+  private func preferredPTTInputOverrideDeviceID() -> AudioDeviceID? {
+    if AudioCaptureService.isDefaultOutputBluetooth(),
+      let builtIn = AudioCaptureService.findBuiltInMicDeviceID()
+    {
+      return builtIn
+    }
+    return nil
   }
 
   private func clearBufferedTurnAudio() {
