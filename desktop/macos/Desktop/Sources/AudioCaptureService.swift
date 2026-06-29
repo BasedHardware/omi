@@ -16,6 +16,26 @@ class AudioCaptureService: @unchecked Sendable {
     /// Callback for receiving audio levels (0.0 - 1.0)
     typealias AudioLevelHandler = (Float) -> Void
 
+    enum SilentMicRecoveryAction {
+        case fallbackToBuiltIn
+        case rebuildCoreAudioStack
+    }
+
+    struct SilentMicDetection {
+        let deviceID: AudioDeviceID
+        let deviceDescription: String
+        let consecutiveSilentWindows: Int
+        let isBluetoothTransport: Bool
+
+        var suggestedAction: SilentMicRecoveryAction {
+            isBluetoothTransport ? .fallbackToBuiltIn : .rebuildCoreAudioStack
+        }
+
+        var reason: String {
+            "silent input on \(deviceDescription) after \(consecutiveSilentWindows) windows"
+        }
+    }
+
     enum AudioCaptureError: LocalizedError {
         case noInputAvailable
         case engineStartFailed(Error)
@@ -64,9 +84,12 @@ class AudioCaptureService: @unchecked Sendable {
     private var onAudioLevel: AudioLevelHandler?
 
     /// Called once when the mic has been alive-but-silent for `silentMicWindowThreshold`
-    /// seconds AND the current device transports over Bluetooth. Caller is expected to
-    /// fall back to the built-in mic. Fires at most once per capture session.
-    var onSilentMicDetected: (() -> Void)?
+    /// seconds. By default this is limited to Bluetooth inputs, where macOS can feed
+    /// zeros during A2DP/HFP profile conflicts. PTT enables all-transport detection so
+    /// it can recover a stale HAL route that reports the built-in mic but still returns
+    /// silence. Fires at most once per capture session.
+    var onSilentMicDetected: ((SilentMicDetection) -> Void)?
+    var detectSilentMicOnAnyTransport = false
 
     /// Human-readable description of the capture device currently in use — for
     /// diagnostics (which mic a turn was recorded from).
@@ -108,6 +131,13 @@ class AudioCaptureService: @unchecked Sendable {
     private let audioQueue = DispatchQueue(label: "com.omi.audiocapture.device")
 
     // MARK: - Public Methods
+
+    func resetSilentMicWatchdog() {
+        consecutiveSilentWindows = 0
+        silentMicDetectedFired = false
+        watchdogWindowPeak = 0
+        watchdogWindowStart = 0
+    }
 
     /// Check if microphone permission is granted
     static func checkPermission() -> Bool {
@@ -152,6 +182,7 @@ class AudioCaptureService: @unchecked Sendable {
 
         self.onAudioChunk = onAudioChunk
         self.onAudioLevel = onAudioLevel
+        resetSilentMicWatchdog()
 
         // All CoreAudio HAL calls (AudioObjectGetPropertyData, AudioDeviceStart, etc.) are
         // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
@@ -175,6 +206,8 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Performs all blocking CoreAudio HAL setup. Must be called on audioQueue, not the main thread.
     private func startCaptureOnQueue() throws {
+        resetSilentMicWatchdog()
+
         // 1. Resolve input device: explicit override wins while available, otherwise
         // fall back to the system default instead of pinning capture to a stale device.
         let inputDeviceID = try resolveInputDeviceID()
@@ -248,6 +281,7 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Stop capturing audio
     func stopCapture() {
+        resetSilentMicWatchdog()
         guard isCapturing else { return }
 
         removePropertyListeners()
@@ -479,10 +513,9 @@ class AudioCaptureService: @unchecked Sendable {
             return Data(buffer: buffer)
         }
 
-        // Silent-mic watchdog: on Bluetooth-to-Bluetooth A2DP/HFP profile conflicts macOS
-        // accepts the IOProc but delivers only zero samples. Track the peak amplitude within
-        // a rolling ~1s window; if the window is silent AND the device transports over
-        // Bluetooth, fire onSilentMicDetected so the caller can swap to the built-in mic.
+        // Silent-mic watchdog: macOS can accept the IOProc but deliver only zero samples.
+        // Bluetooth inputs recover by switching to the built-in mic; PTT can opt into
+        // all-transport detection so a stale built-in/default route triggers a full rebuild.
         // Fires at most once per capture session.
         if !silentMicDetectedFired {
             for s in pcmData {
@@ -500,12 +533,23 @@ class AudioCaptureService: @unchecked Sendable {
                 } else {
                     consecutiveSilentWindows = 0
                 }
+                let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
                 if consecutiveSilentWindows >= silentMicWindowThreshold,
-                   Self.isBluetoothTransport(deviceID: deviceID) {
+                   isBluetooth || detectSilentMicOnAnyTransport {
                     silentMicDetectedFired = true
-                    log("AudioCapture: Bluetooth mic returning silence for \(consecutiveSilentWindows)s — falling back to built-in mic")
+                    let detection = SilentMicDetection(
+                        deviceID: deviceID,
+                        deviceDescription: currentDeviceDescription,
+                        consecutiveSilentWindows: consecutiveSilentWindows,
+                        isBluetoothTransport: isBluetooth
+                    )
+                    if isBluetooth {
+                        log("AudioCapture: Bluetooth mic returning silence for \(consecutiveSilentWindows)s — falling back to built-in mic")
+                    } else {
+                        log("AudioCapture: Input device returning silence for \(consecutiveSilentWindows)s — rebuilding CoreAudio capture")
+                    }
                     let handler = onSilentMicDetected
-                    DispatchQueue.main.async { handler?() }
+                    DispatchQueue.main.async { handler?(detection) }
                 }
                 watchdogWindowPeak = 0
                 watchdogWindowStart = nowAbs

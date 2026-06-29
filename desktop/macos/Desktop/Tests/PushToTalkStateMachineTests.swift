@@ -19,6 +19,20 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertFalse(source.contains("private var micCaptureActive"))
   }
 
+  func testSilentMicRecoveryPreservesBluetoothOutputRouting() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("private func preferredPTTInputOverrideDeviceID() -> AudioDeviceID?"))
+    XCTAssertTrue(source.contains("startMicCapture(batchMode: batchMode, overrideDeviceID: preferredPTTInputOverrideDeviceID())"))
+  }
+
+  func testSilentMicRecoveryResetsCaptureWatchdogForNewPTTTurn() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("capture.resetSilentMicWatchdog()"))
+    XCTAssertTrue(source.contains("capture.detectSilentMicOnAnyTransport = true"))
+  }
+
   private func pushToTalkManagerSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
