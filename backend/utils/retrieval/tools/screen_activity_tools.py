@@ -5,12 +5,14 @@ Tools for accessing screen/computer activity data from the desktop app.
 import contextvars
 from datetime import datetime, timezone
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.screen_activity as screen_activity_db
 import database.vector_db as vector_db
+import database.notifications as notification_db
 from database._client import db as firestore_db
 from utils.llm.clients import gemini_embed_query
 import logging
@@ -35,6 +37,19 @@ def _get_uid(config: RunnableConfig) -> Optional[str]:
         return config['configurable'].get('user_id')
     except (KeyError, TypeError):
         return None
+
+
+def _resolve_display_tz(uid: str):
+    # Render timestamps in the user's timezone so a chat answer shows screen-activity matches in the
+    # same timezone as conversation matches (conversation_tools renders in the user's timezone too).
+    # Fall back to UTC when the user has no timezone set or it is not a valid IANA name.
+    tz_name = notification_db.get_user_time_zone(uid)
+    if tz_name:
+        try:
+            return ZoneInfo(tz_name)
+        except Exception:
+            logger.warning(f"search_screen_activity_tool - invalid user timezone {tz_name!r}, using UTC")
+    return timezone.utc
 
 
 @tool
@@ -202,13 +217,14 @@ def search_screen_activity_tool(
     app_by_id = {m['screenshot_id']: m.get('appName', '') for m in matches}
     ts_by_id = {m['screenshot_id']: m.get('timestamp', 0) for m in matches}
 
+    display_tz = _resolve_display_tz(uid)
     result = f"Found {len(matches)} screen activity matches for '{query}':\n\n"
 
     for sid in screenshot_ids:
         score = scores_by_id.get(sid, 0)
         app_name = app_by_id.get(sid, 'Unknown')
         ts = ts_by_id.get(sid, 0)
-        ts_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S') if ts else 'Unknown'
+        ts_str = datetime.fromtimestamp(ts, tz=display_tz).strftime('%Y-%m-%d %H:%M:%S') if ts else 'Unknown'
 
         # Fetch OCR text from Firestore
         ocr_text = ''
