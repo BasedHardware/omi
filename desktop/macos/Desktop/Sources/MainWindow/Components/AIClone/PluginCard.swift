@@ -2,11 +2,8 @@ import SwiftUI
 
 /// Per-plugin connection card for the AI Clone page.
 ///
-/// One parameterized card drives both the Telegram and WhatsApp tiles —
-/// everything that differs between the two lives on the `AIPlugin` enum
-/// (display name, icon color, credential fields). Previously this was
-/// duplicated as TelegramCard.swift + WhatsAppCard.swift (~330 LOC);
-/// this file is the single source of truth.
+/// One parameterized card drives both the Telegram and WhatsApp tiles.
+/// Shows connection status, auto-reply toggle, and disconnect button.
 struct PluginCard: View {
     let plugin: AIPlugin
     @ObservedObject var config: AICloneConfig
@@ -20,11 +17,7 @@ struct PluginCard: View {
         case connected(since: Date)
         case error(String)
 
-        var isConnected: Bool {
-            if case .connected = self { return true }
-            return false
-        }
-
+        var isConnected: Bool { if case .connected = self { return true }; return false }
         var displayStatus: String {
             switch self {
             case .notConnected: return "Not connected"
@@ -35,12 +28,10 @@ struct PluginCard: View {
     }
 
     var body: some View {
-        pluginCardChrome {
-            content
-        }
-        .sheet(isPresented: $showingConnect) {
-            ConnectSheet(plugin: plugin, config: config, isPresented: $showingConnect)
-        }
+        pluginCardChrome { content }
+            .sheet(isPresented: $showingConnect) {
+                ConnectSheet(plugin: plugin, config: config, isPresented: $showingConnect)
+            }
     }
 
     // MARK: - Content
@@ -48,7 +39,6 @@ struct PluginCard: View {
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
             statusHeader
-
             if connectionState.isConnected {
                 connectedControls
             } else {
@@ -58,21 +48,26 @@ struct PluginCard: View {
     }
 
     private var statusHeader: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 12) {
             Image(systemName: plugin.systemImage)
                 .scaledFont(size: 22)
-                .foregroundColor(plugin.accentColor)
-                .frame(width: 36, height: 36)
-                .background(plugin.accentColor.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .foregroundColor(.white)
+                .frame(width: 40, height: 40)
+                .background(plugin.accentColor)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(plugin.displayName)
                     .scaledFont(size: 16, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
-                Text(connectionState.displayStatus)
-                    .scaledFont(size: 12)
-                    .foregroundColor(statusColor)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(connectionState.isConnected ? OmiColors.success : OmiColors.textTertiary)
+                        .frame(width: 6, height: 6)
+                    Text(connectionState.displayStatus)
+                        .scaledFont(size: 12)
+                        .foregroundColor(statusColor)
+                }
             }
 
             Spacer()
@@ -93,49 +88,51 @@ struct PluginCard: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             Button(action: { showingConnect = true }) {
-                Text("Connect \(plugin.displayName)")
+                Label("Connect", systemImage: "link.badge.plus")
                     .scaledFont(size: 13, weight: .medium)
             }
             .buttonStyle(.borderedProminent)
             .disabled(!config.isFullyConfigured)
-            .help(config.isFullyConfigured ? "" : "Configure the plugin service URL, bearer token, and dev API key first")
+            .help(config.isFullyConfigured ? "" : "Configure the plugin service first")
         }
     }
 
     private var connectedControls: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
+            // Auto-reply toggle row
             HStack {
-                Text("Auto-reply")
-                    .scaledFont(size: 13, weight: .medium)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Auto-reply")
+                        .scaledFont(size: 13, weight: .medium)
+                        .foregroundColor(OmiColors.textPrimary)
+                    Text(autoReplyEnabled ? "Omi replies to messages automatically" : "Omi won't reply until you enable this")
+                        .scaledFont(size: 11)
+                        .foregroundColor(autoReplyEnabled ? OmiColors.success : OmiColors.textTertiary)
+                }
                 Spacer()
+                if toggleInFlight {
+                    ProgressView().controlSize(.small)
+                }
                 Toggle("", isOn: $autoReplyEnabled)
                     .labelsHidden()
-                    // C2: per-chat toggle requires a chat_id/phone from a completed
-                    // handshake, which we don't track yet. v0.1 ships disabled;
-                    // the toggle becomes functional once /global-toggle lands on
-                    // the plugin backend (separate PR).
-                    .disabled(true)
+                    .disabled(toggleInFlight)
                     .onChange(of: autoReplyEnabled) { _, newValue in
                         Task { await flipAutoReply(enabled: newValue) }
                     }
             }
 
-            Text("Auto-reply activates once you send a message in \(plugin.displayName) and the handshake completes.")
-                .scaledFont(size: 11)
-                .foregroundColor(OmiColors.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            Divider()
 
-            Button("Disconnect", role: .destructive) {
-                connectionState = .notConnected
-                autoReplyEnabled = false
+            // Disconnect
+            HStack {
+                Spacer()
+                Button("Disconnect", role: .destructive) {
+                    connectionState = .notConnected
+                    autoReplyEnabled = false
+                }
+                .buttonStyle(.bordered)
+                .scaledFont(size: 12)
             }
-            .buttonStyle(.bordered)
-            // I1: Disconnect is local-only — clears the in-app connection view
-            // but does not tell the plugin service to forget the stored
-            // credentials. To fully disconnect, the user must also remove the
-            // webhook/bot from the platform's admin (Telegram @BotFather /
-            // Meta Business dashboard). This is intentional for v0.1; a future
-            // DELETE /setup endpoint on the plugin can make it remote too.
         }
     }
 
@@ -152,22 +149,40 @@ struct PluginCard: View {
     private func connectedSinceText(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
-        return "since " + formatter.localizedString(for: date, relativeTo: Date())
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
-    /// Stub for the (future) per-chat / global toggle. The toggle is currently
-    /// disabled in the UI; this exists so the wiring is in place when the
-    /// plugin backend adds `POST /global-toggle`.
     private func flipAutoReply(enabled: Bool) async {
         toggleInFlight = true
         defer { toggleInFlight = false }
-        try? await Task.sleep(nanoseconds: 200_000_000)
-        _ = enabled
+        // Toggle via the plugin's /toggle endpoint using the new
+        // credential-free schema (chat_id + enabled only, bearer auth
+        // via the plugin service header). The chat_id for the connected
+        // chat is stored in simple_storage after the /start handshake.
+        // For v0.1 the toggle is global per-plugin; per-chat toggles
+        // ship in a follow-up once the plugin exposes a chat list.
+        do {
+            let body = plugin.toggleRequestBody(
+                chatId: "global",
+                credentialForAuth: config.bearerToken,
+                enabled: enabled
+            )
+            _ = try await AICloneClient.shared.toggle(
+                baseURL: config.pluginURL,
+                bearerToken: config.bearerToken,
+                plugin: plugin,
+                body: body
+            )
+            log("PluginCard: toggle auto-reply \(enabled ? "ON" : "OFF") for \(plugin.displayName)")
+        } catch {
+            log("PluginCard: toggle failed: \(error)")
+            // Revert the toggle on failure
+            await MainActor.run { autoReplyEnabled = !enabled }
+        }
     }
 }
 
-/// Shared card chrome — wraps the per-plugin content in the standard
-/// section background + corner radius.
+/// Shared card chrome.
 @ViewBuilder
 func pluginCardChrome<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -179,9 +194,6 @@ func pluginCardChrome<Content: View>(@ViewBuilder _ content: () -> Content) -> s
 }
 
 extension AIPlugin {
-    /// Accent color for the plugin card icon. Mapped from the plugin enum
-    /// rather than hardcoded in the view, so adding a third plugin (e.g.
-    /// iMessage) is a one-line change.
     var accentColor: Color {
         switch self {
         case .telegram: return OmiColors.info

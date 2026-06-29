@@ -2,15 +2,21 @@ import SwiftUI
 
 /// Card showing the configured AI Clone plugin service URL + credentials.
 ///
-/// Always visible at the top of the AI Clone page. Shows the three required
-/// values (plugin URL, bearer token, dev API key) with status indicators and
-/// inline editing.
+/// Shows a green "auto-discovered" banner when the plugin was found via
+/// the discovery file (~/.config/omi/ai-clone-plugin.json). Includes a
+/// health-check indicator that pings the plugin's /health endpoint.
 struct PluginURLCard: View {
     @ObservedObject var config: AICloneConfig
     @State private var showingEditor = false
+    @State private var healthStatus: HealthStatus = .unknown
+
+    enum HealthStatus {
+        case unknown, reachable, unreachable
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Header row
             HStack(spacing: 8) {
                 Image(systemName: "server.rack")
                     .scaledFont(size: 16, weight: .semibold)
@@ -19,6 +25,7 @@ struct PluginURLCard: View {
                     .scaledFont(size: 17, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
                 Spacer()
+                healthIndicator
                 Button(action: { showingEditor = true }) {
                     Text(config.isFullyConfigured ? "Edit" : "Configure")
                         .scaledFont(size: 13, weight: .medium)
@@ -27,6 +34,24 @@ struct PluginURLCard: View {
                 .foregroundColor(OmiColors.purplePrimary)
             }
 
+            // Auto-discovery banner
+            if config.isAutoDiscovered && config.isFullyConfigured {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                        .scaledFont(size: 11)
+                        .foregroundColor(OmiColors.success)
+                    Text("Auto-discovered from local plugin")
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundColor(OmiColors.success)
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(OmiColors.success.opacity(0.08))
+                .cornerRadius(8)
+            }
+
+            // Status rows
             if config.isFullyConfigured {
                 statusRow(
                     icon: "link",
@@ -40,14 +65,18 @@ struct PluginURLCard: View {
                     value: String(repeating: "•", count: 8),
                     isOK: config.isBearerTokenConfigured
                 )
-                statusRow(
-                    icon: "person.crop.square.fill",
-                    label: "Dev API Key",
-                    value: String(repeating: "•", count: 8),
-                    isOK: config.isDevApiKeyConfigured
-                )
+                if !config.pluginDevMode {
+                    statusRow(
+                        icon: "person.crop.square.fill",
+                        label: "Dev API Key",
+                        value: config.isDevApiKeyConfigured ? String(repeating: "•", count: 8) : "Required",
+                        isOK: config.isDevApiKeyConfigured
+                    )
+                }
             } else {
-                Text("Configure your self-hosted AI Clone plugin service to enable Telegram and WhatsApp auto-reply. You'll need: the service URL, the bearer token (matches the AI_CLONE_PLUGIN_TOKEN env var on the service), and your omi_dev_… developer API key.")
+                Text(config.pluginURL.isEmpty
+                     ? "Start the plugin service on your machine. If it's already running, the settings will be auto-detected."
+                     : "Configure your self-hosted AI Clone plugin service. You'll need: the service URL, the bearer token, and your omi_dev_… developer API key.")
                     .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -59,7 +88,51 @@ struct PluginURLCard: View {
         .sheet(isPresented: $showingEditor) {
             PluginServiceEditorSheet(config: config, isPresented: $showingEditor)
         }
+        .task {
+            await checkHealth()
+        }
     }
+
+    // MARK: - Health indicator
+
+    @ViewBuilder
+    private var healthIndicator: some View {
+        switch healthStatus {
+        case .unknown:
+            Circle()
+                .fill(OmiColors.textTertiary.opacity(0.3))
+                .frame(width: 8, height: 8)
+        case .reachable:
+            HStack(spacing: 4) {
+                Circle().fill(OmiColors.success).frame(width: 8, height: 8)
+                Text("Online")
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.success)
+            }
+        case .unreachable:
+            HStack(spacing: 4) {
+                Circle().fill(OmiColors.error).frame(width: 8, height: 8)
+                Text("Offline")
+                    .scaledFont(size: 11)
+                    .foregroundColor(OmiColors.error)
+            }
+        }
+    }
+
+    private func checkHealth() async {
+        guard config.isPluginURLConfigured else {
+            healthStatus = .unknown
+            return
+        }
+        do {
+            let ok = try await AICloneClient.shared.health(baseURL: config.pluginURL)
+            healthStatus = ok ? .reachable : .unreachable
+        } catch {
+            healthStatus = .unreachable
+        }
+    }
+
+    // MARK: - Helpers
 
     private func statusRow(icon: String, label: String, value: String, isOK: Bool) -> some View {
         HStack(spacing: 8) {
@@ -82,8 +155,6 @@ struct PluginURLCard: View {
         }
     }
 
-    /// Masks the URL to display just the host (hide the path, which may
-    /// contain tokens or user-identifying data).
     private func maskedURL(_ raw: String) -> String {
         guard let url = URL(string: raw) else { return raw }
         return "\(url.scheme ?? "https")://\(url.host ?? raw)\(url.path.isEmpty ? "" : "/…")"
@@ -104,11 +175,7 @@ struct PluginServiceEditorSheet: View {
     enum TestResult: Equatable {
         case success
         case failure(String)
-
-        var isSuccess: Bool {
-            if case .success = self { return true }
-            return false
-        }
+        var isSuccess: Bool { if case .success = self { return true }; return false }
     }
 
     var body: some View {
@@ -138,7 +205,6 @@ struct PluginServiceEditorSheet: View {
                         isSecure: false,
                         helpText: "HTTPS URL of your self-hosted plugin service."
                     )
-
                     fieldRow(
                         title: "Bearer Token",
                         text: $draftBearer,
@@ -146,13 +212,14 @@ struct PluginServiceEditorSheet: View {
                         isSecure: true,
                         helpText: "Sent as Authorization: Bearer on every request to the plugin service."
                     )
-
                     fieldRow(
                         title: "Omi Dev API Key",
                         text: $draftDevKey,
                         placeholder: "omi_dev_…",
                         isSecure: true,
-                        helpText: "Forwarded to the plugin so it can call the backend persona chat API on your behalf. Create one in Omi Settings → Developer."
+                        helpText: config.pluginDevMode
+                            ? "Optional in dev mode — the local mock persona doesn't validate it."
+                            : "Forwarded to the plugin so it can call the backend persona chat API on your behalf. Create one in Omi Settings → Developer."
                     )
 
                     if let result = testResult {

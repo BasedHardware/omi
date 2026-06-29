@@ -73,6 +73,16 @@ final class AICloneConfig: ObservableObject {
         }
     }
 
+    /// True if the current config was auto-discovered from the plugin's
+    /// discovery file (rather than manually entered by the user).
+    /// Drives the UI banner: "Plugin discovered automatically".
+    @Published var isAutoDiscovered: Bool = false
+
+    /// True when the plugin is running in dev mode (the discovery file
+    /// said so). In dev mode, the dev API key is optional because the
+    /// local mock persona doesn't validate it.
+    @Published var pluginDevMode: Bool = false
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.pluginURL = defaults.string(forKey: DefaultsKeys.pluginURL) ?? ""
@@ -91,6 +101,66 @@ final class AICloneConfig: ObservableObject {
         // Load current values from Keychain (may be empty).
         self.bearerToken = (try? AICloneKeychain.get(.pluginBearerToken)) ?? ""
         self.omiDevApiKey = (try? AICloneKeychain.get(.devApiKey)) ?? ""
+
+        // Zero-config: if the plugin discovery file exists (written by
+        // the plugin's FastAPI lifespan at startup), auto-fill any
+        // empty fields. This is the key UX improvement: the user starts
+        // the plugin, opens the desktop, and the AI Clone settings are
+        // pre-filled — no copy/paste needed.
+        //
+        // We only fill EMPTY fields — if the user has already
+        // configured a different URL/token manually, we don't override
+        // their choice. If the plugin restarts with a NEW token (new
+        // instance_id), the discovery file changes and we pick up the
+        // new value on next launch.
+        applyDiscoveryIfAvailable()
+    }
+
+    /// Read `~/.config/omi/ai-clone-plugin.json` and fill any empty
+    /// fields (pluginURL, bearerToken). Called once at init.
+    ///
+    /// For the dev API key: the discovery file doesn't contain it
+    /// (it's user-specific). If `devMode == true` in the discovery
+    /// file, the plugin is paired with a local mock persona that
+    /// doesn't validate the key — so we leave the field empty and
+    /// the UI will show a lighter "optional" indicator.
+    private func applyDiscoveryIfAvailable() {
+        let path = PluginDiscovery.filePath
+        log("AICloneConfig: checking discovery file at \(path)")
+        guard let discovery = PluginDiscovery.read() else {
+            log("AICloneConfig: no discovery file found")
+            return
+        }
+
+        // Prefer public_url (the tunnel URL) for pluginURL — that's
+        // what Telegram needs to reach the plugin.
+        let discoveryURL = discovery.publicURL ?? discovery.pluginURL
+
+        var changed = false
+
+        if self.pluginURL.isEmpty {
+            // Write directly to UserDefaults (bypassing didSet which may
+            // not fire reliably during init). Then set the property for
+            // the in-memory state.
+            defaults.set(discoveryURL, forKey: DefaultsKeys.pluginURL)
+            self.pluginURL = discoveryURL
+            changed = true
+        }
+
+        if self.bearerToken.isEmpty {
+            // Write directly to Keychain.
+            try? AICloneKeychain.set(.pluginBearerToken, discovery.bearerToken)
+            self.bearerToken = discovery.bearerToken
+            changed = true
+        }
+
+        if changed {
+            // Use the app's log() function so it appears in /tmp/omi-dev.log
+            // (NSLog goes to unified logging only, not the dev log file).
+            log("AICloneConfig: auto-discovered plugin at \(discoveryURL) (type=\(discovery.pluginType), devMode=\(discovery.devMode))")
+            self.isAutoDiscovered = true
+            self.pluginDevMode = discovery.devMode
+        }
     }
 
     /// Move legacy UserDefaults-stored secrets into the Keychain.
@@ -121,8 +191,13 @@ final class AICloneConfig: ObservableObject {
     /// True if the dev API key is set (non-empty).
     var isDevApiKeyConfigured: Bool { !omiDevApiKey.isEmpty }
 
-    /// True if all three values needed to call the plugin are present.
+    /// True if all values needed to call the plugin are present.
+    /// In dev mode (plugin paired with local mock persona), the dev API
+    /// key is optional — the mock doesn't validate it.
     var isFullyConfigured: Bool {
-        isPluginURLConfigured && isBearerTokenConfigured && isDevApiKeyConfigured
+        if pluginDevMode {
+            return isPluginURLConfigured && isBearerTokenConfigured
+        }
+        return isPluginURLConfigured && isBearerTokenConfigured && isDevApiKeyConfigured
     }
 }
