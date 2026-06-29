@@ -4,12 +4,18 @@ import AppKit
 
 /// Tests for ClipboardWatcher.
 ///
-/// Uses an injected `Source` closure (a fake pasteboard that bumps
-/// changeCount on write) rather than NSPasteboard.general. Reason:
-/// xctest runs in a sandbox that does NOT have access to the user's
-/// system pasteboard — changeCount is pinned at startup and never
-/// bumps in the test runner. The injected Source simulates the real
-/// NSPasteboard.general behavior (changeCount increments per write).
+/// Uses injected `changeCountSource` + `stringSource` closures (a
+/// fake pasteboard that bumps changeCount on write) rather than
+/// NSPasteboard.general. Reason: xctest runs in a sandbox that does
+/// NOT have access to the user's system pasteboard — changeCount is
+/// pinned at startup and never bumps in the test runner. The
+/// injected sources simulate the real NSPasteboard.general behavior
+/// (changeCount increments per write).
+///
+/// P1 (cubic follow-up): the previous design used a single Source
+/// closure that read BOTH changeCount AND string. The fix splits
+/// into two closures so the watcher's main loop only reads the
+/// string when the change count has actually moved.
 @MainActor
 final class ClipboardWatcherTests: XCTestCase {
 
@@ -29,10 +35,6 @@ final class ClipboardWatcherTests: XCTestCase {
             string = value
             changeCount += 1
         }
-
-        func snapshot() -> ClipboardWatcher.Snapshot {
-            ClipboardWatcher.Snapshot(changeCount: changeCount, string: string)
-        }
     }
 
     private var fake: FakeClipboard!
@@ -47,17 +49,25 @@ final class ClipboardWatcherTests: XCTestCase {
         super.tearDown()
     }
 
+    private func makeWatcher(
+        pollInterval: TimeInterval = 999.0,
+        handler: @escaping ClipboardWatcher.ChangeHandler
+    ) -> ClipboardWatcher {
+        ClipboardWatcher(
+            changeCountSource: { [weak fake] in fake?.changeCount ?? 0 },
+            stringSource: { [weak fake] in fake?.string },
+            pollInterval: pollInterval,
+            handler: handler
+        )
+    }
+
     func test_emits_handler_when_clipboard_string_changes() {
         let exp = expectation(description: "handler called")
         var received: String?
-        let watcher = ClipboardWatcher(
-            source: { [weak fake] in fake?.snapshot() ?? .init(changeCount: 0, string: nil) },
-            pollInterval: 999.0,  // never fires naturally
-            handler: { content in
-                received = content
-                exp.fulfill()
-            }
-        )
+        let watcher = makeWatcher { content in
+            received = content
+            exp.fulfill()
+        }
 
         fake.setString("123456789:AAEhBP7fWqu7vK3HbZGE-vJRq4YH9k5m7XQ")
         watcher.checkClipboard()
@@ -71,11 +81,8 @@ final class ClipboardWatcherTests: XCTestCase {
         // check with no further changes must not emit.
         var callCount = 0
         fake.setString("baseline")
-        let watcher = ClipboardWatcher(
-            source: { [weak fake] in fake?.snapshot() ?? .init(changeCount: 0, string: nil) },
-            handler: { _ in callCount += 1 }
-        )
-        watcher.checkClipboard()  // no change since init
+        let watcher = makeWatcher { _ in callCount += 1 }
+        watcher.checkClipboard()
         XCTAssertEqual(callCount, 0)
     }
 
@@ -86,10 +93,7 @@ final class ClipboardWatcherTests: XCTestCase {
         // production ConnectSheet relies on (each copy from @BotFather
         // fires the auto-detect handler).
         var received: [String] = []
-        let watcher = ClipboardWatcher(
-            source: { [weak fake] in fake?.snapshot() ?? .init(changeCount: 0, string: nil) },
-            handler: { content in received.append(content) }
-        )
+        let watcher = makeWatcher { content in received.append(content) }
 
         watcher.checkClipboard()
         XCTAssertTrue(received.isEmpty, "no emit on initial check")
@@ -114,12 +118,9 @@ final class ClipboardWatcherTests: XCTestCase {
 
     func test_does_not_emit_when_clipboard_contains_non_string_content() {
         // changeCount goes up when content is cleared too. The watcher
-        // should suppress the emit because snapshot.string is nil.
+        // should suppress the emit because stringSource() returns nil.
         var callCount = 0
-        let watcher = ClipboardWatcher(
-            source: { [weak fake] in fake?.snapshot() ?? .init(changeCount: 0, string: nil) },
-            handler: { _ in callCount += 1 }
-        )
+        let watcher = makeWatcher { _ in callCount += 1 }
         fake.clearContents()
         watcher.checkClipboard()
         XCTAssertEqual(callCount, 0, "watcher should skip when string content is nil")
@@ -131,10 +132,7 @@ final class ClipboardWatcherTests: XCTestCase {
         // empty string to the handler (would be confusing for the
         // validator).
         var received: [String] = []
-        let watcher = ClipboardWatcher(
-            source: { [weak fake] in fake?.snapshot() ?? .init(changeCount: 0, string: nil) },
-            handler: { content in received.append(content) }
-        )
+        let watcher = makeWatcher { content in received.append(content) }
         fake.setString("previous")
         watcher.checkClipboard()
         XCTAssertEqual(received, ["previous"])
@@ -146,11 +144,7 @@ final class ClipboardWatcherTests: XCTestCase {
 
     func test_stop_prevents_further_emits() {
         var callCount = 0
-        let watcher = ClipboardWatcher(
-            source: { [weak fake] in fake?.snapshot() ?? .init(changeCount: 0, string: nil) },
-            pollInterval: 0.01,
-            handler: { _ in callCount += 1 }
-        )
+        let watcher = makeWatcher(pollInterval: 0.01) { _ in callCount += 1 }
         fake.setString("v1")
         watcher.start()
         // Give the timer a chance to fire (pollInterval is 0.01s).
@@ -173,17 +167,43 @@ final class ClipboardWatcherTests: XCTestCase {
         // between should not emit twice.
 
         // Establish baseline BEFORE creating the watcher so its seed
-        // matches the current changeCount. (The watcher's init reads
-        // source().changeCount — if we created the watcher first and
-        // then bumped changeCount, the FIRST checkClipboard would emit.)
+        // matches the current changeCount.
         fake.setString("baseline")
-        let watcher = ClipboardWatcher(
-            source: { [weak fake] in fake?.snapshot() ?? .init(changeCount: 0, string: nil) },
-            handler: { _ in XCTFail("handler should not fire on idempotent checks") }
-        )
+        let watcher = makeWatcher { _ in
+            XCTFail("handler should not fire on idempotent checks")
+        }
         // No further fake changes. Multiple checks must all be silent.
         watcher.checkClipboard()
         watcher.checkClipboard()
         watcher.checkClipboard()
+    }
+
+    // P1 (cubic follow-up): verifies the LAZY string read. The fake
+    // stringSource counts how many times it's invoked; it should ONLY
+    // be called when changeCount has actually moved. A steady-state
+    // watch (no clipboard changes) must NOT touch the string at all.
+    func test_does_not_read_string_when_changeCount_unchanged() {
+        var stringReadCount = 0
+        var changeCountReadCount = 0
+        let fake = self.fake  // explicit capture for closure
+        let watcher = ClipboardWatcher(
+            changeCountSource: {
+                changeCountReadCount += 1
+                return fake?.changeCount ?? 0
+            },
+            stringSource: {
+                stringReadCount += 1
+                return fake?.string
+            },
+            handler: { _ in XCTFail("handler should not fire") }
+        )
+        // Seed the watcher
+        let initialCount = changeCountReadCount
+        // Multiple checks with no changeCount change
+        for _ in 0..<5 {
+            watcher.checkClipboard()
+        }
+        XCTAssertEqual(stringReadCount, 0, "stringSource must NOT be called when changeCount is unchanged")
+        XCTAssertGreaterThan(changeCountReadCount, initialCount, "changeCountSource IS called every tick")
     }
 }
