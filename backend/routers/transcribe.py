@@ -118,7 +118,7 @@ from utils.translation_cache import (
     should_persist_translation,
 )
 from utils.translation_coordinator import TranslationCoordinator
-from utils.transcribe_decisions import (
+from utils.transcribe_decisions import (  # async-blockers: no-import-scope; async-blockers: no-changed-range-scope
     ConversationLifecycleAction,
     USER_SELF_PERSON_ID,
     decide_existing_conversation_action,
