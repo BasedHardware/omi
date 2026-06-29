@@ -26,6 +26,26 @@ Self-hosted FastAPI service. Receives Telegram webhook updates, calls the Omi pe
 - `POST /webhook` — receives Telegram updates. Verifies `X-Telegram-Bot-Api-Secret-Token`, dispatches to the persona when auto-reply is on.
 - `POST /toggle` — flips `auto_reply_enabled` for a given `chat_id`. Called by Chat Tools.
 
+### `POST /toggle` — auth + body schema
+
+The endpoint is gated by the **plugin bearer token** (set `AI_CLONE_PLUGIN_TOKEN` when launching the plugin; the desktop stores it in Keychain after reading `~/.config/omi/ai-clone-plugin.json`). The same 401 is returned for missing and wrong bearer so the endpoint can't be probed.
+
+Request body (JSON):
+
+```json
+{
+  "chat_id": "999001",
+  "enabled": true,
+  "bot_token": "123456789:AABBCC-DDeeff..."
+}
+```
+
+- `chat_id` — the Telegram chat id (string of int) to flip.
+- `enabled` — bool, the new value of `auto_reply_enabled`.
+- `bot_token` — the bot token the chat was bound to during `/setup`. Required; same 403 for unknown chat AND wrong token to prevent enumeration.
+
+Response: `200 OK` with `{"ok": true}` on success.
+
 ## Architecture
 
 - `main.py` — FastAPI app, routes.
