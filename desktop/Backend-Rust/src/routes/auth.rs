@@ -252,7 +252,7 @@ fn google_auth_redirect(config: &Config, session_id: &str) -> Result<Redirect, E
     let api_base_url = config.base_api_url.as_deref().unwrap_or("http://localhost:8080");
     let callback_url_raw = format!("{}/v1/auth/callback/google", api_base_url);
     let callback_url = urlencoding::encode(&callback_url_raw);
-    let scope = urlencoding::encode("openid email profile");
+    let scope = urlencoding::encode("openid email profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events");
 
     let auth_url = format!(
         "https://accounts.google.com/o/oauth2/v2/auth?\
