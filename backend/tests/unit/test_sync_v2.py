@@ -1552,6 +1552,7 @@ class TestAsyncCoordinatorBehavioral:
             module.build_person_embeddings_cache = MagicMock(return_value={})
             module._reprocess_merged_conversations = MagicMock()
             module.record_usage = MagicMock()
+            module.get_timestamp_from_path = MagicMock(side_effect=lambda p: int(p.split('_')[-1].split('.')[0]))
             call_count = [0]
 
             def _process_seg_fails_once(path, uid, response, lock, errors, *args, **kwargs):
