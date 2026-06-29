@@ -548,9 +548,5 @@ def search_conversations_tool(
         return result
 
     except Exception as e:
-        error_msg = f"Error performing vector search: {str(e)}"
-        logger.info(f"❌ search_conversations_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Found vector search results but encountered an error processing them: {str(e)}"
+        logger.warning("search_conversations_tool vector search failed (%s)", type(e).__name__)
+        return "Found vector search results but encountered an error processing them."
