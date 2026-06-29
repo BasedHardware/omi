@@ -231,8 +231,18 @@ _OPENROUTER_TEMPERATURES: Dict[str, float] = {
     'wrapped_analysis': 0.7,
 }
 
-# Models that support OpenAI prompt caching (prompt_cache_key routing).
-_CACHE_KEY_MODELS = {'gpt-5.4', 'gpt-5.4-mini'}
+# Prompt-cache capability detection.
+#
+# OpenAI prompt caching is a capability of whole model families, not of specific point
+# releases. Gating on exact names (e.g. {'gpt-5.4', 'gpt-5.4-mini'}) silently breaks the
+# moment a model is renamed or a new family member ships, so we detect by family prefix.
+#
+#   prompt_cache_key             — prefix-cache request routing. Supported by the gpt-4o,
+#                                  gpt-4.1, gpt-5.x and o-series families.
+#   prompt_cache_retention='24h' — extended (24h) cache retention. Supported by the
+#                                  gpt-5.x and o-series families.
+_CACHE_KEY_MODEL_PREFIXES = ('gpt-5', 'gpt-4.1', 'gpt-4o', 'o1', 'o3', 'o4')
+_CACHE_RETENTION_MODEL_PREFIXES = ('gpt-5', 'o1', 'o3', 'o4')
 
 # Features that call .with_structured_output() — logged when resolving to Gemini for compat monitoring.
 _STRUCTURED_OUTPUT_FEATURES = {
@@ -288,7 +298,7 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
     """Return provider/model construction options for a resolved route."""
 
     options: Dict[str, object] = {}
-    if model == 'gpt-5.1':
+    if supports_cache_retention(model):
         options['extra_body'] = {"prompt_cache_retention": "24h"}
     if provider == 'openrouter':
         temperature = _OPENROUTER_TEMPERATURES.get(feature)
@@ -324,7 +334,13 @@ def get_route_ref(feature: str) -> RouteRef:
 
 
 def supports_prompt_cache(model: str) -> bool:
-    return model in _CACHE_KEY_MODELS
+    """Whether a model supports OpenAI prompt-cache routing (prompt_cache_key)."""
+    return bool(model) and model.startswith(_CACHE_KEY_MODEL_PREFIXES)
+
+
+def supports_cache_retention(model: str) -> bool:
+    """Whether a model supports 24h OpenAI prompt-cache retention (prompt_cache_retention='24h')."""
+    return bool(model) and model.startswith(_CACHE_RETENTION_MODEL_PREFIXES)
 
 
 def is_structured_output_feature(feature: str) -> bool:
