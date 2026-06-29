@@ -149,12 +149,13 @@ enum MemoryExportExecutor {
         requestAccessibilityApprovalForCloudSetup()
         throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
       }
+      if cloudFormFillNeedsManualClaudeAdd(lastResult),
+        CloudConnectorFormAutomation.showClaudeAddGuidanceOverlay()
+      {
+        throw ExecutorError.browserSetupRequired(cloudSetupManualClaudeAddMessage)
+      }
       if cloudFormFillRequiresScreenRecordingApproval(lastResult) {
-        if cloudFormFillNeedsManualClaudeAdd(lastResult),
-          CloudConnectorFormAutomation.showClaudeAddGuidanceOverlay()
-        {
-          throw ExecutorError.browserSetupRequired(cloudSetupManualClaudeAddMessage)
-        } else if CloudConnectorFormAutomation.showClaudeConnectGuidanceOverlay() {
+        if CloudConnectorFormAutomation.showClaudeConnectGuidanceOverlay() {
           throw ExecutorError.browserSetupRequired(cloudSetupManualClaudeConnectMessage)
         } else {
           // We could not anchor to Claude. Send the user to grant Screen Recording, but

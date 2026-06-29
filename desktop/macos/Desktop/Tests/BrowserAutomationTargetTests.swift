@@ -208,6 +208,13 @@ final class BrowserAutomationTargetTests: XCTestCase {
       source.contains("I did not start the Playwright/browser-agent fallback"),
       "Cloud setup cards should not mention internal fallback implementation details."
     )
+    let manualAddRange = try XCTUnwrap(source.range(of: "cloudFormFillNeedsManualClaudeAdd(lastResult)"))
+    let screenRecordingRange = try XCTUnwrap(source.range(of: "cloudFormFillRequiresScreenRecordingApproval(lastResult)"))
+    XCTAssertLessThan(
+      manualAddRange.lowerBound,
+      screenRecordingRange.lowerBound,
+      "Manual Claude Add guidance must run before Screen Recording handling; the Add button can be hidden from AX even when Screen Recording is already granted."
+    )
   }
 
   func testAgentRuntimeOnlyEnablesPlaywrightWhenBridgeIsConfigured() throws {
