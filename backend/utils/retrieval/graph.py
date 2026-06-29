@@ -24,6 +24,10 @@ from utils.llm.chat import retrieve_is_file_question
 from utils.llm.clients import get_llm
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
+from utils.observability.langsmith import (
+    get_chat_tracer_callbacks,
+    has_langsmith_api_key,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -138,8 +142,31 @@ async def execute_persona_chat_stream(
 
     full_response: list[str] = []
 
-    if callback_data is not None:
-        callback_data['langsmith_run_id'] = str(uuid.uuid4())
+    # Build a LangSmith tracer for this request so the run_id stored
+    # on the ai_message actually maps to a real trace in LangSmith.
+    # Without a tracer attached, submit_langsmith_feedback() called
+    # later would fail because the run_id never existed.
+    #
+    # If no API key is configured, the callback list is empty AND we
+    # deliberately don't store a fake langsmith_run_id on the message —
+    # a phantom run_id would cause feedback submission to error out
+    # server-side. Identified by cubic (P2): partial-removal of
+    # LangSmith tracing created non-resolvable run IDs.
+    langsmith_run_id = str(uuid.uuid4()) if has_langsmith_api_key() else None
+    tracer_callbacks = get_chat_tracer_callbacks(
+        run_id=langsmith_run_id,
+        run_name="chat.persona.stream",
+        tags=["chat", "persona", "streaming"],
+        metadata={
+            "uid": uid,
+            "app_id": app.id if app else None,
+            "app_name": app.name if app else None,
+            "cited": cited,
+        },
+    )
+
+    if callback_data is not None and langsmith_run_id is not None:
+        callback_data['langsmith_run_id'] = langsmith_run_id
 
     try:
         # Use the 'persona_chat' feature (not 'chat_graph') so the QoS
@@ -147,8 +174,16 @@ async def execute_persona_chat_stream(
         # personas, not gpt-4.1-mini (more expensive). The old code
         # used 'chat_graph' by mistake — this was pre-existing.
         llm = get_llm('persona_chat', streaming=True)
+        # Wire the tracer via RunnableConfig so the run_id is real in
+        # LangSmith. `config` is the v0.2+ way to pass callbacks into
+        # astream() — callbacks= was removed in langchain-core >= 0.2.
+        astream_kwargs = (
+            {"config": {"callbacks": tracer_callbacks}}
+            if tracer_callbacks
+            else {}
+        )
         chunk_count = 0
-        async for chunk in llm.astream(formatted_messages):
+        async for chunk in llm.astream(formatted_messages, **astream_kwargs):
             chunk_count += 1
             token = chunk.content
             if not token:
