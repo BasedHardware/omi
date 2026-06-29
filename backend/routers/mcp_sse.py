@@ -11,10 +11,9 @@ import asyncio
 import json
 import logging
 import os
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Union, List, Any
+from typing import Optional, Any
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 import firebase_admin.auth
@@ -54,9 +53,6 @@ from utils.mcp_memories import (
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
-
-# Store active sessions
-active_sessions: dict = {}
 
 MCP_RESOURCE_URL = mcp_oauth_db.MCP_RESOURCE_URL
 MCP_AUTHORIZATION_SERVER_URL = os.getenv("MCP_AUTHORIZATION_SERVER_URL", "https://api.omi.me")
@@ -116,16 +112,6 @@ GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
 SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
-
-
-class MCPSession:
-    """Represents an active MCP session."""
-
-    def __init__(self, session_id: str, user_id: str):
-        self.session_id = session_id
-        self.user_id = user_id
-        self.created_at = datetime.utcnow()
-        self.initialized = False
 
 
 @dataclass
@@ -1160,9 +1146,7 @@ def create_mcp_error(id: Any, code: int, message: str) -> dict:
     return {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
 
 
-def handle_mcp_message(
-    auth_context: MCPAuthContext, message: dict, session: Optional[MCPSession] = None
-) -> tuple[Optional[dict], Optional[str]]:
+def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Optional[dict], Optional[str]]:
     """
     Process an incoming MCP JSON-RPC message and return a response.
     Returns (response, new_session_id) tuple.
@@ -1170,16 +1154,8 @@ def handle_mcp_message(
     msg_id = message.get("id")
     method = message.get("method")
     params = message.get("params", {})
-    new_session_id = None
 
     if method == "initialize":
-        # Create a new session
-        session_id = str(uuid.uuid4())
-        new_session = MCPSession(session_id, auth_context.uid)
-        new_session.initialized = True
-        active_sessions[session_id] = new_session
-        new_session_id = session_id
-
         return (
             create_mcp_response(
                 msg_id,
@@ -1195,7 +1171,7 @@ def handle_mcp_message(
                     ),
                 },
             ),
-            new_session_id,
+            None,
         )
 
     elif method == "notifications/initialized":
@@ -1441,7 +1417,7 @@ async def mcp_streamable_http(
 
     - POST JSON-RPC messages to this endpoint
     - Responses are returned as SSE stream or JSON depending on Accept header
-    - Session ID is returned in Mcp-Session-Id header after initialization
+    - This hosted transport is stateless; bearer-token auth scopes every request
     """
     # Authenticate
     auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
@@ -1457,16 +1433,6 @@ async def mcp_streamable_http(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    # Get session if provided
-    session = None
-    if mcp_session_id:
-        if mcp_session_id not in active_sessions:
-            raise HTTPException(status_code=404, detail="Session not found")
-        session = active_sessions[mcp_session_id]
-        # Verify session belongs to this user
-        if session.user_id != auth_context.uid:
-            raise HTTPException(status_code=403, detail="Session does not belong to this user")
-
     # Handle batch requests (array of messages)
     messages = body if isinstance(body, list) else [body]
 
@@ -1476,7 +1442,7 @@ async def mcp_streamable_http(
     if all_notifications:
         # Process notifications without response
         for msg in messages:
-            await run_blocking(db_executor, handle_mcp_message, auth_context, msg, session)
+            await run_blocking(db_executor, handle_mcp_message, auth_context, msg)
         return Response(status_code=202)
 
     # Process messages and collect responses
@@ -1484,7 +1450,7 @@ async def mcp_streamable_http(
     new_session_id = None
 
     for msg in messages:
-        response, session_id = await run_blocking(db_executor, handle_mcp_message, auth_context, msg, session)
+        response, session_id = await run_blocking(db_executor, handle_mcp_message, auth_context, msg)
         if session_id:
             new_session_id = session_id
         if response:
@@ -1534,6 +1500,8 @@ async def mcp_sse_get(
     if not auth_context:
         raise invalid_mcp_auth_exception()
 
+    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
+
     # For backwards compatibility, also support the old SSE flow
     # Return an empty SSE stream that just sends keepalives
     async def event_generator():
@@ -1575,18 +1543,8 @@ def mcp_delete_session(
     if not auth_context:
         raise invalid_mcp_auth_exception("Invalid or missing API key")
 
-    if not mcp_session_id:
-        raise HTTPException(status_code=400, detail="Mcp-Session-Id header required")
-
-    if mcp_session_id not in active_sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    session = active_sessions[mcp_session_id]
-    if session.user_id != auth_context.uid:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this session")
-
-    # Delete the session
-    del active_sessions[mcp_session_id]
+    # Hosted MCP is stateless; terminate requests are best-effort so stale
+    # or load-balanced session ids do not create client-visible errors.
     return Response(status_code=204)
 
 
