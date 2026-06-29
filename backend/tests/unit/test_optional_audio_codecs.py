@@ -40,6 +40,9 @@ def _drop_module(name: str):
     sys.modules.pop(name, None)
     parent_name, _, attr = name.rpartition(".")
     parent = sys.modules.get(parent_name)
+    if parent is not None and not hasattr(parent, "__path__"):
+        sys.modules.pop(parent_name, None)
+        return
     if parent is not None and hasattr(parent, attr):
         delattr(parent, attr)
 
@@ -156,18 +159,18 @@ def test_storage_import_defers_missing_native_opus(monkeypatch):
 
 
 def test_sync_import_defers_missing_native_opus(monkeypatch, tmp_path):
-    captured_sync = _capture_module("routers.sync")
+    captured_sync_files = _capture_module("utils.sync.files")
     _install_sync_import_stubs(monkeypatch)
     monkeypatch.setitem(sys.modules, "opuslib", None)
     try:
-        _drop_module("routers.sync")
+        _drop_module("utils.sync.files")
 
-        sync = importlib.import_module("routers.sync")
+        sync_files = importlib.import_module("utils.sync.files")
         opus_path = tmp_path / "audio.opus"
         opus_path.write_bytes(b"\x00\x00\x00\x00")
 
-        assert sync.Decoder is None
+        assert sync_files.Decoder is None
         with pytest.raises(RuntimeError, match=MISSING_OPUS_MESSAGE):
-            sync.decode_opus_file_to_wav(str(opus_path), str(tmp_path / "audio.wav"))
+            sync_files.decode_opus_file_to_wav(str(opus_path), str(tmp_path / "audio.wav"))
     finally:
-        _restore_module("routers.sync", captured_sync)
+        _restore_module("utils.sync.files", captured_sync_files)

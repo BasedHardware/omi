@@ -55,6 +55,7 @@ models_app_mod = _stub_module("models.app")
 models_chat_mod = _stub_module("models.chat")
 models_conversation_mod = _stub_module("models.conversation")
 models_conversation_enums_mod = _stub_module("models.conversation_enums")
+models_dev_api_key_mod = _stub_module("models.dev_api_key")
 models_notification_mod = _stub_module("models.notification_message")
 
 
@@ -87,17 +88,23 @@ class NotificationMessage:
     pass
 
 
+class DevApiKey:
+    pass
+
+
 models_app_mod.App = App
 models_app_mod.ProactiveNotification = ProactiveNotification
 models_app_mod.UsageHistoryType = UsageHistoryType
 models_chat_mod.Message = Message
 models_conversation_mod.Conversation = Conversation
 models_conversation_enums_mod.ConversationSource = ConversationSource
+models_dev_api_key_mod.DevApiKey = DevApiKey
 models_notification_mod.NotificationMessage = NotificationMessage
 setattr(models_mod, "app", models_app_mod)
 setattr(models_mod, "chat", models_chat_mod)
 setattr(models_mod, "conversation", models_conversation_mod)
 setattr(models_mod, "conversation_enums", models_conversation_enums_mod)
+setattr(models_mod, "dev_api_key", models_dev_api_key_mod)
 setattr(models_mod, "notification_message", models_notification_mod)
 
 

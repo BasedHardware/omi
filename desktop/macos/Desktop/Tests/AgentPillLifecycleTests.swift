@@ -522,6 +522,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("self.resizeAnchored(to: self.collapsedBarSize, makeResizable: false, animated: false, anchorTop: true)"))
   }
 
+  func testStartupRevalidatesDisplayMetadataForAutomaticNotchMode() throws {
+    let source = try floatingControlBarWindowSource()
+
+    // Some MacBook notch safe-area metadata can arrive after the floating bar
+    // window is created. Startup retries should use the same layout path as
+    // display changes so users do not need to change screen resolution first.
+    XCTAssertTrue(source.contains("private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]"))
+    XCTAssertTrue(source.contains("scheduleStartupDisplayRevalidation()"))
+    XCTAssertTrue(source.contains("self?.validatePositionOnScreenChange(reason: \"startup_display_revalidation\")"))
+    XCTAssertTrue(source.contains("self?.validatePositionOnScreenChange(reason: \"screen_parameters_changed\")"))
+  }
+
   func testBackFromAgentUsesSharedDisplayAwarePath() throws {
     let viewSource = try floatingControlBarViewSource()
     let windowSource = try floatingControlBarWindowSource()

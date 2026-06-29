@@ -41,6 +41,16 @@ jobs:
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
 
+      - name: Validate desktop OAuth base API URL
+        env:
+          DESKTOP_BACKEND_BASE_API_URL: ${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DESKTOP_BACKEND_BASE_API_URL//[[:space:]]/}" ]; then
+            echo "DESKTOP_BACKEND_BASE_API_URL must be configured for desktop OAuth callbacks" >&2
+            exit 1
+          fi
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -61,6 +71,7 @@ jobs:
           env_vars: |
             FIREBASE_PROJECT_ID=based-hardware
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+            BASE_API_URL=${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
           secrets: |
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest

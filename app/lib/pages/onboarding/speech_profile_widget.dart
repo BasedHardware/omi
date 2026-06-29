@@ -117,7 +117,7 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
 
     return PopScope(
       canPop: true,
-      onPopInvoked: (didPop) async {
+      onPopInvokedWithResult: (didPop, result) async {
         final speechProvider = context.read<SpeechProfileProvider>();
         speechProvider.close();
         restartDeviceRecording();

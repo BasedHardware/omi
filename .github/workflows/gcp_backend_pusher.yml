@@ -167,6 +167,7 @@ jobs:
             fi
           else
             helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+            kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=300s
           fi
 
       - name: Smoke LLM Gateway
@@ -229,7 +230,7 @@ jobs:
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
+        run: echo "${{ env.SERVICE }} deployed to ${{ github.event.inputs.environment }}"
 
       - name: Generate deployment summary
         if: always() && github.event.inputs.environment == 'prod'

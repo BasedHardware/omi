@@ -32,12 +32,12 @@ class OmiSendButton extends AdaptiveWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: enabled ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textQuaternary.withOpacity(0.3),
+            color: enabled ? ResponsiveHelper.purplePrimary : ResponsiveHelper.textQuaternary.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(12),
             boxShadow: enabled
                 ? [
                     BoxShadow(
-                      color: ResponsiveHelper.purplePrimary.withOpacity(0.3),
+                      color: ResponsiveHelper.purplePrimary.withValues(alpha: 0.3),
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
