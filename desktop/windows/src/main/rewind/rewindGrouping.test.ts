@@ -44,4 +44,21 @@ describe('groupFrames', () => {
     expect(groups[0].representative.id).toBe(2)
     expect(groups[0].matchSnippet.toLowerCase()).toContain('world')
   })
+  it('uses window-title matches when OCR text does not explain the search hit', () => {
+    const groups = groupFrames(
+      [frame({ id: 1, windowTitle: 'Project plan - Notion', ocrText: 'status notes' })],
+      'notion'
+    )
+    expect(groups[0].representative.id).toBe(1)
+    expect(groups[0].matchSnippet).toContain('Window title:')
+    expect(groups[0].matchSnippet.toLowerCase()).toContain('notion')
+  })
+  it('uses app matches when OCR and window title do not explain the search hit', () => {
+    const groups = groupFrames(
+      [frame({ id: 1, app: 'Slack.exe', windowTitle: 'general', ocrText: 'team update' })],
+      'slack'
+    )
+    expect(groups[0].matchSnippet).toContain('App:')
+    expect(groups[0].matchSnippet.toLowerCase()).toContain('slack')
+  })
 })
