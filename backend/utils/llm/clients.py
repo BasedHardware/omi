@@ -11,7 +11,7 @@ from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 import tiktoken
 
-from models.structured import Structured
+from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
@@ -368,7 +368,7 @@ embeddings = _OpenAIEmbeddingsProxy(
     default=_embeddings_default,
     ctor_kwargs={},
 )
-parser = PydanticOutputParser(pydantic_object=Structured)
+parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
 
 encoding = tiktoken.encoding_for_model('gpt-4')
 
