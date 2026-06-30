@@ -38,6 +38,7 @@ from utils.llm.memories import extract_memories_from_text
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
+from utils.executors import db_executor, run_blocking
 from utils import social
 
 logger = logging.getLogger(__name__)
@@ -207,7 +208,7 @@ def _unregister_user(uid: str) -> None:
 async def get_valid_access_token(uid: str) -> Optional[str]:
     """Return a non-expired access token, refreshing if needed. None if not
     connected or refresh is impossible."""
-    integ = users_db.get_integration(uid, INTEGRATION_KEY)
+    integ = await run_blocking(db_executor, users_db.get_integration, uid, INTEGRATION_KEY)
     if not integ or not integ.get('access_token'):
         return None
     try:
@@ -225,7 +226,14 @@ async def get_valid_access_token(uid: str) -> Optional[str]:
         return integ['access_token']  # best effort; may be expired
     try:
         token_resp = await _refresh(refresh)
-        _store_tokens(uid, token_resp, handle=integ.get('handle'), x_user_id=integ.get('x_user_id'))
+        await run_blocking(
+            db_executor,
+            _store_tokens,
+            uid,
+            token_resp,
+            handle=integ.get('handle'),
+            x_user_id=integ.get('x_user_id'),
+        )
         return token_resp['access_token']
     except Exception as e:
         logger.warning(f'x_connector: token refresh failed for uid={uid}: {e}')
@@ -380,11 +388,11 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
 
 async def sync_x_for_user(uid: str) -> Dict:
     """Pull new X posts, store raw, extract memories. Returns a summary dict."""
-    integ = users_db.get_integration(uid, INTEGRATION_KEY) or {}
+    integ = await run_blocking(db_executor, users_db.get_integration, uid, INTEGRATION_KEY) or {}
     # Mark syncing so the desktop can show live progress while this runs in the
     # background (the OAuth callback kicks this off as a background task).
-    users_db.set_integration(uid, INTEGRATION_KEY, {'syncing': True})
-    since_id = x_posts_db.get_newest_tweet_id(uid)
+    await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': True})
+    since_id = await run_blocking(db_executor, x_posts_db.get_newest_tweet_id, uid)
 
     new_posts: List[Dict] = []
     source = None
@@ -399,7 +407,13 @@ async def sync_x_for_user(uid: str) -> Dict:
                 x_user_id = str(me.get('id')) if me.get('id') else None
                 handle = me.get('username') or handle
                 if x_user_id:
-                    users_db.set_integration(uid, INTEGRATION_KEY, {'x_user_id': x_user_id, 'handle': handle})
+                    await run_blocking(
+                        db_executor,
+                        users_db.set_integration,
+                        uid,
+                        INTEGRATION_KEY,
+                        {'x_user_id': x_user_id, 'handle': handle},
+                    )
             if x_user_id:
                 tweets = await fetch_tweets(token, x_user_id, since_id)
                 bookmarks = await fetch_bookmarks(token, x_user_id)
@@ -412,7 +426,7 @@ async def sync_x_for_user(uid: str) -> Dict:
     if source is None:
         handle = integ.get('handle')
         if not handle:
-            users_db.set_integration(uid, INTEGRATION_KEY, {'syncing': False})
+            await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
             return {'success': False, 'error': 'not_connected', 'new_posts': 0, 'memories_created': 0}
         try:
             timeline = await social.get_twitter_timeline(handle)
@@ -428,10 +442,10 @@ async def sync_x_for_user(uid: str) -> Dict:
             source = 'rapidapi'
         except Exception as e:
             logger.error(f'x_connector: RapidAPI fallback failed for uid={uid}: {e}')
-            users_db.set_integration(uid, INTEGRATION_KEY, {'syncing': False})
+            await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': False})
             return {'success': False, 'error': 'fetch_failed', 'new_posts': 0, 'memories_created': 0}
 
-    written = x_posts_db.save_x_posts(uid, new_posts)
+    written = await run_blocking(db_executor, x_posts_db.save_x_posts, uid, new_posts)
     # Only mine memories from posts we hadn't seen before (the raw store dedupes,
     # but extraction is the expensive part — restrict it to genuinely new text).
     fresh = new_posts if written == len(new_posts) else new_posts[:written]
@@ -441,18 +455,21 @@ async def sync_x_for_user(uid: str) -> Dict:
     items_to_index = [{'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh]
     for i in range(0, len(items_to_index), 100):
         try:
-            upsert_x_post_vectors_batch(uid, items_to_index[i : i + 100])
+            await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
         except Exception as e:
             logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
-    memories_created = _extract_and_index(uid, fresh)
+    memories_created = await run_blocking(db_executor, _extract_and_index, uid, fresh)
+    post_count = await run_blocking(db_executor, x_posts_db.count_x_posts, uid)
 
-    users_db.set_integration(
+    await run_blocking(
+        db_executor,
+        users_db.set_integration,
         uid,
         INTEGRATION_KEY,
         {
             'last_synced_at': datetime.now(timezone.utc).isoformat(),
             'last_sync_source': source,
-            'post_count': x_posts_db.count_x_posts(uid),
+            'post_count': post_count,
             'memory_count': int(integ.get('memory_count', 0)) + memories_created,
             'syncing': False,
         },

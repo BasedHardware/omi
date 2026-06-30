@@ -149,9 +149,8 @@ class LanguageSelectionDialog {
 
                                 return ListTile(
                                   title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                                  trailing: isSelected
-                                      ? const Icon(Icons.check_circle, color: Colors.deepPurple)
-                                      : null,
+                                  trailing:
+                                      isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                                   selected: isSelected,
                                   selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),

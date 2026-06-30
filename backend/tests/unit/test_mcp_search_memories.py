@@ -101,6 +101,7 @@ def _mcp_search_import_isolation():
         return SimpleNamespace(allowed=True, status_code=200, detail={})
 
     mcp_router_mod.authorize_memory_external_default_memory_read = _allow_memory_auth
+    mcp_router_mod.authorize_memory_external_default_memory_write = _allow_memory_auth
     mcp_router_mod.read_default_read_rollout = MagicMock(
         return_value=SimpleNamespace(read_decision=mcp_router_mod.MemoryReadDecision.USE_LEGACY_SAFE)
     )
@@ -406,7 +407,7 @@ class TestEditMemoryVectorSync:
         mock_pin.return_value = _LEGACY
         mock_fetch.return_value = _legacy_memory_doc(category='hobbies')
         mock_service_memories_db.get_memory.return_value = _legacy_memory_doc(category='hobbies')
-        result = edit_memory(memory_id="mem-1", value="new text", uid="user-1")
+        result = edit_memory(memory_id="mem-1", value="new text", auth_context=_auth_context())
         assert result == {"status": "ok"}
         mock_service_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
         mock_upsert_vector.assert_called_once_with("user-1", "mem-1", "new text", "hobbies", subject_entity_id=None)
@@ -423,7 +424,7 @@ class TestEditMemoryVectorSync:
         mock_fetch.return_value = _legacy_memory_doc(category='other')
         mock_service_memories_db.get_memory.return_value = _legacy_memory_doc(category='other')
         mock_upsert_vector.side_effect = Exception("pinecone down")
-        result = edit_memory(memory_id="mem-1", value="new text", uid="user-1")
+        result = edit_memory(memory_id="mem-1", value="new text", auth_context=_auth_context())
         assert result == {"status": "ok"}
         mock_service_memories_db.edit_memory.assert_called_once_with("user-1", "mem-1", "new text")
 
@@ -448,7 +449,7 @@ class TestDeleteMemoryVectorSync:
         mock_pin.return_value = _LEGACY
         mock_fetch.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
         mock_service_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
-        result = delete_memory(memory_id="mem-1", uid="user-1")
+        result = delete_memory(memory_id="mem-1", auth_context=_auth_context())
         assert result == {"status": "ok"}
         mock_service_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")
         mock_delete_vector.assert_called_once_with("user-1", "mem-1")
@@ -465,6 +466,6 @@ class TestDeleteMemoryVectorSync:
         mock_fetch.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
         mock_service_memories_db.get_memory.return_value = {'id': 'mem-1', 'content': 'x', 'is_locked': False}
         mock_delete_vector.side_effect = Exception("pinecone down")
-        result = delete_memory(memory_id="mem-1", uid="user-1")
+        result = delete_memory(memory_id="mem-1", auth_context=_auth_context())
         assert result == {"status": "ok"}
         mock_service_memories_db.delete_memory.assert_called_once_with("user-1", "mem-1")

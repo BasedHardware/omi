@@ -68,10 +68,10 @@ class _MemoryDialogState extends State<MemoryDialog> {
                       Text(
                         isEditing
                             ? (widget.memory!.category == MemoryCategory.manual
-                                  ? context.l10n.filterManual
-                                  : widget.memory!.category == MemoryCategory.interesting
-                                  ? context.l10n.filterInteresting
-                                  : context.l10n.filterSystem)
+                                ? context.l10n.filterManual
+                                : widget.memory!.category == MemoryCategory.interesting
+                                    ? context.l10n.filterInteresting
+                                    : context.l10n.filterSystem)
                             : context.l10n.newMemory,
                         style: const TextStyle(color: Colors.white, fontSize: 14),
                       ),

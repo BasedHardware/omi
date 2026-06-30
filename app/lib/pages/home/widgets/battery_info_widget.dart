@@ -127,8 +127,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                               color: batteryLevel > 75
                                   ? const Color.fromARGB(255, 0, 255, 8)
                                   : batteryLevel > 20
-                                  ? Colors.yellow.shade700
-                                  : Colors.red,
+                                      ? Colors.yellow.shade700
+                                      : Colors.red,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -234,8 +234,9 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                   ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                                 )
                               : isMemoriesPage
-                              ? Text(context.l10n.connect, style: const TextStyle(color: Colors.white, fontSize: 12))
-                              : const SizedBox.shrink(),
+                                  ? Text(context.l10n.connect,
+                                      style: const TextStyle(color: Colors.white, fontSize: 12))
+                                  : const SizedBox.shrink(),
                         ],
                       ),
                     ),
@@ -285,8 +286,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                           isRecording
                                               ? context.l10n.stop
                                               : isInitialising
-                                              ? '...'
-                                              : context.l10n.record,
+                                                  ? '...'
+                                                  : context.l10n.record,
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 12,

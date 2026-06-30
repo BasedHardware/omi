@@ -37,7 +37,11 @@ def restore_sys_modules(saved: Mapping[str, ModuleType | None]) -> None:
             if "." in name:
                 parent_name, child_name = name.rsplit(".", 1)
                 parent = sys.modules.get(parent_name)
-                if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is (removed or current):
+                if (
+                    isinstance(parent, ModuleType)
+                    and hasattr(parent, child_name)
+                    and getattr(parent, child_name, None) is (removed or current)
+                ):
                     delattr(parent, child_name)
         else:
             sys.modules[name] = original
@@ -67,6 +71,7 @@ def drop_stale_module(module_name: str, expected_file: str) -> None:
 def make_database_client_stub() -> ModuleType:
     client_mod = types.ModuleType("database._client")
     client_mod.db = MagicMock()
+    client_mod.get_firestore_client = lambda: client_mod.db
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
