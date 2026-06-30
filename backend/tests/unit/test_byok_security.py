@@ -639,6 +639,26 @@ class TestBYOKCustomProvider:
             with pytest.raises(ValueError):
                 validate_custom_base_url('https://nonexistent.example.invalid/v1')
 
+    def test_normalizes_os_resolver_error_to_value_error(self):
+        # getaddrinfo can raise a non-gaierror OSError; it must degrade to a rejected URL
+        # (ValueError) so the caller falls back to the default provider, not a 500. The
+        # 'did not resolve' match proves it was normalized rather than escaping as OSError.
+        from utils.byok import validate_custom_base_url
+
+        with patch('utils.byok.socket.getaddrinfo', side_effect=OSError('temporary failure in name resolution')):
+            with pytest.raises(ValueError, match='did not resolve'):
+                validate_custom_base_url('https://flaky.example.com/v1')
+
+    def test_normalizes_unicode_resolver_error_to_value_error(self):
+        # An overlong/invalid IDNA hostname label makes getaddrinfo raise UnicodeError. It is
+        # a ValueError subclass, so the 'did not resolve' match (not the raw 'label too long'
+        # message) is what proves it was normalized into the graceful-rejection path.
+        from utils.byok import validate_custom_base_url
+
+        with patch('utils.byok.socket.getaddrinfo', side_effect=UnicodeError('label too long')):
+            with pytest.raises(ValueError, match='did not resolve'):
+                validate_custom_base_url('https://overlong-label.example.com/v1')
+
     def test_accepts_hostname_resolving_to_public_ip(self):
         from utils.byok import validate_custom_base_url
 

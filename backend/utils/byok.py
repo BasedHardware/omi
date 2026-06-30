@@ -179,8 +179,10 @@ def validate_custom_base_url(base_url: str) -> str:
         raise ValueError(cached)
     try:
         infos = socket.getaddrinfo(host, parsed.port or 443, type=socket.SOCK_STREAM)
-    except socket.gaierror as e:
-        # Transient resolution failures are not cached.
+    except (OSError, UnicodeError) as e:
+        # Any resolver failure degrades to a rejected URL rather than a 500: OSError covers
+        # socket.gaierror and other DNS/socket errors, UnicodeError covers IDNA failures such
+        # as an overlong hostname label. Transient failures are not cached.
         raise ValueError(f'custom base URL host did not resolve: {e}')
     for info in infos:
         addr = info[4][0]
