@@ -247,8 +247,10 @@ echo "" > /tmp/omi-dev.log
 # (telegram / whatsapp / imessage). Symlink the telegram discovery to
 # the legacy path so the desktop's auto-discovery picks it up. Remove
 # this once PluginDiscovery.swift learns the per-plugin filenames.
-TUNNEL_DISCOVERY="/Users/choguun/.config/omi/ai-clone-plugin-telegram.json"
-LEGACY_DISCOVERY="/Users/choguun/.config/omi/ai-clone-plugin.json"
+# (P2 from cubic AI review 4601469127: use $HOME instead of a hard-
+# coded absolute path so the script works for any user.)
+TUNNEL_DISCOVERY="$HOME/.config/omi/ai-clone-plugin-telegram.json"
+LEGACY_DISCOVERY="$HOME/.config/omi/ai-clone-plugin.json"
 [ -f "$TUNNEL_DISCOVERY" ] && ln -sf "$TUNNEL_DISCOVERY" "$LEGACY_DISCOVERY"
 
 open "/Applications/$APP_NAME.app"

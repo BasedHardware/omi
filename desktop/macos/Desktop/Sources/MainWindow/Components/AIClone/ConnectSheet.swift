@@ -696,38 +696,51 @@ struct ConnectSheet: View {
                 pollCount += 1
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 if Task.isCancelled { break }
-                // P1 (cubic, PR #8682): /status is the authoritative
-                // signal for a completed handshake. /health only proves
-                // the plugin process is up; /status (with bearer auth)
-                // returns connectedChats > 0 only when the user has
-                // actually sent /start and the plugin has bound a chat.
-                // A bearer token is required to call /status (see
-                // plugins/omi-telegram-app/main.py status handler); the
-                // bearer was either pre-filled from discovery or saved
-                // at /setup time. If we don't have one, fall back to
-                // /health so the UI doesn't deadlock on a missing
-                // bearer (and so unit tests with no bearer still work).
+                // P1 (cubic, PR #8682, follow-up 4601469127): /status
+                // is the authoritative signal for a completed
+                // handshake. /health only proves the plugin process is
+                // up; it does NOT prove the user has sent /start and the
+                // plugin has bound a chat. The previous fallback
+                // (`handshakeDone = reachable` when the bearer was
+                // empty) let the UI falsely report "Connected" the
+                // moment the plugin's /health endpoint responded — even
+                // before the user had opened the deep link.
+                //
+                // New behavior: if the bearer is missing, we can't
+                // verify the handshake. Skip this poll iteration
+                // (continue) and let the polling loop run until either
+                // a bearer appears or the timeout fires. The UI's
+                // timeout branch then surfaces "couldn't verify
+                // handshake" rather than falsely claiming "Connected".
+                //
+                // The bearer is normally populated from the discovery
+                // file via AICloneConfig.applyDiscovery() and from
+                // /setup; an empty bearer at this point means the
+                // discovery file is missing OR the plugin didn't write
+                // one — both rare but recoverable.
                 let bearer = config.bearerToken
-                let handshakeDone: Bool
-                if bearer.isEmpty {
-                    let reachable = (try? await AICloneClient.shared.health(
-                        baseURL: config.pluginURL
-                    )) ?? false
-                    handshakeDone = reachable
-                } else {
-                    let status = try? await AICloneClient.shared.status(
-                        baseURL: config.pluginURL,
-                        bearerToken: bearer
-                    )
-                    handshakeDone = (status?.connectedChats ?? 0) >= 1
+                guard !bearer.isEmpty else {
+                    // Don't claim handshake complete; don't increment
+                    // any failure state. Just retry on the next tick.
+                    continue
                 }
+                let status = try? await AICloneClient.shared.status(
+                    baseURL: config.pluginURL,
+                    bearerToken: bearer
+                )
+                let handshakeDone = (status?.connectedChats ?? 0) >= 1
                 if handshakeDone {
                     // P1 (cubic): the only path that sets handshakeCompleted
-                    // is a successful handshake probe during the polling
-                    // window. Reaching this branch means /status reported
-                    // at least one bound chat (or /health was reachable as
-                    // a bearer-less fallback). Necessary AND sufficient for
-                    // a real handshake.
+                    // is a successful /status probe returning connectedChats
+                    // >= 1 during the polling window. /health is no longer
+                    // sufficient — see comment above. connectedChats is
+                    // also not strictly scoped to the current setup attempt
+                    // (the plugin reports any bound chat, including ones
+                    // set up in previous sessions on the same plugin
+                    // instance), so the user can still see a false positive
+                    // if they have stale state on the plugin. Documented
+                    // here as a known limitation; the long-term fix is a
+                    // setup-attempt nonce in /status.
                     await MainActor.run {
                         handshakeCompleted = true
                         pollingForHandshake = false

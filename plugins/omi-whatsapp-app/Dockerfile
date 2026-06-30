@@ -45,7 +45,20 @@ COPY . .
 # "wrong context" mistake at build time, not at image-push time.
 RUN set -eu; \
     secrets_found=0; \
-    for path in .env .env.local users_data.json pending_setups.json; do \
+    # Check both WORKDIR-relative paths (correct-context build where
+    # the plugin dir is the build root) AND plugin-local paths (repo-
+    # root context where `COPY . .` lands the plugin at
+    # /app/plugins/omi-whatsapp-app/). The latter is a P1 from cubic
+    # AI review (PR #8682 follow-up 4601469127): the previous guard
+    # only checked WORKDIR-rooted paths and silently allowed secrets
+    # through when the build context was the repo root, since the
+    # files landed at /app/plugins/omi-whatsapp-app/users_data.json
+    # etc. — invisible to the WORKDIR-rooted checks.
+    for path in \
+        .env .env.local users_data.json pending_setups.json \
+        plugins/omi-whatsapp-app/.env plugins/omi-whatsapp-app/.env.local \
+        plugins/omi-whatsapp-app/users_data.json plugins/omi-whatsapp-app/pending_setups.json \
+    ; do \
         if [ -e "$path" ]; then \
             echo "ERROR: secret-bearing file '$path' found in build context. \
 Build context must be the plugin directory, not the repo root. \
