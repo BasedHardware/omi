@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/core/app_shell.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -207,25 +208,18 @@ class _DeleteAccountState extends State<DeleteAccount> {
             child: SizedBox(
               width: double.infinity,
               height: 52,
-              child: ElevatedButton(
+              child: OmiButton(
+                label: context.l10n.continueButton,
                 onPressed: canContinue
                     ? () {
                         PlatformManager.instance.analytics.deleteAccountReasonSelected(reason: _selectedReason!);
                         _next();
                       }
                     : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  disabledBackgroundColor: Colors.grey.shade900,
-                  foregroundColor: Colors.black,
-                  disabledForegroundColor: Colors.grey.shade700,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                child: Text(
-                  context.l10n.continueButton,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                ),
+                borderRadius: 14,
+                fontSize: 16,
+                disabledColor: Colors.grey.shade900,
+                disabledTextColor: Colors.grey.shade700,
               ),
             ),
           ),
@@ -339,18 +333,11 @@ class _DeleteAccountState extends State<DeleteAccount> {
                 SizedBox(
                   width: double.infinity,
                   height: 52,
-                  child: ElevatedButton(
+                  child: OmiButton(
+                    label: context.l10n.continueButton,
                     onPressed: _next,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
+                    borderRadius: 14,
+                    fontSize: 16,
                   ),
                 ),
                 const SizedBox(height: 8),

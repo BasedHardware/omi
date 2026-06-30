@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/models/announcement.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 
 class AnnouncementDialog extends StatelessWidget {
   final Announcement announcement;
@@ -171,19 +172,15 @@ class AnnouncementDialog extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       height: 52,
-      child: ElevatedButton(
+      child: OmiButton(
+        label: cta.text,
         onPressed: () {
           onCTAPressed?.call();
           Navigator.pop(context);
           _handleCTAAction(context, cta.action);
         },
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
-          elevation: 0,
-        ),
-        child: Text(cta.text, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        borderRadius: 26,
+        fontSize: 16,
       ),
     );
   }
