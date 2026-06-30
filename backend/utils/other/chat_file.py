@@ -107,9 +107,17 @@ class FileChatTool:
     async def process_chat_with_file_stream(self, question, file_ids: List[str], callback=None):
         """Process chat with file attachments (streaming)"""
         # Offloaded: the Firestore read is sync and blocks the event loop in this async path.
-        files_data = await run_blocking(db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9)
-        files = [FileChat(**f) for f in files_data]
-        all_images = all(f.is_image() for f in files) if files else False
+        # If this pre-stream setup fails, signal the streaming callback's end before propagating
+        # (mirrors the _ensure_thread_and_assistant failure path below) so it is not left dangling.
+        try:
+            files_data = await run_blocking(
+                db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9
+            )
+            files = [FileChat(**f) for f in files_data]
+            all_images = all(f.is_image() for f in files) if files else False
+        except Exception:
+            callback.end_nowait()
+            raise
 
         if all_images and files:
             logger.info(f"[FileChat] All {len(files)} files are images, using Chat Completions vision API")
