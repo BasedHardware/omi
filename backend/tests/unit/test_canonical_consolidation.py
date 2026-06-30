@@ -201,7 +201,7 @@ def test_supersede_golden_path_with_mock_agent():
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     db = _FakeDb(
         {
-            f"users/{uid}/memory_control/state": control.model_dump(mode="python"),
+            f"users/{uid}/memory_state/apply_control": control.model_dump(mode="python"),
             f"users/{uid}/memory_items/mem_old": old.model_dump(mode="python"),
             f"users/{uid}/memory_items/mem_new": new.model_dump(mode="python"),
         }
@@ -257,7 +257,7 @@ def test_ambiguous_contradiction_escalates_to_review_queue():
     survivor = _item("mem_new", "Maybe lives in LA")
     existing = _item("mem_old", "Lives in NYC")
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
-    db = _FakeDb({f"users/{uid}/memory_control/state": control.model_dump(mode="python")})
+    db = _FakeDb({f"users/{uid}/memory_state/apply_control": control.model_dump(mode="python")})
 
     agent_response = ConsolidationAgentBatch(
         decisions=[

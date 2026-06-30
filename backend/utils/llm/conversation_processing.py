@@ -20,13 +20,13 @@ from .clients import get_llm, parser
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import invoke_chat_structured_gateway, record_chat_extraction_gateway_result
 from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
+from utils.llm.gateway_observability import record_gateway_shadow_comparison
 import logging
 
 logger = logging.getLogger(__name__)
 CONVERSATION_STRUCTURE_SHADOW_FEATURE = 'conversation_structure.extract.shadow'
 CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED'
 CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE'
-LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = None
 
 # =============================================
 #            FOLDER ASSIGNMENT
@@ -70,15 +70,7 @@ def _coerce_structured(response: Structured | StructuredExtraction) -> Structure
 
 
 def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
-    try:
-        global LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS
-        if LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS is None:
-            from utils.metrics import LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS as comparison_counter
-
-            LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = comparison_counter
-        LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS.labels(feature=feature, field=field, outcome=outcome).inc()
-    except Exception:
-        pass
+    record_gateway_shadow_comparison(feature=feature, field=field, outcome=outcome)
 
 
 def _env_flag_enabled(name: str, *, default: bool = False) -> bool:

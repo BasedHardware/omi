@@ -140,6 +140,10 @@ if "utils.llm.gateway_client" not in sys.modules:
     gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
     gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 
+if "utils.llm.gateway_observability" not in sys.modules:
+    gateway_observability_mod = _stub_module("utils.llm.gateway_observability")
+    gateway_observability_mod.record_gateway_shadow_comparison = MagicMock()
+
 # Stub langchain
 langchain_core = _stub_package("langchain_core")
 langchain_tools = _stub_module("langchain_core.tools")

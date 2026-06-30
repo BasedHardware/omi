@@ -357,7 +357,7 @@ def test_write_path_syncs_vector_on_idempotent_skip(monkeypatch):
     )
     db = _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
             f"users/{uid}/memory_evidence/ev_ws_i_1": MemoryEvidence(
