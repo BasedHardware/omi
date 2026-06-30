@@ -50,7 +50,6 @@ from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification
 from utils.llm.clients import generate_embedding
-from utils.llm.temporal import current_date_for_uid
 from utils.llm.proactive_notification import (
     evaluate_relevance,
     generate_notification,
@@ -403,11 +402,6 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.error(f"mentor_proactive recent_notis_failed uid={uid} error={e}")
         recent_notifications = []
 
-    # Ground the prompts in today's date so insights stop treating correctly dated
-    # future-year content as wrong-clock anomalies (the model otherwise anchors to its
-    # training-cutoff year). See the date-grounding fix.
-    current_date = current_date_for_uid(uid)
-
     # ── Step 1: Gate ─────────────────────────────────────────────────────
     try:
         with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
@@ -417,7 +411,6 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 goals=goals,
                 current_messages=conversation_messages,
                 recent_notifications=recent_notifications,
-                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
@@ -486,7 +479,6 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 frequency=frequency,
                 gate_reasoning=relevance.reasoning,
                 output_language=output_language,
-                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive generate_failed uid={uid} error={e}")
@@ -514,7 +506,6 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
                 current_messages=conversation_messages,
                 goals=goals,
                 output_language=output_language,
-                current_date=current_date,
             )
     except Exception as e:
         logger.error(f"mentor_proactive critic_failed uid={uid} error={e}")
