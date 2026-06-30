@@ -69,15 +69,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     static let notchCompactSideWidth: CGFloat = 30
     static let notchActiveSideWidth: CGFloat = 42
-    static let notchChromeHeight: CGFloat = 34
+    static let defaultNotchChromeHeight: CGFloat = 34
+    static var notchChromeHeight: CGFloat { defaultNotchChromeHeight }
     static let notchActivationHeight: CGFloat = 17
     static let notchGlowOutsetX: CGFloat = 24
     static let notchGlowOutsetBottom: CGFloat = 24
     static let notchConversationBottomPadding: CGFloat = 18
     static let notchInputPanelVerticalPadding: CGFloat = 46
     static let notchInputPanelMinimumContentHeight: CGFloat = 40
-    static let notchInputPanelHeight: CGFloat =
-        notchChromeHeight + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
     /// Extra vertical budget added on top of the input editor when notch mode
     /// renders the "Back / Omi Chat" header above the input (agent pills present).
     /// Header row (32pt) + VStack top padding (8) + spacing (8) = 48pt.
@@ -91,14 +90,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let responseStreamingResizeStep: CGFloat = 56
     private static let legacyPillGlowOutsetX: CGFloat = 22
     private static let legacyPillGlowOutsetY: CGFloat = 18
-    static let notchCompactSize = NSSize(
-        width: notchHiddenCenterWidth + notchCompactSideWidth * 2,
-        height: notchChromeHeight
-    )
-    static let notchActiveSize = NSSize(
-        width: notchHiddenCenterWidth + notchActiveSideWidth * 2,
-        height: notchChromeHeight
-    )
     static func notchAgentListHeight(agentCount: Int) -> CGFloat {
         let visibleCount = min(max(0, agentCount), notchAgentListMaxVisibleAgents)
         guard visibleCount > 0 else { return 0 }
@@ -181,12 +172,24 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var notchHiddenCenterWidthForCurrentScreen: CGFloat {
         Self.notchHiddenCenterWidth(for: screenForPlacement)
     }
+    private var notchChromeHeightForCurrentScreen: CGFloat {
+        Self.notchChromeHeight(for: screenForPlacement)
+    }
+    private var notchInputPanelHeightForCurrentScreen: CGFloat {
+        Self.notchInputPanelHeight(for: screenForPlacement)
+    }
     private func notchSize(active: Bool) -> NSSize {
         let sideWidth = active ? Self.notchActiveSideWidth : Self.notchCompactSideWidth
         return notchSize(sideWidth: sideWidth)
     }
     private func notchSize(sideWidth: CGFloat) -> NSSize {
-        return NSSize(width: notchHiddenCenterWidthForCurrentScreen + sideWidth * 2, height: Self.notchChromeHeight)
+        return NSSize(width: notchHiddenCenterWidthForCurrentScreen + sideWidth * 2, height: notchChromeHeightForCurrentScreen)
+    }
+    private func notchSize(sideWidth: CGFloat, for screen: NSScreen) -> NSSize {
+        NSSize(
+            width: Self.notchHiddenCenterWidth(for: screen) + sideWidth * 2,
+            height: Self.notchChromeHeight(for: screen)
+        )
     }
     private func responseGlowWindowSize(forSurfaceSize size: NSSize, usesNotchIsland: Bool) -> NSSize {
         if usesNotchIsland {
@@ -210,7 +213,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func notchHoverMenuWindowSize(agentCount: Int) -> NSSize {
         NSSize(
             width: max(collapsedBarSize.width, Self.notchExpandedWidth),
-            height: Self.notchChromeHeight
+            height: notchChromeHeightForCurrentScreen
                 + Self.notchHoverMenuHeight(agentCount: agentCount)
                 + Self.notchGlowOutsetBottom
         )
@@ -228,13 +231,16 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return frame.width
     }
     private var notchCollapsedSize: NSSize {
-        NSSize(width: notchHiddenCenterWidthForCurrentScreen + notchSideWidth * 2, height: Self.notchChromeHeight)
+        NSSize(width: notchHiddenCenterWidthForCurrentScreen + notchSideWidth * 2, height: notchChromeHeightForCurrentScreen)
+    }
+    private func notchCollapsedSize(for screen: NSScreen) -> NSSize {
+        notchSize(sideWidth: notchSideWidth, for: screen)
     }
     private var collapsedBarSize: NSSize { notchModeEnabled ? notchCollapsedSize : Self.minBarSize }
     private var expandedContentWidth: CGFloat { notchModeEnabled ? Self.notchExpandedWidth : Self.expandedWidth }
-    private var inputChromeHeight: CGFloat { notchModeEnabled ? Self.notchChromeHeight : 50 }
+    private var inputChromeHeight: CGFloat { notchModeEnabled ? notchChromeHeightForCurrentScreen : 50 }
     private var inputPanelHeight: CGFloat {
-        let base = notchModeEnabled ? Self.notchInputPanelHeight : 120
+        let base = notchModeEnabled ? notchInputPanelHeightForCurrentScreen : 120
         // When notch mode renders the "Back / Omi Chat" header (agent pills
         // present), the input panel needs additional vertical room so the
         // header + editor + padding all fit. (Codex P2 — input/send clipping.)
@@ -259,7 +265,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             ? NSSize(
                 width: FloatingControlBarWindow.notchHiddenCenterWidth(for: NSScreen.main ?? NSScreen.screens.first)
                     + FloatingControlBarWindow.notchCompactSideWidth * 2,
-                height: FloatingControlBarWindow.notchChromeHeight
+                height: FloatingControlBarWindow.notchChromeHeight(for: NSScreen.main ?? NSScreen.screens.first)
             )
             : FloatingControlBarWindow.minBarSize
         let initialRect = NSRect(origin: .zero, size: initialSize)
@@ -336,6 +342,37 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             return screen.safeAreaInsets.top > 0
         }
         return false
+    }
+
+    static func notchChromeHeight(for screen: NSScreen?) -> CGFloat {
+        guard let screen else { return notchChromeHeight }
+        if #available(macOS 12.0, *) {
+            return notchChromeHeight(
+                topSafeAreaInset: screen.safeAreaInsets.top,
+                auxiliaryTopLeftArea: screen.auxiliaryTopLeftArea,
+                auxiliaryTopRightArea: screen.auxiliaryTopRightArea
+            )
+        }
+        return notchChromeHeight
+    }
+
+    static func notchChromeHeight(
+        topSafeAreaInset: CGFloat,
+        auxiliaryTopLeftArea: NSRect?,
+        auxiliaryTopRightArea: NSRect?
+    ) -> CGFloat {
+        let auxiliaryHeights = [auxiliaryTopLeftArea, auxiliaryTopRightArea]
+            .compactMap { area -> CGFloat? in
+                guard let area, !area.isEmpty, area.height > 0 else { return nil }
+                return area.height
+            }
+        let measuredHeight = max(topSafeAreaInset, auxiliaryHeights.max() ?? 0)
+        guard measuredHeight > 0 else { return notchChromeHeight }
+        return max(notchChromeHeight, measuredHeight)
+    }
+
+    static func notchInputPanelHeight(for screen: NSScreen?) -> CGFloat {
+        notchChromeHeight(for: screen) + notchInputPanelMinimumContentHeight + notchInputPanelVerticalPadding
     }
 
     static func notchHiddenCenterWidth(for screen: NSScreen?) -> CGFloat {
@@ -497,7 +534,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         } else if state.isVoiceListening {
             size = notchSize(active: true)
         } else if state.currentNotification != nil {
-            size = NSSize(width: Self.notificationWidth, height: Self.notchChromeHeight + Self.notificationSpacing + Self.notificationHeight)
+            size = NSSize(
+                width: Self.notificationWidth,
+                height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.notificationHeight
+            )
         } else {
             size = collapsedBarSize
         }
@@ -512,7 +552,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if state.showingAIConversation {
             let defaultWidth = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
             let width = max(defaultWidth, currentResponseSurfaceWidth(usesNotchIsland: usesNotchIsland))
-            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
+            let panelHeight = usesNotchIsland ? notchInputPanelHeightForCurrentScreen : 120
             let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
             let contentHeight = max(panelHeight, frame.height - reservedGlowOutset)
             return NSSize(width: width, height: contentHeight)
@@ -522,7 +562,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         }
         if state.currentNotification != nil {
             let barHeight = usesNotchIsland
-                ? Self.notchChromeHeight
+                ? notchChromeHeightForCurrentScreen
                 : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
             return NSSize(
                 width: Self.notificationWidth,
@@ -540,21 +580,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let size: NSSize
         if state.showingAIConversation {
             let width = usesNotchIsland ? Self.notchExpandedWidth : Self.expandedWidth
-            let chromeHeight = usesNotchIsland ? Self.notchChromeHeight : 50
-            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight : 120
+            let chromeHeight = usesNotchIsland ? Self.notchChromeHeight(for: screen) : 50
+            let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight(for: screen) : 120
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
         } else if state.isVoiceListening {
-            size = usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
+            size = usesNotchIsland ? notchSize(sideWidth: Self.notchActiveSideWidth, for: screen) : Self.voiceBarSize
         } else if state.currentNotification != nil {
             let barHeight = usesNotchIsland
-                ? Self.notchChromeHeight
+                ? Self.notchChromeHeight(for: screen)
                 : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
             size = NSSize(
                 width: Self.notificationWidth,
                 height: barHeight + Self.notificationSpacing + Self.notificationHeight
             )
         } else {
-            size = usesNotchIsland ? notchCollapsedSize : Self.minBarSize
+            size = usesNotchIsland ? notchCollapsedSize(for: screen) : Self.minBarSize
         }
         let windowSize = responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: usesNotchIsland)
         return NSRect(
@@ -673,8 +713,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
               state.currentNotification == nil
         else { return true }
 
-        let mode: NotchPointerMode = state.isNotchHoverMenuVisible ? .openMenuRetention : .activationOnly
-        return notchPointerContains(localPoint: point, mode: mode)
+        let chromeHeight = state.isNotchHoverMenuVisible
+            ? max(Self.notchActivationHeight, frame.height - Self.notchGlowOutsetBottom)
+            : notchChromeHeightForCurrentScreen
+        return FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+            localPoint: point,
+            windowSize: frame.size,
+            chromeHeight: chromeHeight,
+            horizontalOutset: Self.notchGlowOutsetX
+        )
     }
 
     private func observeNotchAgentPills() {
@@ -1054,8 +1101,8 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
 
     private func animateNotchReveal(from sourceSize: NSSize, to targetSize: NSSize, duration: TimeInterval) {
-        let startWidth = max(Self.notchCompactSize.width, min(sourceSize.width, targetSize.width))
-        let startHeight = max(Self.notchChromeHeight, min(sourceSize.height, targetSize.height))
+        let startWidth = max(notchSize(active: false).width, min(sourceSize.width, targetSize.width))
+        let startHeight = max(notchChromeHeightForCurrentScreen, min(sourceSize.height, targetSize.height))
         let widthProgress = targetSize.width > 0 ? startWidth / targetSize.width : 1
         let heightProgress = targetSize.height > 0 ? startHeight / targetSize.height : 1
         let startProgress = min(1, max(0.001, min(widthProgress, heightProgress)))
@@ -1421,7 +1468,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard !state.showingAIConversation else { return }
         state.currentNotification = notification
         let barHeight = notchModeEnabled
-            ? Self.notchChromeHeight
+            ? notchChromeHeightForCurrentScreen
             : (state.isHoveringBar ? Self.expandedBarSize.height : Self.minBarSize.height)
         let targetSize = NSSize(
             width: Self.notificationWidth,
