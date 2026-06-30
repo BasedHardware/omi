@@ -480,7 +480,7 @@ class ChatToolExecutor {
     if let directedProvider {
       let availability = LocalAgentProviderDetector.availability(for: directedProvider)
       guard availability.isAvailable else {
-        return availability.setupPrompt
+        return availability.toolError
       }
     }
     let model = ShortcutSettings.shared.selectedModel.isEmpty

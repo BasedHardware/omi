@@ -505,11 +505,20 @@ export class AgentRuntimeKernel {
       lastAttempt = attempt;
 
       if (!this.registry.has(adapterId)) {
+        const failure: RuntimeFailure = {
+          code: "adapter_not_registered",
+          source: "runtime",
+          adapterId,
+          retryable: false,
+          userMessage: `Adapter not registered: ${adapterId}`,
+          technicalMessage: `Adapter not registered: ${adapterId}`,
+        };
         this.failAttemptBeforeExecution(
           attempt,
           "adapter_not_registered",
-          `Adapter not registered: ${adapterId}`,
-          false
+          failure.userMessage,
+          false,
+          failure
         );
         break;
       }
@@ -560,7 +569,13 @@ export class AgentRuntimeKernel {
       } catch (error) {
         pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
         if (isStaleBindingError(error)) {
-          this.failAttemptBeforeExecution(attempt, "stale_binding", messageFrom(error), attemptNo < maxAttempts);
+          const failure = failureFromError(error, {
+            code: "stale_binding",
+            source: "adapter_process",
+            adapterId: attempt.adapterId,
+            retryable: attemptNo < maxAttempts,
+          });
+          this.failAttemptBeforeExecution(attempt, "stale_binding", failure.userMessage, attemptNo < maxAttempts, failure);
           retryReason = "stale_binding";
           resumeFromAttemptId = attempt.attemptId;
           continue;
@@ -570,7 +585,13 @@ export class AgentRuntimeKernel {
           resumeFromAttemptId = attempt.attemptId;
           continue;
         }
-        this.failAttemptBeforeExecution(attempt, "binding_failed", messageFrom(error), false);
+        const failure = failureFromError(error, {
+          code: "binding_failed",
+          source: "adapter_process",
+          adapterId: attempt.adapterId,
+          retryable: false,
+        });
+        this.failAttemptBeforeExecution(attempt, "binding_failed", failure.userMessage, false, failure);
         break;
       }
 
@@ -627,7 +648,13 @@ export class AgentRuntimeKernel {
         this.activeExecutions.delete(accepted.run.runId);
         if (isStaleBindingError(error)) {
           this.markBindingStale(binding, attempt, messageFrom(error));
-          this.failAttemptBeforeExecution(attempt, "stale_binding", messageFrom(error), attemptNo < maxAttempts);
+          const failure = failureFromError(error, {
+            code: "stale_binding",
+            source: "adapter_execution",
+            adapterId: attempt.adapterId,
+            retryable: attemptNo < maxAttempts,
+          });
+          this.failAttemptBeforeExecution(attempt, "stale_binding", failure.userMessage, attemptNo < maxAttempts, failure);
           retryReason = "stale_binding";
           resumeFromAttemptId = attempt.attemptId;
           continue;
@@ -1638,7 +1665,13 @@ export class AgentRuntimeKernel {
     });
   }
 
-  private failAttemptBeforeExecution(attempt: RunAttempt, errorCode: string, errorMessage: string, retryable: boolean): void {
+  private failAttemptBeforeExecution(
+    attempt: RunAttempt,
+    errorCode: string,
+    errorMessage: string,
+    retryable: boolean,
+    failure?: RuntimeFailure
+  ): void {
     const run = this.readRun(attempt.runId);
     this.withTransaction(() => {
       this.updateAttempt(attempt.attemptId, {
@@ -1654,6 +1687,7 @@ export class AgentRuntimeKernel {
           status: "failed",
           errorCode,
           errorMessage,
+          resultJson: failure ? JSON.stringify({ failure }) : null,
           completedAtMs: Date.now(),
           updatedAtMs: Date.now(),
         });
@@ -1662,7 +1696,7 @@ export class AgentRuntimeKernel {
           runId: attempt.runId,
           attemptId: attempt.attemptId,
           type: "run.failed",
-          payload: { runId: attempt.runId, errorCode, errorMessage },
+          payload: { runId: attempt.runId, errorCode, errorMessage, failure },
         });
       }
       this.appendEvent({
@@ -1670,7 +1704,7 @@ export class AgentRuntimeKernel {
         runId: attempt.runId,
         attemptId: attempt.attemptId,
         type: "attempt.failed",
-        payload: { attemptId: attempt.attemptId, errorCode, errorMessage, retryable },
+        payload: { attemptId: attempt.attemptId, errorCode, errorMessage, retryable, failure },
       });
     });
   }
@@ -1694,7 +1728,13 @@ export class AgentRuntimeKernel {
     if (!recovered) {
       return false;
     }
-    this.failAttemptBeforeExecution(attempt, errorCode, messageFrom(error), true);
+    const failure = failureFromError(error, {
+      code: errorCode,
+      source: "adapter_process",
+      adapterId: attempt.adapterId,
+      retryable: true,
+    });
+    this.failAttemptBeforeExecution(attempt, errorCode, failure.userMessage, true, failure);
     return true;
   }
 

@@ -22,7 +22,7 @@ class PostHogManager {
     func initialize() {
         guard !isInitialized else { return }
 
-        let config = PostHogConfig(apiKey: apiKey, host: host)
+        let config = PostHogConfig(projectToken: apiKey, host: host)
 
         // Disable automatic lifecycle events — PostHog's observer calls setResourceValues(isExcludedFromBackupKey:)
         // synchronously on the main thread (via NSApplicationDidFinishLaunchingNotification), which XPCs to the

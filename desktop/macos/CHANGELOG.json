@@ -2,6 +2,23 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.573",
+      "date": "2026-06-30",
+      "changes": [
+        "Fixed failed agents so their error details appear in the agent chat transcript",
+        "Reduced desktop agent dependency audit findings and build warning noise"
+      ]
+    },
+    {
+      "version": "0.11.572",
+      "date": "2026-06-30",
+      "changes": [
+        "Reduced false desktop recording errors from empty cloud reconciliation sessions",
+        "Made unavailable local agents fail clearly with install-first guidance instead of exposing adapter environment variables.",
+        "Fixed Notch Mode height detection so the floating bar fits the Mac's actual camera housing"
+      ]
+    },
+    {
       "version": "0.11.571",
       "date": "2026-06-30",
       "changes": [

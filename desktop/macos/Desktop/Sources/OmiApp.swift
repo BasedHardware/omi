@@ -377,7 +377,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ]
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            let value = exc.value ?? ""
+            let value = exc.value
             return transientNetworkCodes.contains { entry in
               exc.type == entry.domain
                 && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
@@ -414,7 +414,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            exc.type == "Omi_Computer.AuthError" && (exc.value ?? "").contains("notSignedIn")
+            exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
           })
         {
           return nil

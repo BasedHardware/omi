@@ -28,11 +28,11 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directedProvider)"))
     XCTAssertTrue(source.contains("guard availability.isAvailable else"))
     XCTAssertTrue(source.contains("assistantText = setupPrompt"))
-    XCTAssertTrue(source.contains("output: setupPrompt"))
+    XCTAssertTrue(source.contains("output: availability.toolError"))
     XCTAssertTrue(source.contains("""
           sendToolResultIfCurrent(
             source: source, callId: callId, name: name,
-            output: setupPrompt)
+            output: availability.toolError)
           return
 """))
   }

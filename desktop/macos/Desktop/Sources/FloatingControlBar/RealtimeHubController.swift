@@ -1038,7 +1038,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
           log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) unavailable")
           sendToolResultIfCurrent(
             source: source, callId: callId, name: name,
-            output: setupPrompt)
+            output: availability.toolError)
           return
         }
       }
