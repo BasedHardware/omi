@@ -198,6 +198,15 @@ describe("SqliteAgentStore", () => {
       subjectId: dispatch.dispatchId,
       hiddenUntilMs: 600,
       reason: "snoozed",
+      createdAtMs: 200,
+    });
+    const updatedOverride = store.upsertDesktopAttentionOverride({
+      ownerId: "owner",
+      subjectKind: "dispatch",
+      subjectId: dispatch.dispatchId,
+      hiddenUntilMs: 700,
+      reason: "still snoozed",
+      createdAtMs: 900,
     });
 
     expect(store.getRow("SELECT objective FROM desktop_context_packets WHERE packet_id = ?", [packet.packetId]).objective).toBe("summarize current work");
@@ -243,22 +252,15 @@ describe("SqliteAgentStore", () => {
       override.ownerId,
       override.subjectKind,
       override.subjectId,
-    ]).hidden_until_ms).toBe(600);
-    const updatedOverride = store.upsertDesktopAttentionOverride({
-      ownerId: "owner",
-      subjectKind: "dispatch",
-      subjectId: dispatch.dispatchId,
-      hiddenUntilMs: 900,
-      reason: "extended snooze",
-    });
+    ]).hidden_until_ms).toBe(700);
     expect(updatedOverride.createdAtMs).toBe(override.createdAtMs);
     expect(store.getRow("SELECT hidden_until_ms, reason, created_at_ms FROM desktop_attention_overrides WHERE owner_id = ? AND subject_kind = ? AND subject_id = ?", [
       override.ownerId,
       override.subjectKind,
       override.subjectId,
     ])).toMatchObject({
-      hidden_until_ms: 900,
-      reason: "extended snooze",
+      hidden_until_ms: 700,
+      reason: "still snoozed",
       created_at_ms: override.createdAtMs,
     });
 
@@ -844,6 +846,122 @@ describe("SqliteAgentStore", () => {
       resolvedAtMs: 260,
     });
     expect(store.reconcileStartup().recoveryDispatchIds).toHaveLength(0);
+    store.close();
+  });
+
+  it("expires stale pending recovery dispatches and creates one fresh recovery action", () => {
+    const databasePath = newDatabasePath();
+    let now = 100;
+    const store = new SqliteAgentStore({ databasePath, reconcileOnOpen: false, nowMs: () => now });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "delegated_agent",
+      defaultAdapterId: "acp",
+    });
+    const parentRun = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "parent",
+      status: "succeeded",
+      mode: "act",
+    });
+    const childRun = store.insertRun({
+      sessionId: session.sessionId,
+      parentRunId: parentRun.runId,
+      clientId: "client",
+      requestId: "child",
+      status: "orphaned",
+      mode: "act",
+    });
+    const staleDispatch = store.insertDesktopDispatch({
+      dispatchId: "dispatch_stale_recovery",
+      ownerId: "owner",
+      kind: "failure_recovery",
+      priority: 80,
+      title: "Old recovery",
+      decisionPrompt: "Old recovery",
+      sourceSessionId: session.sessionId,
+      sourceRunId: childRun.runId,
+      expiresAtMs: 150,
+    });
+
+    now = 250;
+    const reconciliation = store.reconcileStartup();
+
+    expect(store.getRow("SELECT status, resolved_at_ms FROM desktop_dispatches WHERE dispatch_id = ?", [staleDispatch.dispatchId])).toMatchObject({
+      status: "expired",
+      resolved_at_ms: 250,
+    });
+    expect(reconciliation.recoveryDispatchIds).toHaveLength(1);
+    expect(reconciliation.recoveryDispatchIds[0]).not.toBe(staleDispatch.dispatchId);
+    expect(store.allRows("SELECT status FROM desktop_dispatches WHERE kind = ? AND source_run_id = ? ORDER BY created_at_ms", [
+      "failure_recovery",
+      childRun.runId,
+    ]).map((row) => row.status)).toEqual(["expired", "pending"]);
+    store.close();
+  });
+
+  it("does not recreate recovery dispatches after resolved or cancelled recovery decisions", () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false, nowMs: () => 250 });
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "delegated_agent",
+      defaultAdapterId: "acp",
+    });
+    const parentRun = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "parent",
+      status: "succeeded",
+      mode: "act",
+    });
+    const resolvedRun = store.insertRun({
+      sessionId: session.sessionId,
+      parentRunId: parentRun.runId,
+      clientId: "client",
+      requestId: "resolved-child",
+      status: "orphaned",
+      mode: "act",
+    });
+    const cancelledRun = store.insertRun({
+      sessionId: session.sessionId,
+      parentRunId: parentRun.runId,
+      clientId: "client",
+      requestId: "cancelled-child",
+      status: "orphaned",
+      mode: "act",
+    });
+    store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "failure_recovery",
+      priority: 80,
+      status: "resolved",
+      title: "Resolved recovery",
+      decisionPrompt: "Resolved recovery",
+      sourceSessionId: session.sessionId,
+      sourceRunId: resolvedRun.runId,
+      resolvedAtMs: 200,
+      resolvedBy: "user",
+      resolutionJson: "{}",
+    });
+    store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "failure_recovery",
+      priority: 80,
+      status: "cancelled",
+      title: "Cancelled recovery",
+      decisionPrompt: "Cancelled recovery",
+      sourceSessionId: session.sessionId,
+      sourceRunId: cancelledRun.runId,
+      resolvedAtMs: 200,
+      resolvedBy: "user",
+      resolutionJson: "{}",
+    });
+
+    const reconciliation = store.reconcileStartup();
+
+    expect(reconciliation.recoveryDispatchIds).toEqual([]);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM desktop_dispatches WHERE kind = ?", ["failure_recovery"]).count).toBe(2);
     store.close();
   });
 
