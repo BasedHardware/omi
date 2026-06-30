@@ -178,6 +178,7 @@ def test_memory_collections_define_unified_memory_items_and_no_separate_short_te
     assert paths.memory_operations == "users/u1/memory_operations"
     assert paths.memory_outbox == "users/u1/memory_outbox"
     assert paths.memory_control_state == "users/u1/memory_control/state"
+    assert paths.memory_apply_control_state == "users/u1/memory_state/apply_control"
     assert paths.legacy_fallback == "users/u1/memory_legacy_fallback"
     assert "memory_short_term" not in paths.all_collection_paths()
     assert "memory_archive" not in paths.all_collection_paths()

@@ -128,6 +128,9 @@ class _DocRef:
         return _Snapshot(self._db.docs[self.path], exists=True)
 
     def set(self, data, merge=False):
+        if merge and self.path in self._db.docs:
+            self._db.docs[self.path] = self._db.docs[self.path] | data
+            return
         self._db.docs[self.path] = data
 
 
@@ -268,7 +271,7 @@ def test_canonical_write_uses_apply_and_not_legacy_save(monkeypatch):
     evidence_id = payload["evidence"][0]["evidence_id"]
     db = _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
         }
@@ -391,7 +394,7 @@ def test_reprocess_retract_then_rewrite_restores_active_memory(monkeypatch):
     memory_id = payload["id"]
     db = _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
         }
@@ -620,7 +623,7 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
     }
     db = _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid, head_commit_id="head0", account_generation=1, source_generation=1
             ).model_dump(mode="json"),
         }
@@ -770,10 +773,10 @@ def test_offline_rag_script_excluded_from_live_writer_guard():
 
 def test_memories_router_routes_canonical_create_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
-    assert "canonical_write_enabled(uid, db_client=db_client)" in source
+    assert "_canonical_write_enabled_or_fail_closed(uid, db_client=db_client)" in source
     assert "run_blocking(db_executor, memory_service.write, uid, payload)" in source
     create_section = source.split("async def create_memory", 1)[1].split("@router.post", 1)[0]
-    canonical_pos = create_section.find("canonical_write_enabled")
+    canonical_pos = create_section.find("_canonical_write_enabled_or_fail_closed")
     legacy_pos = create_section.find("memories_db.create_memory")
     assert canonical_pos != -1 and legacy_pos != -1
     assert canonical_pos < legacy_pos
@@ -782,9 +785,9 @@ def test_memories_router_routes_canonical_create_through_memory_service():
 def test_review_memory_routes_canonical_cohort_through_memory_service():
     source = (BACKEND_DIR / "routers" / "memories.py").read_text(encoding="utf-8")
     section = source.split("def review_memory", 1)[1].split("@router.patch", 1)[0]
-    assert "canonical_write_enabled(uid, db_client=db_client)" in section
+    assert "_canonical_write_enabled_or_fail_closed(uid, db_client=db_client)" in section
     assert ".review(uid, memory_id, value)" in section
-    canonical_pos = section.find("canonical_write_enabled")
+    canonical_pos = section.find("_canonical_write_enabled_or_fail_closed")
     legacy_pos = section.find("memories_db.review_memory")
     assert canonical_pos != -1 and legacy_pos != -1
     assert canonical_pos < legacy_pos
