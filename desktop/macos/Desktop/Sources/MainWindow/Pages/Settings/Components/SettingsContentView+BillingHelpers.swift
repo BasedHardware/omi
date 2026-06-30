@@ -393,7 +393,7 @@ extension SettingsContentView {
                   .textFieldStyle(.roundedBorder)
                   .scaledFont(size: 13)
                   .disabled(activeCheckoutPriceId != nil)
-                  .onChange(of: upgradePromotionCode) { _ in
+                  .onChange(of: upgradePromotionCode) {
                     subscriptionError = nil
                   }
 

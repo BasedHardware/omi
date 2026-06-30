@@ -489,7 +489,7 @@ actor TranscriptionStorage {
         guard !segmentIds.isEmpty else { return }
         let db = try await ensureInitialized()
 
-        try await db.write { database in
+        _ = try await db.write { database in
             try TranscriptionSegmentRecord
                 .filter(Column("sessionId") == sessionId)
                 .filter(segmentIds.contains(Column("segmentId")))
