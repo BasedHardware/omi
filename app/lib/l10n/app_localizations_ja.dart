@@ -7487,6 +7487,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get removeFilter => 'フィルターを削除';
 
   @override
+  String get filterByDate => '日付でフィルター';
+
+  @override
   String get categoryConversationAnalysis => '会話分析';
 
   @override

@@ -7489,6 +7489,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get removeFilter => '필터 제거';
 
   @override
+  String get filterByDate => '날짜로 필터링';
+
+  @override
   String get categoryConversationAnalysis => '대화 분석';
 
   @override

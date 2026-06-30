@@ -32,6 +32,9 @@ class ConversationProvider extends ChangeNotifier {
   int totalSearchPages = 1;
   int currentSearchPage = 1;
 
+  DateTime? searchStartDate;
+  DateTime? searchEndDate;
+
   Timer? _processingConversationWatchTimer;
 
   // Add debounce mechanism for refresh
@@ -105,6 +108,8 @@ class ConversationProvider extends ChangeNotifier {
     hasDailySummaries = false;
     selectedDate = null;
     selectedFolderId = null;
+    searchStartDate = null;
+    searchEndDate = null;
     selectedSpeakerId = null;
     previousQuery = '';
     totalSearchPages = 1;
@@ -160,6 +165,8 @@ class ConversationProvider extends ChangeNotifier {
     var (convos, current, total) = await searchConversationsServer(
       query,
       includeDiscarded: showDiscardedConversations,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
       speakerId: selectedSpeakerId,
     );
     convos.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
@@ -191,6 +198,8 @@ class ConversationProvider extends ChangeNotifier {
       previousQuery,
       page: currentSearchPage + 1,
       includeDiscarded: showDiscardedConversations,
+      startDate: searchStartDate,
+      endDate: searchEndDate,
       speakerId: selectedSpeakerId,
     );
     searchedConversations.addAll(newConvos);
@@ -530,6 +539,25 @@ class ConversationProvider extends ChangeNotifier {
 
       return true;
     }).toList();
+  }
+
+  /// Set search date range (start and end). Null = no limit on that side.
+  ///
+  /// Dates are normalized to day boundaries so the selected final calendar day
+  /// is included: [start] is set to the start of its day (00:00:00) and [end]
+  /// is set to the end of its day (23:59:59.999), matching how the server
+  /// interprets the ISO-8601 bounds.
+  void setSearchDateRange(DateTime? start, DateTime? end) {
+    searchStartDate = start != null ? DateTime(start.year, start.month, start.day) : null;
+    searchEndDate = end != null ? DateTime(end.year, end.month, end.day, 23, 59, 59, 999) : null;
+    notifyListeners();
+  }
+
+  /// Clear the search date range filter
+  void clearSearchDateRange() {
+    searchStartDate = null;
+    searchEndDate = null;
+    notifyListeners();
   }
 
   /// Filter conversations by a specific date

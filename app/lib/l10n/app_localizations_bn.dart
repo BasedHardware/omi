@@ -7624,6 +7624,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get removeFilter => 'ফিল্টার সরান';
 
   @override
+  String get filterByDate => 'তারিখ অনুযায়ী ফিল্টার';
+
+  @override
   String get categoryConversationAnalysis => 'কথোপকথন বিশ্লেষণ';
 
   @override

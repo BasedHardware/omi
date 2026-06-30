@@ -7598,6 +7598,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get removeFilter => 'Fjern Filter';
 
   @override
+  String get filterByDate => 'Filtrer efter dato';
+
+  @override
   String get categoryConversationAnalysis => 'Samtaleanalyse';
 
   @override

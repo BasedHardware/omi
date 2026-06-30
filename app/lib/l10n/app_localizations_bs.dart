@@ -7638,6 +7638,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get removeFilter => 'Uklonite filter';
 
   @override
+  String get filterByDate => 'Filtriraj po datumu';
+
+  @override
   String get categoryConversationAnalysis => 'Analiza razgovora';
 
   @override

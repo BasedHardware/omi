@@ -2397,6 +2397,7 @@
     "largeTimeGapsDetected": "Открити са големи времеви разлики ({gaps})",
     "dailyRecaps": "Дневни резюмета",
     "removeFilter": "Премахни филтъра",
+    "filterByDate": "Филтриране по дата",
     "appleHealthNotAvailable": "Apple Health не е налично на това устройство",
     "downloadAudio": "Изтегляне на аудио",
     "audioDownloadSuccess": "Аудиото е изтеглено успешно",

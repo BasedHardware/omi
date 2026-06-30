@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "ตรวจพบช่วงเวลาห่างมากหลายช่วง ({gaps})",
     "dailyRecaps": "สรุปรายวัน",
     "removeFilter": "ลบตัวกรอง",
+    "filterByDate": "กรองตามวันที่",
     "appleHealthNotAvailable": "Apple Health ไม่พร้อมใช้งานบนอุปกรณ์นี้",
     "downloadAudio": "ดาวน์โหลดเสียง",
     "audioDownloadSuccess": "ดาวน์โหลดเสียงสำเร็จ",

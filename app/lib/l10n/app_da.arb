@@ -2437,6 +2437,7 @@
     "largeTimeGapsDetected": "Store tidsgab opdaget ({gaps})",
     "dailyRecaps": "Daglige Opsummeringer",
     "removeFilter": "Fjern Filter",
+    "filterByDate": "Filtrer efter dato",
     "appleHealthNotAvailable": "Apple Health er ikke tilgængelig på denne enhed",
     "downloadAudio": "Download lyd",
     "audioDownloadSuccess": "Lyd downloadet succesfuldt",

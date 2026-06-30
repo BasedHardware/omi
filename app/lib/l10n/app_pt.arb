@@ -2464,6 +2464,7 @@
     "largeTimeGapsDetected": "Grandes intervalos de tempo detetados ({gaps})",
     "dailyRecaps": "Resumos Diários",
     "removeFilter": "Remover Filtro",
+    "filterByDate": "Filtrar por data",
     "appleHealthNotAvailable": "Apple Health não está disponível neste dispositivo",
     "downloadAudio": "Baixar áudio",
     "audioDownloadSuccess": "Áudio baixado com sucesso",

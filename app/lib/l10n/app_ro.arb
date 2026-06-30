@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Au fost detectate diferențe mari de timp ({gaps})",
     "dailyRecaps": "Recapitulări Zilnice",
     "removeFilter": "Eliminare Filtru",
+    "filterByDate": "Filtrează după dată",
     "appleHealthNotAvailable": "Apple Health nu este disponibil pe acest dispozitiv",
     "downloadAudio": "Descarcă audio",
     "audioDownloadSuccess": "Audio descărcat cu succes",

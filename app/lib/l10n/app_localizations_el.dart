@@ -7669,6 +7669,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get removeFilter => 'Κατάργηση Φίλτρου';
 
   @override
+  String get filterByDate => 'Φιλτράρισμα κατά ημερομηνία';
+
+  @override
   String get categoryConversationAnalysis => 'Ανάλυση συνομιλιών';
 
   @override

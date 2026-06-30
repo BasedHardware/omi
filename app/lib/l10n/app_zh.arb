@@ -2450,6 +2450,7 @@
     "largeTimeGapsDetected": "检测到多个较大时间间隔 ({gaps})",
     "dailyRecaps": "每日回顾",
     "removeFilter": "移除筛选",
+    "filterByDate": "按日期筛选",
     "appleHealthNotAvailable": "此设备上不可用Apple Health",
     "downloadAudio": "下载音频",
     "audioDownloadSuccess": "音频下载成功",

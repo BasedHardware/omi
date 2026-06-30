@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "큰 시간 간격들이 감지되었습니다 ({gaps})",
     "dailyRecaps": "일일 요약",
     "removeFilter": "필터 제거",
+    "filterByDate": "날짜로 필터링",
     "appleHealthNotAvailable": "이 기기에서는 Apple Health를 사용할 수 없습니다",
     "downloadAudio": "오디오 다운로드",
     "audioDownloadSuccess": "오디오가 성공적으로 다운로드되었습니다",

@@ -14223,6 +14223,12 @@ abstract class AppLocalizations {
   /// **'Remove Filter'**
   String get removeFilter;
 
+  /// Header label for the date range filter sheet in conversation search
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by date'**
+  String get filterByDate;
+
   /// No description provided for @categoryConversationAnalysis.
   ///
   /// In en, this message translates to:

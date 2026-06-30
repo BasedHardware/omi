@@ -7612,6 +7612,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get removeFilter => 'Remove Filter';
 
   @override
+  String get filterByDate => 'Filter by date';
+
+  @override
   String get categoryConversationAnalysis => 'Conversation Analysis';
 
   @override

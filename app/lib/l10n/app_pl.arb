@@ -2463,6 +2463,7 @@
     "largeTimeGapsDetected": "Wykryto duże przerwy czasowe ({gaps})",
     "dailyRecaps": "Podsumowania Dnia",
     "removeFilter": "Usuń Filtr",
+    "filterByDate": "Filtruj według daty",
     "appleHealthNotAvailable": "Apple Health nie jest dostępne na tym urządzeniu",
     "downloadAudio": "Pobierz dźwięk",
     "audioDownloadSuccess": "Dźwięk został pomyślnie pobrany",

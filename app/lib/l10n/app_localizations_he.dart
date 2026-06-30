@@ -7553,6 +7553,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get removeFilter => 'הסר מסנן';
 
   @override
+  String get filterByDate => 'סינון לפי תאריך';
+
+  @override
   String get categoryConversationAnalysis => 'ניתוח שיחות';
 
   @override

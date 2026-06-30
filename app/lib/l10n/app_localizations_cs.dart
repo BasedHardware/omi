@@ -7610,6 +7610,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get removeFilter => 'Odstranit Filtr';
 
   @override
+  String get filterByDate => 'Filtrovat podle data';
+
+  @override
   String get categoryConversationAnalysis => 'Analýza konverzací';
 
   @override

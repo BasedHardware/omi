@@ -7638,6 +7638,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get removeFilter => 'Прыбраць фільтр';
 
   @override
+  String get filterByDate => 'Фільтр па даце';
+
+  @override
   String get categoryConversationAnalysis => 'Аналіз разьмовы';
 
   @override

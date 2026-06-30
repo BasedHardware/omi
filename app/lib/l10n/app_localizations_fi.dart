@@ -7614,6 +7614,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get removeFilter => 'Poista Suodatin';
 
   @override
+  String get filterByDate => 'Suodata päivämäärän mukaan';
+
+  @override
   String get categoryConversationAnalysis => 'Keskusteluanalyysi';
 
   @override

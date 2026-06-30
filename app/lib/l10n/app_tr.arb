@@ -2463,6 +2463,7 @@
     "largeTimeGapsDetected": "Büyük zaman farkları tespit edildi ({gaps})",
     "dailyRecaps": "Günlük Özetler",
     "removeFilter": "Filtreyi Kaldır",
+    "filterByDate": "Tarihe göre filtrele",
     "appleHealthNotAvailable": "Apple Health bu cihazda kullanılamıyor",
     "downloadAudio": "Ses İndir",
     "audioDownloadSuccess": "Ses başarıyla indirildi",

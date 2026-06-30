@@ -7643,6 +7643,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get removeFilter => 'Ukloni Filter';
 
   @override
+  String get filterByDate => 'Filtriraj po datumu';
+
+  @override
   String get categoryConversationAnalysis => 'Analiza Razgovora';
 
   @override

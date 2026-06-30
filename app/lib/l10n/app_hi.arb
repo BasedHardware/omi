@@ -2429,6 +2429,7 @@
     "largeTimeGapsDetected": "बड़े समय अंतराल पाए गए ({gaps})",
     "dailyRecaps": "दैनिक सारांश",
     "removeFilter": "फ़िल्टर हटाएं",
+    "filterByDate": "तारीख के अनुसार फ़िल्टर करें",
     "appleHealthNotAvailable": "इस डिवाइस पर Apple Health उपलब्ध नहीं है",
     "downloadAudio": "ऑडियो डाउनलोड करें",
     "audioDownloadSuccess": "ऑडियो सफलतापूर्वक डाउनलोड हुआ",

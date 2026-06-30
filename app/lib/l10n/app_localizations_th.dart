@@ -7579,6 +7579,9 @@ class AppLocalizationsTh extends AppLocalizations {
   String get removeFilter => 'ลบตัวกรอง';
 
   @override
+  String get filterByDate => 'กรองตามวันที่';
+
+  @override
   String get categoryConversationAnalysis => 'การวิเคราะห์การสนทนา';
 
   @override

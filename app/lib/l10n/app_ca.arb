@@ -2397,6 +2397,7 @@
     "largeTimeGapsDetected": "S'han detectat grans intervals de temps ({gaps})",
     "dailyRecaps": "Resums Diaris",
     "removeFilter": "Elimina el Filtre",
+    "filterByDate": "Filtra per data",
     "appleHealthNotAvailable": "Apple Health no està disponible en aquest dispositiu",
     "downloadAudio": "Descarregar àudio",
     "audioDownloadSuccess": "Àudio descarregat correctament",

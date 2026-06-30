@@ -7620,6 +7620,9 @@ class AppLocalizationsSv extends AppLocalizations {
   String get removeFilter => 'Ta Bort Filter';
 
   @override
+  String get filterByDate => 'Filtrera efter datum';
+
+  @override
   String get categoryConversationAnalysis => 'Samtalsanalys';
 
   @override

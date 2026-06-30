@@ -7627,6 +7627,9 @@ class AppLocalizationsSr extends AppLocalizations {
   String get removeFilter => 'Уклони филтер';
 
   @override
+  String get filterByDate => 'Филтрирај по датум';
+
+  @override
   String get categoryConversationAnalysis => 'Анализа разговора';
 
   @override

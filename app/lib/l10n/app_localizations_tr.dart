@@ -7628,6 +7628,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get removeFilter => 'Filtreyi Kaldır';
 
   @override
+  String get filterByDate => 'Tarihe göre filtrele';
+
+  @override
   String get categoryConversationAnalysis => 'Konuşma Analizi';
 
   @override
