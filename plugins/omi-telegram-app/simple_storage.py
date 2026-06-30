@@ -54,7 +54,7 @@ def _save(path: str, payload: dict) -> None:
     explicit restrictive perms, a shared host or permissive umask leaves
     the JSON readable by other users on the box.
     """
-    tmp = path + ".tmp"
+    tmp = f"{path}.{os.getpid()}.tmp"
     try:
         # Ensure parent directory exists. Without this, the first save after
         # STORAGE_DIR change raises FileNotFoundError and the user is silently
