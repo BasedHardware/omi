@@ -38,7 +38,7 @@ This version proves the backend can boot hermetically and that selected core CRU
 | Sync v2 job lifecycle | ✅ Partial | `/v2/sync-local-files` fast path, Redis job creation, deterministic background pipeline completion, job polling, and conversation persistence run with decode/VAD/STT/provider-heavy segment work replaced by deterministic seams. Full audio decoding and provider transcription remain lower-level/unit or v2 fake work. |
 | Storage / speech profile | ✅ Green | `google.cloud.storage.Client` is patched to a temp-dir fake; speech-profile presence, signed URL, sample list, and delete paths run through real routes/helpers. |
 | Webhooks | ✅ Partial | Developer webhook config/status routes, disabled no-op behavior, realtime delivery payload, non-2xx failure health recording, timeout/exception health recording, and threshold auto-disable are covered with `httpx.MockTransport`. Marketplace app webhook retry/circuit-breaker behavior remains v2. |
-| Task integrations | ✅ Partial | CRUD/default list paths plus connected/disconnected/no-token and Todoist success, provider 500, 401 disconnect, and timeout failure paths are covered. Task creation uses deterministic integration lookup due a fake-firestore single-doc lookup/delete limitation on this nested subcollection shape. |
+| Task integrations | ✅ Green | CRUD/default/delete paths plus connected/disconnected/no-token and Todoist success, provider 500, 401 disconnect, and timeout failure paths exercise real task-integration database helpers against fake Firestore. |
 | User/auth/profile/account | ✅ Green | Auth guard, profile, onboarding, language/transcription prefs, people CRUD, notification/assistant settings, AI profile, and BYOK activation/deactivation routes are covered. |
 | Retrieval/search | ✅ Partial | Memory, action-item, conversation summary, and transcript-chunk retrieval routes run through real public APIs with Firestore-backed records and a deterministic in-memory replacement for Pinecone/OpenAI embeddings at the `database.vector_db` client seam. Full Pinecone/Typesense service compatibility remains out of scope. |
 | Failure / edge modes | ✅ Partial | Invalid input and edge-case coverage runs. Redis-unavailable, LLM 500, and STT timeout cases are explicitly skipped or deferred until per-test failure fakes are wired. |
@@ -178,7 +178,7 @@ def test_read_seeded_conversation(client, auth_headers, sample_conversation_data
 - [ ] Add real Redis-unavailable fail-open tests; v1 uses fakeredis-backed paths.
 - [ ] Execute production migration scripts against fake fixtures if migration-script coverage is needed.
 - [ ] Add marketplace app webhook retry/circuit-breaker tests beyond the developer realtime transcript failure/auto-disable paths.
-- [ ] Improve fake-firestore support for nested task-integration single-doc lookup/delete so the task creation route no longer needs deterministic lookup patching.
+- [x] Improve fake-firestore support for nested task-integration single-doc lookup/delete so the task creation route no longer needs deterministic lookup patching.
 - [ ] Expand retrieval/search beyond the deterministic in-memory vector seam to cover real Typesense keyword behavior and closer Pinecone response compatibility if those service contracts become in-scope.
 - [x] Run under Python 3.11 in CI-like environments; the required `Backend Hermetic E2E` GitHub Action now installs dependencies, prewarms tokenizer cache, and runs the harness.
 
