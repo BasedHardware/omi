@@ -11,9 +11,12 @@ Two stores:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
 if os.path.exists("/app/data"):
@@ -45,14 +48,28 @@ def _save(path: str, payload: dict) -> None:
 
     A process crash mid-write leaves the original file untouched and a stray
     .tmp on disk for the next startup to clean up.
+
+    Files are written with mode 0o600 (owner read/write only) because they
+    contain user tokens and API keys. Identified by cubic (P1): without
+    explicit restrictive perms, a shared host or permissive umask leaves
+    the JSON readable by other users on the box.
     """
     tmp = path + ".tmp"
     try:
+        # Ensure parent directory exists. Without this, the first save after
+        # STORAGE_DIR change raises FileNotFoundError and the user is silently
+        # never persisted. (cubic P1 on WhatsApp variant — same shape here.)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            # Non-POSIX filesystem (e.g. some volumes); don't fail the save.
+            pass
     except Exception as e:
         print(f"⚠️  Could not save {path}: {e}", flush=True)
         try:
@@ -76,6 +93,7 @@ def save_user(
     omi_dev_api_key: str,
     bot_token: str,
     auto_reply_enabled: bool = False,
+    bot_username: str = "",
 ) -> None:
     existing = users.get(chat_id, {})
     users[chat_id] = {
@@ -85,6 +103,7 @@ def save_user(
         "omi_dev_api_key": omi_dev_api_key,
         "bot_token": bot_token,
         "auto_reply_enabled": auto_reply_enabled,
+        "bot_username": bot_username or existing.get("bot_username", ""),
         "created_at": existing.get("created_at", datetime.utcnow().isoformat()),
         "updated_at": datetime.utcnow().isoformat(),
         # last_nudge_at tracks when we last told the user their auto-reply was off,
@@ -156,8 +175,42 @@ def save_pending_setup(token: str, payload: dict) -> None:
     _save(PENDING_FILE, pending_setups)
 
 
+PENDING_SETUP_TTL_SECONDS = 3600  # 1 hour — setup links expire after this
+
+
 def pop_pending_setup(token: str) -> Optional[dict]:
-    """Return and remove the setup payload for this token. One-shot."""
+    """Return and remove the setup payload for this token. One-shot.
+
+    Also purges stale entries older than PENDING_SETUP_TTL_SECONDS.
+    These one-shot records contain platform credentials and Omi
+    developer API keys, so abandoned/leaked setup links should not
+    remain redeemable indefinitely. Identified by maintainer review.
+    """
+    # Purge stale entries first
+    now = datetime.utcnow()
+    stale_tokens = []
+    for t, payload in pending_setups.items():
+        created = payload.get("created_at")
+        if created:
+            try:
+                created_dt = datetime.fromisoformat(created)
+                if (now - created_dt).total_seconds() > PENDING_SETUP_TTL_SECONDS:
+                    stale_tokens.append(t)
+            except (TypeError, ValueError):
+                pass
+    for t in stale_tokens:
+        pending_setups.pop(t, None)
+        logger.info(f"purged stale setup token {t[:8]}... (expired)")
+    if stale_tokens and pending_setups:
+        _save(PENDING_FILE, pending_setups)
+    elif stale_tokens:
+        try:
+            if os.path.exists(PENDING_FILE):
+                os.remove(PENDING_FILE)
+        except Exception:
+            pass
+
+    # Pop the requested token
     payload = pending_setups.pop(token, None)
     if pending_setups:
         _save(PENDING_FILE, pending_setups)

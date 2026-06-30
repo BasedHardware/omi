@@ -16,10 +16,8 @@ Three stores:
 from __future__ import annotations
 
 import json
-import logging
 import os
-import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
@@ -38,13 +36,6 @@ def load_storage() -> None:
     for path, target_name in ((USERS_FILE, "users"), (PENDING_FILE, "pending_setups")):
         try:
             if os.path.exists(path):
-                # Tighten file perms to 0o600 on load if they're wider
-                # (e.g. an older build created the file with default umask,
-                # or the operator manually chmod'd it). Best-effort.
-                try:
-                    os.chmod(path, 0o600)
-                except OSError:
-                    pass
                 with open(path, "r") as f:
                     if target_name == "users":
                         users = json.load(f)
@@ -57,72 +48,35 @@ def load_storage() -> None:
 def _save(path: str, payload: dict) -> None:
     """Atomically write payload to path. Write to <path>.tmp, fsync, then os.replace.
 
-    Permissions: file is created with mode 0o600 (owner read/write only).
-    The file holds user-bound platform tokens (WhatsApp access_token,
-    omidev_api_key) — must not be world-readable. Parent STORAGE_DIR is
-    also chmod 0o700 (best-effort) so the file isn't accessible via
-    path-traversal on a misconfigured share.
+    Files are written with mode 0o600 (owner read/write only) because they
+    contain user access_tokens and verify_tokens. Identified by cubic (P1):
+    without explicit restrictive perms, a shared host or permissive umask
+    leaves the JSON readable by other users on the box.
 
-    P1 (cubic follow-up on PR #8528): the previous version used plain
-    open() with the default umask, which on most systems creates files
-    at 0o644 (world-readable). Anyone with read access to STORAGE_DIR
-    could read user access_tokens off disk.
-
-    P1 (cubic follow-up): the previous version swallowed all write
-    failures via a broad `except Exception` that just printed a warning.
-    If the disk was full or the dir was read-only, /setup would
-    'succeed' (because no exception propagated to the caller) but
-    the user data wouldn't be persisted. On the next restart the
-    plugin would resurrect from the stale (or empty) file, and
-    one-shot setup tokens could be re-redeemed indefinitely.
-
-    Now: log the error AND raise OSError. The caller (/setup) maps
-    OSError to a 5xx response so the user knows the setup failed.
+    Also ensures the parent directory exists before opening the tmp file —
+    without this the first save after a fresh STORAGE_DIR change fails with
+    FileNotFoundError and the user is silently never persisted. (cubic P1.)
     """
-    # P1 (cubic follow-up): use a UNIQUE temp filename per call.
-    # Pre-fix version used a fixed ".tmp" suffix with O_EXCL, which
-    # means a stale temp file from a crashed previous write (e.g. a
-    # crash between os.open and os.replace) would cause every
-    # subsequent _save() to fail with EEXIST. Worse: in multi-worker
-    # deployments (gunicorn -w 2 etc), two processes could race on
-    # the same fixed .tmp name; the loser's cleanup would unlink the
-    # winner's in-progress file, breaking both writes.
-    #
-    # tempfile.mkstemp gives us a per-process unique name AND atomic
-    # exclusive creation, both for free. The temp file is in the same
-    # directory as the target so os.replace is atomic.
+    tmp = path + ".tmp"
     try:
-        fd, tmp = tempfile.mkstemp(
-            prefix=os.path.basename(path) + ".",
-            suffix=".tmp",
-            dir=os.path.dirname(path) or None,
-        )
-        os.chmod(tmp, 0o600)
-        with os.fdopen(fd, "w") as f:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
-        # Tighten parent dir perms on first write.
-        parent = os.path.dirname(path)
-        if parent:
-            try:
-                os.chmod(parent, 0o700)
-            except OSError:
-                pass
-    except OSError as e:
-        # Cleanup the .tmp file if it exists. Don't suppress the
-        # error — the caller needs to know the write failed.
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            # Non-POSIX filesystem (e.g. some volumes); don't fail the save.
+            pass
+    except Exception as e:
+        print(f"⚠️  Could not save {path}: {e}", flush=True)
         try:
             if os.path.exists(tmp):
                 os.remove(tmp)
-        except OSError:
+        except Exception:
             pass
-        import logging
-        logging.getLogger("omi-whatsapp-clone").error(
-            "storage write failed for %s: %s", path, e
-        )
-        raise
 
 
 load_storage()
@@ -186,7 +140,15 @@ def should_nudge(user: dict, cooldown_seconds: float) -> bool:
         last_dt = datetime.fromisoformat(last)
     except (TypeError, ValueError):
         return True
-    elapsed = (datetime.utcnow() - last_dt).total_seconds()
+    # Normalize to naive UTC for the subtraction. datetime.fromisoformat
+    # in Python 3.11+ parses a trailing 'Z' as tz-aware; subtracting an
+    # aware datetime from datetime.utcnow() (naive) raises TypeError.
+    # P2 (cubic): this would 500 on production webhooks that re-load
+    # an old user file where the timestamp was written by a newer Python.
+    if last_dt.tzinfo is not None:
+        last_dt = last_dt.astimezone(timezone.utc).replace(tzinfo=None)
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+    elapsed = (now_naive - last_dt).total_seconds()
     return elapsed >= cooldown_seconds
 
 
@@ -209,8 +171,37 @@ def save_pending_setup(token: str, payload: dict) -> None:
     _save(PENDING_FILE, pending_setups)
 
 
+PENDING_SETUP_TTL_SECONDS = 3600  # 1 hour
+
+
 def pop_pending_setup(token: str) -> Optional[dict]:
-    """Return and remove the setup payload for this token. One-shot."""
+    """Return and remove the setup payload for this token. One-shot.
+
+    Also purges stale entries older than PENDING_SETUP_TTL_SECONDS.
+    Identified by maintainer review: setup records contain credentials.
+    """
+    now = datetime.utcnow()
+    stale_tokens = []
+    for t, payload in pending_setups.items():
+        created = payload.get("created_at")
+        if created:
+            try:
+                created_dt = datetime.fromisoformat(created)
+                if (now - created_dt).total_seconds() > PENDING_SETUP_TTL_SECONDS:
+                    stale_tokens.append(t)
+            except (TypeError, ValueError):
+                pass
+    for t in stale_tokens:
+        pending_setups.pop(t, None)
+    if stale_tokens and pending_setups:
+        _save(PENDING_FILE, pending_setups)
+    elif stale_tokens:
+        try:
+            if os.path.exists(PENDING_FILE):
+                os.remove(PENDING_FILE)
+        except Exception:
+            pass
+
     payload = pending_setups.pop(token, None)
     if pending_setups:
         _save(PENDING_FILE, pending_setups)

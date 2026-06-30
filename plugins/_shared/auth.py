@@ -66,12 +66,14 @@ _DEV_MODE_ENV_VAR = "OMI_DEV_MODE"
 
 
 def get_plugin_token() -> str:
-    """Return the configured plugin token, or "" if unset.
+    """Return the configured plugin token, or "" if unset/blank.
 
-    Empty string is the sentinel for "no token configured" — see the
-    policy matrix in this module's docstring.
+    Whitespace-only tokens are treated as unset — a token of spaces
+    would otherwise be "configured" but accept `Bearer    ` as valid.
+    Identified by maintainer review on PR #8528.
     """
-    return os.getenv(_TOKEN_ENV_VAR, "")
+    raw = os.getenv(_TOKEN_ENV_VAR, "")
+    return raw.strip()
 
 
 def _is_dev_mode() -> bool:
@@ -122,6 +124,25 @@ async def require_bearer(
         )
 
     presented = authorization[len("Bearer ") :]
+
+    # Identified by cubic (P1): secrets.compare_digest raises TypeError on
+    # non-ASCII input, which would surface as an unhandled 500 — leaking
+    # that the comparison happened at all and breaking the
+    # "uniform 401 for any unauthenticated caller" invariant.
+    # FastAPI turns an unhandled exception into 500 (the framework's
+    # default exception handler), so without this guard a non-ASCII
+    # token / header pair is observably different from a missing or
+    # wrong one — an attacker can probe ASCII handling vs. the 500 path.
+    # We bail out with the same 401 before calling compare_digest.
+    try:
+        presented.encode("ascii")
+        expected.encode("ascii")
+    except UnicodeEncodeError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid bearer token",
+        ) from None
+
     if not secrets.compare_digest(presented, expected):
         raise HTTPException(
             status_code=401,

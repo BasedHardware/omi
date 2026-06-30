@@ -23,7 +23,7 @@ from __future__ import annotations
 import os
 
 import pytest
-from fastapi import Depends, FastAPI, Header
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.testclient import TestClient
 
 # Import the module under test directly. _HERE/_SHARED setup is at the
@@ -178,6 +178,55 @@ class TestBearerMatch:
         assert client.get("/protected", headers={"Authorization": "Bearer ab"}).status_code == 401
         # Suffix-match should NOT succeed.
         assert client.get("/protected", headers={"Authorization": "Bearer bc"}).status_code == 401
+
+    def test_non_ascii_header_returns_401_not_500(self, monkeypatch):
+        """Identified by cubic (P1): secrets.compare_digest raises
+        TypeError on non-ASCII input. Without a guard, a non-ASCII
+        Authorization header surfaces as an unhandled 500, which an
+        attacker can probe to distinguish 'invalid token' (401) from
+        'token triggered a 500'. We must convert the 500 path into the
+        same uniform 401.
+
+        httpx (used by FastAPI's TestClient) itself rejects non-ASCII
+        header values BEFORE they reach our dependency. So we exercise
+        the dependency directly via asyncio — the dependency is the
+        one place that could otherwise leak a TypeError as a 500.
+        """
+        import asyncio
+        from auth import require_bearer
+
+        monkeypatch.setenv("AI_CLONE_PLUGIN_TOKEN", "the-secret")
+
+        async def _call():
+            # Pass a non-ASCII Authorization string directly — this is
+            # what would arrive at the dependency if anything between
+            # the client and our code failed to sanitize (e.g. a proxy
+            # or a misbehaving client).
+            return await require_bearer(authorization="Bearer \u4e2d\u6587")
+
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(_call())
+        assert exc_info.value.status_code == 401, (
+            "Non-ASCII Authorization header must yield uniform 401, not a "
+            "500 from TypeError leaking past the dependency."
+        )
+        assert exc_info.value.detail == "Invalid bearer token"
+
+    def test_non_ascii_configured_token_returns_401_not_500(self, monkeypatch):
+        """Same guard for the configured-token side: a server-side
+        misconfiguration with a non-ASCII AI_CLONE_PLUGIN_TOKEN must
+        not produce TypeErrors for every caller."""
+        import asyncio
+        from auth import require_bearer
+
+        monkeypatch.setenv("AI_CLONE_PLUGIN_TOKEN", "tok\u00e9n")  # accented
+
+        async def _call():
+            return await require_bearer(authorization="Bearer anything")
+
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(_call())
+        assert exc_info.value.status_code == 401
 
 
 # ---------------------------------------------------------------------------

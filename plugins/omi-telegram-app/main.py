@@ -19,8 +19,6 @@ import logging
 import os
 import secrets
 import sys
-import errno
-import fcntl
 from typing import Optional
 
 # Add plugins/_shared to sys.path so `from persona_client import chat` works.
@@ -37,6 +35,10 @@ import simple_storage  # noqa: E402
 import telegram_client  # noqa: E402
 from auth import require_bearer  # noqa: E402  (shared bearer-token auth — see plugins/_shared/auth.py)
 from persona_client import chat as _persona_chat  # noqa: E402  (re-export of plugins/_shared/persona_client.chat)
+from plugin_discovery import (
+    write_discovery,
+    clear_discovery,
+)  # noqa: E402  (write ~/.config/omi/ai-clone-plugin.json on startup)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("omi-telegram-clone")
@@ -46,208 +48,13 @@ logger = logging.getLogger("omi-telegram-clone")
 # Webhook secret
 # ---------------------------------------------------------------------------
 # WEBHOOK_SECRET is the value Telegram sends back in X-Telegram-Bot-Api-Secret-Token
-# on every webhook delivery. Resolution order:
-#   1. TELEGRAM_WEBHOOK_SECRET env var (production — operator-managed)
-#   2. <STORAGE_DIR>/webhook_secret (auto-generated, persisted on first run;
-#      survives restarts so Telegram's stored secret stays in sync)
-#   3. secrets.token_urlsafe(32) (first run, dev installs) — and immediately
-#      written to <STORAGE_DIR>/webhook_secret so the next start picks it up.
-#
-# P1 (cubic): previously, when TELEGRAM_WEBHOOK_SECRET was unset, the plugin
-# generated a fresh random secret on every startup. Telegram's stored
-# webhook secret (set via setWebhook) then no longer matched incoming
-# deliveries' X-Telegram-Bot-Api-Secret-Token header, and every webhook
-# request got a 401 until the user re-ran /setup. Persisting the auto-
-# generated secret to a file makes the first-run experience stable
-# across restarts; production still has the option of env-var override.
-#
-# Storage path: default to the PLUGIN's own directory (not /tmp) so the
-# secret survives reboots. /tmp is ephemeral on most systems — using it
-# as the default would defeat the whole "survive restarts" goal. The
-# STORAGE_DIR env var overrides this (same convention as the plugin's
-# simple_storage.py).
-def _resolve_webhook_secret():
-    """Return (secret, source_description). Side effect: may write the
-    freshly generated secret to <STORAGE_DIR>/webhook_secret with mode
-    0o600 (best-effort; logged on failure).
-
-    Security:
-    - File is opened with O_NOFOLLOW so a pre-existing symlink at the
-      target path can't redirect the write to an attacker-controlled
-      location (P1 cubic follow-up: pre-fix version used O_CREAT only
-      and followed symlinks, allowing a local attacker to pre-create
-      a symlink and exfiltrate the secret).
-    - File is opened with O_EXCL to atomically claim the path —
-      prevents two processes from racing on first startup and ending
-      up with different in-memory secrets (P1 cubic follow-up:
-      pre-fix version used O_CREAT|O_TRUNC which overwrites any
-      in-progress writer's file).
-    - File is created with mode 0o600 (owner read/write only) so the
-      secret isn't world-readable.
-    - A short-lived flock on the path serializes concurrent first-run
-      processes. The first to grab the lock writes; the second sees
-      the freshly-written file and reads it.
-    """
-    env_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
-    if env_secret:
-        return env_secret, "configured via env"
-
-    # Default to a persistent path (the plugin's own directory) so the
-    # webhook secret survives reboots. /tmp/omi-tg-e2e is the LEGACY
-    # default and is still honored for back-compat with existing installs.
-    default_storage_dir = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "data"
-    )
-    if not os.path.exists(default_storage_dir):
-        # Plugin shipped without a data/ subdir; fall back to the
-        # plugin dir itself (which is git-ignored, persistent).
-        default_storage_dir = os.path.dirname(os.path.abspath(__file__))
-    legacy_storage_dir = "/tmp/omi-tg-e2e"
-
-    storage_dir = os.getenv("STORAGE_DIR") or default_storage_dir
-    secret_path = os.path.join(storage_dir, "webhook_secret")
-
-    # Try the active path first
-    persisted = _read_secret_safely(secret_path)
-    if persisted:
-        return persisted, f"loaded from {secret_path}"
-
-    # Active path missing/empty — also try the legacy /tmp path on the
-    # theory that an older install has a secret there. If found, copy
-    # it to the active path so future reads use the persistent store.
-    if storage_dir != legacy_storage_dir:
-        legacy_path = os.path.join(legacy_storage_dir, "webhook_secret")
-        legacy = _read_secret_safely(legacy_path)
-        if legacy:
-            # Migrate from /tmp to the persistent path so the next
-            # restart doesn't need the legacy fallback.
-            _write_secret_atomically(secret_path, legacy)
-            return legacy, f"loaded from {legacy_path} (migrated to {secret_path})"
-
-    # First run: generate + persist. The flock is held by whichever
-    # process wins the race; the others will see the freshly-written
-    # file on the next check.
-    secret = secrets.token_urlsafe(32)
-    _write_secret_atomically(secret_path, secret)
-    return secret, f"auto-generated and persisted to {secret_path}"
-
-
-def _read_secret_safely(path: str):
-    """Read a webhook-secret file if it exists. Returns the secret
-    string or None. O_NOFOLLOW on open refuses symlinks (the
-    caller would be a local attacker pointing the path at, e.g.,
-    /dev/stdin to read what the process then writes)."""
-    try:
-        # O_RDONLY | O_NOFOLLOW: read the file, error if it's a symlink.
-        # The secret is small (43 chars from token_urlsafe(32)) so the
-        # read syscall returns it all at once.
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
-    except OSError as e:
-        if e.errno == errno.ENOENT:
-            return None  # not present
-        # ELOOP means path is a symlink (O_NOFOLLOW refused). Don't
-        # follow it — that's the whole point. Treat as missing.
-        if e.errno == errno.ELOOP:
-            logger.warning("webhook secret path %s is a symlink \u2014 refusing to read", path)
-            return None
-        # Any other error (EACCES, EIO, ...): the file exists but we
-        # can't read it. Log so operators can debug perm/mount issues,
-        # then fall back to generating a new secret.
-        logger.warning("webhook secret file %s unreadable: %s", path, e)
-        return None
-    try:
-        with os.fdopen(fd, "r") as f:
-            return f.read().strip() or None
-    except OSError:
-        return None
-
-
-def _write_secret_atomically(path: str, secret: str) -> bool:
-    """Write secret to path with mode 0o600, atomically. Returns True
-    on success. P1 (cubic follow-up): uses O_CREAT|O_EXCL|O_NOFOLLOW
-    to atomically claim the path AND refuse symlinks. A short-lived
-    flock serializes concurrent first-run writers — whichever process
-    wins the lock writes; the others see the file on the next read."""
-    import errno
-    import fcntl
-    import tempfile
-
-    parent = os.path.dirname(path)
-    if parent:
-        try:
-            os.makedirs(parent, exist_ok=True)
-        except OSError:
-            return False
-
-    # Serialize concurrent writers. A short blocking flock so the
-    # second process waits for the first to finish, then re-reads.
-    # We use a sidecar .lock file because we can't flock() a path
-    # that may not exist yet.
-    lock_path = path + ".lock"
-    lock_fd = None
-    try:
-        lock_fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-    except OSError as e:
-        if lock_fd is not None:
-            os.close(lock_fd)
-        return False
-
-    try:
-        # Re-check: another process may have just written the file
-        # while we were waiting for the lock.
-        existing = _read_secret_safely(path)
-        if existing:
-            # Someone else already wrote; don't overwrite their secret.
-            return True  # but the caller will read it on its own
-        # Open the file. O_CREAT|O_EXCL means we fail if the file
-        # already exists (race against another process that beat us
-        # to it between the re-check and the open). O_NOFOLLOW means
-        # we error out if the path is a symlink (local attacker could
-        # have pre-created a symlink at this path to exfiltrate the
-        # secret to an attacker-readable location).
-        try:
-            fd = os.open(
-                path,
-                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                0o600,
-            )
-        except OSError as e:
-            if e.errno == errno.EEXIST:
-                # Another process wrote between the re-check and
-                # the open. Their file is fine; let them keep it.
-                return True
-            return False
-        with os.fdopen(fd, "w") as f:
-            f.write(secret)
-        # Tighten parent dir perms so the file isn't accessible via
-        # path-traversal on a misconfigured share.
-        try:
-            os.chmod(parent, 0o700)
-        except OSError:
-            pass
-        return True
-    finally:
-        try:
-            fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        except OSError:
-            pass
-        try:
-            os.close(lock_fd)
-        except OSError:
-            pass
-
-
-WEBHOOK_SECRET, _webhook_source = _resolve_webhook_secret()
-if _webhook_source == "configured via env":
+# on every webhook delivery. Set via env in production (so it survives restarts);
+# fall back to a fresh random value at startup so dev installs work out of the box.
+WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET") or secrets.token_urlsafe(32)
+if os.getenv("TELEGRAM_WEBHOOK_SECRET"):
     logger.info("Webhook secret: configured via env")
-elif _webhook_source == "loaded from $STORAGE_DIR/webhook_secret":
-    logger.info("Webhook secret: loaded from $STORAGE_DIR/webhook_secret")
 else:
-    logger.warning(
-        "Webhook secret: auto-generated and persisted "
-        "(set TELEGRAM_WEBHOOK_SECRET to override)"
-    )
+    logger.warning("Webhook secret: auto-generated (set TELEGRAM_WEBHOOK_SECRET to persist across restarts)")
 
 # Base URL of the Omi backend that the persona API lives on. Defaults to prod.
 OMI_BASE_URL = os.getenv("OMI_BASE_URL", "https://api.omi.me")
@@ -260,11 +67,98 @@ except ValueError:
     _NUDGE_COOLDOWN_SECONDS = 14400.0
 
 
+import uuid
+from contextlib import asynccontextmanager
+
+
+_PLUGIN_INSTANCE_ID = str(uuid.uuid4())
+
+
+@asynccontextmanager
+async def _plugin_lifespan(app: FastAPI):
+    """Write the discovery file at startup, remove it at shutdown.
+
+    Plugin URL: prefer PUBLIC_BASE_URL if set (the tunnel URL), else
+    fall back to http://127.0.0.1:<port> where <port> comes from $PORT
+    (uvicorn sets it) or defaults to 8000 (Docker) / 18800 (dev).
+
+    Bearer token: the env var AI_CLONE_PLUGIN_TOKEN. We write it to the
+    discovery file as a bootstrap convenience; the desktop moves it
+    into the macOS Keychain on first read so it doesn't linger in a
+    plaintext file.
+
+    Dev mode: True if OMI_DEV_MODE=1. The desktop uses this flag to
+    relax the "developer API key required" check (useful when the
+    plugin is paired with the local persona mock).
+    """
+    port = os.getenv("PORT") or "8000"
+    public_url = os.getenv("PUBLIC_BASE_URL")
+    if not public_url:
+        public_url = f"http://127.0.0.1:{port}"
+    try:
+        write_discovery(
+            plugin_url=f"http://127.0.0.1:{port}",
+            bearer_token=os.getenv("AI_CLONE_PLUGIN_TOKEN", ""),
+            public_url=public_url,
+            dev_mode=os.getenv("OMI_DEV_MODE") == "1",
+            plugin_type="telegram",
+            instance_id=_PLUGIN_INSTANCE_ID,
+            omi_base_url=OMI_BASE_URL,
+        )
+        logger.info("wrote plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
+    except OSError as e:
+        logger.warning("could not write plugin discovery file: %s", e)
+    try:
+        yield
+    finally:
+        try:
+            clear_discovery(instance_id=_PLUGIN_INSTANCE_ID)
+            logger.info("cleared plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
+        except OSError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# /.well-known/omi-tools.json — Omi Chat Tools manifest
+# ---------------------------------------------------------------------------
+# Per docs/doc/developer/apps/ChatTools.mdx, AI Clone plugins expose a
+# static manifest at this well-known path so the Omi desktop/mobile app
+# can discover the tools on install. Each plugin owns its own manifest
+# (TOOLS_MANIFEST in main.py) because the JSON-Schema properties must
+# exactly match the plugin's /toggle ToggleRequest field names — the chat
+# assistant will faithfully build the request from this schema.
+# Unauthenticated — manifest discovery is public; the underlying /toggle
+# endpoint is auth-gated by the plugin bearer token (sent via the
+# `Authorization: Bearer` header, enforced by the shared
+# plugins/_shared/auth.require_bearer dependency). The request body
+# carries only the chat_id (a NON-SECRET identifier the plugin uses
+# to look up the user bound during the /start handshake); the bot
+# token stays in the plugin's storage and is NEVER requested from
+# or transmitted through chat — that keeps long-lived platform
+# credentials out of chat history, tool-call logs, traces, and model
+# context. (Identified by maintainer security review on PR #8531.)
+
 app = FastAPI(
     title="OMI Telegram AI-Clone",
     description="Self-hosted Telegram plugin that lets Omi reply on the user's behalf.",
     version="0.1.0",
+    lifespan=_plugin_lifespan,
 )
+
+
+@app.get("/.well-known/omi-tools.json", include_in_schema=False)
+async def omi_tools_manifest():
+    """Return the Omi Chat Tools manifest for this plugin.
+
+    No auth: the manifest is public metadata. Each tool declared here
+    is gated by the plugin bearer token (Authorization: Bearer header)
+    at call time, NOT by request-body credentials — that's the entire
+    reason `chat_messages.enabled` is False in v0.1: long-lived
+    platform secrets must never transit through chat.
+    """
+    from fastapi.responses import JSONResponse
+
+    return JSONResponse(content=get_omi_tools_manifest())
 
 
 # ---------------------------------------------------------------------------
@@ -273,6 +167,29 @@ app = FastAPI(
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "omi-telegram-clone", "version": "0.1.0"}
+
+
+@app.get("/status", dependencies=[Depends(require_bearer)])
+def status():
+    """Return connected chat count + auto-reply state + first chat_id.
+
+    Used by the desktop's PluginCard to show Connected/Not Connected,
+    the current auto-reply toggle state, and the chat_id to use for
+    /toggle calls. The bearer auth gates this.
+    """
+    chat_ids = list(simple_storage.users.keys())
+    chat_count = len(chat_ids)
+    any_auto_reply = any(u.get("auto_reply_enabled") for u in simple_storage.users.values())
+    # Include bot_username from the first connected user's setup record
+    first_user = simple_storage.users.get(chat_ids[0], {}) if chat_ids else {}
+    bot_username = first_user.get("bot_username", "")
+    return {
+        "connected_chats": chat_count,
+        "auto_reply_enabled": any_auto_reply,
+        "first_chat_id": chat_ids[0] if chat_ids else None,
+        "bot_username": bot_username,
+        "service": "omi-telegram-clone",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -329,12 +246,40 @@ async def setup(req: SetupRequest):
     # /start <token> to the bot, and we know which chat_id maps to which user.
     setup_token = secrets.token_urlsafe(16)
 
+    # When the plugin uses a LOCAL backend (OMI_BASE_URL is localhost),
+    # ALWAYS force the persona_id + API key from persona.json regardless
+    # of what the desktop sends. The desktop may send stale prod values
+    # (from a previous Connect) which won't work on the local backend.
+    # The local backend only has the test persona + test API key.
+    omi_base = os.getenv("OMI_BASE_URL", "https://api.omi.me")
+    is_local_backend = "localhost" in omi_base or "127.0.0.1" in omi_base
+    if is_local_backend:
+        persona_file = "/tmp/omi-py-backend/persona.json"
+        try:
+            with open(persona_file) as f:
+                pdata = json.load(f)
+            effective_persona_id = pdata.get("app_id", req.persona_id)
+            effective_dev_api_key = pdata.get("api_key", req.omi_dev_api_key)
+            logger.info(
+                "setup: local backend detected, forced persona from %s (id=%s, key=%s...)",
+                persona_file,
+                effective_persona_id,
+                effective_dev_api_key[:8],
+            )
+        except (OSError, json.JSONDecodeError):
+            effective_persona_id = req.persona_id
+            effective_dev_api_key = req.omi_dev_api_key
+            logger.warning("setup: local backend but persona.json missing, using desktop-provided values")
+    else:
+        effective_persona_id = req.persona_id
+        effective_dev_api_key = req.omi_dev_api_key
+
     simple_storage.save_pending_setup(
         setup_token,
         {
             "omi_uid": req.omi_uid,
-            "persona_id": req.persona_id,
-            "omi_dev_api_key": req.omi_dev_api_key,
+            "persona_id": effective_persona_id,
+            "omi_dev_api_key": effective_dev_api_key,
             "bot_token": req.bot_token,
             "bot_username": bot_username,
         },
@@ -438,6 +383,7 @@ async def webhook(
             omi_dev_api_key=payload["omi_dev_api_key"],
             bot_token=payload["bot_token"],
             auto_reply_enabled=False,
+            bot_username=payload.get("bot_username", ""),
         )
         await telegram_client.send_message(
             payload["bot_token"],
@@ -513,6 +459,74 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
     logger.info("auto-reply sent to chat %s (%d chars)", chat_id, len(reply))
 
 
+# ---------------------------------------------------------------------------
+# Omi Chat Tools manifest — served at `GET /.well-known/omi-tools.json`.
+# Schema per docs/doc/developer/apps/ChatTools.mdx. Each plugin has its own
+# manifest because the parameter NAMES must match that plugin's /toggle
+# ToggleRequest model.
+#
+# SECURITY: the manifest is public discovery metadata read by the chat
+# assistant. It must NEVER advertise long-lived platform credentials as
+# tool parameters — the chat assistant would faithfully prompt the user
+# to paste them in chat, and those secrets would then live in chat
+# history, tool-call logs, traces, screenshots, and model context.
+#
+# The plugin bearer token (in `Authorization: Bearer`) gates the call.
+# The chat_id / phone is a NON-SECRET reference the plugin uses to look
+# up which user the call applies to (the binding was made at /start
+# handshake time). The platform credential is held by the plugin in
+# its storage; the chat tool never sees it.
+# ---------------------------------------------------------------------------
+TOOLS_MANIFEST = {
+    "tools": [
+        {
+            "name": "toggle_auto_reply",
+            "description": (
+                "Turn the AI Clone auto-reply on or off for a connected "
+                "Telegram chat. Use this when the user wants to enable or "
+                "disable Omi's automatic responses in a specific Telegram "
+                "conversation."
+            ),
+            "endpoint": "/toggle",
+            "method": "POST",
+            "parameters": {
+                "properties": {
+                    "chat_id": {
+                        "type": "string",
+                        "description": (
+                            "Telegram chat_id of the conversation. The "
+                            "plugin uses this to look up the bound user "
+                            "from the prior /start handshake — it is NOT "
+                            "a secret and never identifies the user."
+                        ),
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "description": ("True to enable AI Clone auto-reply for the " "chat, false to disable it."),
+                    },
+                },
+                "required": ["chat_id", "enabled"],
+            },
+            "auth_required": True,
+            "status_message": "Toggling Telegram auto-reply...",
+        }
+    ],
+    "chat_messages": {
+        "enabled": False,
+        "target": "app",
+        "notify": False,
+    },
+}
+
+
+def get_omi_tools_manifest() -> dict:
+    """Return a fresh deep copy of the manifest so callers can't mutate
+    the shared constant. v0.1 manifest is <1KB so copy cost is trivial."""
+    import copy
+
+    return copy.deepcopy(TOOLS_MANIFEST)
+
+
 def _is_group_or_channel(update: dict) -> bool:
     chat = (update.get("message") or update.get("edited_message") or {}).get("chat") or {}
     return chat.get("type") in {"group", "supergroup", "channel"}
@@ -526,17 +540,19 @@ def _is_bot_sender(update: dict) -> bool:
 # ---------------------------------------------------------------------------
 # /toggle — flips auto_reply_enabled for a chat (called by Chat Tools).
 #
-# Auth: the request must include the bot_token that was registered for that
-# chat_id. The bot_token is a real secret (only the user has it; calling
-# setWebhook with the wrong token fails at Telegram). chat_id alone is NOT
-# sufficient — it's exposed in Telegram update payloads and could be guessed
-# by anyone scraping a public channel. Pairing the two raises the bar from
-# "knows chat_id" to "knows chat_id AND bot_token".
+# Auth model: the caller must hold a valid plugin bearer token (via the
+# `Authorization: Bearer` header, enforced by the shared
+# plugins/_shared/auth.require_bearer dependency). The chat_id parameter
+# identifies which user/chat the call applies to — the plugin looks up
+# the user bound to chat_id from its storage (set at /start handshake
+# time). The platform bot_token is held by the plugin and is NEVER
+# requested from or transmitted through chat — that keeps long-lived
+# credentials out of chat history, tool-call logs, traces, and model
+# context. (Identified by maintainer security review on PR #8528.)
 # ---------------------------------------------------------------------------
 class ToggleRequest(BaseModel):
     chat_id: str
     enabled: bool
-    bot_token: str  # required: must match the stored token for chat_id
 
 
 class ToggleResponse(BaseModel):
@@ -548,18 +564,34 @@ class ToggleResponse(BaseModel):
 async def toggle(req: ToggleRequest):
     """Enable or disable auto-reply for the given chat_id.
 
-    Returns 403 with a generic message for both unknown chat_id AND wrong
-    bot_token, so callers can't enumerate which chat_ids are registered by
-    distinguishing 404 (unknown) from 403 (wrong token).
+    Special case: chat_id='all' toggles ALL connected chats at once.
+    This is used by the desktop's global auto-reply toggle when the
+    user has multiple connected chats (or when the desktop doesn't
+    know which specific chat_id to target).
 
-    Called by the Chat Tools manifest entry `toggle_auto_reply` (T-008).
+    Called by the Chat Tools manifest entry `toggle_auto_reply`.
     """
+    if req.chat_id == "all":
+        # Toggle all connected chats
+        if not simple_storage.users:
+            raise HTTPException(status_code=403, detail="No connected chats")
+        for cid in list(simple_storage.users.keys()):
+            simple_storage.update_auto_reply(cid, req.enabled)
+        # Return the first chat_id as representative
+        first_cid = next(iter(simple_storage.users.keys()))
+        return ToggleResponse(chat_id=first_cid, auto_reply_enabled=req.enabled)
     user = simple_storage.get_user_by_chat_id(req.chat_id)
-    # Same response for both 'unknown chat_id' and 'wrong bot_token' so the
-    # endpoint doesn't leak which chat_ids exist (chat_ids are exposed in
-    # Telegram update payloads and could be enumerated otherwise).
-    if user is None or not secrets.compare_digest(req.bot_token, user["bot_token"]):
-        raise HTTPException(status_code=403, detail="Invalid chat_id or bot_token")
+    # Look up the user by chat_id alone — no platform credential is
+    # required because (a) the plugin bearer token already gates this
+    # endpoint and (b) the user-to-chat binding was established at
+    # /start handshake time. See the maintainer security note above.
+    user = simple_storage.get_user_by_chat_id(req.chat_id)
+    if user is None:
+        # Bearer auth already gates this endpoint; the bearer holder
+        # can pass any chat_id they know. Returning 403 with a generic
+        # message is fine — chat_ids aren't secret and an attacker
+        # without the bearer can't even reach this code path.
+        raise HTTPException(status_code=403, detail="Unknown chat_id")
     simple_storage.update_auto_reply(req.chat_id, req.enabled)
     return ToggleResponse(chat_id=req.chat_id, auto_reply_enabled=req.enabled)
 
