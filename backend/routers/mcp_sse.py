@@ -119,6 +119,8 @@ class MCPAuthContext:
     uid: str
     auth_type: str
     scopes: list[str]
+    app_id: Optional[str] = None
+    key_id: Optional[str] = None
     client_id: Optional[str] = None
     resource: Optional[str] = None
     grant_id: Optional[str] = None
@@ -134,10 +136,16 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_id = mcp_api_key_db.get_user_id_by_api_key(token)
-        if not user_id:
+        auth_context = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        if not auth_context or not auth_context.get("user_id"):
             return None
-        return MCPAuthContext(uid=user_id, auth_type="legacy_mcp_key", scopes=MCP_LEGACY_API_KEY_SCOPES)
+        return MCPAuthContext(
+            uid=auth_context["user_id"],
+            auth_type="legacy_mcp_key",
+            scopes=auth_context.get("scopes") or MCP_LEGACY_API_KEY_SCOPES,
+            app_id=auth_context.get("app_id"),
+            key_id=auth_context.get("key_id"),
+        )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:

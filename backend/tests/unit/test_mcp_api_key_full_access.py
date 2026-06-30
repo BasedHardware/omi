@@ -1,0 +1,216 @@
+from datetime import datetime
+from types import ModuleType
+import sys
+
+google_cloud = ModuleType("google.cloud")
+firestore_module = ModuleType("google.cloud.firestore")
+firestore_module.Query = type("Query", (), {"DESCENDING": "DESCENDING"})
+google_cloud.firestore = firestore_module
+sys.modules["google.cloud"] = google_cloud
+sys.modules["google.cloud.firestore"] = firestore_module
+
+database_client = ModuleType("database._client")
+database_client.db = None
+sys.modules["database._client"] = database_client
+redis_stub = ModuleType("database.redis_db")
+redis_stub.get_cached_mcp_api_key_auth_context = lambda _hashed_key: None
+redis_stub.cache_mcp_api_key_auth_context = lambda *_args, **_kwargs: None
+redis_stub.delete_cached_mcp_api_key = lambda _hashed_key: None
+sys.modules["database.redis_db"] = redis_stub
+sys.modules.pop("database.mcp_api_key", None)
+
+import database.mcp_api_key as mcp_api_key_db
+
+
+class _DocSnapshot:
+    def __init__(self, reference, data=None):
+        self.reference = reference
+        self.id = reference.id
+        self._data = data
+        self.exists = data is not None
+
+    def to_dict(self):
+        return dict(self._data or {})
+
+
+def _deep_merge(target, patch):
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(target.get(key), dict):
+            _deep_merge(target[key], value)
+        else:
+            target[key] = value
+
+
+class _DocReference:
+    def __init__(self, collection, doc_id):
+        self._collection = collection
+        self.id = doc_id
+
+    def collection(self, name):
+        return self._collection._db.collection(f"{self._collection.name}/{self.id}/{name}")
+
+    def get(self):
+        return _DocSnapshot(self, self._collection._docs.get(self.id))
+
+    def set(self, data, merge=False):
+        if merge:
+            existing = self._collection._docs.setdefault(self.id, {})
+            _deep_merge(existing, dict(data))
+            return
+        self._collection._docs[self.id] = dict(data)
+
+    def update(self, data):
+        self._collection._docs.setdefault(self.id, {}).update(data)
+
+
+class _Query:
+    def __init__(self, collection, field, expected):
+        self._collection = collection
+        self._field = field
+        self._expected = expected
+        self._limit = None
+
+    def limit(self, limit):
+        self._limit = limit
+        return self
+
+    def stream(self):
+        matches = [
+            _DocSnapshot(_DocReference(self._collection, doc_id), data)
+            for doc_id, data in self._collection._docs.items()
+            if data.get(self._field) == self._expected
+        ]
+        return matches[: self._limit] if self._limit is not None else matches
+
+
+class _Collection:
+    def __init__(self, db, name):
+        self._db = db
+        self.name = name
+        self._docs = {}
+
+    def document(self, doc_id):
+        return _DocReference(self, doc_id)
+
+    def where(self, field, op, expected):
+        assert op == "=="
+        return _Query(self, field, expected)
+
+
+class _DB:
+    def __init__(self):
+        self._collections = {}
+
+    def collection(self, name):
+        self._collections.setdefault(name, _Collection(self, name))
+        return self._collections[name]
+
+
+class _Redis:
+    def __init__(self):
+        self.auth_context = None
+        self.cached = []
+
+    def get_cached_mcp_api_key_auth_context(self, _hashed_key):
+        return self.auth_context
+
+    def cache_mcp_api_key_auth_context(self, hashed_key, user_id, scopes, key_id=None, app_id=None):
+        self.auth_context = {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
+        self.cached.append({"hashed_key": hashed_key, **self.auth_context})
+
+
+def _grant_for(db, uid, key_id, app_id=mcp_api_key_db.MCP_DEFAULT_APP_ID):
+    doc = (
+        db.collection("users")
+        .document(uid)
+        .collection(mcp_api_key_db.MCP_MEMORY_CONTROL_COLLECTION)
+        .document(mcp_api_key_db.MCP_APP_KEY_MEMORY_GRANTS_DOC_ID)
+        .get()
+        .to_dict()
+    )
+    return doc["grants"]["mcp"]["apps"][app_id]["keys"][key_id]
+
+
+def test_create_mcp_key_persists_full_access_identity_and_memory_grant(monkeypatch):
+    db = _DB()
+    monkeypatch.setattr(mcp_api_key_db, "db", db)
+    monkeypatch.setattr(mcp_api_key_db, "generate_api_key", lambda: ("omi_mcp_secret", "hashed", "omi_mcp"))
+    monkeypatch.setattr(mcp_api_key_db.uuid, "uuid4", lambda: "key-1")
+
+    raw_key, key = mcp_api_key_db.create_mcp_key("user-1", "Agent")
+
+    key_doc = db.collection("mcp_api_keys").document("key-1").get().to_dict()
+    assert raw_key == "omi_mcp_secret"
+    assert key.app_id == mcp_api_key_db.MCP_DEFAULT_APP_ID
+    assert "memories.write" in key.scopes
+    assert key_doc["app_id"] == mcp_api_key_db.MCP_DEFAULT_APP_ID
+    assert "memories.write" in key_doc["scopes"]
+
+    grant = _grant_for(db, "user-1", "key-1")
+    assert grant == {
+        "enabled": True,
+        "scopes": ["memories.read", "memories.write"],
+        "default_read": True,
+        "archive_read": False,
+        "write": True,
+    }
+
+
+def test_legacy_mcp_key_auth_repairs_identity_scopes_and_memory_grant(monkeypatch):
+    db = _DB()
+    db.collection("mcp_api_keys").document("legacy-key").set(
+        {
+            "id": "legacy-key",
+            "user_id": "user-1",
+            "name": "Legacy",
+            "hashed_key": "hashed",
+            "key_prefix": "omi_mcp",
+            "created_at": datetime.utcnow(),
+            "last_used_at": None,
+            "scopes": ["memories.read"],
+        }
+    )
+    redis = _Redis()
+    monkeypatch.setattr(mcp_api_key_db, "db", db)
+    monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
+    monkeypatch.setattr(mcp_api_key_db, "hash_api_key", lambda _secret: "hashed")
+
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_secret")
+
+    assert auth["user_id"] == "user-1"
+    assert auth["key_id"] == "legacy-key"
+    assert auth["app_id"] == mcp_api_key_db.MCP_DEFAULT_APP_ID
+    assert "memories.write" in auth["scopes"]
+
+    repaired = db.collection("mcp_api_keys").document("legacy-key").get().to_dict()
+    assert repaired["app_id"] == mcp_api_key_db.MCP_DEFAULT_APP_ID
+    assert "memories.write" in repaired["scopes"]
+    assert repaired["last_used_at"] is not None
+
+    grant = _grant_for(db, "user-1", "legacy-key")
+    assert grant["default_read"] is True
+    assert grant["write"] is True
+    assert "memories.write" in grant["scopes"]
+    assert redis.cached[0]["app_id"] == mcp_api_key_db.MCP_DEFAULT_APP_ID
+
+
+def test_cached_mcp_key_auth_still_repairs_memory_grant(monkeypatch):
+    db = _DB()
+    redis = _Redis()
+    redis.auth_context = {
+        "user_id": "user-1",
+        "scopes": ["memories.read"],
+        "key_id": "cached-key",
+        "app_id": None,
+    }
+    monkeypatch.setattr(mcp_api_key_db, "db", db)
+    monkeypatch.setattr(mcp_api_key_db, "redis_db", redis)
+    monkeypatch.setattr(mcp_api_key_db, "hash_api_key", lambda _secret: "hashed")
+
+    auth = mcp_api_key_db.get_user_and_scopes_by_api_key("omi_mcp_secret")
+
+    assert auth["app_id"] == mcp_api_key_db.MCP_DEFAULT_APP_ID
+    assert "memories.write" in auth["scopes"]
+    grant = _grant_for(db, "user-1", "cached-key")
+    assert grant["write"] is True
+    assert redis.cached[0]["scopes"] == auth["scopes"]

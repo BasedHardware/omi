@@ -9,8 +9,65 @@ from database._client import db
 from models.mcp_api_key import McpApiKey
 from utils.mcp_api_keys import generate_api_key, hash_api_key
 
+MCP_DEFAULT_APP_ID = "mcp-api"
+MCP_FULL_ACCESS_SCOPES = [
+    "memories.read",
+    "memories.write",
+    "conversations.read",
+    "action_items.read",
+    "action_items.write",
+    "goals.read",
+    "chat.read",
+    "screen_activity.read",
+    "people.read",
+]
+MCP_MEMORY_GRANT_SCOPES = ["memories.read", "memories.write"]
+MCP_MEMORY_CONTROL_COLLECTION = "memory_control"
+MCP_APP_KEY_MEMORY_GRANTS_DOC_ID = "app_key_memory_grants"
 
-def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
+
+def _normalized_scopes(scopes: Optional[List[str]]) -> List[str]:
+    return sorted(set(MCP_FULL_ACCESS_SCOPES).union(scopes or []))
+
+
+def _seed_mcp_memory_grant(user_id: str, key_id: str, app_id: str = MCP_DEFAULT_APP_ID):
+    grant_ref = (
+        db.collection("users")
+        .document(user_id)
+        .collection(MCP_MEMORY_CONTROL_COLLECTION)
+        .document(MCP_APP_KEY_MEMORY_GRANTS_DOC_ID)
+    )
+    grant_ref.set(
+        {
+            "grants": {
+                "mcp": {
+                    "apps": {
+                        app_id: {
+                            "keys": {
+                                key_id: {
+                                    "enabled": True,
+                                    "scopes": MCP_MEMORY_GRANT_SCOPES,
+                                    "default_read": True,
+                                    "archive_read": False,
+                                    "write": True,
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "updated_at": datetime.utcnow(),
+        },
+        merge=True,
+    )
+
+
+def create_mcp_key(
+    user_id: str,
+    name: str,
+    scopes: Optional[List[str]] = None,
+    app_id: Optional[str] = MCP_DEFAULT_APP_ID,
+) -> Tuple[str, McpApiKey]:
     """
     Creates a new MCP API key for a user.
     Returns the raw key and the key's metadata.
@@ -18,6 +75,8 @@ def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
     raw_key, hashed_key, key_prefix = generate_api_key()
     key_id = str(uuid.uuid4())
     now = datetime.utcnow()
+    resolved_app_id = app_id or MCP_DEFAULT_APP_ID
+    resolved_scopes = _normalized_scopes(scopes)
 
     api_key_doc = {
         "id": key_id,
@@ -27,8 +86,11 @@ def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
         "key_prefix": key_prefix,
         "created_at": now,
         "last_used_at": None,
+        "app_id": resolved_app_id,
+        "scopes": resolved_scopes,
     }
     db.collection("mcp_api_keys").document(key_id).set(api_key_doc)
+    _seed_mcp_memory_grant(user_id, key_id, resolved_app_id)
 
     api_key_data = McpApiKey(
         id=key_id,
@@ -36,6 +98,8 @@ def create_mcp_key(user_id: str, name: str) -> Tuple[str, McpApiKey]:
         key_prefix=key_prefix,
         created_at=now,
         last_used_at=None,
+        app_id=resolved_app_id,
+        scopes=resolved_scopes,
     )
     return raw_key, api_key_data
 
@@ -74,17 +138,38 @@ def get_user_id_by_api_key(api_key: str) -> Optional[str]:
     Uses a cache to avoid frequent database lookups.
     Also updates the last_used_at timestamp on cache miss.
     """
+    auth_context = get_user_and_scopes_by_api_key(api_key)
+    return auth_context.get("user_id") if auth_context else None
+
+
+def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
+    """
+    Verifies an MCP API key and returns uid plus server-owned app/key/scopes.
+
+    MCP keys are full-access agent keys. Older key documents may be missing the
+    app identity, scopes, and memory grant state introduced by the app/key grant
+    layer; repair them lazily on successful authentication so existing agents
+    keep working without regenerating keys.
+    """
     if not api_key.startswith("omi_mcp_"):
         return None
     secret_part = api_key.replace("omi_mcp_", "", 1)
     hashed_key = hash_api_key(secret_part)
 
-    # Check cache first
-    user_id = redis_db.get_cached_mcp_api_key_user_id(hashed_key)
-    if user_id:
-        return user_id
+    cached_data = redis_db.get_cached_mcp_api_key_auth_context(hashed_key)
+    if cached_data and cached_data.get("user_id") and cached_data.get("key_id"):
+        cached_data["app_id"] = cached_data.get("app_id") or MCP_DEFAULT_APP_ID
+        cached_data["scopes"] = _normalized_scopes(cached_data.get("scopes"))
+        _seed_mcp_memory_grant(cached_data["user_id"], cached_data["key_id"], cached_data["app_id"])
+        redis_db.cache_mcp_api_key_auth_context(
+            hashed_key,
+            cached_data["user_id"],
+            cached_data["scopes"],
+            key_id=cached_data["key_id"],
+            app_id=cached_data["app_id"],
+        )
+        return cached_data
 
-    # If not in cache, query database
     keys_ref = db.collection("mcp_api_keys").where("hashed_key", "==", hashed_key).limit(1)
     docs = list(keys_ref.stream())
 
@@ -92,12 +177,16 @@ def get_user_id_by_api_key(api_key: str) -> Optional[str]:
         return None
 
     key_doc = docs[0]
-    user_id = key_doc.to_dict().get("user_id")
+    key_data = key_doc.to_dict() or {}
+    user_id = key_data.get("user_id")
+    key_id = key_data.get("id") or key_doc.id
+    app_id = key_data.get("app_id") or MCP_DEFAULT_APP_ID
+    scopes = _normalized_scopes(key_data.get("scopes"))
 
     if user_id:
-        # Cache the key and update last_used_at
-        redis_db.cache_mcp_api_key(hashed_key, user_id)
         key_ref = key_doc.reference
-        key_ref.update({"last_used_at": datetime.utcnow()})
+        key_ref.update({"id": key_id, "last_used_at": datetime.utcnow(), "app_id": app_id, "scopes": scopes})
+        _seed_mcp_memory_grant(user_id, key_id, app_id)
+        redis_db.cache_mcp_api_key_auth_context(hashed_key, user_id, scopes, key_id=key_id, app_id=app_id)
 
-    return user_id
+    return {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
