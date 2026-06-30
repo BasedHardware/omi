@@ -177,24 +177,31 @@ final class AICloneConfig: ObservableObject {
             changed = true
         }
 
-        // ALWAYS refresh the public/tunnel URL from the discovery file.
-        // Telegram / Meta can't reach pluginURL (loopback) from outside;
-        // they need the tunnel URL. ConnectSheet reads this field and
-        // sends it as publicBaseUrl to the plugin's /setup endpoint.
-        // Previously this lived inside the `if changed` block above —
-        // but if both pluginURL and bearerToken were already populated
-        // from UserDefaults (auth-seed case), changed stayed false and
-        // publicBaseURL kept its default nil value, so ConnectSheet
-        // fell back to pluginURL (the loopback URL Telegram rejects).
+        // ALWAYS refresh discovery-derived fields. The discovery file is
+        // written by the plugin on every restart, so its values reflect
+        // the LIVE plugin instance (with a new instance_id and possibly
+        // a different tunnel URL). The UserDefaults-cached pluginURL /
+        // bearerToken can be stale if the user restarted the plugin or
+        // a sibling worktree is competing for the same port — refreshing
+        // only `publicBaseURL` while leaving the other discovery-derived
+        // fields gated behind `changed` would create a mixed
+        // configuration where ConnectSheet posts to the OLD pluginURL
+        // but passes the NEW publicBaseURL + STALE pluginDevMode /
+        // discoveryBackendURL. (P2 cubic review 4601373760.)
+        //
+        // UserDefaults (pluginURL) and Keychain (bearerToken) still
+        // only get WRITTEN when changed=true (preserving the user's
+        // manual edits) — but the in-memory copy of every discovery-
+        // derived field always reflects the current plugin.
         self.publicBaseURL = discovery.publicURL ?? discovery.pluginURL
+        self.pluginDevMode = discovery.devMode
+        self.discoveryBackendURL = discovery.omiBaseURL
 
         if changed {
             // Use the app's log() function so it appears in /tmp/omi-dev.log
             // (NSLog goes to unified logging only, not the dev log file).
             log("AICloneConfig: auto-discovered plugin at \(discoveryURL) (type=\(discovery.pluginType), devMode=\(discovery.devMode))")
             self.isAutoDiscovered = true
-            self.pluginDevMode = discovery.devMode
-            self.discoveryBackendURL = discovery.omiBaseURL
         }
     }
 

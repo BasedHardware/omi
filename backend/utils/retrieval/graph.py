@@ -119,7 +119,7 @@ async def execute_persona_chat_stream(
     cited: Optional[bool] = False,
     callback_data: dict = None,
     chat_session: Optional[str] = None,
-    extra_system_messages: Optional[List["SystemMessage"]] = None,
+    extra_user_messages: Optional[List["HumanMessage"]] = None,
 ) -> AsyncGenerator[str, None]:
     """Handle streaming chat responses for persona-type apps.
 
@@ -132,20 +132,28 @@ async def execute_persona_chat_stream(
     never pushed to the queue). astream() yields chunks as an
     async iterator — we just push each chunk to the SSE consumer.
 
-    `extra_system_messages` (T-020) are inserted immediately after the
-    persona_prompt SystemMessage and before any prior turns. Used by the
-    integration persona-chat route to inject "you are talking to Alice on
-    Telegram" without changing the persona_prompt template itself. Pass
-    None or an empty list for the existing single-shot desktop flow.
+    `extra_user_messages` (T-020) are HumanMessage instances inserted
+    immediately after the persona_prompt SystemMessage and before any
+    prior turns. Used by the integration persona-chat route to inject
+    sender / platform / chat-type context WITHOUT changing the
+    persona_prompt template itself. They are HumanMessage (not
+    SystemMessage) because the values come from untrusted chat-platform
+    profile fields — a user can set their Telegram first_name to
+    anything, including prompt-injection payloads. Demoting to user
+    role + framing the values as DATA (see
+    routers.integration._render_persona_context_message) means
+    attacker-controlled strings cannot override the persona prompt.
+    Pass None or an empty list for the existing single-shot desktop flow.
     """
     system_prompt = app.persona_prompt
     formatted_messages = [SystemMessage(content=system_prompt)]
 
     # T-020: optional context blocks (sender name, platform, chat type).
-    # Inserted at position 1 so they sit next to the persona_prompt and
-    # before any prior turns. Empty list = no-op (preserves existing behavior).
-    if extra_system_messages:
-        formatted_messages.extend(extra_system_messages)
+    # Inserted at position 1 so they sit right after the persona_prompt
+    # and before any prior turns. Empty list = no-op (preserves existing
+    # behavior). HumanMessage role — see prompt-injection note above.
+    if extra_user_messages:
+        formatted_messages.extend(extra_user_messages)
 
     for msg in messages:
         if msg.sender == "ai":
@@ -249,7 +257,7 @@ async def execute_chat_stream(
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
-    extra_system_messages: Optional[List["SystemMessage"]] = None,
+    extra_user_messages: Optional[List["HumanMessage"]] = None,
 ) -> AsyncGenerator[str, None]:
     """Route chat requests to the appropriate handler.
 
@@ -257,9 +265,12 @@ async def execute_chat_stream(
     - File attachments -> file chat (OpenAI Assistants)
     - Everything else -> Anthropic agentic chat (Claude decides whether to use tools)
 
-    `extra_system_messages` (T-020) are forwarded only to the persona
+    `extra_user_messages` (T-020) are forwarded only to the persona
     handler. The agentic / file-chat paths ignore them — those don't use
-    a persona_prompt and the context doesn't apply.
+    a persona_prompt and the context doesn't apply. They carry
+    untrusted sender / platform metadata, demoted to user role so
+    they can't override the persona prompt via prompt injection (see
+    execute_persona_chat_stream for the security rationale).
     """
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
 
@@ -272,7 +283,7 @@ async def execute_chat_stream(
             cited=cited,
             callback_data=callback_data,
             chat_session=chat_session,
-            extra_system_messages=extra_system_messages,
+            extra_user_messages=extra_user_messages,
         ):
             yield chunk
         return
