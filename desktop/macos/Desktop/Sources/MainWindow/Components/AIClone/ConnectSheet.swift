@@ -638,7 +638,12 @@ struct ConnectSheet: View {
                     omiUid: currentUid(),
                     personaId: personaId,
                     omiDevApiKey: effectiveDevKey,
-                    publicBaseUrl: config.pluginURL
+                    // The plugin needs the PUBLIC/tunnel URL here so
+                    // Telegram / Meta can reach the webhook from the
+                    // internet. pluginURL is loopback and unreachable
+                    // from outside. Falls back to pluginURL when no
+                    // tunnel is configured (same-machine testing).
+                    publicBaseUrl: config.publicBaseURL ?? config.pluginURL
                 )
                 let result = try await AICloneClient.shared.setup(
                     baseURL: config.pluginURL,

@@ -87,6 +87,15 @@ final class AICloneConfig: ObservableObject {
     /// key on that backend instead of prod. Prevents persona_id mismatch.
     @Published var discoveryBackendURL: String? = nil
 
+    /// The PUBLIC URL of the plugin (the tunnel / external address
+    /// Telegram or Meta use to reach the plugin from outside). Used by
+    /// the desktop's ConnectSheet as the `publicBaseUrl` payload to the
+    /// plugin's /setup endpoint — Telegram's webhook must be reachable
+    /// from the internet, so we can't pass the local `pluginURL`
+    /// (loopback). Falls back to pluginURL when no tunnel is configured
+    /// (same-machine-only testing, where Telegram isn't involved).
+    @Published var publicBaseURL: String? = nil
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.pluginURL = defaults.string(forKey: DefaultsKeys.pluginURL) ?? ""
@@ -175,6 +184,12 @@ final class AICloneConfig: ObservableObject {
             self.isAutoDiscovered = true
             self.pluginDevMode = discovery.devMode
             self.discoveryBackendURL = discovery.omiBaseURL
+            // Capture the public/tunnel URL so ConnectSheet can pass it
+            // to the plugin's /setup endpoint as publicBaseUrl. Telegram
+            // and Meta can't reach pluginURL (loopback) from outside;
+            // they need the tunnel URL. Falls back to pluginURL when
+            // publicURL is absent (same-machine testing only).
+            self.publicBaseURL = discovery.publicURL ?? discovery.pluginURL
         }
     }
 
