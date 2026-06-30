@@ -53,9 +53,8 @@ class Person {
       createdAt: DateTime.parse(json['created_at']).toLocal(),
       updatedAt: DateTime.parse(json['updated_at']).toLocal(),
       speechSamples: json['speech_samples'] != null ? List<String>.from(json['speech_samples']) : [],
-      speechSampleTranscripts: json['speech_sample_transcripts'] != null
-          ? List<String>.from(json['speech_sample_transcripts'])
-          : null,
+      speechSampleTranscripts:
+          json['speech_sample_transcripts'] != null ? List<String>.from(json['speech_sample_transcripts']) : null,
       speechSamplesVersion: json['speech_samples_version'] ?? 1,
       colorIdx: json['color_idx'] ?? json['id'].hashCode % speakerColors.length,
     );
