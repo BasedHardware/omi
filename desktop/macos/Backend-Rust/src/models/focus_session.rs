@@ -71,4 +71,3 @@ pub struct FocusStats {
     /// Top distraction apps/sites
     pub top_distractions: Vec<DistractionEntry>,
 }
-

@@ -136,39 +136,42 @@ def _chat_structured_payload(prompt: str, output_model: type[BaseModel], *, feat
 def _strict_model_json_schema(output_model: type[BaseModel]) -> dict:
     """Generate a strict-compatible JSON Schema for OpenAI Structured Outputs.
 
-    OpenAI requires every object schema to include ``additionalProperties: false``
-    when ``strict`` mode is set. Pydantic's ``model_json_schema()`` does not add
-    that by default, so we inject it recursively for all ``type: object`` schemas.
+    OpenAI strict structured outputs require every object schema to disallow
+    additional properties and mark every declared property as required. Pydantic
+    emits defaults for optional/domain fields; strip those from provider schemas
+    and represent optional values through their nullable type instead.
     """
     schema = output_model.model_json_schema()
-    _enforce_additional_properties_false(schema)
+    _normalize_strict_schema(schema)
     return schema
 
 
-def _enforce_additional_properties_false(schema: dict) -> None:
-    """Recursively add ``additionalProperties: false`` to all object schemas."""
+def _normalize_strict_schema(schema: dict) -> None:
+    """Recursively normalize a Pydantic JSON schema for strict provider output."""
     if not isinstance(schema, dict):
         return
-    if schema.get('type') == 'object' and 'additionalProperties' not in schema:
+    schema.pop('default', None)
+    if schema.get('type') == 'object':
         schema['additionalProperties'] = False
+    properties = schema.get('properties')
+    if isinstance(properties, dict):
+        schema['required'] = list(properties.keys())
+        for prop_schema in properties.values():
+            _normalize_strict_schema(prop_schema)
     # Recurse into nested schemas under $defs, properties, items, etc.
     for key in ('$defs', 'definitions'):
         defs = schema.get(key)
         if isinstance(defs, dict):
             for def_schema in defs.values():
-                _enforce_additional_properties_false(def_schema)
-    properties = schema.get('properties')
-    if isinstance(properties, dict):
-        for prop_schema in properties.values():
-            _enforce_additional_properties_false(prop_schema)
+                _normalize_strict_schema(def_schema)
     items = schema.get('items')
     if isinstance(items, dict):
-        _enforce_additional_properties_false(items)
+        _normalize_strict_schema(items)
     for ref_key in ('anyOf', 'oneOf', 'allOf'):
         alternatives = schema.get(ref_key)
         if isinstance(alternatives, list):
             for alt_schema in alternatives:
-                _enforce_additional_properties_false(alt_schema)
+                _normalize_strict_schema(alt_schema)
 
 
 def _extract_choice_content(response_body: object) -> object:

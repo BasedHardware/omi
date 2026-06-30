@@ -17,6 +17,7 @@ from utils.retrieval.tools.calendar_tools import (
     update_google_calendar_event,
 )
 from utils.retrieval.tools.google_utils import refresh_google_token
+from utils.executors import run_blocking, db_executor
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,7 @@ async def get_overlapping_calendar_event(
     Returns:
         CalendarEventLink if a matching event is found, None otherwise
     """
-    integration = users_db.get_integration(uid, 'google_calendar')
+    integration = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
     if not integration or not integration.get('connected'):
         return None
 
@@ -150,7 +151,7 @@ async def write_conversation_link_to_calendar_event(
     Silently no-ops on any error — linking the conversation to the event is the primary
     action; failing to write the description link should not block the caller.
     """
-    integration = users_db.get_integration(uid, 'google_calendar')
+    integration = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
     if not integration or not integration.get('connected'):
         return
 

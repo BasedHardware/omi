@@ -45,15 +45,25 @@ class AuthState: ObservableObject {
   @Published var userEmail: String?
 
   private init() {
+    BundleEnvironment.loadIfNeeded()
+
     // Restore auth state from UserDefaults immediately on init (before UI renders)
     let savedSignedIn = UserDefaults.standard.bool(forKey: Self.kAuthIsSignedIn)
     let savedEmail = UserDefaults.standard.string(forKey: Self.kAuthUserEmail)
-    self.isSignedIn = savedSignedIn
-    self.userEmail = savedEmail
-    // Show loading splash while Firebase restores session (only if user was previously signed in)
-    self.isRestoringAuth = savedSignedIn
+
+    if DesktopLocalProfile.isEnabled {
+      // Harness-owned emulator auth replaces any persisted cloud session.
+      self.isSignedIn = false
+      self.userEmail = nil
+      self.isRestoringAuth = true
+    } else {
+      self.isSignedIn = savedSignedIn
+      self.userEmail = savedEmail
+      self.isRestoringAuth = savedSignedIn
+    }
     NSLog(
-      "OMI AuthState: Initialized with savedSignedIn=%@, email=%@, isRestoringAuth=%@",
+      "OMI AuthState: Initialized localProfile=%@ savedSignedIn=%@ email=%@ isRestoringAuth=%@",
+      DesktopLocalProfile.isEnabled ? "true" : "false",
       savedSignedIn ? "true" : "false", savedEmail ?? "nil", self.isRestoringAuth ? "true" : "false"
     )
   }
@@ -240,6 +250,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
     signal(SIGPIPE, SIG_IGN)
 
+    // Load bundle .env before AuthState/Firebase so local harness env is visible to getenv().
+    BundleEnvironment.loadIfNeeded()
+
     DesktopAutomationBridge.shared.startIfNeeded()
     LocalAgentAPIServer.shared.startIfNeeded()
 
@@ -364,7 +377,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ]
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            let value = exc.value ?? ""
+            let value = exc.value
             return transientNetworkCodes.contains { entry in
               exc.type == entry.domain
                 && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
@@ -401,7 +414,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            exc.type == "Omi_Computer.AuthError" && (exc.value ?? "").contains("notSignedIn")
+            exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
           })
         {
           return nil
@@ -411,14 +424,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     log("Sentry initialized (environment: \(isDev ? "development" : "production"))")
 
-    // Initialize Firebase
+    // Initialize Firebase (skipped for local harness — Firebase SDK configure can hang;
+    // local dev uses Auth emulator REST + stored tokens instead).
     let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist")
 
-    if let path = plistPath,
+    if DesktopLocalProfile.isEnabled {
+      log("Local harness: skipping Firebase SDK configure; bootstrapping Auth emulator via REST")
+      AuthState.shared.isRestoringAuth = true
+      Task { @MainActor in
+        await AuthService.shared.bootstrapLocalHarnessAuthIfNeeded()
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+        if AuthState.shared.isRestoringAuth {
+          log("Local harness auth watchdog: clearing stuck restoring_auth splash")
+          AuthState.shared.isRestoringAuth = false
+        }
+      }
+    } else if let path = plistPath,
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
       AuthService.shared.configure()
+    } else {
+      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
     }
 
     // Initialize analytics (PostHog)
@@ -1292,8 +1320,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
 
-    // Mark clean shutdown so next launch skips expensive DB integrity check
-    RewindDatabase.markCleanShutdown()
+    // Finalize the active Rewind MP4 chunk while the app is still alive.
+    // AVAssetWriter files are not readable until finishWriting writes the trailer.
+    let didFlushRewind = RewindShutdownFlush.flush(timeout: 5, context: "AppDelegate")
+
+    // Mark clean shutdown only after Rewind finalized its active MP4 chunk.
+    if didFlushRewind {
+      RewindDatabase.markCleanShutdown()
+    }
 
     // Report final resources before termination
     ResourceMonitor.shared.reportResourcesNow(context: "app_terminating")

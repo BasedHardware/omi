@@ -68,6 +68,7 @@ _vector_db_spec = importlib.util.spec_from_file_location('action_item_dedup_vect
 if _vector_db_spec is None or _vector_db_spec.loader is None:
     raise ImportError(f'Unable to load vector_db from {_vector_db_path}')
 vector_db = importlib.util.module_from_spec(_vector_db_spec)
+sys.modules[_vector_db_spec.name] = vector_db
 _vector_db_spec.loader.exec_module(vector_db)
 
 if previous_clients_stub is None:
@@ -206,3 +207,35 @@ class TestFindSimilarActionItems:
 
         assert [r['action_item_id'] for r in result] == ['good-1', 'good-2']
         assert all(r['action_item_id'] for r in result)
+
+
+class TestQueryConversationVectors:
+    def test_start_date_only_builds_one_sided_filter(self, monkeypatch):
+        fake_index, fake_embeddings = _setup_mocks(
+            monkeypatch,
+            query_response={'matches': [{'id': 'uid-abc-conv-1'}]},
+        )
+
+        result = vector_db.query_vectors('coffee', 'uid-abc', starts_at=100, ends_at=None, k=3)
+
+        assert result == ['conv-1']
+        fake_embeddings.embed_query.assert_called_once_with('coffee')
+        kwargs = fake_index.query.call_args.kwargs
+        assert kwargs['filter'] == {'uid': 'uid-abc', 'created_at': {'$gte': 100}}
+        assert kwargs['top_k'] == 3
+
+    def test_end_date_only_builds_one_sided_filter(self, monkeypatch):
+        fake_index, _ = _setup_mocks(monkeypatch, query_response={'matches': []})
+
+        assert vector_db.query_vectors('coffee', 'uid-abc', starts_at=None, ends_at=200) == []
+
+        kwargs = fake_index.query.call_args.kwargs
+        assert kwargs['filter'] == {'uid': 'uid-abc', 'created_at': {'$lte': 200}}
+
+    def test_invalid_date_filter_returns_empty_without_embedding(self, monkeypatch):
+        fake_index, fake_embeddings = _setup_mocks(monkeypatch, query_response={'matches': []})
+
+        assert vector_db.query_vectors('coffee', 'uid-abc', starts_at=300, ends_at=200) == []
+
+        fake_embeddings.embed_query.assert_not_called()
+        fake_index.query.assert_not_called()

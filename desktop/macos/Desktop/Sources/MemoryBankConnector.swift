@@ -8,7 +8,7 @@ import Foundation
 /// the way Codex's config.toml block is written.
 enum MemoryBankConnector {
   static let marker = "omi-memory-bank"
-  private static let mcpURL = "https://api.omi.me/v1/mcp/sse"
+  private static var mcpURL: String { MemoryExportDestination.mcpServerURL }
 
   enum ConnectError: LocalizedError {
     case notInstalled(String)
@@ -69,8 +69,7 @@ enum MemoryBankConnector {
     ## OMI memory (search FIRST)
     Omi is your memory bank. Before any task, **search Omi memory first** for context, then save durable new facts back to it.
     - MCP: \(mcpURL)  (Authorization: Bearer \(key))
-    - HTTP search: GET https://api.omi.me/v1/mcp/memories/search?query=<q>  (Bearer \(key))
-    - HTTP save:   POST https://api.omi.me/v1/mcp/memories  {"content":"…"}  (Bearer \(key))
+    - Config-file MCP clients should connect through `mcp-remote` with this endpoint and Authorization header.
     <!-- /\(marker) -->
     """
   }

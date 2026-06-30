@@ -131,8 +131,8 @@ final class FloatingBarGeometryTests: XCTestCase {
     }
 
     func testNotchOpenMenuRetentionIncludesRowsButNotBottomGlow() {
-        let windowSize = NSSize(width: 430, height: 34 + 96 + 24)
-        let visibleSurfaceHeight: CGFloat = 34 + 96
+        let windowSize = NSSize(width: 430, height: FloatingControlBarWindow.notchChromeHeight + 96 + 24)
+        let visibleSurfaceHeight: CGFloat = FloatingControlBarWindow.notchChromeHeight + 96
 
         XCTAssertTrue(FloatingControlBarGeometry.notchChromeActivationContainsLocal(
             localPoint: NSPoint(x: 215, y: windowSize.height - visibleSurfaceHeight + 6),
@@ -153,6 +153,58 @@ final class FloatingBarGeometryTests: XCTestCase {
             FloatingControlBarWindow.notchHoverMenuHeight(agentCount: 0),
             FloatingControlBarWindow.notchAgentListRowHeight + FloatingControlBarWindow.notchHoverMenuBottomMargin
         )
+    }
+
+    func testNotchChromeHeightUsesMeasuredAuxiliaryAreaHeight() {
+        let height = FloatingControlBarWindow.notchChromeHeight(
+            topSafeAreaInset: 30,
+            auxiliaryTopLeftArea: NSRect(x: 0, y: 860, width: 600, height: 48),
+            auxiliaryTopRightArea: NSRect(x: 840, y: 860, width: 600, height: 48)
+        )
+
+        XCTAssertEqual(height, 48)
+    }
+
+    func testNotchChromeHeightFallsBackToSafeAreaInset() {
+        let height = FloatingControlBarWindow.notchChromeHeight(
+            topSafeAreaInset: 44,
+            auxiliaryTopLeftArea: nil,
+            auxiliaryTopRightArea: nil
+        )
+
+        XCTAssertEqual(height, 44)
+    }
+
+    func testNotchChromeHeightKeepsDefaultForLegacyDisplays() {
+        let height = FloatingControlBarWindow.notchChromeHeight(
+            topSafeAreaInset: 0,
+            auxiliaryTopLeftArea: nil,
+            auxiliaryTopRightArea: nil
+        )
+
+        XCTAssertEqual(height, FloatingControlBarWindow.notchChromeHeight)
+    }
+
+    func testMeasuredNotchChromeHeightAcceptsFullVisibleChromeButNotGlow() {
+        let measuredChromeHeight = FloatingControlBarWindow.notchChromeHeight(
+            topSafeAreaInset: 48,
+            auxiliaryTopLeftArea: nil,
+            auxiliaryTopRightArea: nil
+        )
+        let windowSize = NSSize(width: 360, height: measuredChromeHeight + FloatingControlBarWindow.notchGlowOutsetBottom)
+
+        XCTAssertTrue(FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+            localPoint: NSPoint(x: 180, y: FloatingControlBarWindow.notchGlowOutsetBottom + 2),
+            windowSize: windowSize,
+            chromeHeight: measuredChromeHeight,
+            horizontalOutset: FloatingControlBarWindow.notchGlowOutsetX
+        ))
+        XCTAssertFalse(FloatingControlBarGeometry.notchChromeActivationContainsLocal(
+            localPoint: NSPoint(x: 180, y: FloatingControlBarWindow.notchGlowOutsetBottom - 2),
+            windowSize: windowSize,
+            chromeHeight: measuredChromeHeight,
+            horizontalOutset: FloatingControlBarWindow.notchGlowOutsetX
+        ))
     }
 
     func testNotchChromeActivationIgnoresHorizontalGlowOutsets() {

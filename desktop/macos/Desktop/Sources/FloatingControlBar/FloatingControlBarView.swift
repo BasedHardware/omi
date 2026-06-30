@@ -172,24 +172,25 @@ struct FloatingControlBarView: View {
                             progress: notchSwitcherProgress,
                             notchHiddenCenterWidth: notchHiddenCenterWidth,
                             notchSideWidth: notchSideWidth,
+                            notchChromeHeight: notchChromeHeight,
                             rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight,
                             onSelect: openAgentInChat
                         )
-                        .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                        .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)
                         .allowsHitTesting(notchSwitcherProgress > 0.6)
 
                         notchAgentLogoHitTarget
-                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight)
+                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)
                     }
 
                     notchOmiChatOverlayHitTarget
                         .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
-                        .offset(y: FloatingControlBarWindow.notchChromeHeight)
+                        .offset(y: notchChromeHeight)
                         .opacity(notchSwitcherProgress)
                         .allowsHitTesting(notchSwitcherProgress > 0.6)
                         .zIndex(2)
                 }
-                .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)
                 .onHover { setAgentSwitcherHovering($0) }
             }
         }
@@ -458,7 +459,7 @@ struct FloatingControlBarView: View {
     }
 
     private var notchChromeHeight: CGFloat {
-        FloatingControlBarWindow.notchChromeHeight
+        FloatingControlBarWindow.notchChromeHeight(for: window?.screen ?? NSScreen.main)
     }
 
     private var barChrome: some View {
@@ -737,7 +738,7 @@ struct FloatingControlBarView: View {
         guard state.usesNotchIsland else { return true }
         guard let window else { return false }
         let hitHeight = state.isAgentSwitcherExpanded
-            ? max(FloatingControlBarWindow.notchChromeHeight, window.frame.height - notchSurfaceBottomInset)
+            ? max(notchChromeHeight, window.frame.height - notchSurfaceBottomInset)
             : FloatingControlBarWindow.notchActivationHeight
         return FloatingControlBarGeometry.notchChromeActivationContains(
             mouseLocation: NSEvent.mouseLocation,
@@ -1068,7 +1069,7 @@ struct FloatingControlBarView: View {
                 }
             }
         )
-        .onChange(of: agentPills.pills.count) { _ in
+        .onChange(of: agentPills.pills.count) {
             // The agent-pills header budget depends on whether pills exist, so
             // recompute the input height when the pill list changes while the
             // input/chat view is open. Without this the budget goes stale and
@@ -1786,6 +1787,7 @@ private struct NotchAgentMorphField: View {
     let progress: CGFloat
     let notchHiddenCenterWidth: CGFloat
     let notchSideWidth: CGFloat
+    let notchChromeHeight: CGFloat
     let rowTopOffset: CGFloat
     let onSelect: (AgentPill) -> Void
     @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
@@ -1799,7 +1801,7 @@ private struct NotchAgentMorphField: View {
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let chromeHeight = FloatingControlBarWindow.notchChromeHeight
+            let chromeHeight = notchChromeHeight
             let rowHeight = FloatingControlBarWindow.notchAgentListRowHeight
             let rowSpacing = FloatingControlBarWindow.notchAgentListRowSpacing
             let verticalPadding = FloatingControlBarWindow.notchAgentListVerticalPadding

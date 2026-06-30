@@ -477,6 +477,12 @@ class ChatToolExecutor {
     default:
       return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes."
     }
+    if let directedProvider {
+      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
+      guard availability.isAvailable else {
+        return availability.toolError
+      }
+    }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
     let pill = AgentPillsManager.shared.spawnFromUserQuery(

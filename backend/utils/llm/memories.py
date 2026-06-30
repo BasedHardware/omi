@@ -1,7 +1,7 @@
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from database import users as users_db
 from models.memories import Memory, MemoryCategory
@@ -25,20 +25,62 @@ def _get_language_instruction(uid: str, language: Optional[str] = None) -> str:
     return 'Write all extracted memories/learnings in English.'
 
 
+class ExtractedMemory(BaseModel):
+    content: str = Field(description="The content of the memory")
+    category: MemoryCategory = Field(description="The category of the memory", default=MemoryCategory.interesting)
+    tags: List[str] = Field(description="The tags of the memory and learning", default=[])
+    headline: Optional[str] = Field(description="Short headline for notification preview (max 5 words)", default=None)
+
+    @field_validator('category', mode='before')
+    @classmethod
+    def set_category_default_on_error(cls, v: object) -> MemoryCategory | str:
+        if isinstance(v, MemoryCategory):
+            return v
+        if isinstance(v, str):
+            if v in {'interesting', 'system', 'manual', 'workflow'}:
+                return v
+            if v in LEGACY_TO_NEW_CATEGORY:
+                return LEGACY_TO_NEW_CATEGORY[v]
+        return MemoryCategory.interesting
+
+    def to_memory(self) -> Memory:
+        return Memory(
+            content=self.content,
+            category=self.category,
+            visibility='private',
+            tags=self.tags,
+            headline=self.headline,
+        )
+
+
 class Memories(BaseModel):
-    facts: List[Memory] = Field(
+    facts: List[ExtractedMemory] = Field(
         min_items=0,
         max_items=2,
         description="List of **new** memories. Maximum 2 per conversation.",
         default=[],
     )
 
+    def to_memories(self) -> List[Memory]:
+        return [fact.to_memory() for fact in self.facts]
+
+
+class HighRecallMemories(BaseModel):
+    facts: List[Memory] = Field(
+        min_items=0,
+        description="List of **new** memories. Include all memory-worthy facts from the conversation.",
+        default=[],
+    )
+
 
 class MemoriesByTexts(BaseModel):
-    facts: List[Memory] = Field(
+    facts: List[ExtractedMemory] = Field(
         description="List of **new** facts. If any",
         default=[],
     )
+
+    def to_memories(self) -> List[Memory]:
+        return [fact.to_memory() for fact in self.facts]
 
 
 # Map for converting legacy categories to new format
@@ -65,6 +107,7 @@ def new_memories_extractor(
     memories_str: Optional[str] = None,
     language: Optional[str] = None,
     content_date: Optional[str] = None,
+    high_recall: bool = False,
 ) -> List[Memory]:
     # print('new_memories_extractor', uid, 'segments', len(segments), user_name, 'len(memories_str)', len(memories_str))
     if user_name is None or memories_str is None:
@@ -82,9 +125,9 @@ def new_memories_extractor(
     language_instruction = _get_language_instruction(uid, language)
 
     try:
-        parser = PydanticOutputParser(pydantic_object=Memories)
+        parser = PydanticOutputParser(pydantic_object=HighRecallMemories if high_recall else Memories)
         chain = extract_memories_prompt | get_llm('memories') | parser
-        response: Memories = chain.invoke(
+        response: Memories | HighRecallMemories = chain.invoke(
             {
                 'user_name': user_name,
                 'conversation': content,
@@ -96,11 +139,12 @@ def new_memories_extractor(
         )
 
         # Ensure all new memories use the new category format
-        for memory in response.facts:
+        memories = response.to_memories()
+        for memory in memories:
             if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
                 memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
 
-        return response.facts
+        return memories
     except Exception as e:
         logger.error(f'Error extracting new facts: {e}')
         return []
@@ -127,7 +171,7 @@ def extract_memories_from_text(
     try:
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
         chain = extract_memories_text_content_prompt | get_llm('memories') | parser
-        response: Memories = chain.invoke(
+        response: MemoriesByTexts = chain.invoke(
             {
                 'user_name': user_name,
                 'text_content': text,
@@ -140,11 +184,12 @@ def extract_memories_from_text(
         )
 
         # Ensure all new memories use the new category format
-        for memory in response.facts:
+        memories = response.to_memories()
+        for memory in memories:
             if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
                 memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
 
-        return response.facts
+        return memories
     except Exception as e:
         logger.error(f'Error extracting facts from {text_source}: {e}')
         return []
@@ -264,11 +309,41 @@ class MemoryResolution(BaseModel):
     merged_content: Optional[str] = Field(
         default=None, description="If action is 'merge', the combined/refined memory content. Keep under 12 words."
     )
+    merged_predicate: Optional[str] = Field(
+        default=None, description="If action is 'merge', the canonical predicate for the merged fact."
+    )
+    merged_arguments: Optional[Dict[str, Any]] = Field(
+        default=None, description="If action is 'merge', argument-level slots for the merged fact."
+    )
+    merged_qualifiers: Optional[Dict[str, Any]] = Field(
+        default=None, description="If action is 'merge', qualifier-level slots for the merged fact."
+    )
     reasoning: str = Field(default="", description="Brief explanation of why this action was chosen")
 
 
 # Backwards-compatible action aliases (older callers/tests used these names).
 _LEGACY_ACTION_ALIASES = {'keep_new': 'add', 'keep_existing': 'skip'}
+
+
+class TypedMemoryResolution(BaseModel):
+    relationship: Literal['contradict', 'refine', 'extend', 'coexist', 'duplicate', 'review_conflict'] = Field(
+        description=(
+            "Typed relationship between the new fact and candidates. Use contradict only when an existing fact "
+            "is false/outdated, refine for argument-level narrowing, extend for unrelated additions, coexist for "
+            "related facts that remain true together, duplicate when already captured, and review_conflict when "
+            "a low-veracity new contradiction should not auto-merge."
+        )
+    )
+    candidate_id: Optional[str] = Field(default=None, description="Existing fact id this decision targets, if any")
+    supersedes: List[str] = Field(default_factory=list, description="Existing fact ids superseded by this decision")
+    arg_changes: Dict[str, Any] = Field(
+        default_factory=dict, description="Argument/content changes for refine_fact mutations"
+    )
+    valid_interval: Dict[str, Any] = Field(
+        default_factory=dict, description="Valid-time interval for supersession, distinct from commit time"
+    )
+    review_required: bool = Field(default=False, description="Whether this relationship must be routed to review")
+    reasoning: str = Field(default="", description="Brief evidence-weighted justification")
 
 
 def resolve_memory_conflict(
@@ -313,7 +388,7 @@ Choose ONE action:
 - "add": the new fact is genuinely new and does not change any existing fact. Store it.
 - "skip": the new fact is already captured by an existing fact (a duplicate / no new info). Do not store it.
 - "update": the new fact makes one or more existing facts OUTDATED or FALSE (the same attribute now has a different value). Store the new fact AND put the indices of every outdated fact in "supersedes".
-- "merge": the new fact and an existing one should become a SINGLE richer fact. Provide "merged_content" AND put the replaced indices in "supersedes".
+- "merge": the new fact and an existing one should become a SINGLE richer fact. Provide "merged_content" and, when possible, merged_predicate / merged_arguments / merged_qualifiers. Put the replaced indices in "supersedes".
 - "keep_both": the new fact and the existing ones are all still TRUE at the same time. Store the new fact, supersede nothing.
 
 CRITICAL — only put a fact in "supersedes" if it is now genuinely FALSE or OUTDATED. Two preferences that can both be true at once must NEVER supersede each other.{language_note}

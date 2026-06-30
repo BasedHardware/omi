@@ -82,6 +82,33 @@ for _modname, _attrs in [
         setattr(_mod, _attr, MagicMock())
     sys.modules[_modname] = _mod
 
+# Stub the memory routing imports used only by the delete/cascade path in
+# perform_merge_async. Loading the real modules would pull in the full memory
+# graph (Firestore models, rollout config, vector stores) for this pure merge
+# validation test.
+_fake_memory_service = types.ModuleType("utils.memory.memory_service")
+setattr(_fake_memory_service, "MemoryService", MagicMock())
+sys.modules["utils.memory.memory_service"] = _fake_memory_service
+
+_fake_memory_system = types.ModuleType("utils.memory.memory_system")
+
+
+class _MemorySystem:
+    LEGACY = "legacy"
+    CANONICAL = "canonical"
+
+
+setattr(_fake_memory_system, "MemorySystem", _MemorySystem)
+sys.modules["utils.memory.memory_system"] = _fake_memory_system
+
+_fake_canonical_activation = types.ModuleType("utils.memory.canonical_activation")
+setattr(_fake_canonical_activation, "canonical_write_enabled", MagicMock(return_value=False))
+sys.modules["utils.memory.canonical_activation"] = _fake_canonical_activation
+
+_fake_surface_routing = types.ModuleType("utils.memory.surface_routing")
+setattr(_fake_surface_routing, "pin_memory_system", MagicMock(return_value=_MemorySystem.LEGACY))
+sys.modules["utils.memory.surface_routing"] = _fake_surface_routing
+
 # Drop any earlier empty stub of utils.conversations.merge_conversations so
 # the real module file is re-loaded with our pre-installed stubs in place.
 for _modname in ["utils.conversations", "utils.conversations.merge_conversations"]:

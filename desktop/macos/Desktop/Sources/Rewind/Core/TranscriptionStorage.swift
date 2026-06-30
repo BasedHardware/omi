@@ -50,6 +50,7 @@ actor TranscriptionStorage {
         language: String = "en",
         timezone: String = "UTC",
         inputDeviceName: String? = nil,
+        clientConversationId: String? = nil,
         finalizationStrategy: TranscriptionFinalizationStrategy = .cloudReconcile
     ) async throws -> Int64 {
         let db = try await ensureInitialized()
@@ -61,6 +62,7 @@ actor TranscriptionStorage {
             timezone: timezone,
             inputDeviceName: inputDeviceName,
             status: .recording,
+            clientConversationId: clientConversationId,
             finalizationStrategy: finalizationStrategy
         )
 
@@ -487,7 +489,7 @@ actor TranscriptionStorage {
         guard !segmentIds.isEmpty else { return }
         let db = try await ensureInitialized()
 
-        try await db.write { database in
+        _ = try await db.write { database in
             try TranscriptionSegmentRecord
                 .filter(Column("sessionId") == sessionId)
                 .filter(segmentIds.contains(Column("segmentId")))
