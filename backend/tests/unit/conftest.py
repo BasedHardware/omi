@@ -5,6 +5,63 @@ import importlib.util
 import sys
 import types
 
+import pytest
+
+# ---------------------------------------------------------------------------
+# sys.modules isolation: prevent test files from poisoning each other
+# ---------------------------------------------------------------------------
+# Some test files stub top-level backend packages (utils, models, database,
+# routers) at module level during import.  Without isolation, pytest collects
+# modules alphabetically and every file imported AFTER a poisoning file sees
+# empty stubs instead of real packages.
+#
+# Fix: snapshot sys.modules before each Module collection and restore after.
+# Test functions still work because they hold direct object references, not
+# import-based lookups.  Files that need stubs during execution re-apply them
+# via module-scoped autouse fixtures.
+
+_module_snapshots = {}
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collectstart(collector):
+    if isinstance(collector, pytest.Module):
+        modules = {}
+        paths = {}
+        for k, v in list(sys.modules.items()):
+            modules[k] = v
+            p = getattr(v, '__path__', None)
+            if p is not None:
+                paths[k] = list(p)
+        _module_snapshots[collector.nodeid] = (modules, paths)
+
+
+@pytest.hookimpl(trylast=True)
+def pytest_collectreport(report):
+    entry = _module_snapshots.pop(report.nodeid, None)
+    if entry is None:
+        return
+    saved, saved_paths = entry
+    added = sorted([k for k in sys.modules if k not in saved], key=lambda k: -k.count('.'))
+    for k in added:
+        mod = sys.modules.pop(k, None)
+        if mod is not None and '.' in k:
+            parent_name, attr_name = k.rsplit('.', 1)
+            parent = saved.get(parent_name)
+            if parent is not None and getattr(parent, attr_name, None) is mod:
+                try:
+                    delattr(parent, attr_name)
+                except AttributeError:
+                    pass
+    for k, mod in saved.items():
+        cur = sys.modules.get(k)
+        if cur is not mod:
+            sys.modules[k] = mod
+    for k, orig_path in saved_paths.items():
+        mod = sys.modules.get(k)
+        if mod is not None and list(getattr(mod, '__path__', [])) != orig_path:
+            mod.__path__ = orig_path
+
 
 def _install_prometheus_client_stub():
     if 'prometheus_client' in sys.modules:
