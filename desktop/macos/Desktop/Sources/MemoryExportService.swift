@@ -685,7 +685,7 @@ actor MemoryExportService {
 
     ## Discovery
 
-    - Hosted MCP: list available tools before use. If `get_user_profile` exists, use it for a high-level summary. If it is absent, use `get_memories(limit=5)` and `search_memories`.
+    - Hosted MCP: list available tools before use. If `get_user_profile` exists, use it for a high-level summary. If it is absent or returns `profile: null`, use `get_memories(limit=5)` and `search_memories`.
     - Local Omi CLI: run `omi --json local status` and `omi --json local tools` before local work. If status fails, Omi Desktop, the local URL, or the local token is not ready.
 
     ## Routing
@@ -718,6 +718,7 @@ actor MemoryExportService {
 
     Hosted MCP endpoint: \(MemoryExportDestination.mcpServerURL)
     Authorization header: Bearer <omi_mcp_key>
+    Config-file MCP clients should prefer `mcp-remote` with the endpoint and Authorization header above.
 
     Local Omi Desktop CLI:
     - Install or update `omi-cli`.
@@ -761,7 +762,7 @@ actor MemoryExportService {
 
     4. Verify setup:
     - List hosted MCP tools.
-    - If hosted `get_user_profile` exists, call it. Otherwise call `get_memories` with `limit: 5`.
+    - If hosted `get_user_profile` exists, call it. If it is absent or returns `profile: null`, call `get_memories` with `limit: 5`.
     - Run `omi --json local status`.
     - Run `omi --json local tools`.
     - Use only hosted and local tools that were discovered.

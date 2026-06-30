@@ -1145,9 +1145,10 @@ enum CloudConnectorFormAutomation {
       return .addCustomConnectorModal
     }
 
+    let mcpServerURL = MemoryExportDestination.mcpServerURL.lowercased()
     let hasOmiConnector =
       text.contains("omi custom")
-      || (text.contains("omi") && text.contains("https://api.omiapi.com/v1/mcp/sse"))
+      || (text.contains("omi") && text.contains(mcpServerURL))
     guard hasOmiConnector else { return .other }
 
     if text.contains("you are not connected to omi yet")
