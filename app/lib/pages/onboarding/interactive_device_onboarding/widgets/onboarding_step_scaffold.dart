@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/providers/device_onboarding_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 // Persistent, self-animating progress indicator. Rendered once in the wrapper
@@ -100,16 +101,9 @@ class OnboardingContinueButton extends StatelessWidget {
     return SizedBox(
       width: double.infinity,
       height: 56,
-      child: ElevatedButton(
+      child: OmiButton(
+        label: label ?? context.l10n.deviceOnboardingContinue,
         onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-          elevation: 0,
-        ),
-        child: Text(label ?? context.l10n.deviceOnboardingContinue,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
       ),
     );
   }

@@ -10,6 +10,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
 
@@ -167,7 +168,8 @@ class PermissionsInterstitialPage extends StatelessWidget {
                           : SizedBox(
                               width: double.infinity,
                               height: 56,
-                              child: ElevatedButton(
+                              child: OmiButton(
+                                label: context.l10n.continueButton,
                                 onPressed: () async {
                                   provider.setLoading(true);
                                   if (Platform.isAndroid && !provider.hasBackgroundPermission) {
@@ -191,20 +193,6 @@ class PermissionsInterstitialPage extends StatelessWidget {
                                     _goHome(context);
                                   }
                                 },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.black,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                  elevation: 0,
-                                ),
-                                child: Text(
-                                  context.l10n.continueButton,
-                                  style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: 'Manrope',
-                                  ),
-                                ),
                               ),
                             ),
                     ],

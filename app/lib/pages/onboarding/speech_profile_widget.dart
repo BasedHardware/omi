@@ -10,6 +10,7 @@ import 'package:omi/pages/speech_profile/percentage_bar_progress.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -310,7 +311,8 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                               : SizedBox(
                                   width: double.infinity,
                                   height: 56,
-                                  child: ElevatedButton(
+                                  child: OmiButton(
+                                    label: context.l10n.getStarted,
                                     onPressed: () async {
                                       // Check if user has set primary language, if not, show dialog
                                       if (!context.read<HomeProvider>().hasSetPrimaryLanguage) {
@@ -344,20 +346,6 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                                       if (!mounted) return;
                                       _questionAnimationController.forward();
                                     },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.white,
-                                      foregroundColor: Colors.black,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                      elevation: 0,
-                                    ),
-                                    child: Text(
-                                      context.l10n.getStarted,
-                                      style: const TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w600,
-                                        fontFamily: 'Manrope',
-                                      ),
-                                    ),
                                   ),
                                 ),
                         ] else if (provider.profileCompleted) ...[
@@ -366,22 +354,9 @@ class _SpeechProfileWidgetState extends State<SpeechProfileWidget> with TickerPr
                           SizedBox(
                             width: double.infinity,
                             height: 56,
-                            child: ElevatedButton(
+                            child: OmiButton(
+                              label: context.l10n.allDone,
                               onPressed: () => widget.goNext(),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                                elevation: 0,
-                              ),
-                              child: Text(
-                                context.l10n.allDone,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
                             ),
                           ),
                         ] else if (provider.uploadingProfile) ...[
