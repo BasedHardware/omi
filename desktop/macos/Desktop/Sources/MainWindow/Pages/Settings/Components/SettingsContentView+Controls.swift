@@ -466,6 +466,49 @@ extension SettingsContentView {
               .foregroundColor(OmiColors.textTertiary)
           }
 
+          if let failure = updaterViewModel.lastUpdateFailure {
+            VStack(alignment: .leading, spacing: 10) {
+              HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                  .scaledFont(size: 14)
+                  .foregroundColor(OmiColors.warning)
+
+                VStack(alignment: .leading, spacing: 4) {
+                  Text("Update Needs Attention")
+                    .scaledFont(size: 13, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                  Text(failure.userMessage)
+                    .scaledFont(size: 12)
+                    .foregroundColor(OmiColors.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+              }
+
+              HStack(spacing: 8) {
+                if failure.isRecoverableLaunchLocation {
+                  Button("Open Applications") {
+                    NSWorkspace.shared.open(
+                      URL(fileURLWithPath: "/Applications", isDirectory: true))
+                  }
+                  .buttonStyle(.bordered)
+                }
+
+                Button("Download Latest") {
+                  openURLInDefaultBrowser(AppBuild.manualDownloadURL)
+                }
+                .buttonStyle(.bordered)
+
+                Button("Dismiss") {
+                  updaterViewModel.lastUpdateFailure = nil
+                }
+                .buttonStyle(.borderless)
+              }
+            }
+            .padding(12)
+            .background(OmiColors.backgroundTertiary)
+            .cornerRadius(8)
+          }
+
           Divider()
             .background(OmiColors.backgroundQuaternary)
 

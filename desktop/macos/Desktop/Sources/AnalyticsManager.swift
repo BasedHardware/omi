@@ -667,6 +667,10 @@ class AnalyticsManager {
     PostHogManager.shared.updateInstalled(version: version)
   }
 
+  func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {
+    PostHogManager.shared.updateCheckFailed(diagnostics: diagnostics)
+  }
+
   // MARK: - Notification Events
 
   func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
