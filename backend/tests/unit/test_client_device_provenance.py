@@ -47,7 +47,10 @@ def test_record_client_device_upserts_and_throttles(mock_lock):
     mock_user = MagicMock()
     mock_user.collection.return_value = mock_collection
 
-    with patch.object(users_db, "db") as mock_db:
+    mock_db = MagicMock()
+    original_db = users_db.__dict__.get("db")
+    users_db.db = mock_db
+    try:
         mock_db.collection.return_value.document.return_value = mock_user
         users_db.record_client_device(
             "uid-1",
@@ -55,6 +58,8 @@ def test_record_client_device_upserts_and_throttles(mock_lock):
             platform="macos",
             app_version="1.0.0",
         )
+    finally:
+        users_db.db = original_db
 
     mock_lock.assert_called_once_with("uid-1", "macos_a1b2c3d4")
     mock_doc.set.assert_called_once()
