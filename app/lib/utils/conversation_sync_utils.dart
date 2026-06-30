@@ -39,9 +39,8 @@ class ConversationSyncUtils {
     SyncedConversationType type,
   ) {
     final validConversations = conversations.where((conversation) => conversation != null).toList();
-    final completedConversations = validConversations
-        .where((conversation) => conversation!.status == ConversationStatus.completed)
-        .toList();
+    final completedConversations =
+        validConversations.where((conversation) => conversation!.status == ConversationStatus.completed).toList();
     return completedConversations.map((conversation) => _createPointer(conversation!, type)).toList();
   }
 

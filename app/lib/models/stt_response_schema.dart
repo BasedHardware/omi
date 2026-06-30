@@ -134,18 +134,18 @@ class SttResponseSchema {
   }
 
   Map<String, dynamic> toJson() => {
-    'segments_path': segmentsPath,
-    'segments_text_field': segmentsTextField,
-    'segments_start_field': segmentsStartField,
-    'segments_end_field': segmentsEndField,
-    'segments_speaker_field': segmentsSpeakerField,
-    'segments_speaker_id_field': segmentsSpeakerIdField,
-    'segments_is_user_field': segmentsIsUserField,
-    'segments_person_id_field': segmentsPersonIdField,
-    'segments_translations_field': segmentsTranslationsField,
-    'text_path': textPath,
-    'default_segment_duration': defaultSegmentDuration,
-  };
+        'segments_path': segmentsPath,
+        'segments_text_field': segmentsTextField,
+        'segments_start_field': segmentsStartField,
+        'segments_end_field': segmentsEndField,
+        'segments_speaker_field': segmentsSpeakerField,
+        'segments_speaker_id_field': segmentsSpeakerIdField,
+        'segments_is_user_field': segmentsIsUserField,
+        'segments_person_id_field': segmentsPersonIdField,
+        'segments_translations_field': segmentsTranslationsField,
+        'text_path': textPath,
+        'default_segment_duration': defaultSegmentDuration,
+      };
 }
 
 class JsonPathNavigator {

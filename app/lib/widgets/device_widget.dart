@@ -62,10 +62,10 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
                         Assets.images.blob.path,
                         height: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
                         width: (MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier,
-                        cacheHeight: ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier)
-                            .round(),
-                        cacheWidth: ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier)
-                            .round(),
+                        cacheHeight:
+                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
+                        cacheWidth:
+                            ((MediaQuery.sizeOf(context).height <= 700 ? 360 : 390) * widget.sizeMultiplier).round(),
                       ),
                     ),
                   )

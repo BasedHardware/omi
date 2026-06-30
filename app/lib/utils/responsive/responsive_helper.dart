@@ -170,60 +170,60 @@ class ResponsiveHelper {
 
   // Premium typography scale
   TextStyle get displayLarge => responsiveTextStyle(
-    baseFontSize: 56,
-    minFontSize: 40,
-    maxFontSize: 64,
-    fontWeight: FontWeight.w800,
-    color: textPrimary,
-    height: 1.0,
-    letterSpacing: -0.5,
-  );
+        baseFontSize: 56,
+        minFontSize: 40,
+        maxFontSize: 64,
+        fontWeight: FontWeight.w800,
+        color: textPrimary,
+        height: 1.0,
+        letterSpacing: -0.5,
+      );
 
   TextStyle get displayMedium => responsiveTextStyle(
-    baseFontSize: 44,
-    minFontSize: 32,
-    maxFontSize: 52,
-    fontWeight: FontWeight.w700,
-    color: textPrimary,
-    height: 1.1,
-    letterSpacing: -0.25,
-  );
+        baseFontSize: 44,
+        minFontSize: 32,
+        maxFontSize: 52,
+        fontWeight: FontWeight.w700,
+        color: textPrimary,
+        height: 1.1,
+        letterSpacing: -0.25,
+      );
 
   TextStyle get headlineLarge => responsiveTextStyle(
-    baseFontSize: 36,
-    minFontSize: 28,
-    maxFontSize: 42,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-    height: 1.2,
-  );
+        baseFontSize: 36,
+        minFontSize: 28,
+        maxFontSize: 42,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+        height: 1.2,
+      );
 
   TextStyle get headlineMedium => responsiveTextStyle(
-    baseFontSize: 28,
-    minFontSize: 22,
-    maxFontSize: 32,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-    height: 1.25,
-  );
+        baseFontSize: 28,
+        minFontSize: 22,
+        maxFontSize: 32,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+        height: 1.25,
+      );
 
   TextStyle get titleLarge => responsiveTextStyle(
-    baseFontSize: 22,
-    minFontSize: 18,
-    maxFontSize: 26,
-    fontWeight: FontWeight.w500,
-    color: textPrimary,
-    height: 1.3,
-  );
+        baseFontSize: 22,
+        minFontSize: 18,
+        maxFontSize: 26,
+        fontWeight: FontWeight.w500,
+        color: textPrimary,
+        height: 1.3,
+      );
 
   TextStyle get titleMedium => responsiveTextStyle(
-    baseFontSize: 18,
-    minFontSize: 16,
-    maxFontSize: 20,
-    fontWeight: FontWeight.w500,
-    color: textPrimary,
-    height: 1.4,
-  );
+        baseFontSize: 18,
+        minFontSize: 16,
+        maxFontSize: 20,
+        fontWeight: FontWeight.w500,
+        color: textPrimary,
+        height: 1.4,
+      );
 
   TextStyle get bodyLarge =>
       responsiveTextStyle(baseFontSize: 16, minFontSize: 14, maxFontSize: 18, color: textSecondary, height: 1.5);
@@ -235,69 +235,69 @@ class ResponsiveHelper {
       responsiveTextStyle(baseFontSize: 12, minFontSize: 11, maxFontSize: 14, color: textTertiary, height: 1.4);
 
   TextStyle get labelLarge => responsiveTextStyle(
-    baseFontSize: 16,
-    minFontSize: 14,
-    maxFontSize: 18,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-  );
+        baseFontSize: 16,
+        minFontSize: 14,
+        maxFontSize: 18,
+        fontWeight: FontWeight.w600,
+        color: textPrimary,
+      );
 
   TextStyle get labelMedium => responsiveTextStyle(
-    baseFontSize: 14,
-    minFontSize: 12,
-    maxFontSize: 16,
-    fontWeight: FontWeight.w500,
-    color: textSecondary,
-  );
+        baseFontSize: 14,
+        minFontSize: 12,
+        maxFontSize: 16,
+        fontWeight: FontWeight.w500,
+        color: textSecondary,
+      );
 
   // Premium gradient definitions
   LinearGradient get purpleGradient =>
       const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [purplePrimary, purpleAccent]);
 
   LinearGradient get purpleLightGradient => const LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [purpleSecondary, purpleLight],
-  );
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [purpleSecondary, purpleLight],
+      );
 
   LinearGradient get backgroundGradient => const LinearGradient(
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-    colors: [backgroundPrimary, backgroundSecondary, backgroundPrimary],
-  );
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [backgroundPrimary, backgroundSecondary, backgroundPrimary],
+      );
 
   // Premium shadow definitions
   List<BoxShadow> get softShadow => [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.1),
-      blurRadius: spacing(baseSpacing: 12, minSpacing: 8, maxSpacing: 16),
-      offset: Offset(0, spacing(baseSpacing: 4, minSpacing: 2, maxSpacing: 6)),
-    ),
-  ];
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.1),
+          blurRadius: spacing(baseSpacing: 12, minSpacing: 8, maxSpacing: 16),
+          offset: Offset(0, spacing(baseSpacing: 4, minSpacing: 2, maxSpacing: 6)),
+        ),
+      ];
 
   List<BoxShadow> get mediumShadow => [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.15),
-      blurRadius: spacing(baseSpacing: 20, minSpacing: 15, maxSpacing: 25),
-      offset: Offset(0, spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 10)),
-    ),
-  ];
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.15),
+          blurRadius: spacing(baseSpacing: 20, minSpacing: 15, maxSpacing: 25),
+          offset: Offset(0, spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 10)),
+        ),
+      ];
 
   List<BoxShadow> get strongShadow => [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.25),
-      blurRadius: spacing(baseSpacing: 30, minSpacing: 20, maxSpacing: 40),
-      offset: Offset(0, spacing(baseSpacing: 12, minSpacing: 8, maxSpacing: 16)),
-    ),
-  ];
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.25),
+          blurRadius: spacing(baseSpacing: 30, minSpacing: 20, maxSpacing: 40),
+          offset: Offset(0, spacing(baseSpacing: 12, minSpacing: 8, maxSpacing: 16)),
+        ),
+      ];
 
   List<BoxShadow> get glowShadow => [
-    BoxShadow(
-      color: purplePrimary.withValues(alpha: 0.3),
-      blurRadius: spacing(baseSpacing: 20, minSpacing: 15, maxSpacing: 25),
-      offset: Offset(0, spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 10)),
-    ),
-  ];
+        BoxShadow(
+          color: purplePrimary.withValues(alpha: 0.3),
+          blurRadius: spacing(baseSpacing: 20, minSpacing: 15, maxSpacing: 25),
+          offset: Offset(0, spacing(baseSpacing: 8, minSpacing: 6, maxSpacing: 10)),
+        ),
+      ];
 
   // Utility methods
   bool get hasVerticalOverflow => _screenHeight < 700;
