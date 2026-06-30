@@ -1,0 +1,10 @@
+# Single-process-safe subset: backend test files verified to not pollute sys.modules
+# when run together in one pytest process. One path per line, relative to backend/.
+#
+# This list GROWS monotonically as files are migrated off the dirty allowlist
+# (backend/tests/.module_stub_legacy_allowlist). The hermeticity test
+# (tests/unit/test_sys_modules_hermeticity.py) runs exactly these files in one
+# subprocess and asserts no backend-owned module is left as a fake/stub afterwards.
+#
+# Terminal state: this list contains the entire unit suite; the dirty allowlist is
+# empty and deleted. See .coordination/test-isolation/PLAN.md §4 and WORKSTREAM.md.
