@@ -31,7 +31,7 @@ _C_EXT_PREFIXES = frozenset(
     }
 )
 
-_UNSAFE_TOPS = frozenset({'google', 'grpc', 'proto', 'firebase_admin'})
+_UNSAFE_TOPS = frozenset({'google', 'grpc', 'proto'})
 
 _ISOLATE_PREFIXES = frozenset({'database', 'dependencies', 'models', 'routers', 'utils'})
 
@@ -132,20 +132,16 @@ def _auto_reinstall_module_stubs(request):
             non_backend_pre[k] = v
 
     if stubs is not None:
-        from unittest.mock import MagicMock, Mock
-
         for k in sorted(stubs, key=lambda x: x.count('.')):
-            v = stubs[k]
-            if _is_c_extension(k):
+            top = k.split('.', 1)[0]
+            if top in _UNSAFE_TOPS:
                 continue
-            if k.split('.', 1)[0] in _UNSAFE_TOPS and not isinstance(v, (MagicMock, Mock)):
-                continue
-            sys.modules[k] = v
+            sys.modules[k] = stubs[k]
             if '.' in k:
                 parent_name, attr_name = k.rsplit('.', 1)
                 parent = sys.modules.get(parent_name)
                 if parent is not None:
-                    setattr(parent, attr_name, v)
+                    setattr(parent, attr_name, stubs[k])
 
     yield
 
