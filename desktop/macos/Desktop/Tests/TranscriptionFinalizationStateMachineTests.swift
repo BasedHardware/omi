@@ -32,8 +32,10 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     }
 
     func testFinalizationStrategyReasonAndTimestampsPersistAcrossStorageReopen() async throws {
+        let clientConversationId = UUID().uuidString.lowercased()
         let sessionId = try await TranscriptionStorage.shared.startSession(
             source: "desktop",
+            clientConversationId: clientConversationId,
             finalizationStrategy: .localSegments
         )
 
@@ -48,6 +50,7 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertEqual(uploading.status, .uploading)
         XCTAssertEqual(uploading.finalizationStrategy, .localSegments)
         XCTAssertEqual(uploading.finalizationReason, .finishAndContinue)
+        XCTAssertEqual(uploading.clientConversationId, clientConversationId)
         XCTAssertNotNil(uploading.finishedAt)
         XCTAssertNotNil(uploading.finalizationStartedAt)
         XCTAssertNil(uploading.finalizationCompletedAt)
@@ -65,11 +68,38 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         let completed = try XCTUnwrap(completedSession)
         XCTAssertEqual(completed.status, .completed)
         XCTAssertEqual(completed.backendId, "backend-finalized")
+        XCTAssertEqual(completed.clientConversationId, clientConversationId)
         XCTAssertTrue(completed.backendSynced)
         XCTAssertEqual(completed.finalizationStrategy, .localSegments)
         XCTAssertEqual(completed.finalizationReason, .finishAndContinue)
         XCTAssertNotNil(completed.finalizationStartedAt)
         XCTAssertNotNil(completed.finalizationCompletedAt)
+    }
+
+    func testLocalUploadFallbackReusesPersistedClientConversationId() {
+        let clientConversationId = UUID().uuidString.lowercased()
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: "desktop",
+            clientConversationId: clientConversationId
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.localClientConversationId(session: session, sessionId: 42),
+            clientConversationId
+        )
+    }
+
+    func testLocalUploadFallbackUsesStableLegacyKeyWhenClientConversationIdIsMissing() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000.123),
+            source: "desktop"
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.localClientConversationId(session: session, sessionId: 42),
+            "macos-local-42-1700000000123"
+        )
     }
 
     func testFinishSessionDefaultsStrategyAndStoresReason() async throws {

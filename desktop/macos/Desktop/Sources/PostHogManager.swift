@@ -234,10 +234,27 @@ extension PostHogManager {
         ])
     }
 
-    func recordingError(error: String) {
-        track("Phone Mic Recording Error", properties: [
-            "error": error
-        ])
+    func recordingError(
+        error: String,
+        reason: String? = nil,
+        source: String? = nil,
+        stage: String? = nil,
+        retryCount: Int? = nil
+    ) {
+        var properties: [String: Any] = ["error": error]
+        if let reason {
+            properties["recording_error_reason"] = reason
+        }
+        if let source {
+            properties["recording_source"] = source
+        }
+        if let stage {
+            properties["recording_stage"] = stage
+        }
+        if let retryCount {
+            properties["retry_count"] = retryCount
+        }
+        track("Phone Mic Recording Error", properties: properties)
     }
 
     // MARK: - Permission Events

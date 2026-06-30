@@ -29,6 +29,7 @@ extension AppState {
 
     // Use provided source or fall back to current setting
     let effectiveSource = source ?? audioSource
+    var recordingConversationSource = currentConversationSource
 
     // For BLE device, check if device is connected
     if effectiveSource == .bleDevice {
@@ -59,6 +60,8 @@ extension AppState {
           || UserDefaults.standard.bool(forKey: "forceCloudSTT")
           || forceCloudSTTForSession)  // set after an on-device Parakeet model-load failure
       useLocalSTT = effectiveSource != .bleDevice && !forceCloudSTT && Self.isAppleSilicon
+      let clientConversationId = UUID().uuidString.lowercased()
+
       if useLocalSTT {
         log("Transcription: ON-DEVICE Parakeet mode (OMI_LOCAL_STT) — no cloud STT")
         // Segments are delivered on the main actor by the service, so no Task hop here.
@@ -79,7 +82,10 @@ extension AppState {
         localSystemService = system
       } else {
         // Always streaming via Python backend /v4/listen
-        transcriptionService = try TranscriptionService(language: effectiveLanguage)
+        transcriptionService = try TranscriptionService(
+          language: effectiveLanguage,
+          clientConversationId: clientConversationId
+        )
       }
 
       // Set conversation source based on audio source
@@ -90,6 +96,7 @@ extension AppState {
         currentConversationSource = .desktop
         recordingInputDeviceName = AudioCaptureService.getCurrentMicrophoneName()
       }
+      recordingConversationSource = currentConversationSource
 
       // Initialize audio services based on source
       if effectiveSource == .microphone {
@@ -142,7 +149,12 @@ extension AppState {
         onError: { [weak self] error in
           Task { @MainActor in
             logError("Transcription error", error: error)
-            AnalyticsManager.shared.recordingError(error: error.localizedDescription)
+            AnalyticsManager.shared.recordingError(
+              error: error.localizedDescription,
+              reason: "cloud_stt_error",
+              source: self?.currentConversationSource.rawValue,
+              stage: "streaming"
+            )
             // Cloud WS gave up (reconnects exhausted) → try to keep recording on-device
             // instead of dropping it. Falls through to stopTranscription if not possible.
             self?.handleCloudSTTReconnectFailure()
@@ -190,6 +202,7 @@ extension AppState {
             language: effectiveLanguage,
             timezone: TimeZone.current.identifier,
             inputDeviceName: recordingInputDeviceName,
+            clientConversationId: useLocalSTT ? nil : clientConversationId,
             finalizationStrategy: useLocalSTT ? .localSegments : .cloudReconcile
           )
           await MainActor.run {
@@ -269,7 +282,12 @@ extension AppState {
       log("Transcription: Starting...")
 
     } catch {
-      AnalyticsManager.shared.recordingError(error: error.localizedDescription)
+      AnalyticsManager.shared.recordingError(
+        error: error.localizedDescription,
+        reason: "start_transcription_failed",
+        source: recordingConversationSource.rawValue,
+        stage: "startup"
+      )
       showAlert(title: "Transcription Error", message: error.localizedDescription)
     }
   }
@@ -725,7 +743,12 @@ extension AppState {
     sttFallbackInProgress = true
     forceCloudSTTForSession = true
     log("Transcription: Parakeet model load failed — falling back to cloud STT")
-    AnalyticsManager.shared.recordingError(error: "parakeet_model_load_failed_fallback_cloud")
+    AnalyticsManager.shared.recordingError(
+      error: "parakeet_model_load_failed_fallback_cloud",
+      reason: "local_stt_model_load_failed",
+      source: currentConversationSource.rawValue,
+      stage: "fallback"
+    )
     let source = audioSource
     stopTranscription()
     // Restart in cloud mode once stop has settled (isTranscribing flips false inside the stop's
@@ -757,7 +780,12 @@ extension AppState {
     sttFallbackInProgress = true
     forceLocalSTTForSession = true
     log("Transcription: cloud STT unreachable (reconnects exhausted) — falling back to on-device Parakeet")
-    AnalyticsManager.shared.recordingError(error: "cloud_stt_reconnect_failed_fallback_local")
+    AnalyticsManager.shared.recordingError(
+      error: "cloud_stt_reconnect_failed_fallback_local",
+      reason: "cloud_stt_reconnect_failed",
+      source: currentConversationSource.rawValue,
+      stage: "fallback"
+    )
     let source = audioSource
     stopTranscription()
     Task { @MainActor [weak self] in
@@ -892,6 +920,7 @@ extension AppState {
     }
 
     // Reconnect transcription service for the next conversation
+    let nextClientConversationId = useLocalSTT ? nil : UUID().uuidString.lowercased()
     do {
       let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
       if useLocalSTT {
@@ -909,7 +938,10 @@ extension AppState {
         localSystemService = system
         log("Transcription: Re-armed on-device Parakeet (mic + system) for next conversation")
       } else {
-        transcriptionService = try TranscriptionService(language: effectiveLanguage)
+        transcriptionService = try TranscriptionService(
+          language: effectiveLanguage,
+          clientConversationId: nextClientConversationId
+        )
         transcriptionService?.start(
           onSegments: { [weak self] segments in
             Task { @MainActor in
@@ -949,6 +981,7 @@ extension AppState {
           language: lang,
           timezone: TimeZone.current.identifier,
           inputDeviceName: recordingInputDeviceName,
+          clientConversationId: nextClientConversationId,
           finalizationStrategy: useLocalSTT ? .localSegments : .cloudReconcile
         )
         await MainActor.run {

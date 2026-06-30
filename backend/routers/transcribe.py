@@ -44,13 +44,15 @@ from utils.speaker_assignment import (
     update_speaker_assignment_maps,
     should_update_speaker_to_person_map,
 )
-import database.conversations as conversations_db
-import database.calendar_meetings as calendar_db
-import database.users as user_db
 from utils.byok import get_byok_keys, extract_byok_from_websocket, set_byok_keys
-from database.users import get_user_transcription_preferences
-from database import redis_db
-from database.redis_db import check_credits_invalidation
+from utils.transcribe_store import (
+    calendar_db,
+    check_credits_invalidation,
+    conversations_db,
+    get_user_transcription_preferences,
+    redis_db,
+    user_db,
+)
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from utils.conversations.factory import deserialize_conversation
@@ -198,6 +200,18 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds — no-data timeout on client WebSocket re
 BG_DRAIN_TIMEOUT = 30.0  # seconds — grace period for bg tasks to drain after disconnect
 
 
+def _normalize_client_conversation_id(client_conversation_id: Optional[str]) -> Optional[str]:
+    if not client_conversation_id:
+        return None
+    value = client_conversation_id.strip()
+    if not value:
+        return None
+    try:
+        return str(uuid.UUID(value))
+    except ValueError:
+        return None
+
+
 # ---- Multi-channel support ----
 
 
@@ -284,12 +298,14 @@ async def _stream_handler(
     create_speakers: bool = True,
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
+    client_conversation_id: Optional[str] = None,
 ):
     """
     Core WebSocket streaming handler. Assumes websocket is already accepted and uid is validated.
     This function is called by both _listen (for app clients) and web_listen_handler (for web clients).
     """
     session_id = str(uuid.uuid4())
+    client_conversation_id = _normalize_client_conversation_id(client_conversation_id)
 
     if not uid or len(uid) <= 0:
         await websocket.close(code=1008, reason="Bad uid")
@@ -313,7 +329,7 @@ async def _stream_handler(
         return
 
     logger.info(
-        f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode}'
+        f'_stream_handler {uid} {session_id} {language} {sample_rate} {codec} {include_speech_profile} {stt_service} {conversation_timeout} custom_stt={custom_stt_mode} onboarding={onboarding_mode} client_conversation_id={bool(client_conversation_id)}'
     )
 
     use_custom_stt = custom_stt_mode == CustomSttMode.enabled
@@ -872,7 +888,20 @@ async def _stream_handler(
                 logger.error(f"Invalid conversation source '{source}', defaulting to 'omi' {uid} {session_id}")
                 conversation_source = ConversationSource.omi
 
-        new_conversation_id = str(uuid.uuid4())
+        new_conversation_id = client_conversation_id or str(uuid.uuid4())
+        if client_conversation_id:
+            existing_conversation = conversations_db.get_conversation(uid, client_conversation_id)
+            if existing_conversation:
+                if existing_conversation.get('status') == ConversationStatus.in_progress:
+                    current_conversation_id = client_conversation_id
+                    redis_db.set_in_progress_conversation_id(uid, current_conversation_id)
+                    _send_message_event(ConversationSessionEvent(conversation_id=current_conversation_id))
+                    logger.info(f"Resuming client-scoped conversation {current_conversation_id} {uid} {session_id}")
+                    return
+                logger.warning(
+                    f"Client conversation id already exists with status {existing_conversation.get('status')}; generating server id instead {uid} {session_id}"
+                )
+                new_conversation_id = str(uuid.uuid4())
         stub_conversation = Conversation(
             id=new_conversation_id,
             created_at=datetime.now(timezone.utc),
@@ -887,7 +916,10 @@ async def _stream_handler(
             private_cloud_sync_enabled=private_cloud_sync_enabled,
             call_id=call_id if is_multi_channel else None,
         )
-        conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
+        if client_conversation_id and new_conversation_id == client_conversation_id:
+            conversations_db.create_conversation_if_absent(uid, stub_conversation.dict())
+        else:
+            conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
 
         detected_meeting_id = None
@@ -2531,6 +2563,7 @@ async def _listen(
     create_speakers: bool = True,
     vad_gate_override: Optional[str] = None,
     call_id: Optional[str] = None,
+    client_conversation_id: Optional[str] = None,
 ):
     """
     WebSocket handler for app clients. Accepts the websocket connection and delegates to _stream_handler.
@@ -2559,6 +2592,7 @@ async def _listen(
         create_speakers=create_speakers,
         vad_gate_override=vad_gate_override,
         call_id=call_id,
+        client_conversation_id=client_conversation_id,
     )
     logger.info(f"_listen ended {uid}")
 
@@ -2581,6 +2615,7 @@ async def listen_handler(
     create_speakers: bool = True,
     vad_gate: str = '',
     call_id: Optional[str] = None,
+    client_conversation_id: Optional[str] = None,
 ):
     custom_stt_mode = CustomSttMode.enabled if custom_stt == 'enabled' else CustomSttMode.disabled
     onboarding_mode = onboarding == 'enabled'
@@ -2603,6 +2638,7 @@ async def listen_handler(
         create_speakers=create_speakers,
         vad_gate_override=vad_gate_override,
         call_id=call_id,
+        client_conversation_id=client_conversation_id,
     )
 
 
@@ -2619,6 +2655,7 @@ async def web_listen_handler(
     custom_stt: str = 'disabled',
     onboarding: str = 'disabled',
     call_id: Optional[str] = None,
+    client_conversation_id: Optional[str] = None,
 ):
     """
     WebSocket endpoint for web browser clients using first-message authentication.
@@ -2680,5 +2717,6 @@ async def web_listen_handler(
         custom_stt_mode=custom_stt_mode,
         onboarding_mode=onboarding_mode,
         call_id=call_id,
+        client_conversation_id=client_conversation_id,
     )
     logger.info(f"web_listen_handler ended {uid}")

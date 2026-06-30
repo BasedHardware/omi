@@ -141,8 +141,20 @@ class AnalyticsManager {
     PostHogManager.shared.transcriptionStopped(wordCount: wordCount)
   }
 
-  func recordingError(error: String) {
-    PostHogManager.shared.recordingError(error: error)
+  func recordingError(
+    error: String,
+    reason: String? = nil,
+    source: String? = nil,
+    stage: String? = nil,
+    retryCount: Int? = nil
+  ) {
+    PostHogManager.shared.recordingError(
+      error: error,
+      reason: reason,
+      source: source,
+      stage: stage,
+      retryCount: retryCount
+    )
   }
 
   // MARK: - Permission Events
