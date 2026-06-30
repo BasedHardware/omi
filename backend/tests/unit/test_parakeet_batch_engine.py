@@ -754,6 +754,160 @@ class TestLazyVramInit:
             loop.close()
 
 
+class TestBatchesInflight:
+
+    def test_full_batch_uses_second_inflight_slot(self):
+        """When a full batch is processing (inflight=1), a second full batch
+        should dispatch immediately using the second inflight slot."""
+        batch_sizes = []
+        gate = asyncio.Event()
+
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            batch_sizes.append(payload["batch_size"])
+
+            async def resolve():
+                if len(batch_sizes) == 1:
+                    await gate.wait()
+                results = [{"text": f"ok_{i}"} for i in range(payload["batch_size"])]
+                if not fut.done():
+                    fut.set_result(results)
+                item.inference_seconds = 0.01
+
+            asyncio.ensure_future(resolve())
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    futs = [asyncio.ensure_future(engine.submit(f"/tmp/a{i}.wav")) for i in range(4)]
+                    await asyncio.sleep(0.02)
+                    assert len(batch_sizes) >= 1, "First batch should have dispatched"
+                    more_futs = [asyncio.ensure_future(engine.submit(f"/tmp/b{i}.wav")) for i in range(4)]
+                    await asyncio.sleep(0.02)
+                    assert len(batch_sizes) >= 2, (
+                        f"Second full batch should dispatch while first is inflight "
+                        f"(got {len(batch_sizes)} dispatches, batches={batch_sizes})"
+                    )
+                    gate.set()
+                    all_futs = futs + more_futs
+                    results = await asyncio.wait_for(asyncio.gather(*all_futs, return_exceptions=True), timeout=10)
+                    successes = [r for r in results if not isinstance(r, Exception)]
+                    assert len(successes) == 8
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_batches_inflight_resets_after_gpu_error(self):
+        """After a GPU error, _batches_inflight must return to 0 so the
+        flush timer can dispatch future batches."""
+        call_count = {"n": 0}
+
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                loop.call_soon(fut.set_exception, RuntimeError("GPU exploded"))
+            else:
+                results = [{"text": "ok"} for _ in range(payload["batch_size"])]
+                loop.call_soon(fut.set_result, results)
+            item.inference_seconds = 0.01
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    with pytest.raises(RuntimeError, match="GPU exploded"):
+                        await asyncio.wait_for(engine.submit("/tmp/fail.wav"), timeout=5)
+                    assert (
+                        engine._batches_inflight == 0
+                    ), f"_batches_inflight must be 0 after error, got {engine._batches_inflight}"
+                    result = await asyncio.wait_for(engine.submit("/tmp/ok.wav"), timeout=5)
+                    assert result["text"] == "ok"
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_timer_flush_blocked_during_inflight(self):
+        """When _batches_inflight > 0, the 2ms flush timer must NOT create
+        new flush tasks — requests accumulate instead."""
+        batch_sizes = []
+
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            batch_sizes.append(payload["batch_size"])
+
+            async def delayed_resolve():
+                await asyncio.sleep(0.1)
+                results = [{"text": f"ok_{i}"} for i in range(payload["batch_size"])]
+                if not fut.done():
+                    fut.set_result(results)
+                item.inference_seconds = 0.1
+
+            asyncio.ensure_future(delayed_resolve())
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=32, max_wait_seconds=0.002, max_inflight=1, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    futs = []
+                    futs.append(asyncio.ensure_future(engine.submit("/tmp/first.wav")))
+                    await asyncio.sleep(0.01)
+                    for i in range(5):
+                        futs.append(asyncio.ensure_future(engine.submit(f"/tmp/later_{i}.wav")))
+                        await asyncio.sleep(0.005)
+                    results = await asyncio.wait_for(asyncio.gather(*futs, return_exceptions=True), timeout=10)
+                    successes = [r for r in results if not isinstance(r, Exception)]
+                    assert len(successes) == 6
+                    batch1_count = sum(1 for b in batch_sizes if b == 1)
+                    assert batch1_count <= 1, (
+                        f"At most 1 batch=1 expected (got {batch1_count}, batches={batch_sizes}). "
+                        f"Timer should not flush while batches_inflight > 0."
+                    )
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+
 class TestUnlinkSafe:
 
     def test_unlink_existing(self):
