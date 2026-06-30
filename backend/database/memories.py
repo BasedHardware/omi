@@ -604,7 +604,13 @@ def invalidate_memory(
         ledger_mutation = memory_ledger.retract_fact(memory_id, reason='invalidated')
 
     def write_projection(transaction):
-        transaction.update(memory_ref, update_payload)
+        try:
+            transaction.update(memory_ref, update_payload)
+        except FirestoreNotFound:
+            # Missing legacy projection docs are already invalidated from the caller's
+            # perspective. Keep the operation idempotent; the ledger mutation still
+            # records the invalidation for canonical state.
+            return
 
     return memory_ledger.append_commit(
         uid,
