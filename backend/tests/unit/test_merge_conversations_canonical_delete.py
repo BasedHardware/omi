@@ -71,8 +71,9 @@ def test_delete_conversation_related_data_routes_canonical_to_retract():
         "utils.conversations.merge_conversations.pin_memory_system",
         return_value=MemorySystem.CANONICAL,
     ):
-        with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
-            _delete_conversation_and_related_data("uid-canonical", "conv-1")
+        with patch("utils.conversations.merge_conversations.canonical_write_enabled", return_value=True):
+            with patch("utils.conversations.merge_conversations.MemoryService", return_value=service):
+                _delete_conversation_and_related_data("uid-canonical", "conv-1")
 
     service.retract_conversation_memories.assert_called_once_with("uid-canonical", "conv-1")
     legacy_delete.assert_not_called()
