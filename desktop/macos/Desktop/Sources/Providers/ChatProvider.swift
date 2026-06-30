@@ -2116,7 +2116,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             .map { index, message in
                 [
                     "snippetId": "recent_message_\(index + 1)",
-                    "sourceKind": "main_chat",
+                    "sourceKind": "chat_surface",
                     "operation": message.sender == .user ? "recent_user_message" : "recent_assistant_message",
                     "provenance": ["sessionKey": sessionKey, "messageId": message.id],
                     "content": String(message.text.prefix(2_000)),
@@ -2128,7 +2128,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var snippets = recentMessages
         snippets.append([
             "snippetId": "current_user_message",
-            "sourceKind": "main_chat",
+            "sourceKind": "chat_surface",
             "operation": "current_user_message",
             "provenance": ["sessionKey": sessionKey],
             "content": userMessage,

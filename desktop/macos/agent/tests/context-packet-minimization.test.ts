@@ -90,6 +90,57 @@ describe("desktop context packet builder", () => {
     ).toThrow(/screenshot image bytes/);
   });
 
+  it("rejects caller-labeled allowed sensitive screen snippets", () => {
+    expect(() =>
+      buildDesktopContextPacket({
+        ownerId: "owner-1",
+        surfaceKind: "main_chat",
+        objective: "Inspect screen metadata",
+        retentionClass: "ephemeral",
+        ttlMs: 60_000,
+        snippets: [
+          {
+            snippetId: "screen",
+            sourceKind: "screen_current",
+            operation: "get_work_context",
+            provenance: { app: "Browser" },
+            content: "Visible page title",
+            redactedContent: "Visible page title",
+            sensitivityTier: "sensitive",
+            policyDecision: "allowed",
+          },
+        ],
+      }),
+    ).toThrow(/requires dispatch approval/);
+  });
+
+  it("allows sensitive screen snippets only after dispatch approval", () => {
+    const result = buildDesktopContextPacket({
+      ownerId: "owner-1",
+      surfaceKind: "main_chat",
+      objective: "Inspect screen metadata",
+      retentionClass: "ephemeral",
+      ttlMs: 60_000,
+      snippets: [
+        {
+          snippetId: "screen",
+          sourceKind: "screen_current",
+          operation: "get_work_context",
+          provenance: { app: "Browser" },
+          content: "Visible page title",
+          redactedContent: "Visible page title",
+          sensitivityTier: "sensitive",
+          policyDecision: "dispatch_created",
+        },
+      ],
+    });
+
+    expect(result.accessLogs[0]).toMatchObject({
+      sourceKind: "screen_current",
+      policyDecision: "dispatch_created",
+    });
+  });
+
   it("uses deterministic context hashes for equivalent packet content", () => {
     const base = {
       ownerId: "owner-1",

@@ -29,7 +29,6 @@ describe("omi tool manifest", () => {
       "route_desktop_intent",
       "evaluate_desktop_tool_policy",
       "create_desktop_dispatch",
-      "resolve_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
       "update_agent_artifact_lifecycle",
@@ -52,6 +51,7 @@ describe("omi tool manifest", () => {
       "update_action_item",
       "capture_screen",
     ]);
+    expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
   });
 
   it("keeps directed provider routing on the canonical spawn_agent schema", () => {

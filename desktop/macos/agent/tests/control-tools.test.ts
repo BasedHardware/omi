@@ -157,7 +157,7 @@ describe("agent control tools", () => {
       resourceRef: "screenshot:42",
     }));
 
-    const resolved = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "resolve_desktop_dispatch", {
+    const resolved = parseToolResult(await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
       dispatchId: created.dispatch.dispatchId,
       status: "resolved",
       resolution: { decision: "allow" },
@@ -186,6 +186,128 @@ describe("agent control tools", () => {
     });
     expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(1);
     expect(store.getRow("SELECT COUNT(*) AS count FROM events WHERE type = ?", ["approval.resolved"]).count).toBe(1);
+    store.close();
+  });
+
+  it("rejects desktop dispatch grants that do not match the approval request", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+    });
+    const dispatch = kernel.createDesktopDispatch({
+      ownerId: "owner",
+      kind: "approval",
+      priority: 100,
+      title: "Approve screenshot",
+      decisionPrompt: "Allow screenshot image bytes?",
+      sourceSessionId: session.sessionId,
+      capability: "desktop.context.screenshot_image",
+      operation: "get_screenshot",
+      resourceRef: "screenshot:42",
+    });
+
+    const resolved = parseToolResult(await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+      dispatchId: dispatch.dispatchId,
+      status: "resolved",
+      resolution: { decision: "allow" },
+      grant: {
+        capability: "desktop.context.local_read",
+        operation: "get_screenshot",
+        resourcePattern: "screenshot:42",
+        effect: "allow",
+        expiresAtMs: Date.now() + 60_000,
+      },
+    }));
+
+    expect(resolved).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(String(resolved.error.message)).toContain("capability must match");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
+    store.close();
+  });
+
+  it("rejects grant creation for non-approval desktop dispatches", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+    });
+    const dispatch = kernel.createDesktopDispatch({
+      ownerId: "owner",
+      kind: "routing_choice",
+      priority: 10,
+      title: "Choose route",
+      decisionPrompt: "Resume or fork?",
+      sourceSessionId: session.sessionId,
+      capability: "desktop.agent_control.manage",
+      operation: "route_desktop_intent",
+      resourceRef: "route:1",
+    });
+
+    const resolved = parseToolResult(await handleAgentControlToolCall(trustedOwnerContext(kernel), "resolve_desktop_dispatch", {
+      dispatchId: dispatch.dispatchId,
+      status: "resolved",
+      resolution: { decision: "allow" },
+      grant: {
+        capability: "desktop.agent_control.manage",
+        operation: "route_desktop_intent",
+        resourcePattern: "route:1",
+        effect: "allow",
+        expiresAtMs: Date.now() + 60_000,
+      },
+    }));
+
+    expect(resolved).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(String(resolved.error.message)).toContain("Only approval dispatches");
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
+    store.close();
+  });
+
+  it("denies desktop dispatch resolution from untrusted tool callers", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+    });
+    const dispatch = kernel.createDesktopDispatch({
+      ownerId: "owner",
+      kind: "approval",
+      priority: 100,
+      title: "Approve screenshot",
+      decisionPrompt: "Allow screenshot image bytes?",
+      sourceSessionId: session.sessionId,
+      capability: "desktop.context.screenshot_image",
+      operation: "get_screenshot",
+      resourceRef: "screenshot:42",
+    });
+
+    const resolved = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "resolve_desktop_dispatch", {
+      dispatchId: dispatch.dispatchId,
+      status: "resolved",
+      resolution: { decision: "allow" },
+      grant: {
+        capability: "desktop.context.screenshot_image",
+        operation: "get_screenshot",
+        resourcePattern: "screenshot:42",
+        effect: "allow",
+        expiresAtMs: Date.now() + 60_000,
+      },
+    }));
+
+    expect(resolved).toMatchObject({
+      ok: false,
+      error: { code: "policy_denied" },
+    });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
     store.close();
   });
 
@@ -1574,6 +1696,10 @@ function newDatabasePath(): string {
 
 function ownerContext(kernel: AgentControlToolContext["kernel"]): AgentControlToolContext {
   return { kernel, getOwnerId: () => "owner" };
+}
+
+function trustedOwnerContext(kernel: AgentControlToolContext["kernel"]): AgentControlToolContext {
+  return { kernel, trustedUserControl: true, getOwnerId: () => "owner" };
 }
 
 function startControlRelay(context: AgentControlToolContext): Promise<string> {

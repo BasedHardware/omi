@@ -1088,7 +1088,6 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     route_desktop_intent: ["surfaceKind", "utterance"],
     evaluate_desktop_tool_policy: ["selectedBundles"],
     create_desktop_dispatch: ["decisionPrompt", "kind", "priority", "title"],
-    resolve_desktop_dispatch: ["dispatchId", "status"],
     cancel_agent_run: ["runId"],
     inspect_agent_artifacts: [],
     update_agent_artifact_lifecycle: ["artifactId", "state"],
@@ -1167,15 +1166,19 @@ test("OMI_TOOLS: delegate_agent and spawn_agent describe separate session surfac
 });
 
 test("OMI_TOOLS: agent control tools match canonical capability manifest", () => {
+  const advertisedControlManifest = agentControlCapabilityManifest.filter((manifestTool) =>
+    OMI_TOOLS.some((tool) => tool.name === manifestTool.name)
+  );
   const controlTools = OMI_TOOLS.filter((tool) =>
     agentControlCapabilityManifest.some((manifestTool) => manifestTool.name === tool.name)
   );
   assert.deepEqual(
     controlTools.map((tool) => tool.name),
-    agentControlCapabilityManifest.map((tool) => tool.name),
+    advertisedControlManifest.map((tool) => tool.name),
   );
+  assert.ok(!OMI_TOOLS.some((tool) => tool.name === "resolve_desktop_dispatch"));
 
-  for (const manifestTool of agentControlCapabilityManifest) {
+  for (const manifestTool of advertisedControlManifest) {
     const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
     assert.ok(tool, `${manifestTool.name} missing from OMI_TOOLS`);
     assert.equal(tool!.label, manifestTool.label, `${manifestTool.name} label drifted`);
@@ -1298,7 +1301,8 @@ test("registerOmiTools: snapshot write failure logs and still registers tools", 
 
 test("OMI_TOOLS: agent control timeout classes match canonical manifest", () => {
   for (const manifestTool of agentControlCapabilityManifest) {
-    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name)!;
+    const tool = OMI_TOOLS.find((candidate) => candidate.name === manifestTool.name);
+    if (!tool) continue;
     const timeoutMs = manifestTool.timeoutClass === "long" ? OMI_LONG_CONTROL_TOOL_TIMEOUT_MS : OMI_TOOL_TIMEOUT_MS;
     assert.equal((tool as any).__omiTimeoutMsForTest, timeoutMs, `${tool.name} timeout class drifted`);
   }

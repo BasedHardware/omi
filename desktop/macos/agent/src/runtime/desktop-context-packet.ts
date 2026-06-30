@@ -81,6 +81,22 @@ function assertNoScreenshotBytes(snippet: DesktopContextSnippetInput): void {
   }
 }
 
+function requiresExplicitPolicy(snippet: DesktopContextSnippetInput): boolean {
+  const tier = snippet.sensitivityTier.toLowerCase();
+  if (snippet.sourceKind === "screenshot_image") return true;
+  if (snippet.sourceKind === "rewind_timeline") return true;
+  if (snippet.sourceKind === "screen_current" && tier !== "low") return true;
+  return tier === "sensitive";
+}
+
+function policyDecisionForSnippet(snippet: DesktopContextSnippetInput): DesktopContextPolicyDecision {
+  if (!requiresExplicitPolicy(snippet)) return "allowed";
+  if (snippet.policyDecision === "dispatch_created") return "dispatch_created";
+  throw new Error(
+    `Context snippet ${snippet.snippetId} requires dispatch approval before sensitive source ${snippet.sourceKind} can be included.`,
+  );
+}
+
 function packetIdFor(input: DesktopContextPacketBuildInput, createdAtMs: number): string {
   if (input.packetId) return input.packetId;
   const hash = createHash("sha256")
@@ -96,7 +112,10 @@ export function buildDesktopContextPacket(input: DesktopContextPacketBuildInput)
   }
   const nowMs = input.nowMs ?? Date.now();
   const selected = input.snippets.filter((snippet) => snippet.selected !== false);
-  for (const snippet of selected) assertNoScreenshotBytes(snippet);
+  for (const snippet of selected) {
+    assertNoScreenshotBytes(snippet);
+    policyDecisionForSnippet(snippet);
+  }
 
   const snippets = selected.map((snippet) => ({
     snippetId: snippet.snippetId,
@@ -142,7 +161,7 @@ export function buildDesktopContextPacket(input: DesktopContextPacketBuildInput)
     operation: snippet.operation,
     scopeJson: JSON.stringify(snippet.provenance),
     sensitivityTier: snippet.sensitivityTier,
-    policyDecision: snippet.policyDecision ?? "allowed",
+    policyDecision: policyDecisionForSnippet(snippet),
     redactionSummaryJson: JSON.stringify({
       previewOnly: true,
       contentIncluded: snippet.content !== undefined,

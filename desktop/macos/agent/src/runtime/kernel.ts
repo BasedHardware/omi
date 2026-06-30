@@ -998,6 +998,25 @@ export class AgentRuntimeKernel {
       const dispatch = this.store.resolveDesktopDispatch(dispatchId, input);
       let grant: AgentGrant | null = null;
       if (input.status === "resolved" && input.grant && input.grant.effect === "allow") {
+        const resolution = parseJsonObject(input.resolutionJson);
+        if (dispatch.kind !== "approval") {
+          throw new Error("Only approval dispatches can mint grants");
+        }
+        if (resolution.decision !== "allow") {
+          throw new Error("Resolved dispatch grants require an allow resolution");
+        }
+        if (!dispatch.capability || input.grant.capability !== dispatch.capability) {
+          throw new Error("Resolved dispatch grant capability must match the approval request");
+        }
+        if (!dispatch.operation || input.grant.operation !== dispatch.operation) {
+          throw new Error("Resolved dispatch grant operation must match the approval request");
+        }
+        if (!dispatch.resourceRef || input.grant.resourcePattern !== dispatch.resourceRef) {
+          throw new Error("Resolved dispatch grant resource must match the approval request");
+        }
+        if (!Number.isFinite(input.grant.expiresAtMs)) {
+          throw new Error("Resolved dispatch grants require a finite expiry");
+        }
         const sessionId = input.grant.sessionId ?? dispatch.sourceSessionId;
         if (!sessionId) {
           throw new Error("Resolved dispatch grants require a session scope");

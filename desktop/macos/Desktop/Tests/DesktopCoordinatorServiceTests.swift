@@ -29,6 +29,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("buildMainChatContextPacketPrompt("))
     XCTAssertTrue(source.contains("build_desktop_context_packet"))
     XCTAssertTrue(source.contains("DesktopContextPacket"))
+    XCTAssertTrue(source.contains("\"sourceKind\": \"chat_surface\""))
     XCTAssertTrue(source.contains("prompt: promptForBridge"))
     XCTAssertTrue(source.contains("\"screenshotImages\": \"dispatch_required\""))
   }

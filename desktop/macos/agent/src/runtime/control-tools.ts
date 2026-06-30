@@ -266,6 +266,7 @@ export const agentControlToolDefinitions: AgentControlToolDefinition[] = agentCo
 
 export interface AgentControlToolContext {
   kernel: AgentRuntimeKernel;
+  trustedUserControl?: boolean;
   getOwnerId?: () => string;
   buildMcpServers?: (
     mode: "ask" | "act",
@@ -395,6 +396,15 @@ export async function handleAgentControlToolCall(
 ): Promise<string> {
   if (!isAgentControlToolName(name)) {
     return JSON.stringify({ ok: false, error: { code: "unknown_control_tool", message: `Unknown control tool: ${name}` } });
+  }
+  if (name === "resolve_desktop_dispatch" && !context.trustedUserControl) {
+    return JSON.stringify({
+      ok: false,
+      error: {
+        code: "policy_denied",
+        message: "resolve_desktop_dispatch requires trusted user control",
+      },
+    });
   }
 
   try {
