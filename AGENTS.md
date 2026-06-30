@@ -14,7 +14,8 @@ These rules apply to every AI agent working in this repository. This file is the
 
 ## Setup
 
-- **Worktree setup (required before first commit/push):** `make setup` — installs the repo Git hooks using linked-worktree-safe paths.
+- **Pre-commit hook (required before first commit):** `ln -s -f ../../scripts/pre-commit "$(git rev-parse --git-path hooks)/pre-commit"` — auto-formats staged files on commit.
+- **Pre-push hook (required before first push):** `ln -s -f ../../scripts/pre-push "$(git rev-parse --git-path hooks)/pre-push"` — blocks push if changed files have formatting violations.
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`).
 
 ## Safety Rules
@@ -234,7 +235,7 @@ Rules:
 
 ## Formatting
 
-**Run `make setup` before your first commit** — it installs pre-commit and pre-push hooks that auto-format staged files. Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`.
+**Install both hooks before your first commit** (see Setup). Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`.
 
 The **pre-commit hook** auto-formats staged files on commit (Dart, Python, ARB/JSON, web/Prettier, C/C++, Rust). The **pre-push hook** checks formatting of all files changed vs `main` and blocks the push if any are dirty.
 
@@ -251,7 +252,7 @@ Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format man
 
 ## Git
 
-- **Before your first commit**, run `make setup` to install Git hooks (see Setup). Commits without hooks bypass formatting and let violations land on `main`.
+- **Before your first commit**, install both Git hooks (see Setup). Commits without hooks bypass formatting and let violations land on `main`.
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 - Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
