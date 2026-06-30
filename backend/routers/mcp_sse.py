@@ -49,6 +49,7 @@ from utils.mcp_memories import (
     parse_mcp_int,
     parse_optional_mcp_bool,
 )
+from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -61,29 +62,8 @@ MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
-MCP_SCOPES_SUPPORTED = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
-
-MCP_LEGACY_API_KEY_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
+MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
+MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -119,6 +99,8 @@ class MCPAuthContext:
     uid: str
     auth_type: str
     scopes: list[str]
+    app_id: Optional[str] = None
+    key_id: Optional[str] = None
     client_id: Optional[str] = None
     resource: Optional[str] = None
     grant_id: Optional[str] = None
@@ -134,10 +116,16 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_id = mcp_api_key_db.get_user_id_by_api_key(token)
-        if not user_id:
+        auth_context = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        if not auth_context or not auth_context.get("user_id"):
             return None
-        return MCPAuthContext(uid=user_id, auth_type="legacy_mcp_key", scopes=MCP_LEGACY_API_KEY_SCOPES)
+        return MCPAuthContext(
+            uid=auth_context["user_id"],
+            auth_type="legacy_mcp_key",
+            scopes=auth_context.get("scopes") or MCP_LEGACY_API_KEY_SCOPES,
+            app_id=auth_context.get("app_id"),
+            key_id=auth_context.get("key_id"),
+        )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:

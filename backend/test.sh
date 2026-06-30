@@ -6,6 +6,10 @@ cd "$ROOT_DIR"
 
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 
+pytest() {
+  python3 -m pytest "$@"
+}
+
 if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
   if [[ ! -f "$BACKEND_UNIT_TEST_FILE_LIST" ]]; then
     echo "BACKEND_UNIT_TEST_FILE_LIST does not exist: $BACKEND_UNIT_TEST_FILE_LIST" >&2
@@ -63,6 +67,7 @@ pytest tests/unit/test_mcp_search_conversations_poison.py -v
 pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
+pytest tests/unit/test_mcp_api_key_full_access.py -v
 pytest tests/unit/test_mcp_oauth.py -v
 pytest tests/unit/test_mcp_action_item_writes.py -v
 pytest tests/unit/test_mcp_conversations_poison.py -v
