@@ -252,7 +252,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("activeControlRequests[requestKey]"))
     XCTAssertTrue(source.contains("completeControlRequest(message)"))
     XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestKey)"))
-    XCTAssertTrue(source.contains("controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))"))
+    XCTAssertTrue(source.contains("failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)"))
+    XCTAssertTrue(source.contains(#"["failed", "timed_out", "orphaned"].contains(terminalStatus)"#))
   }
 
   func testDirectControlToolRequestsUseDedicatedSignedInOwnerEnvelope() throws {

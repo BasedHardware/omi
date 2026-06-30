@@ -124,6 +124,7 @@ extension ChatErrorState {
   ///   - `.encodingError`        (internal error, retry won't help)
   ///   - `.quotaExceeded`        (paywall — kept as separate sheet)
   ///   - `.agentError`           (varied; existing banner already classifies)
+  ///   - `.agentRuntimeFailure`  (already carries runtime-specific copy)
   ///   - `.requestAlreadyActive` (the existing banner explains the active turn)
   static func from(_ bridgeError: BridgeError) -> ChatErrorState? {
     switch bridgeError {
@@ -141,7 +142,7 @@ extension ChatErrorState {
       return .bridgeUnavailable(reason: .unknown)
     case .authMissing:
       return .authRequired
-    case .encodingError, .quotaExceeded, .agentError, .requestAlreadyActive:
+    case .encodingError, .quotaExceeded, .agentError, .agentRuntimeFailure, .requestAlreadyActive:
       return nil
     }
   }
