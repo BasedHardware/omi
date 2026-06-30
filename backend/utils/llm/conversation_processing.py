@@ -18,16 +18,15 @@ from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction, StructuredExtraction
 from .clients import get_llm, parser
 from utils.byok import has_byok_keys
-from utils.executors import llm_executor, submit_with_context
 from utils.llm.gateway_client import invoke_chat_structured_gateway, record_chat_extraction_gateway_result
 from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
-from utils.metrics import LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS
 import logging
 
 logger = logging.getLogger(__name__)
 CONVERSATION_STRUCTURE_SHADOW_FEATURE = 'conversation_structure.extract.shadow'
 CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED'
 CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE'
+LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = None
 
 # =============================================
 #            FOLDER ASSIGNMENT
@@ -72,6 +71,11 @@ def _coerce_structured(response: Structured | StructuredExtraction) -> Structure
 
 def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
     try:
+        global LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS
+        if LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS is None:
+            from utils.metrics import LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS as comparison_counter
+
+            LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = comparison_counter
         LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS.labels(feature=feature, field=field, outcome=outcome).inc()
     except Exception:
         pass
@@ -229,9 +233,15 @@ def _run_conversation_structure_shadow(prompt: str, legacy_response: Structured)
     _record_conversation_structure_shadow_comparison(gateway_response, legacy_response)
 
 
+def _submit_llm_background(fn, *args):
+    from utils.executors import llm_executor, submit_with_context
+
+    return submit_with_context(llm_executor, fn, *args)
+
+
 def _submit_conversation_structure_shadow(prompt: str, legacy_response: Structured) -> None:
     try:
-        future = submit_with_context(llm_executor, _run_conversation_structure_shadow, prompt, legacy_response)
+        future = _submit_llm_background(_run_conversation_structure_shadow, prompt, legacy_response)
     except Exception:
         record_chat_extraction_gateway_result(
             feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,

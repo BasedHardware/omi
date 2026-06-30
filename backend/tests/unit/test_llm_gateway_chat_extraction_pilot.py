@@ -516,8 +516,8 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
         def add_done_callback(self, callback):
             callback(self)
 
-    def immediate_submit(_executor, fn, *args, **kwargs):
-        fn(*args, **kwargs)
+    def immediate_submit(fn, *args):
+        fn(*args)
         return ImmediateFuture()
 
     monkeypatch.setenv(conversation_processing.CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV, 'true')
@@ -527,7 +527,7 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
     monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
     monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
-    monkeypatch.setattr(conversation_processing, 'submit_with_context', immediate_submit)
+    monkeypatch.setattr(conversation_processing, '_submit_llm_background', immediate_submit)
     monkeypatch.setattr(conversation_processing, 'LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS', counter)
 
     result = conversation_processing.get_transcript_structure(
@@ -591,7 +591,7 @@ def test_conversation_structure_shadow_disabled_skips_gateway(monkeypatch):
     monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
     monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
-    monkeypatch.setattr(conversation_processing, 'submit_with_context', fake_submit)
+    monkeypatch.setattr(conversation_processing, '_submit_llm_background', fake_submit)
     monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
 
     result = conversation_processing.get_transcript_structure(
