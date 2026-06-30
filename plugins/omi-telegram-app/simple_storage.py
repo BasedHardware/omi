@@ -11,9 +11,12 @@ Two stores:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
 if os.path.exists("/app/data"):
@@ -172,8 +175,42 @@ def save_pending_setup(token: str, payload: dict) -> None:
     _save(PENDING_FILE, pending_setups)
 
 
+PENDING_SETUP_TTL_SECONDS = 3600  # 1 hour — setup links expire after this
+
+
 def pop_pending_setup(token: str) -> Optional[dict]:
-    """Return and remove the setup payload for this token. One-shot."""
+    """Return and remove the setup payload for this token. One-shot.
+
+    Also purges stale entries older than PENDING_SETUP_TTL_SECONDS.
+    These one-shot records contain platform credentials and Omi
+    developer API keys, so abandoned/leaked setup links should not
+    remain redeemable indefinitely. Identified by maintainer review.
+    """
+    # Purge stale entries first
+    now = datetime.utcnow()
+    stale_tokens = []
+    for t, payload in pending_setups.items():
+        created = payload.get("created_at")
+        if created:
+            try:
+                created_dt = datetime.fromisoformat(created)
+                if (now - created_dt).total_seconds() > PENDING_SETUP_TTL_SECONDS:
+                    stale_tokens.append(t)
+            except (TypeError, ValueError):
+                pass
+    for t in stale_tokens:
+        pending_setups.pop(t, None)
+        logger.info(f"purged stale setup token {t[:8]}... (expired)")
+    if stale_tokens and pending_setups:
+        _save(PENDING_FILE, pending_setups)
+    elif stale_tokens:
+        try:
+            if os.path.exists(PENDING_FILE):
+                os.remove(PENDING_FILE)
+        except Exception:
+            pass
+
+    # Pop the requested token
     payload = pending_setups.pop(token, None)
     if pending_setups:
         _save(PENDING_FILE, pending_setups)
