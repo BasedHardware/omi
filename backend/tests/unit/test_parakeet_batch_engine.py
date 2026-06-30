@@ -947,20 +947,21 @@ class TestBatchesInflight:
             loop.close()
 
     def test_batches_inflight_resets_on_empty_pending(self):
-        """When _flush_batch finds no pending requests, _batches_inflight
-        must still decrement properly."""
+        """Directly calling _flush_batch with empty _pending must still
+        decrement _batches_inflight (exercises the early return branch)."""
         gpu = _make_mock_gpu_worker()
-        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0)
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=1.0, max_inflight=2, vram_safety_factor=0)
         loop = asyncio.new_event_loop()
         try:
 
             async def run():
                 await engine.start()
                 try:
-                    result = await asyncio.wait_for(engine.submit("/tmp/ok.wav"), timeout=5)
-                    assert result["text"] == "ok:/tmp/ok.wav"
-                    await asyncio.sleep(0.01)
                     assert engine._batches_inflight == 0
+                    await engine._flush_batch()
+                    assert (
+                        engine._batches_inflight == 0
+                    ), f"_batches_inflight must be 0 after empty-pending flush, got {engine._batches_inflight}"
                 finally:
                     await engine.stop()
 
