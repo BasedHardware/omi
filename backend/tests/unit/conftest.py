@@ -1,26 +1,50 @@
 """Shared unit-test fallbacks for optional import-time dependencies."""
 
+import asyncio
 import importlib.util
+import os
 import sys
 import types
+from contextlib import contextmanager
 
 import pytest
 
 # ---------------------------------------------------------------------------
-# sys.modules isolation (temporary quarantine — see issue #8661)
+# sys.modules isolation — see issue #8661
 # ---------------------------------------------------------------------------
-# Some test files stub top-level backend packages at module level during
-# import.  Without isolation, pytest collects alphabetically and every file
-# imported AFTER a poisoning file sees empty stubs instead of real packages.
-#
-# Proper fix: move module-level stubbing into fixtures/context managers.
-# Until then, snapshot protected package names before each Module collection
-# and restore after.  Files that need stubs during execution re-apply them
-# via module-scoped autouse fixtures (use ``stub_modules`` helper below).
-#
-# New test files MUST NOT rely on this hook — use fixtures instead.
-
 _module_snapshots = {}
+_module_stubs = {}
+
+_C_EXT_PREFIXES = frozenset(
+    {
+        'google.protobuf',
+        'google._upb',
+        'grpc',
+        '_cffi_backend',
+        '_brotli',
+        'zstandard',
+        'charset_normalizer',
+        'xxhash',
+        'ujson',
+        'numpy',
+        'yaml',
+    }
+)
+
+_UNSAFE_TOPS = frozenset({'google', 'grpc', 'proto', 'firebase_admin'})
+
+_ISOLATE_PREFIXES = frozenset({'database', 'dependencies', 'models', 'routers', 'utils'})
+
+
+def _is_c_extension(name):
+    for prefix in _C_EXT_PREFIXES:
+        if name == prefix or name.startswith(prefix + '.'):
+            return True
+    return False
+
+
+def _should_isolate(name):
+    return name.split('.', 1)[0] in _ISOLATE_PREFIXES
 
 
 @pytest.hookimpl(tryfirst=True)
@@ -42,6 +66,18 @@ def pytest_collectreport(report):
     if entry is None:
         return
     saved, saved_paths = entry
+
+    stubs = {}
+    for k, v in list(sys.modules.items()):
+        if _is_c_extension(k):
+            continue
+        if k not in saved:
+            stubs[k] = v
+        elif saved[k] is not v:
+            stubs[k] = v
+    if stubs:
+        _module_stubs[report.nodeid] = stubs
+
     added = sorted([k for k in sys.modules if k not in saved], key=lambda k: -k.count('.'))
     for k in added:
         mod = sys.modules.pop(k, None)
@@ -66,6 +102,91 @@ def pytest_collectreport(report):
         mod = sys.modules.get(k)
         if mod is not None and list(getattr(mod, '__path__', [])) != orig_path:
             mod.__path__ = orig_path
+
+
+_baseline_backend = {}
+_baseline_backend_paths = {}
+for _k, _v in list(sys.modules.items()):
+    if _should_isolate(_k):
+        _baseline_backend[_k] = _v
+        _p = getattr(_v, '__path__', None)
+        if _p is not None:
+            _baseline_backend_paths[_k] = list(_p)
+
+_SENTINEL = object()
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _auto_reinstall_module_stubs(request):
+    """Reinstall sys.modules stubs from collection, full isolation between modules."""
+    nodeid = os.path.relpath(str(request.fspath), str(request.config.rootpath))
+    stubs = _module_stubs.get(nodeid)
+
+    prom = sys.modules.get('prometheus_client')
+    if prom is not None and hasattr(prom, 'REGISTRY'):
+        prom.REGISTRY._names_to_collectors.clear()
+
+    non_backend_pre = {}
+    for k, v in list(sys.modules.items()):
+        if not _should_isolate(k) and not _is_c_extension(k):
+            non_backend_pre[k] = v
+
+    if stubs is not None:
+        from unittest.mock import MagicMock, Mock
+
+        for k in sorted(stubs, key=lambda x: x.count('.')):
+            v = stubs[k]
+            if _is_c_extension(k):
+                continue
+            if k.split('.', 1)[0] in _UNSAFE_TOPS and not isinstance(v, (MagicMock, Mock)):
+                continue
+            sys.modules[k] = v
+            if '.' in k:
+                parent_name, attr_name = k.rsplit('.', 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None:
+                    setattr(parent, attr_name, v)
+
+    yield
+
+    for k in sorted(
+        [k for k in sys.modules if _should_isolate(k) and k not in _baseline_backend],
+        key=lambda k: -k.count('.'),
+    ):
+        sys.modules.pop(k, None)
+    for k, mod in _baseline_backend.items():
+        cur = sys.modules.get(k)
+        if cur is not mod:
+            sys.modules[k] = mod
+            if '.' in k:
+                parent_name, attr_name = k.rsplit('.', 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None:
+                    setattr(parent, attr_name, mod)
+    for k, orig_path in _baseline_backend_paths.items():
+        mod = sys.modules.get(k)
+        if mod is not None and list(getattr(mod, '__path__', [])) != orig_path:
+            mod.__path__ = orig_path
+
+    for k in sorted(
+        [
+            k
+            for k in sys.modules
+            if not _should_isolate(k) and not _is_c_extension(k) and k.split('.', 1)[0] not in _UNSAFE_TOPS
+        ],
+        key=lambda k: -k.count('.'),
+    ):
+        orig = non_backend_pre.get(k, _SENTINEL)
+        if orig is _SENTINEL:
+            sys.modules.pop(k, None)
+        elif sys.modules.get(k) is not orig:
+            sys.modules[k] = orig
+
+    policy = asyncio.get_event_loop_policy()
+    try:
+        policy.get_event_loop()
+    except RuntimeError:
+        policy.set_event_loop(asyncio.new_event_loop())
 
 
 from tests.unit._sysmodules_helpers import stub_modules  # noqa: F401
