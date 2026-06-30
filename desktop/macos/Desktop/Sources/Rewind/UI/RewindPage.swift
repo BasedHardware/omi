@@ -789,8 +789,8 @@ struct RewindPage: View {
                     }
                 }
 
-                // Scroll hint
-                Text("scroll to navigate")
+                // Navigation hint
+                Text("scroll or drag to navigate")
                     .scaledFont(size: 9)
                     .foregroundColor(.white.opacity(0.3))
             }
