@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import os
 import pytest
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 from tests.unit.memory_import_isolation import (
     WS_I_HEAVY_STUB_MODULE_NAMES,
@@ -185,6 +185,35 @@ def _install_legacy_safe_memory_developer_defaults(monkeypatch):
 @pytest.fixture(autouse=True)
 def _legacy_safe_memory_developer_for_lock_tests(monkeypatch):
     _install_legacy_safe_memory_developer_defaults(monkeypatch)
+    import routers.developer as developer_module
+
+    monkeypatch.setattr(
+        developer_module,
+        'authorize_memory_external_default_memory_write',
+        MagicMock(return_value=SimpleNamespace(allowed=True, status_code=200, observability={'reason': 'test'})),
+        raising=False,
+    )
+
+
+def _developer_memory_write_context(uid='test-uid'):
+    from utils.memory.product_authorization import ProductAuthorizationContext
+
+    return ProductAuthorizationContext(
+        uid=uid,
+        consumer='developer_api',
+        surface='developer_api',
+        app_id='test-app',
+        key_id='test-key',
+        scopes=('memories.write',),
+    )
+
+
+def _allow_developer_memory_write_grant():
+    import routers.developer as developer_module
+
+    developer_module.authorize_memory_external_default_memory_write = MagicMock(
+        return_value=SimpleNamespace(allowed=True, status_code=200, observability={'reason': 'test'})
+    )
 
 
 def _make_conversation(locked=False, conversation_id='conv-1'):
@@ -325,9 +354,11 @@ class TestDevApiMemoryLockEnforcement:
         from routers.developer import update_memory, UpdateMemoryRequest
         from fastapi import HTTPException
 
+        _allow_developer_memory_write_grant()
+
         request = UpdateMemoryRequest(content='New content')
         with pytest.raises(HTTPException) as exc_info:
-            update_memory(memory_id='mem-1', request=request, uid='test-uid')
+            update_memory(memory_id='mem-1', request=request, auth_context=_developer_memory_write_context())
         assert exc_info.value.status_code == 402
         assert 'paid plan' in exc_info.value.detail.lower()
 
@@ -340,8 +371,10 @@ class TestDevApiMemoryLockEnforcement:
 
         from routers.developer import update_memory, UpdateMemoryRequest
 
+        _allow_developer_memory_write_grant()
+
         request = UpdateMemoryRequest(content='New content')
-        update_memory(memory_id='mem-1', request=request, uid='test-uid')
+        update_memory(memory_id='mem-1', request=request, auth_context=_developer_memory_write_context())
         memories_db.edit_memory.assert_called_once()
 
     def test_delete_memory_rejects_locked(self):
@@ -353,8 +386,10 @@ class TestDevApiMemoryLockEnforcement:
         from routers.developer import delete_memory
         from fastapi import HTTPException
 
+        _allow_developer_memory_write_grant()
+
         with pytest.raises(HTTPException) as exc_info:
-            delete_memory(memory_id='mem-1', uid='test-uid')
+            delete_memory(memory_id='mem-1', auth_context=_developer_memory_write_context())
         assert exc_info.value.status_code == 402
         assert 'paid plan' in exc_info.value.detail.lower()
 
@@ -367,7 +402,9 @@ class TestDevApiMemoryLockEnforcement:
 
         from routers.developer import delete_memory
 
-        result = delete_memory(memory_id='mem-1', uid='test-uid')
+        _allow_developer_memory_write_grant()
+
+        result = delete_memory(memory_id='mem-1', auth_context=_developer_memory_write_context())
         assert result == {"success": True}
         memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
 
