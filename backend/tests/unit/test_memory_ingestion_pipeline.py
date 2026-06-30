@@ -2,6 +2,7 @@ import asyncio
 import json
 import subprocess
 import sys
+from pathlib import Path
 from datetime import datetime, timezone
 
 import pytest
@@ -280,7 +281,7 @@ def test_cli_reads_json_and_writes_pipeline_output(tmp_path):
             "--output",
             str(output_path),
         ],
-        cwd="/Users/dazheng/workspace/omi-memory-ingestion-pipeline/backend",
+        cwd=Path(__file__).resolve().parents[2],
         check=True,
     )
     output = json.loads(output_path.read_text())
