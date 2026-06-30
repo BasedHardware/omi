@@ -397,7 +397,12 @@ def _resolve_initial_tier_value(data: Dict[str, Any]) -> str:
         if hasattr(raw_tier, "value"):
             return raw_tier.value
         return str(raw_tier)
-    return decide_initial_memory_tier(bool(data.get("manually_added")), data.get("durability")).value
+    durability = data.get("durability")
+    if (durability or "").lower() == MemoryLayer.long_term.value:
+        return MemoryLayer.long_term.value
+    if _user_asserted_from_payload(data):
+        return MemoryLayer.short_term.value
+    return decide_initial_memory_tier(False, durability).value
 
 
 def _visibility_from_payload(data: Dict[str, Any]) -> str:

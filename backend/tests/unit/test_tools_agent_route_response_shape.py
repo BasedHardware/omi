@@ -107,6 +107,8 @@ def _install_route_stubs(monkeypatch):
 
     executors_mod = types.ModuleType('utils.executors')
     executors_mod.db_executor = object()
+    executors_mod.postprocess_executor = object()
+    executors_mod.storage_executor = object()
 
     async def _run_blocking(executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)
@@ -115,25 +117,62 @@ def _install_route_stubs(monkeypatch):
     monkeypatch.setitem(sys.modules, 'utils.executors', executors_mod)
 
     google_mod = types.ModuleType('google')
+    google_mod.__path__ = []
+    google_api_core_mod = types.ModuleType('google.api_core')
+    google_api_core_mod.__path__ = []
+    google_api_exceptions_mod = types.ModuleType('google.api_core.exceptions')
+    google_api_exceptions_mod.AlreadyExists = type('AlreadyExists', (Exception,), {})
+    google_api_exceptions_mod.Conflict = type('Conflict', (Exception,), {})
+    google_api_exceptions_mod.NotFound = type('NotFound', (Exception,), {})
     google_auth_mod = types.ModuleType('google.auth')
+    google_auth_mod.__path__ = []
     google_transport_mod = types.ModuleType('google.auth.transport')
+    google_transport_mod.__path__ = []
     google_requests_mod = types.ModuleType('google.auth.transport.requests')
     google_requests_mod.Request = object
+    google_cloud_mod = types.ModuleType('google.cloud')
+    google_cloud_mod.__path__ = []
+    firestore_mod = types.ModuleType('google.cloud.firestore')
+    firestore_mod.ArrayUnion = MagicMock()
+    firestore_mod.ArrayRemove = MagicMock()
+    firestore_mod.DELETE_FIELD = object()
+    firestore_mod.Increment = MagicMock()
+    firestore_v1_mod = types.ModuleType('google.cloud.firestore_v1')
+    firestore_v1_mod.FieldFilter = MagicMock()
+    firestore_v1_mod.transactional = lambda fn: fn
+    google_api_core_mod.exceptions = google_api_exceptions_mod
     google_transport_mod.requests = google_requests_mod
     google_auth_mod.transport = google_transport_mod
+    google_cloud_mod.firestore = firestore_mod
+    google_cloud_mod.firestore_v1 = firestore_v1_mod
+    google_mod.api_core = google_api_core_mod
     google_mod.auth = google_auth_mod
+    google_mod.cloud = google_cloud_mod
     monkeypatch.setitem(sys.modules, 'google', google_mod)
+    monkeypatch.setitem(sys.modules, 'google.api_core', google_api_core_mod)
+    monkeypatch.setitem(sys.modules, 'google.api_core.exceptions', google_api_exceptions_mod)
     monkeypatch.setitem(sys.modules, 'google.auth', google_auth_mod)
     monkeypatch.setitem(sys.modules, 'google.auth.transport', google_transport_mod)
     monkeypatch.setitem(sys.modules, 'google.auth.transport.requests', google_requests_mod)
+    monkeypatch.setitem(sys.modules, 'google.cloud', google_cloud_mod)
+    monkeypatch.setitem(sys.modules, 'google.cloud.firestore', firestore_mod)
+    monkeypatch.setitem(sys.modules, 'google.cloud.firestore_v1', firestore_v1_mod)
 
     httpx_mod = types.ModuleType('httpx')
     httpx_mod.AsyncClient = MagicMock()
     monkeypatch.setitem(sys.modules, 'httpx', httpx_mod)
 
+    tools_pkg_mod = types.ModuleType('utils.retrieval.tools')
+    tools_pkg_mod.__path__ = []
+    monkeypatch.setitem(sys.modules, 'utils.retrieval.tools', tools_pkg_mod)
+
     app_tools_mod = types.ModuleType('utils.retrieval.tools.app_tools')
     app_tools_mod.load_app_tools = MagicMock(return_value=[])
     monkeypatch.setitem(sys.modules, 'utils.retrieval.tools.app_tools', app_tools_mod)
+
+    calendar_tools_mod = types.ModuleType('utils.retrieval.tools.calendar_tools')
+    calendar_tools_mod.create_calendar_event_tool = MagicMock()
+    monkeypatch.setitem(sys.modules, 'utils.retrieval.tools.calendar_tools', calendar_tools_mod)
 
     log_sanitizer_mod = types.ModuleType('utils.log_sanitizer')
     log_sanitizer_mod.sanitize = lambda value: value

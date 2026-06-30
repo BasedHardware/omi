@@ -247,7 +247,7 @@ def test_rollout_env_dual_read_does_not_use_canonical_cohort(monkeypatch):
     monkeypatch.setenv("MEMORY_ENABLED_USERS", "rollout-user")
 
     assert MemoryRolloutConfig.from_env().enabled_users == {"rollout-user"}
-    assert resolve_memory_system("cohort-user") == MemorySystem.CANONICAL
+    assert resolve_memory_system("cohort-user") == MemorySystem.LEGACY
     assert resolve_memory_system("rollout-user") == MemorySystem.LEGACY
 
 

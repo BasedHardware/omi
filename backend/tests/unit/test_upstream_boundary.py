@@ -231,7 +231,6 @@ class TestExtractionSeamFanOut:
             patch.object(pc.conversations_db, "upsert_conversation"),
             patch.object(pc, "submit_with_context", side_effect=_capture_submit),
             patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
-            patch.object(pc, "_extract_trends"),
         ):
             pc.process_conversation("uid-boundary", "en", conversation, is_reprocess=True)
 

@@ -21,6 +21,9 @@ def _load_memory_services(monkeypatch):
     vector_db_mod = types.ModuleType('database.vector_db')
     setattr(vector_db_mod, 'find_similar_memories', lambda *args, **kwargs: [])
     setattr(vector_db_mod, 'query_memory_vector_candidates', lambda *args, **kwargs: [])
+    setattr(vector_db_mod, 'delete_memory_vector', lambda *args, **kwargs: None)
+    setattr(vector_db_mod, 'upsert_memory_vector', lambda *args, **kwargs: None)
+    setattr(vector_db_mod, 'upsert_memory_vectors_batch', lambda *args, **kwargs: None)
     monkeypatch.setitem(sys.modules, 'database.vector_db', vector_db_mod)
 
     conversations_mod = types.ModuleType('utils.retrieval.tool_services.conversations')
