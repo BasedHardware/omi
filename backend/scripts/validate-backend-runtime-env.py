@@ -181,6 +181,14 @@ def _validate_cloud_run(
                 actual=actual_env,
             )
         )
+        errors.extend(
+            _validate_workflow_flags(
+                scope=f'cloud_run/{service}',
+                expected=env_config.get('cloud_run', {}).get('network', {}).get('flags', {}),
+                actual=service_state.get('flags', {}),
+                strict_provisional=strict_provisional,
+            )
+        )
     return errors
 
 
@@ -215,6 +223,22 @@ def _validate_cloud_run_workflows(
                 scope=f'cloud_run_workflow/{service}',
                 expected=service_config.get('env', {}),
                 actual=actual_env,
+                strict_provisional=strict_provisional,
+            )
+        )
+        actual_secrets = _workflow_secret_entries_by_name(service_state.get('secrets', {}))
+        errors.extend(
+            _validate_cloud_run_secret_entries(
+                scope=f'cloud_run_workflow/{service}',
+                expected=service_config.get('secrets', {}),
+                actual=actual_secrets,
+            )
+        )
+        errors.extend(
+            _validate_workflow_flags(
+                scope=f'cloud_run_workflow/{service}',
+                expected=env_config.get('cloud_run', {}).get('network', {}).get('flags', {}),
+                actual=service_state.get('flags', {}),
                 strict_provisional=strict_provisional,
             )
         )
@@ -289,6 +313,19 @@ def _literal_env_entries_by_name(raw_env: Any) -> dict[str, dict[str, Any]]:
     return {name: {'name': name, 'value': str(value)} for name, value in raw_env.items()}
 
 
+def _workflow_secret_entries_by_name(raw_secrets: Any) -> dict[str, dict[str, Any]]:
+    if not isinstance(raw_secrets, dict):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for name, value in raw_secrets.items():
+        secret_name, version = _parse_workflow_secret_ref(str(value))
+        result[str(name)] = {
+            'name': str(name),
+            'valueFrom': {'secretKeyRef': {'name': secret_name, 'key': version}},
+        }
+    return result
+
+
 def _extract_workflow_cloud_run_services(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
     workflow_env = workflow.get('env', {})
     if not isinstance(workflow_env, dict):
@@ -311,8 +348,10 @@ def _extract_workflow_cloud_run_services(workflow: dict[str, Any]) -> dict[str, 
             if service is None:
                 continue
             env_vars = _parse_workflow_env_vars(step_with.get('env_vars'))
-            if env_vars:
-                result[service] = {'env_vars': env_vars}
+            secrets = _parse_workflow_env_vars(step_with.get('secrets'))
+            flags = _parse_workflow_flags(step_with.get('flags'))
+            if env_vars or secrets or flags:
+                result[service] = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
     return result
 
 
@@ -347,6 +386,63 @@ def _parse_workflow_env_vars(raw_env_vars: Any) -> dict[str, str]:
         name, value = line.split('=', 1)
         result[name.strip()] = value.strip()
     return result
+
+
+def _parse_workflow_flags(raw_flags: Any) -> dict[str, str]:
+    if raw_flags is None:
+        return {}
+    if isinstance(raw_flags, dict):
+        return {str(name): str(value) for name, value in raw_flags.items()}
+    if not isinstance(raw_flags, str):
+        return {}
+    result: dict[str, str] = {}
+    for raw_part in raw_flags.split():
+        part = raw_part.strip()
+        if not part.startswith('--') or '=' not in part:
+            continue
+        name, value = part.split('=', 1)
+        result[name] = value
+    return result
+
+
+def _parse_workflow_secret_ref(raw_value: str) -> tuple[str, str]:
+    if ':' not in raw_value:
+        return raw_value, 'latest'
+    secret_name, version = raw_value.rsplit(':', 1)
+    return secret_name, version or 'latest'
+
+
+def _validate_workflow_flags(
+    *,
+    scope: str,
+    expected: dict[str, Any],
+    actual: dict[str, str],
+    strict_provisional: bool,
+) -> list[ValidationError]:
+    errors: list[ValidationError] = []
+    for name, expected_entry in expected.items():
+        actual_value = actual.get(name)
+        if actual_value is None:
+            errors.append(ValidationError(scope, f'missing Cloud Run flag {name}'))
+            continue
+        expected_value = _expected_flag_value(expected_entry)
+        if _is_provisional(expected_entry) and not strict_provisional:
+            if actual_value == '':
+                errors.append(ValidationError(scope, f'Cloud Run flag {name} must have a value'))
+            continue
+        if actual_value != expected_value:
+            errors.append(ValidationError(scope, f'Cloud Run flag {name} mismatch: expected {expected_value!r}'))
+    return errors
+
+
+def _expected_flag_value(expected_entry: Any) -> str:
+    if isinstance(expected_entry, dict) and 'value' in expected_entry:
+        return str(expected_entry['value'])
+    return str(expected_entry)
+
+
+def _is_provisional(expected_entry: Any) -> bool:
+    return isinstance(expected_entry, dict) and bool(expected_entry.get('provisional'))
 
 
 def _has_literal_value(entry: dict[str, Any]) -> bool:
@@ -403,14 +499,38 @@ def _fetch_live_cloud_run_state(env_config: dict[str, Any]) -> dict[str, Any]:
         ]
         result = subprocess.run(command, check=True, capture_output=True, text=True)
         service_state = json.loads(result.stdout)
+        template = service_state.get('spec', {}).get('template', {})
+        annotations = template.get('metadata', {}).get('annotations', {})
         services[service] = {
-            'env': service_state.get('spec', {})
-            .get('template', {})
-            .get('spec', {})
-            .get('containers', [{}])[0]
-            .get('env', [])
+            'env': template.get('spec', {}).get('containers', [{}])[0].get('env', []),
+            'flags': _cloud_run_network_flags_from_annotations(annotations),
         }
     return {'services': services}
+
+
+def _cloud_run_network_flags_from_annotations(annotations: Any) -> dict[str, str]:
+    if not isinstance(annotations, dict):
+        return {}
+    flags: dict[str, str] = {}
+    network_interfaces = annotations.get('run.googleapis.com/network-interfaces')
+    if isinstance(network_interfaces, str) and network_interfaces:
+        try:
+            parsed_interfaces = json.loads(network_interfaces)
+        except json.JSONDecodeError:
+            parsed_interfaces = []
+        if isinstance(parsed_interfaces, list) and parsed_interfaces:
+            first_interface = parsed_interfaces[0]
+            if isinstance(first_interface, dict):
+                network = first_interface.get('network')
+                subnet = first_interface.get('subnetwork')
+                if isinstance(network, str):
+                    flags['--network'] = network
+                if isinstance(subnet, str):
+                    flags['--subnet'] = subnet
+    egress = annotations.get('run.googleapis.com/vpc-access-egress')
+    if isinstance(egress, str):
+        flags['--vpc-egress'] = egress
+    return flags
 
 
 if __name__ == '__main__':

@@ -48,6 +48,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
 {
   "services": {
     "backend": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "SERVICE_ACCOUNT_JSON", "valueFrom": {"secretKeyRef": {"name": "SERVICE_ACCOUNT_JSON"}}},
@@ -56,6 +57,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       ]
     },
     "backend-sync": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -65,6 +67,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
       ]
     },
     "backend-integration": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -166,6 +169,7 @@ def test_cloud_run_state_accepts_secret_bindings(tmp_path):
 {
   "services": {
     "backend": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -175,6 +179,7 @@ def test_cloud_run_state_accepts_secret_bindings(tmp_path):
       ]
     },
     "backend-sync": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -184,6 +189,7 @@ def test_cloud_run_state_accepts_secret_bindings(tmp_path):
       ]
     },
     "backend-integration": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -211,6 +217,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
 {
   "services": {
     "backend": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -220,6 +227,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       ]
     },
     "backend-sync": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},
@@ -229,6 +237,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
       ]
     },
     "backend-integration": {
+      "flags": {"--network": "omi-dev-vpc-1", "--subnet": "omi-us-central1-dev-vpc-1-subnet-1", "--vpc-egress": "private-ranges-only"},
       "env": [
         {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},
         {"name": "OMI_LLM_GATEWAY_URL", "value": "http://172.16.63.232"},

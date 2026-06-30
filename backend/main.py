@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 
@@ -12,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 import firebase_admin
 from fastapi import FastAPI
+
+from database.google_credentials import prepare_google_credentials
+
+prepare_google_credentials()
 
 from routers import (
     chat,
@@ -82,12 +85,7 @@ log_langsmith_status()
 # Validate Stripe price IDs so misconfigured plans fail loud
 validate_stripe_price_ids()
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    credentials = firebase_admin.credentials.Certificate(service_account_info)
-    firebase_admin.initialize_app(credentials)
-else:
-    firebase_admin.initialize_app()
+firebase_admin.initialize_app()
 
 # starlette 0.40 added a default 1 MB cap per multipart form part. Voice
 # messages, audio uploads, and persona/app images legitimately exceed that.
