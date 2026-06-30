@@ -11,6 +11,7 @@ from PIL import Image
 
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
+from utils.executors import db_executor, run_blocking
 import logging
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,8 @@ class FileChatTool:
 
     async def process_chat_with_file_stream(self, question, file_ids: List[str], callback=None):
         """Process chat with file attachments (streaming)"""
-        files_data = chat_db.get_chat_files_desc(self.uid, files_id=file_ids, limit=9)
+        # Offloaded: the Firestore read is sync and blocks the event loop in this async path.
+        files_data = await run_blocking(db_executor, chat_db.get_chat_files_desc, self.uid, files_id=file_ids, limit=9)
         files = [FileChat(**f) for f in files_data]
         all_images = all(f.is_image() for f in files) if files else False
 
