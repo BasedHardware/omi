@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:skeletonizer/skeletonizer.dart';
 
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/payments/models/payment_method_config.dart';
 
@@ -117,15 +118,13 @@ class PaymentMethodCard extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (isConnected && isActive) ...[
-                  ElevatedButton(
+                  OmiButton(
+                    label: context.l10n.update,
                     onPressed: onManageTap,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: Text(context.l10n.update, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    borderRadius: 8,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                   const SizedBox(width: 16),
                 ],
@@ -147,15 +146,13 @@ class PaymentMethodCard extends StatelessWidget {
                   ),
                 ],
                 if (!isConnected) ...[
-                  ElevatedButton(
+                  OmiButton(
+                    label: context.l10n.connect,
                     onPressed: onManageTap,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: Text(context.l10n.connect, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    borderRadius: 8,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
                   ),
                 ],
               ],

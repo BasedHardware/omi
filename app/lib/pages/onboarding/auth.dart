@@ -8,6 +8,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AuthComponent extends StatefulWidget {
@@ -74,31 +75,14 @@ class _AuthComponentState extends State<AuthComponent> {
                       SizedBox(
                         width: double.infinity,
                         height: 56,
-                        child: ElevatedButton(
+                        child: OmiButton(
+                          label: context.l10n.signInWithApple,
+                          icon: FontAwesomeIcons.apple,
+                          iconSize: 24,
                           onPressed: () {
                             HapticFeedback.mediumImpact();
                             provider.onAppleSignIn(widget.onSignIn);
                           },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(FontAwesomeIcons.apple, size: 24),
-                              const SizedBox(width: 8),
-                              Text(
-                                context.l10n.signInWithApple,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -108,27 +92,14 @@ class _AuthComponentState extends State<AuthComponent> {
                     SizedBox(
                       width: double.infinity,
                       height: 56,
-                      child: ElevatedButton(
+                      child: OmiButton(
+                        label: context.l10n.signInWithGoogle,
+                        icon: FontAwesomeIcons.google,
+                        iconSize: 20,
                         onPressed: () {
                           HapticFeedback.mediumImpact();
                           provider.onGoogleSignIn(widget.onSignIn);
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(FontAwesomeIcons.google, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.signInWithGoogle,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
 

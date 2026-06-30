@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 enum AudioDownloadState { preparing, downloading, processing, success, error }
@@ -219,19 +220,17 @@ class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet>
             if (widget.onRetry != null) ...[
               const SizedBox(width: 12),
               Expanded(
-                child: ElevatedButton(
+                child: OmiButton(
+                  label: context.l10n.retry,
                   onPressed: () {
                     Navigator.of(context).pop();
                     widget.onRetry?.call();
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF1C1C1E),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(context.l10n.retry),
+                  textColor: const Color(0xFF1C1C1E),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  borderRadius: 12,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],

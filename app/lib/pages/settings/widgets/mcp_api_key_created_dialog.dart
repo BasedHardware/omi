@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/mcp_api_key.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -37,12 +38,13 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
             Navigator.of(context).pop();
           },
         ),
-        ElevatedButton(
-          child: Text(context.l10n.copy),
-          style: ElevatedButton.styleFrom(
-            foregroundColor: Colors.white,
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-          ),
+        OmiButton(
+          label: context.l10n.copy,
+          color: Theme.of(context).colorScheme.secondary,
+          textColor: Colors.white,
+          borderRadius: 4,
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
           onPressed: () {
             Clipboard.setData(ClipboardData(text: apiKey.key));
             AppSnackbar.showSnackbar(context.l10n.copiedToClipboard(context.l10n.keyWord));

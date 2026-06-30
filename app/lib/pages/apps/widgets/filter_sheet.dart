@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 
 class FilterBottomSheet extends StatelessWidget {
@@ -125,20 +126,16 @@ class FilterBottomSheet extends StatelessWidget {
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: ElevatedButton(
+                      child: OmiButton(
+                        label: AppLocalizations.of(context)!.applyFilters,
                         onPressed: () {
                           Navigator.of(context).pop();
                           Future.microtask(() => provider.applyFilters());
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          AppLocalizations.of(context)!.applyFilters,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
-                        ),
+                        borderRadius: 12,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                     ),
                   ],

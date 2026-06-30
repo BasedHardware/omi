@@ -24,6 +24,7 @@ import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -921,10 +922,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
                   onPressed: () => Navigator.pop(context, true),
                   child: Text(context.l10n.proceedAnyway, style: const TextStyle(color: Colors.white12, fontSize: 10)),
                 ),
-                ElevatedButton(
+                OmiButton(
+                  label: context.l10n.close,
                   onPressed: () => Navigator.pop(context, false),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: Text(context.l10n.close, style: const TextStyle(color: Colors.white)),
+                  color: Colors.red,
+                  textColor: Colors.white,
+                  borderRadius: 4,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
               ],
               actionsAlignment: MainAxisAlignment.spaceBetween,
@@ -1691,18 +1696,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
+                child: OmiButton(
+                  label:
+                      context.l10n.downloadModelWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin'),
                   onPressed: _downloadModel,
-                  icon: const Icon(Icons.download, size: 16),
-                  label: Text(
-                    context.l10n.downloadModelWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin'),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
+                  icon: Icons.download,
+                  iconSize: 16,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -2559,18 +2562,12 @@ class _JsonEditorPageState extends State<_JsonEditorPage> {
         child: SizedBox(
           width: double.infinity,
           height: 50,
-          child: ElevatedButton(
+          child: OmiButton(
+            label: context.l10n.save,
             onPressed: _parseError != null ? null : () => Navigator.of(context).pop(_controller.text),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade800,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: Text(
-              context.l10n.save,
-              style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-            ),
+            disabledColor: Colors.grey.shade800,
+            borderRadius: 10,
+            fontSize: 16,
           ),
         ),
       ),

@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -344,7 +345,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
                 SizedBox(
                   width: double.infinity,
                   height: 56,
-                  child: ElevatedButton(
+                  child: OmiButton(
+                    label: context.l10n.continueButton,
                     onPressed: selectedLanguage == null
                         ? null
                         : () async {
@@ -357,18 +359,8 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
 
                             widget.goNext();
                           },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: selectedLanguage == null ? Colors.grey[800] : Colors.white,
-                      foregroundColor: selectedLanguage == null ? Colors.grey[600] : Colors.black,
-                      disabledBackgroundColor: Colors.grey[800],
-                      disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                    ),
+                    disabledColor: Colors.grey[800],
+                    disabledTextColor: Colors.grey[600],
                   ),
                 ),
 

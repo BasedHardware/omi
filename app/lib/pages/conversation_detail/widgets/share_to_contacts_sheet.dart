@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -410,7 +411,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
+            OmiButton(
+              label: context.l10n.openSettings,
               onPressed: () async {
                 // Open app settings
                 if (Platform.isIOS) {
@@ -419,8 +421,10 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                   await launchUrl(Uri.parse('package:com.friend.ios'));
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
-              child: Text(context.l10n.openSettings),
+              color: Colors.deepPurple,
+              borderRadius: 4,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
           ],
         ),

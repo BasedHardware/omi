@@ -7,6 +7,7 @@ import 'package:timeago/timeago.dart' as timeago;
 import 'package:omi/backend/http/api/apps.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/extensions/string.dart';
 
@@ -95,111 +96,111 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                         child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
                       )
                     : (!showReplyField
-                          ? null
-                          : SingleChildScrollView(
-                              physics: const NeverScrollableScrollPhysics(),
-                              child: Column(
-                                children: [
-                                  SizedBox(
-                                    width: MediaQuery.sizeOf(context).width * 0.88,
-                                    child: TextFormField(
-                                      controller: replyController,
-                                      enabled: isLoading ? false : true,
-                                      keyboardType: TextInputType.multiline,
-                                      maxLength: 250,
-                                      onChanged: (value) {
-                                        if (value.isEmpty) {
-                                          if (value == widget.review.review) {
-                                            updateShowButton(false);
-                                          } else {
-                                            updateShowButton(true);
-                                          }
+                        ? null
+                        : SingleChildScrollView(
+                            physics: const NeverScrollableScrollPhysics(),
+                            child: Column(
+                              children: [
+                                SizedBox(
+                                  width: MediaQuery.sizeOf(context).width * 0.88,
+                                  child: TextFormField(
+                                    controller: replyController,
+                                    enabled: isLoading ? false : true,
+                                    keyboardType: TextInputType.multiline,
+                                    maxLength: 250,
+                                    onChanged: (value) {
+                                      if (value.isEmpty) {
+                                        if (value == widget.review.review) {
+                                          updateShowButton(false);
                                         } else {
                                           updateShowButton(true);
                                         }
-                                      },
-                                      decoration: InputDecoration(
-                                        hintText: context.l10n.writeSomething,
-                                        hintStyle: const TextStyle(color: Colors.grey),
-                                        border: const OutlineInputBorder(
-                                          borderRadius: BorderRadius.all(Radius.circular(8)),
-                                          borderSide: BorderSide(color: Colors.grey),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: const BorderRadius.all(Radius.circular(8)),
-                                          borderSide: BorderSide(color: Colors.grey[700]!),
-                                        ),
-                                        focusedBorder: const OutlineInputBorder(
-                                          borderRadius: BorderRadius.all(Radius.circular(8)),
-                                          borderSide: BorderSide(color: Colors.grey),
-                                        ),
+                                      } else {
+                                        updateShowButton(true);
+                                      }
+                                    },
+                                    decoration: InputDecoration(
+                                      hintText: context.l10n.writeSomething,
+                                      hintStyle: const TextStyle(color: Colors.grey),
+                                      border: const OutlineInputBorder(
+                                        borderRadius: BorderRadius.all(Radius.circular(8)),
+                                        borderSide: BorderSide(color: Colors.grey),
                                       ),
-                                      style: const TextStyle(color: Colors.white),
-                                      maxLines: 3,
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: const BorderRadius.all(Radius.circular(8)),
+                                        borderSide: BorderSide(color: Colors.grey[700]!),
+                                      ),
+                                      focusedBorder: const OutlineInputBorder(
+                                        borderRadius: BorderRadius.all(Radius.circular(8)),
+                                        borderSide: BorderSide(color: Colors.grey),
+                                      ),
                                     ),
+                                    style: const TextStyle(color: Colors.white),
+                                    maxLines: 3,
                                   ),
-                                  const SizedBox(height: 20),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      SizedBox(
-                                        width: MediaQuery.sizeOf(context).width * 0.36,
-                                        child: OutlinedButton(
-                                          style: OutlinedButton.styleFrom(
-                                            side: const BorderSide(color: Colors.white),
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                          ),
-                                          onPressed: () {
-                                            updateShowReplyField(false);
-                                          },
-                                          child: Text(
-                                            context.l10n.cancel,
-                                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                                          ),
+                                ),
+                                const SizedBox(height: 20),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: MediaQuery.sizeOf(context).width * 0.36,
+                                      child: OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(color: Colors.white),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        ),
+                                        onPressed: () {
+                                          updateShowReplyField(false);
+                                        },
+                                        child: Text(
+                                          context.l10n.cancel,
+                                          style: const TextStyle(color: Colors.white, fontSize: 16),
                                         ),
                                       ),
-                                      const SizedBox(width: 30),
-                                      SizedBox(
-                                        width: MediaQuery.sizeOf(context).width * 0.36,
-                                        child: OutlinedButton(
-                                          style: OutlinedButton.styleFrom(
-                                            side: const BorderSide(color: Colors.white),
-                                            backgroundColor: Colors.white,
-                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                          ),
-                                          onPressed: () async {
-                                            if (replyController.text.isNotEmpty) {
-                                              setState(() {
-                                                isLoading = true;
-                                              });
-                                              await replyToAppReview(
-                                                widget.appId,
-                                                replyController.text,
-                                                widget.review.uid,
-                                              );
-                                              context.read<AppProvider>().updateLocalAppReviewResponse(
-                                                widget.appId,
-                                                replyController.text,
-                                                widget.review.uid,
-                                              );
-                                              setState(() {
-                                                widget.review.response = replyController.text;
-                                                isLoading = false;
-                                                showReplyField = false;
-                                              });
-                                            }
-                                          },
-                                          child: Text(
-                                            context.l10n.submitReply,
-                                            style: const TextStyle(color: Colors.black, fontSize: 16),
-                                          ),
+                                    ),
+                                    const SizedBox(width: 30),
+                                    SizedBox(
+                                      width: MediaQuery.sizeOf(context).width * 0.36,
+                                      child: OutlinedButton(
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(color: Colors.white),
+                                          backgroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                        ),
+                                        onPressed: () async {
+                                          if (replyController.text.isNotEmpty) {
+                                            setState(() {
+                                              isLoading = true;
+                                            });
+                                            await replyToAppReview(
+                                              widget.appId,
+                                              replyController.text,
+                                              widget.review.uid,
+                                            );
+                                            context.read<AppProvider>().updateLocalAppReviewResponse(
+                                                  widget.appId,
+                                                  replyController.text,
+                                                  widget.review.uid,
+                                                );
+                                            setState(() {
+                                              widget.review.response = replyController.text;
+                                              isLoading = false;
+                                              showReplyField = false;
+                                            });
+                                          }
+                                        },
+                                        child: Text(
+                                          context.l10n.submitReply,
+                                          style: const TextStyle(color: Colors.black, fontSize: 16),
                                         ),
                                       ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            )),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          )),
               ),
             ),
             !showReplyField && widget.review.response.isNotEmpty
@@ -230,18 +231,15 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        ),
+                      OmiButton(
+                        label:
+                            widget.review.response.isNotEmpty ? context.l10n.editYourReply : context.l10n.replyToReview,
                         onPressed: () {
                           updateShowReplyField(!showReplyField);
                         },
-                        child: Text(
-                          widget.review.response.isNotEmpty ? context.l10n.editYourReply : context.l10n.replyToReview,
-                          style: const TextStyle(color: Colors.black),
-                        ),
+                        borderRadius: 16,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ],
                   )

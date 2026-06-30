@@ -69,6 +69,7 @@ import 'package:omi/services/notifications/important_conversation_notification_h
 import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -472,21 +473,20 @@ class CustomErrorWidget extends StatelessWidget {
             const SizedBox(height: 10.0),
             SizedBox(
               width: 210,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: OmiButton(
+                color: Colors.red,
+                borderRadius: 4,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                label: context.l10n.copyErrorMessage,
+                icon: Icons.copy_rounded,
+                trailingIcon: true,
+                iconSize: 24,
+                iconGap: 10,
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: errorMessage));
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.errorCopied)));
                 },
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(context.l10n.copyErrorMessage),
-                    const SizedBox(width: 10),
-                    const Icon(Icons.copy_rounded),
-                  ],
-                ),
               ),
             ),
           ],

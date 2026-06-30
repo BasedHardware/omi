@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/person_chip.dart';
@@ -436,12 +437,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   Widget _buildSaveButton() {
     return SizedBox(
       width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
+      child: OmiButton(
+        label: context.l10n.save,
+        borderRadius: 8,
+        fontSize: 14,
+        fontWeight: FontWeight.w500,
+        disabledColor: Colors.white.withValues(alpha: 0.12),
+        disabledTextColor: Colors.white.withValues(alpha: 0.38),
         onPressed: !allowSave || loading
             ? null
             : () async {
@@ -467,7 +469,6 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   Navigator.pop(context);
                 }
               },
-        child: Center(child: Text(context.l10n.save)),
       ),
     );
   }

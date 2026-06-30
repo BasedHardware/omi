@@ -5,6 +5,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class _SourceOption {
@@ -165,7 +166,8 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                 SizedBox(
                   width: double.infinity,
                   height: 56,
-                  child: ElevatedButton(
+                  child: OmiButton(
+                    label: context.l10n.continueButton,
                     onPressed: _canContinue
                         ? () {
                             FocusManager.instance.primaryFocus?.unfocus();
@@ -178,18 +180,9 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                             widget.goNext();
                           }
                         : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _canContinue ? Colors.white : Colors.grey[800],
-                      foregroundColor: _canContinue ? Colors.black : Colors.grey[600],
-                      disabledBackgroundColor: Colors.grey[800],
-                      disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                    ),
+                    disabledColor: Colors.grey[800],
+                    disabledTextColor: Colors.grey[600],
+                    borderRadius: 28,
                   ),
                 ),
               ],

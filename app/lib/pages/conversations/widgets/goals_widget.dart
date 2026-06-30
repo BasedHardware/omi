@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Multi-goal widget supporting up to 3 goals with minimalistic UI
@@ -414,18 +415,18 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                     ],
                     Expanded(
                       flex: isNew ? 1 : 2,
-                      child: ElevatedButton(
+                      child: OmiButton(
+                        label: isNew ? context.l10n.addGoal : context.l10n.save,
                         onPressed: () async {
                           Navigator.pop(context);
                           await _saveGoal(existingGoal);
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF22C55E),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(isNew ? context.l10n.addGoal : context.l10n.save),
+                        color: const Color(0xFF22C55E),
+                        textColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        borderRadius: 12,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
                       ),
                     ),
                   ],

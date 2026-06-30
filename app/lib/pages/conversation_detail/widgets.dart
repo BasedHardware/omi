@@ -29,6 +29,7 @@ import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart
 import 'package:omi/pages/conversations/widgets/move_to_folder_sheet.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/providers/folder_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -1044,15 +1045,13 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
               ),
             ),
             const SizedBox(width: 8),
-            ElevatedButton(
+            OmiButton(
+              label: context.l10n.save,
               onPressed: () => _save(original),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: Text(context.l10n.save, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              borderRadius: 10,
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
           ],
         ),

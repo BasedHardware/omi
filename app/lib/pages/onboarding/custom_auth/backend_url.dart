@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class CustomBackendURLForm extends StatefulWidget {
@@ -97,14 +98,14 @@ class _CustomBackendURLFormState extends State<CustomBackendURLForm> {
                       const SizedBox(height: 24),
                       SizedBox(
                         width: double.infinity,
-                        child: ElevatedButton(
+                        child: OmiButton(
+                          label: context.l10n.saveUrlButton,
                           onPressed: _submitForm,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16.0),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-                            backgroundColor: Colors.blueAccent[700],
-                          ),
-                          child: Text(context.l10n.saveUrlButton, style: const TextStyle(fontSize: 18.0)),
+                          color: Colors.blueAccent[700],
+                          borderRadius: 12.0,
+                          fontSize: 18.0,
+                          fontWeight: FontWeight.w500,
+                          padding: const EdgeInsets.symmetric(vertical: 16.0),
                         ),
                       ),
                     ],

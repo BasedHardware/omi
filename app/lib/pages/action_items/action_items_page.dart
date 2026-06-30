@@ -12,6 +12,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
 import 'widgets/action_item_form_sheet.dart';
@@ -1793,7 +1794,8 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
+                child: OmiButton(
+                  label: context.l10n.addGoal,
                   onPressed: () async {
                     final title = titleController.text.trim();
                     if (title.isEmpty) {
@@ -1809,13 +1811,12 @@ class _GoalCreateSheetState extends State<_GoalCreateSheet> {
 
                     widget.onSave(title, current, target);
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF22C55E),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(context.l10n.addGoal),
+                  color: const Color(0xFF22C55E),
+                  textColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  borderRadius: 12,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],
@@ -2008,7 +2009,8 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
                   // Save button
                   Expanded(
                     flex: 2,
-                    child: ElevatedButton(
+                    child: OmiButton(
+                      label: context.l10n.save,
                       onPressed: () async {
                         final title = titleController.text.trim();
                         if (title.isEmpty) {
@@ -2024,13 +2026,12 @@ class _GoalEditSheetState extends State<_GoalEditSheet> {
 
                         widget.onSave(title, current, target);
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF22C55E),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text(context.l10n.save),
+                      color: const Color(0xFF22C55E),
+                      textColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      borderRadius: 12,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -201,16 +202,15 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: ElevatedButton(
+                  child: OmiButton(
+                    label: context.l10n.done,
                     onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF252525),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
-                    child: Text(context.l10n.done, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                    color: const Color(0xFF252525),
+                    textColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    borderRadius: 12,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],

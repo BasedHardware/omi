@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -101,22 +102,14 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
                 ),
               ] else ...[
                 // Continue Button (after permission was requested)
-                SizedBox(
+                OmiButton(
+                  label: context.l10n.continueButton,
+                  onPressed: _continueAndStartRecording,
+                  color: ResponsiveHelper.purplePrimary,
+                  textColor: Colors.white,
+                  borderRadius: 16,
                   width: double.infinity,
                   height: 56,
-                  child: ElevatedButton(
-                    onPressed: _continueAndStartRecording,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ResponsiveHelper.purplePrimary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                  ),
                 ),
                 const SizedBox(height: 24),
 

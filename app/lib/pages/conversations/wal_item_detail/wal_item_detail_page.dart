@@ -10,6 +10,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -301,23 +302,17 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               child: SizedBox(
                 width: double.infinity,
                 height: 56,
-                child: ElevatedButton(
+                child: OmiButton(
+                  label: isTransferring ? context.l10n.cancelTransfer : context.l10n.transferToPhone,
                   onPressed: isTransferring ? _handleCancelTransfer : _handleTransferToPhone,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: isTransferring ? Colors.orange : Colors.deepPurpleAccent,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(isTransferring ? Icons.close : Icons.download, color: Colors.white, size: 22),
-                      const SizedBox(width: 12),
-                      Text(
-                        isTransferring ? context.l10n.cancelTransfer : context.l10n.transferToPhone,
-                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
+                  icon: isTransferring ? Icons.close : Icons.download,
+                  color: isTransferring ? Colors.orange : Colors.deepPurpleAccent,
+                  textColor: Colors.white,
+                  borderRadius: 16,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  iconSize: 22,
+                  iconGap: 12,
                 ),
               ),
             ),

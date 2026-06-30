@@ -16,6 +16,7 @@ import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -629,7 +630,15 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadGraph, child: Text(context.l10n.retry)),
+              OmiButton(
+                label: context.l10n.retry,
+                onPressed: _loadGraph,
+                color: Colors.black,
+                textColor: Colors.black,
+                borderRadius: 4,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
             ],
           ),
         ),
@@ -679,14 +688,17 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                     ),
                   )
                 else if (!widget.hideRebuildButtonWhenEmpty)
-                  ElevatedButton.icon(
+                  OmiButton(
+                    label: context.l10n.buildGraphButton,
                     onPressed: _rebuildGraph,
-                    icon: const Icon(Icons.auto_fix_high),
-                    label: Text(context.l10n.buildGraphButton),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purpleAccent.withValues(alpha: 0.2),
-                      foregroundColor: Colors.purpleAccent,
-                    ),
+                    icon: Icons.auto_fix_high,
+                    iconSize: 24,
+                    color: Colors.purpleAccent.withValues(alpha: 0.2),
+                    textColor: Colors.purpleAccent,
+                    borderRadius: 4,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 16, 0),
                   ),
               ],
             ),

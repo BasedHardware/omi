@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/sync_confirmation.dart';
 
@@ -54,17 +55,17 @@ class LimitlessSyncCardWidget extends StatelessWidget {
                     ),
                   ),
                   if (!isSyncing)
-                    ElevatedButton(
+                    OmiButton(
+                      label: context.l10n.syncNow,
                       onPressed: () async {
                         if (await confirmSyncForCustomStt(context) && context.mounted) syncProvider.syncWals();
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.deepPurple,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: Text(context.l10n.syncNow),
+                      color: Colors.deepPurple,
+                      textColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     )
                   else
                     Text(

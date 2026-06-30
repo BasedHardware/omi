@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 void showEditSegmentBottomSheet(
@@ -104,15 +105,12 @@ class _EditSegmentSheetState extends State<_EditSegmentSheet> {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
+                child: OmiButton(
+                  label: context.l10n.save,
                   onPressed: _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(context.l10n.save, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  borderRadius: 12,
+                  fontSize: 15,
                 ),
               ),
             ],

@@ -2,6 +2,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/device_guide.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
@@ -73,18 +74,14 @@ class DevicePairingSheet extends StatelessWidget {
                 SizedBox(
                   width: double.infinity,
                   height: 52,
-                  child: ElevatedButton(
+                  child: OmiButton(
+                    label: context.l10n.iveDoneThis,
                     onPressed: onDismissAll,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ResponsiveHelper.purplePrimary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.iveDoneThis,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
+                    color: ResponsiveHelper.purplePrimary,
+                    textColor: Colors.white,
+                    borderRadius: 28,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
                 const SizedBox(height: 20),

@@ -18,6 +18,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -462,14 +463,14 @@ class _PlansSheetState extends State<PlansSheet> {
               onPressed: () => Navigator.of(ctx).pop(false),
               child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
             ),
-            ElevatedButton(
+            OmiButton(
+              label: context.l10n.confirmUpgrade,
               onPressed: () => Navigator.of(ctx).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text(context.l10n.confirmUpgrade),
+              color: Colors.deepPurple,
+              textColor: Colors.white,
+              borderRadius: 8,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
           ],
         ),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -201,7 +202,8 @@ class LanguageSelectionDialog {
                     style: TextButton.styleFrom(foregroundColor: Colors.grey),
                     child: Text(context.l10n.skip),
                   ),
-                ElevatedButton(
+                OmiButton(
+                  label: context.l10n.confirm,
                   onPressed: selectedLanguage == null
                       ? null
                       : () async {
@@ -221,12 +223,13 @@ class LanguageSelectionDialog {
                             AppSnackbar.showSnackbarError(failMsg);
                           }
                         },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.3),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(context.l10n.confirm),
+                  color: Colors.deepPurple,
+                  textColor: Colors.white,
+                  disabledColor: Colors.deepPurple.withValues(alpha: 0.3),
+                  disabledTextColor: Colors.white.withValues(alpha: 0.38),
+                  borderRadius: 4,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                 ),
               ],
             );

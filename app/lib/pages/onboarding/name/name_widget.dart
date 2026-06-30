@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/ui/atoms/omi_button.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class NameWidget extends StatefulWidget {
@@ -124,7 +125,8 @@ class _NameWidgetState extends State<NameWidget> {
                 SizedBox(
                   width: double.infinity,
                   height: 56,
-                  child: ElevatedButton(
+                  child: OmiButton(
+                    label: context.l10n.continueButton,
                     onPressed: nameController.text.trim().isEmpty
                         ? null
                         : () async {
@@ -132,18 +134,8 @@ class _NameWidgetState extends State<NameWidget> {
                             AuthService.instance.updateGivenName(nameController.text.trim());
                             widget.goNext();
                           },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: nameController.text.trim().isEmpty ? Colors.grey[800] : Colors.white,
-                      foregroundColor: nameController.text.trim().isEmpty ? Colors.grey[600] : Colors.black,
-                      disabledBackgroundColor: Colors.grey[800],
-                      disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                    ),
+                    disabledColor: Colors.grey[800],
+                    disabledTextColor: Colors.grey[600],
                   ),
                 ),
 
