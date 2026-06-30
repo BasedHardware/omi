@@ -109,6 +109,15 @@ conversation_folder_stub.FolderAssignment = MagicMock()
 conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=(None, 0.0, "test stub"))
 conversation_folder_stub.build_folders_context = MagicMock(return_value="")
 
+# conversation_processing imports these two after the origin/main merge; stub them so the
+# module under test imports in isolation (they are not exercised by these title tests).
+byok_stub = sys.modules.get("utils.byok") or _stub_module("utils.byok")
+byok_stub.has_byok_keys = MagicMock(return_value=False)
+
+gateway_client_stub = sys.modules.get("utils.llm.gateway_client") or _stub_module("utils.llm.gateway_client")
+gateway_client_stub.invoke_chat_structured_gateway = MagicMock()
+gateway_client_stub.record_chat_extraction_gateway_result = MagicMock()
+
 # Real models (pure pydantic) resolve from the models package directory.
 if not hasattr(sys.modules.get("models", None), "__path__"):
     _stub_package("models")
