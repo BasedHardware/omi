@@ -3388,6 +3388,7 @@ extension APIClient {
 
   /// Auto-create a developer API key for the user's persona app.
   /// Calls POST /v1/apps/{app_id}/keys using the user's Firebase auth.
+  /// Uses the default `baseURL` (api.omi.me in production).
   func createAppKey(appId: String) async throws -> String {
     struct KeyResponse: Decodable {
       let id: String
@@ -3409,10 +3410,10 @@ extension APIClient {
   }
 
   /// Get or create the user's persona via POST /v1/user/persona.
-  /// Always targets the prod backend (api.omi.me). Local backend
-  /// persona creation is handled by the plugin, not the desktop.
-  /// Identified by cubic + maintainer review: removing the backendURL
-  /// override prevents accidental auth header leakage to untrusted URLs.
+  /// Uses the default `baseURL` (resolves via DesktopBackendEnvironment,
+  /// which is api.omi.me in production). The backendURL override was
+  /// removed to prevent auth header leakage to untrusted URLs.
+  /// Identified by cubic + maintainer review.
   func getOrCreatePersona() async throws -> Persona {
     return try await post("v1/user/persona")
   }
