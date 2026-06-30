@@ -279,7 +279,7 @@ def test_append_commit_enqueues_projection_repairs(monkeypatch):
     monkeypatch.setattr(
         memory_ledger.projection_repair,
         'enqueue_projection_repairs',
-        lambda uid, item: queued.append((uid, item)) or ['repair'],
+        lambda uid, item, **_kwargs: queued.append((uid, item)) or ['repair'],
     )
 
     result = memory_ledger.append_commit('uid-1', None, commit['mutations'])
