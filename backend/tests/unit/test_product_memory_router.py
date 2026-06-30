@@ -57,7 +57,13 @@ from tests.unit.memory_import_isolation import (
     snapshot_sys_modules,
 )
 
-_ROUTER_STUB_NAMES = ("fastapi", "database._client", "utils.other.endpoints", "routers.memory_product")
+_ROUTER_STUB_NAMES = (
+    "fastapi",
+    "database._client",
+    "database.vector_db",
+    "utils.other.endpoints",
+    "routers.memory_product",
+)
 
 
 @pytest.fixture(scope="module", autouse=True)

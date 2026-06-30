@@ -31,10 +31,21 @@ def snapshot_sys_modules(names: Iterable[str]) -> dict[str, ModuleType | None]:
 
 def restore_sys_modules(saved: Mapping[str, ModuleType | None]) -> None:
     for name, original in saved.items():
+        current = sys.modules.get(name)
         if original is None:
-            sys.modules.pop(name, None)
+            removed = sys.modules.pop(name, None)
+            if "." in name:
+                parent_name, child_name = name.rsplit(".", 1)
+                parent = sys.modules.get(parent_name)
+                if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is (removed or current):
+                    delattr(parent, child_name)
         else:
             sys.modules[name] = original
+            if "." in name:
+                parent_name, child_name = name.rsplit(".", 1)
+                parent = sys.modules.get(parent_name)
+                if isinstance(parent, ModuleType):
+                    setattr(parent, child_name, original)
 
 
 def drop_stale_module(module_name: str, expected_file: str) -> None:
