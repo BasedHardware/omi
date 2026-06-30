@@ -173,10 +173,13 @@ def append_commit(
     commit_time: Optional[datetime] = None,
     projection_writer: Optional[Callable[[Any], None]] = None,
     use_current_head: bool = False,
+    firestore_client=None,
 ) -> Dict[str, Any]:
-    transaction = db.transaction()
+    database = firestore_client or db
+    transaction = database.transaction()
     result = _append_commit_transaction(
         transaction,
+        database,
         uid,
         parent_commit_id,
         mutations,
@@ -186,7 +189,7 @@ def append_commit(
         use_current_head,
     )
     if result.get('applied'):
-        projection_repair.enqueue_projection_repairs(uid, result.get('commit'))
+        projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 
@@ -198,10 +201,13 @@ def append_commit_with_builder(
     run_id: Optional[str] = None,
     commit_time: Optional[datetime] = None,
     use_current_head: bool = False,
+    firestore_client=None,
 ) -> Dict[str, Any]:
-    transaction = db.transaction()
+    database = firestore_client or db
+    transaction = database.transaction()
     result = _append_commit_with_builder_transaction(
         transaction,
+        database,
         uid,
         parent_commit_id,
         mutation_builder,
@@ -210,13 +216,14 @@ def append_commit_with_builder(
         use_current_head,
     )
     if result.get('applied'):
-        projection_repair.enqueue_projection_repairs(uid, result.get('commit'))
+        projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
     return result
 
 
 @transactional
 def _append_commit_transaction(
     transaction,
+    database,
     uid: str,
     parent_commit_id: Optional[str],
     mutations: List[Dict[str, Any]],
@@ -225,7 +232,7 @@ def _append_commit_transaction(
     projection_writer: Optional[Callable[[Any], None]],
     use_current_head: bool,
 ) -> Dict[str, Any]:
-    user_ref = db.collection(users_collection).document(uid)
+    user_ref = database.collection(users_collection).document(uid)
     state_ref = user_ref.collection(memory_state_collection).document(memory_state_document)
     state_snapshot = state_ref.get(transaction=transaction)
     state = state_snapshot.to_dict() if state_snapshot.exists else {}
@@ -260,6 +267,7 @@ def _append_commit_transaction(
 @transactional
 def _append_commit_with_builder_transaction(
     transaction,
+    database,
     uid: str,
     parent_commit_id: Optional[str],
     mutation_builder: Callable[[Any], Dict[str, Any]],
@@ -267,7 +275,7 @@ def _append_commit_with_builder_transaction(
     commit_time: Optional[datetime],
     use_current_head: bool,
 ) -> Dict[str, Any]:
-    user_ref = db.collection(users_collection).document(uid)
+    user_ref = database.collection(users_collection).document(uid)
     state_ref = user_ref.collection(memory_state_collection).document(memory_state_document)
     state_snapshot = state_ref.get(transaction=transaction)
     state = state_snapshot.to_dict() if state_snapshot.exists else {}

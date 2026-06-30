@@ -26,7 +26,7 @@ def repair_reason(mutation: Dict[str, Any]) -> str:
     return mutation_type
 
 
-def enqueue_projection_repairs(uid: str, commit: Optional[Dict[str, Any]]) -> List[str]:
+def enqueue_projection_repairs(uid: str, commit: Optional[Dict[str, Any]], *, firestore_client=None) -> List[str]:
     if not commit:
         return []
     mutations = commit.get('mutations') or []
@@ -35,8 +35,9 @@ def enqueue_projection_repairs(uid: str, commit: Optional[Dict[str, Any]]) -> Li
         return []
 
     now = datetime.now(timezone.utc)
-    batch = db.batch()
-    collection_ref = db.collection(users_collection).document(uid).collection(projection_repairs_collection)
+    database = firestore_client or db
+    batch = database.batch()
+    collection_ref = database.collection(users_collection).document(uid).collection(projection_repairs_collection)
     repair_ids = []
     reasons_by_fact = _reasons_by_fact(mutations)
     for fact_id in fact_ids:

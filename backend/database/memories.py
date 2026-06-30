@@ -209,7 +209,13 @@ def create_memory(uid: str, data: dict, *, firestore_client=None):
 
         return {'mutations': [memory_ledger.add_fact(merged_data)], 'projection_writer': write_projection}
 
-    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
+    return memory_ledger.append_commit_with_builder(
+        uid,
+        None,
+        build_commit,
+        use_current_head=True,
+        firestore_client=database,
+    )
 
 
 @set_data_protection_level(data_arg_name='data')
@@ -243,7 +249,13 @@ def save_memories(uid: str, data: List[dict], *, firestore_client=None):
             'projection_writer': write_projection,
         }
 
-    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
+    return memory_ledger.append_commit_with_builder(
+        uid,
+        None,
+        build_commit,
+        use_current_head=True,
+        firestore_client=database,
+    )
 
 
 @transactional
@@ -530,7 +542,13 @@ def merge_contradict_memory(
             'projection_writer': write_projection,
         }
 
-    return memory_ledger.append_commit_with_builder(uid, None, build_commit, use_current_head=True)
+    return memory_ledger.append_commit_with_builder(
+        uid,
+        None,
+        build_commit,
+        use_current_head=True,
+        firestore_client=database,
+    )
 
 
 def projection_update_for_refine(
