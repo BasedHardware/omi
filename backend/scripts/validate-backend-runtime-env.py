@@ -223,6 +223,38 @@ def _validate_cloud_run_workflows(
             '${{vars.GCP_PROJECT_ID}}': str(env_config['gcp_project']),
             '${{ vars.RUNTIME_GCP_PROJECT_ID }}': runtime_gcp_project,
             '${{vars.RUNTIME_GCP_PROJECT_ID}}': runtime_gcp_project,
+            '${{ vars.OMI_LLM_GATEWAY_URL }}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
+            '${{vars.OMI_LLM_GATEWAY_URL}}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
+            '${{ vars.CLOUD_RUN_VPC_NETWORK }}': _expected_flag_value(
+                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
+            ),
+            '${{vars.CLOUD_RUN_VPC_NETWORK}}': _expected_flag_value(
+                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
+            ),
+            '${{ vars.CLOUD_RUN_VPC_SUBNET }}': _expected_flag_value(
+                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
+            ),
+            '${{vars.CLOUD_RUN_VPC_SUBNET}}': _expected_flag_value(
+                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
+            ),
+            '${{ vars.MEMORY_MODE }}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
+            '${{vars.MEMORY_MODE}}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
+            '${{ vars.MEMORY_ENABLED_USERS }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
+            '${{vars.MEMORY_ENABLED_USERS}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
+            '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
+            '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
+            '${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}': _manifest_env_value(
+                expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
+            ),
+            '${{vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED}}': _manifest_env_value(
+                expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
+            ),
+            '${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}': _manifest_env_value(
+                expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+            ),
+            '${{vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED}}': _manifest_env_value(
+                expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+            ),
         }
         actual_env = _literal_env_entries_by_name(service_state.get('env_vars', {}), variables=workflow_vars)
         errors.extend(
@@ -245,11 +277,19 @@ def _validate_cloud_run_workflows(
             _validate_workflow_flags(
                 scope=f'cloud_run_workflow/{service}',
                 expected=env_config.get('cloud_run', {}).get('network', {}).get('flags', {}),
-                actual=service_state.get('flags', {}),
+                actual=_substitute_values(service_state.get('flags', {}), variables=workflow_vars),
                 strict_provisional=strict_provisional,
             )
         )
     return errors
+
+
+def _manifest_env_value(expected_services: dict[str, Any], name: str) -> str:
+    for service_config in expected_services.values():
+        env_entry = service_config.get('env', {}).get(name)
+        if isinstance(env_entry, dict) and 'value' in env_entry:
+            return str(env_entry['value'])
+    return ''
 
 
 def _validate_env_entries(
@@ -319,6 +359,12 @@ def _literal_env_entries_by_name(raw_env: Any, *, variables: dict[str, str] | No
         return {}
     variables = variables or {}
     return {name: {'name': name, 'value': variables.get(str(value), str(value))} for name, value in raw_env.items()}
+
+
+def _substitute_values(raw: Any, *, variables: dict[str, str]) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+    return {str(name): variables.get(str(value), str(value)) for name, value in raw.items()}
 
 
 def _workflow_secret_entries_by_name(raw_secrets: Any) -> dict[str, dict[str, Any]]:

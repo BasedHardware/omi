@@ -108,6 +108,16 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: MEMORY_MODE
+    value: "off"
+  - name: MEMORY_ENABLED_USERS
+    value: ""
+  - name: MEMORY_V3_GET_ENABLED
+    value: "false"
+  - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
+    value: "false"
+  - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
