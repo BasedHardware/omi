@@ -53,20 +53,79 @@ def _sse_response(chunks: list[str], status_code: int = 200) -> httpx.Response:
 
 
 def _mock_async_client_post(response: httpx.Response | Exception):
-    """Return a configured AsyncMock httpx.AsyncClient whose .post -> response."""
+    """Return a configured AsyncMock httpx.AsyncClient.
+
+    Newer persona_client (after the cubic P1 timeout fix) uses
+    `client.stream("POST", ...)` as an async context manager rather than
+    `client.post(...)` eagerly. Mock both paths so tests work either way:
+    - `client.post(...)` returns the response (legacy behavior).
+    - `client.stream(...)` returns an async context manager whose
+      `__aenter__` yields the response. The response object must expose
+      `aiter_bytes()` for the SSE EventSource consumer.
+
+    For error cases we raise from `client.stream` so the context manager
+    `__aenter__` propagates the exception (httpx.HTTPStatusError on 4xx/5xx
+    is raised by `response.raise_for_status()` inside the `async with`).
+    """
     client = AsyncMock()
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=None)
+
+    # Build a real async-iterator over the body lines so the EventSource
+    # consumer (which calls `response.aiter_lines()`) can drive aiter_sse()
+    # without ad-hoc mocking. Note: aiter_lines yields STR (decoded lines),
+    # not bytes — EventSource does `line.rstrip("\n")` directly on the str.
+    async def _aiter_lines():
+        body = response.content.decode("utf-8") if isinstance(response.content, bytes) else response.content
+        for line in body.splitlines(keepends=True):
+            yield line
+
+    # Attach aiter_lines to the response so EventSource can iterate it.
+    # If `response` is an exception, we skip this — error paths don't reach
+    # the consumer.
+    if isinstance(response, httpx.Response):
+        response.aiter_lines = _aiter_lines
+        # The stream() context manager wraps the response. raise_for_status
+        # is called inside the `async with` body so we patch it to raise
+        # for 4xx/5xx just like the real httpx Response.
+        if response.status_code >= 400:
+
+            def _raise():
+                raise httpx.HTTPStatusError(
+                    f"HTTP {response.status_code}",
+                    request=response.request,
+                    response=response,
+                )
+
+            response.raise_for_status = _raise
+
+        class _StreamCM:
+            async def __aenter__(self_):
+                return response
+
+            async def __aexit__(self_, exc_type, exc, tb):
+                return None
+
+        # Use MagicMock (not AsyncMock) so client.stream(...) returns the
+        # context manager directly. AsyncMock(return_value=...) wraps it in a
+        # coroutine, which `async with` can't accept. .call_args still works
+        # for introspection.
+        client.stream = MagicMock(return_value=_StreamCM())
+
     if isinstance(response, Exception):
         client.post = AsyncMock(side_effect=response)
+
+        class _ErrCM:
+            async def __aenter__(self_):
+                raise response
+
+            async def __aexit__(self_, exc_type, exc, tb):
+                return None
+
+        client.stream = MagicMock(return_value=_ErrCM())
     else:
         client.post = AsyncMock(return_value=response)
 
-    # stream() on the response yields the body bytes
-    async def _stream():
-        yield response.content
-
-    response.stream = MagicMock(return_value=_stream()) if not hasattr(response, "stream") else response.stream
     return client
 
 
@@ -104,8 +163,8 @@ class TestChatSuccess:
                 uid="u-1",
             )
 
-        client.post.assert_awaited_once()
-        call_kwargs = client.post.await_args.kwargs
+        client.stream.assert_called_once()
+        call_kwargs = client.stream.call_args.kwargs
         assert call_kwargs["headers"]["Authorization"] == "Bearer omi_dev_test"
 
     @pytest.mark.asyncio
@@ -122,7 +181,7 @@ class TestChatSuccess:
                 uid="u-1",
             )
 
-        url = client.post.await_args.args[0]
+        url = client.stream.call_args.args[1]
         assert url == "https://api.omi.me/v2/integrations/app-abc/user/persona-chat"
 
     @pytest.mark.asyncio
@@ -146,7 +205,7 @@ class TestChatSuccess:
                 uid="u-abc",
             )
 
-        call_kwargs = client.post.await_args.kwargs
+        call_kwargs = client.stream.call_args.kwargs
         assert call_kwargs["params"] == {
             "uid": "u-abc"
         }, f"uid must be sent as a query param; got params={call_kwargs.get('params')}"
@@ -165,7 +224,7 @@ class TestChatSuccess:
                 uid="u-1",
             )
 
-        call_kwargs = client.post.await_args.kwargs
+        call_kwargs = client.stream.call_args.kwargs
         assert call_kwargs["json"] == {"text": "what's the weather?"}
 
 
@@ -248,7 +307,74 @@ class TestSseParsing:
 
 
 # ---------------------------------------------------------------------------
-# 3. Error paths
+# 3. [DONE] terminator regression
+# ---------------------------------------------------------------------------
+class TestDoneTerminator:
+    """Regression: [DONE] must break the SSE loop immediately.
+
+    Identified by cubic + maintainer review on PR #8531: filtering [DONE]
+    from chunks but not breaking the loop means the client keeps waiting
+    for the stream to close. If the server/proxy sends heartbeats after
+    [DONE], asyncio.wait_for fires and the accumulated reply is lost.
+    """
+
+    @pytest.mark.asyncio
+    async def test_done_breaks_loop_and_returns_reply(self):
+        """Events: 'hello', '[DONE]' → reply should be 'hello', not ''.
+
+        The mock body has 'data: hello\n\n' followed by 'data: [DONE]\n\n'
+        and then nothing else. If the consumer doesn't break on [DONE],
+        it will wait for more events until the read timeout fires,
+        returning ''.
+        """
+        body = "data: hello\n\ndata: [DONE]\n\n"
+        request = httpx.Request("POST", "https://api.omi.me/v2/integrations/app-1/user/persona-chat")
+        resp = httpx.Response(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            content=body.encode("utf-8"),
+            request=request,
+        )
+        client = _mock_async_client_post(resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            reply = await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+                uid="u-1",
+                timeout_seconds=5.0,
+            )
+        assert reply == "hello", f"Expected 'hello', got {reply!r}"
+
+    @pytest.mark.asyncio
+    async def test_done_not_included_in_reply(self):
+        """[DONE] must never appear in the reply text."""
+        body = "data: hello\n\ndata: world\n\ndata: [DONE]\n\n"
+        request = httpx.Request("POST", "https://api.omi.me/v2/integrations/app-1/user/persona-chat")
+        resp = httpx.Response(
+            status_code=200,
+            headers={"content-type": "text/event-stream"},
+            content=body.encode("utf-8"),
+            request=request,
+        )
+        client = _mock_async_client_post(resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            reply = await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+                uid="u-1",
+            )
+        assert "[DONE]" not in reply
+        assert reply == "helloworld"
+
+
+# ---------------------------------------------------------------------------
+# 4. Error paths
 # ---------------------------------------------------------------------------
 class TestChatErrors:
     @pytest.mark.asyncio
@@ -301,10 +427,20 @@ class TestChatErrors:
 
     @pytest.mark.asyncio
     async def test_timeout_returns_empty_and_logs(self, caplog):
+        # After the cubic P1 timeout fix persona_client uses client.stream()
+        # (not client.post()) as an async context manager. Mock stream to
+        # raise httpx.TimeoutException from __aenter__.
+        class _ErrCM:
+            async def __aenter__(self_):
+                raise httpx.TimeoutException("timed out", request=MagicMock())
+
+            async def __aexit__(self_, exc_type, exc, tb):
+                return None
+
         client = AsyncMock()
         client.__aenter__ = AsyncMock(return_value=client)
         client.__aexit__ = AsyncMock(return_value=None)
-        client.post = AsyncMock(side_effect=httpx.TimeoutException("timed out", request=MagicMock()))
+        client.stream = MagicMock(return_value=_ErrCM())
 
         with patch("persona_client.httpx.AsyncClient", return_value=client):
             with caplog.at_level(logging.ERROR, logger="persona_client"):
@@ -322,10 +458,17 @@ class TestChatErrors:
 
     @pytest.mark.asyncio
     async def test_connect_error_returns_empty_and_logs(self, caplog):
+        class _ErrCM:
+            async def __aenter__(self_):
+                raise httpx.ConnectError("boom", request=MagicMock())
+
+            async def __aexit__(self_, exc_type, exc, tb):
+                return None
+
         client = AsyncMock()
         client.__aenter__ = AsyncMock(return_value=client)
         client.__aexit__ = AsyncMock(return_value=None)
-        client.post = AsyncMock(side_effect=httpx.ConnectError("boom", request=MagicMock()))
+        client.stream = MagicMock(return_value=_ErrCM())
 
         with patch("persona_client.httpx.AsyncClient", return_value=client):
             with caplog.at_level(logging.ERROR, logger="persona_client"):
@@ -338,6 +481,23 @@ class TestChatErrors:
                 )
 
         assert reply == ""
+        # P2 (cubic): the test name promised log verification but never
+        # asserted on caplog. Without this assertion, a regression that
+        # swallows the connect-error silently (returns '' without
+        # logging) would pass — defeating the whole point of the test.
+        error_records = [r for r in caplog.records if r.levelno >= logging.ERROR]
+        assert error_records, "expected an ERROR-level log record on connect error"
+        # The message must be informative enough for on-call to diagnose,
+        # but MUST NOT contain the user-supplied api_key (the literal
+        # "k" we passed in) or the raw uid.
+        joined = " ".join(r.getMessage() for r in error_records)
+        assert (
+            "boom" in joined or "connect" in joined.lower()
+        ), f"expected log to mention the connect error, got: {joined!r}"
+        # Negative assertions — guard against future regressions where a
+        # logger.error("%s", exception) leaks sensitive args.
+        assert "api_key='k'" not in joined and "api_key=k" not in joined, f"api_key leaked into log: {joined!r}"
+        assert "uid='u-1'" not in joined, f"uid leaked into log: {joined!r}"
 
     @pytest.mark.asyncio
     async def test_wall_clock_timeout_caps_long_sse_stream(self, caplog):
@@ -367,7 +527,16 @@ class TestChatErrors:
         client = AsyncMock()
         client.__aenter__ = AsyncMock(return_value=client)
         client.__aexit__ = AsyncMock(return_value=None)
-        client.post = AsyncMock(return_value=resp)
+
+        # persona_client now uses client.stream() — wrap resp in an async CM.
+        class _StreamCM:
+            async def __aenter__(self_):
+                return resp
+
+            async def __aexit__(self_, exc_type, exc, tb):
+                return None
+
+        client.stream = MagicMock(return_value=_StreamCM())
 
         with patch("persona_client.httpx.AsyncClient", return_value=client):
             with patch.object(EventSource, "aiter_sse", slow_aiter_sse):
