@@ -78,10 +78,21 @@ class GPUWorker:
         self._attn_is_local = False
         self._model_dtype = None
         self._max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
+        self._vram_total_mb = 0.0
+        self._vram_baseline_mb = 0.0
 
     @property
     def is_ready(self) -> bool:
         return self._ready.is_set() and self._load_error is None
+
+    @property
+    def vram_info(self) -> dict:
+        return {
+            "total_mb": self._vram_total_mb,
+            "baseline_mb": self._vram_baseline_mb,
+            "attention_mode": self._attn_mode,
+            "auto_threshold_sec": self._attn_auto_threshold_sec,
+        }
 
     def start(self) -> None:
         self._running = True
@@ -266,9 +277,16 @@ class GPUWorker:
 
         self._load_embedding_model()
 
-        vram_used = torch.cuda.memory_allocated() / 1024**2
-        vram_total = torch.cuda.get_device_properties(0).total_memory / 1024**2
-        logger.info(f"VRAM after model load: {vram_used:.0f}MiB / {vram_total:.0f}MiB")
+        if torch.cuda.is_available():
+            device = os.getenv("PARAKEET_DEVICE", "cuda:0")
+            dev_idx = int(device.split(":")[-1]) if ":" in device else 0
+            free_bytes, total_bytes = torch.cuda.mem_get_info(dev_idx)
+            self._vram_total_mb = total_bytes / (1024 * 1024)
+            self._vram_baseline_mb = (total_bytes - free_bytes) / (1024 * 1024)
+            logger.info(
+                f"VRAM after model load: {self._vram_baseline_mb:.0f}MiB used / "
+                f"{self._vram_total_mb:.0f}MiB total ({free_bytes / (1024 * 1024):.0f}MiB free)"
+            )
         logger.info("Batch model loaded and ready")
 
     def _load_embedding_model(self) -> None:
@@ -351,7 +369,11 @@ class GPUWorker:
                     )
 
         if self._attn_mode == "auto":
-            max_dur = max((self._get_audio_duration_sec(p) for p in audio_paths), default=0.0)
+            durations_from_batcher = payload.get("durations")
+            if durations_from_batcher:
+                max_dur = max(durations_from_batcher)
+            else:
+                max_dur = max((self._get_audio_duration_sec(p) for p in audio_paths), default=0.0)
             need_local = max_dur >= self._attn_auto_threshold_sec
             if need_local != self._attn_is_local:
                 mode_name = "local" if need_local else "full"
