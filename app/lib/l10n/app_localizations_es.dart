@@ -9384,11 +9384,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get transcribeLaterPaused => 'En pausa: no se está grabando audio';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Este dispositivo';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Este iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Este teléfono';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

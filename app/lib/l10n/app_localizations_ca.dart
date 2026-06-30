@@ -9417,11 +9417,11 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcribeLaterPaused => 'En pausa — no s\'està gravant àudio';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Aquest dispositiu';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Aquest iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Aquest telèfon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

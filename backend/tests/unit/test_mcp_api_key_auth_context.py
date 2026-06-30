@@ -22,6 +22,7 @@ setattr(_fake_fastapi, 'HTTPException', _FakeHTTPException)
 setattr(_fake_fastapi, 'Depends', _identity_dependency)
 setattr(_fake_fastapi, 'Security', _identity_dependency)
 setattr(_fake_fastapi, 'Request', type('Request', (), {}))
+setattr(_fake_fastapi, 'Response', type('Response', (), {}))
 _fake_fastapi_security = ModuleType('fastapi.security')
 setattr(_fake_fastapi_security, 'APIKeyHeader', lambda *args, **kwargs: None)
 setattr(_fake_fastapi_security, 'HTTPBearer', lambda *args, **kwargs: None)
@@ -229,10 +230,14 @@ class _CreateDB:
 
     def __init__(self):
         self.set_calls = []
+        self.document_calls = []
 
     def collection(self, name):
         assert name == 'mcp_api_keys'
         return _CreateCollection(self)
+
+    def document(self, path):
+        return _CreateGrantDoc(self, path)
 
 
 class _CreateCollection:
@@ -251,9 +256,17 @@ class _CreateDoc:
         self.parent.set_calls.append(doc)
 
 
+class _CreateGrantDoc:
+    def __init__(self, parent, path):
+        self.parent = parent
+        self.path = path
+
+    def set(self, doc, merge=False):
+        self.parent.document_calls.append((self.path, doc, merge))
+
+
 def test_create_mcp_key_seeds_default_memory_scopes(monkeypatch):
-    """Newly minted MCP keys must be seeded with memories.read + memories.write
-    so the hosted MCP memory toolset works immediately. Codex review P2."""
+    """Newly minted MCP keys must seed scopes and the matching grant."""
     monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
     fake_db = _CreateDB()
     monkeypatch.setattr(mcp_api_key_db, 'db', fake_db)
@@ -266,6 +279,13 @@ def test_create_mcp_key_seeds_default_memory_scopes(monkeypatch):
     persisted = fake_db.set_calls[0]
     assert persisted['scopes'] == ['memories.read', 'memories.write']
     assert persisted['app_id'] == 'mcp-api'
+    assert fake_db.document_calls[0][0] == 'users/u1/memory_control/app_key_memory_grants'
+    grant_doc = fake_db.document_calls[0][1]
+    seeded_grant = grant_doc['grants']['mcp']['apps']['mcp-api']['keys'][api_key_data.id]
+    assert seeded_grant['scopes'] == ['memories.read', 'memories.write']
+    assert seeded_grant['default_read'] is True
+    assert seeded_grant['write'] is True
+    assert fake_db.document_calls[0][2] is True
 
 
 def test_create_mcp_key_explicit_none_scopes_mints_legacy_key(monkeypatch):
@@ -279,3 +299,4 @@ def test_create_mcp_key_explicit_none_scopes_mints_legacy_key(monkeypatch):
 
     assert api_key_data.scopes is None
     assert fake_db.set_calls[0]['scopes'] is None
+    assert fake_db.document_calls == []

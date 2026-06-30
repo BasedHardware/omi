@@ -9287,11 +9287,11 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcribeLaterPaused => 'מושהה — האודיו אינו מוקלט';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'המכשיר הזה';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'ה-iPhone הזה';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'הטלפון הזה';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

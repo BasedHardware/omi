@@ -9363,11 +9363,11 @@ class AppLocalizationsId extends AppLocalizations {
   String get transcribeLaterPaused => 'Dijeda — audio tidak sedang direkam';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Perangkat ini';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'iPhone ini';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Ponsel ini';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

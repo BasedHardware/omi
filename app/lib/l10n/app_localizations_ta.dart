@@ -9425,11 +9425,11 @@ class AppLocalizationsTa extends AppLocalizations {
   String get transcribeLaterPaused => 'இடைநிறுத்தப்பட்டது — ஒலி பதிவு செய்யப்படவில்லை';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'இந்த சாதனம்';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'இந்த iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'இந்த தொலைபேசி';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

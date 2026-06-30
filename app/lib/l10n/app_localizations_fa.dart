@@ -9360,11 +9360,11 @@ class AppLocalizationsFa extends AppLocalizations {
   String get transcribeLaterPaused => 'متوقف شد — صدا ضبط نمی‌شود';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'این دستگاه';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'این iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'این تلفن';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

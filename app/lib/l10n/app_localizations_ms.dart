@@ -9378,11 +9378,11 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcribeLaterPaused => 'Dijeda — audio tidak dirakam';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Peranti ini';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'iPhone ini';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Telefon ini';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

@@ -9403,11 +9403,11 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Ez az eszköz';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Ez az iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Ez a telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

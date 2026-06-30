@@ -9370,11 +9370,11 @@ class AppLocalizationsSr extends AppLocalizations {
   String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Овај уређај';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Овај iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Овај телефон';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

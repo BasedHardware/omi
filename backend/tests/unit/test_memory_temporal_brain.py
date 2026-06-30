@@ -280,6 +280,20 @@ class TestMemoryLifecycle:
 
         assert [item['evidence_id'] for item in merged] == ['ev1', 'ev2', 'ev3']
 
+    def test_merge_evidence_sets_reactivates_matching_tombstoned_evidence(self):
+        existing = [
+            {'evidence_id': 'ev1', 'source_id': 'conv1', 'redaction_status': 'tombstoned'},
+        ]
+        incoming = [
+            {'evidence_id': 'ev1', 'source_id': 'conv1', 'redaction_status': 'active', 'quote': 'same fact'},
+        ]
+
+        merged = merge_evidence_sets(existing, incoming)
+
+        assert len(merged) == 1
+        assert merged[0]['redaction_status'] == 'active'
+        assert merged[0]['quote'] == 'same fact'
+
     def test_veracity_counts_independent_groups_not_raw_rows(self):
         one_group = [
             {'evidence_id': 'ev1', 'independence_group': 'conv1', 'capture_confidence': 0.8},

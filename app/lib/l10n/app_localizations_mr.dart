@@ -9368,11 +9368,11 @@ class AppLocalizationsMr extends AppLocalizations {
   String get transcribeLaterPaused => 'थांबवले — ऑडिओ रेकॉर्ड होत नाही';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'हे डिव्हाइस';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'हा iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'हा फोन';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

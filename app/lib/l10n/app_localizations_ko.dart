@@ -9202,11 +9202,11 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcribeLaterPaused => '일시중지됨 — 오디오가 녹음되지 않고 있습니다';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => '이 기기';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => '이 iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => '이 휴대폰';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

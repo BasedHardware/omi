@@ -9372,11 +9372,11 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcribeLaterPaused => 'روکا گیا — آڈیو ریکارڈ نہیں ہو رہی';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'یہ ڈیوائس';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'یہ iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'یہ فون';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

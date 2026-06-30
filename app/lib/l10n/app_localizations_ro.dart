@@ -9408,11 +9408,11 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Acest dispozitiv';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Acest iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Acest telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

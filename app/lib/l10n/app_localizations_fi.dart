@@ -9363,11 +9363,11 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Tämä laite';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Tämä iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Tämä puhelin';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

@@ -9389,11 +9389,11 @@ class AppLocalizationsNl extends AppLocalizations {
   String get transcribeLaterPaused => 'Gepauzeerd — audio wordt niet opgenomen';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Dit apparaat';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Deze iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Deze telefoon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

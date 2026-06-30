@@ -9385,11 +9385,11 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transcribeLaterPaused => 'Apturēts — audio netiek ierakstīts';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Šī ierīce';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Šis iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Šis tālrunis';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

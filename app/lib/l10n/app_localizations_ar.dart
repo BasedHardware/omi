@@ -9307,11 +9307,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transcribeLaterPaused => 'متوقف مؤقتًا — لا يتم تسجيل الصوت';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'هذا الجهاز';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'هذا الـ iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'هذا الهاتف';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

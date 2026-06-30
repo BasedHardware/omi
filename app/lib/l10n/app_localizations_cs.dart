@@ -9363,11 +9363,11 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcribeLaterPaused => 'Pozastaveno — zvuk se nenahrává';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Toto zařízení';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Tento iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Tento telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

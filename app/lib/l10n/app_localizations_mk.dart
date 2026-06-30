@@ -9407,11 +9407,11 @@ class AppLocalizationsMk extends AppLocalizations {
   String get transcribeLaterPaused => 'Паузирано — аудиото не се снима';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Овој уред';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Овој iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Овој телефон';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

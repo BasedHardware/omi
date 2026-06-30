@@ -9398,11 +9398,11 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcribeLaterPaused => 'На пауза — звукът не се записва';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Това устройство';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Този iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Този телефон';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

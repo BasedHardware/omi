@@ -6,6 +6,7 @@ from google.cloud import firestore
 
 import database.redis_db as redis_db
 from database._client import db
+from database.memory_app_key_grants import seed_mcp_api_key_memory_grant
 from models.mcp_api_key import McpApiKey
 from utils.mcp_api_keys import generate_api_key, hash_api_key
 
@@ -51,6 +52,15 @@ def create_mcp_key(
         "scopes": scopes,
     }
     db.collection("mcp_api_keys").document(key_id).set(api_key_doc)
+
+    if app_id == MCP_DEFAULT_APP_ID and scopes:
+        seed_mcp_api_key_memory_grant(
+            user_id,
+            key_id,
+            default_read='memories.read' in scopes,
+            write='memories.write' in scopes,
+            db_client=db,
+        )
 
     api_key_data = McpApiKey(
         id=key_id,

@@ -9365,11 +9365,11 @@ class AppLocalizationsBn extends AppLocalizations {
   String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'এই ডিভাইস';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'এই iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'এই ফোন';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

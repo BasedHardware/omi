@@ -9373,11 +9373,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String get transcribeLaterPaused => 'Em pausa — o áudio não está a ser gravado';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Este dispositivo';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Este iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Este telefone';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

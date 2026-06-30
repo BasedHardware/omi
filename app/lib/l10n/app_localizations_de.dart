@@ -9440,11 +9440,11 @@ class AppLocalizationsDe extends AppLocalizations {
   String get transcribeLaterPaused => 'Pausiert – Audio wird nicht aufgenommen';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Dieses Gerät';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Dieses iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Dieses Telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

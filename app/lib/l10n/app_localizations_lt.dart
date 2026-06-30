@@ -9377,11 +9377,11 @@ class AppLocalizationsLt extends AppLocalizations {
   String get transcribeLaterPaused => 'Pristabdyta — garsas neįrašomas';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Šis įrenginys';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Šis iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Šis telefonas';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

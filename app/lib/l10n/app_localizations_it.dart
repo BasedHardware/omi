@@ -9418,11 +9418,11 @@ class AppLocalizationsIt extends AppLocalizations {
   String get transcribeLaterPaused => 'In pausa — l\'audio non viene registrato';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Questo dispositivo';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Questo iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Questo telefono';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

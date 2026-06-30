@@ -116,6 +116,8 @@ def build_app_key_scope_grant_contract_state(
 
 DEVELOPER_API_CONSUMER = 'developer_api'
 DEVELOPER_API_DEFAULT_APP_ID = 'developer_api'
+MCP_CONSUMER = 'mcp'
+MCP_DEFAULT_APP_ID = 'mcp-api'
 
 
 def seed_developer_api_key_memory_grant(
@@ -149,6 +151,39 @@ def seed_developer_api_key_memory_grant(
     contract = build_app_key_scope_grant_contract_state(
         consumer=DEVELOPER_API_CONSUMER,
         app_id=DEVELOPER_API_DEFAULT_APP_ID,
+        key_id=key_id,
+        scopes=scopes,
+        default_read=default_read,
+        archive_read=False,
+        write=write,
+        enabled=True,
+    )
+    document_path = app_key_memory_grants_document_path(uid)
+    db_client.document(document_path).set(contract, merge=True)
+    return document_path
+
+
+def seed_mcp_api_key_memory_grant(
+    uid: str,
+    key_id: str,
+    *,
+    default_read: bool = False,
+    write: bool = False,
+    db_client=None,
+) -> str:
+    """Seed the server-owned app/key memory grant for a hosted MCP key."""
+    if db_client is None:
+        from database._client import db as db_client
+
+    scopes: list[str] = []
+    if default_read:
+        scopes.append('memories.read')
+    if write:
+        scopes.append('memories.write')
+
+    contract = build_app_key_scope_grant_contract_state(
+        consumer=MCP_CONSUMER,
+        app_id=MCP_DEFAULT_APP_ID,
         key_id=key_id,
         scopes=scopes,
         default_read=default_read,
@@ -209,5 +244,6 @@ __all__ = [
     "read_app_key_memory_grants_state",
     "app_key_memory_grants_document_path",
     "seed_developer_api_key_memory_grant",
+    "seed_mcp_api_key_memory_grant",
     "remove_developer_api_key_memory_grant",
 ]

@@ -9360,11 +9360,11 @@ class AppLocalizationsNo extends AppLocalizations {
   String get transcribeLaterPaused => 'På pause – lyd tas ikke opp';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Denne enheten';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Denne iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Denne telefonen';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

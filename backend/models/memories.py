@@ -498,16 +498,23 @@ def confidence_fields_for_evidence(
 
 def merge_evidence_sets(existing: List[dict], incoming: List[dict]) -> List[dict]:
     merged = []
-    seen = set()
+    seen: dict[str, int] = {}
     for item in list(existing) + list(incoming):
         item = _model_or_dict_to_dict(item)
         if not isinstance(item, dict):
             continue
         evidence_id = item.get('evidence_id')
         if evidence_id and evidence_id in seen:
+            existing_index = seen[evidence_id]
+            existing_item = merged[existing_index]
+            if (
+                existing_item.get('redaction_status') == 'tombstoned'
+                and item.get('redaction_status', 'active') != 'tombstoned'
+            ):
+                merged[existing_index] = item
             continue
         if evidence_id:
-            seen.add(evidence_id)
+            seen[evidence_id] = len(merged)
         merged.append(item)
     return merged
 

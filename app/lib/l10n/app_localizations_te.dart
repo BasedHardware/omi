@@ -9407,11 +9407,11 @@ class AppLocalizationsTe extends AppLocalizations {
   String get transcribeLaterPaused => 'పాజ్ చేయబడింది — ఆడియో రికార్డ్ కావడం లేదు';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'ఈ పరికరం';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'ఈ iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'ఈ ఫోన్';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

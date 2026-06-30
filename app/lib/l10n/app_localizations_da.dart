@@ -9353,11 +9353,11 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transcribeLaterPaused => 'Sat på pause — lyden optages ikke';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Denne enhed';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Denne iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Denne telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

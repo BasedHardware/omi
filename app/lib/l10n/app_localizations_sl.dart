@@ -9385,11 +9385,11 @@ class AppLocalizationsSl extends AppLocalizations {
   String get transcribeLaterPaused => 'Premor – zvok se ne snema';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Ta naprava';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Ta iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Ta telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

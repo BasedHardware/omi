@@ -9373,11 +9373,11 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcribeLaterPaused => 'Duraklatıldı — ses kaydedilmiyor';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Bu cihaz';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Bu iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Bu telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

@@ -9389,11 +9389,11 @@ class AppLocalizationsKn extends AppLocalizations {
   String get transcribeLaterPaused => 'ಸ್ಥಗಿತ — ಆಡಿಯೋ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿಲ್ಲ';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'ಈ ಸಾಧನ';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'ಈ iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'ಈ ಫೋನ್';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

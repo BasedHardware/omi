@@ -9368,11 +9368,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcribeLaterPaused => 'Pausad – inget ljud spelas in';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Den här enheten';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Den här iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Den här telefonen';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

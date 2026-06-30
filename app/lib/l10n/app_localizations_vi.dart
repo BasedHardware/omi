@@ -9353,11 +9353,11 @@ class AppLocalizationsVi extends AppLocalizations {
   String get transcribeLaterPaused => 'Đã tạm dừng — không ghi lại âm thanh';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Thiết bị này';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'iPhone này';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Điện thoại này';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

@@ -9386,11 +9386,11 @@ class AppLocalizationsBe extends AppLocalizations {
   String get transcribeLaterPaused => 'Прыпынена — аўдыя не запісваецца';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Гэта прылада';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Гэты iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Гэты тэлефон';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

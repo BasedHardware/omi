@@ -9443,11 +9443,11 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcribeLaterPaused => 'Naka-pause — hindi nire-record ang audio';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Device na ito';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'iPhone na ito';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Teleponong ito';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

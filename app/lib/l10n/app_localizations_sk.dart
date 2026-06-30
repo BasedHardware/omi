@@ -9355,11 +9355,11 @@ class AppLocalizationsSk extends AppLocalizations {
   String get transcribeLaterPaused => 'Pozastavené – zvuk sa nenahráva';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Toto zariadenie';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Tento iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Tento telefón';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

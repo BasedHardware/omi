@@ -9185,11 +9185,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterPaused => '已暂停 — 当前未在录音';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => '此设备';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => '这台 iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => '这部手机';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

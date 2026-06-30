@@ -9429,11 +9429,11 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcribeLaterPaused => 'Σε παύση — δεν γίνεται εγγραφή ήχου';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Αυτή η συσκευή';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Αυτό το iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Αυτό το τηλέφωνο';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

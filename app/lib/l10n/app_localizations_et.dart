@@ -9360,11 +9360,11 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcribeLaterPaused => 'Peatatud — heli ei salvestata';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'See seade';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'See iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'See telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

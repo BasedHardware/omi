@@ -9401,11 +9401,11 @@ class AppLocalizationsRu extends AppLocalizations {
   String get transcribeLaterPaused => 'Пауза — аудио не записывается';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Это устройство';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Этот iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Этот телефон';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

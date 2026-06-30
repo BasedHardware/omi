@@ -9383,11 +9383,11 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Ovaj uređaj';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Ovaj iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Ovaj telefon';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override

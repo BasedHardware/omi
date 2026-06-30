@@ -9381,11 +9381,11 @@ class AppLocalizationsUk extends AppLocalizations {
   String get transcribeLaterPaused => 'Призупинено — аудіо не записується';
 
   @override
-  String get memoryThisDevice => 'This device';
+  String get memoryThisDevice => 'Цей пристрій';
   @override
-  String get memoryThisIphone => 'This iPhone';
+  String get memoryThisIphone => 'Цей iPhone';
   @override
-  String get memoryThisPhone => 'This phone';
+  String get memoryThisPhone => 'Цей телефон';
   @override
   String get memoryProvenanceMac => 'Mac';
   @override
