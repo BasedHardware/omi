@@ -84,6 +84,7 @@ actor APIClient {
     var headers: [String: String] = [
       "Content-Type": "application/json",
       "X-App-Platform": "macos",
+      "X-Device-Id-Hash": ClientDeviceService.shared.deviceIdHash,
       "X-Request-Start-Time": String(Date().timeIntervalSince1970),
       "X-Desktop-Request-ID": UUID().uuidString,
     ]
@@ -1914,6 +1915,10 @@ extension APIClient {
   /// Updates visibility of all default-scope memories.
   /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
   func updateAllMemoriesVisibility(scope: MemoryLayerScope, visibility: String) async throws {
+    if scope == .defaultAccess {
+      try await updateAllMemoriesVisibility(visibility: visibility)
+      return
+    }
     throw APIError.unsupportedTierScopedBulkMutation("visibility updates")
   }
 
@@ -1925,6 +1930,10 @@ extension APIClient {
   /// Deletes all default-scope memories.
   /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
   func deleteAllMemories(scope: MemoryLayerScope) async throws {
+    if scope == .defaultAccess {
+      try await deleteAllMemories()
+      return
+    }
     throw APIError.unsupportedTierScopedBulkMutation("deletion")
   }
 
