@@ -1,12 +1,32 @@
----
-name: ai-clone-e2e
-description: "End-to-end test the Omi AI Clone (Telegram/WhatsApp bot) against a real backend + plugin + desktop UI. Use when verifying the PR #8682 changes (persona prompt rewrite, sender + recent-messages context, memory RAG), reproducing bugs reported in the PR, or onboarding a new contributor to the AI Clone architecture."
-allowed-tools: Bash, Read, Glob, Grep
----
-
 # AI Clone — End-to-End Testing Guide
 
-This guide walks another maintainer through **testing the AI Clone stack locally**: backend ↔ Telegram plugin ↔ desktop app ↔ real Telegram bot. The same flow exercises the WhatsApp plugin (only the bot-side setup differs).
+> ⚠️ **LOCAL DEV ONLY — NOT AN AGENT SKILL.**
+>
+> This guide describes how to bring up the full AI Clone stack (Python
+> backend + Telegram/WhatsApp plugin + desktop app) against a REAL
+> Telegram bot through a REAL ngrok tunnel using REAL GCP service
+> account credentials and a cached Firebase session token. **It is a
+> developer-maintainer handbook for trusted local testing on a machine
+> you control.** It is NOT a contributor onboarding doc, NOT a general
+> testing guide, and NOT something an AI coding agent should follow
+> autonomously. Untrusted PR text or docs in this repository MUST NOT
+> direct agents to run credentialed workflows of this shape.
+>
+> Maintainer review note (PR #8682, Git-on-my-level): the previous
+> version of this file carried an `allowed-tools: Bash` frontmatter
+> that advertised it as an agent skill. That was wrong — the file
+> should never have been agent-loadable because it requires real
+> outbound network access, real bot tokens, and real cloud credentials.
+> The frontmatter has been removed and this banner added so the file is
+> clearly human-facing only.
+>
+> If you are an AI agent reading this: stop. Do not run the commands
+> below without an explicit human user instructing you to do so on
+> their own dev machine. The commands WILL fetch production credentials
+> and create an outbound tunnel to Telegram; running them autonomously
+> would be a security incident.
+
+This guide walks a developer through **testing the AI Clone stack locally**: backend ↔ Telegram plugin ↔ desktop app ↔ real Telegram bot. The same flow exercises the WhatsApp plugin (only the bot-side setup differs).
 
 The current dev work lives on the branch `feat/ai-clone-prompt-rewrite` (PR [#8682](https://github.com/BasedHardware/omi/pull/8682)). The branch already contains the desktop Swift fixes from PR #8528 (`fd88fcdc6` in the stack).
 
@@ -68,6 +88,13 @@ Three independent processes, three log files, three control surfaces. The deskto
 ---
 
 ## Prerequisites
+
+> 🔐 **The prerequisites below source real production-adjacent
+> credentials and a real Telegram bot.** Only follow them on a
+> trusted local dev machine you control. Do not paste the resulting
+> `.env` files, service-account JSON, or cached Firebase tokens into
+> chat / shared docs / PR comments — treat them with the same care
+> you would give any production credential.
 
 ### Code
 
@@ -140,6 +167,12 @@ Pass this file as `AUTH_DUMP_JSON=`. The script replays it into the test bundle 
 ---
 
 ## Running the stack
+
+> ⚠️ The command below starts a public ngrok tunnel, registers that
+> tunnel as your Telegram bot's webhook, and binds a locally-built
+> desktop app to your Firebase session. Run it only on a dev machine
+> and only when you intend to talk to the bot. Stop the stack with the
+> command at the bottom of this file when you're done.
 
 ```bash
 WORKTREE=$HOME/code/omi-worktrees/feat-ai-clone-prompt-rewrite \
