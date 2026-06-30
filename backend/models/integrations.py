@@ -27,6 +27,9 @@ class ExternalIntegrationMemorySource(str, Enum):
 class ExternalIntegrationMemory(BaseModel):
     content: str = Field(description="The content of the memory (fact)")
     tags: Optional[List[str]] = Field(description="Tags associated with the memory (fact)", default=None)
+    source_id: Optional[str] = Field(description="External source object id for provenance", default=None)
+    source_url: Optional[str] = Field(description="External source URL for provenance", default=None)
+    artifact_ref: Optional[Dict[str, Any]] = Field(description="Source-specific provenance pointer", default=None)
 
 
 class ExternalIntegrationCreateMemory(BaseModel):
@@ -35,6 +38,11 @@ class ExternalIntegrationCreateMemory(BaseModel):
         description="The source of the text", default=ExternalIntegrationMemorySource.other
     )
     text_source_spec: Optional[str] = Field(description="Additional specification about the source", default=None)
+    source_id: Optional[str] = Field(description="External source object id for the provided text", default=None)
+    source_url: Optional[str] = Field(description="External source URL for the provided text", default=None)
+    artifact_ref: Optional[Dict[str, Any]] = Field(
+        description="Source-specific provenance pointer for the text", default=None
+    )
     app_id: Optional[str] = None
     memories: Optional[List[ExternalIntegrationMemory]] = Field(
         description="List of explicit memories(facts) to be created", default=None

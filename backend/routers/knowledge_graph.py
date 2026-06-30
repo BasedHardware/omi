@@ -4,8 +4,12 @@ from typing import List, Dict, Any
 
 from database import knowledge_graph as kg_db
 from database import memories as memories_db
+from database._client import db as firestore_db
 from database.auth import get_user_name
 from utils.llm.knowledge_graph import extract_knowledge_from_memory, rebuild_knowledge_graph
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import pin_memory_system
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -45,8 +49,17 @@ def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
 
 
 def _rebuild_graph_task(uid: str, user_name: str):
-    memories = memories_db.get_memories(uid, limit=500)
-    memories = [m for m in memories if not m.get('is_locked', False)]
+    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        memory_objects = MemoryService(db_client=firestore_db).read(uid, limit=500)
+        memories = [
+            {"id": memory.id, "content": memory.content}
+            for memory in memory_objects
+            if not getattr(memory, "is_locked", False)
+        ]
+    else:
+        memories = memories_db.get_memories(uid, limit=500)
+        memories = [m for m in memories if not m.get('is_locked', False)]
     rebuild_knowledge_graph(uid, memories, user_name)
 
 

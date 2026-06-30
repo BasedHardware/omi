@@ -1712,12 +1712,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'LAITETTA',
-      one: 'LAITE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -9368,6 +9363,17 @@ class AppLocalizationsFi extends AppLocalizations {
   String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
 
   @override
+  String get memoryThisDevice => 'Tämä laite';
+  @override
+  String get memoryThisIphone => 'Tämä iPhone';
+  @override
+  String get memoryThisPhone => 'Tämä puhelin';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Näin käytät Omia';
 
   @override

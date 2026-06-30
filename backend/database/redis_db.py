@@ -510,17 +510,24 @@ def cache_mcp_api_key_auth_context(
 @try_catch_decorator
 def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
     """Retrieves the user_id for a given hashed MCP API key from cache."""
-    user_id = r.get(f'mcp_api_key:{hashed_key}')
-    return user_id.decode() if user_id else None
+    auth_context = get_cached_mcp_api_key_auth_context(hashed_key)
+    return auth_context.get("user_id") if auth_context else None
 
 
 @try_catch_decorator
 def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[dict]:
-    """Retrieves the MCP API key auth context from cache."""
+    """Retrieves MCP API key auth context, accepting older uid-only cache values."""
     cached = r.get(f'mcp_api_key_auth:{hashed_key}')
     if not cached:
+        cached = r.get(f'mcp_api_key:{hashed_key}')
+    if not cached:
         return None
-    return json.loads(cached.decode())
+    decoded = cached.decode() if isinstance(cached, bytes) else cached
+    try:
+        cache_data = json.loads(decoded)
+    except (TypeError, ValueError):
+        return {"user_id": decoded, "scopes": None, "key_id": None, "app_id": None}
+    return cache_data if isinstance(cache_data, dict) else None
 
 
 @try_catch_decorator
@@ -535,9 +542,16 @@ def delete_cached_mcp_api_key(hashed_key: str):
 # ******************************************************
 
 
-def cache_dev_api_key(hashed_key: str, user_id: str, scopes: Optional[List[str]] = None, ttl: int = 3600):
-    """Caches the user_id and scopes for a given hashed Developer API key."""
-    cache_data = {"user_id": user_id, "scopes": scopes}
+def cache_dev_api_key(
+    hashed_key: str,
+    user_id: str,
+    scopes: Optional[List[str]] = None,
+    ttl: int = 3600,
+    key_id: Optional[str] = None,
+    app_id: Optional[str] = None,
+):
+    """Caches Developer API key auth context for uid-only and memory app/key authorization."""
+    cache_data = {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
     r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
 
 
@@ -801,6 +815,15 @@ def try_acquire_listen_lock(uid: str, ttl: int = 7) -> bool:
     """Atomically try to acquire listen rate limit lock. Returns True if acquired (not rate limited), False if already rate limited."""
     result = r.set(f'users:{uid}:listen_rate_limit', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def try_acquire_client_device_write_lock(uid: str, client_device_id: str, ttl: int = 600) -> bool:
+    """Throttle client_devices registry upserts to once per (uid, device) every `ttl` seconds."""
+    try:
+        result = r.set(f'users:{uid}:client_device_write:{client_device_id}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception:
+        return True
 
 
 def try_acquire_user_platform_write_lock(uid: str, platform: str, ttl: int = 600) -> bool:

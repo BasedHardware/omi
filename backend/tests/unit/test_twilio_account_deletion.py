@@ -1,7 +1,10 @@
 import os
 from unittest.mock import patch
 
-from tests.unit.twilio_stub import install_phone_calls_stub, install_twilio_stub, prepare_twilio_service_import
+try:
+    from tests.unit.twilio_stub import install_phone_calls_stub, install_twilio_stub, prepare_twilio_service_import
+except ModuleNotFoundError:
+    from twilio_stub import install_phone_calls_stub, install_twilio_stub, prepare_twilio_service_import
 
 os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')
 os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test_auth_token')

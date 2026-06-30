@@ -8,7 +8,16 @@ from typing import Optional
 
 import database.memories as memory_db
 import database.vector_db as vector_db
+from database._client import db as firestore_db
 from models.memories import MemoryDB
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.surface_routing import pin_memory_system
+from utils.memory.chat_memory_adapter import (
+    list_default_chat_memories_decision_text,
+    search_memory_default_chat_memories_vector_decision_text,
+)
+from utils.memory.default_read_rollout import MemoryReadDecision
 from utils.retrieval.tool_services.conversations import parse_iso_date
 import logging
 
@@ -25,10 +34,10 @@ def get_memories_text(
     """Fetch user memories/facts and format as LLM-ready text."""
     logger.info(f"get_memories_text - uid: {uid}, limit: {limit}, offset: {offset}")
 
-    # Cap limit
-    limit = min(limit, 5000)
+    # Cap request bounds before either memory or legacy reads.
+    limit = max(1, min(limit, 5000))
+    offset = max(0, offset)
 
-    # Parse dates
     start_dt = None
     end_dt = None
     if start_date:
@@ -41,6 +50,40 @@ def get_memories_text(
             end_dt = parse_iso_date(end_date, 'end_date')
         except ValueError as e:
             return f"Error: Invalid end_date format: {e}"
+
+    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        memories = MemoryService(db_client=firestore_db).read(uid, limit=limit, offset=offset)
+        if start_dt or end_dt:
+            filtered = []
+            for memory in memories:
+                created = memory.created_at
+                if start_dt and created and created < start_dt:
+                    continue
+                if end_dt and created and created > end_dt:
+                    continue
+                filtered.append(memory)
+            memories = filtered
+        if not memories:
+            return "No memories found."
+        return f"User Memories ({len(memories)} total):\n\n{MemoryDB.get_memories_as_str(memories)}".strip()
+
+    default_memories = list_default_chat_memories_decision_text(
+        uid=uid,
+        limit=limit,
+        offset=offset,
+        db_client=firestore_db,
+        allow_legacy_safe_fallback=True,
+    )
+    if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
+        logger.info("get_memories_text - using memory default chat memory list results")
+        return default_memories.text or "No memory default memories found."
+    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+        logger.info(
+            "get_memories_text - memory default memory list denied without legacy fallback: "
+            f"{default_memories.fallback_reason}"
+        )
+        return default_memories.text or "No memories available for this request."
 
     # Fetch
     memories = []
@@ -89,7 +132,39 @@ def search_memories_text(
     """Semantic vector search for memories, formatted as LLM-ready text."""
     logger.info(f"search_memories_text - uid: {uid}, query: {query}, limit: {limit}")
 
-    limit = min(limit, 20)
+    limit = max(1, min(limit, 20))
+
+    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+        if not matches:
+            return f"No memories found matching '{query}'."
+        result = f"Found {len(matches)} memories matching '{query}':\n\n"
+        for match in matches:
+            memory = match.memory
+            date_str = memory.created_at.strftime('%Y-%m-%d') if memory.created_at else 'Unknown'
+            result += (
+                f"- {memory.content} (relevance: {match.score:.2f}, "
+                f"category: {memory.category.value}, date: {date_str})\n"
+            )
+        return result.strip()
+
+    default_memories = search_memory_default_chat_memories_vector_decision_text(
+        uid=uid,
+        query=query,
+        limit=limit,
+        db_client=firestore_db,
+        allow_legacy_safe_fallback=True,
+    )
+    if default_memories.read_decision == MemoryReadDecision.USE_MEMORY:
+        logger.info("search_memories_text - using memory default chat vector memory results")
+        return default_memories.text or f"No memory vector memories found matching '{query}'."
+    if default_memories.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
+        logger.info(
+            "search_memories_text - memory default memory vector search denied without legacy fallback: "
+            f"{default_memories.fallback_reason}"
+        )
+        return default_memories.text or "No memories available for this request."
 
     try:
         matches = vector_db.find_similar_memories(uid, query, threshold=0.0, limit=limit)

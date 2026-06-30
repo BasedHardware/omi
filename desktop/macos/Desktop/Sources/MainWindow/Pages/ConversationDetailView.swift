@@ -554,8 +554,11 @@ struct ConversationDetailView: View {
         defer { isDeleting = false }
 
         do {
-            try await APIClient.shared.deleteConversation(id: conversation.id)
+            let conversationId = conversation.id
+            try await APIClient.shared.deleteConversation(id: conversationId)
             await MainActor.run {
+                // Always purge local conversation + memory cache; onDelete is nav/UI only.
+                AppState.current?.deleteConversationLocally(conversationId)
                 onDelete?()
                 onBack()
             }

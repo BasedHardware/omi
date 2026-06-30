@@ -1,0 +1,73 @@
+import XCTest
+@testable import Omi_Computer
+
+final class MemoryLayerFilterTests: XCTestCase {
+    func testDefaultFilterIsDefaultAccessOnly() {
+        XCTAssertEqual(MemoryLayerFilter.defaultAccess.allowedLayers, [.shortTerm, .longTerm])
+        XCTAssertFalse(MemoryLayerFilter.defaultAccess.allowedLayers.contains(.archive))
+    }
+
+    func testExplicitArchiveFilterOnlyAllowsArchive() {
+        XCTAssertEqual(MemoryLayerFilter.archive.allowedLayers, [.archive])
+    }
+
+    func testRecordRoundTripsLayerThroughServerMemory() {
+        let memory = ServerMemory(
+            id: "mem-1",
+            content: "A stable preference",
+            category: .manual,
+            tier: .longTerm,
+            createdAt: Date(timeIntervalSince1970: 1),
+            updatedAt: Date(timeIntervalSince1970: 2),
+            conversationId: nil,
+            reviewed: false,
+            userReview: nil,
+            visibility: "private",
+            manuallyAdded: true,
+            scoring: nil,
+            source: "desktop",
+            confidence: nil,
+            sourceApp: nil,
+            contextSummary: nil,
+            isRead: false,
+            isDismissed: false,
+            tags: [],
+            reasoning: nil,
+            currentActivity: nil,
+            inputDeviceName: nil,
+            windowTitle: nil,
+            headline: nil
+        )
+
+        let record = MemoryRecord.from(memory)
+        let roundTripped = record.toServerMemory()
+
+        XCTAssertEqual(record.tier, MemoryLayer.longTerm.rawValue)
+        XCTAssertEqual(roundTripped?.tier, .longTerm)
+    }
+
+    func testDefaultLayerScopeExcludesArchive() {
+        XCTAssertEqual(MemoryLayerScope.defaultAccess.tiers, [.shortTerm, .longTerm])
+        XCTAssertFalse(MemoryLayerScope.defaultAccess.includesArchive)
+    }
+
+    func testArchiveScopeRequiresAcknowledgement() {
+        XCTAssertEqual(MemoryLayerScope.archiveOnly.tiers, [.archive])
+        XCTAssertTrue(MemoryLayerScope.archiveOnly.requiresArchiveAcknowledgement)
+    }
+
+    func testUnknownPersistedTierIsExcludedNotPromotedToLongTerm() {
+        let record = MemoryRecord(
+            backendId: "mem-unknown",
+            backendSynced: true,
+            content: "Legacy record",
+            category: "system",
+            tier: "unexpected_future_tier"
+        )
+
+        XCTAssertNil(record.toServerMemory())
+    }
+}
+
+/// Reversible alias during WS-G client rename (Wave 36).
+typealias MemoryTierFilterTests = MemoryLayerFilterTests

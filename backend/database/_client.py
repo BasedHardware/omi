@@ -1,5 +1,6 @@
 from threading import Lock
 
+import os
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
@@ -11,6 +12,18 @@ _firestore_client_lock = Lock()
 
 def _build_firestore_client():
     prepare_google_credentials()
+    # Production safety: only override project/database when pointed at a local
+    # Firestore emulator. Without FIRESTORE_EMULATOR_HOST set (i.e. real Firestore),
+    # defer entirely to default resolution so env vars cannot repoint prod Firestore.
+    if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        project = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        database = os.environ.get("FIRESTORE_DATABASE_ID")
+        kwargs: dict[str, str] = {}
+        if project:
+            kwargs["project"] = project
+        if database:
+            kwargs["database"] = database
+        return firestore.Client(**kwargs)
     return firestore.Client()
 
 

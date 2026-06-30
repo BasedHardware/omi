@@ -1,5 +1,6 @@
 import Foundation
 import PostHog
+import FirebaseCore
 import FirebaseAuth
 
 /// Singleton manager for PostHog analytics with Session Replay
@@ -47,8 +48,8 @@ class PostHogManager {
         var email: String?
         var name: String?
 
-        // Try Firebase Auth first
-        if let user = Auth.auth().currentUser {
+        // Try Firebase Auth first, but only after Firebase has been configured.
+        if FirebaseApp.app() != nil, let user = Auth.auth().currentUser {
             userId = user.uid
             email = user.email
             name = user.displayName
