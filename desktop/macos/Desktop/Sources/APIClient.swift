@@ -1738,6 +1738,22 @@ extension APIClient {
 
   // MARK: - PATCH helper
 
+  func put<T: Decodable, B: Encodable>(
+    _ endpoint: String,
+    body: B,
+    requireAuth: Bool = true,
+    customBaseURL: String? = nil
+  ) async throws -> T {
+    let base = customBaseURL ?? baseURL
+    let url = URL(string: base + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "PUT"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth)
+    request.httpBody = try JSONEncoder().encode(body)
+
+    return try await performRequest(request)
+  }
+
   func patch<T: Decodable, B: Encodable>(
     _ endpoint: String,
     body: B,
@@ -5401,4 +5417,124 @@ struct XSyncResult: Decodable {
 
 struct XSimpleOK: Decodable {
   let success: Bool
+}
+
+// MARK: - AI Clone
+
+struct CloneGenerateReplyRequest: Encodable {
+  let platform: String
+  let sender: String
+  let message: String
+  let conversationHistory: [CloneHistoryTurn]?
+  enum CodingKeys: String, CodingKey {
+    case platform, sender, message
+    case conversationHistory = "conversation_history"
+  }
+}
+
+struct CloneHistoryTurn: Encodable {
+  let role: String
+  let content: String
+}
+
+struct CloneGenerateReplyResponse: Decodable {
+  let reply: String
+  let messageId: String
+  enum CodingKeys: String, CodingKey {
+    case reply
+    case messageId = "message_id"
+  }
+}
+
+struct CloneSimpleOK: Decodable {
+  let status: String
+}
+
+struct CloneActivityMessage: Decodable, Identifiable {
+  let id: String
+  let platform: String
+  let sender: String
+  let incoming: String
+  let draftReply: String
+  let status: String
+  let createdAt: Date
+
+  enum CodingKeys: String, CodingKey {
+    case id, platform, sender, incoming, status
+    case draftReply = "draft_reply"
+    case createdAt = "created_at"
+  }
+}
+
+struct CloneTelegramConnectResponse: Decodable {
+  let botUsername: String
+  let botName: String
+  enum CodingKeys: String, CodingKey {
+    case botUsername = "bot_username"
+    case botName = "bot_name"
+  }
+}
+
+extension APIClient {
+  func updateCloneSettings(enabled: Bool, autoReply: Bool) async throws {
+    struct Req: Encodable {
+      let enabled: Bool
+      let autoReply: Bool
+      let platforms: [String: String]
+      enum CodingKeys: String, CodingKey {
+        case enabled; case autoReply = "auto_reply"; case platforms
+      }
+    }
+    let _: CloneSimpleOK = try await put("/v1/ai-clone/settings", body: Req(enabled: enabled, autoReply: autoReply, platforms: [:]))
+  }
+
+  func whatsappSend(to: String, text: String) async throws {
+    struct Req: Encodable { let to: String; let text: String }
+    let _: CloneSimpleOK = try await post("/v1/ai-clone/whatsapp/send", body: Req(to: to, text: text))
+  }
+
+  func generateCloneReply(platform: String, sender: String, message: String) async throws -> CloneGenerateReplyResponse {
+    let body = CloneGenerateReplyRequest(platform: platform, sender: sender, message: message, conversationHistory: nil)
+    return try await post("/v1/ai-clone/generate-reply", body: body)
+  }
+
+  func updateCloneMessage(id: String, status: String, editedReply: String?) async throws {
+    struct Req: Encodable {
+      let status: String
+      let editedReply: String?
+      enum CodingKeys: String, CodingKey {
+        case status
+        case editedReply = "edited_reply"
+      }
+    }
+    let _: CloneSimpleOK = try await patch("/v1/ai-clone/messages/\(id)", body: Req(status: status, editedReply: editedReply))
+  }
+
+  func setPlatformActive(platform: String, active: Bool) async throws {
+    struct Req: Encodable { let active: Bool }
+    let _: CloneSimpleOK = try await patch("/v1/ai-clone/platforms/\(platform)", body: Req(active: active))
+  }
+
+  func telegramConnect(botToken: String) async throws -> CloneTelegramConnectResponse {
+    struct Req: Encodable { let botToken: String
+      enum CodingKeys: String, CodingKey { case botToken = "bot_token" }
+    }
+    return try await post("/v1/ai-clone/telegram/connect", body: Req(botToken: botToken))
+  }
+
+  func telegramDisconnect() async throws {
+    struct Empty: Encodable {}
+    let _: CloneSimpleOK = try await post("/v1/ai-clone/telegram/disconnect", body: Empty())
+  }
+
+  func telegramSend(chatId: Int, text: String) async throws {
+    struct Req: Encodable { let chatId: Int; let text: String
+      enum CodingKeys: String, CodingKey { case chatId = "chat_id"; case text }
+    }
+    let _: CloneSimpleOK = try await post("/v1/ai-clone/telegram/send", body: Req(chatId: chatId, text: text))
+  }
+
+  func getCloneMessages(limit: Int = 20) async throws -> [CloneActivityMessage] {
+    return try await get("v1/ai-clone/messages?limit=\(limit)")
+  }
 }

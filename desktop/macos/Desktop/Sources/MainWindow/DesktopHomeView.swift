@@ -519,6 +519,7 @@ struct DesktopHomeView: View {
     if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }
     // Conversations replaced Chat in the sidebar; tier 1 unlocks it.
     if currentTierLevel >= 1 { visibleRawValues.insert(SidebarNavItem.conversations.rawValue) }
+    if currentTierLevel >= 1 { visibleRawValues.insert(SidebarNavItem.aiClone.rawValue) }
 
     if !visibleRawValues.contains(selectedIndex) {
       selectedIndex = SidebarNavItem.dashboard.rawValue
@@ -633,6 +634,8 @@ struct DesktopHomeView: View {
       return .permissions
     case "help":
       return .help
+    case "ai_clone", "clone":
+      return .aiClone
     default:
       return nil
     }
@@ -1151,6 +1154,8 @@ private struct PageContentView: View {
         PermissionsPage(appState: appState)
       case 12:
         HelpPage()
+      case 13:
+        AIClonePage()
       default:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
