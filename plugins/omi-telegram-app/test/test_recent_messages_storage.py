@@ -315,93 +315,68 @@ class TestPerChatIsolation:
         assert [m['text'] for m in msgs_99] == ['to bob']
 
 
-class TestFsyncSplitForCredentialsAndHistory:
-    """P1 from cubic AI review (PR #8682): the no-fsync optimization
-    must apply ONLY to history writes, NOT to credential writes. The
-    shared `_save` helper takes an explicit `fsync` parameter so each
-    call site has to declare its intent — a default would hide the
-    decision.
+class TestDurabilityChain:
+    """P1 from cubic AI review (PR #8682): every save must run the
+    full durability chain — tmp file fsync, os.replace, parent
+    directory fsync. Skipping any step risks zeros/garbage on power
+    loss. The previous round tried to skip the tmp file fsync on
+    history writes for a perf win, but USERS_FILE holds both
+    credentials AND recent_messages in the same JSON, so a skipped
+    fsync on a history append could leave the credential file as
+    zeros/garbage. Reverted: always fsync, accept the 5-30ms cost."""
 
-    History writes (append_message, append_turn, clear_recent_messages)
-    pass fsync=False because the conversation history is rebuildable
-    from the Telegram / WhatsApp APIs on power loss — and skipping
-    fsync avoids blocking the webhook event loop for 5-30ms per
-    reply turn on slow disks.
+    def test_save_does_not_accept_fsync_kwarg(self):
+        """The round-4 `fsync=` parameter is gone — all saves go
+        through the full durability chain. Pinning this so a future
+        refactor doesn't re-introduce the per-callsite fsync knob
+        without realizing the credential-vs-history split is at the
+        file level (single USERS_FILE), not the call site."""
+        import inspect
 
-    Credential writes (save_user, save_pending_setup, update_auto_reply,
-    mark_nudged, pop_pending_setup) pass fsync=True because losing
-    a user's bot_token / omi_dev_api_key on power loss would force a
-    full /setup redo.
-    """
+        import simple_storage
 
-    def test_history_writes_skip_fsync(self):
-        """append_message, append_turn, clear_recent_messages must
-        call _save with fsync=False so the webhook event loop isn't
-        blocked per reply turn."""
+        sig = inspect.signature(simple_storage._save)
+        params = list(sig.parameters.keys())
+        # _save(path, payload) — no fsync kwarg.
+        assert 'fsync' not in params, (
+            f"_save must not accept fsync (single USERS_FILE holds " f"creds + history). Got parameters: {params}"
+        )
+
+    def test_save_fsyncs_tmp_file_and_parent_directory(self):
+        """Pin the full durability chain: tmp file gets fsynced (so
+        contents are on stable storage), then os.replace, then the
+        parent directory gets fsynced (so the rename link itself
+        survives power loss). A future refactor that drops the
+        parent-dir fsync re-introduces the P2 from cubic AI review."""
         from unittest.mock import patch
 
         import simple_storage
 
-        _make_user('42')
-        with patch('simple_storage._save') as mock_save:
+        with patch.object(simple_storage.os, 'fsync') as mock_fsync, patch.object(
+            simple_storage.os, 'open', wraps=simple_storage.os.open
+        ) as mock_open:
+            _make_user('42')
             simple_storage.append_message('42', 'human', 'hi')
-            assert (
-                mock_save.call_args.kwargs.get('fsync') is False
-            ), f"append_message must pass fsync=False, got {mock_save.call_args.kwargs}"
 
-        with patch('simple_storage._save') as mock_save:
-            simple_storage.append_turn('42', human_text='hi', ai_text='hey')
-            assert mock_save.call_args.kwargs.get('fsync') is False
+        # We expect at least two fsync calls: one for the tmp file
+        # (during the `with open(tmp, "w") as f:` block) and one for
+        # the parent directory (after os.replace).
+        assert mock_fsync.call_count >= 2, (
+            f"_save must fsync both the tmp file and the parent " f"directory. Got {mock_fsync.call_count} fsync calls."
+        )
 
-        with patch('simple_storage._save') as mock_save:
-            simple_storage.clear_recent_messages('42')
-            assert mock_save.call_args.kwargs.get('fsync') is False
-
-    def test_credential_writes_use_fsync(self):
-        """save_user, update_auto_reply, mark_nudged, save_pending_setup,
-        pop_pending_setup must call _save with fsync=True so credentials
-        survive power loss. Without this, a power loss after _save's
-        os.replace but before the kernel page-cache flush would force
-        the user to redo /setup."""
-        from unittest.mock import patch
-
-        import simple_storage
-
-        with patch('simple_storage._save') as mock_save:
-            simple_storage.save_user(
-                chat_id='42',
-                omi_uid='uid-1',
-                persona_id='persona-1',
-                omi_dev_api_key='dev-key',
-                bot_token='bot-token',
-                auto_reply_enabled=True,
-            )
-            assert (
-                mock_save.call_args.kwargs.get('fsync') is True
-            ), f"save_user must pass fsync=True, got {mock_save.call_args.kwargs}"
-
-        with patch('simple_storage._save') as mock_save:
-            simple_storage.update_auto_reply('42', True)
-            assert mock_save.call_args.kwargs.get('fsync') is True
-
-        with patch('simple_storage._save') as mock_save:
-            simple_storage.mark_nudged('42')
-            assert mock_save.call_args.kwargs.get('fsync') is True
-
-        with patch('simple_storage._save') as mock_save:
-            simple_storage.save_pending_setup('tok-1', {'omi_uid': 'u-1'})
-            assert mock_save.call_args.kwargs.get('fsync') is True
-
-        # pop_pending_setup persists only if the token was actually
-        # found (skip-on-no-op). Seed in-memory (real save, no mock)
-        # then pop under a mock so the test exercises the persistence
-        # path, not the skip path. Add a second entry so the post-pop
-        # dict is non-empty (otherwise the code removes the file
-        # instead of calling _save).
-        simple_storage.pending_setups.clear()
-        simple_storage.save_pending_setup('tok-2', {'omi_uid': 'u-2'})
-        simple_storage.save_pending_setup('tok-3', {'omi_uid': 'u-3'})
-        with patch('simple_storage._save') as mock_save:
-            simple_storage.pop_pending_setup('tok-2')
-            assert mock_save.call_count == 1, "pop should have persisted"
-            assert mock_save.call_args.kwargs.get('fsync') is True
+        # At least one fsync must have been on a directory fd (O_RDONLY
+        # of the parent dir), not the tmp file fd. The mock records
+        # all the args passed to os.open; filter to ones opening the
+        # parent directory.
+        parent_dir = os.path.dirname(simple_storage.USERS_FILE)
+        opened_parent = [
+            call_args
+            for call_args in mock_open.call_args_list
+            if len(call_args.args) >= 1 and call_args.args[0] == parent_dir
+        ]
+        assert opened_parent, (
+            f"_save must open the parent directory ({parent_dir}) to "
+            f"fsync the rename link. open calls: "
+            f"{[c.args for c in mock_open.call_args_list]}"
+        )

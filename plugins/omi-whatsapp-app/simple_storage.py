@@ -61,50 +61,68 @@ def load_storage() -> None:
             print(f"⚠️  Could not load {path}: {e}", flush=True)
 
 
-def _save(path: str, payload: dict, *, fsync: bool = True) -> None:
-    """Atomically write payload to path. Write to <path>.tmp, then os.replace.
+def _save(path: str, payload: dict) -> None:
+    """Atomically write payload to path. Write to <path>.tmp, fsync, rename, fsync parent.
 
-    Files are written with mode 0o600 (owner read/write only) because they
-    contain user access_tokens and verify_tokens. Identified by cubic (P1):
-    without explicit restrictive perms, a shared host or permissive umask
-    leaves the JSON readable by other users on the box.
+    Full durability chain (P1 from cubic AI review on PR #8682):
+      1. fsync the tmp file's contents — ensures the new file's bytes
+         are on stable storage before the rename.
+      2. os.replace the tmp file over the target — atomic directory
+         entry swap on POSIX (the new inode is now visible).
+      3. fsync the parent directory — ensures the rename itself is
+         durable. Without this, on ext4 with `data=writeback` a power
+         loss after step 2 can leave the directory entry pointing
+         either at the old inode OR at a dangling tmp, depending on
+         the journal state. The file fsync is not enough.
+
+    Files are written with mode 0o600 (owner read/write only) because
+    they contain user access_tokens and verify_tokens. Identified by
+    cubic (P1): without explicit restrictive perms, a shared host or
+    permissive umask leaves the JSON readable by other users on the box.
 
     Also ensures the parent directory exists before opening the tmp file —
     without this the first save after a fresh STORAGE_DIR change fails with
     FileNotFoundError and the user is silently never persisted. (cubic P1.)
 
-    P1 from cubic AI review (PR #8682): this helper is shared by
-    credential writes (save_user, save_pending_setup) and history
-    writes (append_turn, append_message). The credentials
-    (`access_token`, `verify_token`, `omi_dev_api_key`, setup
-    payloads) are NOT rebuildable from the WhatsApp Cloud API —
-    losing them on power loss means the user has to redo the
-    full /setup handshake. The history buffer IS rebuildable from
-    the platform APIs (we just lose the last few turns of context).
-
-    To balance the two, the `fsync` parameter is REQUIRED at the
-    call site (no default would hide the decision). Credential
-    writes pass fsync=True so they survive power loss; history
-    writes pass fsync=False so they don't block the asyncio event
-    loop for 5-30ms per reply turn on slow disks (occasionally
-    exceeding the 10s Meta webhook timeout). Atomicity is
-    preserved by the tmp+rename pair regardless — we never observe
-    a torn write on crash; we only trade power-loss durability
-    for the history path. Mirrors the Telegram plugin's `_save`.
+    Why fsync unconditionally (P1 follow-up from cubic AI review on
+    PR #8682): an earlier round tried to skip fsync on history writes
+    to avoid blocking the webhook event loop for 5-30ms per turn on
+    slow disks. That was unsafe — USERS_FILE holds BOTH credentials
+    AND recent_messages, so a skipped-fsync history append could leave
+    the entire credential-bearing file as zeros/garbage on power loss.
+    The split was illusory at the file level. For now we accept the
+    5-30ms fsync cost (negligible compared to the 200-1000ms LLM
+    call right before it) and deliver actual power-loss durability.
+    Splitting storage into a credential file and a history file is
+    the long-term right fix; tracked separately. Mirrors the
+    Telegram plugin's `_save`.
     """
     tmp = f"{path}.{os.getpid()}.tmp"
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
-            if fsync:
-                f.flush()
-                os.fsync(f.fileno())
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, path)
         try:
             os.chmod(path, 0o600)
         except OSError:
             # Non-POSIX filesystem (e.g. some volumes); don't fail the save.
+            pass
+        # fsync the parent directory so the rename itself is durable.
+        # See step (3) in the function docstring. Silently best-effort:
+        # some volumes (Windows, NFS) don't support dir fsync, and we
+        # don't want to fail the save over a defense-in-depth detail.
+        try:
+            dir_path = os.path.dirname(path)
+            if dir_path:
+                dir_fd = os.open(dir_path, os.O_RDONLY)
+                try:
+                    os.fsync(dir_fd)
+                finally:
+                    os.close(dir_fd)
+        except OSError:
             pass
     except Exception as e:
         print(f"⚠️  Could not save {path}: {e}", flush=True)
@@ -164,7 +182,7 @@ def save_user(
     # Credential-bearing record — fsync so a power loss doesn't lose
     # the user's access_token / verify_token / omi_dev_api_key and
     # force a full /setup redo.
-    _save(USERS_FILE, users, fsync=True)
+    _save(USERS_FILE, users)
 
 
 def get_user_by_phone(phone: str) -> Optional[dict]:
@@ -182,7 +200,7 @@ def update_auto_reply(phone: str, enabled: bool) -> None:
         raise KeyError(f"Unknown phone: {phone}")
     users[str(phone)]["auto_reply_enabled"] = enabled
     users[str(phone)]["updated_at"] = datetime.utcnow().isoformat()
-    _save(USERS_FILE, users, fsync=True)
+    _save(USERS_FILE, users)
 
 
 def should_nudge(user: dict, cooldown_seconds: float) -> bool:
@@ -211,7 +229,7 @@ def mark_nudged(phone: str) -> None:
     if str(phone) in users:
         users[str(phone)]["last_nudge_at"] = datetime.utcnow().isoformat()
         users[str(phone)]["updated_at"] = datetime.utcnow().isoformat()
-        _save(USERS_FILE, users, fsync=True)
+        _save(USERS_FILE, users)
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +243,7 @@ def save_pending_setup(token: str, payload: dict) -> None:
     # Setup credentials (access_token, phone_number_id, verify_token,
     # omi_uid, persona_id, omi_dev_api_key, phone). fsync so a power
     # loss doesn't strand the user mid-/setup.
-    _save(PENDING_FILE, pending_setups, fsync=True)
+    _save(PENDING_FILE, pending_setups)
 
 
 PENDING_SETUP_TTL_SECONDS = 3600  # 1 hour
@@ -251,7 +269,7 @@ def pop_pending_setup(token: str) -> Optional[dict]:
     for t in stale_tokens:
         pending_setups.pop(t, None)
     if stale_tokens and pending_setups:
-        _save(PENDING_FILE, pending_setups, fsync=True)
+        _save(PENDING_FILE, pending_setups)
     elif stale_tokens:
         try:
             if os.path.exists(PENDING_FILE):
@@ -261,7 +279,7 @@ def pop_pending_setup(token: str) -> Optional[dict]:
 
     payload = pending_setups.pop(token, None)
     if pending_setups:
-        _save(PENDING_FILE, pending_setups, fsync=True)
+        _save(PENDING_FILE, pending_setups)
     else:
         try:
             if os.path.exists(PENDING_FILE):
@@ -336,7 +354,7 @@ def append_message(phone: str, role: str, text: str) -> None:
     # the asyncio event loop. Credentials in USERS_FILE were already
     # durably committed by save_user() before this call ran. (See
     # _save docstring for the credential-vs-history split.)
-    _save(USERS_FILE, users, fsync=False)
+    _save(USERS_FILE, users)
 
 
 def append_turn(phone: str, *, human_text: str, ai_text: str) -> None:
@@ -366,7 +384,7 @@ def append_turn(phone: str, *, human_text: str, ai_text: str) -> None:
         user["recent_messages"] = history[-CHAT_HISTORY_MAX:]
     user["updated_at"] = now
     # History write — skip fsync (same reason as append_message).
-    _save(USERS_FILE, users, fsync=False)
+    _save(USERS_FILE, users)
 
 
 def clear_recent_messages(phone: str) -> None:
@@ -377,4 +395,4 @@ def clear_recent_messages(phone: str) -> None:
     user["recent_messages"] = []
     user["updated_at"] = datetime.utcnow().isoformat()
     # History wipe — skip fsync (same reason as append_turn).
-    _save(USERS_FILE, users, fsync=False)
+    _save(USERS_FILE, users)
