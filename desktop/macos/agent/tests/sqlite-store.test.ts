@@ -102,6 +102,7 @@ describe("SqliteAgentStore", () => {
       redactedPreviewJson: "{}",
       contextHash: "sha256:bad",
       retentionClass: "debug",
+      expiresAtMs: Date.now() + 60_000,
     })).toThrow();
     expect(() => store.insertDesktopContextPacket({
       ownerId: "owner",
@@ -243,6 +244,23 @@ describe("SqliteAgentStore", () => {
       override.subjectKind,
       override.subjectId,
     ]).hidden_until_ms).toBe(600);
+    const updatedOverride = store.upsertDesktopAttentionOverride({
+      ownerId: "owner",
+      subjectKind: "dispatch",
+      subjectId: dispatch.dispatchId,
+      hiddenUntilMs: 900,
+      reason: "extended snooze",
+    });
+    expect(updatedOverride.createdAtMs).toBe(override.createdAtMs);
+    expect(store.getRow("SELECT hidden_until_ms, reason, created_at_ms FROM desktop_attention_overrides WHERE owner_id = ? AND subject_kind = ? AND subject_id = ?", [
+      override.ownerId,
+      override.subjectKind,
+      override.subjectId,
+    ])).toMatchObject({
+      hidden_until_ms: 900,
+      reason: "extended snooze",
+      created_at_ms: override.createdAtMs,
+    });
 
     store.close();
   });
@@ -764,6 +782,16 @@ describe("SqliteAgentStore", () => {
       deliveryStatus: "retrying",
       errorJson: "{}",
     });
+    const staleRecoveryDispatch = store.insertDesktopDispatch({
+      ownerId: "owner",
+      kind: "failure_recovery",
+      priority: 80,
+      title: "Stale recovery",
+      decisionPrompt: "This recovery dispatch expired before startup reconciliation.",
+      sourceSessionId: session.sessionId,
+      sourceRunId: childRun.runId,
+      expiresAtMs: 150,
+    });
     store.execute(
       `INSERT INTO delegations (
         delegation_id, parent_session_id, parent_run_id, child_session_id, child_run_id,
@@ -787,8 +815,15 @@ describe("SqliteAgentStore", () => {
     const reconciliation = store.reconcileStartup();
 
     expect(reconciliation.expiredContextPacketIds).toEqual([packet.packetId]);
+    expect(store.getOptionalRow("SELECT packet_id FROM desktop_context_packets WHERE packet_id = ?", [packet.packetId])).toBeUndefined();
     expect(reconciliation.failedArtifactDeliveryIds).toEqual([delivery.deliveryId]);
     expect(reconciliation.recoveryDispatchIds).toHaveLength(1);
+    expect(reconciliation.recoveryDispatchIds[0]).not.toBe(staleRecoveryDispatch.dispatchId);
+    expect(store.getRow("SELECT status, resolved_at_ms, resolved_by FROM desktop_dispatches WHERE dispatch_id = ?", [staleRecoveryDispatch.dispatchId])).toMatchObject({
+      status: "expired",
+      resolved_at_ms: 250,
+      resolved_by: "daemon_startup_reconciliation",
+    });
     expect(store.getRow("SELECT delivery_status, error_json FROM desktop_artifact_deliveries WHERE delivery_id = ?", [delivery.deliveryId])).toMatchObject({
       delivery_status: "failed",
       error_json: "{\"reason\":\"daemon_startup_reconciliation\"}",
@@ -803,6 +838,12 @@ describe("SqliteAgentStore", () => {
       completed_at_ms: 250,
     });
     expect(store.getRow("SELECT type FROM events WHERE type = ?", ["delegation.recovery_required"]).type).toBe("delegation.recovery_required");
+    store.resolveDesktopDispatch(reconciliation.recoveryDispatchIds[0], {
+      ownerId: "owner",
+      status: "resolved",
+      resolvedAtMs: 260,
+    });
+    expect(store.reconcileStartup().recoveryDispatchIds).toHaveLength(0);
     store.close();
   });
 

@@ -522,6 +522,19 @@ export class SqliteAgentStore implements AgentStore {
         "SELECT packet_id FROM desktop_context_packets WHERE expires_at_ms IS NOT NULL AND expires_at_ms <= ?",
         [now],
       ).map((row) => text(row.packet_id));
+      if (expiredContextPacketIds.length > 0) {
+        this.db.prepare(
+          "DELETE FROM desktop_context_packets WHERE expires_at_ms IS NOT NULL AND expires_at_ms <= ?",
+        ).run(now);
+      }
+
+      this.db.prepare(
+        `UPDATE desktop_dispatches
+         SET status = ?, resolved_at_ms = COALESCE(resolved_at_ms, ?), resolved_by = COALESCE(resolved_by, ?), resolution_json = COALESCE(resolution_json, ?)
+         WHERE status = ?
+           AND expires_at_ms IS NOT NULL
+           AND expires_at_ms <= ?`,
+      ).run("expired", now, "daemon_startup_reconciliation", JSON.stringify({ reason: "daemon_startup_reconciliation" }), "pending", now);
 
       const failedArtifactDeliveryIds = this.allRows(
         "SELECT delivery_id FROM desktop_artifact_deliveries WHERE delivery_status = ?",
@@ -545,7 +558,7 @@ export class SqliteAgentStore implements AgentStore {
            AND NOT EXISTS (
              SELECT 1 FROM desktop_dispatches d
              WHERE d.kind = 'failure_recovery'
-               AND d.status = 'pending'
+               AND d.status != 'expired'
                AND d.source_run_id = r.run_id
            )`,
         ["orphaned"],
@@ -1069,10 +1082,12 @@ export class SqliteAgentStore implements AgentStore {
       ON CONFLICT(owner_id, subject_kind, subject_id) DO UPDATE SET
         hidden_until_ms = excluded.hidden_until_ms,
         dismissed_at_ms = excluded.dismissed_at_ms,
-        reason = excluded.reason,
-        created_at_ms = excluded.created_at_ms`,
+        reason = excluded.reason`,
     ).run(...desktopAttentionOverrideValues(override));
-    return override;
+    return desktopAttentionOverrideFromRow(this.getRow(
+      "SELECT * FROM desktop_attention_overrides WHERE owner_id = ? AND subject_kind = ? AND subject_id = ?",
+      [override.ownerId, override.subjectKind, override.subjectId],
+    ));
   }
 
   private assertCoordinatorScope(input: {
@@ -1842,6 +1857,18 @@ function desktopAttentionOverrideValues(override: DesktopAttentionOverride): SQL
     override.reason,
     override.createdAtMs,
   ];
+}
+
+function desktopAttentionOverrideFromRow(row: Row): DesktopAttentionOverride {
+  return {
+    ownerId: text(row.owner_id),
+    subjectKind: text(row.subject_kind) as DesktopAttentionOverride["subjectKind"],
+    subjectId: text(row.subject_id),
+    hiddenUntilMs: nullableNumber(row.hidden_until_ms),
+    dismissedAtMs: nullableNumber(row.dismissed_at_ms),
+    reason: nullableText(row.reason),
+    createdAtMs: Number(row.created_at_ms),
+  };
 }
 
 function desktopDispatchFromRow(row: Row): DesktopCoordinatorDispatch {

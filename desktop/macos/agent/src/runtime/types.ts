@@ -221,8 +221,9 @@ export interface DesktopContextPacket {
   createdAtMs: number;
 }
 
-export type NewDesktopContextPacket = Partial<DesktopContextPacket> &
-  Pick<DesktopContextPacket, "ownerId" | "surfaceKind" | "objective" | "packetJson" | "redactedPreviewJson" | "contextHash" | "retentionClass" | "expiresAtMs">;
+export type NewDesktopContextPacket = Partial<Omit<DesktopContextPacket, "expiresAtMs">> &
+  Pick<DesktopContextPacket, "ownerId" | "surfaceKind" | "objective" | "packetJson" | "redactedPreviewJson" | "contextHash" | "retentionClass"> &
+  { expiresAtMs: number };
 
 export interface DesktopCoordinatorDispatch {
   dispatchId: string;
