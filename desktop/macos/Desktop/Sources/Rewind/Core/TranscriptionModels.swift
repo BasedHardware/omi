@@ -52,6 +52,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     var retryCount: Int
     var lastError: String?
     var backendId: String?                // Server conversation ID
+    var clientConversationId: String?     // Client-generated stable conversation ID for listen reconciliation
     var backendSynced: Bool
     var createdAt: Date
     var updatedAt: Date
@@ -97,6 +98,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         retryCount: Int = 0,
         lastError: String? = nil,
         backendId: String? = nil,
+        clientConversationId: String? = nil,
         backendSynced: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -134,6 +136,7 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         self.retryCount = retryCount
         self.lastError = lastError
         self.backendId = backendId
+        self.clientConversationId = clientConversationId
         self.backendSynced = backendSynced
         self.createdAt = createdAt
         self.updatedAt = updatedAt

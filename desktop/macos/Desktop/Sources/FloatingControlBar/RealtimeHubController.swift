@@ -28,7 +28,10 @@ import Foundation
 /// reported, but with a stable category instead of raw provider text.
 enum RealtimeHubCloseCategory: String {
   case expectedIdleTeardown = "expected_idle_teardown"
+  case providerAuthFailed = "provider_auth_failed"
+  case providerQuotaExceeded = "provider_quota_exceeded"
   case providerPolicyCloseFast = "provider_policy_close_fast"
+  case providerTransient = "provider_transient"
 }
 
 enum RealtimeHubCloseClassifier {
@@ -41,6 +44,18 @@ enum RealtimeHubCloseClassifier {
   ) -> RealtimeHubCloseCategory? {
     let lower = message.lowercased()
     guard lower.contains("websocket closed (1008)") else { return nil }
+    if CredentialHealthManager.classifyProviderClose(
+      message: message,
+      provider: .openai) == .providerQuotaExceeded(provider: .openai)
+    {
+      return .providerQuotaExceeded
+    }
+    if CredentialHealthManager.classifyProviderClose(
+      message: message,
+      provider: .openai) == .providerAuthFailed(provider: .openai, mode: .byok)
+    {
+      return .providerAuthFailed
+    }
     if !hasActiveTurn && aliveFor >= idleTeardownThreshold { return .expectedIdleTeardown }
     return .providerPolicyCloseFast
   }
@@ -309,6 +324,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     if session != nil { teardownSession() }
 
     if let key = APIKeyService.byokKey(provider.byokProvider) {
+      let fingerprint = APIKeyService.byokFingerprint(key)
+      guard CredentialHealthManager.shared.canUseBYOK(provider: provider.byokProvider, fingerprint: fingerprint) else {
+        log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
+        if failoverToAlternateProvider() {
+          return
+        } else if AuthService.shared.isSignedIn {
+          mintAndConnect(provider: provider)
+        } else {
+          CredentialHealthManager.shared.recordProviderFailure(
+            .providerAuthFailed(provider: provider, mode: .byok),
+            provider: provider,
+            authMode: .byok,
+            fingerprint: fingerprint,
+            context: "realtime_byok_blocked")
+        }
+        return
+      }
       startSession(provider: provider, auth: .byokKey(key))
     } else if AuthService.shared.isSignedIn {
       mintAndConnect(provider: provider)
@@ -326,17 +358,37 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     let providerParam = provider == .openai ? "openai" : "gemini"
     log("RealtimeHub: minting ephemeral \(provider.displayName) token (managed)")
     Task { [weak self] in
-      let token = await APIClient.shared.mintRealtimeToken(provider: providerParam)
       guard let self else { return }
-      self.minting = false
-      guard let token else {
-        // Mint failed for this provider — try the OTHER realtime provider before the
-        // legacy Claude cascade.
+      let token: String
+      do {
+        token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      } catch let error as CredentialHealthError {
+        self.minting = false
+        CredentialHealthManager.shared.record(error, context: "realtime_mint")
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: error.failureClass.logValue,
+          phase: "warm")
+        if error.failureClass.isAccountWide {
+          log("RealtimeHub: account credential failure during mint — staying on cascade")
+        } else if !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
+        }
+        return
+      } catch {
+        self.minting = false
+        let typed = CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
+        CredentialHealthManager.shared.record(typed, context: "realtime_mint")
+        DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+          provider: providerParam,
+          reason: "backend_transient",
+          phase: "warm")
         if !self.failoverToAlternateProvider() {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
       }
+      self.minting = false
       // Provider may have changed (picker/failover) while minting; only connect if still wanted.
       guard self.effectiveProvider == provider, self.session == nil
       else { return }
@@ -414,22 +466,37 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     let providerParam = provider == .openai ? "openai" : "gemini"
     log("RealtimeHub[\(provider.displayName)]: minting fresh token for barge-in replacement")
     Task { [weak self] in
-      let token = await APIClient.shared.mintRealtimeToken(provider: providerParam)
       guard let self else { return }
-      self.minting = false
-      guard self.bargeInReplacementInFlight else { return }
+      guard self.bargeInReplacementInFlight else {
+        self.minting = false
+        return
+      }
       guard self.effectiveProvider == provider, self.session == nil else {
+        self.minting = false
         self.clearBargeInReplacementState()
         self.ensureWarm()
         return
       }
-      guard let token else {
-        self.failBargeInReplacement(provider: provider, reason: "token mint failed")
+      let token: String
+      do {
+        token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      } catch let error as CredentialHealthError {
+        self.minting = false
+        CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
+        self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
+        if !error.failureClass.isAccountWide, !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
+        }
+        return
+      } catch {
+        self.minting = false
+        self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
         if !self.failoverToAlternateProvider() {
           log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
         }
         return
       }
+      self.minting = false
       self.startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))
     }
   }
@@ -958,6 +1025,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
           output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
         return
       }
+      if let directedProvider {
+        let availability = LocalAgentProviderDetector.availability(for: directedProvider)
+        guard availability.isAvailable else {
+          let setupPrompt = availability.setupPrompt
+          assistantText = setupPrompt
+          barState?.isVoiceResponseActive = true
+          if !audioReceivedThisTurn {
+            speak(directedProvider.setupNeededStatus)
+          }
+          suppressAssistantOutputForCurrentTurn = true
+          log("RealtimeHub[\(providerTag)]: tool spawn_agent provider=\(directedProvider.rawValue) unavailable")
+          sendToolResultIfCurrent(
+            source: source, callId: callId, name: name,
+            output: availability.toolError)
+          return
+        }
+      }
       let model = ShortcutSettings.shared.selectedModel.isEmpty
         ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
       // Non-blocking: spawn renders its own pill ("text bubble") and runs on its
@@ -1042,8 +1126,36 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       message: message,
       aliveFor: aliveFor,
       hasActiveTurn: hasActiveTurn)
+    let provider = sessionProvider
+    let authMode: CredentialAuthMode = sessionAuth?.isEphemeral == true ? .managed : .byok
+    let fingerprint = provider.flatMap { APIKeyService.byokKey($0.byokProvider) }.map(APIKeyService.byokFingerprint)
+    var credentialFailureClass: CredentialFailureClass?
+    if let provider, closeCategory != .expectedIdleTeardown {
+      var failureClass = CredentialHealthManager.classifyProviderClose(message: message, provider: provider)
+      if authMode == .managed, case .providerAuthFailed = failureClass {
+        failureClass = .providerAuthFailed(provider: provider, mode: .managed)
+      }
+      credentialFailureClass = failureClass
+      CredentialHealthManager.shared.recordProviderFailure(
+        failureClass,
+        provider: provider,
+        authMode: authMode,
+        fingerprint: fingerprint,
+        context: "realtime_socket")
+    }
     let categoryText = closeCategory.map { " category=\($0.rawValue)" } ?? ""
-    let safeMessage = closeCategory == .providerPolicyCloseFast ? "" : " \(message)"
+    let shouldRedactProviderMessage: Bool = {
+      if closeCategory == .providerPolicyCloseFast { return true }
+      if case .providerAuthFailed = credentialFailureClass { return true }
+      if case .providerQuotaExceeded = credentialFailureClass { return true }
+      return false
+    }()
+    let safeMessage = shouldRedactProviderMessage ? "" : " \(message)"
+    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+      provider: providerTag,
+      category: closeCategory?.rawValue,
+      aliveFor: aliveFor,
+      activeTurn: hasActiveTurn)
     if RealtimeHubCloseClassifier.shouldReportToSentry(closeCategory) {
       logError("RealtimeHub: session error —\(categoryText) provider=\(providerTag)\(safeMessage)")
     } else {
@@ -1062,6 +1174,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     // A session that died fast (connected, then the provider rejected/aborted it — e.g.
     // Gemini close 1008 / 429) is a real provider failure: try the OTHER realtime provider
     // before the cascade. One that lived long was a normal idle-close → re-warm the same.
+    if case .providerAuthFailed = credentialFailureClass {
+      if aliveFor < 10, failoverToAlternateProvider() { return }
+      return
+    }
+    if case .providerQuotaExceeded = credentialFailureClass {
+      if failoverToAlternateProvider() { return }
+      return
+    }
     if aliveFor < 10, failoverToAlternateProvider() { return }
     // Re-warm so the NEXT PTT uses the hub, not the STT cascade. Gemini idle-closes
     // the socket (~2.5 min, close 1008) even before the first turn; managed users have

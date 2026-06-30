@@ -60,7 +60,7 @@ echo ""
 echo "Python packages:"
 
 missing_pkgs=()
-for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram_sdk openpipe pytest_asyncio; do
+for pkg in pydantic fastapi firebase_admin google.cloud.firestore redis deepgram_sdk openpipe pytest_asyncio fake_firestore fakeredis; do
   if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" -c "import $pkg" &>/dev/null 2>&1; then
     ok "$pkg"
   else
@@ -138,6 +138,12 @@ if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" scripts/select_backend_unit_tests.py 
   ok "$selected_test_count backend unit test files selected"
 else
   bad "backend unit test selection failed"
+fi
+
+if [[ -n "$PYTHON_BIN" ]] && "$PYTHON_BIN" scripts/export_openapi.py --help &>/dev/null 2>&1; then
+  ok "OpenAPI export script is runnable"
+else
+  bad "OpenAPI export script failed to start"
 fi
 
 # ── Summary ──

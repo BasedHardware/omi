@@ -13,7 +13,12 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::time::{Duration, Instant};
+use tokio::sync::{Mutex, RwLock};
+use tokio::time::timeout;
+
+const UNKNOWN_KID_REFRESH_COOLDOWN: Duration = Duration::from_secs(5);
+const UNKNOWN_KID_REFRESH_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Firebase public keys cache
 /// Keys are fetched from Google's public key endpoint
@@ -24,6 +29,12 @@ pub struct FirebaseAuth {
     client: Client,
     /// Firebase project ID
     project_id: String,
+    /// Serializes on-demand JWK refreshes so an unknown kid burst only fetches once.
+    refresh_lock: Arc<Mutex<()>>,
+    /// Last on-demand refresh attempt for unknown kids. Throttles invalid-token probes.
+    last_unknown_kid_refresh: Arc<RwLock<Option<Instant>>>,
+    /// Whether the most recent unknown-kid refresh attempt failed.
+    last_unknown_kid_refresh_failed: Arc<RwLock<bool>>,
 }
 
 /// JWT Claims from Firebase ID token
@@ -84,6 +95,8 @@ impl IntoResponse for AuthError {
             StatusCode::PAYMENT_REQUIRED
         } else if self.error == "byok_validation_failed" {
             StatusCode::FORBIDDEN
+        } else if self.error == "jwks_refresh_failed" {
+            StatusCode::SERVICE_UNAVAILABLE
         } else {
             StatusCode::UNAUTHORIZED
         };
@@ -98,6 +111,9 @@ impl FirebaseAuth {
             keys: Arc::new(RwLock::new(HashMap::new())),
             client: Client::new(),
             project_id,
+            refresh_lock: Arc::new(Mutex::new(())),
+            last_unknown_kid_refresh: Arc::new(RwLock::new(None)),
+            last_unknown_kid_refresh_failed: Arc::new(RwLock::new(false)),
         }
     }
 
@@ -125,7 +141,10 @@ impl FirebaseAuth {
     }
 
     /// Verify a Firebase ID token and extract the user ID and name
-    pub async fn verify_token(&self, token: &str) -> Result<(String, Option<String>, Option<String>), AuthError> {
+    pub async fn verify_token(
+        &self,
+        token: &str,
+    ) -> Result<(String, Option<String>, Option<String>), AuthError> {
         // Decode header to get kid
         let header = decode_header(token).map_err(|e| AuthError {
             error: "invalid_token".to_string(),
@@ -137,13 +156,6 @@ impl FirebaseAuth {
             message: "Token missing kid header".to_string(),
         })?;
 
-        // Get the key for this kid
-        let keys = self.keys.read().await;
-        let key = keys.get(&kid).ok_or_else(|| AuthError {
-            error: "invalid_token".to_string(),
-            message: format!("Unknown key id: {}", kid),
-        })?;
-
         // Set up validation
         let mut validation = Validation::new(jsonwebtoken::Algorithm::RS256);
         validation.set_audience(&[&self.project_id]);
@@ -152,15 +164,114 @@ impl FirebaseAuth {
             self.project_id
         )]);
 
-        // Decode and validate token
-        let token_data = decode::<FirebaseClaims>(token, key, &validation).map_err(|e| {
-            AuthError {
+        if let Some(result) = self
+            .try_decode_with_cached_key(token, &kid, &validation)
+            .await
+        {
+            let token_data = result?;
+            return Ok((
+                token_data.claims.sub,
+                token_data.claims.name,
+                token_data.claims.email,
+            ));
+        }
+
+        tracing::warn!("Firebase token kid unknown; refreshing JWKs once");
+        self.refresh_keys_for_unknown_kid().await?;
+
+        let result = self
+            .try_decode_with_cached_key(token, &kid, &validation)
+            .await;
+        let token_data = match result {
+            Some(result) => result?,
+            None => {
+                return Err(AuthError {
+                    error: "unknown_key_id".to_string(),
+                    message: "Firebase token key id is not recognized after JWK refresh"
+                        .to_string(),
+                });
+            }
+        };
+
+        Ok((
+            token_data.claims.sub,
+            token_data.claims.name,
+            token_data.claims.email,
+        ))
+    }
+
+    async fn try_decode_with_cached_key(
+        &self,
+        token: &str,
+        kid: &str,
+        validation: &Validation,
+    ) -> Option<Result<jsonwebtoken::TokenData<FirebaseClaims>, AuthError>> {
+        let keys = self.keys.read().await;
+        let key = keys.get(kid)?;
+        Some(
+            decode::<FirebaseClaims>(token, key, validation).map_err(|e| AuthError {
                 error: "invalid_token".to_string(),
                 message: format!("Token validation failed: {}", e),
-            }
-        })?;
+            }),
+        )
+    }
 
-        Ok((token_data.claims.sub, token_data.claims.name, token_data.claims.email))
+    async fn refresh_keys_for_unknown_kid(&self) -> Result<(), AuthError> {
+        let _guard = self.refresh_lock.lock().await;
+
+        {
+            let last = self.last_unknown_kid_refresh.read().await;
+            if last
+                .map(|instant| instant.elapsed() < UNKNOWN_KID_REFRESH_COOLDOWN)
+                .unwrap_or(false)
+            {
+                tracing::warn!(
+                    "Skipping Firebase JWK refresh; unknown-kid refresh was attempted recently"
+                );
+                if *self.last_unknown_kid_refresh_failed.read().await {
+                    return Err(AuthError {
+                        error: "jwks_refresh_failed".to_string(),
+                        message: "Firebase signing keys refresh was attempted recently and failed"
+                            .to_string(),
+                    });
+                }
+                return Ok(());
+            }
+        }
+
+        {
+            let mut last = self.last_unknown_kid_refresh.write().await;
+            *last = Some(Instant::now());
+        }
+
+        match timeout(UNKNOWN_KID_REFRESH_TIMEOUT, self.refresh_keys()).await {
+            Ok(Ok(())) => {
+                let mut failed = self.last_unknown_kid_refresh_failed.write().await;
+                *failed = false;
+                Ok(())
+            }
+            Ok(Err(e)) => {
+                let mut failed = self.last_unknown_kid_refresh_failed.write().await;
+                *failed = true;
+                tracing::warn!("Firebase JWK refresh after unknown kid failed: {}", e);
+                Err(AuthError {
+                    error: "jwks_refresh_failed".to_string(),
+                    message: "Firebase signing keys could not be refreshed".to_string(),
+                })
+            }
+            Err(_) => {
+                let mut failed = self.last_unknown_kid_refresh_failed.write().await;
+                *failed = true;
+                tracing::warn!(
+                    "Firebase JWK refresh after unknown kid timed out after {:?}",
+                    UNKNOWN_KID_REFRESH_TIMEOUT
+                );
+                Err(AuthError {
+                    error: "jwks_refresh_failed".to_string(),
+                    message: "Firebase signing keys refresh timed out".to_string(),
+                })
+            }
+        }
     }
 }
 
@@ -299,10 +410,7 @@ where
         if let Some(byok_ext) = parts.extensions.get::<crate::byok::ByokCacheExt>() {
             // Get the Firestore service from the paywall checker (shares the same Arc)
             if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-                let byok_state = byok_ext
-                    .0
-                    .get_or_fetch(&uid, &checker.0.firestore)
-                    .await;
+                let byok_state = byok_ext.0.get_or_fetch(&uid, &checker.0.firestore).await;
 
                 match crate::byok::validate_byok_request(&uid, &parts.headers, &byok_state) {
                     Ok(crate::byok::ByokValidation::Active) => {
@@ -312,11 +420,7 @@ where
                         byok_stripped = clear_headers;
                     }
                     Err(error_msg) => {
-                        tracing::warn!(
-                            "BYOK validation failed for uid={}: {}",
-                            uid,
-                            error_msg
-                        );
+                        tracing::warn!("BYOK validation failed for uid={}: {}", uid, error_msg);
                         return Err(AuthError {
                             error: "byok_validation_failed".to_string(),
                             message: error_msg,
@@ -329,7 +433,11 @@ where
         // Paywall check — fail open if Firestore is unreachable so a backend
         // outage never makes paying users look paywalled.
         if let Some(checker) = parts.extensions.get::<crate::paywall::PaywallCheckerExt>() {
-            if checker.0.is_paywalled(&uid, &parts.headers, byok_stripped).await {
+            if checker
+                .0
+                .is_paywalled(&uid, &parts.headers, byok_stripped)
+                .await
+            {
                 return Err(AuthError {
                     error: "trial_expired".to_string(),
                     message: "Desktop trial expired. Upgrade or bring your own keys.".to_string(),

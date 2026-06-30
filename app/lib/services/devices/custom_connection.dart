@@ -143,7 +143,8 @@ abstract class CustomDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -157,7 +158,8 @@ abstract class CustomDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async => null;
+  }) async =>
+      null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;

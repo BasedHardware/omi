@@ -891,8 +891,17 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: dropping unroutable result")
       return
     }
-    if (message.payload["terminalStatus"] as? String) == "cancelled" {
+    let terminalStatus = message.payload["terminalStatus"] as? String
+    if terminalStatus == "cancelled" {
       request.continuation.resume(throwing: BridgeError.stopped)
+      return
+    }
+    if let terminalStatus,
+       ["failed", "timed_out", "orphaned"].contains(terminalStatus) {
+      let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
+      let raw = failure?.displayMessage ?? message.payload["text"] as? String ?? "Agent failed"
+      log("AgentRuntimeProcess: agent result failed (raw): \(raw)")
+      request.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
       return
     }
     request.continuation.resume(returning: queryResult(from: message))
@@ -915,7 +924,7 @@ actor AgentRuntimeProcess {
       let controlRequest = activeControlRequests.removeValue(forKey: requestKey)
     {
       log("AgentRuntimeProcess: control tool error (raw): \(raw)")
-      controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))
+      controlRequest.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
       return
     }
     guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
@@ -923,7 +932,7 @@ actor AgentRuntimeProcess {
       return
     }
     log("AgentRuntimeProcess: agent error (raw): \(raw)")
-    request.continuation.resume(throwing: BridgeError.agentError(raw))
+    request.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
   }
 
   private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {

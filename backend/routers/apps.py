@@ -1040,6 +1040,12 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
     if app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     update_app_visibility_in_db(app_id, private)
+    # Toggling visibility of an approved app changes whether it appears in the public marketplace
+    # list, so invalidate that cache too (mirrors approve/reject/delete). Otherwise a newly public
+    # app does not show, and a newly private one keeps showing, until the list cache TTL expires
+    # (issue #3783).
+    if app.approved:
+        invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 

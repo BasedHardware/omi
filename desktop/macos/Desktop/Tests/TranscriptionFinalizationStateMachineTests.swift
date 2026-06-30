@@ -32,8 +32,10 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
     }
 
     func testFinalizationStrategyReasonAndTimestampsPersistAcrossStorageReopen() async throws {
+        let clientConversationId = UUID().uuidString.lowercased()
         let sessionId = try await TranscriptionStorage.shared.startSession(
             source: "desktop",
+            clientConversationId: clientConversationId,
             finalizationStrategy: .localSegments
         )
 
@@ -48,6 +50,7 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertEqual(uploading.status, .uploading)
         XCTAssertEqual(uploading.finalizationStrategy, .localSegments)
         XCTAssertEqual(uploading.finalizationReason, .finishAndContinue)
+        XCTAssertEqual(uploading.clientConversationId, clientConversationId)
         XCTAssertNotNil(uploading.finishedAt)
         XCTAssertNotNil(uploading.finalizationStartedAt)
         XCTAssertNil(uploading.finalizationCompletedAt)
@@ -65,11 +68,38 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         let completed = try XCTUnwrap(completedSession)
         XCTAssertEqual(completed.status, .completed)
         XCTAssertEqual(completed.backendId, "backend-finalized")
+        XCTAssertEqual(completed.clientConversationId, clientConversationId)
         XCTAssertTrue(completed.backendSynced)
         XCTAssertEqual(completed.finalizationStrategy, .localSegments)
         XCTAssertEqual(completed.finalizationReason, .finishAndContinue)
         XCTAssertNotNil(completed.finalizationStartedAt)
         XCTAssertNotNil(completed.finalizationCompletedAt)
+    }
+
+    func testLocalUploadFallbackReusesPersistedClientConversationId() {
+        let clientConversationId = UUID().uuidString.lowercased()
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: "desktop",
+            clientConversationId: clientConversationId
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.localClientConversationId(session: session, sessionId: 42),
+            clientConversationId
+        )
+    }
+
+    func testLocalUploadFallbackUsesStableLegacyKeyWhenClientConversationIdIsMissing() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000.123),
+            source: "desktop"
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.localClientConversationId(session: session, sessionId: 42),
+            "macos-local-42-1700000000123"
+        )
     }
 
     func testFinishSessionDefaultsStrategyAndStoresReason() async throws {
@@ -173,6 +203,33 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertFalse(secondClaim)
     }
 
+    func testRestartRecoveryDoesNotForceProcessWhenCapturedBackendIdWasNotPersisted() async throws {
+        let capturedBackendId = "backend-conversation-123"
+        let sessionId = try await TranscriptionStorage.shared.startSession(
+            source: "desktop",
+            finalizationStrategy: .cloudReconcile
+        )
+        try await TranscriptionStorage.shared.finishSession(
+            id: sessionId,
+            reason: .userStop
+        )
+
+        await RewindDatabase.shared.close()
+        await TranscriptionStorage.shared.invalidateCache()
+        try await RewindDatabase.shared.initialize()
+
+        let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let recoveredSession = try XCTUnwrap(storedSession)
+        XCTAssertNil(recoveredSession.backendId)
+        XCTAssertFalse(
+            DesktopConversationMatchPolicy.canForceProcessBoundCloudSession(
+                capturedBackendId: capturedBackendId,
+                persistedBackendId: recoveredSession.backendId
+            ),
+            "After restart, a captured-but-unpersisted id must not enable current-pointer force-process"
+        )
+    }
+
     func testProcessingServerConversationDoesNotStampFinalizationCompletedAt() async throws {
         let conversation = makeServerConversation(status: .processing)
 
@@ -201,6 +258,97 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
 
         let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
         XCTAssertNil(session)
+    }
+
+    func testCloudReconciliationExhaustionKeepsRetryingBeforeMaxAttempts() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: ConversationSource.desktop.rawValue,
+            retryCount: 3,
+            finalizationStrategy: .cloudReconcile
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.cloudReconciliationExhaustionAction(
+                session: session,
+                segmentCount: 0
+            ),
+            .keepRetrying
+        )
+    }
+
+    func testCloudReconciliationExhaustionFallsBackToLocalSegmentsWhenAvailable() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: ConversationSource.desktop.rawValue,
+            retryCount: 4,
+            finalizationStrategy: .cloudReconcile
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.cloudReconciliationExhaustionAction(
+                session: session,
+                segmentCount: 2
+            ),
+            .uploadLocalSegments
+        )
+    }
+
+    func testCloudReconciliationExhaustionDiscardsEmptyDesktopSessions() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: ConversationSource.desktop.rawValue,
+            retryCount: 4,
+            finalizationStrategy: .cloudReconcile
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.cloudReconciliationExhaustionAction(
+                session: session,
+                segmentCount: 0
+            ),
+            .discardEmptyDesktopSession
+        )
+    }
+
+    func testExhaustedEmptyDesktopCloudSessionIsDeletedInsteadOfFailed() async throws {
+        let sessionId = try await TranscriptionStorage.shared.startSession(
+            source: ConversationSource.desktop.rawValue,
+            finalizationStrategy: .cloudReconcile
+        )
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+        for _ in 0..<4 {
+            try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+        }
+
+        let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let session = try XCTUnwrap(storedSession)
+
+        let handled = try await ConversationFinalizationService.shared.resolveExhaustedCloudReconciliation(
+            session: session,
+            sessionId: sessionId
+        )
+
+        XCTAssertTrue(handled)
+        let deletedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        XCTAssertNil(deletedSession)
+    }
+
+    func testCloudReconciliationExhaustionReportsEmptyNonDesktopSessions() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: ConversationSource.omi.rawValue,
+            retryCount: 4,
+            finalizationStrategy: .cloudReconcile
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.cloudReconciliationExhaustionAction(
+                session: session,
+                segmentCount: 0
+            ),
+            .reportFailure
+        )
     }
 
     func testCompactsOversizedLocalUploadWithoutDroppingText() {

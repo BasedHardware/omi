@@ -5,7 +5,7 @@ from enum import Enum
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import AliasChoices, BaseModel, Field, ValidationError, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 import database.folders as folders_db
 import database.memories as memories_db
@@ -16,7 +16,6 @@ import database.goals as goals_db
 import database.users as users_db
 from database.vector_db import upsert_memory_vectors_batch
 
-from models.folder import Folder
 from models.memories import MemoryCategory, Memory, MemoryDB
 from models.conversation import (
     Conversation as OmiConversation,
@@ -68,12 +67,12 @@ _FROM_SEGMENTS_CONVERSATION_NAMESPACE = uuid.UUID('fb2f1f36-3c84-47a4-9c62-b3f6f
 # ******************************************************
 
 
-@router.get("/v1/dev/keys", response_model=List[DevApiKey], tags=["developer"])
+@router.get("/v1/dev/keys", response_model=List[DevApiKey], tags=["API Keys"], operation_id="listApiKeys")
 def get_keys(uid: str = Depends(get_current_user_id)):
     return dev_api_key_db.get_dev_keys_for_user(uid)
 
 
-@router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["developer"])
+@router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["API Keys"], operation_id="createApiKey")
 def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)):
     """
     Create a new Developer API key with optional scopes.
@@ -105,7 +104,7 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
     return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
-@router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["developer"])
+@router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["API Keys"], operation_id="revokeApiKey")
 def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     dev_api_key_db.delete_dev_key(uid, key_id)
     invalidate_developer_cache(uid)
@@ -141,8 +140,9 @@ def _coerce_optional_memory_datetime(value) -> Optional[datetime]:
     return None
 
 
-class CleanerMemory(BaseModel):
-    # Core fields (aligned with MemoryResponse)
+class DeveloperMemory(BaseModel):
+    model_config = ConfigDict(title='DeveloperMemory')
+
     id: str
     content: str = ''
     category: MemoryCategory = MemoryCategory.interesting
@@ -151,10 +151,10 @@ class CleanerMemory(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     manually_added: bool = False
-    scoring: Optional[str] = None
     reviewed: bool = False
     user_review: Optional[bool] = None
     edited: bool = False
+    scoring: Optional[str] = None
 
     @field_validator('id', mode='before')
     def coerce_id(cls, value):
@@ -185,25 +185,9 @@ class CleanerMemory(BaseModel):
             return []
         return [str(tag) for tag in value if tag is not None]
 
-    @field_validator('scoring', mode='before')
-    def coerce_scoring(cls, value):
-        if value is None:
-            return None
-        return str(value)
-
     @field_validator('created_at', 'updated_at', mode='before')
     def coerce_datetime(cls, value):
         return _coerce_optional_memory_datetime(value)
-
-    @field_validator('user_review', mode='before')
-    def coerce_user_review(cls, value):
-        if isinstance(value, bool):
-            return value
-        if value in [None, '']:
-            return None
-        if isinstance(value, str):
-            return value.lower() in ['true', '1', 'yes']
-        return bool(value)
 
     @field_validator('manually_added', 'reviewed', 'edited', mode='before')
     def coerce_bool(cls, value):
@@ -215,8 +199,30 @@ class CleanerMemory(BaseModel):
             return value.lower() in ['true', '1', 'yes']
         return bool(value)
 
+    @field_validator('user_review', mode='before')
+    def coerce_optional_bool(cls, value):
+        if value in [None, '']:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            return value.lower() in ['true', '1', 'yes']
+        return bool(value)
+
+    @field_validator('scoring', mode='before')
+    def coerce_scoring(cls, value):
+        if value is None:
+            return None
+        return str(value)
+
+
+# Backward-compatible name used by unit tests and older docs.
+CleanerMemory = DeveloperMemory
+
 
 class CreateMemoryRequest(BaseModel):
+    model_config = ConfigDict(title='CreateMemoryRequest')
+
     content: str = Field(description="The content of the memory", min_length=1, max_length=500)
     category: Optional[MemoryCategory] = Field(
         default=None, description="Memory category: interesting, system, or manual (auto-categorized if not provided)"
@@ -226,40 +232,43 @@ class CreateMemoryRequest(BaseModel):
 
 
 class UpdateMemoryRequest(BaseModel):
+    model_config = ConfigDict(title='UpdateMemoryRequest')
+
     content: Optional[str] = Field(default=None, description="New content for the memory", min_length=1, max_length=500)
     visibility: Optional[str] = Field(default=None, description="New visibility: public or private")
     tags: Optional[List[str]] = Field(default=None, description="New tags for the memory")
     category: Optional[MemoryCategory] = Field(default=None, description="New category for the memory")
 
 
-class MemoryResponse(BaseModel):
-    id: str
-    content: str
-    category: MemoryCategory
-    visibility: str
-    tags: List[str]
-    created_at: datetime
-    updated_at: datetime
-    manually_added: bool
-    scoring: str
-
-
 class BatchMemoriesRequest(BaseModel):
+    model_config = ConfigDict(title='BatchMemoriesRequest')
+
     memories: List[CreateMemoryRequest] = Field(description="List of memories to create", max_length=25)
 
 
 class BatchMemoriesResponse(BaseModel):
-    memories: List[MemoryResponse]
+    model_config = ConfigDict(title='BatchMemoriesResponse')
+
+    memories: List[DeveloperMemory]
     created_count: int
 
 
-@router.get("/v1/dev/user/memories", tags=["developer"], response_model=List[CleanerMemory])
+@router.get(
+    "/v1/dev/user/memories",
+    tags=["Memories"],
+    response_model=List[DeveloperMemory],
+    operation_id="listMemories",
+)
 def get_memories(
     uid: str = Depends(get_uid_with_memories_read),
     limit: int = 25,
     offset: int = 0,
     categories: Optional[str] = None,
 ):
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     category_list = []
     if categories:
         try:
@@ -279,7 +288,7 @@ def get_memories(
             content = str(memory.get('content') or '')
             memory['content'] = (content[:70] + '...') if len(content) > 70 else content
         try:
-            valid_memories.append(CleanerMemory.model_validate(memory))
+            valid_memories.append(DeveloperMemory.model_validate(memory))
         except ValidationError as e:
             missing_fields = [err['loc'][0] for err in e.errors() if err.get('loc')]
             logger.warning(
@@ -290,7 +299,7 @@ def get_memories(
     return valid_memories
 
 
-@router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])
+@router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
     uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories")),
@@ -323,7 +332,7 @@ def create_memory(
     # Save to database
     memories_db.create_memory(uid, memory_db.dict())
 
-    return MemoryResponse(
+    return DeveloperMemory(
         id=memory_db.id,
         content=memory_db.content,
         category=memory_db.category,
@@ -332,11 +341,15 @@ def create_memory(
         created_at=memory_db.created_at,
         updated_at=memory_db.updated_at,
         manually_added=memory_db.manually_added,
-        scoring=memory_db.scoring,
     )
 
 
-@router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])
+@router.post(
+    "/v1/dev/user/memories/batch",
+    response_model=BatchMemoriesResponse,
+    tags=["Memories"],
+    operation_id="createMemoriesBatch",
+)
 def create_memories_batch(
     request: BatchMemoriesRequest,
     uid: str = Depends(with_rate_limit(get_uid_with_memories_write, "dev:memories_batch")),
@@ -398,7 +411,7 @@ def create_memories_batch(
 
     # Prepare response
     created_memories = [
-        MemoryResponse(
+        DeveloperMemory(
             id=mem.id,
             content=mem.content,
             category=mem.category,
@@ -407,7 +420,6 @@ def create_memories_batch(
             created_at=mem.created_at,
             updated_at=mem.updated_at,
             manually_added=mem.manually_added,
-            scoring=mem.scoring,
         )
         for mem in memory_dbs
     ]
@@ -415,7 +427,7 @@ def create_memories_batch(
     return BatchMemoriesResponse(memories=created_memories, created_count=len(created_memories))
 
 
-@router.delete("/v1/dev/user/memories/{memory_id}", tags=["developer"])
+@router.delete("/v1/dev/user/memories/{memory_id}", tags=["Memories"], operation_id="deleteMemory")
 def delete_memory(
     memory_id: str,
     uid: str = Depends(get_uid_with_memories_write),
@@ -435,7 +447,12 @@ def delete_memory(
     return {"success": True}
 
 
-@router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])
+@router.patch(
+    "/v1/dev/user/memories/{memory_id}",
+    response_model=DeveloperMemory,
+    tags=["Memories"],
+    operation_id="updateMemory",
+)
 def update_memory(
     memory_id: str,
     request: UpdateMemoryRequest,
@@ -489,6 +506,8 @@ def update_memory(
 
 
 class ActionItemResponse(BaseModel):
+    model_config = ConfigDict(title='DeveloperActionItem')
+
     id: str
     description: str
     completed: bool
@@ -500,6 +519,8 @@ class ActionItemResponse(BaseModel):
 
 
 class CreateActionItemRequest(BaseModel):
+    model_config = ConfigDict(title='CreateActionItemRequest')
+
     description: str = Field(description="The action item description", min_length=1, max_length=500)
     completed: bool = Field(default=False, description="Whether the action item is completed")
     due_at: Optional[datetime] = Field(
@@ -508,21 +529,32 @@ class CreateActionItemRequest(BaseModel):
 
 
 class UpdateActionItemRequest(BaseModel):
+    model_config = ConfigDict(title='UpdateActionItemRequest')
+
     description: Optional[str] = Field(default=None, description="New description", min_length=1, max_length=500)
     completed: Optional[bool] = Field(default=None, description="New completion status")
     due_at: Optional[datetime] = Field(default=None, description="New due date (ISO format with timezone)")
 
 
 class BatchActionItemsRequest(BaseModel):
+    model_config = ConfigDict(title='BatchActionItemsRequest')
+
     action_items: List[CreateActionItemRequest] = Field(description="List of action items to create", max_length=50)
 
 
 class BatchActionItemsResponse(BaseModel):
+    model_config = ConfigDict(title='BatchActionItemsResponse')
+
     action_items: List[ActionItemResponse]
     created_count: int
 
 
-@router.get("/v1/dev/user/action-items", tags=["developer"], response_model=List[ActionItemResponse])
+@router.get(
+    "/v1/dev/user/action-items",
+    tags=["Action Items"],
+    response_model=List[ActionItemResponse],
+    operation_id="listActionItems",
+)
 def get_action_items(
     uid: str = Depends(get_uid_with_action_items_read),
     conversation_id: Optional[str] = None,
@@ -542,6 +574,10 @@ def get_action_items(
     - **limit**: Maximum number of items to return
     - **offset**: Number of items to skip
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -574,7 +610,12 @@ def get_action_items(
     return valid_action_items
 
 
-@router.post("/v1/dev/user/action-items", response_model=ActionItemResponse, tags=["developer"])
+@router.post(
+    "/v1/dev/user/action-items",
+    response_model=ActionItemResponse,
+    tags=["Action Items"],
+    operation_id="createActionItem",
+)
 def create_action_item(
     request: CreateActionItemRequest,
     uid: str = Depends(get_uid_with_action_items_write),
@@ -614,7 +655,12 @@ def create_action_item(
     return ActionItemResponse(**action_item)
 
 
-@router.post("/v1/dev/user/action-items/batch", response_model=BatchActionItemsResponse, tags=["developer"])
+@router.post(
+    "/v1/dev/user/action-items/batch",
+    response_model=BatchActionItemsResponse,
+    tags=["Action Items"],
+    operation_id="createActionItemsBatch",
+)
 def create_action_items_batch(
     request: BatchActionItemsRequest,
     uid: str = Depends(get_uid_with_action_items_write),
@@ -666,7 +712,11 @@ def create_action_items_batch(
     return BatchActionItemsResponse(action_items=created_items, created_count=len(created_items))
 
 
-@router.delete("/v1/dev/user/action-items/{action_item_id}", tags=["developer"])
+@router.delete(
+    "/v1/dev/user/action-items/{action_item_id}",
+    tags=["Action Items"],
+    operation_id="deleteActionItem",
+)
 def delete_action_item(
     action_item_id: str,
     uid: str = Depends(get_uid_with_action_items_write),
@@ -686,7 +736,12 @@ def delete_action_item(
     return {"success": True}
 
 
-@router.patch("/v1/dev/user/action-items/{action_item_id}", response_model=ActionItemResponse, tags=["developer"])
+@router.patch(
+    "/v1/dev/user/action-items/{action_item_id}",
+    response_model=ActionItemResponse,
+    tags=["Action Items"],
+    operation_id="updateActionItem",
+)
 def update_action_item(
     action_item_id: str,
     request: UpdateActionItemRequest,
@@ -749,6 +804,8 @@ def update_action_item(
 
 
 class ActionItem(BaseModel):
+    model_config = ConfigDict(title='DeveloperConversationActionItem')
+
     description: str
     completed: bool = False
     created_at: Optional[datetime] = None
@@ -759,6 +816,8 @@ class ActionItem(BaseModel):
 
 
 class Event(BaseModel):
+    model_config = ConfigDict(title='DeveloperConversationEvent')
+
     title: str
     description: str = ''
     start: datetime
@@ -767,6 +826,8 @@ class Event(BaseModel):
 
 
 class SimpleStructured(BaseModel):
+    model_config = ConfigDict(title='DeveloperConversationStructured')
+
     title: str
     overview: str
     emoji: str = '🧠'
@@ -776,6 +837,8 @@ class SimpleStructured(BaseModel):
 
 
 class SimpleTranscriptSegment(BaseModel):
+    model_config = ConfigDict(title='DeveloperTranscriptSegment')
+
     id: Optional[str] = None
     text: str
     speaker_id: Optional[int] = None
@@ -785,6 +848,8 @@ class SimpleTranscriptSegment(BaseModel):
 
 
 class Conversation(BaseModel):
+    model_config = ConfigDict(title='DeveloperConversation')
+
     id: str
     created_at: datetime
     started_at: Optional[datetime]
@@ -799,6 +864,8 @@ class Conversation(BaseModel):
 
 
 class CreateConversationRequest(BaseModel):
+    model_config = ConfigDict(title='CreateConversationRequest')
+
     text: str = Field(description="The conversation text/transcript", min_length=1, max_length=100000)
     text_source: ExternalIntegrationConversationSource = Field(
         default=ExternalIntegrationConversationSource.other,
@@ -816,12 +883,16 @@ class CreateConversationRequest(BaseModel):
 
 
 class ConversationResponse(BaseModel):
+    model_config = ConfigDict(title='ConversationCreateResponse')
+
     id: str
     status: str
     discarded: bool
 
 
 class UpdateConversationRequest(BaseModel):
+    model_config = ConfigDict(title='UpdateConversationRequest')
+
     title: Optional[str] = Field(
         default=None, description="New title for the conversation", min_length=1, max_length=500
     )
@@ -829,6 +900,8 @@ class UpdateConversationRequest(BaseModel):
 
 
 class DevTranscriptSegment(BaseModel):
+    model_config = ConfigDict(title='CreateConversationTranscriptSegment')
+
     text: str = Field(description="The text spoken in this segment")
     speaker: Optional[str] = Field(
         default='SPEAKER_00', description="Speaker identifier (e.g., 'SPEAKER_00', 'SPEAKER_01')"
@@ -841,6 +914,8 @@ class DevTranscriptSegment(BaseModel):
 
 
 class CreateConversationFromTranscriptRequest(BaseModel):
+    model_config = ConfigDict(title='CreateConversationFromTranscriptRequest')
+
     transcript_segments: List[DevTranscriptSegment] = Field(
         description="List of transcript segments with speaker and timing info", min_length=1, max_length=500
     )
@@ -873,7 +948,23 @@ class CreateConversationFromTranscriptRequest(BaseModel):
         return value
 
 
-@router.get("/v1/dev/user/folders", response_model=List[Folder], tags=["developer"])
+class DeveloperFolder(BaseModel):
+    model_config = ConfigDict(title='DeveloperFolder')
+
+    id: str
+    name: str
+    description: Optional[str] = None
+    color: str
+    icon: str
+    created_at: datetime
+    updated_at: datetime
+    order: int = 0
+    is_default: bool = False
+    is_system: bool = False
+    conversation_count: int = 0
+
+
+@router.get("/v1/dev/user/folders", response_model=List[DeveloperFolder], tags=["Folders"], operation_id="listFolders")
 def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     """
     Get all folders for the authenticated user.
@@ -898,7 +989,12 @@ def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     return folders_db.get_folders(uid)
 
 
-@router.get("/v1/dev/user/conversations", response_model=List[Conversation], tags=["developer"])
+@router.get(
+    "/v1/dev/user/conversations",
+    response_model=List[Conversation],
+    tags=["Conversations"],
+    operation_id="listConversations",
+)
 def get_conversations(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -917,6 +1013,10 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
@@ -966,7 +1066,12 @@ def get_conversations(
     return valid_conversations
 
 
-@router.post("/v1/dev/user/conversations", response_model=ConversationResponse, tags=["developer"])
+@router.post(
+    "/v1/dev/user/conversations",
+    response_model=ConversationResponse,
+    tags=["Conversations"],
+    operation_id="createConversation",
+)
 def create_conversation(
     request: CreateConversationRequest,
     uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
@@ -1044,7 +1149,12 @@ def create_conversation(
     )
 
 
-@router.get("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
+@router.get(
+    "/v1/dev/user/conversations/{conversation_id}",
+    response_model=Conversation,
+    tags=["Conversations"],
+    operation_id="getConversation",
+)
 def get_conversation_endpoint(
     conversation_id: str,
     include_transcript: bool = False,
@@ -1271,7 +1381,12 @@ def create_conversation_from_segments_user(
     return _create_conversation_from_segments(uid, request)
 
 
-@router.post("/v1/dev/user/conversations/from-segments", response_model=ConversationResponse, tags=["developer"])
+@router.post(
+    "/v1/dev/user/conversations/from-segments",
+    response_model=ConversationResponse,
+    tags=["Conversations"],
+    operation_id="createConversationFromSegments",
+)
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
     uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
@@ -1326,7 +1441,11 @@ def create_conversation_from_segments(
     return _create_conversation_from_segments(uid, request)
 
 
-@router.delete("/v1/dev/user/conversations/{conversation_id}", tags=["developer"])
+@router.delete(
+    "/v1/dev/user/conversations/{conversation_id}",
+    tags=["Conversations"],
+    operation_id="deleteConversation",
+)
 def delete_conversation_endpoint(
     conversation_id: str,
     uid: str = Depends(get_uid_with_conversations_write),
@@ -1348,7 +1467,12 @@ def delete_conversation_endpoint(
     return {"success": True}
 
 
-@router.patch("/v1/dev/user/conversations/{conversation_id}", response_model=Conversation, tags=["developer"])
+@router.patch(
+    "/v1/dev/user/conversations/{conversation_id}",
+    response_model=Conversation,
+    tags=["Conversations"],
+    operation_id="updateConversation",
+)
 def update_conversation_endpoint(
     conversation_id: str,
     request: UpdateConversationRequest,
@@ -1397,6 +1521,8 @@ class GoalType(str, Enum):
 
 
 class GoalResponse(BaseModel):
+    model_config = ConfigDict(title='DeveloperGoal')
+
     id: str
     title: str
     goal_type: str
@@ -1411,6 +1537,8 @@ class GoalResponse(BaseModel):
 
 
 class CreateGoalRequest(BaseModel):
+    model_config = ConfigDict(title='CreateGoalRequest')
+
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
     goal_type: GoalType = Field(default=GoalType.scale, description="Type of goal metric: boolean, scale, or numeric")
     target_value: float = Field(description="Target value to achieve")
@@ -1421,6 +1549,8 @@ class CreateGoalRequest(BaseModel):
 
 
 class UpdateGoalRequest(BaseModel):
+    model_config = ConfigDict(title='UpdateGoalRequest')
+
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
     target_value: Optional[float] = Field(default=None, description="New target value")
     current_value: Optional[float] = Field(default=None, description="New progress value")
@@ -1438,7 +1568,7 @@ def _serialize_goal_datetimes(goal: dict) -> dict:
     return goal
 
 
-@router.get("/v1/dev/user/goals", tags=["developer"], response_model=List[GoalResponse])
+@router.get("/v1/dev/user/goals", tags=["Goals"], response_model=List[GoalResponse], operation_id="listGoals")
 def get_goals(
     uid: str = Depends(get_uid_with_goals_read),
     limit: int = 10,
@@ -1458,7 +1588,7 @@ def get_goals(
     return [_serialize_goal_datetimes(g) for g in goals]
 
 
-@router.get("/v1/dev/user/goals/{goal_id}", tags=["developer"], response_model=GoalResponse)
+@router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")
 def get_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_read),
@@ -1477,7 +1607,7 @@ def get_goal(
     return _serialize_goal_datetimes(goal)
 
 
-@router.post("/v1/dev/user/goals", tags=["developer"], response_model=GoalResponse)
+@router.post("/v1/dev/user/goals", tags=["Goals"], response_model=GoalResponse, operation_id="createGoal")
 def create_goal(
     request: CreateGoalRequest,
     uid: str = Depends(get_uid_with_goals_write),
@@ -1511,7 +1641,7 @@ def create_goal(
     return _serialize_goal_datetimes(created_goal)
 
 
-@router.patch("/v1/dev/user/goals/{goal_id}", tags=["developer"], response_model=GoalResponse)
+@router.patch("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="updateGoal")
 def update_goal(
     goal_id: str,
     request: UpdateGoalRequest,
@@ -1544,7 +1674,12 @@ def update_goal(
     return _serialize_goal_datetimes(updated_goal)
 
 
-@router.patch("/v1/dev/user/goals/{goal_id}/progress", tags=["developer"], response_model=GoalResponse)
+@router.patch(
+    "/v1/dev/user/goals/{goal_id}/progress",
+    tags=["Goals"],
+    response_model=GoalResponse,
+    operation_id="updateGoalProgress",
+)
 def update_goal_progress(
     goal_id: str,
     current_value: float = Query(..., description="New progress value"),
@@ -1564,7 +1699,7 @@ def update_goal_progress(
     return _serialize_goal_datetimes(updated_goal)
 
 
-@router.get("/v1/dev/user/goals/{goal_id}/history", tags=["developer"])
+@router.get("/v1/dev/user/goals/{goal_id}/history", tags=["Goals"], operation_id="listGoalHistory")
 def get_goal_history(
     goal_id: str,
     days: HistoryDays = 30,
@@ -1585,7 +1720,7 @@ def get_goal_history(
     return history
 
 
-@router.delete("/v1/dev/user/goals/{goal_id}", tags=["developer"])
+@router.delete("/v1/dev/user/goals/{goal_id}", tags=["Goals"], operation_id="deleteGoal")
 def delete_goal(
     goal_id: str,
     uid: str = Depends(get_uid_with_goals_write),

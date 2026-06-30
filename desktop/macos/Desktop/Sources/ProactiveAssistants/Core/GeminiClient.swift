@@ -210,15 +210,33 @@ actor GeminiClient {
       switch self {
       case .apiError(let message):
         let lower = message.lowercased()
-        return lower.contains("service unavailable")
+        return Self.isTimeoutLike(lower)
+          || lower.contains("service unavailable")
           || lower.contains("overloaded")
           || lower.contains("resource exhausted")
           || lower.contains("high demand")
           || lower.contains("503")
+          || lower.contains("502")
           || lower.contains("429")
           || lower.contains("internal error")
       case .networkError:
         return true
+      case .invalidResponse, .missingAPIKey:
+        return false
+      }
+    }
+
+    /// True when an error should be retried automatically inside GeminiClient.
+    /// Long upstream deadlines are recoverable, but auto-retrying them can keep
+    /// the user waiting through several multi-minute attempts.
+    var shouldAutoRetry: Bool {
+      switch self {
+      case .apiError(let message):
+        let lower = message.lowercased()
+        return isTransient && !Self.isTimeoutLike(lower)
+      case .networkError(let error):
+        let nsError = error as NSError
+        return !(nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorTimedOut)
       case .invalidResponse, .missingAPIKey:
         return false
       }
@@ -282,9 +300,12 @@ actor GeminiClient {
       {
         return "AI service is busy. Please try again in a moment."
       }
+      if Self.isTimeoutLike(lower) {
+        return "AI request took too long. Please try again or shorten the request."
+      }
       if lower.contains("overloaded") || lower.contains("service unavailable")
         || lower.contains("503")
-        || lower.contains("internal error") || lower.contains("500")
+        || lower.contains("502") || lower.contains("internal error") || lower.contains("500")
       {
         return "AI service is temporarily unavailable. Please try again later."
       }
@@ -293,6 +314,17 @@ actor GeminiClient {
       }
       // Fallback: generic message that doesn't leak internals
       return "AI service error. Please try again."
+    }
+
+    private static func isTimeoutLike(_ lowercasedMessage: String) -> Bool {
+      lowercasedMessage.contains("upstream_timeout")
+        || lowercasedMessage.contains("timed out")
+        || lowercasedMessage.contains("timeout")
+        || lowercasedMessage.contains("deadline")
+        || lowercasedMessage.contains("http 504")
+        || lowercasedMessage.contains(" 504")
+        || lowercasedMessage.contains("http 408")
+        || lowercasedMessage.contains(" 408")
     }
   }
 
@@ -362,10 +394,11 @@ actor GeminiClient {
   /// Check if an error is transient and worth retrying
   private func isTransientError(_ error: Error) -> Bool {
     if let geminiError = error as? GeminiClientError {
-      return geminiError.isTransient
+      return geminiError.shouldAutoRetry
     }
     // URLSession network errors are transient
-    return (error as NSError).domain == NSURLErrorDomain
+    let nsError = error as NSError
+    return nsError.domain == NSURLErrorDomain && nsError.code != NSURLErrorTimedOut
   }
 
   /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.

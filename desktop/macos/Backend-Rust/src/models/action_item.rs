@@ -74,4 +74,3 @@ pub struct ActionItemDB {
     #[serde(default)]
     pub recurrence_parent_id: Option<String>,
 }
-

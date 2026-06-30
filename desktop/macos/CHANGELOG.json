@@ -2,6 +2,86 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.574",
+      "date": "2026-06-30",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.11.573",
+      "date": "2026-06-30",
+      "changes": [
+        "Fixed failed agents so their error details appear in the agent chat transcript",
+        "Reduced desktop agent dependency audit findings and build warning noise"
+      ]
+    },
+    {
+      "version": "0.11.572",
+      "date": "2026-06-30",
+      "changes": [
+        "Reduced false desktop recording errors from empty cloud reconciliation sessions",
+        "Made unavailable local agents fail clearly with install-first guidance instead of exposing adapter environment variables.",
+        "Fixed Notch Mode height detection so the floating bar fits the Mac's actual camera housing"
+      ]
+    },
+    {
+      "version": "0.11.571",
+      "date": "2026-06-30",
+      "changes": [
+        "Improved Rewind scrubbing and made screenshot history capture more efficient"
+      ]
+    },
+    {
+      "version": "0.11.570",
+      "date": "2026-06-30",
+      "changes": [
+        "Improved desktop update recovery with clearer failure guidance and safer manual downloads"
+      ]
+    },
+    {
+      "version": "0.11.569",
+      "date": "2026-06-30",
+      "changes": [
+        "Fixed desktop recording reconciliation so cloud sessions use a durable client id and recover from missing backend matches"
+      ]
+    },
+    {
+      "version": "0.11.568",
+      "date": "2026-06-29",
+      "changes": [
+        "Improved OpenClaw and Hermes agent handoff so unavailable local providers prompt for setup instead of creating failed pills",
+        "Improved the onboarding second-brain graph branding for sharing",
+        "Improved desktop backend consistency for conversations and memories",
+        "Improved desktop AI timeout handling so slow Gemini requests fail clearly before the backend deadline"
+      ]
+    },
+    {
+      "version": "0.11.567",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed desktop recordings so stop and retry finalize the exact backend conversation when available"
+      ]
+    },
+    {
+      "version": "0.11.566",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed push-to-talk getting stuck with silent audio until relogin",
+        "Improved voice response recovery when sign-in or provider credentials become stale",
+        "Added privacy-safe desktop diagnostics for push-to-talk audio and realtime voice reliability"
+      ]
+    },
+    {
+      "version": "0.11.565",
+      "date": "2026-06-29",
+      "changes": [
+        "Improved desktop app maintainability for settings, app state, and backend data sync",
+        "Restored the home page ambient glow to purple",
+        "Fixed push-to-talk getting stuck with silent microphone capture until Omi was relaunched"
+      ]
+    },
+    {
       "version": "0.11.564",
       "date": "2026-06-29",
       "changes": [

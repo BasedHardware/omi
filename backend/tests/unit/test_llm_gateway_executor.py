@@ -11,7 +11,7 @@ from llm_gateway.gateway.errors import (
     GatewayInvalidRouteConfigError,
     GatewayProviderFailureError,
 )
-from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion
+from llm_gateway.gateway.executor import ProviderRegistry, execute_chat_completion, selected_serving_route_artifact_id
 from llm_gateway.gateway.providers import FakeChatCompletionProvider, ProviderFailure, fake_success_response
 from llm_gateway.gateway.resolver import resolve_chat_completion_route
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutPolicy, RolloutStage
@@ -335,6 +335,7 @@ async def test_shadow_active_route_serves_lkg_not_active():
     assert result.selected_model == 'gpt-4.1-mini'
     assert result.used_lkg
     assert provider.calls[0].request['model'] == 'gpt-4.1-mini'
+    assert selected_serving_route_artifact_id(resolved) == LKG_ROUTE
 
 
 @pytest.mark.asyncio

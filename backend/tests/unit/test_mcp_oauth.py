@@ -175,6 +175,58 @@ def test_public_client_uses_pkce_without_shared_secret():
     )
 
 
+def test_chatgpt_prod_client_uses_public_pkce_exchange(monkeypatch):
+    redirect_uri = 'https://chatgpt.com/connector/oauth/OUbdUMlL15Ct'
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_ID', 'omi-chatgpt-prod')
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_SECRET', 'configured-but-not-sent-by-chatgpt')
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_REDIRECT_URIS', redirect_uri)
+    monkeypatch.delenv('MCP_OAUTH_CHATGPT_TOKEN_AUTH_METHOD', raising=False)
+    monkeypatch.setattr(mcp_oauth, 'DEFAULT_CLIENT_ID', 'omi-chatgpt-prod')
+
+    client = mcp_oauth.get_client('omi-chatgpt-prod')
+    assert client['token_endpoint_auth_method'] == 'none'
+    assert mcp_oauth.verify_client_auth(client, None)
+    assert not mcp_oauth.verify_client_auth(client, 'unexpected-secret')
+    assert mcp_oauth.validate_redirect_uri(client, redirect_uri)
+
+    scopes = mcp_oauth.normalize_scopes(
+        (
+            'memories.read memories.write conversations.read action_items.read action_items.write '
+            'goals.read chat.read screen_activity.read people.read'
+        ),
+        client,
+    )
+    verifier = 'c' * 64
+    grant = mcp_oauth.create_or_update_grant('chatgpt-reviewer', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    code = mcp_oauth.issue_authorization_code(
+        'chatgpt-reviewer',
+        grant['id'],
+        'omi-chatgpt-prod',
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256(verifier),
+    )
+
+    token_pair = mcp_oauth.exchange_authorization_code_for_tokens(
+        code, 'omi-chatgpt-prod', redirect_uri, mcp_oauth.MCP_RESOURCE_URL, verifier
+    )
+    assert token_pair['access_token'].startswith('omi_oat_')
+    assert token_pair['scope'] == ' '.join(scopes)
+
+
+def test_chatgpt_token_auth_method_env_can_force_confidential_client(monkeypatch):
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_ID', 'omi-chatgpt-prod')
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_CLIENT_SECRET', 'client-secret')
+    monkeypatch.setenv('MCP_OAUTH_CHATGPT_TOKEN_AUTH_METHOD', 'client_secret_post')
+    monkeypatch.setattr(mcp_oauth, 'DEFAULT_CLIENT_ID', 'omi-chatgpt-prod')
+
+    client = mcp_oauth.get_client('omi-chatgpt-prod')
+    assert client['token_endpoint_auth_method'] == 'client_secret_post'
+    assert mcp_oauth.verify_client_auth(client, 'client-secret')
+    assert not mcp_oauth.verify_client_auth(client, None)
+
+
 def test_public_client_rejects_unregistered_redirect_uri():
     client = mcp_oauth.get_client('omi-mcp-public')
     assert not mcp_oauth.validate_redirect_uri(client, 'https://example.com/oauth/callback')

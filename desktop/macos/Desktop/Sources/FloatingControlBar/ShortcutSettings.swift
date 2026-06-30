@@ -561,8 +561,10 @@ class ShortcutSettings: ObservableObject {
         self.selectedVoiceID = validVoiceID
 
         NotificationCenter.default.addObserver(forName: .modelTierDidChange, object: nil, queue: .main) { [weak self] _ in
-            guard let self else { return }
-            self.selectedModel = ModelQoS.Claude.sanitizedSelection(self.selectedModel)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.selectedModel = ModelQoS.Claude.sanitizedSelection(self.selectedModel)
+            }
         }
     }
 
