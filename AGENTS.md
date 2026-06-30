@@ -15,7 +15,6 @@ These rules apply to every AI agent working in this repository. This file is the
 ## Setup
 
 - **Pre-commit hook (required before first commit):** `ln -s -f ../../scripts/pre-commit "$(git rev-parse --git-path hooks)/pre-commit"` — auto-formats staged files on commit.
-- **Pre-push hook (required before first push):** `ln -s -f ../../scripts/pre-push "$(git rev-parse --git-path hooks)/pre-push"` — blocks push if changed files have formatting violations.
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`).
 
 ## Safety Rules
@@ -235,24 +234,24 @@ Rules:
 
 ## Formatting
 
-**Install both hooks before your first commit** (see Setup). Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`.
+**Install the pre-commit hook before your first commit** (see Setup). Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`.
 
-The **pre-commit hook** auto-formats staged files on commit (Dart, Python, ARB/JSON, web/Prettier, C/C++, Rust). The **pre-push hook** checks formatting of all files changed vs `main` and blocks the push if any are dirty.
+The **pre-commit hook** auto-formats staged files on commit (Dart, Python, ARB/JSON, web/Prettier, C/C++, Rust). You can also format manually:
 
-| Language | Auto-formatted by hook | Manual command |
-|----------|----------------------|----------------|
-| Dart (`app/`) | pre-commit + pre-push | `dart format --line-length 120 <files>` |
-| Python (`backend/`) | pre-commit + pre-push | `black --line-length 120 --skip-string-normalization <files>` |
-| ARB (`app/lib/l10n/`) | pre-commit + pre-push | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
-| C/C++ (firmware) | pre-commit + pre-push | `clang-format -i <files>` |
-| Rust (`desktop/macos/Backend-Rust/`) | pre-commit (fmt + check) + pre-push | `rustfmt --edition 2021 <files>` |
-| Web (`web/`) | pre-commit | `npx prettier --write <files>` |
+| Language | Manual command |
+|----------|----------------|
+| Dart (`app/`) | `dart format --line-length 120 <files>` |
+| Python (`backend/`) | `black --line-length 120 --skip-string-normalization <files>` |
+| ARB (`app/lib/l10n/`) | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
+| C/C++ (firmware) | `clang-format -i <files>` |
+| Rust (`desktop/macos/Backend-Rust/`) | `rustfmt --edition 2021 <files>` |
+| Web (`web/`) | `npx prettier --write <files>` |
 
 Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually.
 
 ## Git
 
-- **Before your first commit**, install both Git hooks (see Setup). Commits without hooks bypass formatting and let violations land on `main`.
+- **Before your first commit**, install the pre-commit hook (see Setup). Commits without the hook bypass formatting and let violations land on `main`.
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 - Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
