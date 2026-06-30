@@ -9,6 +9,14 @@ export interface AgentControlManifestProperty {
 
 export type AgentControlSurface = "desktopChat" | "realtimeHub";
 
+export interface AgentControlMcpInputSchemaOptions {
+  anyOf?: unknown[];
+  allOf?: unknown[];
+  oneOf?: unknown[];
+  if?: unknown;
+  then?: unknown;
+}
+
 export interface AgentControlManifestTool {
   name:
     | "list_agent_sessions"
@@ -28,7 +36,7 @@ export interface AgentControlManifestTool {
   timeoutClass: AgentControlTimeoutClass;
   properties: Record<string, AgentControlManifestProperty>;
   required: string[];
-  jsonSchemaOptions?: Record<string, unknown>;
+  mcpInputSchemaOptions?: AgentControlMcpInputSchemaOptions;
 }
 
 export const agentControlCapabilityManifest = [
@@ -139,7 +147,7 @@ Returns metadata and references only. It does not read arbitrary artifact conten
       limit: { type: "number", description: "Maximum artifacts to return. Default 50, max 200." },
     },
     required: [],
-    jsonSchemaOptions: {
+    mcpInputSchemaOptions: {
       anyOf: [
         { required: ["artifactId"] },
         { required: ["sessionId"] },
@@ -255,7 +263,7 @@ Supports call, spawn, and continue modes. Child context is intentionally minimal
       metadata: { type: "object", description: "Small structured metadata for the child run.", additionalProperties: true },
     },
     required: ["mode", "parentRunId", "objective"],
-    jsonSchemaOptions: {
+    mcpInputSchemaOptions: {
       allOf: [
         {
           if: { properties: { mode: { const: "continue" } }, required: ["mode"] },

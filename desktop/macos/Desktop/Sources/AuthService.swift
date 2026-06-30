@@ -383,11 +383,13 @@ class AuthService {
         do {
             // Step 1: Generate state for CSRF protection
             let state = generateState()
+            let codeVerifier = generateCodeVerifier()
+            let codeChallenge = makeCodeChallenge(for: codeVerifier)
             pendingOAuthState = state
             NSLog("OMI AUTH: Generated OAuth state")
 
             // Step 2: Build authorization URL
-            let authURL = buildAuthorizationURL(provider: provider, state: state)
+            let authURL = buildAuthorizationURL(provider: provider, state: state, codeChallenge: codeChallenge)
             NSLog("OMI AUTH: Opening browser for authentication")
 
             // Step 3: Open browser for authentication
@@ -409,7 +411,7 @@ class AuthService {
 
             // Step 6: Exchange code for custom token and user info
             NSLog("OMI AUTH: Exchanging code for Firebase token...")
-            let tokenResult = try await exchangeCodeForToken(code: code)
+            let tokenResult = try await exchangeCodeForToken(code: code, codeVerifier: codeVerifier)
             NSLog("OMI AUTH: Got Firebase custom token")
 
             // Save user info from OAuth response immediately (before Firebase sign-in)
@@ -499,9 +501,12 @@ class AuthService {
 
     // MARK: - OAuth URL Building
 
-    private func buildAuthorizationURL(provider: String, state: String) -> String {
+    private func buildAuthorizationURL(provider: String, state: String, codeChallenge: String) -> String {
         let encodedRedirectURI = redirectURI.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? redirectURI
-        return "\(apiBaseURL)v1/auth/authorize?provider=\(provider)&redirect_uri=\(encodedRedirectURI)&state=\(state)"
+        let encodedCodeChallenge =
+            codeChallenge.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? codeChallenge
+        return "\(apiBaseURL)v1/auth/authorize?provider=\(provider)&redirect_uri=\(encodedRedirectURI)"
+            + "&state=\(state)&code_challenge=\(encodedCodeChallenge)&code_challenge_method=S256"
     }
 
     // MARK: - OAuth Callback Handling
@@ -601,7 +606,7 @@ class AuthService {
         let email: String?
     }
 
-    private func exchangeCodeForToken(code: String) async throws -> TokenExchangeResult {
+    private func exchangeCodeForToken(code: String, codeVerifier: String) async throws -> TokenExchangeResult {
         guard let url = URL(string: "\(apiBaseURL)v1/auth/token") else {
             throw AuthError.invalidURL
         }
@@ -614,7 +619,8 @@ class AuthService {
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": redirectURI,
-            "use_custom_token": "true"
+            "use_custom_token": "true",
+            "code_verifier": codeVerifier
         ]
 
         let bodyString = bodyParams
@@ -940,8 +946,9 @@ class AuthService {
                 // where auth_isSignedIn=true but no valid tokens exist.
                 isSignedIn = false
                 saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                throw AuthError.notSignedIn
             }
-            throw AuthError.notSignedIn
+            throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -995,6 +1002,7 @@ class AuthService {
 
         // Second try: Refresh using stored refresh token
         // Allow refresh when expectedUserId is nil (token was saved by valid sign-in)
+        var refreshFailure: Error?
         if let _ = storedRefreshToken {
             let tokenUserId = storedTokenUserId
             let canRefresh = tokenUserId == nil || expectedUserId == nil || tokenUserId == expectedUserId
@@ -1002,6 +1010,7 @@ class AuthService {
                 do {
                     return try await refreshIdToken()
                 } catch {
+                    refreshFailure = error
                     NSLog("OMI AUTH: Token refresh failed: %@", error.localizedDescription)
                 }
             }
@@ -1024,11 +1033,15 @@ class AuthService {
             }
         }
 
+        if let refreshFailure {
+            throw refreshFailure
+        }
+
         throw AuthError.notSignedIn
     }
 
-    func getAuthHeader() async throws -> String {
-        let token = try await getIdToken(forceRefresh: false)
+    func getAuthHeader(forceRefresh: Bool = false) async throws -> String {
+        let token = try await getIdToken(forceRefresh: forceRefresh)
         return "Bearer \(token)"
     }
 
@@ -1073,6 +1086,7 @@ class AuthService {
 
         try Auth.auth().signOut()
         isSignedIn = false
+        CredentialHealthManager.shared.reset()
         APIKeyService.shared.clear()
         // Clear saved auth state and tokens
         saveAuthState(isSignedIn: false, email: nil, userId: nil)
@@ -1146,6 +1160,21 @@ class AuthService {
         // Encode source bundle in state so callbacks can be routed back to the
         // originating app, even when multiple dev builds share URL schemes.
         return "\(nonce)|\(currentBundleIdentifier)"
+    }
+
+    private func generateCodeVerifier(length: Int = 64) -> String {
+        var bytes = [UInt8](repeating: 0, count: length)
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let charset: [Character] = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
+        return String(bytes.map { charset[Int($0) % charset.count] })
+    }
+
+    private func makeCodeChallenge(for verifier: String) -> String {
+        let digest = SHA256.hash(data: Data(verifier.utf8))
+        return Data(digest).base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
     }
 
     private func targetBundleIdentifier(from state: String) -> String? {

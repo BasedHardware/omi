@@ -248,7 +248,7 @@ struct DesktopHomeView: View {
                 }
               }
             }
-            .onChange(of: apiKeyService.isLoaded) { loaded in
+            .onChange(of: apiKeyService.isLoaded) { _, loaded in
               guard loaded else { return }
               log("DesktopHomeView: API keys loaded — retrying deferred services")
               // Retry transcription

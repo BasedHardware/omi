@@ -169,6 +169,11 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GOOGLE_APPLICATION_CREDENTIALS
+  - name: SERVICE_ACCOUNT_JSON
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SERVICE_ACCOUNT_JSON
   - name: HOSTED_PUSHER_API_URL
     value: "http://pusher.omi.me"
   - name: BUCKET_PLUGINS_LOGOS
@@ -373,6 +378,41 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: X_OAUTH_REDIRECT_URI
+  - name: MCP_AUTHORIZATION_SERVER_URL
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_AUTHORIZATION_SERVER_URL
+  - name: MCP_RESOURCE_URL
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_RESOURCE_URL
+  - name: MCP_OAUTH_CHATGPT_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_CLIENT_ID
+  - name: MCP_OAUTH_CHATGPT_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_CLIENT_SECRET
+  - name: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+  - name: MCP_OAUTH_PUBLIC_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_PUBLIC_CLIENT_ID
+  - name: MCP_OAUTH_PUBLIC_REDIRECT_URIS
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: MCP_OAUTH_PUBLIC_REDIRECT_URIS
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

@@ -170,7 +170,7 @@ class _DeviceOnboardingPageState extends State<DeviceOnboardingPage> with Single
                         Text(
                           content['subtitle']!,
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.7),
+                            color: Colors.white.withValues(alpha: 0.7),
                             fontSize: 16,
                             height: 1.4,
                             fontFamily: 'Manrope',

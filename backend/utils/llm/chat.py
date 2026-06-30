@@ -421,14 +421,65 @@ def _get_qa_rag_prompt(
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
 
 
+# The agentic system prompt is wrapped in a single Anthropic cache_control breakpoint,
+# so any byte that changes per request invalidates the whole cached prefix. The current
+# datetime is the only such value (microsecond ISO), so it is kept OUT of the system prompt
+# and injected into the user turn instead (see get_current_datetime_block / agentic.py).
+# The system prompt references this placeholder so the datetime instructions still make sense.
+CURRENT_DATETIME_PLACEHOLDER = "(see <current_datetime> in the latest user message)"
+
+
+def get_user_timezone(uid: str) -> str:
+    """Resolve the user's timezone, falling back to UTC when missing/invalid."""
+    tz = notification_db.get_user_time_zone(uid)
+    try:
+        ZoneInfo(tz)
+        return tz
+    except Exception:
+        return "UTC"
+
+
+def get_current_datetime_block(uid: str, tz: Optional[str] = None) -> str:
+    """Build the current-datetime block injected into the user turn.
+
+    Kept out of the cached system prefix so the cached bytes stay stable across requests
+    while the model still receives the live time. Mirrors the timezone resolution used by
+    _get_agentic_qa_prompt. Pass a pre-resolved ``tz`` to avoid a duplicate timezone lookup
+    when the caller already resolved it for the system prompt.
+    """
+    if tz is None:
+        tz = get_user_timezone(uid)
+    try:
+        current_datetime_user = datetime.now(ZoneInfo(tz))
+    except Exception:
+        current_datetime_user = datetime.now(timezone.utc)
+        tz = "UTC"
+    current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
+    current_datetime_iso = current_datetime_user.isoformat()
+    return (
+        "<current_datetime>\n"
+        f"Current date time in {tz}: {current_datetime_str}\n"
+        f"Current date time ISO format: {current_datetime_iso}\n"
+        "</current_datetime>"
+    )
+
+
 def _get_agentic_qa_prompt(
-    uid: str, app: Optional[App] = None, messages: List[Message] = None, context: Optional[PageContext] = None
+    uid: str,
+    app: Optional[App] = None,
+    messages: List[Message] = None,
+    context: Optional[PageContext] = None,
+    tz: Optional[str] = None,
 ) -> str:
     """
     Build the system prompt for the agentic chat agent.
 
     Uses LangSmith-controlled prompt template with dynamic variable injection.
     Falls back to hardcoded prompt if LangSmith is unavailable.
+
+    The current datetime is intentionally NOT embedded here — it changes every request and
+    would invalidate the cache_control prefix. It is injected into the user turn instead
+    (see get_current_datetime_block); the prompt only carries a stable placeholder.
 
     Args:
         uid: User ID
@@ -441,23 +492,14 @@ def _get_agentic_qa_prompt(
     """
     user_name = get_user_name(uid)
 
-    # Get timezone and current datetime in user's timezone
-    tz = notification_db.get_user_time_zone(uid)
-    try:
-        user_tz = ZoneInfo(tz)
-        current_datetime_user = datetime.now(user_tz)
-        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
-        current_datetime_iso = current_datetime_user.isoformat()
-        logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}, Current time: {current_datetime_str}")
-    except Exception:
-        # Fallback to UTC if timezone is invalid
-        current_datetime_user = datetime.now(timezone.utc)
-        current_datetime_str = current_datetime_user.strftime('%Y-%m-%d %H:%M:%S')
-        current_datetime_iso = current_datetime_user.isoformat()
-        tz = "UTC"
-        logger.warning(
-            f"🌍 _get_agentic_qa_prompt - User timezone: UTC (fallback), Current time: {current_datetime_str}"
-        )
+    # Resolve timezone only — the live datetime is injected into the user turn, not here,
+    # so the cached system prefix stays byte-identical across requests. A caller that already
+    # resolved the timezone (for the datetime block) can pass it in to skip a duplicate lookup.
+    if tz is None:
+        tz = get_user_timezone(uid)
+    current_datetime_str = CURRENT_DATETIME_PLACEHOLDER
+    current_datetime_iso = CURRENT_DATETIME_PLACEHOLDER
+    logger.info(f"🌍 _get_agentic_qa_prompt - User timezone: {tz}")
 
     # Handle persona apps - they override the entire system prompt
     if app and app.is_a_persona():
@@ -719,19 +761,19 @@ When the user asks about specific dates/times, they are ALWAYS referring to date
    - Format: YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., "2024-01-19T15:00:00-08:00" for PST)
    - NEVER use datetime without timezone (e.g., "2024-01-19T07:15:00" is WRONG)
    - The timezone offset must match {user_name}'s timezone ({tz})
-   - Current time reference: {current_datetime_iso}
+   - Use the current time from the <current_datetime> block in the latest user message as your reference
 
 2. **For "X hours ago" or "X minutes ago" queries:**
    - Work in {user_name}'s timezone: {tz}
    - Identify the specific hour that was X hours/minutes ago
    - start_date: Beginning of that hour (HH:00:00)
    - end_date: End of that hour (HH:59:59)
-   - Example: User asks "3 hours ago", current time in {tz} is {current_datetime_iso}
-     * Calculate: {current_datetime_iso} minus 3 hours
-     * Get the hour boundary: if result is 2024-01-19T14:23:45-08:00, use hour 14
+   - Example (illustrative): if the current time were "2024-01-19T17:23:45-08:00" and the user asks "3 hours ago"
+     * Calculate: 17:23:45 minus 3 hours
+     * Get the hour boundary: result is 2024-01-19T14:23:45-08:00, so use hour 14
      * start_date = "2024-01-19T14:00:00-08:00"
      * end_date = "2024-01-19T14:59:59-08:00"
-   - Format both with the timezone offset for {tz}
+   - Always use the actual current time from the <current_datetime> block, formatted with the timezone offset for {tz}
 
 3. **For "today" queries:**
    - start_date: Start of today in {tz} (00:00:00)

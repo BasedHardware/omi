@@ -1,10 +1,10 @@
 """Browser-based Firebase OAuth flow for omi-cli.
 
-Flow (RFC 8252 native-app pattern with CSRF state token):
+Flow (RFC 8252 native-app pattern with CSRF state token and PKCE):
 
 1. Spin up an HTTP server bound to ``127.0.0.1`` on an ephemeral port.
 2. Open the user's default browser at
-   ``{api_base}/v1/auth/authorize?provider=...&redirect_uri=http://127.0.0.1:PORT/callback&state=<csrf>``.
+   ``{api_base}/v1/auth/authorize?provider=...&redirect_uri=http://127.0.0.1:PORT/callback&state=<csrf>&code_challenge=<pkce>``.
 3. The user signs in via Google (or Apple). The Omi backend's
    ``auth_callback.html`` template navigates the browser back to the
    loopback URL with ``?code=...&state=...``.
@@ -20,6 +20,8 @@ opportunistically by the HTTP client just before each request.
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import html
 import http.server
 import secrets
@@ -105,6 +107,7 @@ def login_with_browser(
         )
 
     state = secrets.token_urlsafe(32)
+    code_verifier, code_challenge = _generate_pkce_pair()
     received: dict[str, Optional[str]] = {}
     received_event = threading.Event()
 
@@ -116,12 +119,16 @@ def login_with_browser(
     with _OneShotHTTPServer(("127.0.0.1", 0), handler_class) as server:
         port = server.server_address[1]
         redirect_uri = f"http://127.0.0.1:{port}{_CALLBACK_PATH}"
-        auth_url = (
-            f"{api_base.rstrip('/')}/v1/auth/authorize?"
-            f"provider={urllib.parse.quote(provider)}&"
-            f"redirect_uri={urllib.parse.quote(redirect_uri, safe='')}&"
-            f"state={urllib.parse.quote(state)}"
+        auth_query = urllib.parse.urlencode(
+            {
+                "provider": provider,
+                "redirect_uri": redirect_uri,
+                "state": state,
+                "code_challenge": code_challenge,
+                "code_challenge_method": "S256",
+            }
         )
+        auth_url = f"{api_base.rstrip('/')}/v1/auth/authorize?{auth_query}"
 
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -168,7 +175,7 @@ def login_with_browser(
             detail="The browser callback URL did not include a `code` parameter.",
         )
 
-    custom_token = _exchange_code_for_custom_token(api_base, code, redirect_uri)
+    custom_token = _exchange_code_for_custom_token(api_base, code, redirect_uri, code_verifier)
     id_token, _refresh_token, _expires_in = _firebase_signin_with_custom_token(custom_token)
 
     # Every /v1/dev/* endpoint the CLI actually uses authenticates with a
@@ -319,7 +326,15 @@ def _exchange_firebase_token_for_dev_key(api_base: str, id_token: str) -> str:
     return str(raw_key)
 
 
-def _exchange_code_for_custom_token(api_base: str, code: str, redirect_uri: str) -> str:
+def _generate_pkce_pair() -> tuple[str, str]:
+    """Generate a PKCE code_verifier and S256 code_challenge."""
+    code_verifier = secrets.token_urlsafe(64)[:128]
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return code_verifier, code_challenge
+
+
+def _exchange_code_for_custom_token(api_base: str, code: str, redirect_uri: str, code_verifier: str) -> str:
     """Hit ``POST /v1/auth/token`` and pull the Firebase custom token out of the response."""
     with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
         resp = client.post(
@@ -329,6 +344,7 @@ def _exchange_code_for_custom_token(api_base: str, code: str, redirect_uri: str)
                 "code": code,
                 "redirect_uri": redirect_uri,
                 "use_custom_token": "true",
+                "code_verifier": code_verifier,
             },
         )
     if resp.status_code != 200:

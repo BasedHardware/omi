@@ -102,9 +102,7 @@ class AuthenticationProvider extends BaseProvider {
                 'Failed to sign in with Google, please try again.',
           );
         }
-      } catch (e, stackTrace) {
-        print('DEBUG_AUTH: OAuth Google sign in error: $e');
-        print('DEBUG_AUTH: Stack trace: $stackTrace');
+      } catch (e) {
         Logger.debug('OAuth Google sign in error: $e');
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
@@ -271,7 +269,7 @@ class AuthenticationProvider extends BaseProvider {
         rethrow;
       }
     } catch (e) {
-      print('Error linking with Apple: $e');
+      Logger.debug('Error linking with Apple: $e');
       AppSnackbar.showSnackbarError(
         globalNavigatorKey.currentContext?.l10n.authFailedToLinkApple ?? 'Failed to link with Apple, please try again.',
       );

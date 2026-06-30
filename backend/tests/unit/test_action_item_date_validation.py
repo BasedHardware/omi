@@ -72,6 +72,16 @@ def _load_module_from_file(module_name, file_path):
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies
 # ---------------------------------------------------------------------------
+for importable_mod_name in [
+    "google.auth",
+    "google.auth.transport",
+    "google.auth.transport.requests",
+]:
+    try:
+        importlib.import_module(importable_mod_name)
+    except Exception:
+        pass
+
 for mod_name in [
     "firebase_admin",
     "firebase_admin.firestore",
@@ -107,7 +117,12 @@ action_items_db.get_action_item = MagicMock(
     }
 )
 action_items_db.update_action_item = MagicMock(return_value=True)
-_stub_package("database")
+
+# Stub database.notifications (action_item_tools imports get_user_time_zone for tz rendering)
+notifications_db = _stub_module("database.notifications")
+notifications_db.get_user_time_zone = MagicMock(return_value="UTC")
+if "database" not in sys.modules:
+    importlib.import_module("database")
 
 # Stub notifications
 notif_mod = _stub_module("utils.notifications")
@@ -115,6 +130,15 @@ notif_mod.send_action_item_completed_notification = MagicMock()
 notif_mod.send_action_item_created_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
 notif_mod.sync_action_item_reminder = MagicMock()
+
+if "utils.byok" not in sys.modules:
+    byok_mod = _stub_module("utils.byok")
+    byok_mod.has_byok_keys = MagicMock(return_value=False)
+
+if "utils.llm.gateway_client" not in sys.modules:
+    gateway_mod = _stub_module("utils.llm.gateway_client")
+    gateway_mod.invoke_chat_structured_gateway = MagicMock(return_value=None)
+    gateway_mod.record_chat_extraction_gateway_result = MagicMock()
 
 # Stub langchain
 langchain_core = _stub_package("langchain_core")
@@ -151,6 +175,21 @@ _stub_package("utils.retrieval.tools")
 _stub_package("utils.llm")
 _stub_package("utils.conversations")
 
+# Stub utils.conversations.render (action_item_tools imports resolve_display_tz)
+_render_stub = _stub_module("utils.conversations.render")
+
+
+def _real_resolve_display_tz(tz):
+    if tz:
+        try:
+            return ZoneInfo(tz), tz
+        except Exception:
+            pass
+    return timezone.utc, "UTC"
+
+
+_render_stub.resolve_display_tz = _real_resolve_display_tz
+
 # Stub utils.retrieval.agentic
 import contextvars
 
@@ -168,6 +207,12 @@ llm_clients_stub.parser = MagicMock()
 llm_clients_stub.llm_high = MagicMock()
 llm_clients_stub.llm_medium_experiment = MagicMock()
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
+
+# Stub utils.llm.conversation_folder (conversation_processing imports from it after a recent refactor)
+conv_folder_stub = _stub_module("utils.llm.conversation_folder")
+conv_folder_stub.FolderAssignment = MagicMock()
+conv_folder_stub.assign_conversation_to_folder = MagicMock()
+conv_folder_stub.build_folders_context = MagicMock(return_value="")
 
 # Load models first
 _stub_package("models")
@@ -390,15 +435,15 @@ class TestExtractActionItemsPostValidation:
 
     def test_clears_past_due_dates_from_extraction(self):
         """Due dates more than 1 day in the past should be cleared after extraction."""
-        from models.structured import ActionItem, ActionItemsExtraction
+        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
 
         past_due = datetime(2025, 9, 15, 10, 0, tzinfo=timezone.utc)
         future_due = datetime.now(timezone.utc) + timedelta(days=3)
 
         mock_response = ActionItemsExtraction(
             action_items=[
-                ActionItem(description="Past task", due_at=past_due),
-                ActionItem(description="Future task", due_at=future_due),
+                ExtractedActionItem(description="Past task", due_at=past_due),
+                ExtractedActionItem(description="Future task", due_at=future_due),
             ]
         )
 
@@ -441,7 +486,7 @@ class TestExtractActionItemsPostValidation:
 
     def test_passes_current_time_to_invoke(self):
         """extract_action_items should pass current_time in the invoke payload."""
-        from models.structured import ActionItemsExtraction
+        from models.structured_extraction import ActionItemsExtraction
 
         mock_response = ActionItemsExtraction(action_items=[])
         mock_chain = MagicMock()
@@ -483,9 +528,11 @@ class TestExtractActionItemsPostValidation:
 
     def test_preserves_none_due_dates(self):
         """Action items with no due date should remain unchanged."""
-        from models.structured import ActionItem, ActionItemsExtraction
+        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
 
-        mock_response = ActionItemsExtraction(action_items=[ActionItem(description="No due date task", due_at=None)])
+        mock_response = ActionItemsExtraction(
+            action_items=[ExtractedActionItem(description="No due date task", due_at=None)]
+        )
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
         mock_chain.__or__ = MagicMock(return_value=mock_chain)
@@ -524,11 +571,11 @@ class TestExtractActionItemsPostValidation:
 
     def test_preserves_due_date_within_grace_boundary(self):
         """Due date 23h ago should be preserved (within 1-day grace window)."""
-        from models.structured import ActionItem, ActionItemsExtraction
+        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
 
         boundary_due = datetime.now(timezone.utc) - timedelta(hours=23)
         mock_response = ActionItemsExtraction(
-            action_items=[ActionItem(description="Boundary task", due_at=boundary_due)]
+            action_items=[ExtractedActionItem(description="Boundary task", due_at=boundary_due)]
         )
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
@@ -577,9 +624,9 @@ class TestActionItemTimezoneConversion:
         return ZoneInfo(key)
 
     def _run(self, due_at, tz):
-        from models.structured import ActionItem, ActionItemsExtraction
+        from models.structured_extraction import ActionItemsExtraction, ExtractedActionItem
 
-        mock_response = ActionItemsExtraction(action_items=[ActionItem(description="Task", due_at=due_at)])
+        mock_response = ActionItemsExtraction(action_items=[ExtractedActionItem(description="Task", due_at=due_at)])
         mock_chain = MagicMock()
         mock_chain.invoke.return_value = mock_response
         mock_chain.__or__ = MagicMock(return_value=mock_chain)

@@ -27,9 +27,31 @@ while IFS= read -r file; do
   [ -n "$file" ] && CHANGED_FILES+=("$file")
 done < <(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
 
+CHANGED_FILES_LIST=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-changed-files.XXXXXX")
+SELECTED_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests.XXXXXX")
+SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests-reason.XXXXXX")
+trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON"' EXIT
+printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
+
 run_step() {
   echo "==> $*"
   "$@"
+}
+
+changed_matches() {
+  local file
+  local pattern
+
+  for file in "${CHANGED_FILES[@]}"; do
+    for pattern in "$@"; do
+      case "$file" in
+        $pattern)
+          return 0
+          ;;
+      esac
+    done
+  done
+  return 1
 }
 
 check_merge_conflicts() {
@@ -47,6 +69,10 @@ check_merge_conflicts() {
     echo "FAIL: unresolved merge conflict markers found in changed files" >&2
     return 1
   fi
+}
+
+check_arch_guardrails() {
+  python3 .github/scripts/check_arch_guardrails.py --changed-files "$CHANGED_FILES_LIST"
 }
 
 check_optional_formatters() {
@@ -137,7 +163,209 @@ PY
   fi
 }
 
+check_backend_runtime_env_if_needed() {
+  if [ "${PRE_PUSH_SKIP_BACKEND_RUNTIME_ENV:-}" = "1" ]; then
+    echo "Skipping backend runtime env checks because PRE_PUSH_SKIP_BACKEND_RUNTIME_ENV=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/deploy/runtime_env.yaml' \
+    'backend/charts/backend-listen/*_values.yaml' \
+    'backend/charts/backend-listen/**/*_values.yaml' \
+    'backend/scripts/validate-backend-runtime-env.py' \
+    '.github/workflows/gcp_backend*.yml' \
+    '.github/workflows/gcp_backend*.yaml' \
+    '.github/workflows/lint.yml'
+  then
+    return
+  fi
+
+  python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
+  python3 backend/scripts/validate-backend-runtime-env.py --env prod
+}
+
+check_backend_async_blockers_if_needed() {
+  if [ "${PRE_PUSH_SKIP_BACKEND_ASYNC_BLOCKERS:-}" = "1" ]; then
+    echo "Skipping backend async blocker scan because PRE_PUSH_SKIP_BACKEND_ASYNC_BLOCKERS=1."
+    return
+  fi
+
+  if ! changed_matches 'backend/*.py' 'backend/**/*.py' '.github/workflows/lint.yml'; then
+    return
+  fi
+
+  python3 backend/scripts/scan_async_blockers.py \
+    --dirs backend/routers backend/utils \
+    --diff-base "$BASE_REF" \
+    --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
+}
+
+check_backend_unit_tests_if_needed() {
+  local selected_count
+  local reason
+
+  if [ "${PRE_PUSH_SKIP_BACKEND_UNIT_TESTS:-}" = "1" ]; then
+    echo "Skipping backend unit tests because PRE_PUSH_SKIP_BACKEND_UNIT_TESTS=1."
+    return
+  fi
+
+  if ! changed_matches 'backend/*.py' 'backend/**/*.py'; then
+    return
+  fi
+
+  (
+    cd backend
+    bash test-preflight.sh
+  )
+  python3 backend/scripts/select_backend_unit_tests.py \
+    --changed-files "$CHANGED_FILES_LIST" \
+    --output "$SELECTED_BACKEND_TESTS" \
+    --reason-output "$SELECTED_BACKEND_TESTS_REASON"
+
+  selected_count=$(wc -l < "$SELECTED_BACKEND_TESTS" | tr -d ' ')
+  reason=$(cat "$SELECTED_BACKEND_TESTS_REASON")
+  if [ "$selected_count" -eq 0 ]; then
+    echo "No backend unit tests selected: $reason"
+    return
+  fi
+
+  echo "Selected $selected_count backend unit test file(s): $reason"
+  (
+    cd backend
+    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" bash test.sh
+  )
+}
+
+check_openapi_contract_if_needed() {
+  if [ "${PRE_PUSH_SKIP_OPENAPI_CONTRACT:-}" = "1" ]; then
+    echo "Skipping OpenAPI contract check because PRE_PUSH_SKIP_OPENAPI_CONTRACT=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/main.py' \
+    'backend/routers/*.py' \
+    'backend/routers/**/*.py' \
+    'backend/models/*.py' \
+    'backend/models/**/*.py' \
+    'backend/scripts/export_openapi.py' \
+    'docs/api-reference/openapi.json' \
+    'docs/docs.json' \
+    '.github/workflows/openapi-contract.yml'
+  then
+    return
+  fi
+
+  (
+    cd backend
+    python3 scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+  )
+}
+
+check_workflows_if_needed() {
+  local -a workflow_files=()
+  local -a actionlint_cmd=()
+  local file
+
+  if [ "${PRE_PUSH_SKIP_ACTIONLINT:-}" = "1" ]; then
+    echo "Skipping actionlint because PRE_PUSH_SKIP_ACTIONLINT=1."
+    return
+  fi
+
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      .github/workflows/*.yml|.github/workflows/*.yaml)
+        workflow_files+=("$file")
+        ;;
+    esac
+  done
+
+  if [ "${#workflow_files[@]}" -eq 0 ]; then
+    return
+  fi
+
+  if command -v actionlint >/dev/null 2>&1; then
+    actionlint_cmd=(actionlint)
+  elif command -v go >/dev/null 2>&1; then
+    actionlint_cmd=(go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12)
+  else
+    echo "FAIL: actionlint or go is required to validate changed workflow files." >&2
+    return 1
+  fi
+
+  "${actionlint_cmd[@]}" -shellcheck "" "${workflow_files[@]}"
+}
+
+check_desktop_rust_if_needed() {
+  local -a rust_files=()
+  local file
+
+  if [ "${PRE_PUSH_SKIP_DESKTOP_RUST:-}" = "1" ]; then
+    echo "Skipping desktop Rust checks because PRE_PUSH_SKIP_DESKTOP_RUST=1."
+    return
+  fi
+
+  if ! changed_matches 'desktop/macos/Backend-Rust/*' 'desktop/macos/Backend-Rust/**/*' '.github/workflows/lint.yml'; then
+    return
+  fi
+
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      desktop/macos/Backend-Rust/*.rs|desktop/macos/Backend-Rust/**/*.rs)
+        rust_files+=("${file#desktop/macos/Backend-Rust/}")
+        ;;
+    esac
+  done
+
+  (
+    cd desktop/macos/Backend-Rust
+    if [ "${#rust_files[@]}" -gt 0 ]; then
+      rustfmt --edition 2021 --check "${rust_files[@]}"
+    fi
+    cargo check --locked
+  )
+}
+
+check_desktop_launcher_tests_if_needed() {
+  if [ "${PRE_PUSH_SKIP_DESKTOP_LAUNCHER_TESTS:-}" = "1" ]; then
+    echo "Skipping desktop launcher tests because PRE_PUSH_SKIP_DESKTOP_LAUNCHER_TESTS=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/run.sh' \
+    'desktop/macos/scripts/dev-instance.sh' \
+    'desktop/macos/scripts/omi-auth-dump.sh' \
+    'desktop/macos/scripts/omi-auth-seed.sh' \
+    'desktop/macos/scripts/omi-settings-seed.sh' \
+    'desktop/macos/tests/test-app-config.sh' \
+    'desktop/macos/tests/test-settings-seed.sh'
+  then
+    return
+  fi
+
+  (
+    cd desktop/macos
+    bash tests/test-app-config.sh
+    bash tests/test-settings-seed.sh
+  )
+}
+
+check_desktop_tool_surfaces_if_needed() {
+  local file
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      desktop/macos/agent/*|desktop/macos/agent/**/*|desktop/macos/pi-mono-extension/*|desktop/macos/pi-mono-extension/**/*|desktop/macos/run.sh|desktop/macos/scripts/prepare-agent-runtime.sh|desktop/macos/scripts/test-tool-surfaces.sh|codemagic.yaml)
+        desktop/macos/scripts/test-tool-surfaces.sh
+        return
+        ;;
+    esac
+  done
+}
+
 run_step check_merge_conflicts
+run_step check_arch_guardrails
 run_step python3 .github/scripts/desktop-changelog.py validate
 
 if [[ "$CURRENT_BRANCH" == changelog/v* ]]; then
@@ -149,6 +377,14 @@ else
 fi
 
 run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
+run_step check_backend_runtime_env_if_needed
+run_step check_backend_async_blockers_if_needed
+run_step check_backend_unit_tests_if_needed
+run_step check_openapi_contract_if_needed
+run_step check_workflows_if_needed
+run_step check_desktop_rust_if_needed
+run_step check_desktop_launcher_tests_if_needed
+run_step check_desktop_tool_surfaces_if_needed
 run_step check_optional_formatters
 
 echo "Fast pre-push checks passed."

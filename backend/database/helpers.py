@@ -2,13 +2,21 @@ import inspect
 from functools import wraps
 from typing import List, Dict, Any, Callable
 
-from google.cloud import firestore
-
 from database import users as users_db, redis_db
-from ._client import db
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _get_user_profile_for_data_protection(uid: str, firestore_client=None) -> dict:
+    if firestore_client is not None:
+        user_ref = firestore_client.collection('users').document(uid)
+        user_doc = user_ref.get()
+        if user_doc.exists:
+            return user_doc.to_dict() or {}
+        return {}
+
+    return users_db.get_user_profile(uid)
 
 
 def set_data_protection_level(data_arg_name: str):
@@ -61,13 +69,15 @@ def set_data_protection_level(data_arg_name: str):
             if not needs_backfill:
                 return func(*args, **kwargs)
 
-            level = redis_db.get_user_data_protection_level(uid)
+            firestore_client = bound_args.arguments.get('firestore_client')
+            level = None if firestore_client is not None else redis_db.get_user_data_protection_level(uid)
 
             if not level:
                 try:
-                    user_profile = users_db.get_user_profile(uid)
+                    user_profile = _get_user_profile_for_data_protection(uid, firestore_client=firestore_client)
                     level = user_profile.get('data_protection_level', 'enhanced') if user_profile else 'enhanced'
-                    redis_db.set_user_data_protection_level(uid, level)
+                    if firestore_client is None:
+                        redis_db.set_user_data_protection_level(uid, level)
                 except Exception as e:
                     logger.error(f"Failed to get user profile for {uid}: {e}")
                     level = 'enhanced'

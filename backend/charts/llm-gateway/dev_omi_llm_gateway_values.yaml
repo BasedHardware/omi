@@ -34,7 +34,24 @@ podLabels: {}
 
 service:
   type: ClusterIP
+  backendConfig: dev-llm-gateway-backend-config
   port: 8080
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "dev-llm-gateway-backend-config"}'
+
+ingress:
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: "gce-internal"
+    kubernetes.io/ingress.regional-static-ip-name: "dev-llm-gateway-ilb-ip-address"
+    kubernetes.io/ingress.allow-http: "true"
+  hosts:
+    - paths:
+        - path: /
+          pathType: Prefix
+  tls: []
 
 env:
   - name: OMI_LLM_GATEWAY_PROD

@@ -143,6 +143,63 @@ def process_in_progress_conversation(
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
 
+@router.post(
+    '/v1/conversations/{conversation_id}/finalize', response_model=CreateConversationResponse, tags=['conversations']
+)
+def finalize_conversation(
+    conversation_id: str,
+    request: ProcessConversationRequest = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
+):
+    """Finalize exactly one backend conversation.
+
+    Unlike POST /v1/conversations, this does not operate on the user's Redis
+    "current in-progress" pointer, so desktop retry/rotation cannot accidentally
+    finalize a newer recording.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation)
+
+    if conversation.status != ConversationStatus.in_progress:
+        return CreateConversationResponse(conversation=conversation, messages=[])
+
+    claim_updates = {}
+    if request and request.calendar_meeting_context:
+        if not conversation.external_data:
+            conversation.external_data = {}
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        claim_updates['external_data'] = conversation.external_data
+
+    if not conversations_db.claim_conversation_status(
+        uid,
+        conversation.id,
+        ConversationStatus.in_progress,
+        ConversationStatus.processing,
+        extra_updates=claim_updates or None,
+    ):
+        latest = _get_valid_conversation_by_id(uid, conversation_id)
+        latest = deserialize_conversation(latest)
+        return CreateConversationResponse(conversation=latest, messages=[])
+
+    conversation.status = ConversationStatus.processing
+
+    current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+    if current_in_progress_id == conversation_id:
+        redis_db.remove_in_progress_conversation_id(uid)
+
+    geolocation = redis_db.get_cached_user_geolocation(uid)
+    if geolocation:
+        geolocation = Geolocation(**geolocation)
+        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    if conversation.status:
+        conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
+
+    return CreateConversationResponse(conversation=conversation, messages=messages)
+
+
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
 def reprocess_conversation(
     conversation_id: str,
@@ -169,6 +226,13 @@ def reprocess_conversation(
     return processed_conversation
 
 
+def _ensure_aware(value: datetime) -> datetime:
+    # FastAPI parses a query datetime as naive or timezone-aware depending on whether the client
+    # included a UTC offset. Normalize to timezone-aware (UTC) so comparing the two ends of a date
+    # range never raises TypeError on mixed awareness (which would surface as a 500).
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
 @router.get(
     '/v1/conversations',
     response_model=List[Conversation],
@@ -189,6 +253,8 @@ def get_conversations(
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
@@ -220,6 +286,8 @@ def get_conversations_count(
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
     count = conversations_db.get_conversations_count(
         uid,
@@ -882,6 +950,11 @@ def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
 ):
+    if search_request.speaker_id and search_request.speaker_id != 'user':
+        person = users_db.get_person(uid, search_request.speaker_id)
+        if person is None:
+            raise HTTPException(status_code=404, detail="Speaker not found")
+
     # Convert ISO datetime strings to Unix timestamps if provided
     start_timestamp = None
     end_timestamp = None
@@ -906,6 +979,7 @@ def search_conversations_endpoint(
         include_discarded=search_request.include_discarded,
         start_date=start_timestamp,
         end_date=end_timestamp,
+        speaker_id=search_request.speaker_id,
     )
 
 

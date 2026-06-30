@@ -118,23 +118,31 @@ async def create_memories_batch(
         if memory.visibility == 'public':
             has_public = True
 
-    # Firestore batch write + Pinecone batch upsert run on a worker thread so a
-    # slow embeddings/Pinecone call can't starve the FastAPI sync threadpool.
-    def _persist():
-        memories_db.save_memories(uid, [m.dict() for m in memory_dbs])
-        upsert_memory_vectors_batch(
-            uid,
-            [
-                {
-                    "memory_id": m.id,
-                    "content": m.content,
-                    "category": m.category.value,
-                }
-                for m in memory_dbs
-            ],
-        )
+    # Persist to Firestore first — that write is the authoritative result.
+    # Mirror create_memory above: isolate the best-effort vector upsert so a
+    # transient/BYOK embedding failure (e.g. an OpenAI key without
+    # text-embedding-3-large access -> 403) can't 500 a request whose memories
+    # were already saved, which would make the client retry and duplicate them.
+    try:
+        await run_blocking(db_executor, memories_db.save_memories, uid, [m.dict() for m in memory_dbs])
+    except Exception:
+        logger.exception("Firestore save_memories failed uid=%s count=%s", uid, len(memory_dbs))
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
-    await run_blocking(db_executor, _persist)
+    # Pinecone batch upsert runs on a worker thread (postprocess pool, like the
+    # single-create path) so a slow embeddings/Pinecone call can't starve the
+    # FastAPI sync threadpool.
+    try:
+        await run_blocking(
+            postprocess_executor,
+            upsert_memory_vectors_batch,
+            uid,
+            [{"memory_id": m.id, "content": m.content, "category": m.category.value} for m in memory_dbs],
+        )
+    except Exception:
+        logger.exception(
+            "Vector batch upsert failed uid=%s count=%s (memories saved, vectors missing)", uid, len(memory_dbs)
+        )
 
     return BatchMemoriesResponse(memories=memory_dbs, created_count=len(memory_dbs))
 

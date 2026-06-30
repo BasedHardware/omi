@@ -45,13 +45,13 @@ fv1_mod.FieldFilter = MagicMock()
 
 # Stub database package
 database_mod = _stub_module("database")
-if not hasattr(database_mod, "__path__"):
-    database_mod.__path__ = []
+database_mod.__path__ = [os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "..", "database"))]
 
 # Stub database._client with a mock db
 client_mod = _stub_module("database._client")
 mock_db = MagicMock()
 client_mod.db = mock_db
+client_mod.document_id_from_seed = MagicMock(return_value="doc-id")
 
 # Now import the real goals module
 import importlib

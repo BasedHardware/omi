@@ -356,13 +356,13 @@ class TestFolderConversationRedaction:
 
         result = get_folder_conversations(folder_id='f1', limit=100, offset=0, include_discarded=False, uid='test-uid')
 
-        locked = result[0]
+        locked = result[0].model_dump()
         assert locked['structured']['action_items'] == []
         assert locked['structured']['events'] == []
         assert locked['apps_results'] == []
         assert locked['transcript_segments'] == []
 
-        unlocked = result[1]
+        unlocked = result[1].model_dump()
         assert len(unlocked['structured']['action_items']) == 1
         assert len(unlocked['transcript_segments']) == 1
 
@@ -376,7 +376,7 @@ class TestFolderConversationRedaction:
         from routers.folders import get_folder_conversations
 
         result = get_folder_conversations(folder_id='f1', limit=100, offset=0, include_discarded=False, uid='test-uid')
-        assert result[0]['structured']['title'] == 'Test Conversation'
+        assert result[0].model_dump()['structured']['title'] == 'Test Conversation'
 
 
 # =============================================================================
@@ -632,7 +632,7 @@ class TestMemoryToolFiltering:
         # Only unlocked memory content should appear; locked must be filtered
         assert 'UNLOCKED_VISIBLE_CONTENT' in result
         assert 'LOCKED_SECRET_CONTENT' not in result
-        assert '1 total' in result  # Only 1 memory should appear
+        assert '1 shown' in result  # Only 1 memory should appear
 
     def test_search_memories_filters_locked(self):
         """search_memories_tool must exclude locked memories from results."""
@@ -969,19 +969,25 @@ class TestMcpRestLockRedaction:
         """GET /v1/mcp/conversations calls real router and redacts locked fields."""
         import database.conversations as conversations_db
 
-        conversations_db.get_conversations = MagicMock(
-            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        )
+        conversations = [_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
+        conversations_db.get_conversations = MagicMock(return_value=conversations)
 
         from routers.mcp import get_conversations
 
         result = get_conversations(uid='test-uid')
 
-        assert result[0]['structured']['action_items'] == []
-        assert result[0]['structured']['events'] == []
-        assert result[0]['transcript_segments'] == []
-        assert len(result[1]['structured']['action_items']) == 1
-        assert len(result[1]['transcript_segments']) == 1
+        assert conversations[0]['structured']['action_items'] == []
+        assert conversations[0]['structured']['events'] == []
+        assert conversations[0]['transcript_segments'] == []
+        assert len(conversations[1]['structured']['action_items']) == 1
+        assert len(conversations[1]['transcript_segments']) == 1
+        locked_response = result[0].model_dump()
+        unlocked_response = result[1].model_dump()
+        assert locked_response['structured']['title'] == 'Test Conversation'
+        assert unlocked_response['structured']['title'] == 'Test Conversation'
+        assert 'action_items' not in locked_response['structured']
+        assert 'events' not in locked_response['structured']
+        assert 'transcript_segments' not in locked_response
 
 
 # =============================================================================

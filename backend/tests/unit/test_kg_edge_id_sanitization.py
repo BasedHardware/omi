@@ -64,6 +64,9 @@ class TestEdgeIdSanitization:
 
     def setup_method(self):
         mock_db.reset_mock()
+        # database.knowledge_graph imports a module-level db object; point it at
+        # this test's mock so the Firestore document() call is observable.
+        upsert_knowledge_edge.__globals__['db'] = mock_db
         # Set up document chain: db.collection().document().collection().document()
         self.mock_edge_ref = MagicMock()
         self.mock_edge_ref.get.return_value = MagicMock(exists=False)

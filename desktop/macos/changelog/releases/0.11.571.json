@@ -1,0 +1,7 @@
+{
+  "version": "0.11.571",
+  "date": "2026-06-30",
+  "changes": [
+    "Improved Rewind scrubbing and made screenshot history capture more efficient"
+  ]
+}

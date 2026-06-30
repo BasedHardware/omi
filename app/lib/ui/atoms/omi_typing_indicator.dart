@@ -47,9 +47,9 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
   }
 
   Animation<Offset> _tween(double delta) => Tween<Offset>(
-    begin: Offset(0, delta),
-    end: Offset(0, -delta),
-  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+        begin: Offset(0, delta),
+        end: Offset(0, -delta),
+      ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
 
   @override
   void dispose() {
@@ -68,19 +68,19 @@ class _IndicatorState extends State<_Indicator> with SingleTickerProviderStateMi
   // Optimized animation: keeps scale effect with RepaintBoundary isolation
   // Scale range reduced (0.85-1.0) for subtle bounce that's easy on battery
   Widget _bubble(Animation<Offset> anim) => RepaintBoundary(
-    child: SlideTransition(
-      position: anim,
-      child: ScaleTransition(
-        scale: _scale,
-        child: AnimatedBuilder(
-          animation: _color,
-          builder: (context, _) => Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: _color.value, shape: BoxShape.circle),
+        child: SlideTransition(
+          position: anim,
+          child: ScaleTransition(
+            scale: _scale,
+            child: AnimatedBuilder(
+              animation: _color,
+              builder: (context, _) => Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(color: _color.value, shape: BoxShape.circle),
+              ),
+            ),
           ),
         ),
-      ),
-    ),
-  );
+      );
 }

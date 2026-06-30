@@ -10,6 +10,8 @@ class McpApiKey(BaseModel):
     key_prefix: str
     created_at: datetime
     last_used_at: Optional[datetime] = None
+    app_id: Optional[str] = None
+    scopes: Optional[list[str]] = None
 
 
 class McpApiKeyDB(McpApiKey):

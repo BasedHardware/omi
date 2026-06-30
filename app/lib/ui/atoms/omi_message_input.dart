@@ -30,7 +30,7 @@ class OmiMessageInput extends AdaptiveWidget {
       margin: margin ?? const EdgeInsets.symmetric(horizontal: 8),
       constraints: BoxConstraints(maxHeight: maxHeight),
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.8),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.8),
         borderRadius: BorderRadius.circular(16),
       ),
       child: TextField(
