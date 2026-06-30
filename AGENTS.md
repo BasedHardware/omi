@@ -14,6 +14,7 @@ These rules apply to every AI agent working in this repository. This file is the
 
 ## Setup
 
+- **Worktree setup (required before first commit/push):** `make setup` — installs the repo Git hooks using linked-worktree-safe paths.
 - **Pre-commit hook (required before first commit):** `ln -s -f ../../scripts/pre-commit "$(git rev-parse --git-path hooks)/pre-commit"` — auto-formats staged files on commit.
 - Mobile app setup: `cd app && bash setup.sh ios` (or `android`).
 
