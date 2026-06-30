@@ -128,6 +128,7 @@ def create_memory(
         memory_system=memory_system,
         consumer='mcp',
         operation="mcp_memory_create",
+        require_canonical_promotion=True,
     )
     postprocess_executor.submit(update_personas_async, uid)
     return memory_db

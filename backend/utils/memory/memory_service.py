@@ -27,6 +27,7 @@ from utils.memory.canonical_memory_adapter import (
     write_canonical_extraction_memory,
     write_canonical_external_memory,
 )
+from utils.memory.required_promotion import required_promotion_payload
 from utils.client_device import DeviceScopeRequest
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_enabled
 from utils.memory.memory_system import MemorySystem
@@ -507,10 +508,14 @@ class MemoryService:
         consumer: str,
         operation: str,
         upsert_vector: bool = True,
+        require_canonical_promotion: bool = False,
     ) -> MemoryDB:
         """Create one external memory on canonical or legacy backend with side effects."""
         if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=self._db_client):
-            committed_id = self.write(uid, memory_db.model_dump())
+            payload = memory_db.model_dump()
+            if require_canonical_promotion:
+                payload = required_promotion_payload(payload, source_surface=consumer)
+            committed_id = self.write(uid, payload)
             item = _read_canonical_memory_item(uid, committed_id or memory_db.id, db_client=self._db_client)
             if item is not None:
                 return memory_item_to_memorydb(item)
@@ -544,10 +549,14 @@ class MemoryService:
         consumer: str,
         operation: str,
         upsert_vectors: bool = True,
+        require_canonical_promotion: bool = False,
     ) -> List[MemoryDB]:
         """Batch-create external memories with legacy vector upsert when applicable."""
         if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=self._db_client):
-            committed_ids = self.write_batch(uid, [memory.model_dump() for memory in memory_dbs])
+            payloads = [memory.model_dump() for memory in memory_dbs]
+            if require_canonical_promotion:
+                payloads = [required_promotion_payload(payload, source_surface=consumer) for payload in payloads]
+            committed_ids = self.write_batch(uid, payloads)
             results: List[MemoryDB] = []
             for memory_id in committed_ids:
                 item = _read_canonical_memory_item(uid, memory_id, db_client=self._db_client)

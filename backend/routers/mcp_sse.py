@@ -41,7 +41,10 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.conversations.render import redact_conversation_for_list
 from models.conversation_enums import CategoryEnum
 from utils.llm.memories import identify_category_for_memory
-from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
+from utils.memory.canonical_memory_adapter import (
+    _read_canonical_memory_item,
+    memory_item_to_memorydb,
+)
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
     guard_legacy_memory_write,
@@ -54,6 +57,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_read,
     authorize_memory_external_default_memory_write,
 )
+from utils.memory.required_promotion import required_promotion_payload
 from utils.memory.surface_routing import pin_memory_system
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
 import utils.mcp_action_items as mcp_action_items
@@ -881,7 +885,10 @@ def execute_tool(
             category = identify_category_for_memory(content)
             memory = Memory(content=content, category=category)
             memory_db = MemoryDB.from_memory(memory, user_id, None, True)
-            committed_id = MemoryService(db_client=db).write(user_id, memory_db.model_dump())
+            committed_id = MemoryService(db_client=db).write(
+                user_id,
+                required_promotion_payload(memory_db.model_dump(), source_surface="mcp"),
+            )
             item = _read_canonical_memory_item(user_id, committed_id or memory_db.id, db_client=db)
             if item is not None:
                 memory_db = memory_item_to_memorydb(item)

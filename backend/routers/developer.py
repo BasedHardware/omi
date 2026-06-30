@@ -538,6 +538,7 @@ def create_memory(
             consumer='developer_api',
             operation='create_memory',
             upsert_vector=False,
+            require_canonical_promotion=True,
         )
         if memory.visibility == 'public':
             postprocess_executor.submit(update_personas_async, uid)
@@ -567,6 +568,7 @@ def create_memory(
         consumer='developer_api',
         operation='create_memory',
         upsert_vector=False,
+        require_canonical_promotion=True,
     )
     if memory.visibility == 'public':
         postprocess_executor.submit(update_personas_async, uid)
@@ -642,6 +644,7 @@ def create_memories_batch(
         consumer='developer_api',
         operation='batch_create_memories',
         upsert_vectors=memory_system != MemorySystem.CANONICAL,
+        require_canonical_promotion=True,
     )
     if has_public:
         postprocess_executor.submit(update_personas_async, uid)

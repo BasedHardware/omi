@@ -53,6 +53,10 @@ from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.product_memory import MemoryItemStatus, MemoryLayer, ProcessingState, MemoryItem
 from utils.memory.atom_keyword_index import sync_atom_keyword_index_for_item
 from utils.memory.canonical_consolidation import ConsolidationReport, run_canonical_consolidation
+from utils.memory.required_promotion import (
+    REQUIRED_PROMOTION_STATUS_PROMOTED,
+    REQUIRED_PROMOTION_STATUSES,
+)
 from utils.memory.canonical_kg_promotion import extract_kg_for_promoted_memory
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
@@ -116,6 +120,88 @@ def is_fast_track_promotable(item: MemoryItem) -> bool:
     return promotion_fast_track_enabled() and bool(item.user_asserted)
 
 
+def is_required_promotion_item(item: MemoryItem) -> bool:
+    promotion = item.promotion or {}
+    return bool(promotion.get("required")) and promotion.get("status") in REQUIRED_PROMOTION_STATUSES
+
+
+def list_required_promotion_items(items: List[MemoryItem]) -> List[MemoryItem]:
+    return [item for item in items if is_required_promotion_item(item)]
+
+
+def _normalized_text(value: str) -> str:
+    return " ".join((value or "").strip().lower().split())
+
+
+def _exact_long_term_duplicate(uid: str, item: MemoryItem, *, db_client) -> Optional[MemoryItem]:
+    normalized_content = _normalized_text(item.content)
+    if not normalized_content:
+        return None
+    snapshots = (
+        db_client.collection(MemoryCollections(uid=uid).memory_items)
+        .where("tier", "==", MemoryLayer.long_term.value)
+        .stream()
+    )
+    for snapshot in snapshots:
+        candidate = MemoryItem(**(snapshot.to_dict() or {}))
+        if candidate.uid != uid or candidate.status != MemoryItemStatus.active:
+            continue
+        if _normalized_text(candidate.content) != normalized_content:
+            continue
+        if item.subject_entity_id and candidate.subject_entity_id != item.subject_entity_id:
+            continue
+        if item.predicate and candidate.predicate != item.predicate:
+            continue
+        if item.arguments and dict(candidate.arguments or {}) != dict(item.arguments or {}):
+            continue
+        return candidate
+    return None
+
+
+def _merge_required_promotion_duplicate(
+    uid: str,
+    item: MemoryItem,
+    existing: MemoryItem,
+    *,
+    trigger_reason: str,
+    now: datetime,
+    db_client,
+) -> MemoryItem:
+    collections = MemoryCollections(uid=uid)
+    evidence_by_id = {evidence.evidence_id: evidence for evidence in existing.evidence}
+    for evidence in item.evidence:
+        evidence_by_id.setdefault(evidence.evidence_id, evidence)
+    merged_existing = existing.model_copy(
+        update={
+            "evidence": list(evidence_by_id.values()),
+            "corroboration_count": existing.corroboration_count + 1,
+            "last_corroborated_at": now,
+            "updated_at": now,
+        }
+    )
+    source_promotion = dict(item.promotion or {})
+    source_promotion.update(
+        {
+            "status": "merged",
+            "target_memory_id": existing.memory_id,
+            "merged_at": now.isoformat(),
+            "trigger_reason": trigger_reason,
+        }
+    )
+    superseded_source = item.model_copy(
+        update={
+            "status": MemoryItemStatus.superseded,
+            "promotion": source_promotion,
+            "superseded_by": existing.memory_id,
+            "updated_at": now,
+        }
+    )
+    db_client.document(f"{collections.memory_items}/{existing.memory_id}").set(merged_existing.model_dump(mode="json"))
+    db_client.document(f"{collections.memory_items}/{item.memory_id}").set(superseded_source.model_dump(mode="json"))
+    sync_atom_keyword_index_for_item(merged_existing, db_client=db_client)
+    return merged_existing
+
+
 def list_fast_track_promotable_items(
     uid: str,
     *,
@@ -137,6 +223,7 @@ def promotion_trigger_reason(
     last_promotion_run_at: Optional[datetime],
     now: datetime,
     batch_threshold: Optional[int] = None,
+    required_promotion_count: int = 0,
 ) -> Optional[str]:
     """Return trigger reason when batch-or-daily fires; None when neither condition met.
 
@@ -145,6 +232,8 @@ def promotion_trigger_reason(
     """
     if promotable_count <= 0:
         return None
+    if required_promotion_count > 0:
+        return "required_promotion"
     threshold = batch_threshold if batch_threshold is not None else promotion_batch_threshold()
     if promotable_count >= threshold:
         return "batch_threshold"
@@ -227,18 +316,38 @@ def promote_short_term_item_via_apply(
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         raise ValueError(f"promotion refused for non-canonical cohort uid={uid}")
     current_time = _coerce_aware_utc(now)
+    if is_required_promotion_item(item):
+        existing_duplicate = _exact_long_term_duplicate(uid, item, db_client=client)
+        if existing_duplicate is not None:
+            return (
+                _merge_required_promotion_duplicate(
+                    uid,
+                    item,
+                    existing_duplicate,
+                    trigger_reason=trigger_reason,
+                    now=current_time,
+                    db_client=client,
+                ),
+                False,
+            )
     operation = _ensure_promotion_operation(uid=uid, item=item, control=control, run_id=run_id, db_client=client)
     idempotency_key = deterministic_contract_id(
         "canonical-short-term-promotion",
         {"uid": uid, "memory_id": item.memory_id, "from_layer": MemoryLayer.short_term.value},
     )
-    promotion_audit = {
-        "from_layer": MemoryLayer.short_term.value,
-        "to_layer": MemoryLayer.long_term.value,
-        "reason": trigger_reason,
-        "at": current_time.isoformat(),
-        "by": PROMOTION_BY,
-    }
+    promotion_audit = dict(item.promotion or {})
+    if promotion_audit.get("required"):
+        promotion_audit["status"] = REQUIRED_PROMOTION_STATUS_PROMOTED
+    promotion_audit.update({"promoted_at": current_time.isoformat(), "trigger_reason": trigger_reason})
+    promotion_audit.update(
+        {
+            "from_layer": MemoryLayer.short_term.value,
+            "to_layer": MemoryLayer.long_term.value,
+            "reason": trigger_reason,
+            "at": current_time.isoformat(),
+            "by": PROMOTION_BY,
+        }
+    )
     patch_payload = {
         "patch_id": f"patch_promote_{idempotency_key[:24]}",
         "packet_id": f"promotion_{run_id}",
@@ -373,14 +482,18 @@ def run_canonical_short_term_promotion(
         allowed = set(consolidation_batched_ids)
         promotable = [item for item in promotable if item.memory_id in allowed]
     fast_track = list_fast_track_promotable_items(uid, db_client=client, now=current_time)
+    required_promotion = list_required_promotion_items(promotable)
     control = _read_control_state(uid, db_client=client)
     trigger = promotion_trigger_reason(
         promotable_count=len(promotable),
         last_promotion_run_at=control.last_promotion_run_at,
         now=current_time,
         batch_threshold=batch_threshold,
+        required_promotion_count=len(required_promotion),
     )
-    if trigger is None and fast_track:
+    if trigger == "required_promotion":
+        promotable = required_promotion
+    elif trigger is None and fast_track:
         trigger = "user_asserted_fast_track"
         if consolidation_batched_ids is not None:
             promotable = [item for item in fast_track if item.memory_id in allowed]

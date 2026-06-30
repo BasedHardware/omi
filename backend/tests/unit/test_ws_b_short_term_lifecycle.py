@@ -37,7 +37,11 @@ from models.memory_domain import MemoryLayer, MemoryProcessingState, MemoryRecor
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_apply import MemoryControlState
 from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState, MemoryItem
-from utils.memory.canonical_memory_adapter import read_canonical_memories, write_canonical_extraction_memory
+from utils.memory.canonical_memory_adapter import (
+    read_canonical_memories,
+    write_canonical_extraction_memory,
+)
+from utils.memory.required_promotion import required_promotion_payload
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.short_term_promotion import (
     DEFAULT_PROMOTION_BATCH_THRESHOLD,
@@ -361,6 +365,15 @@ def test_promotion_trigger_reason_batch_default():
             promotable_count=1,
             last_promotion_run_at=None,
             now=NOW,
+            required_promotion_count=1,
+        )
+        == "required_promotion"
+    )
+    assert (
+        promotion_trigger_reason(
+            promotable_count=1,
+            last_promotion_run_at=None,
+            now=NOW,
         )
         is None
     )
@@ -399,6 +412,108 @@ def test_promotion_does_not_fire_on_first_run_below_batch_threshold(monkeypatch)
     assert report.skipped_reason == "promotion_not_due"
     assert report.promoted_count == 0
     assert db.docs[f"users/{uid}/memory_items/{memory_id}"]["tier"] == MemoryTier.short_term.value
+
+
+def test_required_promotion_manual_write_starts_short_term(monkeypatch):
+    uid = "uid-canonical-required-manual"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+
+    payload = required_promotion_payload(
+        {
+            "id": "manual-required-1",
+            "content": "User prefers concise launch checklists",
+            "manually_added": True,
+        },
+        source_surface="mcp",
+    )
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+    stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
+
+    assert stored["tier"] == MemoryTier.short_term.value
+    assert stored["user_asserted"] is True
+    assert stored["promotion"]["required"] is True
+    assert stored["promotion"]["status"] == "pending"
+    assert stored["promotion"]["source_surface"] == "mcp"
+
+
+def test_required_promotion_fires_on_first_run_below_batch_threshold(monkeypatch):
+    uid = "uid-canonical-required-promotion"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
+    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
+    payload = required_promotion_payload(
+        {
+            "id": "manual-required-2",
+            "content": "User wants MCP memories promoted after review",
+            "manually_added": True,
+        },
+        source_surface="developer_api",
+    )
+    memory_id = write_canonical_extraction_memory(uid, payload, db_client=db)
+
+    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-1")
+    stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
+
+    assert report.skipped_reason is None
+    assert report.trigger_reason == "required_promotion"
+    assert report.promoted_memory_ids == [memory_id]
+    assert stored["tier"] == MemoryTier.long_term.value
+    assert stored["promotion"]["required"] is True
+    assert stored["promotion"]["status"] == "promoted"
+    assert stored["promotion"]["source_surface"] == "developer_api"
+
+
+def test_required_promotion_merges_exact_existing_long_term(monkeypatch):
+    uid = "uid-canonical-required-merge"
+    _set_canonical_cohort(monkeypatch, uid)
+    db = _canonical_db_with_control(uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr("utils.memory.short_term_promotion.sync_canonical_memory_vector", lambda *_, **__: None)
+    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
+
+    existing_payload = {
+        "id": "existing-long-term",
+        "content": "User prefers launch checklists",
+        "manually_added": False,
+        "memory_tier": MemoryTier.long_term.value,
+    }
+    existing_id = write_canonical_extraction_memory(uid, existing_payload, db_client=db)
+    required_payload = required_promotion_payload(
+        {
+            "id": "manual-required-merge",
+            "content": "  user   prefers launch CHECKLISTS ",
+            "manually_added": True,
+        },
+        source_surface="mcp",
+    )
+    short_id = write_canonical_extraction_memory(uid, required_payload, db_client=db)
+
+    report = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-merge")
+    existing_stored = db.docs[f"users/{uid}/memory_items/{existing_id}"]
+    short_stored = db.docs[f"users/{uid}/memory_items/{short_id}"]
+
+    assert report.trigger_reason == "required_promotion"
+    assert report.promoted_memory_ids == [existing_id]
+    assert existing_stored["tier"] == MemoryTier.long_term.value
+    assert existing_stored["corroboration_count"] == 1
+    assert short_stored["tier"] == MemoryTier.short_term.value
+    assert short_stored["status"] == MemoryItemStatus.superseded.value
+    assert short_stored["superseded_by"] == existing_id
+    assert short_stored["promotion"]["status"] == "merged"
+    assert short_stored["promotion"]["target_memory_id"] == existing_id
 
 
 def test_promotion_daily_cadence_applies_after_first_successful_run(monkeypatch):

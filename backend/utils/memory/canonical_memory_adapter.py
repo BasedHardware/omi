@@ -535,6 +535,8 @@ def write_canonical_extraction_memory(uid: str, data: Dict[str, Any], *, db_clie
         "visibility": _visibility_from_payload(data),
         "user_asserted": _user_asserted_from_payload(data),
     }
+    if isinstance(data.get("promotion"), dict):
+        patch_payload["promotion"] = dict(data["promotion"])
     if data.get("subject_entity_id"):
         patch_payload["subject_entity_id"] = data["subject_entity_id"]
     if data.get("predicate"):

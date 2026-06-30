@@ -218,6 +218,7 @@ def _materialize_memory_item(
     commit_id: str,
     sequence: int,
     account_generation: int,
+    promotion: Optional[Dict[str, Any]] = None,
 ) -> MemoryItem:
     now = datetime.now(timezone.utc)
     tier = patch.initial_tier if isinstance(patch.initial_tier, MemoryTier) else MemoryTier(patch.initial_tier)
@@ -254,6 +255,7 @@ def _materialize_memory_item(
             "memory-content", {"content": patch.memory_text, "evidence_ids": patch.evidence_ids}
         ),
         account_generation=account_generation,
+        promotion=promotion,
         subject_entity_id=patch.subject_entity_id,
         predicate=patch.predicate,
         arguments=dict(patch.arguments or {}),
@@ -379,6 +381,7 @@ def apply_long_term_patch_transaction(
     raw = dict(patch_payload)
     existing_item_raw = raw.pop("existing_item", None)
     promotion_audit = raw.pop("promotion_audit", None)
+    promotion_metadata = raw.pop("promotion", None)
     extra_item_updates: Dict[str, Any] = {}
     for optional_key in (
         "corroboration_count",
@@ -500,6 +503,7 @@ def apply_long_term_patch_transaction(
             commit_id=commit_id,
             sequence=next_control.commit_sequence,
             account_generation=control_state.account_generation,
+            promotion=promotion_metadata,
         )
     outbox_events = [
         MemoryOutboxEvent(

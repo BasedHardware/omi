@@ -21,8 +21,12 @@ from utils.apps import update_personas_async
 from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3_production_runtime import build_v3_production_runtime
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_enabled
-from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
+from utils.memory.canonical_memory_adapter import (
+    _read_canonical_memory_item,
+    memory_item_to_memorydb,
+)
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
+from utils.memory.required_promotion import required_promotion_payload
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
 from utils.other import endpoints as auth
@@ -232,6 +236,8 @@ async def create_memory(
     if canonical_write_enabled(uid, db_client=db_client):
         try:
             memory_service = MemoryService(db_client=db_client)
+            if manually_added:
+                payload = required_promotion_payload(payload, source_surface="v3_manual")
             committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
             item = await run_blocking(
                 db_executor,
@@ -321,7 +327,10 @@ async def create_memories_batch(
                 )
         committed_ids: List[str] = []
         for memory_db in memory_dbs:
-            committed_id = await run_blocking(db_executor, memory_service.write, uid, memory_db.dict())
+            payload = memory_db.dict()
+            if memory_db.manually_added:
+                payload = required_promotion_payload(payload, source_surface="v3_manual")
+            committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
             committed_ids.append(committed_id or memory_db.id)
         if has_public:
             submit_with_context(postprocess_executor, update_personas_async, uid)
