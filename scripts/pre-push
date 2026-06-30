@@ -68,7 +68,8 @@ fi
 CHANGED_FILES_LIST=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-changed-files.XXXXXX")
 SELECTED_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests.XXXXXX")
 SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests-reason.XXXXXX")
-trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON"' EXIT
+FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
+trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
 
 run_step() {
@@ -241,7 +242,10 @@ check_backend_async_blockers_if_needed() {
 
 check_backend_unit_tests_if_needed() {
   local selected_count
+  local original_selected_count
+  local max_pre_push_tests
   local reason
+  local file
 
   if [ "${PRE_PUSH_SKIP_BACKEND_UNIT_TESTS:-}" = "1" ]; then
     echo "Skipping backend unit tests because PRE_PUSH_SKIP_BACKEND_UNIT_TESTS=1."
@@ -252,25 +256,45 @@ check_backend_unit_tests_if_needed() {
     return
   fi
 
-  (
-    cd backend
-    bash test-preflight.sh
-  )
   python3 backend/scripts/select_backend_unit_tests.py \
     --changed-files "$CHANGED_FILES_LIST" \
     --output "$SELECTED_BACKEND_TESTS" \
     --reason-output "$SELECTED_BACKEND_TESTS_REASON"
 
   selected_count=$(wc -l < "$SELECTED_BACKEND_TESTS" | tr -d ' ')
+  original_selected_count="$selected_count"
   reason=$(cat "$SELECTED_BACKEND_TESTS_REASON")
   if [ "$selected_count" -eq 0 ]; then
     echo "No backend unit tests selected: $reason"
     return
   fi
 
+  max_pre_push_tests="${PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40}"
+  if [ "$selected_count" -gt "$max_pre_push_tests" ]; then
+    : > "$FAST_BACKEND_TESTS"
+    for file in "${CHANGED_FILES[@]}"; do
+      case "$file" in
+        backend/tests/*.py|backend/tests/**/*.py)
+          printf '%s\n' "${file#backend/}" >> "$FAST_BACKEND_TESTS"
+          ;;
+      esac
+    done
+    if [ -s "$FAST_BACKEND_TESTS" ]; then
+      sort -u "$FAST_BACKEND_TESTS" -o "$FAST_BACKEND_TESTS"
+      selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
+      echo "Selector requested $reason ($original_selected_count files; running $selected_count changed backend test file(s) instead; cap is $max_pre_push_tests)."
+      cp "$FAST_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS"
+    else
+      echo "Skipping broad backend unit suite in pre-push: $reason ($selected_count files; cap is $max_pre_push_tests)."
+      echo "Run cd backend && bash test.sh for the full suite, or rely on CI."
+      return
+    fi
+  fi
+
   echo "Selected $selected_count backend unit test file(s): $reason"
   (
     cd backend
+    bash test-preflight.sh
     BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" bash test.sh
   )
 }
