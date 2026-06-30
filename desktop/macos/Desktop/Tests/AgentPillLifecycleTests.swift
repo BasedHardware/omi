@@ -519,6 +519,14 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(sessionSource.contains("return eventResponseID == expected"))
     XCTAssertFalse(sessionSource.contains("guard let expected = openAIActiveResponseID else { return true }"))
     XCTAssertTrue(sessionSource.contains("ignoring stale response.done"))
+    XCTAssertTrue(sessionSource.contains("private var pendingOpenAIToolCallIds = Set<String>()"))
+    XCTAssertTrue(sessionSource.contains("pendingOpenAIToolCallIds.insert(callId)"))
+    XCTAssertTrue(sessionSource.contains("waiting for \\(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s)"))
+    XCTAssertTrue(sessionSource.contains("private var pendingGeminiToolCallIds = Set<String>()"))
+    XCTAssertTrue(sessionSource.contains("pendingGeminiToolCallIds.insert(callId)"))
+    XCTAssertTrue(sessionSource.contains("deferring Gemini turnComplete with"))
+    XCTAssertTrue(sessionSource.contains("nextGeminiSyntheticToolCallId(name: name)"))
+    XCTAssertFalse(sessionSource.contains("let callId = call[\"id\"] as? String ?? name"))
   }
 
   func testCredentialHealthRetryAndFailoverInvariants() throws {

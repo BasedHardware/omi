@@ -2221,7 +2221,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         legacyClientScope: String?,
         imageData: Data?,
         attachmentMetadataJSON: String?
-    ) async -> String? {
+    ) async -> DesktopCoordinatorCompletionDelta? {
         guard systemPromptStyle == .main,
               !isOnboarding,
               surfaceRef == nil,
@@ -2231,7 +2231,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
               attachmentMetadataJSON == nil
         else { return nil }
 
-        return await DesktopCoordinatorService.shared.completedAgentDeltaPrompt(surfaceKind: "main_chat")
+        return await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surfaceKind: "main_chat")
     }
 
     private func routeIntentJSONWithFailOpenTimeout(intent: String, surfaceKind: String) async throws -> String? {
@@ -3368,7 +3368,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
                 # Desktop Completed Agent Delta
 
-                \(coordinatorCompletionDeltaContext)
+                \(coordinatorCompletionDeltaContext.prompt)
                 """
             }
 
@@ -3624,6 +3624,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             )
+            if let coordinatorCompletionDeltaContext {
+                DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
+                    surfaceKind: "main_chat",
+                    ids: coordinatorCompletionDeltaContext.ids
+                )
+            }
 
             // Flush any remaining buffered streaming text before finalizing
             streamingFlushWorkItem?.cancel()

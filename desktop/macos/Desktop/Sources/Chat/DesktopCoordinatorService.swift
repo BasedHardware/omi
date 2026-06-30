@@ -101,6 +101,11 @@ struct DesktopCoordinatorCompletionDeltaItem: Codable {
   let finalText: String
 }
 
+struct DesktopCoordinatorCompletionDelta: Codable {
+  let ids: [String]
+  let prompt: String
+}
+
 @MainActor
 final class DesktopCoordinatorService {
   static let shared = DesktopCoordinatorService()
@@ -238,6 +243,14 @@ final class DesktopCoordinatorService {
   }
 
   func completedAgentDeltaPrompt(surfaceKind: String, limit: Int = 5) async -> String? {
+    guard let delta = await peekCompletedAgentDelta(surfaceKind: surfaceKind, limit: limit) else {
+      return nil
+    }
+    acknowledgeCompletedAgentDelta(surfaceKind: surfaceKind, ids: delta.ids)
+    return delta.prompt
+  }
+
+  func peekCompletedAgentDelta(surfaceKind: String, limit: Int = 5) async -> DesktopCoordinatorCompletionDelta? {
     do {
       let raw = try await callRuntimeControlTool(ToolName.listAgentSessions, input: ["limit": 50])
       let seen = Set(checkpointDefaults.stringArray(forKey: completionCheckpointKey(surfaceKind: surfaceKind)) ?? [])
@@ -247,12 +260,19 @@ final class DesktopCoordinatorService {
         .map { $0 }
 
       guard !items.isEmpty else { return nil }
-      checkpointCompletionDelta(surfaceKind: surfaceKind, items: items)
-      return formatCompletionDeltaPrompt(surfaceKind: surfaceKind, items: items)
+      return DesktopCoordinatorCompletionDelta(
+        ids: items.map(\.id),
+        prompt: formatCompletionDeltaPrompt(surfaceKind: surfaceKind, items: items)
+      )
     } catch {
       logError("DesktopCoordinatorService: completed agent delta unavailable", error: error)
       return nil
     }
+  }
+
+  func acknowledgeCompletedAgentDelta(surfaceKind: String, ids: [String]) {
+    guard !ids.isEmpty else { return }
+    checkpointCompletionDelta(surfaceKind: surfaceKind, ids: ids)
   }
 
   func routeIntent(intent: String, surfaceKind: String? = nil, taskId: String? = nil) async -> DesktopCoordinatorRouteDecision {
@@ -462,19 +482,19 @@ final class DesktopCoordinatorService {
       let surfaceKind = stringValue(session["surfaceKind"])
       guard surfaceKind != "main_chat" else { return nil }
 
-      let finalText = stringValue(latestRun["finalText"])
-        ?? stringValue(latestRun["errorMessage"])
-        ?? stringValue((latestRun["result"] as? [String: Any])?["text"])
-      guard let finalText else { return nil }
-
       let title = stringValue(session["title"])
         ?? surfaceKind
         ?? stringValue(session["omiSessionId"])
         ?? "Completed agent"
+      let sanitizedTitle = sanitizePromptLine(title, maxLength: 120)
+      let finalText = stringValue(latestRun["finalText"])
+        ?? stringValue(latestRun["errorMessage"])
+        ?? stringValue((latestRun["result"] as? [String: Any])?["text"])
+        ?? "\(sanitizedTitle) finished with status \(status). Inspect the agentRef for details if the user asks."
 
       return DesktopCoordinatorCompletionDeltaItem(
         id: id,
-        title: sanitizePromptLine(title, maxLength: 120),
+        title: sanitizedTitle,
         surfaceKind: surfaceKind,
         externalRefKind: stringValue(session["externalRefKind"]),
         externalRefId: stringValue(session["externalRefId"]),
@@ -487,10 +507,10 @@ final class DesktopCoordinatorService {
     }
   }
 
-  private func checkpointCompletionDelta(surfaceKind: String, items: [DesktopCoordinatorCompletionDeltaItem]) {
+  private func checkpointCompletionDelta(surfaceKind: String, ids: [String]) {
     let key = completionCheckpointKey(surfaceKind: surfaceKind)
     var seen = checkpointDefaults.stringArray(forKey: key) ?? []
-    seen.append(contentsOf: items.map(\.id))
+    seen.append(contentsOf: ids)
     checkpointDefaults.set(Array(seen.suffix(100)), forKey: key)
   }
 
