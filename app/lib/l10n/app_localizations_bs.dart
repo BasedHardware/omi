@@ -9490,6 +9490,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Oko 1 minute';
+
   @override
   String get jumpToLatestMessage => 'Idi na najnoviju poruku';
 

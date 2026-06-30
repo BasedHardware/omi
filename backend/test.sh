@@ -27,6 +27,8 @@ pytest tests/unit/test_parakeet_nim.py -v
 pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
+pytest tests/unit/test_vram_batch.py -v
+pytest tests/unit/test_oom_reproduction.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
 pytest tests/unit/test_parakeet_builtin_embedding.py -v
 pytest tests/unit/test_parakeet_endpoints.py -v
@@ -177,6 +179,7 @@ pytest tests/unit/test_llm_gateway_route_refs.py -v
 pytest tests/unit/test_llm_gateway_dependencies.py -v
 pytest tests/unit/test_llm_gateway_chat_extraction_pilot.py -v
 pytest tests/unit/test_backend_runtime_env_validator.py -v
+pytest tests/unit/test_google_credentials.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v

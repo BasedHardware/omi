@@ -162,6 +162,21 @@ impl IntoResponse for ErrorResponse {
     }
 }
 
+fn api_base_url(config: &Config) -> Result<&str, ErrorResponse> {
+    config
+        .base_api_url
+        .as_deref()
+        .filter(|url| is_nonblank_url(url))
+        .ok_or_else(|| ErrorResponse {
+            error: "not_configured".to_string(),
+            message: "BASE_API_URL not configured".to_string(),
+        })
+}
+
+fn is_nonblank_url(url: &str) -> bool {
+    !url.trim().is_empty()
+}
+
 // OAuth credential data stored in auth codes
 #[derive(Debug, Serialize, Deserialize)]
 struct OAuthCredentials {
@@ -232,10 +247,7 @@ fn apple_auth_redirect(config: &Config, session_id: &str) -> Result<Redirect, Er
             message: "APPLE_CLIENT_ID not configured".to_string(),
         })?;
 
-    let api_base_url = config
-        .base_api_url
-        .as_deref()
-        .unwrap_or("http://localhost:8080");
+    let api_base_url = api_base_url(config)?;
     let callback_url = format!("{}/v1/auth/callback/apple", api_base_url);
 
     let auth_url = format!(
@@ -261,10 +273,7 @@ fn google_auth_redirect(config: &Config, session_id: &str) -> Result<Redirect, E
             message: "GOOGLE_CLIENT_ID not configured".to_string(),
         })?;
 
-    let api_base_url = config
-        .base_api_url
-        .as_deref()
-        .unwrap_or("http://localhost:8080");
+    let api_base_url = api_base_url(config)?;
     let callback_url_raw = format!("{}/v1/auth/callback/google", api_base_url);
     let callback_url = urlencoding::encode(&callback_url_raw);
     let scope = urlencoding::encode("openid email profile");
@@ -468,10 +477,7 @@ async fn exchange_apple_code(
             message: "APPLE_PRIVATE_KEY not configured".to_string(),
         })?;
 
-    let api_base_url = config
-        .base_api_url
-        .as_deref()
-        .unwrap_or("http://localhost:8080");
+    let api_base_url = api_base_url(config)?;
     let callback_url = format!("{}/v1/auth/callback/apple", api_base_url);
 
     // Generate client secret JWT
@@ -552,10 +558,7 @@ async fn exchange_google_code(
             message: "GOOGLE_CLIENT_SECRET not configured".to_string(),
         })?;
 
-    let api_base_url = config
-        .base_api_url
-        .as_deref()
-        .unwrap_or("http://localhost:8080");
+    let api_base_url = api_base_url(config)?;
     let callback_url = format!("{}/v1/auth/callback/google", api_base_url);
 
     // Exchange code for tokens
@@ -648,6 +651,12 @@ async fn generate_custom_token(
         .firebase_api_key
         .as_ref()
         .ok_or("FIREBASE_API_KEY not configured")?;
+    let request_uri = state
+        .config
+        .base_api_url
+        .as_deref()
+        .filter(|url| is_nonblank_url(url))
+        .ok_or("BASE_API_URL not configured")?;
 
     // Sign in with OAuth credential using Firebase Auth REST API
     let sign_in_url = format!(
@@ -686,7 +695,7 @@ async fn generate_custom_token(
         .post(&sign_in_url)
         .json(&SignInRequest {
             post_body,
-            request_uri: "http://localhost".to_string(),
+            request_uri: request_uri.to_string(),
             return_idp_credential: true,
             return_secure_token: true,
         })
@@ -757,4 +766,22 @@ pub fn auth_routes(config: Arc<Config>) -> Router {
         .route("/v1/auth/callback/google", get(auth_callback_google))
         .route("/v1/auth/token", post(auth_token))
         .with_state(auth_state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_base_url_rejects_blank_values() {
+        assert!(!is_nonblank_url(""));
+        assert!(!is_nonblank_url("   "));
+        assert!(!is_nonblank_url("\n\t"));
+    }
+
+    #[test]
+    fn auth_base_url_accepts_nonblank_values() {
+        assert!(is_nonblank_url("https://desktop-backend.example.com"));
+        assert!(is_nonblank_url("  https://desktop-backend.example.com  "));
+    }
 }

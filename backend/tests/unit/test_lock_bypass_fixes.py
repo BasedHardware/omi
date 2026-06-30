@@ -4,21 +4,13 @@ Verifies that is_locked conversations/memories are properly guarded
 across all previously-bypassed endpoints by calling the real code paths.
 """
 
-from contextlib import contextmanager
 from unittest.mock import patch, MagicMock
-import importlib
 import os
 import pytest
 import sys
 from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType
 from zoneinfo import ZoneInfo
-
-from tests.unit.memory_import_isolation import (
-    WS_I_HEAVY_STUB_MODULE_NAMES,
-    restore_sys_modules,
-    snapshot_sys_modules,
-)
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -186,348 +178,24 @@ _stubs = [
     'utils.llm.usage_tracker',
     'websockets',
 ]
-
-
-def _install_lock_bypass_usage_tracker_stub() -> None:
-    """Usage-tracker stub with a complete Features enum (WS-I stubs leave an empty _Features)."""
-    usage_tracker_mod = ModuleType("utils.llm.usage_tracker")
-
-    @contextmanager
-    def _track_usage(_uid, _feature):
-        yield
-
-    usage_tracker_mod.track_usage = _track_usage
-
-    class Features:
-        CHAT = "chat"
-        CONVERSATION_PROCESSING = "conversation_processing"
-        RAG = "rag"
-        NOTIFICATIONS = "notifications"
-        APP_INTEGRATIONS = "app_integrations"
-        GOALS = "goals"
-        TRENDS = "trends"
-        PERSONA = "persona"
-        MEMORIES = "memories"
-        TRANSCRIBE = "transcribe"
-        REALTIME_INTEGRATIONS = "realtime_integrations"
-        DAILY_SUMMARY = "daily_summary"
-        SUBSCRIPTION_NOTIFICATION = "subscription_notification"
-        KNOWLEDGE_GRAPH = "knowledge_graph"
-        OTHER = "other"
-        PROACTIVE_NOTIFICATION = "proactive_notification"
-        FOLLOWUP = "followup"
-        OPENGLASS = "openglass"
-        APP_GENERATOR = "app_generator"
-        ONBOARDING = "onboarding"
-        CONVERSATION_DISCARD = "conv_discard"
-        CONVERSATION_STRUCTURE = "conv_structure"
-        CONVERSATION_ACTION_ITEMS = "conv_action_items"
-        CONVERSATION_FOLDER = "conv_folder"
-        CONVERSATION_APPS = "conv_apps"
-
-    usage_tracker_mod.Features = Features
-    sys.modules["utils.llm.usage_tracker"] = usage_tracker_mod
-
-
-def _drop_stub_only_module(name: str) -> None:
-    mod = sys.modules.get(name)
-    if mod is None or getattr(mod, "__file__", None) is not None:
-        return
-    sys.modules.pop(name, None)
-    if "." not in name:
-        return
-    parent_name, child_name = name.rsplit(".", 1)
-    parent = sys.modules.get(parent_name)
-    if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is mod:
-        delattr(parent, child_name)
-
-
-def _install_langchain_core_package_stub() -> None:
-    """Package-shaped langchain_core stub (WS-I AutoMockModule breaks submodule imports)."""
-    langchain_core = ModuleType("langchain_core")
-    langchain_core.__path__ = []
-
-    messages = ModuleType("langchain_core.messages")
-    messages.SystemMessage = MagicMock()
-    messages.HumanMessage = MagicMock()
-    messages.AIMessage = MagicMock()
-
-    output_parsers = ModuleType("langchain_core.output_parsers")
-    output_parsers.PydanticOutputParser = MagicMock()
-
-    prompts = ModuleType("langchain_core.prompts")
-    prompts.ChatPromptTemplate = MagicMock()
-
-    callbacks = ModuleType("langchain_core.callbacks")
-    callbacks.BaseCallbackHandler = object
-
-    runnables = ModuleType("langchain_core.runnables")
-    runnables.RunnableConfig = dict
-
-    outputs = ModuleType("langchain_core.outputs")
-    outputs.LLMResult = object
-
-    tools = ModuleType("langchain_core.tools")
-    tools.tool = _tool
-
-    langchain_core.messages = messages
-    langchain_core.output_parsers = output_parsers
-    langchain_core.prompts = prompts
-    langchain_core.callbacks = callbacks
-    langchain_core.runnables = runnables
-    langchain_core.outputs = outputs
-    langchain_core.tools = tools
-
-    sys.modules["langchain_core"] = langchain_core
-    sys.modules["langchain_core.messages"] = messages
-    sys.modules["langchain_core.output_parsers"] = output_parsers
-    sys.modules["langchain_core.prompts"] = prompts
-    sys.modules["langchain_core.callbacks"] = callbacks
-    sys.modules["langchain_core.runnables"] = runnables
-    sys.modules["langchain_core.outputs"] = outputs
-    sys.modules["langchain_core.tools"] = tools
-
-
-def _install_lock_bypass_import_stubs() -> None:
-    real_imports = frozenset(_LOCK_BYPASS_REAL_IMPORT_MODULES)
-    for mod_name in _LOCK_BYPASS_REAL_IMPORT_MODULES:
-        _drop_stub_only_module(mod_name)
-
-    for mod_name in _stubs:
-        if mod_name in real_imports:
-            continue
-        existing = sys.modules.get(mod_name)
-        if existing is not None and getattr(existing, "__file__", None) is not None:
-            continue
+for mod_name in _stubs:
+    if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
 
-    _install_lock_bypass_usage_tracker_stub()
-    _install_langchain_core_package_stub()
+# Concrete attributes used by imported modules during lightweight tests.
+sys.modules['langchain_core.callbacks'].BaseCallbackHandler = object
+sys.modules['langchain_core.outputs'].LLMResult = object
+sys.modules['langchain_core.runnables'].RunnableConfig = dict
+sys.modules['langchain_core.tools'].tool = _tool
+sys.modules['pytz'].timezone = _PytzZoneInfo
+sys.modules['pytz'].utc = timezone.utc
 
-    # Concrete attributes used by imported modules during lightweight tests.
-    sys.modules['langchain_core.callbacks'].BaseCallbackHandler = object
-    sys.modules['langchain_core.outputs'].LLMResult = object
-    sys.modules['langchain_core.runnables'].RunnableConfig = dict
-    sys.modules['langchain_core.tools'].tool = _tool
-    sys.modules['pytz'].timezone = _PytzZoneInfo
-    sys.modules['pytz'].utc = timezone.utc
-
-    # Override specific attributes that need concrete values
-    sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-    sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
-    sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
-    sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
-    sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
-
-    subscription_mod = sys.modules['utils.subscription']
-    subscription_mod.has_transcription_credits = MagicMock(return_value=True)
-
-
-def _repair_polluted_lock_bypass_stubs() -> None:
-    """Drop stub-only modules left by other test files so lock-bypass imports stay valid."""
-    from utils.memory.memory_system_pin import clear_memory_system_pin
-
-    clear_memory_system_pin()
-    for name in _LOCK_BYPASS_REAL_IMPORT_MODULES:
-        sys.modules.pop(name, None)
-    for name in (
-        *_LOCK_BYPASS_REAL_IMPORT_MODULES,
-        *WS_I_HEAVY_STUB_MODULE_NAMES,
-        'google.api_core',
-        'google.api_core.exceptions',
-        'google.cloud',
-        'utils.cloud_tasks',
-        'utils.other.storage',
-        'utils.subscription',
-        'utils.llm.usage_tracker',
-    ):
-        _drop_stub_only_module(name)
-    _install_lock_bypass_import_stubs()
-    _rebind_memory_service_database_stubs()
-
-
-def _rebind_memory_service_database_stubs() -> None:
-    import importlib
-    import utils.memory.memory_service as memory_service_mod
-
-    memories = sys.modules.get('database.memories')
-    if memories is not None:
-        memory_service_mod.memories_db = memories
-    vector_db = sys.modules.get('database.vector_db')
-    if vector_db is not None:
-        memory_service_mod.vector_db = vector_db
-    importlib.reload(memory_service_mod)
-
-
-_LOCK_BYPASS_STUB_MODULE_NAMES = tuple(_stubs)
-
-# Sprint isolation stubs that must be dropped so lock-bypass tests import real tool/router code.
-_LOCK_BYPASS_REAL_IMPORT_MODULES = (
-    'utils.retrieval.tools.memory_tools',
-    'utils.retrieval.tools.conversation_tools',
-    'utils.retrieval.hybrid',
-    'utils.conversations.search',
-    'utils.llm.goals',
-    'utils.llm.memories',
-    'utils.llm.notifications',
-    'utils.llm.external_integrations',
-    'utils.llm.chat',
-    'utils.llm.usage_tracker',
-    'utils.app_integrations',
-    'utils.apps',
-    'utils.webhooks',
-    'utils.other.notifications',
-    'routers.sync',
-    'routers.folders',
-    'routers.mcp',
-    'routers.mcp_sse',
-    'routers.action_items',
-    'routers.users',
-    'routers.integration',
-    'routers.conversations',
-    'routers.developer',
-    'routers.knowledge_graph',
-)
-
-_LOCK_BYPASS_POLLUTION_SNAPSHOT_NAMES = tuple(
-    dict.fromkeys([*_LOCK_BYPASS_STUB_MODULE_NAMES, *WS_I_HEAVY_STUB_MODULE_NAMES])
-)
-
-_install_lock_bypass_import_stubs()
-
-
-@pytest.fixture(scope="module", autouse=True)
-def _lock_bypass_import_isolation():
-    saved = snapshot_sys_modules(_LOCK_BYPASS_STUB_MODULE_NAMES)
-    _install_lock_bypass_import_stubs()
-    yield
-    restore_sys_modules(saved)
-
-
-@pytest.fixture(autouse=True)
-def _reinstall_lock_bypass_import_stubs():
-    saved = snapshot_sys_modules(_LOCK_BYPASS_POLLUTION_SNAPSHOT_NAMES)
-    _repair_polluted_lock_bypass_stubs()
-    yield
-    restore_sys_modules(saved)
-
-
-def _install_legacy_safe_memory_defaults(monkeypatch):
-    """Keep lock-bypass tests focused on legacy lock checks, not memory rollout gating."""
-    from types import SimpleNamespace
-
-    import utils.memory.chat_memory_adapter as chat_adapter
-    import utils.mcp_memories as default_mcp
-    import utils.memory.default_read_rollout as rollout
-    import utils.memory.product_authorization as product_auth
-
-    def _legacy_rollout(uid='test-uid', consumer='mcp', **_kwargs):
-        return rollout.legacy_safe_default_read_rollout_decision(
-            uid=uid,
-            source_path='test/legacy-safe',
-            consumer=consumer,
-            reason='lock_bypass_fixture_legacy_safe',
-        )
-
-    legacy_text = SimpleNamespace(
-        read_decision=rollout.MemoryReadDecision.USE_LEGACY_SAFE,
-        text='',
-        fallback_reason='lock_bypass_fixture_legacy_safe',
-    )
-    legacy_memories = SimpleNamespace(
-        read_decision=rollout.MemoryReadDecision.USE_LEGACY_SAFE,
-        memories=[],
-        fallback_reason='lock_bypass_fixture_legacy_safe',
-    )
-    allowed_write = rollout.LegacyMemoryWriteGuardDecision(allowed=True, detail={'enabled': True})
-    ready_gate = rollout.WriteConvergencePolicy(source_path='test/convergence', ready=True)
-    allowed_auth = product_auth.ProductAuthorizationDecision(
-        allowed=True,
-        context=product_auth.ProductAuthorizationContext(
-            uid='test-uid', consumer='mcp', surface='mcp_sse', app_id='test-app', key_id='test-key'
-        ),
-        db_client=None,
-        read_decision=rollout.MemoryReadDecision.USE_LEGACY_SAFE,
-        reason='lock_bypass_fixture_legacy_safe',
-        observability={'enabled': True},
-        status_code=200,
-    )
-
-    for module in [chat_adapter, default_mcp]:
-        for attr in [
-            'list_default_chat_memories_decision_text',
-            'search_memory_default_chat_memories_vector_decision_text',
-            'list_default_mcp_memories',
-            'search_default_mcp_memories_vector',
-        ]:
-            if hasattr(module, attr):
-                value = legacy_text if attr.endswith('_text') else legacy_memories
-                monkeypatch.setattr(module, attr, MagicMock(return_value=value), raising=False)
-
-    monkeypatch.setattr(default_mcp, 'read_default_read_rollout', MagicMock(side_effect=_legacy_rollout), raising=False)
-    monkeypatch.setattr(
-        product_auth,
-        'authorize_memory_external_default_memory_read',
-        MagicMock(return_value=allowed_auth),
-        raising=False,
-    )
-    monkeypatch.setattr(rollout, 'read_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False)
-    monkeypatch.setattr(
-        rollout,
-        'assert_legacy_memory_write_allowed_for_default_read_decision',
-        MagicMock(return_value=allowed_write),
-        raising=False,
-    )
-
-    # Patch already-imported callsites that used `from module import ...`.
-    for module_name in [
-        'utils.retrieval.tools.memory_tools',
-        'routers.mcp',
-        'routers.mcp_sse',
-    ]:
-        module = sys.modules.get(module_name)
-        if module is None:
-            continue
-        for attr in [
-            'list_default_chat_memories_decision_text',
-            'search_memory_default_chat_memories_vector_decision_text',
-        ]:
-            if hasattr(module, attr):
-                monkeypatch.setattr(module, attr, MagicMock(return_value=legacy_text), raising=False)
-        for attr in ['list_default_mcp_memories', 'search_default_mcp_memories_vector']:
-            if hasattr(module, attr):
-                monkeypatch.setattr(module, attr, MagicMock(return_value=legacy_memories), raising=False)
-        if hasattr(module, 'read_default_read_rollout'):
-            monkeypatch.setattr(
-                module, 'read_default_read_rollout', MagicMock(side_effect=_legacy_rollout), raising=False
-            )
-        if hasattr(module, 'guard_legacy_memory_write'):
-            monkeypatch.setattr(
-                module, 'guard_legacy_memory_write', MagicMock(return_value=allowed_write), raising=False
-            )
-        if hasattr(module, 'authorize_memory_external_default_memory_read'):
-            monkeypatch.setattr(
-                module,
-                'authorize_memory_external_default_memory_read',
-                MagicMock(return_value=allowed_auth),
-                raising=False,
-            )
-        if hasattr(module, 'read_write_convergence_gate'):
-            monkeypatch.setattr(
-                module, 'read_write_convergence_gate', MagicMock(return_value=ready_gate), raising=False
-            )
-        if hasattr(module, 'assert_legacy_memory_write_allowed_for_default_read_decision'):
-            monkeypatch.setattr(
-                module,
-                'assert_legacy_memory_write_allowed_for_default_read_decision',
-                MagicMock(return_value=allowed_write),
-                raising=False,
-            )
-
-
-@pytest.fixture(autouse=True)
-def _legacy_safe_memory_for_lock_bypass_tests(monkeypatch):
-    _install_legacy_safe_memory_defaults(monkeypatch)
+# Override specific attributes that need concrete values
+sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
+sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
+sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
+sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
 
 class TestLightweightStubHelpers:
@@ -688,15 +356,15 @@ class TestFolderConversationRedaction:
 
         result = get_folder_conversations(folder_id='f1', limit=100, offset=0, include_discarded=False, uid='test-uid')
 
-        locked = result[0]
-        assert locked.structured.action_items == []
-        assert locked.structured.events == []
-        assert locked.apps_results == []
-        assert locked.transcript_segments == []
+        locked = result[0].model_dump()
+        assert locked['structured']['action_items'] == []
+        assert locked['structured']['events'] == []
+        assert locked['apps_results'] == []
+        assert locked['transcript_segments'] == []
 
-        unlocked = result[1]
-        assert len(unlocked.structured.action_items) == 1
-        assert len(unlocked.transcript_segments) == 1
+        unlocked = result[1].model_dump()
+        assert len(unlocked['structured']['action_items']) == 1
+        assert len(unlocked['transcript_segments']) == 1
 
     def test_folder_endpoint_preserves_title_for_locked(self):
         """Locked conversations should still show title/overview."""
@@ -708,7 +376,7 @@ class TestFolderConversationRedaction:
         from routers.folders import get_folder_conversations
 
         result = get_folder_conversations(folder_id='f1', limit=100, offset=0, include_discarded=False, uid='test-uid')
-        assert result[0].structured.title == 'Test Conversation'
+        assert result[0].model_dump()['structured']['title'] == 'Test Conversation'
 
 
 # =============================================================================
@@ -964,7 +632,7 @@ class TestMemoryToolFiltering:
         # Only unlocked memory content should appear; locked must be filtered
         assert 'UNLOCKED_VISIBLE_CONTENT' in result
         assert 'LOCKED_SECRET_CONTENT' not in result
-        assert '1 total' in result  # Only 1 memory should appear
+        assert '1 shown' in result  # Only 1 memory should appear
 
     def test_search_memories_filters_locked(self):
         """search_memories_tool must exclude locked memories from results."""
@@ -981,84 +649,6 @@ class TestMemoryToolFiltering:
         result = search_memories_tool.invoke({'query': 'test'}, config=config)
         # All memories locked, so result should indicate nothing found
         assert 'no' in result.lower() or 'mem-1' not in result
-
-    def test_get_memories_tool_routes_canonical_user_to_memory_service(self):
-        """Canonical cohort must read via MemoryService, not legacy get_memories."""
-        from datetime import datetime, timezone
-
-        from models.memories import MemoryDB, MemoryCategory
-        from utils.memory.memory_system import MemorySystem
-        from utils.retrieval.tools import memory_tools
-
-        canonical_memory = MemoryDB(
-            id='mem-canonical',
-            uid='uid-canonical',
-            content='CANONICAL_FACT',
-            category=MemoryCategory.interesting,
-            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-        )
-        service = MagicMock()
-        service.read.return_value = [canonical_memory]
-        config = {'configurable': {'user_id': 'uid-canonical'}}
-
-        with patch.object(memory_tools, 'pin_memory_system', return_value=MemorySystem.CANONICAL):
-            with patch.object(memory_tools, 'MemoryService', return_value=service):
-                with patch.object(memory_tools.memory_db, 'get_memories') as legacy_get:
-                    result = memory_tools.get_memories_tool.invoke({'limit': 10, 'offset': 0}, config=config)
-
-        service.read.assert_called_once_with('uid-canonical', limit=10, offset=0)
-        legacy_get.assert_not_called()
-        assert 'CANONICAL_FACT' in result
-
-    def test_get_memories_tool_routes_legacy_user_to_legacy_db(self):
-        """Non-canonical cohort must keep legacy get_memories path."""
-        from utils.memory.memory_system import MemorySystem
-        from utils.retrieval.tools import memory_tools
-
-        unlocked_mem = _make_memory(locked=False, memory_id='mem-legacy')
-        unlocked_mem['content'] = 'LEGACY_FACT'
-        service = MagicMock()
-        config = {'configurable': {'user_id': 'uid-legacy'}}
-
-        with patch.object(memory_tools, 'pin_memory_system', return_value=MemorySystem.LEGACY):
-            with patch.object(memory_tools, 'MemoryService', return_value=service):
-                with patch.object(memory_tools.memory_db, 'get_memories', return_value=[unlocked_mem]) as legacy_get:
-                    result = memory_tools.get_memories_tool.invoke({'limit': 10, 'offset': 0}, config=config)
-
-        legacy_get.assert_called_once()
-        service.read.assert_not_called()
-        assert 'LEGACY_FACT' in result
-
-    def test_search_memories_tool_routes_canonical_user_to_memory_service(self):
-        """Canonical cohort must search via MemoryService, not legacy vector_db."""
-        from datetime import datetime, timezone
-        from types import SimpleNamespace
-
-        from models.memories import MemoryDB, MemoryCategory
-        from utils.memory.memory_system import MemorySystem
-        from utils.retrieval.tools import memory_tools
-
-        canonical_memory = MemoryDB(
-            id='mem-canonical',
-            uid='uid-canonical',
-            content='CANONICAL_SEARCH_HIT',
-            category=MemoryCategory.interesting,
-            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-        )
-        service = MagicMock()
-        service.search.return_value = [SimpleNamespace(memory=canonical_memory, score=0.91)]
-        config = {'configurable': {'user_id': 'uid-canonical'}}
-
-        with patch.object(memory_tools, 'pin_memory_system', return_value=MemorySystem.CANONICAL):
-            with patch.object(memory_tools, 'MemoryService', return_value=service):
-                with patch.object(memory_tools.vector_db, 'find_similar_memories') as legacy_search:
-                    result = memory_tools.search_memories_tool.invoke({'query': 'coffee'}, config=config)
-
-        service.search.assert_called_once_with('uid-canonical', 'coffee', limit=5)
-        legacy_search.assert_not_called()
-        assert 'CANONICAL_SEARCH_HIT' in result
 
 
 # =============================================================================
@@ -1245,12 +835,9 @@ class TestMcpSseLockRedaction:
             ]
         )
 
-        from routers.mcp_sse import ProductAuthorizationContext, execute_tool
+        from routers.mcp_sse import execute_tool
 
-        auth_context = ProductAuthorizationContext(
-            uid='test-uid', consumer='mcp', surface='mcp_sse', app_id='test-app', key_id='test-key'
-        )
-        result = execute_tool('test-uid', 'search_memories', {'query': 'memory', 'limit': 2}, auth_context=auth_context)
+        result = execute_tool('test-uid', 'search_memories', {'query': 'memory', 'limit': 2})
 
         assert [memory['id'] for memory in result['memories']] == ['visible-1', 'visible-2']
         assert 'LOCKED_SECRET_MEMORY' not in str(result)
@@ -1301,7 +888,6 @@ class TestUsersLockEnforcement:
         import database.conversations as conversations_db
         import database.notifications as notification_db
         import database.daily_summaries as daily_summaries_db
-        import routers.users as users_router
 
         data = [
             _make_conversation(locked=True),
@@ -1313,10 +899,12 @@ class TestUsersLockEnforcement:
         notification_db.get_all_tokens = MagicMock(return_value=['token1'])
         daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
 
+        from routers.users import test_daily_summary
+
         mock_gen = MagicMock(return_value={'headline': 'Test', 'overview': 'Overview'})
-        with patch.object(users_router, 'generate_comprehensive_daily_summary', mock_gen):
-            with patch.object(users_router, 'send_notification'):
-                users_router.test_daily_summary(uid='test-uid')
+        with patch('routers.users.generate_comprehensive_daily_summary', mock_gen):
+            with patch('routers.users.send_notification'):
+                result = test_daily_summary(uid='test-uid')
 
         # Verify only unlocked conversations were passed to summary generation
         call_args = mock_gen.call_args
@@ -1326,8 +914,15 @@ class TestUsersLockEnforcement:
 
     def test_gdpr_export_includes_locked(self):
         """H6: GDPR export must include locked conversations (Art. 15)."""
+        import database.conversations as conversations_db
+        import database.memories as memories_db
+        import database.chat as chat_db
+
         locked_conv = _make_conversation(locked=True)
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
+        conversations_db.iter_all_conversations = MagicMock(return_value=iter([locked_conv, unlocked_conv]))
+        memories_db.get_non_filtered_memories = MagicMock(return_value=[])
+        chat_db.iter_all_messages = MagicMock(return_value=iter([]))
 
         # The export generator lives in services.users.data_export, which binds
         # these helpers at module level. Patch the service-level symbols so the
@@ -1336,34 +931,22 @@ class TestUsersLockEnforcement:
         with patch('services.users.data_export.get_user_profile', return_value={'name': 'Test'}):
             with patch('services.users.data_export.get_people', return_value=[]):
                 with patch('services.users.data_export.get_standalone_action_items', return_value=[]):
-                    with patch(
-                        'services.users.data_export.conversations_db.iter_all_conversations',
-                        return_value=iter([locked_conv, unlocked_conv]),
-                    ):
-                        with patch(
-                            'services.users.data_export.memories_db.get_non_filtered_memories',
-                            return_value=[],
-                        ):
-                            with patch(
-                                'services.users.data_export.chat_db.iter_all_messages',
-                                return_value=iter([]),
-                            ):
-                                from routers.users import export_all_user_data
+                    from routers.users import export_all_user_data
 
-                                response = export_all_user_data(uid='test-uid')
+                    response = export_all_user_data(uid='test-uid')
 
-                                # Consume body inside patches — the generator is lazy.
-                                # StreamingResponse wraps sync generators as async iterators,
-                                # so iterate the underlying generator directly.
-                                import asyncio
+                    # Consume body inside patches — the generator is lazy.
+                    # StreamingResponse wraps sync generators as async iterators,
+                    # so iterate the underlying generator directly.
+                    import asyncio
 
-                                async def _consume():
-                                    parts = []
-                                    async for chunk in response.body_iterator:
-                                        parts.append(chunk)
-                                    return ''.join(parts)
+                    async def _consume():
+                        parts = []
+                        async for chunk in response.body_iterator:
+                            parts.append(chunk)
+                        return ''.join(parts)
 
-                                body = asyncio.run(_consume())
+                    body = asyncio.run(_consume())
 
         import json
 
@@ -1386,24 +969,25 @@ class TestMcpRestLockRedaction:
         """GET /v1/mcp/conversations calls real router and redacts locked fields."""
         import database.conversations as conversations_db
 
-        conversations_db.get_conversations = MagicMock(
-            return_value=[_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
-        )
+        conversations = [_make_conversation(locked=True), _make_conversation(locked=False, conversation_id='conv-2')]
+        conversations_db.get_conversations = MagicMock(return_value=conversations)
 
         from routers.mcp import get_conversations
-        from utils.conversations.render import redact_conversation_for_list
 
         result = get_conversations(uid='test-uid')
 
-        # Endpoint returns SimpleConversation (title/overview/category only).
-        assert len(result) == 2
-        assert result[0].structured.title == 'Test Conversation'
-        assert result[1].structured.title == 'Test Conversation'
-        # redact_conversations_for_list runs on dicts before validate — verify locked stripping.
-        redacted_locked = redact_conversation_for_list(_make_conversation(locked=True))
-        assert redacted_locked['structured']['action_items'] == []
-        assert redacted_locked['structured']['events'] == []
-        assert redacted_locked['transcript_segments'] == []
+        assert conversations[0]['structured']['action_items'] == []
+        assert conversations[0]['structured']['events'] == []
+        assert conversations[0]['transcript_segments'] == []
+        assert len(conversations[1]['structured']['action_items']) == 1
+        assert len(conversations[1]['transcript_segments']) == 1
+        locked_response = result[0].model_dump()
+        unlocked_response = result[1].model_dump()
+        assert locked_response['structured']['title'] == 'Test Conversation'
+        assert unlocked_response['structured']['title'] == 'Test Conversation'
+        assert 'action_items' not in locked_response['structured']
+        assert 'events' not in locked_response['structured']
+        assert 'transcript_segments' not in locked_response
 
 
 # =============================================================================
@@ -1418,23 +1002,23 @@ class TestScheduledDailySummaryLockFilter:
         """_send_summary_notification filters locked conversations before generating summary."""
         import database.conversations as conversations_db
         import database.daily_summaries as daily_summaries_db
-        import utils.other.notifications as notifications_mod
 
         locked_conv = _make_conversation(locked=True)
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
         conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
 
-        with patch.object(notifications_mod, 'is_trial_paywalled', return_value=False):
-            with patch.object(notifications_mod, 'try_acquire_daily_summary_lock', return_value=True):
-                with patch.object(
-                    notifications_mod,
-                    'generate_comprehensive_daily_summary',
+        with patch('utils.other.notifications.is_trial_paywalled', return_value=False):
+            with patch('utils.other.notifications.try_acquire_daily_summary_lock', return_value=True):
+                with patch(
+                    'utils.other.notifications.generate_comprehensive_daily_summary',
                     return_value={'headline': 'Test', 'day_emoji': '📅', 'overview': 'ok'},
                 ) as mock_gen:
                     daily_summaries_db.create_daily_summary = MagicMock(return_value='summary-1')
                     daily_summaries_db.get_daily_summary_by_date = MagicMock(return_value=None)
-                    with patch.object(notifications_mod, 'send_notification'):
-                        notifications_mod._send_summary_notification(('test-uid', 'token', 'UTC'))
+                    with patch('utils.other.notifications.send_notification'):
+                        from utils.other.notifications import _send_summary_notification
+
+                        _send_summary_notification(('test-uid', 'token', 'UTC'))
 
         # generate_comprehensive_daily_summary must be called only with unlocked conversations
         mock_gen.assert_called_once()
@@ -1529,21 +1113,15 @@ class TestNotificationLlmLockFilter:
     @pytest.mark.asyncio
     async def test_get_relevant_memories_filters_locked(self):
         """get_relevant_memories must exclude locked memories from LLM context."""
-        import utils.llm.notifications as notifications_mod
+        import database.memories as memories_db
 
         locked_mem = {'content': 'LOCKED_SECRET', 'is_locked': True}
         unlocked_mem = {'content': 'VISIBLE_CONTENT', 'is_locked': False}
+        memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
 
-        async def _fake_run_blocking(_executor, fn, *args, **kwargs):
-            return fn(*args, **kwargs)
+        from utils.llm.notifications import get_relevant_memories
 
-        with patch.object(
-            notifications_mod,
-            'get_memories',
-            MagicMock(return_value=[locked_mem, unlocked_mem]),
-        ):
-            with patch.object(notifications_mod, 'run_blocking', _fake_run_blocking):
-                result = await notifications_mod.get_relevant_memories('test-uid')
+        result = await get_relevant_memories('test-uid')
 
         assert len(result) == 1
         assert result[0]['content'] == 'VISIBLE_CONTENT'
@@ -1562,7 +1140,6 @@ class TestMentorProactiveLockFilter:
         import database.conversations as conversations_db
         import database.mem_db as mem_db
         import database.redis_db as redis_db
-        import utils.app_integrations as app_integrations_mod
 
         locked_conv = _make_conversation(locked=True)
         locked_conv['structured']['overview'] = 'SECRET_LOCKED_DATA'
@@ -1580,19 +1157,16 @@ class TestMentorProactiveLockFilter:
         gate_result.context_summary = 'test'
         gate_result.reasoning = 'test'
 
-        with patch.object(app_integrations_mod, 'get_mentor_notification_frequency', return_value=5):
-            with patch.object(app_integrations_mod, 'get_daily_notification_count', return_value=0):
-                with patch.object(app_integrations_mod, 'get_prompt_memories', return_value=('Test', '')):
-                    with patch.object(app_integrations_mod, 'get_user_goals', return_value=[]):
-                        with patch.object(app_integrations_mod, 'get_app_messages', return_value=[]):
-                            with patch.object(app_integrations_mod, 'track_usage'):
-                                with patch.object(app_integrations_mod, 'evaluate_relevance', return_value=gate_result):
-                                    with patch.object(
-                                        app_integrations_mod, 'generate_embedding', return_value=[0.1] * 1536
-                                    ):
-                                        with patch.object(
-                                            app_integrations_mod,
-                                            'query_vectors_by_metadata',
+        with patch('utils.app_integrations.get_mentor_notification_frequency', return_value=5):
+            with patch('utils.app_integrations.get_daily_notification_count', return_value=0):
+                with patch('utils.app_integrations.get_prompt_memories', return_value=('Test', '')):
+                    with patch('utils.app_integrations.get_user_goals', return_value=[]):
+                        with patch('utils.app_integrations.get_app_messages', return_value=[]):
+                            with patch('utils.app_integrations.track_usage'):
+                                with patch('utils.app_integrations.evaluate_relevance', return_value=gate_result):
+                                    with patch('utils.app_integrations.generate_embedding', return_value=[0.1] * 1536):
+                                        with patch(
+                                            'utils.app_integrations.query_vectors_by_metadata',
                                             return_value=['conv-1', 'conv-2'],
                                         ):
                                             conversations_db.get_conversations_by_id = MagicMock(
@@ -1600,19 +1174,19 @@ class TestMentorProactiveLockFilter:
                                             )
                                             conversations_db.get_conversations = MagicMock(return_value=[])
 
-                                            with patch.object(
-                                                app_integrations_mod, 'conversations_to_string'
-                                            ) as mock_render:
+                                            with patch('utils.app_integrations.conversations_to_string') as mock_render:
                                                 mock_render.return_value = ''
 
                                                 draft = MagicMock()
                                                 draft.notification_text = ''
-                                                with patch.object(
-                                                    app_integrations_mod,
-                                                    'generate_notification',
-                                                    return_value=draft,
+                                                with patch(
+                                                    'utils.app_integrations.generate_notification', return_value=draft
                                                 ):
-                                                    app_integrations_mod._process_mentor_proactive_notification(
+                                                    from utils.app_integrations import (
+                                                        _process_mentor_proactive_notification,
+                                                    )
+
+                                                    _process_mentor_proactive_notification(
                                                         uid='test-uid',
                                                         conversation_messages=[{'text': 'hello', 'sender': 'human'}],
                                                     )
@@ -1705,8 +1279,7 @@ class TestPromptDataLockFilter:
 
     def test_get_prompt_data_filters_locked_memories(self):
         """get_prompt_data must not include locked memories in prompt context."""
-        import utils.llms.memory as memory_mod
-        from utils.memory.memory_system import MemorySystem
+        import database.memories as memories_db
 
         locked_mem = {
             'id': 'mem-1',
@@ -1722,76 +1295,17 @@ class TestPromptDataLockFilter:
             'manually_added': False,
             'category': 'interesting',
         }
+        memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
 
-        with patch.object(memory_mod, 'get_user_name', return_value='Test'):
-            with patch.object(memory_mod, 'resolve_memory_system', return_value=MemorySystem.LEGACY):
-                with patch.object(
-                    memory_mod.memories_db,
-                    'get_memories',
-                    MagicMock(return_value=[locked_mem, unlocked_mem]),
-                ):
-                    _, user_made, generated = memory_mod.get_prompt_data('test-uid')
+        with patch('utils.llms.memory.get_user_name', return_value='Test'):
+            from utils.llms.memory import get_prompt_data
+
+            _, user_made, generated = get_prompt_data('test-uid')
 
         # Only unlocked memory should appear
         all_mems = user_made + generated
         assert len(all_mems) == 1
         assert all_mems[0].content == 'VISIBLE_CONTENT'
-
-    def test_get_prompt_data_routes_canonical_user_to_memory_service(self):
-        """Canonical cohort must load prompt facts via MemoryService.read."""
-        from datetime import datetime, timezone
-
-        from models.memories import MemoryDB, MemoryCategory
-        from utils.memory.memory_system import MemorySystem
-        import utils.llms.memory as memory_mod
-
-        canonical_memory = MemoryDB(
-            id='mem-canonical',
-            uid='uid-canonical',
-            content='CANONICAL_PROMPT_FACT',
-            category=MemoryCategory.interesting,
-            manually_added=False,
-            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
-        )
-        service = MagicMock()
-        service.read.return_value = [canonical_memory]
-
-        with patch.object(memory_mod, 'resolve_memory_system', return_value=MemorySystem.CANONICAL):
-            with patch.object(memory_mod, 'MemoryService', return_value=service):
-                with patch.object(memory_mod.memories_db, 'get_memories') as legacy_get:
-                    with patch.object(memory_mod, 'get_user_name', return_value='Test'):
-                        _, user_made, generated = memory_mod.get_prompt_data('uid-canonical')
-
-        service.read.assert_called_once_with('uid-canonical', limit=1000)
-        legacy_get.assert_not_called()
-        assert len(user_made) + len(generated) == 1
-        assert (user_made + generated)[0].content == 'CANONICAL_PROMPT_FACT'
-
-    def test_get_prompt_data_routes_legacy_user_to_legacy_db(self):
-        """Non-canonical cohort must keep legacy get_memories for prompt facts."""
-        import utils.llms.memory as memory_mod
-        from utils.memory.memory_system import MemorySystem
-
-        unlocked_mem = {
-            'id': 'mem-legacy',
-            'content': 'LEGACY_PROMPT_FACT',
-            'is_locked': False,
-            'manually_added': False,
-            'category': 'interesting',
-        }
-        service = MagicMock()
-
-        with patch.object(memory_mod, 'resolve_memory_system', return_value=MemorySystem.LEGACY):
-            with patch.object(memory_mod, 'MemoryService', return_value=service):
-                with patch.object(memory_mod.memories_db, 'get_memories', return_value=[unlocked_mem]) as legacy_get:
-                    with patch.object(memory_mod, 'get_user_name', return_value='Test'):
-                        _, user_made, generated = memory_mod.get_prompt_data('uid-legacy')
-
-        legacy_get.assert_called_once_with('uid-legacy', limit=1000)
-        service.read.assert_not_called()
-        assert len(user_made) + len(generated) == 1
-        assert (user_made + generated)[0].content == 'LEGACY_PROMPT_FACT'
 
 
 # =============================================================================
@@ -1831,13 +1345,23 @@ class TestPersonaGenerationLockFilter:
 
     @pytest.mark.asyncio
     async def test_generate_persona_prompt_filters_locked(self):
-        """generate_persona_prompt lock filter must exclude locked memories/conversations."""
-        _drop_stub_only_module('utils.apps')
-        for dep in ('utils.llm.persona', 'database.cache', 'database.llm_usage', 'utils.stripe', 'utils.social'):
-            if dep not in sys.modules or getattr(sys.modules.get(dep), '__file__', None) is None:
+        """generate_persona_prompt lock filter must exclude locked memories/conversations.
+
+        utils.apps is fully stubbed due to deep import chains, so we reload it
+        inside the test to get the real function with all deps pre-stubbed.
+        """
+        import importlib
+
+        # Temporarily remove the stub so we can load the real module
+        old_mod = sys.modules.pop('utils.apps', None)
+        # Add missing transitive stubs
+        for dep in ['database.cache', 'database.llm_usage', 'utils.stripe', 'utils.social', 'utils.llm.persona']:
+            if dep not in sys.modules:
                 sys.modules[dep] = _AutoMockModule(dep)
 
-        import utils.apps as apps_mod
+        import database.memories as memories_db
+        import database.conversations as conversations_db
+        import database.auth as auth_db
 
         locked_mem = _make_memory(locked=True)
         locked_mem['content'] = 'LOCKED_SECRET'
@@ -1847,30 +1371,33 @@ class TestPersonaGenerationLockFilter:
         locked_conv = _make_conversation(locked=True)
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
 
+        memories_db.get_memories = MagicMock(return_value=[locked_mem, unlocked_mem])
+        conversations_db.get_conversations = MagicMock(return_value=[locked_conv, unlocked_conv])
+        auth_db.get_user_name = MagicMock(return_value='TestUser')
+
         persona = {'connected_accounts': [], 'twitter': None}
 
-        async def _fake_run_blocking(_executor, fn, *args, **kwargs):
-            return fn(*args, **kwargs)
+        try:
+            import utils.apps as real_apps
 
-        mock_track = MagicMock()
-        mock_track.__enter__ = MagicMock(return_value=None)
-        mock_track.__exit__ = MagicMock(return_value=False)
+            mock_track = MagicMock()
+            mock_track.__enter__ = MagicMock(return_value=None)
+            mock_track.__exit__ = MagicMock(return_value=False)
+            real_apps.track_usage = MagicMock(return_value=mock_track)
+            real_apps.condense_conversations = MagicMock(return_value='condensed convos')
+            real_apps.condense_memories = MagicMock(return_value='condensed mems')
 
-        with patch.object(apps_mod, 'run_blocking', _fake_run_blocking):
-            with patch.object(apps_mod, 'get_memories', MagicMock(return_value=[locked_mem, unlocked_mem])):
-                with patch.object(apps_mod, 'get_conversations', MagicMock(return_value=[locked_conv, unlocked_conv])):
-                    with patch.object(apps_mod, 'get_user_name', MagicMock(return_value='TestUser')):
-                        with patch.object(apps_mod, 'track_usage', return_value=mock_track):
-                            with patch.object(apps_mod, 'condense_conversations', return_value='condensed convos'):
-                                with patch.object(
-                                    apps_mod, 'condense_memories', return_value='condensed mems'
-                                ) as mock_condense:
-                                    await apps_mod.generate_persona_prompt('test-uid', persona)
+            result = await real_apps.generate_persona_prompt('test-uid', persona)
 
-        call_args = mock_condense.call_args[0]
-        memory_contents = call_args[0]
-        assert 'LOCKED_SECRET' not in memory_contents
-        assert 'visible memory' in memory_contents
+            # condense_memories should only receive unlocked memory content
+            call_args = real_apps.condense_memories.call_args[0]
+            memory_contents = call_args[0]
+            assert 'LOCKED_SECRET' not in memory_contents
+            assert 'visible memory' in memory_contents
+        finally:
+            # Restore the stub
+            if old_mod is not None:
+                sys.modules['utils.apps'] = old_mod
 
 
 # =============================================================================
@@ -1987,7 +1514,6 @@ class TestSuggestGoalLockFilter:
     def test_suggest_goal_filters_locked_memories(self):
         """suggest_goal must not include locked memories in AI prompt context."""
         import database.memories as memories_db
-        import utils.llm.goals as goals_mod
 
         locked_mem = _make_memory(locked=True)
         locked_mem['content'] = 'LOCKED_SECRET'
@@ -2003,13 +1529,15 @@ class TestSuggestGoalLockFilter:
         mock_track.__enter__ = MagicMock(return_value=None)
         mock_track.__exit__ = MagicMock(return_value=False)
 
-        with patch.object(goals_mod, 'track_usage', return_value=mock_track):
-            with patch.object(goals_mod, 'get_llm') as mock_get_llm:
+        with patch('utils.llm.goals.track_usage', return_value=mock_track):
+            with patch('utils.llm.goals.get_llm') as mock_get_llm:
                 mock_llm = MagicMock()
                 mock_llm.invoke.return_value = mock_llm_response
                 mock_get_llm.return_value = mock_llm
 
-                goals_mod.suggest_goal('test-uid')
+                from utils.llm.goals import suggest_goal
+
+                result = suggest_goal('test-uid')
 
         # Verify the prompt sent to the LLM did not contain locked content
         call_args = mock_llm.invoke.call_args[0][0]

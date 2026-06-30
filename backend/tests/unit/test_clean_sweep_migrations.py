@@ -31,6 +31,7 @@ Covers round 3:
 
 import inspect
 import os
+import re
 import pytest
 
 BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -310,15 +311,19 @@ class TestWrappedExecutorMigration:
 
 
 class TestChatUtilsExecutorMigration:
-    """Verify utils/chat.py delegates temporal file cleanup to storage utilities."""
+    """Verify utils/chat.py uses storage_executor for file cleanup."""
 
     def test_no_threading_thread(self):
         src = _read_source('utils/chat.py')
         assert 'threading.Thread' not in src
 
-    def test_schedules_temporal_file_deletion(self):
+    def test_uses_storage_executor(self):
         src = _read_source('utils/chat.py')
-        assert 'schedule_syncing_temporal_file_deletion(' in src
+        storage_src = _read_source('utils/other/storage.py')
+        assert 'schedule_syncing_temporal_file_deletion' in src
+        assert 'time.sleep(480)' not in src
+        assert 'DeferredDeleter' in storage_src
+        assert 'def schedule_syncing_temporal_file_deletion' in storage_src
 
 
 class TestPostprocessExecutorMigration:
@@ -415,9 +420,8 @@ class TestNoRequestsInProductionCode:
                 assert 'import requests' not in src, f'routers/{fname} still imports requests'
 
     def test_no_import_requests_in_utils(self):
-        # vad.py retains requests for sync onnx-compatible path; cloud_tasks.py uses
-        # requests for google-auth OIDC verification and task dispatch.
-        excluded = {'utils/stt/vad.py', 'utils/cloud_tasks.py'}
+        # vad.py retains requests for sync onnx-compatible path (not yet migrated)
+        excluded = {'utils/stt/vad.py'}
         for root, dirs, files in os.walk(os.path.join(BACKEND_DIR, 'utils')):
             for fname in files:
                 if fname.endswith('.py'):
@@ -425,7 +429,9 @@ class TestNoRequestsInProductionCode:
                     if rel in excluded:
                         continue
                     src = _read_source(rel)
-                    assert 'import requests' not in src, f'{rel} still imports requests'
+                    bare_import = re.search(r'^\s*import requests\b', src, re.MULTILINE)
+                    from_import = re.search(r'^\s*from requests\b', src, re.MULTILINE)
+                    assert bare_import is None and from_import is None, f'{rel} still imports requests'
 
     def test_no_threading_thread_start_in_routers(self):
         # users.py retains threading.Thread for background wipe (long-running, not executor-suitable)

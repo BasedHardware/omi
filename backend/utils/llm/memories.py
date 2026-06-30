@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from database import users as users_db
 from models.memories import Memory, MemoryCategory
@@ -24,13 +24,44 @@ def _get_language_instruction(uid: str, language: Optional[str] = None) -> str:
     return 'Write all extracted memories/learnings in English.'
 
 
+class ExtractedMemory(BaseModel):
+    content: str = Field(description="The content of the memory")
+    category: MemoryCategory = Field(description="The category of the memory", default=MemoryCategory.interesting)
+    tags: List[str] = Field(description="The tags of the memory and learning", default=[])
+    headline: Optional[str] = Field(description="Short headline for notification preview (max 5 words)", default=None)
+
+    @field_validator('category', mode='before')
+    @classmethod
+    def set_category_default_on_error(cls, v: object) -> MemoryCategory | str:
+        if isinstance(v, MemoryCategory):
+            return v
+        if isinstance(v, str):
+            if v in {'interesting', 'system', 'manual', 'workflow'}:
+                return v
+            if v in LEGACY_TO_NEW_CATEGORY:
+                return LEGACY_TO_NEW_CATEGORY[v]
+        return MemoryCategory.interesting
+
+    def to_memory(self) -> Memory:
+        return Memory(
+            content=self.content,
+            category=self.category,
+            visibility='private',
+            tags=self.tags,
+            headline=self.headline,
+        )
+
+
 class Memories(BaseModel):
-    facts: List[Memory] = Field(
+    facts: List[ExtractedMemory] = Field(
         min_items=0,
         max_items=2,
         description="List of **new** memories. Maximum 2 per conversation.",
         default=[],
     )
+
+    def to_memories(self) -> List[Memory]:
+        return [fact.to_memory() for fact in self.facts]
 
 
 class HighRecallMemories(BaseModel):
@@ -42,10 +73,13 @@ class HighRecallMemories(BaseModel):
 
 
 class MemoriesByTexts(BaseModel):
-    facts: List[Memory] = Field(
+    facts: List[ExtractedMemory] = Field(
         description="List of **new** facts. If any",
         default=[],
     )
+
+    def to_memories(self) -> List[Memory]:
+        return [fact.to_memory() for fact in self.facts]
 
 
 # Map for converting legacy categories to new format
@@ -102,11 +136,12 @@ def new_memories_extractor(
         )
 
         # Ensure all new memories use the new category format
-        for memory in response.facts:
+        memories = response.to_memories()
+        for memory in memories:
             if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
                 memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
 
-        return response.facts
+        return memories
     except Exception as e:
         logger.error(f'Error extracting new facts: {e}')
         return []
@@ -132,7 +167,7 @@ def extract_memories_from_text(
     try:
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
         chain = extract_memories_text_content_prompt | get_llm('memories') | parser
-        response: Memories = chain.invoke(
+        response: MemoriesByTexts = chain.invoke(
             {
                 'user_name': user_name,
                 'text_content': text,
@@ -144,11 +179,12 @@ def extract_memories_from_text(
         )
 
         # Ensure all new memories use the new category format
-        for memory in response.facts:
+        memories = response.to_memories()
+        for memory in memories:
             if isinstance(memory.category, str) and memory.category in LEGACY_TO_NEW_CATEGORY:
                 memory.category = LEGACY_TO_NEW_CATEGORY[memory.category]
 
-        return response.facts
+        return memories
     except Exception as e:
         logger.error(f'Error extracting facts from {text_source}: {e}')
         return []

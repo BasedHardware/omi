@@ -72,6 +72,10 @@ pub struct AppState {
     pub chat_rate_limiter: routes::rate_limit::SharedRateLimiter,
     /// Vertex AI auth provider (present when USE_VERTEX_AI=true)
     pub vertex_auth: Option<vertex::VertexAuth>,
+    /// Gemini proxy client for full-response calls; owns the upstream deadline.
+    pub gemini_client: reqwest::Client,
+    /// Gemini proxy client for streaming calls; only bounds connection setup.
+    pub gemini_stream_client: reqwest::Client,
 }
 
 #[tokio::main]
@@ -312,6 +316,8 @@ async fn main() {
         gemini_rate_limiter,
         chat_rate_limiter,
         vertex_auth,
+        gemini_client: routes::proxy::gemini_client(),
+        gemini_stream_client: routes::proxy::gemini_stream_client(),
     };
 
     // Build CORS layer

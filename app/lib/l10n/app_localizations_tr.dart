@@ -9479,6 +9479,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Yaklaşık 1 dakika';
+
   @override
   String get jumpToLatestMessage => 'En son mesaja git';
 

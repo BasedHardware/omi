@@ -9523,6 +9523,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Aproximadament 1 minut';
+
   @override
   String get jumpToLatestMessage => 'Vés a l\'últim missatge';
 

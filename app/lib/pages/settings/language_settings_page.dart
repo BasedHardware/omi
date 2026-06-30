@@ -78,11 +78,11 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
   ) {
     final languageName = homeProvider.userPrimaryLanguage.isNotEmpty
         ? homeProvider.availableLanguages.entries
-            .firstWhere(
-              (element) => element.value == homeProvider.userPrimaryLanguage,
-              orElse: () => MapEntry(context.l10n.notSet, ''),
-            )
-            .key
+              .firstWhere(
+                (element) => element.value == homeProvider.userPrimaryLanguage,
+                orElse: () => MapEntry(context.l10n.notSet, ''),
+              )
+              .key
         : context.l10n.notSet;
 
     final isUpdatingTranslation = userProvider.isUpdatingSingleLanguageMode;
@@ -181,7 +181,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
                     }
                   },
-                  activeColor: const Color(0xFF22C55E),
+                  activeThumbColor: const Color(0xFF22C55E),
                 ),
             ],
           ),

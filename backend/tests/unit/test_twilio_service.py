@@ -4,10 +4,7 @@ import sys
 import types
 from unittest.mock import patch, MagicMock
 
-try:
-    from tests.unit.twilio_stub import install_phone_calls_stub, install_twilio_stub, prepare_twilio_service_import
-except ModuleNotFoundError:
-    from twilio_stub import install_phone_calls_stub, install_twilio_stub, prepare_twilio_service_import
+from tests.unit.twilio_stub import install_phone_calls_stub, install_twilio_stub, prepare_twilio_service_import
 
 os.environ.setdefault('TWILIO_ACCOUNT_SID', 'ACtest123')
 os.environ.setdefault('TWILIO_AUTH_TOKEN', 'test_auth_token')
@@ -115,20 +112,24 @@ def test_install_phone_calls_stub_completes_existing_module():
 def test_twilio_stub_dial_appends_multiple_numbers():
     from twilio.twiml.voice_response import Dial, VoiceResponse
 
+    def without_xml_declaration(value):
+        return str(value).replace('<?xml version="1.0" encoding="UTF-8"?>', '')
+
     dial = Dial(caller_id='+15550000000')
     first_number = dial.number('+15551111111')
     second_number = dial.number('+15552222222')
 
-    assert '<Number>' in str(first_number)
-    assert '<Number>' in str(second_number)
+    assert without_xml_declaration(first_number) == '<Number>+15551111111</Number>'
+    assert without_xml_declaration(second_number) == '<Number>+15552222222</Number>'
 
     response = VoiceResponse()
     response.append(dial)
 
-    rendered = str(response)
-    assert '<Response>' in rendered
-    assert '<Dial' in rendered
-    assert rendered.count('<Number>') == 2
+    response_xml = str(response).replace('encoding="UTF-8"', 'encoding="utf-8"')
+    assert (
+        response_xml == '<?xml version="1.0" encoding="utf-8"?><Response><Dial callerId="+15550000000">'
+        '<Number>+15551111111</Number><Number>+15552222222</Number></Dial></Response>'
+    )
 
 
 def test_validate_twilio_signature_valid():

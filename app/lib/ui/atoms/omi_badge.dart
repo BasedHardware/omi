@@ -29,7 +29,7 @@ class OmiBadge extends AdaptiveWidget {
   Widget _base() => Container(
     padding: padding,
     decoration: BoxDecoration(
-      color: backgroundColor ?? color.withOpacity(0.15),
+      color: backgroundColor ?? color.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(borderRadius),
     ),
     child: Text(

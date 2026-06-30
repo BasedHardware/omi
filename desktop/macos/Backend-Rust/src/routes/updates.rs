@@ -32,6 +32,8 @@ pub struct ReleaseInfo {
     pub version: String,
     pub build_number: u32,
     pub download_url: String,
+    #[serde(default)]
+    pub manual_download_url: Option<String>,
     pub ed_signature: String,
     pub published_at: String,
     pub changelog: Vec<String>,
@@ -134,18 +136,34 @@ fn generate_appcast_xml(releases: &[ReleaseInfo], platform: &str) -> String {
     xml
 }
 
+fn manual_download_url_for_release(release: &ReleaseInfo) -> String {
+    if let Some(url) = release.manual_download_url.as_deref() {
+        let trimmed = url.trim();
+        if !trimmed.is_empty() {
+            return trimmed.to_string();
+        }
+    }
+
+    if let Some(github_asset_base) = release.download_url.strip_suffix("/Omi.zip") {
+        return format!("{}/Omi.dmg", github_asset_base);
+    }
+
+    release.download_url.clone()
+}
+
 /// GET /appcast.xml - Sparkle appcast feed
 async fn get_appcast(State(state): State<AppState>, Query(query): Query<AppcastQuery>) -> Response {
     // Fetch all releases — generate_appcast_xml handles filtering and per-channel dedup
     let releases = match state.firestore.get_desktop_releases().await {
         Ok(releases) => releases,
         Err(e) => {
-            tracing::warn!(
-                "Failed to fetch releases from Firestore: {}, using fallback",
-                e
-            );
-            // Return empty appcast if no releases found
-            vec![]
+            tracing::error!("Failed to fetch releases from Firestore: {}", e);
+            return (
+                StatusCode::SERVICE_UNAVAILABLE,
+                [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+                "Desktop update feed is temporarily unavailable",
+            )
+                .into_response();
         }
     };
 
@@ -213,13 +231,9 @@ async fn download_redirect(State(state): State<AppState>) -> impl IntoResponse {
                 .filter(|r| r.is_live && r.channel.as_deref() == Some("stable"))
                 .next()
             {
-                // Serve from GCS bucket for direct download (avoids multi-hop GitHub redirects)
-                let gcs_url = format!(
-                    "https://storage.googleapis.com/omi_macos_updates/releases/v{}/Omi.Beta.dmg",
-                    latest.version
-                );
-                tracing::info!("Redirecting download to GCS: {}", gcs_url);
-                axum::response::Redirect::temporary(&gcs_url).into_response()
+                let download_url = manual_download_url_for_release(&latest);
+                tracing::info!("Redirecting download to release artifact: {}", download_url);
+                axum::response::Redirect::temporary(&download_url).into_response()
             } else {
                 (StatusCode::NOT_FOUND, "No live releases found").into_response()
             }
@@ -241,6 +255,8 @@ pub struct CreateReleaseRequest {
     pub version: String,
     pub build_number: u32,
     pub download_url: String,
+    #[serde(default)]
+    pub manual_download_url: Option<String>,
     pub ed_signature: String,
     #[serde(default)]
     pub changelog: Vec<String>,
@@ -290,6 +306,7 @@ async fn create_release(
         version: request.version.clone(),
         build_number: request.build_number,
         download_url: request.download_url,
+        manual_download_url: request.manual_download_url,
         ed_signature: request.ed_signature,
         published_at: chrono::Utc::now().to_rfc3339(),
         changelog: request.changelog,
@@ -425,6 +442,7 @@ mod tests {
             version: version.to_string(),
             build_number: build,
             download_url: format!("https://example.com/{}.zip", version),
+            manual_download_url: None,
             ed_signature: "sig123".to_string(),
             published_at: "2025-01-01T00:00:00Z".to_string(),
             changelog: vec![],
@@ -513,6 +531,40 @@ mod tests {
         let releases = vec![make_release("0.1.0", 100, Some("stable"), false)];
         let xml = generate_appcast_xml(&releases, "macos");
         assert!(!xml.contains("0.1.0"), "non-live release should not appear");
+    }
+
+    #[test]
+    fn test_manual_download_url_prefers_explicit_url() {
+        let mut release = make_release("0.1.0", 100, Some("stable"), true);
+        release.manual_download_url = Some("https://cdn.example.com/omi.dmg".to_string());
+
+        assert_eq!(
+            manual_download_url_for_release(&release),
+            "https://cdn.example.com/omi.dmg"
+        );
+    }
+
+    #[test]
+    fn test_manual_download_url_derives_github_dmg_from_sparkle_zip() {
+        let mut release = make_release("0.1.0", 100, Some("stable"), true);
+        release.download_url =
+            "https://github.com/BasedHardware/omi/releases/download/v0.1.0%2B100-macos/Omi.zip"
+                .to_string();
+
+        assert_eq!(
+            manual_download_url_for_release(&release),
+            "https://github.com/BasedHardware/omi/releases/download/v0.1.0%2B100-macos/Omi.dmg"
+        );
+    }
+
+    #[test]
+    fn test_manual_download_url_falls_back_to_appcast_url() {
+        let release = make_release("0.1.0", 100, Some("stable"), true);
+
+        assert_eq!(
+            manual_download_url_for_release(&release),
+            release.download_url
+        );
     }
 }
 

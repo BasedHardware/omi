@@ -154,6 +154,9 @@ class ChatToolExecutor {
     case "capture_screen":
       return await executeCaptureScreen()
 
+    case "fill_cloud_connector_form":
+      return await CloudConnectorFormAutomation.fill(toolCall.arguments)
+
     // Backend RAG tools — call Python backend /v1/tools/* endpoints
     case "get_conversations":
       return await executeBackendTool(toolCall)
@@ -473,6 +476,12 @@ class ChatToolExecutor {
     case "": directedProvider = nil
     default:
       return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes."
+    }
+    if let directedProvider {
+      let availability = LocalAgentProviderDetector.availability(for: directedProvider)
+      guard availability.isAvailable else {
+        return availability.setupPrompt
+      }
     }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel

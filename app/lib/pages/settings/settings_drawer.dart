@@ -152,7 +152,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.2),
+                          color: Colors.orange.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -171,7 +171,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.2),
+                          color: Colors.green.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -260,7 +260,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
+                ],
               ),
               child: Text(
                 context.l10n.appAndDeviceCopied,
@@ -420,7 +422,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       // --- Sign Out ---
       _SearchableItem(
         title: context.l10n.signOut,
-        icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+        icon: const FaIcon(FontAwesomeIcons.rightFromBracket, color: Color(0xFF8E8E93), size: 20),
         onTap: () async {
           final navigator = Navigator.of(context);
           navigator.pop();
@@ -472,8 +474,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     }
 
     return Column(
-      children:
-          filtered.map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap)).toList(),
+      children: filtered
+          .map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap))
+          .toList(),
     );
   }
 
@@ -526,7 +529,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                           ? Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.amber.withOpacity(0.2),
+                                color: Colors.amber.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Row(
@@ -558,8 +561,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: const FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    final page =
-                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                    final page = SharedPreferencesUtil().deviceSupportsMultiFileSync
+                        ? const AutoSyncPage()
+                        : const SyncPage();
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),
@@ -692,7 +696,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
               children: [
                 _buildSettingsItem(
                   title: context.l10n.signOut,
-                  icon: const FaIcon(FontAwesomeIcons.signOutAlt, color: Color(0xFF8E8E93), size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.rightFromBracket, color: Color(0xFF8E8E93), size: 20),
                   onTap: () async {
                     final navigator = Navigator.of(context);
 

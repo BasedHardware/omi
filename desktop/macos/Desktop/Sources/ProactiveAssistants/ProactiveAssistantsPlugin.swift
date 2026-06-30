@@ -534,6 +534,7 @@ public class ProactiveAssistantsPlugin: NSObject {
                 await memory.stop()
             }
         }
+        _ = RewindShutdownFlush.flush(timeout: 5, context: "ProactiveAssistantsPlugin")
 
         focusAssistant = nil
         taskAssistant = nil

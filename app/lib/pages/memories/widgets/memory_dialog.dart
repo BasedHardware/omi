@@ -57,7 +57,7 @@ class _MemoryDialogState extends State<MemoryDialog> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
@@ -68,10 +68,10 @@ class _MemoryDialogState extends State<MemoryDialog> {
                       Text(
                         isEditing
                             ? (widget.memory!.category == MemoryCategory.manual
-                                ? context.l10n.filterManual
-                                : widget.memory!.category == MemoryCategory.interesting
-                                    ? context.l10n.filterInteresting
-                                    : context.l10n.filterSystem)
+                                  ? context.l10n.filterManual
+                                  : widget.memory!.category == MemoryCategory.interesting
+                                  ? context.l10n.filterInteresting
+                                  : context.l10n.filterSystem)
                             : context.l10n.newMemory,
                         style: const TextStyle(color: Colors.white, fontSize: 14),
                       ),
@@ -130,8 +130,8 @@ class _MemoryDialogState extends State<MemoryDialog> {
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurpleAccent.withOpacity(0.5),
-                  disabledForegroundColor: Colors.white.withOpacity(0.7),
+                  disabledBackgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.5),
+                  disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
                 ),
                 child: _isSaving
                     ? const SizedBox(

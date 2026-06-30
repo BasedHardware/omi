@@ -9306,6 +9306,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => '約1分';
+
   @override
   String get jumpToLatestMessage => '最新のメッセージにジャンプ';
 

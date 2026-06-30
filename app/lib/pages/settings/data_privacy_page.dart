@@ -143,8 +143,9 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                   const SizedBox(height: 24),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {
-                      final appsWithDataAccess =
-                          appProvider.apps.where((app) => app.enabled && app.worksExternally()).toList();
+                      final appsWithDataAccess = appProvider.apps
+                          .where((app) => app.enabled && app.worksExternally())
+                          .toList();
 
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,7 +216,7 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
               ),
               if (isLoading && !isMigrating)
                 Container(
-                  color: Colors.black.withOpacity(0.5),
+                  color: Colors.black.withValues(alpha: 0.5),
                   child: const Center(child: CircularProgressIndicator()),
                 ),
             ],

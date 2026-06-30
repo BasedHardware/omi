@@ -1,37 +1,54 @@
-import json
-import os
+from threading import Lock
 
+import os
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
+from database.google_credentials import prepare_google_credentials
 
-if os.environ.get('SERVICE_ACCOUNT_JSON'):
-    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
-    # create google-credentials.json
-    with open('google-credentials.json', 'w') as f:
-        json.dump(service_account_info, f)
+_firestore_client = None
+_firestore_client_lock = Lock()
 
 
-def _firestore_client() -> firestore.Client:
+def _build_firestore_client():
+    prepare_google_credentials()
     # Production safety: only override project/database when pointed at a local
     # Firestore emulator. Without FIRESTORE_EMULATOR_HOST set (i.e. real Firestore),
-    # defer entirely to default resolution so behavior is byte-identical to the prior
-    # `firestore.Client()` — env vars must never be able to repoint the prod client.
-    if not os.environ.get("FIRESTORE_EMULATOR_HOST"):
-        return firestore.Client()
-    project = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT")
-    database = os.environ.get("FIRESTORE_DATABASE_ID")
-    kwargs: dict[str, str] = {}
-    if project:
-        kwargs["project"] = project
-    if database:
-        kwargs["database"] = database
-    return firestore.Client(**kwargs)
+    # defer entirely to default resolution so env vars cannot repoint prod Firestore.
+    if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        project = os.environ.get("FIREBASE_PROJECT_ID") or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        database = os.environ.get("FIRESTORE_DATABASE_ID")
+        kwargs: dict[str, str] = {}
+        if project:
+            kwargs["project"] = project
+        if database:
+            kwargs["database"] = database
+        return firestore.Client(**kwargs)
+    return firestore.Client()
 
 
-db = _firestore_client()
+def get_firestore_client():
+    global _firestore_client
+
+    if _firestore_client is None:
+        with _firestore_client_lock:
+            if _firestore_client is None:
+                _firestore_client = _build_firestore_client()
+    return _firestore_client
+
+
+def get_firestore_client_dependency():
+    return get_firestore_client()
+
+
+class _LazyFirestoreClient:
+    def __getattr__(self, name):
+        return getattr(get_firestore_client(), name)
+
+
+db = _LazyFirestoreClient()
 
 
 def get_users_uid():
-    users_ref = db.collection('users')
+    users_ref = get_firestore_client().collection('users')
     return [str(doc.id) for doc in users_ref.stream()]

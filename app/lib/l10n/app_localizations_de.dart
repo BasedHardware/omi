@@ -9547,6 +9547,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Etwa 1 Minute';
+
   @override
   String get jumpToLatestMessage => 'Zur neuesten Nachricht springen';
 

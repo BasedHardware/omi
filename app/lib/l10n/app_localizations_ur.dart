@@ -9478,6 +9478,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'تقریباً 1 منٹ';
+
   @override
   String get jumpToLatestMessage => 'تازہ ترین پیغام پر جائیں';
 

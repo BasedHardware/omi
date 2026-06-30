@@ -9466,6 +9466,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Cirka 1 minutt';
+
   @override
   String get jumpToLatestMessage => 'Gå til nyeste melding';
 

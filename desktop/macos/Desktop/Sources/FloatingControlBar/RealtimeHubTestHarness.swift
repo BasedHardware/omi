@@ -182,8 +182,14 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
         auth = .byokKey(key)
       } else {
         let p = provider == .openai ? "openai" : "gemini"
-        guard let token = await APIClient.shared.mintRealtimeToken(provider: p) else {
-          return ["error": "ephemeral mint failed for \(p) (check backend route + entitlement)"]
+        let token: String
+        do {
+          token = try await APIClient.shared.mintRealtimeToken(provider: p)
+        } catch {
+          return [
+            "error": "ephemeral mint failed for \(p)",
+            "detail": error.localizedDescription,
+          ]
         }
         auth = .ephemeral(token)
       }

@@ -282,7 +282,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                     ? Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withOpacity(0.2),
+                          color: const Color(0xFF6366F1).withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -336,27 +336,27 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             color: isCompleted
                                 ? const Color(0xFF6366F1)
                                 : isActive
-                                    ? const Color(0xFF6366F1).withOpacity(0.2)
-                                    : const Color(0xFF2A2A2E),
+                                ? const Color(0xFF6366F1).withValues(alpha: 0.2)
+                                : const Color(0xFF2A2A2E),
                             border: isActive ? Border.all(color: const Color(0xFF6366F1), width: 2) : null,
                           ),
                           child: Center(
                             child: isCompleted
                                 ? const FaIcon(FontAwesomeIcons.check, color: Colors.white, size: 12)
                                 : isActive
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                                        ),
-                                      )
-                                    : Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
-                                      ),
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
+                                    ),
+                                  )
+                                : Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
+                                  ),
                           ),
                         ),
                         const SizedBox(width: 14),
@@ -752,7 +752,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -797,7 +797,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF6366F1).withOpacity(0.15),
+                              color: const Color(0xFF6366F1).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Row(
@@ -826,7 +826,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF22C55E).withOpacity(0.15),
+                                color: const Color(0xFF22C55E).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Row(
@@ -848,7 +848,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF22C55E).withOpacity(0.15),
+                                color: const Color(0xFF22C55E).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Text(
@@ -1047,7 +1047,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged, activeColor: activeColor),
+        Switch(value: value, onChanged: onChanged, activeThumbColor: activeColor),
       ],
     );
   }

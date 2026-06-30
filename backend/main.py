@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 
@@ -12,6 +11,10 @@ logger = logging.getLogger(__name__)
 
 import firebase_admin
 from fastapi import FastAPI
+
+from database.google_credentials import prepare_google_credentials
+
+prepare_google_credentials()
 
 from routers import (
     chat,

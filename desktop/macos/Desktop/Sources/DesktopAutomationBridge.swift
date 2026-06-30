@@ -531,6 +531,56 @@ final class DesktopAutomationActionRegistry {
       let wait = boolParam(params["wait"], default: true)
       return await FloatingControlBarManager.shared.backFromSubagentForAutomation(wait: wait)
     }
+
+    register(
+      name: "spatial_overlay_present_fixture",
+      summary: "Present a deterministic spatial-overlay fixture for dogfood harnesses",
+      params: ["fixture", "settleMs"]
+    ) { params in
+      guard let fixture = SpatialOverlayDogfoodFixture(rawValue: params["fixture"] ?? "") else {
+        throw DesktopAutomationActionError.invalidParams(
+          "unknown fixture; expected one of \(SpatialOverlayDogfoodFixture.allCases.map(\.rawValue).joined(separator: ","))"
+        )
+      }
+      let state = CloudConnectorGuidanceOverlay.shared.presentAutomationFixture(fixture)
+      return state
+    }
+
+    register(
+      name: "spatial_overlay_state",
+      summary: "Return the current spatial-overlay dogfood state"
+    ) { _ in
+      CloudConnectorGuidanceOverlay.shared.automationState()
+    }
+
+    register(
+      name: "spatial_overlay_dismiss",
+      summary: "Dismiss the current spatial-overlay dogfood overlay"
+    ) { _ in
+      CloudConnectorGuidanceOverlay.shared.dismiss()
+      return ["dismissed": "true", "visible": "false"]
+    }
+
+    register(
+      name: "cloud_connector_guidance_probe",
+      summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
+    ) { _ in
+      await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
+    }
+
+    register(
+      name: "spatial_overlay_present_instruction",
+      summary: "Present the Screen Recording fallback instruction card (dogfood/visual)"
+    ) { params in
+      let title = params["title"] ?? "Allow Screen Recording for Omi"
+      let subtitle =
+        params["subtitle"]
+        ?? "Turn on Omi under Screen & System Audio Recording, then return to Claude and click Add."
+      let anchor = CloudConnectorGuidanceOverlay.anchorRect(fromParam: params["anchor"])
+      CloudConnectorGuidanceOverlay.shared.presentInstructionCard(
+        title: title, subtitle: subtitle, near: anchor)
+      return CloudConnectorGuidanceOverlay.shared.automationState()
+    }
   }
 }
 
@@ -998,6 +1048,8 @@ final class DesktopAutomationBridge {
       let window: NSWindow?
       if payload.target == "floating" {
         window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
+      } else if payload.target == "overlay" {
+        window = CloudConnectorGuidanceOverlay.shared.automationWindow
       } else {
         window = NSApp.windows.first(where: { window in
           window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow

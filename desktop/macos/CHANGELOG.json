@@ -2,6 +2,99 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.11.571",
+      "date": "2026-06-30",
+      "changes": [
+        "Improved Rewind scrubbing and made screenshot history capture more efficient"
+      ]
+    },
+    {
+      "version": "0.11.570",
+      "date": "2026-06-30",
+      "changes": [
+        "Improved desktop update recovery with clearer failure guidance and safer manual downloads"
+      ]
+    },
+    {
+      "version": "0.11.569",
+      "date": "2026-06-30",
+      "changes": [
+        "Fixed desktop recording reconciliation so cloud sessions use a durable client id and recover from missing backend matches"
+      ]
+    },
+    {
+      "version": "0.11.568",
+      "date": "2026-06-29",
+      "changes": [
+        "Improved OpenClaw and Hermes agent handoff so unavailable local providers prompt for setup instead of creating failed pills",
+        "Improved the onboarding second-brain graph branding for sharing",
+        "Improved desktop backend consistency for conversations and memories",
+        "Improved desktop AI timeout handling so slow Gemini requests fail clearly before the backend deadline"
+      ]
+    },
+    {
+      "version": "0.11.567",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed desktop recordings so stop and retry finalize the exact backend conversation when available"
+      ]
+    },
+    {
+      "version": "0.11.566",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed push-to-talk getting stuck with silent audio until relogin",
+        "Improved voice response recovery when sign-in or provider credentials become stale",
+        "Added privacy-safe desktop diagnostics for push-to-talk audio and realtime voice reliability"
+      ]
+    },
+    {
+      "version": "0.11.565",
+      "date": "2026-06-29",
+      "changes": [
+        "Improved desktop app maintainability for settings, app state, and backend data sync",
+        "Restored the home page ambient glow to purple",
+        "Fixed push-to-talk getting stuck with silent microphone capture until Omi was relaunched"
+      ]
+    },
+    {
+      "version": "0.11.564",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed the Notch Mode Omi Chat row so clicking it opens Omi Chat",
+        "Fixed the floating bar hover menu hiding the final key in longer Ask Omi shortcuts"
+      ]
+    },
+    {
+      "version": "0.11.563",
+      "date": "2026-06-29",
+      "changes": [
+        "Made the floating bar use Notch Mode automatically on Macs with a notch"
+      ]
+    },
+    {
+      "version": "0.11.562",
+      "date": "2026-06-29",
+      "changes": [
+        "Agent browser tools now expose Playwright only when the user has an existing configured Playwright bridge installed",
+        "Fixed the Claude connector setup guidance bubble so its arrow points directly at the Add button instead of below the modal",
+        "Added a dismissible instruction card when Claude connector setup needs Screen Recording, so System Settings no longer opens with no explanation",
+        "Claude connector setup now actually requests Screen Recording, so Omi shows up in the Screen & System Audio Recording list with a toggle to flip on instead of an empty Settings pane",
+        "Polished the Claude setup guidance cards with a frosted glass surface, gradient accent icon, and a cleaner dismiss button",
+        "Improved desktop overlay positioning for Claude connector setup and assistant guidance",
+        "Tightened the Claude setup guidance card height so short instructions no longer leave excess empty space",
+        "Fixed desktop conversations so local transcription sessions are finalized and retried through one durable path",
+        "Fixed desktop OAuth setup failures when the backend callback URL is missing"
+      ]
+    },
+    {
+      "version": "0.11.561",
+      "date": "2026-06-29",
+      "changes": [
+        "Fixed Gmail import detail panel showing \"Connect Gmail\" button when Gmail is already connected"
+      ]
+    },
+    {
       "version": "0.11.560",
       "date": "2026-06-29",
       "changes": [

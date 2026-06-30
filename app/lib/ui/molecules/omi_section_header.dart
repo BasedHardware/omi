@@ -34,7 +34,7 @@ class OmiSectionHeader extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+              color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(

@@ -8,16 +8,9 @@ The handler now catches it and returns HTTP 400. These tests mount the conversat
 
 import os
 import sys
+from datetime import datetime, timezone
 from types import ModuleType
-from unittest.mock import MagicMock, patch
-
-from tests.unit.memory_import_isolation import install_database_client_stub
-
-from pathlib import Path
-
-import pytest
-
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault(
@@ -45,6 +38,7 @@ _stubs = [
     'ulid',
     'pinecone',
     'typesense',
+    'database._client',
     'database.conversations',
     'database.action_items',
     'database.memories',
@@ -58,6 +52,7 @@ _stubs = [
     'firebase_admin.firestore',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
+    'utils.request_validation',
     'utils.other.endpoints',
     'utils.other.storage',
     'utils.conversations.factory',
@@ -156,22 +151,16 @@ _endpoints.with_rate_limit = _fake_with_rate_limit
 _endpoints.get_user = MagicMock()
 _register_module('utils.other.endpoints', _endpoints)
 
-install_database_client_stub()
-
-_utils_memory_pkg = ModuleType('utils.memory')
-_utils_memory_pkg.__path__ = []
-_register_module('utils.memory', _utils_memory_pkg)
-
-_memory_service_stub = ModuleType('utils.memory.memory_service')
-_memory_service_stub.MemoryService = MagicMock()
-_register_module('utils.memory.memory_service', _memory_service_stub)
-
-_surface_routing_stub = ModuleType('utils.memory.surface_routing')
-_surface_routing_stub.pin_memory_system = MagicMock()
-_register_module('utils.memory.surface_routing', _surface_routing_stub)
+_request_validation = ModuleType('utils.request_validation')
+_request_validation.NonNegativeOffset = int
+_request_validation.PositiveLimit = int
+_register_module('utils.request_validation', _request_validation)
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from models.conversation import Conversation  # noqa: E402
+from models.conversation_enums import ConversationStatus  # noqa: E402
+from models.structured import Structured  # noqa: E402
 
 _remove_module_for_fresh_import('routers.conversations')
 _remove_module_for_fresh_import('routers')
@@ -246,3 +235,112 @@ def test_user_speaker_does_not_require_person_record():
     assert resp.status_code == 200
     mock_get_person.assert_not_called()
     assert mock_search.call_args.kwargs['speaker_id'] == 'user'
+
+
+def _conversation(conversation_id='conv-1', status=ConversationStatus.in_progress):
+    return Conversation(
+        id=conversation_id,
+        created_at=datetime.now(timezone.utc),
+        started_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(timezone.utc),
+        language='en',
+        structured=Structured(),
+        transcript_segments=[],
+        status=status,
+    )
+
+
+def test_finalize_conversation_processes_target_id_and_clears_matching_redis_pointer():
+    target = _conversation()
+    processed = _conversation(status=ConversationStatus.completed)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=True) as claim_status,
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
+        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
+        patch.object(conv, 'process_conversation', return_value=processed) as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
+    ):
+        response = conv.finalize_conversation('conv-1', uid='test-uid')
+
+    claim_status.assert_called_once_with(
+        'test-uid',
+        'conv-1',
+        ConversationStatus.in_progress,
+        ConversationStatus.processing,
+        extra_updates=None,
+    )
+    remove_pointer.assert_called_once_with('test-uid')
+    update_status.assert_called_once_with('test-uid', 'conv-1', ConversationStatus.completed)
+    process.assert_called_once_with('test-uid', 'en', target, force_process=True)
+    assert response.conversation.id == 'conv-1'
+    assert response.conversation.status == ConversationStatus.completed
+
+
+def test_finalize_conversation_does_not_clear_different_redis_pointer():
+    target = _conversation()
+    processed = _conversation(status=ConversationStatus.completed)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=True),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='newer-conv'),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
+        patch.object(conv.conversations_db, 'update_conversation_status'),
+        patch.object(conv, 'process_conversation', return_value=processed),
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
+    ):
+        conv.finalize_conversation('conv-1', uid='test-uid')
+
+    remove_pointer.assert_not_called()
+
+
+def test_finalize_conversation_claim_loser_returns_latest_without_side_effects():
+    target = _conversation(status=ConversationStatus.in_progress)
+    latest = _conversation(status=ConversationStatus.processing)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=False) as claim_status,
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
+        patch.object(conv, 'process_conversation') as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
+    ):
+        response = conv.finalize_conversation('conv-1', uid='test-uid')
+
+    claim_status.assert_called_once()
+    get_pointer.assert_not_called()
+    remove_pointer.assert_not_called()
+    update_status.assert_not_called()
+    process.assert_not_called()
+    integrations.assert_not_called()
+    assert response.conversation.status == ConversationStatus.processing
+
+
+def test_finalize_conversation_is_noop_for_completed_conversation():
+    completed = _conversation(status=ConversationStatus.completed)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=completed),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
+        patch.object(conv, 'process_conversation') as process,
+    ):
+        response = conv.finalize_conversation('conv-1', uid='test-uid')
+
+    get_pointer.assert_not_called()
+    remove_pointer.assert_not_called()
+    update_status.assert_not_called()
+    process.assert_not_called()
+    assert response.conversation.status == ConversationStatus.completed

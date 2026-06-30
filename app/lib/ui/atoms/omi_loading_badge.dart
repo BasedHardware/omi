@@ -39,9 +39,9 @@ class OmiLoadingBadge extends AdaptiveWidget {
   Widget _base() => Container(
     padding: padding,
     decoration: BoxDecoration(
-      color: ResponsiveHelper.backgroundSecondary.withOpacity(0.6),
+      color: ResponsiveHelper.backgroundSecondary.withValues(alpha: 0.6),
       borderRadius: BorderRadius.circular(borderRadius),
-      border: Border.all(color: color.withOpacity(0.3), width: 1),
+      border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -51,7 +51,7 @@ class OmiLoadingBadge extends AdaptiveWidget {
           height: 12,
           child: CircularProgressIndicator(
             strokeWidth: strokeWidth,
-            valueColor: AlwaysStoppedAnimation<Color>(color.withOpacity(0.8)),
+            valueColor: AlwaysStoppedAnimation<Color>(color.withValues(alpha: 0.8)),
           ),
         ),
         const SizedBox(width: 8),

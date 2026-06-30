@@ -69,7 +69,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
+                ],
               ),
               child: Row(
                 children: [
@@ -350,11 +352,11 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty
                                             ? context.l10n.noMemoriesYet
                                             : provider.selectedCategories.isNotEmpty
-                                                ? provider.selectedCategories.contains(MemoryCategory.manual) &&
-                                                        provider.selectedCategories.length == 1
-                                                    ? context.l10n.noManualMemories
-                                                    : context.l10n.noMemoriesInCategories
-                                                : context.l10n.noMemoriesFound,
+                                            ? provider.selectedCategories.contains(MemoryCategory.manual) &&
+                                                      provider.selectedCategories.length == 1
+                                                  ? context.l10n.noManualMemories
+                                                  : context.l10n.noMemoriesInCategories
+                                            : context.l10n.noMemoriesFound,
                                         style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
                                       ),
                                       if (provider.searchQuery.isEmpty && provider.selectedCategories.isEmpty) ...[
@@ -379,9 +381,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                       provider: provider,
                                       onTap:
                                           (BuildContext context, Memory tappedMemory, MemoriesProvider tappedProvider) {
-                                        PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
-                                        _showQuickEditSheet(context, tappedMemory, tappedProvider);
-                                      },
+                                            PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
+                                            _showQuickEditSheet(context, tappedMemory, tappedProvider);
+                                          },
                                     );
                                   }, childCount: provider.filteredMemories.length),
                                 ),

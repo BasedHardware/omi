@@ -72,7 +72,8 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
       String newDescription = _textController.text.trim();
       bool descriptionChanged = newDescription != widget.actionItem!.description;
       // Compare due dates - handle null cases explicitly
-      bool dueDateChanged = (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
+      bool dueDateChanged =
+          (_selectedDueDate == null && widget.actionItem!.dueAt != null) ||
           (_selectedDueDate != null && widget.actionItem!.dueAt == null) ||
           (_selectedDueDate != null &&
               widget.actionItem!.dueAt != null &&
@@ -425,7 +426,7 @@ class _ActionItemFormSheetState extends State<ActionItemFormSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -477,8 +478,8 @@ class _DateTimePickerSheetState extends State<DateTimePickerSheet> {
         color: isSelected == true
             ? ResponsiveHelper.purplePrimary
             : isCurrentYear == true
-                ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
-                : Colors.transparent,
+            ? ResponsiveHelper.purplePrimary.withValues(alpha: 0.3)
+            : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Center(

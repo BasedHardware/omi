@@ -43,6 +43,7 @@ sys.modules.setdefault('utils.llm.clients', clients_stub)
 from utils import byok
 from utils.llm import chat, gateway_client
 from utils.llm import conversation_processing
+from models.structured_extraction import ActionItemsExtraction
 
 
 class FakeParser:
@@ -214,6 +215,34 @@ def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeyp
     assert captured['json']['messages'] == [{'role': 'user', 'content': 'classified prompt'}]
     assert captured['json']['response_format']['type'] == 'json_schema'
     assert captured['json']['response_format']['json_schema']['schema']['properties']['value']['type'] == 'boolean'
+
+
+def test_strict_schema_normalizes_action_item_extraction_for_openai():
+    schema = gateway_client._strict_model_json_schema(ActionItemsExtraction)
+
+    assert schema['additionalProperties'] is False
+    assert schema['required'] == ['action_items']
+
+    action_item_schema = schema['$defs']['ExtractedActionItem']
+    assert action_item_schema['additionalProperties'] is False
+    assert action_item_schema['required'] == ['description', 'due_at']
+    assert 'default' not in action_item_schema['properties']['due_at']
+    assert {'type': 'null'} in action_item_schema['properties']['due_at']['anyOf']
+
+
+def test_strict_schema_removes_defaults_recursively():
+    schema = gateway_client._strict_model_json_schema(ActionItemsExtraction)
+
+    def walk(node):
+        if isinstance(node, dict):
+            assert 'default' not in node
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(schema)
 
 
 def test_chat_structured_gateway_records_success_metric(monkeypatch):

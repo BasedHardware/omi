@@ -39,7 +39,10 @@ sys.modules['redis.exceptions'] = redis_mock.exceptions
 
 # Stub firebase_admin.auth
 firebase_auth = sys.modules['firebase_admin.auth']
+firebase_auth.CertificateFetchError = type('CertificateFetchError', (Exception,), {})
+firebase_auth.ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
 firebase_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+firebase_auth.RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 
 # Stub database.redis_db with real check_rate_limit logic (Lua script mocked)
 redis_db_stub = sys.modules['database.redis_db']
@@ -377,8 +380,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_conversations_router_has_rate_limits(self):
         matches = self._grep_file("routers/conversations.py", r"with_rate_limit.*conversations:")
-        # create, reprocess, search, merge = 4 endpoints
-        self.assertEqual(len(matches), 4, f"conversations.py expected 4 rate limits, got {len(matches)}")
+        # create, reprocess, search, merge, and events = 5 endpoints
+        self.assertEqual(len(matches), 5, f"conversations.py expected 5 rate limits, got {len(matches)}")
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")

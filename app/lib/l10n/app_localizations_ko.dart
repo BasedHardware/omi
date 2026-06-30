@@ -9307,6 +9307,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => '약 1분';
+
   @override
   String get jumpToLatestMessage => '최신 메시지로 이동';
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 from collections import defaultdict
@@ -68,10 +70,35 @@ def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[
     logger.info(f'upsert_vectors {res}')
 
 
-def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
-    filter_data = {'uid': uid}
+def _created_at_filter(starts_at: int = None, ends_at: int = None):
+    if starts_at is None and ends_at is None:
+        return None
+    if starts_at is not None and not isinstance(starts_at, int):
+        return None
+    if ends_at is not None and not isinstance(ends_at, int):
+        return None
+    if starts_at is not None and ends_at is not None and starts_at > ends_at:
+        return None
+
+    created_at = {}
     if starts_at is not None:
-        filter_data['created_at'] = {'$gte': starts_at, '$lte': ends_at}
+        created_at['$gte'] = starts_at
+    if ends_at is not None:
+        created_at['$lte'] = ends_at
+    return created_at
+
+
+def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
+    if index is None:
+        return []
+
+    filter_data = {'uid': uid}
+    created_at = _created_at_filter(starts_at, ends_at)
+    if (starts_at is not None or ends_at is not None) and created_at is None:
+        logger.warning('Skipping conversation vector search with invalid date filter')
+        return []
+    if created_at is not None:
+        filter_data['created_at'] = created_at
 
     xq = embeddings.embed_query(query)
     xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")

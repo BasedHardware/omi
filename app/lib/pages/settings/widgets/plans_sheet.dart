@@ -150,8 +150,8 @@ class _PlansSheetState extends State<PlansSheet> {
                               isChecked = value ?? false;
                             });
                           },
-                          fillColor: MaterialStateProperty.resolveWith((states) {
-                            if (states.contains(MaterialState.selected)) {
+                          fillColor: WidgetStateProperty.resolveWith((states) {
+                            if (states.contains(WidgetState.selected)) {
                               return Colors.white;
                             }
                             return Colors.transparent;
@@ -374,13 +374,13 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic>? selectedPlanData;
     if (tierId != null) {
       selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-          );
+        (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+      );
     }
     // Fallback to old behavior (first plan matching interval) for backwards compat
     selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-        );
+      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+    );
 
     if (selectedPlanData == null) {
       AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
@@ -396,7 +396,8 @@ class _PlansSheetState extends State<PlansSheet> {
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
     final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
     final isSameTier = currentTierName == tierId;
-    final isUpgradingFromMonthlyToAnnual = isSameTier &&
+    final isUpgradingFromMonthlyToAnnual =
+        isSameTier &&
         (currentSub?.plan == PlanType.unlimited ||
             currentSub?.plan == PlanType.operator ||
             currentSub?.plan == PlanType.architect) &&
@@ -438,9 +439,9 @@ class _PlansSheetState extends State<PlansSheet> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurple.withOpacity(0.1),
+                  color: Colors.deepPurple.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+                  border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -649,9 +650,9 @@ class _PlansSheetState extends State<PlansSheet> {
                   begin: Alignment.bottomCenter,
                   end: Alignment.topCenter,
                   colors: [
-                    Colors.deepPurple.withOpacity(0.5),
-                    Colors.deepPurple.withOpacity(0.3),
-                    Colors.black.withOpacity(0.8),
+                    Colors.deepPurple.withValues(alpha: 0.5),
+                    Colors.deepPurple.withValues(alpha: 0.3),
+                    Colors.black.withValues(alpha: 0.8),
                     Colors.black,
                   ],
                   stops: const [0.0, 0.2, 0.6, 1.0],
@@ -727,7 +728,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                                   height: height,
                                                   margin: const EdgeInsets.symmetric(horizontal: 1.5),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.red.withOpacity(0.7),
+                                                    color: Colors.red.withValues(alpha: 0.7),
                                                     borderRadius: BorderRadius.circular(2),
                                                   ),
                                                 );
@@ -748,7 +749,7 @@ class _PlansSheetState extends State<PlansSheet> {
                                                   height: height,
                                                   margin: const EdgeInsets.symmetric(horizontal: 1.5),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.red.withOpacity(0.7),
+                                                    color: Colors.red.withValues(alpha: 0.7),
                                                     borderRadius: BorderRadius.circular(2),
                                                   ),
                                                 );
@@ -785,11 +786,11 @@ class _PlansSheetState extends State<PlansSheet> {
                                                   height: 55,
                                                   margin: const EdgeInsets.symmetric(horizontal: 5),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.white.withOpacity(0.95),
+                                                    color: Colors.white.withValues(alpha: 0.95),
                                                     borderRadius: BorderRadius.circular(8),
                                                     boxShadow: [
                                                       BoxShadow(
-                                                        color: Colors.black.withOpacity(0.15),
+                                                        color: Colors.black.withValues(alpha: 0.15),
                                                         blurRadius: 4,
                                                         offset: const Offset(0, 2),
                                                       ),
@@ -839,11 +840,11 @@ class _PlansSheetState extends State<PlansSheet> {
                                                   height: 55,
                                                   margin: const EdgeInsets.symmetric(horizontal: 5),
                                                   decoration: BoxDecoration(
-                                                    color: Colors.white.withOpacity(0.95),
+                                                    color: Colors.white.withValues(alpha: 0.95),
                                                     borderRadius: BorderRadius.circular(8),
                                                     boxShadow: [
                                                       BoxShadow(
-                                                        color: Colors.black.withOpacity(0.15),
+                                                        color: Colors.black.withValues(alpha: 0.15),
                                                         blurRadius: 4,
                                                         offset: const Offset(0, 2),
                                                       ),
@@ -900,7 +901,7 @@ class _PlansSheetState extends State<PlansSheet> {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               boxShadow: [
-                                BoxShadow(color: Colors.blue.withOpacity(0.4), blurRadius: 20, spreadRadius: 3),
+                                BoxShadow(color: Colors.blue.withValues(alpha: 0.4), blurRadius: 20, spreadRadius: 3),
                               ],
                             ),
                             child: ClipOval(child: Image.asset(Assets.images.omiWithoutRope.path, fit: BoxFit.cover)),
@@ -964,7 +965,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded = sub?.currentPeriodEnd != null &&
+                              final periodEnded =
+                                  sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1033,7 +1035,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption =
+                                _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1067,9 +1070,9 @@ class _PlansSheetState extends State<PlansSheet> {
                                 return Container(
                                   padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
-                                    color: Colors.deepPurple.withOpacity(0.1),
+                                    color: Colors.deepPurple.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.deepPurple.withOpacity(0.3)),
+                                    border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
                                   ),
                                   child: Column(
                                     children: [
@@ -1097,9 +1100,9 @@ class _PlansSheetState extends State<PlansSheet> {
                                 return Container(
                                   padding: const EdgeInsets.all(20),
                                   decoration: BoxDecoration(
-                                    color: Colors.blue.withOpacity(0.1),
+                                    color: Colors.blue.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                                   ),
                                   child: Column(
                                     children: [
@@ -1196,7 +1199,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
+                            final shouldShowContinueButton =
+                                !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1444,10 +1448,7 @@ class _PlansSheetState extends State<PlansSheet> {
             children: [
               Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 18),
               const SizedBox(width: 8),
-              Text(
-                context.l10n.promoCode,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              ),
+              Text(context.l10n.promoCode, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
               const SizedBox(width: 4),
               Icon(
                 _showPromoCodeField ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
@@ -1468,14 +1469,14 @@ class _PlansSheetState extends State<PlansSheet> {
               hintText: context.l10n.enterPromoCode,
               hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.08),
+              fillColor: Colors.white.withValues(alpha: 0.08),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -1516,9 +1517,9 @@ class _PlansSheetState extends State<PlansSheet> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
+        color: Colors.red.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -1755,7 +1756,7 @@ class _PlansSheetState extends State<PlansSheet> {
           width: 32,
           height: 32,
           decoration: BoxDecoration(
-            color: Colors.red.withOpacity(0.1),
+            color: Colors.red.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.red.shade400, width: 1),
           ),
@@ -1942,7 +1943,7 @@ class _PlansSheetState extends State<PlansSheet> {
       decoration: BoxDecoration(
         color: const Color(0xFF1F1F25), // Use conversation list background
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.1), width: 2),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 2),
       ),
       child: Column(
         children: [
@@ -1956,26 +1957,26 @@ class _PlansSheetState extends State<PlansSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     ShimmerWithTimeout(
-                      baseColor: Colors.white.withOpacity(0.1),
-                      highlightColor: Colors.white.withOpacity(0.3),
+                      baseColor: Colors.white.withValues(alpha: 0.1),
+                      highlightColor: Colors.white.withValues(alpha: 0.3),
                       child: Container(
                         height: 18,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
                     ),
                     const SizedBox(height: 4),
                     ShimmerWithTimeout(
-                      baseColor: Colors.white.withOpacity(0.1),
-                      highlightColor: Colors.white.withOpacity(0.3),
+                      baseColor: Colors.white.withValues(alpha: 0.1),
+                      highlightColor: Colors.white.withValues(alpha: 0.3),
                       child: Container(
                         height: 14,
                         width: 100,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -1987,26 +1988,26 @@ class _PlansSheetState extends State<PlansSheet> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   ShimmerWithTimeout(
-                    baseColor: Colors.white.withOpacity(0.1),
-                    highlightColor: Colors.white.withOpacity(0.3),
+                    baseColor: Colors.white.withValues(alpha: 0.1),
+                    highlightColor: Colors.white.withValues(alpha: 0.3),
                     child: Container(
                       height: 18,
                       width: 100,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   ShimmerWithTimeout(
-                    baseColor: Colors.white.withOpacity(0.1),
-                    highlightColor: Colors.white.withOpacity(0.3),
+                    baseColor: Colors.white.withValues(alpha: 0.1),
+                    highlightColor: Colors.white.withValues(alpha: 0.3),
                     child: Container(
                       height: 14,
                       width: 60,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.white.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
@@ -2088,11 +2089,7 @@ class _PlansSheetState extends State<PlansSheet> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            granted ? Icons.check : Icons.close,
-            color: granted ? Colors.green[400] : Colors.red[400],
-            size: 14,
-          ),
+          Icon(granted ? Icons.check : Icons.close, color: granted ? Colors.green[400] : Colors.red[400], size: 14),
           const SizedBox(width: 6),
           Expanded(
             child: Text(

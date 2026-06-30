@@ -171,7 +171,7 @@ def get_user_profile(uid: str) -> dict:
 
 def get_user_store_recording_permission(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('store_recording_permission', False)
 
 
@@ -183,7 +183,7 @@ def set_user_store_recording_permission(uid: str, value: bool):
 def get_user_private_cloud_sync_enabled(uid: str) -> bool:
     """Check if user has private cloud sync enabled."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('private_cloud_sync_enabled', True)
 
 
@@ -1053,7 +1053,7 @@ def set_chat_message_rating_score(
 
 def get_stripe_connect_account_id(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('stripe_account_id', None)
 
 
@@ -1069,7 +1069,7 @@ def set_paypal_payment_details(uid: str, data: dict):
 
 def get_paypal_payment_details(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('paypal_details', None)
 
 
@@ -1080,7 +1080,7 @@ def set_default_payment_method(uid: str, payment_method_id: str):
 
 def get_default_payment_method(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('default_payment_method', None)
 
 
@@ -1285,7 +1285,7 @@ def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
     """Get user's training data opt-in status."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('training_data_opt_in', None)
 
 

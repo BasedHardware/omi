@@ -16,11 +16,18 @@ environments:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
     cloud_run:
+      workflow_files:
+        - .github/workflows/gcp_backend_auto_dev.yml
+      network:
+        flags:
+          --network: omi-dev-vpc-1
+          --subnet: omi-us-central1-dev-vpc-1-subnet-1
+          --vpc-egress: private-ranges-only
       services:
         backend:
           env:
             GOOGLE_CLOUD_PROJECT:
-              value: based-hardware
+              value: based-hardware-dev
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -37,7 +44,7 @@ environments:
         backend-sync:
           env:
             GOOGLE_CLOUD_PROJECT:
-              value: based-hardware
+              value: based-hardware-dev
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -54,7 +61,7 @@ environments:
         backend-integration:
           env:
             GOOGLE_CLOUD_PROJECT:
-              value: based-hardware
+              value: based-hardware-dev
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -83,7 +90,22 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+          SERVICE_ACCOUNT_JSON:
+            secret:
+              name: prod-omi-backend-secrets
+              key: SERVICE_ACCOUNT_JSON
     cloud_run:
+      workflow_files:
+        - .github/workflows/gcp_backend.yml
+      network:
+        flags:
+          --network:
+            value: ${{vars.CLOUD_RUN_VPC_NETWORK}}
+            provisional: true
+          --subnet:
+            value: ${{vars.CLOUD_RUN_VPC_SUBNET}}
+            provisional: true
+          --vpc-egress: private-ranges-only
       services:
         backend:
           env:
@@ -92,6 +114,12 @@ environments:
               category: service_discovery
               provisional: true
           secrets:
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -102,6 +130,12 @@ environments:
               category: service_discovery
               provisional: true
           secrets:
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -112,6 +146,12 @@ environments:
               category: service_discovery
               provisional: true
           secrets:
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest

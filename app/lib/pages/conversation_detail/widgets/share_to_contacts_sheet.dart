@@ -299,7 +299,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: Colors.deepPurple.withOpacity(0.3),
+                          color: Colors.deepPurple.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -328,7 +328,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                   child: Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.2),
+                      color: Colors.red.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -372,8 +372,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                                 _selectedContacts.isEmpty
                                     ? context.l10n.selectContactsToShare
                                     : _selectedContacts.length > 1
-                                        ? context.l10n.shareWithContactsCount(_selectedContacts.length)
-                                        : context.l10n.shareWithContactCount(_selectedContacts.length),
+                                    ? context.l10n.shareWithContactsCount(_selectedContacts.length)
+                                    : context.l10n.shareWithContactCount(_selectedContacts.length),
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                       ),

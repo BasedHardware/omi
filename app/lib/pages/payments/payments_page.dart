@@ -87,18 +87,16 @@ class _PaymentsPageState extends State<PaymentsPage> {
                     Consumer<PaymentMethodProvider>(
                       builder: (context, provider, child) {
                         // PayPal is no longer offered; only treat Stripe as a valid active method.
-                        final activeMethod =
-                            provider.activeMethod == PaymentMethodType.stripe ? provider.activeMethod : null;
+                        final activeMethod = provider.activeMethod == PaymentMethodType.stripe
+                            ? provider.activeMethod
+                            : null;
                         final hasActiveMethod = activeMethod != null;
 
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             if (!hasActiveMethod) ...[_buildInfoCard(), const SizedBox(height: 28)],
-                            if (hasActiveMethod) ...[
-                              _buildActiveMethodCard(provider),
-                              const SizedBox(height: 24),
-                            ],
+                            if (hasActiveMethod) ...[_buildActiveMethodCard(provider), const SizedBox(height: 24)],
                             Text(
                               context.l10n.availablePaymentMethods,
                               style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
@@ -127,27 +125,23 @@ class _PaymentsPageState extends State<PaymentsPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF14141A),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 1),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
+              color: Colors.white.withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(Icons.schedule_outlined, color: Colors.white.withOpacity(0.45), size: 22),
+            child: Icon(Icons.schedule_outlined, color: Colors.white.withValues(alpha: 0.45), size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               context.l10n.morePaymentMethodsComingSoon,
-              style: TextStyle(
-                color: Colors.white.withOpacity(0.6),
-                fontSize: 15,
-                fontWeight: FontWeight.w400,
-              ),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 15, fontWeight: FontWeight.w400),
             ),
           ),
         ],

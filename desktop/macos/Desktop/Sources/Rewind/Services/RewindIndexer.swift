@@ -21,6 +21,12 @@ actor RewindIndexer {
     private var statsLastLogTime = Date()
     private let statsLogInterval: TimeInterval = 60
 
+    /// Drop repeated static captures, but keep periodic anchors so long-running
+    /// unchanged screens still appear in the timeline.
+    private let frameDedupeMaxInterval: TimeInterval = 30.0
+    private var lastEncodedFrameSignature: FrameDedupeSignature?
+    private var lastEncodedFrameTimestamp: Date?
+
     /// Backoff state for initialization retries
     private var initFailureCount = 0
     private var nextRetryTime: Date = .distantPast
@@ -44,6 +50,8 @@ actor RewindIndexer {
         isInitializing = false
         initFailureCount = 0
         nextRetryTime = .distantPast
+        lastEncodedFrameSignature = nil
+        lastEncodedFrameTimestamp = nil
         log("RewindIndexer: Reset (will re-initialize on next frame)")
     }
 
@@ -132,6 +140,43 @@ actor RewindIndexer {
         }
     }
 
+    private func makeFrameDedupeSignature(cgImage: CGImage, appName: String, windowTitle: String?) -> FrameDedupeSignature {
+        FrameDedupeSignature(
+            fingerprint: RewindOCRService.dHash(of: cgImage),
+            width: cgImage.width,
+            height: cgImage.height,
+            appName: appName,
+            windowTitle: windowTitle
+        )
+    }
+
+    private func shouldSkipFrameForDedupe(_ signature: FrameDedupeSignature, timestamp: Date) async -> Bool {
+        guard await VideoChunkEncoder.shared.hasFinalizedChunkForDedupe() else {
+            return false
+        }
+
+        guard let lastSignature = lastEncodedFrameSignature,
+              let lastTimestamp = lastEncodedFrameTimestamp,
+              signature == lastSignature
+        else {
+            return false
+        }
+
+        return timestamp.timeIntervalSince(lastTimestamp) <= frameDedupeMaxInterval
+    }
+
+    private func markFrameEncodedForDedupe(_ signature: FrameDedupeSignature, timestamp: Date) {
+        lastEncodedFrameSignature = signature
+        lastEncodedFrameTimestamp = timestamp
+    }
+
+    private func hasMetadata(focusStatus: String?, extractedTasks: [String]?, insight: String?) -> Bool {
+        if focusStatus != nil { return true }
+        if extractedTasks?.isEmpty == false { return true }
+        if insight?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false { return true }
+        return false
+    }
+
     // MARK: - Frame Processing
 
     /// Process a captured frame from ProactiveAssistantsPlugin
@@ -154,28 +199,26 @@ actor RewindIndexer {
                 return
             }
 
-            // OCR gating: throttle frequency, deduplicate, then check battery
-            var ocrText: String?
-            var ocrDataJson: String?
-            var isIndexed = false
+            let dedupeSignature = makeFrameDedupeSignature(cgImage: cgImage, appName: frame.appName, windowTitle: frame.windowTitle)
+            if await shouldSkipFrameForDedupe(dedupeSignature, timestamp: frame.captureTime) {
+                return
+            }
 
-            // Add frame to the video encoder first so raw frame/history capture
-            // never blocks on OCR. Vision OCR can be slow or transiently fail on
-            // some machines; previously the secret scan ran before these gates
-            // and its catch path returned before encoding, stopping Rewind video
-            // capture entirely. Frame storage must be independent of OCR outcome.
+            // Add frame to video encoder
             let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
                 image: cgImage,
                 timestamp: frame.captureTime
             )
 
-            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip
-            // OCR and DB insert since there's no video chunk to load later.
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            // since there's no video chunk to load later
             guard let encodedFrame = encodedFrame else { return }
 
-            // OCR secret scan is gated by frequency and dedup so it only runs
-            // when OCR would have run anyway. Failures drop the OCR artifact
-            // but never the already-stored raw frame.
+            // OCR gating: throttle frequency, deduplicate, then check battery
+            var ocrText: String?
+            var ocrDataJson: String?
+            var isIndexed = false
+
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
                 recordOCROutcome(.skippedFrequency)
@@ -185,33 +228,18 @@ actor RewindIndexer {
                 isIndexed = true
             } else {
                 framesSinceLastOCR = 0
-                let secretScanResult: OCRResult?
+                recordOCROutcome(.ran)
                 do {
-                    secretScanResult = try await scanJPEGForHardSecret(
-                        data: frame.jpegData,
-                        appName: frame.appName,
-                        windowTitle: frame.windowTitle,
-                        timestamp: frame.captureTime
-                    )
-                } catch {
-                    await dropUnscannedOCRArtifact(appName: frame.appName, windowTitle: frame.windowTitle, timestamp: frame.captureTime, error: error)
-                    recordOCROutcome(.ran)
-                    isIndexed = true
-                    secretScanResult = nil
-                }
-
-                if let result = secretScanResult {
-                    recordOCROutcome(.ran)
-                    ocrText = result.fullText
-                    if let data = try? JSONEncoder().encode(result) {
+                    let ocrResult = try await Task(priority: .utility) {
+                        try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
+                    }.value
+                    ocrText = ocrResult.fullText
+                    if let data = try? JSONEncoder().encode(ocrResult) {
                         ocrDataJson = String(data: data, encoding: .utf8)
                     }
                     isIndexed = true
-                } else {
-                    // scanJPEGForHardSecret returned nil = secret detected and
-                    // tombstoned, or an error was already logged above. Either
-                    // way the raw frame is already stored; skip OCR enrichment.
-                    isIndexed = true
+                } catch {
+                    logError("RewindIndexer: OCR failed for frame: \(error)")
                 }
             }
 
@@ -229,6 +257,7 @@ actor RewindIndexer {
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
+            markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
 
             // Embed OCR text for semantic search (non-blocking)
             if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
@@ -254,29 +283,25 @@ actor RewindIndexer {
         scheduleRetentionCleanupIfDue()
 
         do {
-            // OCR gating: throttle frequency, deduplicate, then check battery
-            var ocrText: String?
-            var ocrDataJson: String?
-            var isIndexed = false
+            let dedupeSignature = makeFrameDedupeSignature(cgImage: cgImage, appName: appName, windowTitle: windowTitle)
+            if await shouldSkipFrameForDedupe(dedupeSignature, timestamp: captureTime) {
+                return
+            }
 
-            // Add frame to the video encoder first so raw frame/history capture
-            // never blocks on OCR. Vision OCR can be slow or transiently fail on
-            // some machines; previously the secret scan ran before these gates
-            // and its catch path returned before encoding, stopping Rewind video
-            // capture entirely. Frame storage must be independent of OCR outcome.
-            // This mirrors the JPEG overload's encode-first ordering.
+            // Add frame to video encoder (CGImage directly, no decode needed)
             let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
                 image: cgImage,
                 timestamp: captureTime
             )
 
-            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip
-            // OCR and DB insert since there's no video chunk to load later.
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
             guard let encodedFrame = encodedFrame else { return }
 
-            // OCR secret scan is gated by frequency and dedup so it only runs
-            // when OCR would have run anyway. Failures drop the OCR artifact
-            // but never the already-stored raw frame.
+            // OCR gating: throttle frequency, deduplicate, then check battery
+            var ocrText: String?
+            var ocrDataJson: String?
+            var isIndexed = false
+
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
                 recordOCROutcome(.skippedFrequency)
@@ -286,33 +311,18 @@ actor RewindIndexer {
                 isIndexed = true
             } else {
                 framesSinceLastOCR = 0
-                let secretScanResult: OCRResult?
+                recordOCROutcome(.ran)
                 do {
-                    secretScanResult = try await scanCGImageForHardSecret(
-                        cgImage,
-                        appName: appName,
-                        windowTitle: windowTitle,
-                        timestamp: captureTime
-                    )
-                } catch {
-                    await dropUnscannedOCRArtifact(appName: appName, windowTitle: windowTitle, timestamp: captureTime, error: error)
-                    recordOCROutcome(.ran)
-                    isIndexed = true
-                    secretScanResult = nil
-                }
-
-                if let result = secretScanResult {
-                    recordOCROutcome(.ran)
-                    ocrText = result.fullText
-                    if let data = try? JSONEncoder().encode(result) {
+                    let ocrResult = try await Task(priority: .utility) {
+                        try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
+                    }.value
+                    ocrText = ocrResult.fullText
+                    if let data = try? JSONEncoder().encode(ocrResult) {
                         ocrDataJson = String(data: data, encoding: .utf8)
                     }
                     isIndexed = true
-                } else {
-                    // scanCGImageForHardSecret returned nil = secret detected and
-                    // tombstoned, or an error was already logged above. Either
-                    // way the raw frame is already stored; skip OCR enrichment.
-                    isIndexed = true
+                } catch {
+                    logError("RewindIndexer: OCR failed for CGImage frame: \(error)")
                 }
             }
 
@@ -329,6 +339,7 @@ actor RewindIndexer {
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
+            markFrameEncodedForDedupe(dedupeSignature, timestamp: captureTime)
 
             // Embed OCR text for semantic search (non-blocking)
             if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
@@ -366,26 +377,25 @@ actor RewindIndexer {
                 return
             }
 
+            let dedupeSignature = makeFrameDedupeSignature(cgImage: cgImage, appName: frame.appName, windowTitle: frame.windowTitle)
+            let carriesMetadata = hasMetadata(focusStatus: focusStatus, extractedTasks: extractedTasks, insight: insight)
+            if !carriesMetadata, await shouldSkipFrameForDedupe(dedupeSignature, timestamp: frame.captureTime) {
+                return
+            }
+
+            // Add frame to video encoder
+            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
+                image: cgImage,
+                timestamp: frame.captureTime
+            )
+
+            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
+            guard let encodedFrame = encodedFrame else { return }
+
             // OCR gating: throttle frequency, deduplicate, then check battery
             var ocrText: String?
             var ocrDataJson: String?
             var isIndexed = false
-
-            let secretScanResult: OCRResult
-            do {
-                guard let result = try await scanJPEGForHardSecret(
-                    data: frame.jpegData,
-                    appName: frame.appName,
-                    windowTitle: frame.windowTitle,
-                    timestamp: frame.captureTime
-                ) else {
-                    return
-                }
-                secretScanResult = result
-            } catch {
-                await dropUnscannedOCRArtifact(appName: frame.appName, windowTitle: frame.windowTitle, timestamp: frame.captureTime, error: error)
-                return
-            }
 
             framesSinceLastOCR += 1
             if framesSinceLastOCR < ocrEveryNthFrame {
@@ -397,11 +407,18 @@ actor RewindIndexer {
             } else {
                 framesSinceLastOCR = 0
                 recordOCROutcome(.ran)
-                ocrText = secretScanResult.fullText
-                if let data = try? JSONEncoder().encode(secretScanResult) {
-                    ocrDataJson = String(data: data, encoding: .utf8)
+                do {
+                    let ocrResult = try await Task(priority: .utility) {
+                        try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
+                    }.value
+                    ocrText = ocrResult.fullText
+                    if let data = try? JSONEncoder().encode(ocrResult) {
+                        ocrDataJson = String(data: data, encoding: .utf8)
+                    }
+                    isIndexed = true
+                } catch {
+                    logError("RewindIndexer: OCR failed for frame with metadata: \(error)")
                 }
-                isIndexed = true
             }
 
             // Encode tasks and insight as JSON
@@ -412,16 +429,6 @@ actor RewindIndexer {
             }
 
             let adviceJson: String? = insight
-
-            // Add frame to video encoder after OCR secret gating so secret-bearing frames
-            // are tombstoned before raw frame storage.
-            let encodedFrame = try await VideoChunkEncoder.shared.addFrame(
-                image: cgImage,
-                timestamp: frame.captureTime
-            )
-
-            // Frame was dropped by encoder (e.g. aspect ratio debounce) — skip DB insert
-            guard let encodedFrame = encodedFrame else { return }
 
             let screenshot = Screenshot(
                 timestamp: frame.captureTime,
@@ -439,6 +446,9 @@ actor RewindIndexer {
             )
 
             let inserted = try await RewindDatabase.shared.insertScreenshot(screenshot)
+            if !carriesMetadata {
+                markFrameEncodedForDedupe(dedupeSignature, timestamp: frame.captureTime)
+            }
 
             // Embed OCR text for semantic search (non-blocking)
             if let ocrText = ocrText, !ocrText.isEmpty, let id = inserted.id {
@@ -455,88 +465,6 @@ actor RewindIndexer {
         } catch {
             logError("RewindIndexer: Failed to process frame with metadata: \(error)")
             await RewindDatabase.shared.reportQueryError(error)
-        }
-    }
-
-    private func dropOCRArtifactIfSecret(
-        text: String,
-        appName: String?,
-        windowTitle: String?,
-        timestamp: Date
-    ) async -> Bool {
-        let categories = HardSecretDetector.categories(in: text)
-        guard !categories.isEmpty else { return false }
-
-        await recordDroppedOCRArtifact(
-            reason: "secret",
-            appName: appName,
-            windowTitle: windowTitle,
-            categories: categories,
-            timestamp: timestamp
-        )
-        return true
-    }
-
-    private func scanJPEGForHardSecret(
-        data: Data,
-        appName: String?,
-        windowTitle: String?,
-        timestamp: Date
-    ) async throws -> OCRResult? {
-        let ocrResult = try await Task(priority: .utility) {
-            try await RewindOCRService.shared.extractTextWithBounds(from: data)
-        }.value
-        if await dropOCRArtifactIfSecret(text: ocrResult.fullText, appName: appName, windowTitle: windowTitle, timestamp: timestamp) {
-            return nil
-        }
-        return ocrResult
-    }
-
-    private func scanCGImageForHardSecret(
-        _ cgImage: CGImage,
-        appName: String?,
-        windowTitle: String?,
-        timestamp: Date
-    ) async throws -> OCRResult? {
-        let ocrResult = try await Task(priority: .utility) {
-            try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
-        }.value
-        if await dropOCRArtifactIfSecret(text: ocrResult.fullText, appName: appName, windowTitle: windowTitle, timestamp: timestamp) {
-            return nil
-        }
-        return ocrResult
-    }
-
-    private func dropUnscannedOCRArtifact(appName: String?, windowTitle: String?, timestamp: Date, error: Error) async {
-        await recordDroppedOCRArtifact(
-            reason: "secret_scan_failed",
-            appName: appName,
-            windowTitle: windowTitle,
-            categories: [],
-            timestamp: timestamp
-        )
-        logError("RewindIndexer: Dropped unscanned OCR artifact before raw storage", error: error)
-    }
-
-    private func recordDroppedOCRArtifact(
-        reason: String,
-        appName: String?,
-        windowTitle: String?,
-        categories: [String],
-        timestamp: Date
-    ) async {
-        do {
-            try await RewindDatabase.shared.insertDroppedArtifact(
-                reason: reason,
-                sourceType: "screen_ocr",
-                appName: appName,
-                windowTitle: windowTitle,
-                categories: categories,
-                timestamp: timestamp
-            )
-            log("RewindIndexer: Dropped OCR artifact reason=\(reason) categories=\(categories.joined(separator: ","))")
-        } catch {
-            logError("RewindIndexer: Failed to record dropped OCR artifact", error: error)
         }
     }
 
@@ -597,16 +525,19 @@ actor RewindIndexer {
         }
     }
 
-    /// Stop the indexer
-    func stop() async {
+    /// Stop the indexer and return whether pending video frames flushed successfully.
+    @discardableResult
+    func stop() async -> Bool {
         // Flush any pending video frames before stopping
         do {
             _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
         } catch {
             logError("RewindIndexer: Failed to flush video chunk: \(error)")
+            return false
         }
 
         log("RewindIndexer: Stopped")
+        return true
     }
 
     // MARK: - OCR Backfill (battery → AC)
@@ -655,16 +586,6 @@ actor RewindIndexer {
                         let ocrResult = try await Task(priority: .utility) {
                             try await RewindOCRService.shared.extractTextWithBounds(from: cgImage)
                         }.value
-
-                        if await dropOCRArtifactIfSecret(
-                            text: ocrResult.fullText,
-                            appName: screenshot.appName,
-                            windowTitle: screenshot.windowTitle,
-                            timestamp: screenshot.timestamp
-                        ) {
-                            try? await RewindDatabase.shared.clearSkippedForBattery(id: id)
-                            continue
-                        }
 
                         try await RewindDatabase.shared.updateOCRResult(id: id, ocrResult: ocrResult)
                         totalProcessed += 1
@@ -847,10 +768,56 @@ actor RewindIndexer {
     }
 }
 
+enum RewindShutdownFlush {
+    static func flush(timeout: TimeInterval, context: String) -> Bool {
+        let state = RewindFlushState()
+        let semaphore = DispatchSemaphore(value: 0)
+        Task.detached(priority: .userInitiated) {
+            state.setFlushed(await RewindIndexer.shared.stop())
+            semaphore.signal()
+        }
+
+        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+            logError("\(context): Timed out flushing Rewind chunk")
+            return false
+        }
+
+        if !state.didFlush {
+            logError("\(context): Failed to flush Rewind chunk")
+        }
+        return state.didFlush
+    }
+}
+
+private final class RewindFlushState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flushed = false
+
+    var didFlush: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return flushed
+    }
+
+    func setFlushed(_ value: Bool) {
+        lock.lock()
+        flushed = value
+        lock.unlock()
+    }
+}
+
 /// Metadata for a frame extracted from video
 private struct FrameMetadata {
     let timestamp: Date
     let frameOffset: Int
     let appName: String?
+    let windowTitle: String?
+}
+
+private struct FrameDedupeSignature: Equatable {
+    let fingerprint: UInt64
+    let width: Int
+    let height: Int
+    let appName: String
     let windowTitle: String?
 }
