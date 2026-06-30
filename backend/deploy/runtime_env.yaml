@@ -11,6 +11,12 @@ environments:
           OMI_LLM_GATEWAY_URL:
             value: http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080
             category: service_discovery
+          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+            value: "true"
+            category: rollout
+          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+            value: "1.0"
+            category: rollout
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
               name: dev-omi-backend-secrets
