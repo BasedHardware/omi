@@ -1963,18 +1963,6 @@ function desktopArtifactDeliveryFromRow(row: Row): DesktopArtifactDelivery {
   };
 }
 
-function desktopAttentionOverrideFromRow(row: Row): DesktopAttentionOverride {
-  return {
-    ownerId: text(row.owner_id),
-    subjectKind: text(row.subject_kind),
-    subjectId: text(row.subject_id),
-    hiddenUntilMs: nullableNumber(row.hidden_until_ms),
-    dismissedAtMs: nullableNumber(row.dismissed_at_ms),
-    reason: nullableText(row.reason),
-    createdAtMs: Number(row.created_at_ms),
-  };
-}
-
 function nullableText(value: SQLOutputValue): string | null {
   if (value === null) return null;
   return text(value);
