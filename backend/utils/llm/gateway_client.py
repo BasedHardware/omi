@@ -8,7 +8,7 @@ from typing import TypeVar
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from utils.metrics import LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS
+from utils.llm.gateway_observability import record_gateway_request_result
 
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
 LEGACY_LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'LLM_GATEWAY_SERVICE_TOKEN'
@@ -96,10 +96,7 @@ def invoke_chat_structured_gateway(
 
 
 def record_chat_extraction_gateway_result(*, feature: str, outcome: str, reason: str) -> None:
-    try:
-        LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS.labels(feature=feature, outcome=outcome, reason=reason).inc()
-    except Exception:
-        pass
+    record_gateway_request_result(feature=feature, outcome=outcome, reason=reason)
 
 
 def _gateway_headers() -> dict[str, str]:
