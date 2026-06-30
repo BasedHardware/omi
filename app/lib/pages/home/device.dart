@@ -101,6 +101,56 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.copiedToClipboard(title))));
   }
 
+  Future<void> _showRenameDeviceDialog(DeviceProvider provider) async {
+    final device = provider.pairedDevice ?? provider.connectedDevice;
+    if (device == null || device.id.isEmpty) return;
+
+    final controller = TextEditingController(text: device.name);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1C1C1E),
+          title: Text(context.l10n.deviceName, style: const TextStyle(color: Colors.white)),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 32,
+            style: const TextStyle(color: Colors.white),
+            decoration: InputDecoration(
+              labelText: context.l10n.deviceName,
+              labelStyle: const TextStyle(color: Color(0xFF8E8E93)),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFF3C3C43))),
+              focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white)),
+            ),
+            textInputAction: TextInputAction.done,
+            onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+              child: Text(context.l10n.save, style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+
+    controller.dispose();
+    if (newName == null) return;
+
+    final trimmedName = newName.trim();
+    if (trimmedName.isEmpty || trimmedName == device.name) return;
+
+    await provider.updateCustomDeviceName(trimmedName);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.saved)));
+  }
+
   Widget _buildProfileStyleItem({
     required IconData icon,
     required String title,
@@ -366,6 +416,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
 
               // Clear stored device
+              await provider.clearCustomDeviceName(deviceId);
               await SharedPreferencesUtil().btDeviceSet(BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0));
               SharedPreferencesUtil().deviceName = '';
 
@@ -421,6 +472,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                     () => Navigator.of(context).pop(),
                     () async {
                       Navigator.of(context).pop();
+                      final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+                      await provider.clearCustomDeviceName(deviceId);
                       await SharedPreferencesUtil().btDeviceSet(
                         BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0),
                       );
@@ -500,10 +553,10 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
         children: [
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.microchip,
-            title: context.l10n.productName,
+            title: context.l10n.deviceName,
             chipValue: deviceName,
-            copyValue: deviceName,
-            showChevron: false,
+            onTap: () => _showRenameDeviceDialog(provider),
+            showChevron: true,
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
