@@ -79,6 +79,9 @@ class _DocRef:
         return _Snapshot(self._db.docs[self.path], exists=True)
 
     def set(self, data, merge=False):
+        if merge and self.path in self._db.docs:
+            self._db.docs[self.path] = self._db.docs[self.path] | data
+            return
         self._db.docs[self.path] = data
 
 
@@ -158,7 +161,7 @@ class _PromotionFakeDb(_FakeDb):
 def _canonical_db_with_control(uid: str = "uid-canonical") -> _PromotionFakeDb:
     return _PromotionFakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid,
                 head_commit_id="head0",
                 account_generation=1,
@@ -253,7 +256,7 @@ def test_promotion_fires_on_daily_elapsed_below_batch_threshold(monkeypatch):
         source_generation=1,
         last_promotion_run_at=NOW - timedelta(hours=25),
     )
-    db.docs[f"users/{uid}/memory_control/state"] = control.model_dump(mode="json")
+    db.docs[f"users/{uid}/memory_state/apply_control"] = control.model_dump(mode="json")
 
     memory_id = _seed_canonical_short_term(
         db,
@@ -282,7 +285,7 @@ def test_promotion_does_not_fire_when_neither_condition_met(monkeypatch):
         source_generation=1,
         last_promotion_run_at=NOW - timedelta(hours=1),
     )
-    db.docs[f"users/{uid}/memory_control/state"] = control.model_dump(mode="json")
+    db.docs[f"users/{uid}/memory_state/apply_control"] = control.model_dump(mode="json")
     memory_id = _seed_canonical_short_term(
         db,
         uid=uid,
@@ -534,7 +537,7 @@ def test_promotion_daily_cadence_applies_after_first_successful_run(monkeypatch)
     first = run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-first-run")
     assert first.trigger_reason == "batch_threshold"
     assert first.promoted_count == threshold
-    assert db.docs[f"users/{uid}/memory_control/state"]["last_promotion_run_at"] is not None
+    assert db.docs[f"users/{uid}/memory_state/apply_control"]["last_promotion_run_at"] is not None
 
     daily_memory_id = _seed_canonical_short_term(
         db,

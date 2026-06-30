@@ -85,7 +85,7 @@ def apply_long_term_patch_firestore(
 
 
 def atomic_bump_source_generation(uid: str, *, db_client) -> MemoryControlState:
-    """Atomically advance ``source_generation`` on memory_control/state (Q7 reprocess)."""
+    """Atomically advance canonical apply ``source_generation`` (Q7 reprocess)."""
     transaction = db_client.transaction()
     return _atomic_bump_source_generation_transaction(transaction, db_client, uid)
 
@@ -98,7 +98,7 @@ def _atomic_bump_source_generation_transaction(
 ) -> MemoryControlState:
     now = datetime.now(timezone.utc)
     collections = MemoryCollections(uid=uid)
-    control_ref = db_client.document(collections.memory_control_state)
+    control_ref = db_client.document(collections.memory_apply_control_state)
     snapshot = control_ref.get(transaction=transaction)
     if not getattr(snapshot, "exists", False):
         control = MemoryControlState(
@@ -129,7 +129,7 @@ def _apply_long_term_patch_firestore_transaction(
     patch_payload: Dict[str, Any],
 ) -> ApplyResult:
     collections = MemoryCollections(uid=uid)
-    control_ref = db_client.document(collections.memory_control_state)
+    control_ref = db_client.document(collections.memory_apply_control_state)
     operation_ref = db_client.document(f"{collections.memory_operations}/{operation_id}")
 
     control_state = _required_model(
@@ -302,7 +302,7 @@ def _write_apply_result(
     if result.status != ApplyStatus.committed:
         return
 
-    control_ref = db_client.document(collections.memory_control_state)
+    control_ref = db_client.document(collections.memory_apply_control_state)
     commit_ref = db_client.document(f"{collections.memory_commits}/{result.control_state.head_commit_id}")
     state_head_ref = db_client.document(collections.memory_state_head)
     transaction.set(control_ref, _firestore_data(result.control_state))

@@ -279,10 +279,15 @@ check_backend_unit_tests_if_needed() {
           ;;
       esac
     done
+    if changed_matches 'backend/utils/llm/*.py' 'backend/utils/llm/**/*.py'; then
+      add_fast_backend_test_if_selected "tests/unit/test_action_item_date_validation.py"
+      add_fast_backend_test_if_selected "tests/unit/test_conversation_structure_timezone.py"
+      add_fast_backend_test_if_selected "tests/unit/test_llm_gateway_chat_extraction_pilot.py"
+    fi
     if [ -s "$FAST_BACKEND_TESTS" ]; then
       sort -u "$FAST_BACKEND_TESTS" -o "$FAST_BACKEND_TESTS"
       selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
-      echo "Selector requested $reason ($original_selected_count files; running $selected_count changed backend test file(s) instead; cap is $max_pre_push_tests)."
+      echo "Selector requested $reason ($original_selected_count files; running $selected_count focused backend test file(s) instead; cap is $max_pre_push_tests)."
       cp "$FAST_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS"
     else
       echo "Skipping broad backend unit suite in pre-push: $reason ($selected_count files; cap is $max_pre_push_tests)."
@@ -295,8 +300,16 @@ check_backend_unit_tests_if_needed() {
   (
     cd backend
     bash test-preflight.sh
-    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" bash test.sh
+    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" BACKEND_PYTEST_XDIST=auto BACKEND_PYTEST_WORKERS=auto bash test.sh
   )
+}
+
+add_fast_backend_test_if_selected() {
+  local test_path="$1"
+
+  if grep -Fxq "$test_path" "$SELECTED_BACKEND_TESTS"; then
+    printf '%s\n' "$test_path" >> "$FAST_BACKEND_TESTS"
+  fi
 }
 
 check_openapi_contract_if_needed() {
@@ -317,7 +330,7 @@ check_openapi_contract_if_needed() {
 
   (
     cd backend
-    python3 scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+    scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
   )
 }
 

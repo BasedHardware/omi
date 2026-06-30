@@ -32,6 +32,10 @@ class MemoryCollections:
         return f"{self.user_root}/memory_control/state"
 
     @property
+    def memory_apply_control_state(self) -> str:
+        return f"{self.user_root}/memory_state/apply_control"
+
+    @property
     def memory_lineage(self) -> str:
         return f"{self.user_root}/memory_lineage"
 
@@ -60,6 +64,10 @@ class MemoryCollections:
         return f"{self.user_root}/memory_commits"
 
     @property
+    def memory_state(self) -> str:
+        return f"{self.user_root}/memory_state"
+
+    @property
     def memory_state_head(self) -> str:
         return f"{self.user_root}/memory_state/head"
 
@@ -83,6 +91,7 @@ class MemoryCollections:
             self.short_term_lifecycle_transitions,
             self.legacy_fallback,
             self.memory_commits,
+            self.memory_state,
             self.v3_compatibility_projection_items,
         ]
 

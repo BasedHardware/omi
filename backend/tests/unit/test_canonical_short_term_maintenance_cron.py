@@ -178,6 +178,10 @@ def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch
 def _consolidation_disabled_for_promotion_cron(monkeypatch):
     """Promotion cron tests target batch-or-daily promotion, not the consolidation LLM path."""
     monkeypatch.setenv("MEMORY_CANONICAL_CONSOLIDATION_ENABLED", "false")
+    monkeypatch.setattr(
+        "utils.memory.canonical_kg_promotion.extract_knowledge_from_memory",
+        lambda *args, **kwargs: {"nodes": [], "edges": []},
+    )
 
 
 def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation_disabled_for_promotion_cron):
