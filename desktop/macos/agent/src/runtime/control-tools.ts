@@ -64,6 +64,7 @@ const contextSnippetSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
   sensitivityTier: z.string().min(1),
   policyDecision: z.enum(["allowed", "denied", "dispatch_created"]).optional(),
+  dispatchId: z.string().min(1).nullable().optional(),
   selected: z.boolean().optional(),
   tokenEstimate: z.coerce.number().int().positive().optional(),
 });

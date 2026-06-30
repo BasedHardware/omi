@@ -227,6 +227,7 @@ describe("agent control tools", () => {
     });
     expect(String(resolved.error.message)).toContain("capability must match");
     expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
+    expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [dispatch.dispatchId]).status).toBe("pending");
     store.close();
   });
 
@@ -268,6 +269,7 @@ describe("agent control tools", () => {
     });
     expect(String(resolved.error.message)).toContain("Only approval dispatches");
     expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
+    expect(store.getRow("SELECT status FROM desktop_dispatches WHERE dispatch_id = ?", [dispatch.dispatchId]).status).toBe("pending");
     store.close();
   });
 
@@ -308,6 +310,81 @@ describe("agent control tools", () => {
       error: { code: "policy_denied" },
     });
     expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(0);
+    store.close();
+  });
+
+  it("requires verified approved dispatches for sensitive context packet snippets", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const dispatch = kernel.createDesktopDispatch({
+      ownerId: "owner",
+      kind: "screen_context",
+      priority: 100,
+      title: "Approve current screen",
+      decisionPrompt: "Allow current screen summary?",
+      capability: "desktop.context.screen_summary",
+      operation: "get_work_context",
+      resourceRef: "screen:current",
+    });
+
+    const unapproved = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "build_desktop_context_packet", {
+      surfaceKind: "main_chat",
+      objective: "Inspect screen",
+      ttlMs: 60_000,
+      retentionClass: "ephemeral",
+      packetJson: {
+        snippets: [
+          {
+            snippetId: "screen",
+            sourceKind: "screen_current",
+            operation: "get_work_context",
+            provenance: { scope: "current" },
+            content: "Visible app title",
+            sensitivityTier: "sensitive",
+            policyDecision: "dispatch_created",
+            dispatchId: dispatch.dispatchId,
+          },
+        ],
+      },
+    }));
+    expect(unapproved).toMatchObject({
+      ok: false,
+      error: { code: "control_tool_failed" },
+    });
+    expect(String(unapproved.error.message)).toContain("not approved");
+
+    store.resolveDesktopDispatch(dispatch.dispatchId, {
+      ownerId: "owner",
+      status: "resolved",
+      resolutionJson: JSON.stringify({ decision: "allow" }),
+    });
+
+    const approved = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "build_desktop_context_packet", {
+      surfaceKind: "main_chat",
+      objective: "Inspect screen",
+      ttlMs: 60_000,
+      retentionClass: "ephemeral",
+      packetJson: {
+        snippets: [
+          {
+            snippetId: "screen",
+            sourceKind: "screen_current",
+            operation: "get_work_context",
+            provenance: { scope: "current" },
+            content: "Visible app title",
+            sensitivityTier: "sensitive",
+            policyDecision: "dispatch_created",
+            dispatchId: dispatch.dispatchId,
+          },
+        ],
+      },
+    }));
+
+    expect(approved.ok).toBe(true);
+    expect(approved.accessLogs[0]).toMatchObject({
+      sourceKind: "screen_current",
+      dispatchId: dispatch.dispatchId,
+      policyDecision: "dispatch_created",
+    });
     store.close();
   });
 

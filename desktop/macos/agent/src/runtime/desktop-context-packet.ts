@@ -16,6 +16,7 @@ export interface DesktopContextSnippetInput {
   metadata?: Record<string, unknown>;
   sensitivityTier: string;
   policyDecision?: DesktopContextPolicyDecision;
+  dispatchId?: string | null;
   selected?: boolean;
   tokenEstimate?: number;
 }
@@ -91,9 +92,9 @@ function requiresExplicitPolicy(snippet: DesktopContextSnippetInput): boolean {
 
 function policyDecisionForSnippet(snippet: DesktopContextSnippetInput): DesktopContextPolicyDecision {
   if (!requiresExplicitPolicy(snippet)) return "allowed";
-  if (snippet.policyDecision === "dispatch_created") return "dispatch_created";
+  if (snippet.policyDecision === "dispatch_created" && snippet.dispatchId) return "dispatch_created";
   throw new Error(
-    `Context snippet ${snippet.snippetId} requires dispatch approval before sensitive source ${snippet.sourceKind} can be included.`,
+    `Context snippet ${snippet.snippetId} requires a verified dispatch before sensitive source ${snippet.sourceKind} can be included.`,
   );
 }
 
@@ -162,6 +163,7 @@ export function buildDesktopContextPacket(input: DesktopContextPacketBuildInput)
     scopeJson: JSON.stringify(snippet.provenance),
     sensitivityTier: snippet.sensitivityTier,
     policyDecision: policyDecisionForSnippet(snippet),
+    dispatchId: snippet.dispatchId ?? null,
     redactionSummaryJson: JSON.stringify({
       previewOnly: true,
       contentIncluded: snippet.content !== undefined,

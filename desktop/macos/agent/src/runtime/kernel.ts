@@ -42,7 +42,7 @@ import type {
   NewDesktopCoordinatorDispatch,
 } from "./types.js";
 import { buildDesktopActionQueue, type DesktopActionQueueItem, type QueueArtifactDeliveryInput, type QueueCandidateInput, type QueueDispatchInput, type QueueOverrideInput, type QueueRunInput } from "./desktop-action-queue.js";
-import { buildDesktopContextPacket, type DesktopContextPacketBuildInput, type BuiltDesktopContextPacket } from "./desktop-context-packet.js";
+import { buildDesktopContextPacket, type DesktopContextPacketBuildInput, type BuiltDesktopContextPacket, type DesktopContextSnippetInput } from "./desktop-context-packet.js";
 import { routeDesktopIntent, type DesktopIntentRoute, type DesktopIntentRouteInput, type DesktopIntentSessionCandidate } from "./desktop-intent-router.js";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
@@ -53,6 +53,14 @@ const TERMINAL_STATUSES: readonly RunStatus[] = ["succeeded", "failed", "cancell
 const DEFAULT_DELEGATION_MAX_DEPTH = 3;
 const HARD_DELEGATION_MAX_DEPTH = 5;
 const DEFAULT_DELEGATION_MAX_BUDGET_USD = 5;
+
+function requiresVerifiedContextDispatch(snippet: DesktopContextSnippetInput): boolean {
+  const tier = snippet.sensitivityTier.toLowerCase();
+  if (snippet.sourceKind === "screenshot_image") return true;
+  if (snippet.sourceKind === "rewind_timeline") return true;
+  if (snippet.sourceKind === "screen_current" && tier !== "low") return true;
+  return tier === "sensitive";
+}
 const HARD_DELEGATION_MAX_BUDGET_USD = 10;
 
 function stableHash(value: string | undefined): string {
@@ -965,6 +973,7 @@ export class AgentRuntimeKernel {
 
   persistDesktopContextPacket(input: DesktopContextPacketPersistInput): BuiltDesktopContextPacket {
     const ownerId = input.ownerId ?? "desktop-local-user";
+    this.validateSensitiveContextDispatches({ ...input, ownerId });
     const built = buildDesktopContextPacket({ ...input, ownerId });
     this.withTransaction(() => {
       this.store.insertDesktopContextPacket({
@@ -987,6 +996,34 @@ export class AgentRuntimeKernel {
       actionQueue: this.listDesktopActionQueue({ ownerId, limit: 50 }),
       sessionCandidates: this.desktopIntentSessionCandidates(ownerId, input.surfaceKind, input.taskId ?? null),
     });
+  }
+
+  private validateSensitiveContextDispatches(input: DesktopContextPacketBuildInput): void {
+    for (const snippet of input.snippets) {
+      if (snippet.selected === false || !requiresVerifiedContextDispatch(snippet)) continue;
+      const dispatchId = snippet.dispatchId?.trim();
+      if (!dispatchId) {
+        throw new Error(`Sensitive context snippet ${snippet.snippetId} requires a dispatch id`);
+      }
+      const row = this.store.getOptionalRow("SELECT * FROM desktop_dispatches WHERE dispatch_id = ? AND owner_id = ?", [
+        dispatchId,
+        input.ownerId,
+      ]);
+      if (!row) {
+        throw new Error(`Sensitive context dispatch ${dispatchId} was not found for owner`);
+      }
+      const dispatch = desktopDispatchFromRow(row);
+      const resolution = parseJsonObject(dispatch.resolutionJson);
+      if (!["approval", "screen_context"].includes(dispatch.kind)) {
+        throw new Error(`Sensitive context dispatch ${dispatchId} has invalid kind`);
+      }
+      if (dispatch.status !== "resolved" || resolution.decision !== "allow") {
+        throw new Error(`Sensitive context dispatch ${dispatchId} is not approved`);
+      }
+      if (dispatch.operation && dispatch.operation !== snippet.operation) {
+        throw new Error(`Sensitive context dispatch ${dispatchId} operation does not match snippet`);
+      }
+    }
   }
 
   createDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch {

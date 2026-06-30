@@ -111,10 +111,10 @@ describe("desktop context packet builder", () => {
           },
         ],
       }),
-    ).toThrow(/requires dispatch approval/);
+    ).toThrow(/requires a verified dispatch/);
   });
 
-  it("allows sensitive screen snippets only after dispatch approval", () => {
+  it("allows sensitive screen snippets only with a dispatch reference", () => {
     const result = buildDesktopContextPacket({
       ownerId: "owner-1",
       surfaceKind: "main_chat",
@@ -131,6 +131,7 @@ describe("desktop context packet builder", () => {
           redactedContent: "Visible page title",
           sensitivityTier: "sensitive",
           policyDecision: "dispatch_created",
+          dispatchId: "dispatch-1",
         },
       ],
     });
@@ -138,6 +139,7 @@ describe("desktop context packet builder", () => {
     expect(result.accessLogs[0]).toMatchObject({
       sourceKind: "screen_current",
       policyDecision: "dispatch_created",
+      dispatchId: "dispatch-1",
     });
   });
 
