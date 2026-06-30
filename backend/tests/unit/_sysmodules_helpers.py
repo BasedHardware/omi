@@ -46,17 +46,19 @@ def stub_modules(stub_names):
                 if parent is not None:
                     setattr(parent, attr_name, mod)
 
-    yield _install
-    for k, old in prev_modules.items():
-        if old is None:
-            sys.modules.pop(k, None)
-        else:
-            sys.modules[k] = old
-    for k, (parent, attr_name, orig_val) in prev_attrs.items():
-        if orig_val is _SENTINEL:
-            try:
-                delattr(parent, attr_name)
-            except AttributeError:
-                pass
-        else:
-            setattr(parent, attr_name, orig_val)
+    try:
+        yield _install
+    finally:
+        for k, old in prev_modules.items():
+            if old is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = old
+        for k, (parent, attr_name, orig_val) in prev_attrs.items():
+            if orig_val is _SENTINEL:
+                try:
+                    delattr(parent, attr_name)
+                except AttributeError:
+                    pass
+            else:
+                setattr(parent, attr_name, orig_val)
