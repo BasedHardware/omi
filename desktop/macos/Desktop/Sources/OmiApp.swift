@@ -1292,8 +1292,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
 
-    // Mark clean shutdown so next launch skips expensive DB integrity check
-    RewindDatabase.markCleanShutdown()
+    // Finalize the active Rewind MP4 chunk while the app is still alive.
+    // AVAssetWriter files are not readable until finishWriting writes the trailer.
+    let didFlushRewind = RewindShutdownFlush.flush(timeout: 5, context: "AppDelegate")
+
+    // Mark clean shutdown only after Rewind finalized its active MP4 chunk.
+    if didFlushRewind {
+      RewindDatabase.markCleanShutdown()
+    }
 
     // Report final resources before termination
     ResourceMonitor.shared.reportResourcesNow(context: "app_terminating")
