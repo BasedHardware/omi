@@ -383,8 +383,10 @@ class AppMetadataWidget extends StatelessWidget {
                             onTap: () async {
                               await context.read<AddAppProvider>().generateDescription();
                             },
-                            child: SvgPicture.asset(Assets.images.aiMagic,
-                                colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn)),
+                            child: SvgPicture.asset(
+                              Assets.images.aiMagic,
+                              colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                            ),
                           ),
                         ),
                     ],

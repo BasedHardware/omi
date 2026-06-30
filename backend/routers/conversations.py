@@ -5,6 +5,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database._client as db_client_module
 import database.action_items as action_items_db
 import database.memories as memories_db
 import database.redis_db as redis_db
@@ -39,7 +40,11 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
-from utils.executors import postprocess_executor, submit_with_context
+from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
@@ -373,10 +378,10 @@ async def link_calendar_event(
     Link a specific Google Calendar event to an existing conversation.
     Fetches the event details and stores the calendar_event on the conversation.
     """
-    _get_valid_conversation_by_id(uid, conversation_id)
+    await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get Google Calendar access token
-    integration = users_db.get_integration(uid, 'google_calendar')
+    integration = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
     if not integration or not integration.get('connected'):
         raise HTTPException(status_code=400, detail="Google Calendar not connected")
 
@@ -408,8 +413,12 @@ async def link_calendar_event(
         raise HTTPException(status_code=400, detail="Could not parse calendar event times")
 
     # Persist to Firestore
-    conversations_db.update_conversation(
-        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    await run_blocking(
+        db_executor,
+        conversations_db.update_conversation,
+        uid,
+        conversation_id,
+        {'calendar_event': calendar_event.model_dump(mode='json')},
     )
 
     # Automatically write the conversation link into the calendar event description
@@ -429,7 +438,7 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     Uses the conversation's started_at/finished_at to find a matching event.
     Returns 404 if no overlapping event is found.
     """
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get conversation times
     started_at = conversation.get('started_at')
@@ -468,8 +477,12 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
         raise HTTPException(status_code=404, detail="No overlapping calendar event found")
 
     # Persist to Firestore
-    conversations_db.update_conversation(
-        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    await run_blocking(
+        db_executor,
+        conversations_db.update_conversation,
+        uid,
+        conversation_id,
+        {'calendar_event': calendar_event.model_dump(mode='json')},
     )
 
     # Automatically write the conversation link into the calendar event description
@@ -526,6 +539,9 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
+    # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
+    # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
+    # docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -538,11 +554,15 @@ def delete_conversation(
         # Delete audio files
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-        # Delete associated memories and their vectors
-        memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
-        for memory_id in memory_ids:
-            background_tasks.add_task(delete_memory_vector, uid, memory_id)
+        # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
+        db_client = getattr(db_client_module, 'db', None)
+        memory_system = pin_memory_system(uid, db_client=db_client)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
+        else:
+            deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
+            for memory_id in deletion_result.get('vector_delete_ids', []):
+                delete_memory_vector(uid, memory_id)
 
         # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)

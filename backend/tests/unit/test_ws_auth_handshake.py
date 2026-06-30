@@ -87,6 +87,7 @@ database_package.redis_db = database_redis_stub
 
 database_users_stub = types.ModuleType('database.users')
 database_users_stub.record_user_platform = MagicMock()
+database_users_stub.record_client_device = MagicMock()
 original_database_users = sys.modules.get('database.users')
 original_database_users_attr = getattr(database_package, 'users', None)
 original_database_users_attr_missing = not hasattr(database_package, 'users')

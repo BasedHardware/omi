@@ -86,8 +86,11 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
                                 child: Container(
                                   padding: const EdgeInsets.all(14),
                                   decoration: const BoxDecoration(color: Color(0xFF635BFF), shape: BoxShape.circle),
-                                  child: SvgPicture.asset(Assets.images.stripeLogo,
-                                      width: 40, colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn)),
+                                  child: SvgPicture.asset(
+                                    Assets.images.stripeLogo,
+                                    width: 40,
+                                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                                  ),
                                 ),
                               ),
                             ],

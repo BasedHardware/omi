@@ -147,8 +147,8 @@ final class SystemAudioCaptureModeSettingsTests: XCTestCase {
         super.tearDown()
     }
 
-    func testDefaultsToAlways() {
-        XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .always)
+    func testDefaultsToOnlyDuringMeetings() {
+        XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
     }
 
     func testPersistsAndReadsBack() {
@@ -162,6 +162,6 @@ final class SystemAudioCaptureModeSettingsTests: XCTestCase {
 
     func testUnknownRawValueFallsBackToDefault() {
         UserDefaults.standard.set("garbage", forKey: key)
-        XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .always)
+        XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
     }
 }
