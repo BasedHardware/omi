@@ -154,6 +154,7 @@ async def _run_blocking_inline(_executor, func, *args, **kwargs):
 
 class _JsonRequest:
     def __init__(self, body):
+        self.headers = {"content-type": "application/json"}
         self.body = body
 
     async def json(self):
@@ -161,6 +162,37 @@ class _JsonRequest:
 
     async def is_disconnected(self):
         return False
+
+
+class _FormRequest:
+    def __init__(self, body):
+        self.headers = {"content-type": "application/x-www-form-urlencoded"}
+        self.body = body
+
+    async def form(self):
+        return self.body
+
+
+@pytest.mark.asyncio
+async def test_token_request_parser_reads_json_body():
+    body = {
+        'grant_type': 'authorization_code',
+        'client_id': 'omi-chatgpt-prod',
+        'code': 'omi_code_test',
+    }
+
+    assert await sse._get_token_request_data(_JsonRequest(body)) == body
+
+
+@pytest.mark.asyncio
+async def test_token_request_parser_reads_form_body():
+    body = {
+        'grant_type': 'authorization_code',
+        'client_id': 'omi-chatgpt-prod',
+        'code': 'omi_code_test',
+    }
+
+    assert await sse._get_token_request_data(_FormRequest(body)) == body
 
 
 def test_sse_tools_list_filters_by_oauth_scopes():
