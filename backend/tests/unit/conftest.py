@@ -8,17 +8,16 @@ import types
 import pytest
 
 # ---------------------------------------------------------------------------
-# sys.modules isolation: prevent test files from poisoning each other
+# sys.modules isolation (temporary quarantine — see issue #8661)
 # ---------------------------------------------------------------------------
-# Some test files stub top-level backend packages (utils, models, database,
-# routers) at module level during import.  Without isolation, pytest collects
-# modules alphabetically and every file imported AFTER a poisoning file sees
-# empty stubs instead of real packages.
+# Some test files stub top-level backend packages at module level during
+# import.  Without isolation, pytest collects alphabetically and every file
+# imported AFTER a poisoning file sees empty stubs instead of real packages.
 #
-# Fix: snapshot sys.modules before each Module collection and restore after.
-# Test functions still work because they hold direct object references, not
-# import-based lookups.  Files that need stubs during execution re-apply them
-# via module-scoped autouse fixtures.
+# Proper fix: move module-level stubbing into fixtures/context managers.
+# Until then, snapshot sys.modules before each Module collection and restore
+# after.  Files that need stubs during execution re-apply them via
+# module-scoped autouse fixtures with explicit teardown.
 
 _module_snapshots = {}
 
