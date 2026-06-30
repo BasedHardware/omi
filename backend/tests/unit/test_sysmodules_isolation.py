@@ -9,18 +9,33 @@ types.ModuleType stub left behind by a poisoning test file.
 """
 
 import importlib
+import os
 import sys
 import types
 
+_BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 
 def _assert_real_package(name):
-    """Import the package and verify it's real, not a stub."""
+    """Import the package and verify it's real and rooted under backend/."""
     mod = importlib.import_module(name)
-    has_file = getattr(mod, '__file__', None) is not None
-    has_path = getattr(mod, '__path__', None) is not None and len(mod.__path__) > 0
-    has_loader = getattr(mod, '__loader__', None) is not None
-    assert has_file or has_path or has_loader, (
-        f"{name} looks like a stub (no __file__, no __path__, no __loader__). "
+
+    mod_file = getattr(mod, '__file__', None)
+    mod_path = getattr(mod, '__path__', None)
+
+    if mod_file is not None:
+        assert os.path.abspath(mod_file).startswith(
+            _BACKEND_DIR
+        ), f"{name}.__file__ = {mod_file} is not under {_BACKEND_DIR}"
+        return
+
+    if mod_path is not None and len(mod_path) > 0:
+        for p in mod_path:
+            assert os.path.abspath(p).startswith(_BACKEND_DIR), f"{name}.__path__ entry {p} is not under {_BACKEND_DIR}"
+        return
+
+    raise AssertionError(
+        f"{name} looks like a stub (no __file__, no __path__ under {_BACKEND_DIR}). "
         f"A poisoning test file may have leaked into sys.modules."
     )
 
@@ -39,3 +54,15 @@ def test_models_is_real_package():
 
 def test_routers_is_real_package():
     _assert_real_package("routers")
+
+
+def test_path_not_mutated():
+    """Verify __path__ of real packages hasn't been mutated by stubs."""
+    for name in ("utils", "database", "models", "routers"):
+        mod = importlib.import_module(name)
+        mod_path = getattr(mod, '__path__', None)
+        if mod_path is not None:
+            for p in mod_path:
+                assert os.path.isdir(p), (
+                    f"{name}.__path__ entry {p} does not exist on disk — " f"__path__ may have been mutated by a stub"
+                )
