@@ -7,11 +7,10 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 #
-# Total: 96 entries.
+# Total: 91 entries.
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
-backend/tests/unit/test_action_item_dedup.py
 backend/tests/unit/test_action_item_idempotency.py
 backend/tests/unit/test_action_items_date_range_validation.py
 backend/tests/unit/test_action_items_pagination_order.py
@@ -25,7 +24,6 @@ backend/tests/unit/test_conversation_events_bounds.py
 backend/tests/unit/test_conversations_date_range_validation.py
 backend/tests/unit/test_daily_summary_zero_coordinate_locations.py
 backend/tests/unit/test_delete_account_purge_storage.py
-backend/tests/unit/test_delete_account_stripe_cancel.py
 backend/tests/unit/test_desktop_transcribe.py
 backend/tests/unit/test_desktop_updates.py
 backend/tests/unit/test_dg_start_guard.py
@@ -60,7 +58,6 @@ backend/tests/unit/test_neo_desktop_grandfather.py
 backend/tests/unit/test_non_active_route_audit.py
 backend/tests/unit/test_non_active_route_report.py
 backend/tests/unit/test_non_active_routes.py
-backend/tests/unit/test_omi_product_tool_failsoft.py
 backend/tests/unit/test_oom_reproduction.py
 backend/tests/unit/test_parakeet_batch_engine.py
 backend/tests/unit/test_parakeet_batch_routing.py
@@ -84,7 +81,6 @@ backend/tests/unit/test_skip_classifier_restrict.py
 backend/tests/unit/test_speaker_sample.py
 backend/tests/unit/test_speaker_sample_migration.py
 backend/tests/unit/test_speech_profile_existence.py
-backend/tests/unit/test_staged_tasks_dedup.py
 backend/tests/unit/test_storage_opus_encoding.py
 backend/tests/unit/test_storage_upload_audio_chunk_data_protection.py
 backend/tests/unit/test_streaming_deepgram_backoff.py
@@ -95,7 +91,6 @@ backend/tests/unit/test_sync_playback_service.py
 backend/tests/unit/test_sync_transcription_prefs.py
 backend/tests/unit/test_user_speaker_embedding.py
 backend/tests/unit/test_user_usage.py
-backend/tests/unit/test_users_add_sample_transaction.py
 backend/tests/unit/test_v3_account_generation_source.py
 backend/tests/unit/test_vad_gate.py
 backend/tests/unit/test_vad_onnx.py
