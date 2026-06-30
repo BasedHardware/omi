@@ -340,7 +340,7 @@ def rate_limit_dependency(endpoint: str = "", requests_per_window: int = 60, win
     return rate_limit
 
 
-def _enforce_rate_limit(key: str, policy_name: str):
+def _enforce_rate_limit(key: str, policy_name: str, *, fail_closed: bool = False):
     """Shared rate limit enforcement. Raises HTTPException(429) or logs in shadow mode.
 
     One Redis round-trip per call (Lua script). Fail-open on Redis errors.
@@ -349,7 +349,9 @@ def _enforce_rate_limit(key: str, policy_name: str):
     try:
         allowed, remaining, retry_after = check_rate_limit(key, policy_name, max_requests, window)
     except redis_pkg.exceptions.RedisError as e:
-        logger.error(f"Rate limit Redis error (allowing request): {e}")
+        logger.error(f"Rate limit Redis error policy={policy_name} key={key}: {e}")
+        if fail_closed:
+            raise HTTPException(status_code=503, detail="Rate limiter unavailable")
         return
 
     if not allowed:
@@ -367,11 +369,41 @@ def _enforce_rate_limit(key: str, policy_name: str):
         )
 
 
+def rate_limit_key_for_context(auth_context) -> str:
+    """Return the narrowest stable rate-limit subject for an auth context."""
+    app_id = getattr(auth_context, 'app_id', None)
+    key_id = getattr(auth_context, 'key_id', None)
+    uid = getattr(auth_context, 'uid', None)
+    if app_id and key_id:
+        return f"app:{app_id}:key:{key_id}"
+    if hasattr(auth_context, 'app_id') or hasattr(auth_context, 'key_id'):
+        raise HTTPException(status_code=403, detail="Missing API key identity")
+    if key_id:
+        return f"key:{key_id}"
+    if uid:
+        return str(uid)
+    raise HTTPException(status_code=401, detail="Authenticated subject missing")
+
+
+def check_api_key_rate_limit(
+    *,
+    prefix: str,
+    uid: str,
+    app_id: str | None,
+    key_id: str | None,
+    policy_name: str,
+):
+    if not key_id:
+        raise HTTPException(status_code=403, detail="Missing API key identity")
+    key = f"{prefix}:{uid}:{app_id or 'unknown_app'}:{key_id}"
+    _enforce_rate_limit(key, policy_name, fail_closed=True)
+
+
 def with_rate_limit(auth_dependency, policy_name: str):
     """Wrap an auth dependency with per-UID rate limiting.
 
     After auth succeeds, checks the rate limit for that UID.
-    One Redis call per request. Fail-open on Redis errors.
+    One Redis call per request. Fail-open on Redis errors for first-party user paths.
 
     Args:
         auth_dependency: FastAPI dependency that returns a UID string.
@@ -388,10 +420,11 @@ def with_rate_limit(auth_dependency, policy_name: str):
 
 
 def with_rate_limit_context(auth_context_dependency, policy_name: str):
-    """Wrap a context-returning auth dependency with per-UID rate limiting.
+    """Wrap a context-returning auth dependency with per-subject rate limiting.
 
-    After auth succeeds, checks the rate limit for that context's UID.
-    One Redis call per request. Fail-open on Redis errors.
+    After auth succeeds, checks the rate limit for app/key identity when present,
+    falling back to UID for first-party or legacy auth contexts.
+    One Redis call per request. Fail-closed on Redis errors for API-key paths.
 
     Args:
         auth_context_dependency: FastAPI dependency that returns an auth context
@@ -402,10 +435,15 @@ def with_rate_limit_context(auth_context_dependency, policy_name: str):
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(auth_context=Depends(auth_context_dependency)):
-        _enforce_rate_limit(auth_context.uid, policy_name)
+        _enforce_rate_limit(rate_limit_key_for_context(auth_context), policy_name, fail_closed=True)
         return auth_context
 
     return dependency
+
+
+def check_rate_limit_context(auth_context, policy_name: str):
+    """Check rate limit inline for an already-authenticated context."""
+    _enforce_rate_limit(rate_limit_key_for_context(auth_context), policy_name, fail_closed=True)
 
 
 def check_rate_limit_inline(key: str, policy_name: str):

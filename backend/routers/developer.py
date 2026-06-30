@@ -40,6 +40,7 @@ from dependencies import (
     get_current_user_id,
     get_uid_with_conversations_read,
     get_uid_with_conversations_write,
+    get_developer_memory_default_memory_batch_write_context,
     get_developer_memory_default_memory_read_context,
     get_developer_memory_default_memory_write_context,
     get_uid_with_action_items_read,
@@ -48,7 +49,7 @@ from dependencies import (
     get_uid_with_goals_write,
 )
 from utils.apps import update_personas_async
-from utils.other.endpoints import with_rate_limit, with_rate_limit_context, get_current_user_uid
+from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
 from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
@@ -497,9 +498,7 @@ def search_memories_vector(
 @router.post("/v1/dev/user/memories", response_model=DeveloperMemory, tags=["Memories"], operation_id="createMemory")
 def create_memory(
     request: CreateMemoryRequest,
-    auth_context: ProductAuthorizationContext = Depends(
-        with_rate_limit_context(get_developer_memory_default_memory_write_context, "dev:memories")
-    ),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_write_context),
 ):
     """
     Create a new memory for the authenticated user.
@@ -596,9 +595,7 @@ def create_memory(
 )
 def create_memories_batch(
     request: BatchMemoriesRequest,
-    auth_context: ProductAuthorizationContext = Depends(
-        with_rate_limit_context(get_developer_memory_default_memory_write_context, "dev:memories_batch")
-    ),
+    auth_context: ProductAuthorizationContext = Depends(get_developer_memory_default_memory_batch_write_context),
 ):
     """
     Create multiple memories in a batch.
@@ -1314,7 +1311,7 @@ def get_conversations(
     # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset = max(0, offset)
-    limit = max(1, min(limit, 1000))
+    limit = max(1, min(limit, 25 if include_transcript else 100))
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:
@@ -1372,7 +1369,7 @@ def get_conversations(
 )
 def create_conversation(
     request: CreateConversationRequest,
-    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
+    uid: str = Depends(get_uid_with_conversations_write),
 ):
     """
     Create a new conversation from text for the authenticated user.
@@ -1707,7 +1704,7 @@ def create_conversation_from_segments_user(
 def create_conversation_from_segments(
     request: CreateConversationFromTranscriptRequest,
     http_request: Request,
-    uid: str = Depends(with_rate_limit(get_uid_with_conversations_write, "dev:conversations")),
+    uid: str = Depends(get_uid_with_conversations_write),
 ):
     """
     Create a new conversation from structured transcript segments.

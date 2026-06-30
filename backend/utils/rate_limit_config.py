@@ -93,10 +93,21 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "integration:memories": (60, 3600),
     # Phone verification uses IP-based rate_limit_dependency (pre-auth, no UID).
     # Not migrated to per-UID Lua limiter intentionally.
-    # Dev API
+    # Dev API. Read limits are intentionally separate from write limits so a
+    # polling client cannot consume the processing/write budget. Developer and
+    # MCP API-key contexts are keyed by app/key identity when available.
+    "dev:memories_read": (120, 3600),
+    "dev:action_items_read": (120, 3600),
+    "dev:conversations_read": (60, 3600),
+    "dev:goals_read": (120, 3600),
     "dev:conversations": (25, 3600),
     "dev:memories": (120, 3600),
     "dev:memories_batch": (15, 3600),
+    "dev:action_items_write": (120, 3600),
+    "dev:goals_write": (120, 3600),
+    # MCP REST data API
+    "mcp:read": (300, 3600),
+    "mcp:memories_read": (120, 3600),
     # Test
     "test:prompt": (30, 3600),
     # Apps
