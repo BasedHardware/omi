@@ -1,7 +1,7 @@
 import logging
 import math
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 
 import typesense
@@ -15,6 +15,17 @@ client = typesense.Client(
         'connection_timeout_seconds': 2,
     }
 )
+
+
+def _utc_iso(ts) -> str:
+    """Convert a stored unix timestamp to a timezone-aware UTC ISO 8601 string (with a +00:00 offset).
+
+    Typesense stores created_at/started_at/finished_at as unix timestamps. Rendering them with
+    ``datetime.utcfromtimestamp(ts).isoformat()`` produced a NAIVE string with no offset, so the chat
+    model and clients could read a UTC time as local time and show conversation times hours off
+    (issue #4643). Anchoring to UTC keeps the offset explicit so consumers interpret it correctly.
+    """
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
 def search_conversations(
@@ -72,9 +83,9 @@ def search_conversations(
             try:
                 # Convert all three into locals first, then assign, so a hit that fails partway is
                 # never left half-converted.
-                created_at = datetime.utcfromtimestamp(doc['created_at']).isoformat()
-                started_at = datetime.utcfromtimestamp(doc['started_at']).isoformat()
-                finished_at = datetime.utcfromtimestamp(doc['finished_at']).isoformat()
+                created_at = _utc_iso(doc['created_at'])
+                started_at = _utc_iso(doc['started_at'])
+                finished_at = _utc_iso(doc['finished_at'])
             except (KeyError, TypeError, ValueError, OverflowError, OSError) as e:
                 # One malformed/legacy indexed doc (missing, null, or out-of-range timestamp) must not
                 # 500 the whole search page; skip just this hit (mirrors the per-record tolerance in
