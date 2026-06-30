@@ -39,6 +39,7 @@ export interface QueueDispatchInput {
   title: string;
   priority: number;
   createdAtMs: number;
+  expiresAtMs?: number | null;
   sourceSessionId?: string | null;
   sourceRunId?: string | null;
 }
@@ -124,9 +125,11 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
   const nowMs = input.nowMs;
   const staleAfterMs = input.staleAfterMs ?? 30 * 60 * 1000;
   const items: DesktopActionQueueItem[] = [];
+  const reusableSessions = new Map<string, QueueRunInput>();
 
   for (const dispatch of input.dispatches ?? []) {
     if (dispatch.status !== "pending") continue;
+    if (dispatch.expiresAtMs != null && dispatch.expiresAtMs <= nowMs) continue;
     items.push(
       item({
         kind: "dispatch",
@@ -179,22 +182,29 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
         }),
       );
     } else if (run.reusable === true) {
-      items.push(
-        item({
-          kind: "reusable_session",
-          subjectKind: "session",
-          subjectId: run.sessionId,
-          ownerId: run.ownerId,
-          title: run.title ?? "Reusable agent session",
-          priority: 20,
-          rank: 7,
-          createdAtMs: run.updatedAtMs,
-          sourceSessionId: run.sessionId,
-          sourceRunId: run.runId,
-          reason: "Existing session may be relevant to the current request.",
-        }),
-      );
+      const existing = reusableSessions.get(run.sessionId);
+      if (!existing || run.updatedAtMs > existing.updatedAtMs) {
+        reusableSessions.set(run.sessionId, run);
+      }
     }
+  }
+
+  for (const run of reusableSessions.values()) {
+    items.push(
+      item({
+        kind: "reusable_session",
+        subjectKind: "session",
+        subjectId: run.sessionId,
+        ownerId: run.ownerId,
+        title: run.title ?? "Reusable agent session",
+        priority: 20,
+        rank: 7,
+        createdAtMs: run.updatedAtMs,
+        sourceSessionId: run.sessionId,
+        sourceRunId: run.runId,
+        reason: "Existing session may be relevant to the current request.",
+      }),
+    );
   }
 
   for (const delivery of input.artifactDeliveries ?? []) {

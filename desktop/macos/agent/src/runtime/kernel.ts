@@ -2760,6 +2760,7 @@ function dispatchToQueueInput(dispatch: DesktopCoordinatorDispatch): QueueDispat
     title: dispatch.title,
     priority: dispatch.priority,
     createdAtMs: dispatch.createdAtMs,
+    expiresAtMs: dispatch.expiresAtMs,
     sourceSessionId: dispatch.sourceSessionId,
     sourceRunId: dispatch.sourceRunId,
   };

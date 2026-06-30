@@ -63,6 +63,57 @@ describe("desktop intent router", () => {
     expect(route.explanation).toContain("External send/share");
   });
 
+  it("routes to any pending dispatch before other intent paths", () => {
+    const route = routeDesktopIntent({
+      utterance: "what's running right now?",
+      surfaceKind: "main_chat",
+      nowMs: 10_000,
+      actionQueue: [
+        {
+          itemId: "dispatch:dispatch:approval-1",
+          kind: "dispatch",
+          subjectKind: "dispatch",
+          subjectId: "approval-1",
+          ownerId: "owner-1",
+          title: "Approve screen access",
+          priority: 100,
+          rank: 1,
+          createdAtMs: 9_000,
+          dispatchKind: "screen_context",
+          reason: "screen approval",
+        },
+      ],
+    });
+
+    expect(route).toMatchObject({
+      intent: "dispatch",
+      dispatchId: "approval-1",
+      queueItemId: "dispatch:dispatch:approval-1",
+    });
+  });
+
+  it("does not resume untasked surface candidates for explicit task intents", () => {
+    const route = routeDesktopIntent({
+      utterance: "continue this task",
+      surfaceKind: "task_chat",
+      taskId: "task-1",
+      nowMs: 10_000,
+      sessionCandidates: [
+        {
+          sessionId: "wrong-task-surface-session",
+          runId: "run-1",
+          surfaceKind: "task_chat",
+          taskId: null,
+          status: "healthy",
+          relevance: 0.95,
+          lastActivityAtMs: 9_000,
+        },
+      ],
+    });
+
+    expect(route.intent).toBe("new_run");
+  });
+
   it("routes unrelated implementation work to delegation", () => {
     const route = routeDesktopIntent({
       utterance: "please implement and test the desktop coordinator policy",

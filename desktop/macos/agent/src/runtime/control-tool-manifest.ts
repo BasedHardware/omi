@@ -16,9 +16,10 @@ export type AgentControlBundle =
   | "external.write_send";
 
 export interface AgentControlManifestProperty {
-  type: "string" | "number" | "boolean" | "object";
+  type: "string" | "number" | "boolean" | "object" | "array";
   description?: string;
   enum?: string[];
+  items?: AgentControlManifestProperty;
   additionalProperties?: boolean;
 }
 
@@ -282,7 +283,46 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     timeoutClass: "normal",
     properties: {
       toolName: { type: "string", description: "Optional tool name." },
-      selectedBundles: { type: "object", description: "Selected capability bundles array.", additionalProperties: true },
+      selectedBundles: {
+        type: "array",
+        description: "Selected capability bundles.",
+        items: {
+          type: "string",
+          enum: [
+            "desktop.agent_control.read",
+            "desktop.agent_control.manage",
+            "desktop.context.local_read",
+            "desktop.context.screen_summary",
+            "desktop.context.screenshot_image",
+            "desktop.tasks.readwrite",
+            "desktop.artifacts.manage",
+            "desktop.automation.read",
+            "desktop.automation.act_dev_only",
+            "external.write_prepare",
+            "external.write_send",
+          ],
+        },
+      },
+      requestedBundles: {
+        type: "array",
+        description: "Optional explicit capability bundles being requested.",
+        items: {
+          type: "string",
+          enum: [
+            "desktop.agent_control.read",
+            "desktop.agent_control.manage",
+            "desktop.context.local_read",
+            "desktop.context.screen_summary",
+            "desktop.context.screenshot_image",
+            "desktop.tasks.readwrite",
+            "desktop.artifacts.manage",
+            "desktop.automation.read",
+            "desktop.automation.act_dev_only",
+            "external.write_prepare",
+            "external.write_send",
+          ],
+        },
+      },
       sql: { type: "string", description: "Optional SQL statement to classify." },
       operation: { type: "string", description: "Optional operation." },
       resourceRef: { type: "string", description: "Optional resource ref." },
@@ -536,6 +576,14 @@ export function agentControlInputSchema(tool: AgentControlManifestTool): Record<
       };
       if (property.description) schema.description = property.description;
       if (property.enum) schema.enum = property.enum;
+      if (property.type === "array" && property.items) {
+        const itemSchema: Record<string, unknown> = {
+          type: property.items.type,
+        };
+        if (property.items.description) itemSchema.description = property.items.description;
+        if (property.items.enum) itemSchema.enum = property.items.enum;
+        schema.items = itemSchema;
+      }
       if (property.type === "object" && property.additionalProperties !== undefined) {
         schema.additionalProperties = property.additionalProperties;
       }

@@ -118,6 +118,21 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("rejects unknown coordinator bundles at the control-tool boundary", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const result = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "evaluate_desktop_tool_policy", {
+        selectedBundles: ["desktop.context.local_read", "desktop.context.magic_root"],
+      }),
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: "invalid_tool_input" },
+    });
+    store.close();
+  });
+
   it("documents delegate_agent as canonical delegation, not floating pill UI", () => {
     const delegateAgent = agentControlCapabilityManifest.find((tool) => tool.name === "delegate_agent");
     expect(delegateAgent?.description).toContain("canonical child handles");

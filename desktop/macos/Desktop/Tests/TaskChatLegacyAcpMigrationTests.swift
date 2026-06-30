@@ -49,13 +49,14 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertTrue(source.contains("surfaceRuntimeFailure(projection)"))
   }
 
-  func testTaskChatUsesContextPacketsInsteadOfRawTaskPromptPrepend() throws {
+  func testTaskChatUsesContextPacketsWhilePreservingVisibleTaskContext() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
     XCTAssertTrue(source.contains("buildContextPacketSummary("))
     XCTAssertTrue(source.contains("build_desktop_context_packet"))
     XCTAssertTrue(source.contains("DesktopContextPacket"))
-    XCTAssertFalse(source.contains("# Task Context\\n\\n\\(ctx)\\n\\n---\\n\\n# User Message"))
+    XCTAssertTrue(source.contains("# Task Context\\n\\n\\(taskContext)\\n\\n---\\n\\n# User Message"))
+    XCTAssertTrue(source.contains("The full task context is included below in the prompt."))
   }
 
   @MainActor

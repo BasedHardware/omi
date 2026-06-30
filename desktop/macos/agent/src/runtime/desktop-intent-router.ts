@@ -49,19 +49,19 @@ function chooseCandidate(input: DesktopIntentRouteInput): DesktopIntentSessionCa
   );
   return candidates.find((candidate) => {
     if (candidate.relevance < 0.55) return false;
-    if (input.taskId && candidate.taskId && candidate.taskId !== input.taskId) return false;
+    if (input.taskId) return candidate.taskId === input.taskId;
     return candidate.surfaceKind === input.surfaceKind || candidate.taskId === input.taskId;
   });
 }
 
 export function routeDesktopIntent(input: DesktopIntentRouteInput): DesktopIntentRoute {
   const dispatchItem = (input.actionQueue ?? []).find((item) => item.kind === "dispatch");
-  if (dispatchItem && (dispatchItem.dispatchKind === "external_draft" || isExternalSendAmbiguous(input.utterance))) {
+  if (dispatchItem) {
     return {
       intent: "dispatch",
       dispatchId: dispatchItem.subjectId,
       queueItemId: dispatchItem.itemId,
-      explanation: "A pending dispatch must be resolved before sending or sharing externally.",
+      explanation: "A pending dispatch must be resolved before routing additional local agent work.",
     };
   }
   if (isExternalSendAmbiguous(input.utterance)) {

@@ -94,6 +94,71 @@ describe("desktop action queue", () => {
     });
   });
 
+  it("filters expired pending dispatches", () => {
+    const queue = buildDesktopActionQueue({
+      nowMs: 10_000,
+      dispatches: [
+        {
+          dispatchId: "expired-dispatch",
+          ownerId: "owner-1",
+          kind: "approval",
+          status: "pending",
+          title: "Expired approval",
+          priority: 100,
+          createdAtMs: 1_000,
+          expiresAtMs: 9_999,
+        },
+        {
+          dispatchId: "active-dispatch",
+          ownerId: "owner-1",
+          kind: "approval",
+          status: "pending",
+          title: "Active approval",
+          priority: 1,
+          createdAtMs: 9_000,
+          expiresAtMs: 11_000,
+        },
+      ],
+    });
+
+    expect(queue.map((item) => item.subjectId)).toEqual(["active-dispatch"]);
+  });
+
+  it("coalesces reusable-session items to one row per session", () => {
+    const queue = buildDesktopActionQueue({
+      nowMs: 10_000,
+      runs: [
+        {
+          runId: "older-run",
+          sessionId: "session-1",
+          ownerId: "owner-1",
+          status: "succeeded",
+          title: "Older run",
+          createdAtMs: 1_000,
+          updatedAtMs: 2_000,
+          reusable: true,
+        },
+        {
+          runId: "newer-run",
+          sessionId: "session-1",
+          ownerId: "owner-1",
+          status: "succeeded",
+          title: "Newer run",
+          createdAtMs: 3_000,
+          updatedAtMs: 5_000,
+          reusable: true,
+        },
+      ],
+    });
+
+    expect(queue).toHaveLength(1);
+    expect(queue[0]).toMatchObject({
+      itemId: "reusable_session:session:session-1",
+      sourceRunId: "newer-run",
+      title: "Newer run",
+    });
+  });
+
   it("projects pending candidates and legacy pills into derived items", () => {
     const queue = buildDesktopActionQueue({
       nowMs: 10_000,

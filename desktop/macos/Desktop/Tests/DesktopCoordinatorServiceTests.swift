@@ -42,6 +42,15 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("TaskAgentStatusRegistry.shared.combinedSummary()"))
   }
 
+  func testTaskRoutingUsesExactExternalTaskReference() throws {
+    let source = try sourceFile("Chat/DesktopCoordinatorService.swift")
+
+    XCTAssertTrue(source.contains("externalRefKind: stringValue(session[\"externalRefKind\"])"))
+    XCTAssertTrue(source.contains("externalRefId: stringValue(session[\"externalRefId\"])"))
+    XCTAssertTrue(source.contains("$0.externalRefKind == \"task\" && $0.externalRefId == taskId"))
+    XCTAssertFalse(source.contains("sessionId?.contains(taskId)"))
+  }
+
   func testLocalAgentAPIRejectsUnexpectedHostAndOrigin() throws {
     let source = try sourceFile("LocalAgentAPIServer.swift")
 

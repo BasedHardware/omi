@@ -12,6 +12,19 @@ const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
 const delegationModeSchema = z.enum(["call", "spawn", "continue"]);
+const desktopCoordinatorBundleSchema = z.enum([
+  "desktop.agent_control.read",
+  "desktop.agent_control.manage",
+  "desktop.context.local_read",
+  "desktop.context.screen_summary",
+  "desktop.context.screenshot_image",
+  "desktop.tasks.readwrite",
+  "desktop.artifacts.manage",
+  "desktop.automation.read",
+  "desktop.automation.act_dev_only",
+  "external.write_prepare",
+  "external.write_send",
+]);
 const strictObject = <T extends z.ZodRawShape>(shape: T) => z.object(shape).strict();
 
 const listAgentSessionsSchema = strictObject({
@@ -77,7 +90,7 @@ const buildDesktopContextPacketSchema = strictObject({
   objective: z.string().min(1),
   packetJson: strictObject({
     snippets: z.array(contextSnippetSchema).default([]),
-    selectedToolBundles: z.array(z.string().min(1)).default([]),
+    selectedToolBundles: z.array(desktopCoordinatorBundleSchema).default([]),
     constraints: z.array(z.string()).default([]),
     evidenceRequired: z.array(z.string()).default([]),
     boundaryPolicy: z.record(z.string(), z.unknown()).default({}),
@@ -95,8 +108,8 @@ const routeDesktopIntentSchema = strictObject({
 
 const evaluateDesktopToolPolicySchema = strictObject({
   toolName: z.string().min(1).optional(),
-  selectedBundles: z.array(z.string().min(1)),
-  requestedBundles: z.array(z.string().min(1)).optional(),
+  selectedBundles: z.array(desktopCoordinatorBundleSchema),
+  requestedBundles: z.array(desktopCoordinatorBundleSchema).optional(),
   sql: z.string().optional(),
   operation: z.string().optional(),
   resourceRef: z.string().optional(),

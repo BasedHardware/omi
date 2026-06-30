@@ -35,6 +35,8 @@ struct DesktopCoordinatorSessionProjection: Codable {
   let sessionId: String?
   let title: String
   let surfaceKind: String?
+  let externalRefKind: String?
+  let externalRefId: String?
   let status: String
   let runId: String?
   let runStatus: String?
@@ -247,7 +249,9 @@ final class DesktopCoordinatorService {
       )
     }
 
-    if let taskId, let match = snapshot.sessions.first(where: { $0.surfaceKind == "task_chat" && $0.sessionId?.contains(taskId) == true }) {
+    if let taskId, let match = snapshot.sessions.first(where: {
+      $0.surfaceKind == "task_chat" && $0.externalRefKind == "task" && $0.externalRefId == taskId
+    }) {
       return DesktopCoordinatorRouteDecision(
         generatedAt: nowString(),
         intent: intent,
@@ -391,6 +395,8 @@ final class DesktopCoordinatorService {
         sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
         title: title,
         surfaceKind: stringValue(session["surfaceKind"]),
+        externalRefKind: stringValue(session["externalRefKind"]),
+        externalRefId: stringValue(session["externalRefId"]),
         status: sessionStatus,
         runId: stringValue(selectedRun["runId"]),
         runStatus: stringValue(selectedRun["status"]),

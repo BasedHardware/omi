@@ -272,7 +272,11 @@ class TaskChatState: ObservableObject {
 
             let fullPrompt: String
             if let contextPacketSummary {
-                fullPrompt = "\(contextPacketSummary)\n\n# User Message\n\n\(trimmedText)"
+                if let taskContext, !taskContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    fullPrompt = "\(contextPacketSummary)\n\n# Task Context\n\n\(taskContext)\n\n---\n\n# User Message\n\n\(trimmedText)"
+                } else {
+                    fullPrompt = "\(contextPacketSummary)\n\n# User Message\n\n\(trimmedText)"
+                }
             } else {
                 fullPrompt = trimmedText
             }
@@ -439,7 +443,7 @@ class TaskChatState: ObservableObject {
                     ],
                 ],
                 "selectedToolBundles": ["desktop.context.local_read", "desktop.tasks.readwrite"],
-                "constraints": ["Use the persisted context packet; do not assume the full task history is in prompt text."],
+                "constraints": ["Use the persisted context packet and the model-visible task context; cite task evidence before claiming completion."],
                 "evidenceRequired": ["Cite task state or artifact evidence before claiming completion."],
                 "boundaryPolicy": ["taskMutations": "candidate_or_dispatch"],
             ],
@@ -460,7 +464,7 @@ class TaskChatState: ObservableObject {
             return """
             # Context Packet
 
-            Use persisted DesktopContextPacket `\(packetId)` as the scoped task context. Redacted preview:
+            Persisted DesktopContextPacket `\(packetId)` audits the scoped task context. The full task context is included below in the prompt. Redacted preview:
 
             \(previewText)
             """
