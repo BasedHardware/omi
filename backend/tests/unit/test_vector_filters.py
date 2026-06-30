@@ -62,7 +62,12 @@ def _load_vector_db_with_stubs():
     spec = importlib.util.spec_from_file_location("vector_filter_vector_db", vector_db_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(spec.name, None)
+        raise
     return module
 
 
