@@ -15,6 +15,8 @@ sys.path.insert(0, str(BACKEND_DIR / "testing" / "e2e"))
 import database._client as client_module  # noqa: E402
 import database.helpers as helpers  # noqa: E402
 import database.memories as memories_db  # noqa: E402
+
+pytest.importorskip("fake_firestore", reason="fake_firestore package required for DI seam tests")
 from fakes.firestore import setup_fake_firestore, teardown_fake_firestore  # noqa: E402
 
 
