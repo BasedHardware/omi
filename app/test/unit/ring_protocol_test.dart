@@ -322,13 +322,7 @@ void main() {
       final f2 = List<int>.generate(80, (i) => 0x50 + (i & 0x0F));
       final audio = <int>[80, ...f1, 80, ...f2];
       audio.addAll(List.filled(440 - audio.length, 0));
-      final record = <int>[
-        (ts >> 24) & 0xFF,
-        (ts >> 16) & 0xFF,
-        (ts >> 8) & 0xFF,
-        ts & 0xFF,
-        ...audio,
-      ];
+      final record = <int>[(ts >> 24) & 0xFF, (ts >> 16) & 0xFF, (ts >> 8) & 0xFF, ts & 0xFF, ...audio];
       expect(record.length, 444);
 
       // Split across two BLE chunks at an arbitrary boundary.

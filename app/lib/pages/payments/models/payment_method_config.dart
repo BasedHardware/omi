@@ -36,8 +36,11 @@ class PaymentMethodConfig {
     return PaymentMethodConfig(
       title: title,
       subtitle: subtitle,
-      icon: SvgPicture.asset(Assets.images.stripeLogo,
-          width: 80, colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn)),
+      icon: SvgPicture.asset(
+        Assets.images.stripeLogo,
+        width: 80,
+        colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+      ),
       backgroundColor: isActive ? const Color(0xFF635BFF) : Color(0xFF35343B),
       onManageTap: onManageTap,
       onSetActiveTap: onSetActiveTap,

@@ -235,6 +235,30 @@
       },
       "CreateConversationFromTranscriptRequest": {
         "properties": {
+          "client_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Capture device id ({platform}_{hash})",
+            "title": "Client Device Id"
+          },
+          "client_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Client platform (ios/android/macos)",
+            "title": "Client Platform"
+          },
           "client_session_id": {
             "anyOf": [
               {
@@ -295,7 +319,7 @@
                 "type": "null"
               }
             ],
-            "default": "external_integration",
+            "default": "phone",
             "description": "Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)"
           },
           "started_at": {
@@ -3374,6 +3398,71 @@
         "summary": "Create Memories Batch",
         "tags": [
           "Memories"
+        ]
+      }
+    },
+    "/v1/dev/user/memories/vector/search": {
+      "get": {
+        "description": "Search developer-readable default memory memory through hydrated vector candidates.\n\nThis narrow developer API vector endpoint fails closed unless the authenticated\nDeveloper API app/key has a verified memories.read scope, a persisted app/key\ndefault-read grant, and the server-owned rollout state enables developer_api\nmemory default-memory reads. Vector hits are hydrated from authoritative\n`users/{uid}/memory_items` before returning results, so stale Short-term and\nArchive remain unavailable by default.",
+        "operationId": "search_memories_vector_v1_dev_user_memories_vector_search_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "query",
+            "required": true,
+            "schema": {
+              "minLength": 1,
+              "title": "Query",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "developerApiKey": []
+          }
+        ],
+        "summary": "Search Memories Vector",
+        "tags": [
+          "developer"
         ]
       }
     },

@@ -1,0 +1,34 @@
+# Optional direnv setup for Omi backend env stages.
+#   cp .envrc.example .envrc && direnv allow
+#
+# Stages (OMI_ENV_STAGE):
+#   local   — Firebase emulators + optional real dev provider keys (default harness)
+#   offline — emulators + hermetic fake providers (no API keys)
+#   dev     — remote dev GCP / Firebase project (based-hardware-dev)
+#   prod    — production reference only; do not use locally
+#
+# Pick a stage, copy the matching template, fill secrets, then symlink:
+#   cp backend/.env.local-dev.template backend/.env.local-dev   # local (default)
+#   cp backend/.env.offline.template backend/.env.offline       # offline
+#   cp backend/.env.dev.template backend/.env.dev                 # dev cloud
+#   ln -sf .env.local-dev backend/.env                            # example for local
+
+export OMI_ENV_STAGE="${OMI_ENV_STAGE:-local}"
+
+case "$OMI_ENV_STAGE" in
+  local)   dotenv_if_exists backend/.env.local-dev ;;
+  offline) dotenv_if_exists backend/.env.offline ;;
+  dev)     dotenv_if_exists backend/.env.dev ;;
+  prod)    dotenv_if_exists backend/.env.prod ;;
+  *)
+    echo "Unknown OMI_ENV_STAGE=$OMI_ENV_STAGE" >&2
+    exit 1
+    ;;
+esac
+
+# Personal overrides (never commit)
+dotenv_if_exists backend/.env
+
+# Offline shortcut (no provider keys required):
+# export OMI_ENV_STAGE=offline
+# export PROVIDER_MODE=offline

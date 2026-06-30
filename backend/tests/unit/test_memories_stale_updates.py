@@ -29,6 +29,7 @@ firestore_mod.SERVER_TIMESTAMP = object()
 firestore_mod.DELETE_FIELD = object()
 firestore_mod.Query = MagicMock
 firestore_v1_mod.FieldFilter = MagicMock
+firestore_v1_mod.transactional = lambda fn: fn
 setattr(google_mod, 'cloud', cloud_mod)
 setattr(cloud_mod, 'firestore', firestore_mod)
 setattr(cloud_mod, 'firestore_v1', firestore_v1_mod)
@@ -65,13 +66,30 @@ class _FakeDb:
         return MagicMock()
 
 
+class _FakeTransaction:
+    def update(self, ref, payload):
+        return ref.update(payload)
+
+
+def _append_commit_with_projection(**kwargs):
+    projection_writer = kwargs.get('projection_writer')
+    if projection_writer:
+        projection_writer(_FakeTransaction())
+    return None
+
+
 def _load_memories_module(memory_ref):
     client_mod = types.ModuleType('database._client')
     client_mod.db = _FakeDb(memory_ref)
     setattr(client_mod, 'get_firestore_client', lambda: client_mod.db)
+    setattr(client_mod, 'document_id_from_seed', lambda seed: f'doc-{seed}')
     sys.modules['database._client'] = client_mod
     sys.modules.pop('database.memories', None)
-    return importlib.import_module('database.memories')
+    memories = importlib.import_module('database.memories')
+    memories.memory_ledger.append_commit = MagicMock(
+        side_effect=lambda *args, **kwargs: _append_commit_with_projection(**kwargs)
+    )
+    return memories
 
 
 def test_set_memory_kg_extracted_missing_doc_is_idempotent(caplog):

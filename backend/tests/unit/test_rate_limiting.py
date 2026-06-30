@@ -49,6 +49,7 @@ redis_db_stub = sys.modules['database.redis_db']
 redis_db_stub._RATE_LIMIT_LUA = MagicMock(return_value=[1, 3600])
 redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
 sys.modules['database.users'].record_user_platform = MagicMock()
+sys.modules['database.users'].record_client_device = MagicMock()
 
 
 def _check_rate_limit(key, policy, max_requests, window):
@@ -437,8 +438,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_memories_router_has_rate_limits(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
-        # create, batch, delete, delete_all, modify(review), modify(edit), modify(visibility) = 7
-        self.assertEqual(len(matches), 7, f"memories.py expected 7 rate limits, got {len(matches)}")
+        # create, batch, 2 review, delete, delete_all, 3 modify endpoints = 9
+        self.assertEqual(len(matches), 9, f"memories.py expected 9 rate limits, got {len(matches)}")
 
     def test_memories_create_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")
