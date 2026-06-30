@@ -467,6 +467,7 @@ def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
 def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch):
     captured = {}
     counter = FakeCounter()
+    call_order = []
 
     class LegacyParser:
         @staticmethod
@@ -490,6 +491,7 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
 
         def invoke(self, values):
             assert values['format_instructions'] == 'return legacy structure'
+            call_order.append('legacy')
             return Structured(
                 title='Weekly Planning',
                 overview='Discussed project launch tasks.',
@@ -498,6 +500,7 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
             )
 
     def fake_gateway(prompt, output_model, *, feature):
+        call_order.append('gateway')
         captured.update({'prompt': prompt, 'output_model': output_model, 'feature': feature})
         return output_model(
             title='Weekly Plan',
@@ -506,11 +509,25 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
             category=CategoryEnum.work,
         )
 
+    class ImmediateFuture:
+        def result(self):
+            return None
+
+        def add_done_callback(self, callback):
+            callback(self)
+
+    def immediate_submit(_executor, fn, *args, **kwargs):
+        fn(*args, **kwargs)
+        return ImmediateFuture()
+
+    monkeypatch.setenv(conversation_processing.CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV, 'true')
+    monkeypatch.setenv(conversation_processing.CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV, '1.0')
     monkeypatch.setattr(conversation_processing, 'parser', LegacyParser())
     monkeypatch.setattr(conversation_processing, 'PydanticOutputParser', FakeParser)
     monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
     monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(conversation_processing, 'submit_with_context', immediate_submit)
     monkeypatch.setattr(conversation_processing, 'LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS', counter)
 
     result = conversation_processing.get_transcript_structure(
@@ -523,6 +540,7 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
 
     assert result.title == 'Weekly Planning'
     assert result.overview == 'Discussed project launch tasks.'
+    assert call_order == ['legacy', 'gateway']
     assert captured['output_model'] is ConversationStructureExtraction
     assert captured['feature'] == 'conversation_structure.extract.shadow'
     assert 'return shadow structure' in captured['prompt']
@@ -539,3 +557,58 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
     } in comparison_labels
     assert any(labels['field'] == 'title_similarity' for labels in comparison_labels)
     assert any(labels['field'] == 'overview_similarity' for labels in comparison_labels)
+
+
+def test_conversation_structure_shadow_disabled_skips_gateway(monkeypatch):
+    captured = {'gateway_called': False, 'submitted': False}
+    counter = FakeCounter()
+
+    class LegacyParser:
+        @staticmethod
+        def get_format_instructions():
+            return 'return legacy structure'
+
+    class FakePrompt:
+        def __or__(self, other):
+            return FakeChain()
+
+    class FakeChain:
+        def __or__(self, other):
+            return self
+
+        def invoke(self, values):
+            return Structured(title='Legacy Title', overview='Legacy Overview', category=CategoryEnum.work)
+
+    def fake_gateway(*args, **kwargs):
+        captured['gateway_called'] = True
+        return None
+
+    def fake_submit(*args, **kwargs):
+        captured['submitted'] = True
+
+    monkeypatch.delenv(conversation_processing.CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(conversation_processing, 'parser', LegacyParser())
+    monkeypatch.setattr(conversation_processing.ChatPromptTemplate, 'from_messages', lambda messages: FakePrompt())
+    monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
+    monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
+    monkeypatch.setattr(conversation_processing, 'submit_with_context', fake_submit)
+    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+
+    result = conversation_processing.get_transcript_structure(
+        'we discussed project launch tasks',
+        datetime(2026, 6, 28, tzinfo=timezone.utc),
+        'en',
+        'UTC',
+        'uid',
+    )
+
+    assert result.title == 'Legacy Title'
+    assert captured == {'gateway_called': False, 'submitted': False}
+    assert (
+        {
+            'feature': 'conversation_structure.extract.shadow',
+            'outcome': 'skipped',
+            'reason': 'disabled',
+        },
+        1,
+    ) in counter.calls

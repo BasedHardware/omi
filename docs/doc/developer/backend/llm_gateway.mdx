@@ -175,6 +175,8 @@ Backend-listen env:
 |---|---|
 | `OMI_LLM_GATEWAY_URL` | Internal service URL above |
 | `OMI_LLM_GATEWAY_SERVICE_TOKEN` | `*-omi-backend-secrets` key `OMI_LLM_GATEWAY_SERVICE_TOKEN` |
+| `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED` | Feature-level shadow kill switch for conversation structure extraction |
+| `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE` | Deterministic sample rate from `0.0` to `1.0` for conversation structure shadow traffic |
 
 Gateway env:
 
@@ -617,6 +619,8 @@ Shadow mode must be explicitly bounded before any live user content goes through
 - metrics-only comparison unless an approved eval store exists.
 
 Prefer offline replay/eval before live shadow for memory- or transcript-heavy workloads.
+
+Shadow callers must not put gateway latency on the authoritative product path. Run the legacy or serving result first, then schedule shadow work through the shared executor pools or another bounded background path. A gateway timeout, provider outage, disabled feature flag, or sampled-out request should affect only shadow metrics, never the returned product result.
 
 ## Explicit Non-Goals
 
