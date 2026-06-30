@@ -203,6 +203,7 @@ class TestGPUWorkerQueueFull:
 
     def test_sync_queue_full(self):
         worker = GPUWorker()
+        worker._running = True
         worker._ready.set()
         for _ in range(512):
             try:
@@ -215,6 +216,7 @@ class TestGPUWorkerQueueFull:
 
     def test_async_queue_full(self):
         worker = GPUWorker()
+        worker._running = True
         worker._ready.set()
         for _ in range(512):
             try:
