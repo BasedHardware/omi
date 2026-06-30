@@ -10,13 +10,14 @@ import pytest
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 ENCRYPTION_SECRET = "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 os.environ.setdefault("ENCRYPTION_SECRET", ENCRYPTION_SECRET)
+
+pytest.importorskip("fake_firestore", reason="fake_firestore package required for DI seam tests")
+
 sys.path.insert(0, str(BACKEND_DIR / "testing" / "e2e"))
 
 import database._client as client_module  # noqa: E402
 import database.helpers as helpers  # noqa: E402
 import database.memories as memories_db  # noqa: E402
-
-pytest.importorskip("fake_firestore", reason="fake_firestore package required for DI seam tests")
 from fakes.firestore import setup_fake_firestore, teardown_fake_firestore  # noqa: E402
 
 
