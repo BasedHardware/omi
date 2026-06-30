@@ -113,6 +113,11 @@ def _install_router_stubs(monkeypatch, counters):
     review_queue = types.ModuleType("database.review_queue")
     review_queue.list_review_conflicts = mark_mutation("list_review_conflicts")
     review_queue.resolve_review_conflict = mark_mutation("resolve_review_conflict")
+    setattr(
+        review_queue,
+        "purge_stale_review_conflicts_for_memories",
+        mark_mutation("purge_stale_review_conflicts_for_memories"),
+    )
     monkeypatch.setitem(sys.modules, "database.review_queue", review_queue)
     setattr(database_pkg, "review_queue", review_queue)
 
@@ -172,9 +177,7 @@ def _client(monkeypatch, runtime=None):
     clear_canonical_cohort(monkeypatch)
     _install_router_stubs(monkeypatch, counters)
     module = importlib.import_module("routers.memories")
-    from utils.memory.memory_system import MemorySystem
 
-    monkeypatch.setattr(module, "pin_memory_system", lambda uid, db_client=None: MemorySystem.LEGACY)
     app = FastAPI()
     app.dependency_overrides[module.auth.get_current_user_uid] = lambda: "secret-uid-123"
     if runtime is not None:
