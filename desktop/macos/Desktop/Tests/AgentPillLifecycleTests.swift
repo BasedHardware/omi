@@ -150,8 +150,8 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testNotchSettingsHitTargetDoesNotCoverChatRows() throws {
     let source = try floatingControlBarViewSource()
 
-    XCTAssertTrue(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight)"))
-    XCTAssertFalse(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)"))
+    XCTAssertTrue(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"))
+    XCTAssertFalse(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"))
   }
 
   func testNotchChatSizingPreservesSurfaceWidthAndGlowList() throws {
@@ -225,7 +225,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("notchOmiChatRow\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
     XCTAssertTrue(source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
     XCTAssertTrue(source.contains("notchOmiChatOverlayHitTarget\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
-    XCTAssertTrue(source.contains(".offset(y: FloatingControlBarWindow.notchChromeHeight)"))
+    XCTAssertTrue(source.contains(".offset(y: notchChromeHeight)"))
     XCTAssertTrue(source.contains(".zIndex(2)"))
     XCTAssertTrue(source.contains("height: notchHoverMenuHeight - FloatingControlBarWindow.notchAgentListRowHeight"))
     XCTAssertTrue(source.contains("state.present(.agent(pill.id))"))
