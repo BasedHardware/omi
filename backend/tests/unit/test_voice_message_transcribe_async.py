@@ -41,13 +41,22 @@ def _direct_calls(node):
 
 
 def _run_blocking_offloaded(node):
-    """Names passed as the function argument to ``run_blocking(executor, fn, ...)``."""
+    """Names passed as the function argument to an AWAITED ``run_blocking(executor, fn, ...)``.
+
+    The run_blocking call must be the operand of an ``await``. A bare ``run_blocking(...)``
+    without ``await`` returns a coroutine that never runs, so the offload would silently break
+    while still passing a looser wrapped-in-run_blocking check. Requiring the await closes that
+    regression gap.
+    """
     offloaded = set()
     for sub in ast.walk(node):
-        if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name) and sub.func.id == "run_blocking":
-            # run_blocking(executor, fn, *args, **kwargs) -> fn is the 2nd positional arg.
-            if len(sub.args) >= 2 and isinstance(sub.args[1], ast.Name):
-                offloaded.add(sub.args[1].id)
+        if not (isinstance(sub, ast.Await) and isinstance(sub.value, ast.Call)):
+            continue
+        call = sub.value
+        # run_blocking(executor, fn, *args, **kwargs) -> fn is the 2nd positional arg.
+        if isinstance(call.func, ast.Name) and call.func.id == "run_blocking" and len(call.args) >= 2:
+            if isinstance(call.args[1], ast.Name):
+                offloaded.add(call.args[1].id)
     return offloaded
 
 
