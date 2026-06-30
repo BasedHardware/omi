@@ -176,6 +176,13 @@ safety_mod = _stub_module("utils.retrieval.safety")
 safety_mod.AgentSafetyGuard = MagicMock()
 safety_mod.SafetyGuardError = type("SafetyGuardError", (Exception,), {})
 
+boundaries_mod = _stub_module("utils.retrieval.tool_result_boundaries")
+setattr(
+    boundaries_mod,
+    "preserve_chat_memory_tool_result_boundary",
+    MagicMock(side_effect=lambda _tool_name, result: result),
+)
+
 # --- MCP client stub ---
 mcp_mod = _stub_module("utils.mcp_client")
 mcp_mod.call_mcp_tool = MagicMock()
@@ -309,6 +316,7 @@ def _get_agentic_module():
         "search_screen_activity_tool",
         "save_user_preference_tool",
         "fetch_url_tool",
+        "traverse_knowledge_graph_tool",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -542,10 +550,10 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_25_tools():
-    """CORE_TOOLS must contain exactly 25 tools (web search is now a built-in server tool)."""
+def test_core_tools_has_26_tools():
+    """CORE_TOOLS must contain exactly 26 tools (web search is now a built-in server tool)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 25, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 25"
+    assert len(agentic_mod.CORE_TOOLS) == 26, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 26"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -568,9 +576,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 26
-    assert len(tools_b) == 25
-    assert len(agentic_mod.CORE_TOOLS) == 25, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 27
+    assert len(tools_b) == 26
+    assert len(agentic_mod.CORE_TOOLS) == 26, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -606,6 +614,7 @@ def test_core_tools_order_matches_exports():
         "search_screen_activity_tool",
         "save_user_preference_tool",
         "fetch_url_tool",
+        "traverse_knowledge_graph_tool",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]
