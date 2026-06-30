@@ -39,7 +39,7 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
-from utils.executors import postprocess_executor, submit_with_context
+from utils.executors import postprocess_executor, submit_with_context, run_blocking, db_executor
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
@@ -373,10 +373,10 @@ async def link_calendar_event(
     Link a specific Google Calendar event to an existing conversation.
     Fetches the event details and stores the calendar_event on the conversation.
     """
-    _get_valid_conversation_by_id(uid, conversation_id)
+    await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get Google Calendar access token
-    integration = users_db.get_integration(uid, 'google_calendar')
+    integration = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
     if not integration or not integration.get('connected'):
         raise HTTPException(status_code=400, detail="Google Calendar not connected")
 
@@ -408,8 +408,12 @@ async def link_calendar_event(
         raise HTTPException(status_code=400, detail="Could not parse calendar event times")
 
     # Persist to Firestore
-    conversations_db.update_conversation(
-        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    await run_blocking(
+        db_executor,
+        conversations_db.update_conversation,
+        uid,
+        conversation_id,
+        {'calendar_event': calendar_event.model_dump(mode='json')},
     )
 
     # Automatically write the conversation link into the calendar event description
@@ -429,7 +433,7 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     Uses the conversation's started_at/finished_at to find a matching event.
     Returns 404 if no overlapping event is found.
     """
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get conversation times
     started_at = conversation.get('started_at')
@@ -468,8 +472,12 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
         raise HTTPException(status_code=404, detail="No overlapping calendar event found")
 
     # Persist to Firestore
-    conversations_db.update_conversation(
-        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    await run_blocking(
+        db_executor,
+        conversations_db.update_conversation,
+        uid,
+        conversation_id,
+        {'calendar_event': calendar_event.model_dump(mode='json')},
     )
 
     # Automatically write the conversation link into the calendar event description
