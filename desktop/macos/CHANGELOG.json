@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "New AutoRouter singleton (desktop/macos/Desktop/Sources/AutoRouter/) with per-task pick cache + 24h TTL + null-model cache invalidation"
+  ],
   "releases": [
     {
       "version": "0.11.575",

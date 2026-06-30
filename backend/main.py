@@ -22,6 +22,7 @@ from routers import (
     transcribe,
     omni_relay,
     auto_model,
+    auto_router,
     notifications,
     speech_profile,
     agents,
@@ -99,6 +100,7 @@ app = FastAPI()
 app.include_router(transcribe.router)
 app.include_router(omni_relay.router)
 app.include_router(auto_model.router)
+app.include_router(auto_router.router)
 app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(task_integrations.router)
