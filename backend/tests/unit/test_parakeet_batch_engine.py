@@ -907,6 +907,67 @@ class TestBatchesInflight:
         finally:
             loop.close()
 
+    def test_batches_inflight_resets_after_oom(self):
+        """After a CUDA OOM, _batches_inflight must return to 0."""
+        oom_fired = {"count": 0}
+
+        def on_oom():
+            oom_fired["count"] += 1
+
+        def mock_submit(payload, loop):
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            loop.call_soon(fut.set_exception, RuntimeError("CUDA out of memory"))
+            item.inference_seconds = 0.01
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(
+            gpu, max_batch_size=1, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0, on_gpu_oom=on_oom
+        )
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    with pytest.raises(RuntimeError, match="CUDA out of memory"):
+                        await asyncio.wait_for(engine.submit("/tmp/oom.wav"), timeout=5)
+                    assert engine._batches_inflight == 0
+                    assert oom_fired["count"] == 1
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
+    def test_batches_inflight_resets_on_empty_pending(self):
+        """When _flush_batch finds no pending requests, _batches_inflight
+        must still decrement properly."""
+        gpu = _make_mock_gpu_worker()
+        engine = BatchEngine(gpu, max_batch_size=1, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0)
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    result = await asyncio.wait_for(engine.submit("/tmp/ok.wav"), timeout=5)
+                    assert result["text"] == "ok:/tmp/ok.wav"
+                    await asyncio.sleep(0.01)
+                    assert engine._batches_inflight == 0
+                finally:
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
 
 class TestUnlinkSafe:
 
