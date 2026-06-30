@@ -8,3 +8,5 @@
 #
 # Terminal state: this list contains the entire unit suite; the dirty allowlist is
 # empty and deleted. See .coordination/test-isolation/PLAN.md §4 and WORKSTREAM.md.
+tests/unit/test_goals_sort_missing_created_at.py
+tests/unit/test_goals_id_fallback.py
