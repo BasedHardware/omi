@@ -69,7 +69,9 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 4, offset: const Offset(0, 2))],
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 4, offset: const Offset(0, 2)),
+                ],
               ),
               child: Row(
                 children: [
@@ -289,6 +291,14 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                           ),
                                         );
                                       },
+                                    ),
+                                    const SizedBox(width: 8),
+                                    FilterChip(
+                                      label: Text(context.l10n.memoryThisDevice, style: const TextStyle(fontSize: 12)),
+                                      selected: provider.filterThisDeviceOnly,
+                                      onSelected: provider.setFilterThisDeviceOnly,
+                                      visualDensity: VisualDensity.compact,
+                                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                                     ),
                                     const SizedBox(width: 8),
                                     SizedBox(

@@ -5,7 +5,7 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.35.3)
+# - Flutter SDK (v3.41.9)
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
@@ -29,7 +29,7 @@ echo "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Join us o
 echo "Prerequisites (stable versions, use these or higher):"
 echo ""
 echo "Common for all developers:"
-echo "- Flutter SDK (v3.35.3)"
+echo "- Flutter SDK (v3.41.9)"
 echo "- Opus Codec: https://opus-codec.org"
 echo ""
 echo "For iOS Developers:"

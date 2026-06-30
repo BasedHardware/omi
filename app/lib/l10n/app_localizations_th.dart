@@ -9304,6 +9304,17 @@ class AppLocalizationsTh extends AppLocalizations {
   String get transcribeLaterPaused => 'หยุดชั่วคราว — ไม่ได้กำลังบันทึกเสียง';
 
   @override
+  String get memoryThisDevice => 'อุปกรณ์นี้';
+  @override
+  String get memoryThisIphone => 'iPhone เครื่องนี้';
+  @override
+  String get memoryThisPhone => 'โทรศัพท์เครื่องนี้';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'วิธีใช้ Omi';
 
   @override
@@ -9398,6 +9409,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'ประมาณ 1 นาที';
+
   @override
   String get jumpToLatestMessage => 'ไปยังข้อความล่าสุด';
 

@@ -7,11 +7,14 @@ replicaCount: 1
 
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
-  repository: gcr.io/based-hardware-dev/backend
+  repository: ""
   # This sets the pull policy for images.
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
+
+gcpProjectId: ""
+runtimeGcpProjectId: ""
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
@@ -108,11 +111,25 @@ env:
         key: OPENAI_API_KEY
   - name: OMI_LLM_GATEWAY_URL
     value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
+  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
+    value: "true"
+  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
+    value: "1.0"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: MEMORY_MODE
+    value: "write"
+  - name: MEMORY_ENABLED_USERS
+    value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
+  - name: MEMORY_V3_GET_ENABLED
+    value: "false"
+  - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
+    value: "false"
+  - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+    value: "false"
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -276,7 +293,7 @@ env:
         name: dev-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
   - name: GOOGLE_CLOUD_PROJECT
-    value: "based-hardware"
+    value: ""
   - name: TWILIO_ACCOUNT_SID
     valueFrom:
       secretKeyRef:
@@ -378,6 +395,31 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: X_OAUTH_REDIRECT_URI
+  - name: MCP_AUTHORIZATION_SERVER_URL
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_AUTHORIZATION_SERVER_URL
+  - name: MCP_RESOURCE_URL
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_RESOURCE_URL
+  - name: MCP_OAUTH_CHATGPT_CLIENT_ID
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_CLIENT_ID
+  - name: MCP_OAUTH_CHATGPT_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_CLIENT_SECRET
+  - name: MCP_OAUTH_CHATGPT_REDIRECT_URIS
+    valueFrom:
+      secretKeyRef:
+        name: dev-omi-backend-secrets
+        key: MCP_OAUTH_CHATGPT_REDIRECT_URIS
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious

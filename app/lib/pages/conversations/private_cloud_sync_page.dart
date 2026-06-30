@@ -137,7 +137,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: isEnabled ? Colors.green.withOpacity(0.2) : const Color(0xFF2A2A2E),
+                                    color: isEnabled ? Colors.green.withValues(alpha: 0.2) : const Color(0xFF2A2A2E),
                                     borderRadius: BorderRadius.circular(100),
                                   ),
                                   child: Text(

@@ -9389,6 +9389,17 @@ class AppLocalizationsKn extends AppLocalizations {
   String get transcribeLaterPaused => 'ಸ್ಥಗಿತ — ಆಡಿಯೋ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿಲ್ಲ';
 
   @override
+  String get memoryThisDevice => 'ಈ ಸಾಧನ';
+  @override
+  String get memoryThisIphone => 'ಈ iPhone';
+  @override
+  String get memoryThisPhone => 'ಈ ಫೋನ್';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Omi ಅನ್ನು ಹೇಗೆ ಬಳಸುವುದು';
 
   @override
@@ -9483,6 +9494,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'ಸುಮಾರು 1 ನಿಮಿಷ';
+
   @override
   String get jumpToLatestMessage => 'ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ';
 

@@ -34,7 +34,11 @@ podLabels: {}
 
 service:
   type: ClusterIP
+  backendConfig: ""
   port: 8080
+
+ingress:
+  enabled: false
 
 env:
   - name: OMI_LLM_GATEWAY_PROD

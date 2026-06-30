@@ -90,6 +90,17 @@ _stub_package("utils.llm")
 llm_clients_stub = _stub_module("utils.llm.clients")
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
 llm_clients_stub.parser = MagicMock()
+conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
+conversation_folder_stub.FolderAssignment = MagicMock
+conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=None)
+conversation_folder_stub.build_folders_context = MagicMock(return_value="")
+
+byok_stub = _stub_module("utils.byok")
+byok_stub.has_byok_keys = MagicMock(return_value=False)
+
+gateway_stub = _stub_module("utils.llm.gateway_client")
+gateway_stub.invoke_chat_structured_gateway = MagicMock(return_value=None)
+gateway_stub.record_chat_extraction_gateway_result = MagicMock()
 
 conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
 conversation_folder_stub.FolderAssignment = MagicMock()

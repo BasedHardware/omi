@@ -111,8 +111,24 @@ finally:
 
 def _call(limit, offset):
     db = MagicMock(return_value=[])
-    with patch.object(mem_mod.memories_db, 'get_memories', db):
-        mem_mod.get_memories(limit=limit, offset=offset, uid='uid1')
+    runtime = mem_mod.V3GetRuntime(enabled=False, source_decision='disabled')
+    scope_request = types.SimpleNamespace(device_scope='all', client_device_id=None)
+    with (
+        patch.object(mem_mod.memories_db, 'get_memories', db),
+        patch.object(mem_mod, 'canonical_read_enabled', return_value=False),
+        patch.object(mem_mod, '_resolve_get_memories_device_scope', return_value=scope_request),
+    ):
+        mem_mod.get_memories(
+            response=MagicMock(),
+            limit=limit,
+            offset=offset,
+            uid='uid1',
+            device_scope='all',
+            client_device_id=None,
+            x_app_platform=None,
+            x_device_id_hash=None,
+            memory_runtime=runtime,
+        )
     # get_memories(uid, limit, offset)
     return db.call_args.args[1], db.call_args.args[2]
 

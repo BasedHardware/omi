@@ -21,6 +21,9 @@ export interface OmiToolInputSchema {
   properties: Record<string, unknown>;
   required?: string[];
   additionalProperties?: boolean;
+}
+
+export interface OmiMcpToolInputSchema extends OmiToolInputSchema {
   anyOf?: unknown[];
   allOf?: unknown[];
   oneOf?: unknown[];
@@ -43,6 +46,7 @@ export interface OmiToolManifestEntry {
   promptGuidelines?: string[];
   latency: "fast local" | "fast network" | "async background";
   inputSchema: OmiToolInputSchema;
+  mcpInputSchema?: OmiMcpToolInputSchema;
   annotations: OmiToolAnnotations;
   timeoutClass: OmiToolTimeoutClass;
   executor: {
@@ -79,6 +83,12 @@ const localWrite: OmiToolAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
   openWorldHint: false,
+};
+
+const openWorldWrite: OmiToolAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  openWorldHint: true,
 };
 
 const destructiveLocal: OmiToolAnnotations = {
@@ -200,6 +210,56 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     intendedForAgents: true,
     runtimePreconditions: ["Requires the desktop app task-agent stores."],
     adapters: piAndStdio(),
+  },
+  {
+    name: "fill_cloud_connector_form",
+    label: "Fill Cloud Connector Form",
+    description:
+      "Fill the currently visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation. Use first for one-click cloud connector setup after opening the signed-in browser to the connector page.",
+    promptSnippet: "fill_cloud_connector_form - Fill and optionally submit the visible ChatGPT/Claude MCP connector form",
+    promptGuidelines: [
+      "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
+      "Do not install browser extensions before trying this tool.",
+      "If it reports missing Accessibility permission, missing form, or missing required fields, wait for the missing condition or use guarded screenshots before any keyboard automation.",
+    ],
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        provider: {
+          type: "string",
+          enum: ["claude", "chatgpt"],
+          description: "Cloud platform whose connector form is visible.",
+        },
+        name: { type: "string", description: "Connector name, usually 'Omi Memory'." },
+        server_url: { type: "string", description: "Remote MCP server URL to paste into the connector form." },
+        oauth_client_id: { type: "string", description: "OAuth Client ID, usually 'omi'." },
+        oauth_client_secret: { type: "string", description: "OAuth Client Secret / Omi MCP key." },
+        authentication: { type: "string", description: "Authentication mode, usually 'OAuth'." },
+        token_auth_method: {
+          type: "string",
+          description: "OAuth token auth method, usually 'client_secret_post'.",
+        },
+        auth_url: { type: "string", description: "OAuth authorization URL when the form asks for it." },
+        token_url: { type: "string", description: "OAuth token URL when the form asks for it." },
+        submit: {
+          type: "boolean",
+          description: "Whether to press the visible Add/Connect/Create button after filling required fields.",
+        },
+      },
+      ["provider", "server_url", "oauth_client_secret"],
+    ),
+    annotations: openWorldWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires a signed-in supported browser on the connector page.",
+      "Requires macOS Accessibility permission for Omi and the target browser.",
+    ],
+    adapters: {
+      ...piAndStdio(),
+      "local-agent-api": { advertised: true },
+    },
   },
   {
     name: "spawn_agent",
@@ -722,9 +782,13 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     latency: tool.latency,
     inputSchema: {
       ...agentControlInputSchema(tool),
-      ...tool.jsonSchemaOptions,
       additionalProperties: false,
     } as OmiToolInputSchema,
+    mcpInputSchema: {
+      ...agentControlInputSchema(tool),
+      ...tool.mcpInputSchemaOptions,
+      additionalProperties: false,
+    } as OmiMcpToolInputSchema,
     annotations: readOnlyLocal,
     timeoutClass: tool.timeoutClass,
     executor: { kind: "runtimeControl" },
@@ -767,11 +831,11 @@ export function toolNamesForAdapter(
 export function mcpToolDefinitionsForAdapter(
   adapterId: "omi-tools-stdio",
   context: OmiToolProjectionContext = {},
-): Array<{ name: string; description: string; inputSchema: OmiToolInputSchema }> {
+): Array<{ name: string; description: string; inputSchema: OmiMcpToolInputSchema }> {
   return toolsForAdapter(adapterId, context).map((tool) => ({
     name: tool.adapters[adapterId]?.adapterName ?? tool.name,
     description: tool.description,
-    inputSchema: tool.inputSchema,
+    inputSchema: tool.mcpInputSchema ?? tool.inputSchema,
   }));
 }
 

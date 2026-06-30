@@ -45,15 +45,25 @@ class AuthState: ObservableObject {
   @Published var userEmail: String?
 
   private init() {
+    BundleEnvironment.loadIfNeeded()
+
     // Restore auth state from UserDefaults immediately on init (before UI renders)
     let savedSignedIn = UserDefaults.standard.bool(forKey: Self.kAuthIsSignedIn)
     let savedEmail = UserDefaults.standard.string(forKey: Self.kAuthUserEmail)
-    self.isSignedIn = savedSignedIn
-    self.userEmail = savedEmail
-    // Show loading splash while Firebase restores session (only if user was previously signed in)
-    self.isRestoringAuth = savedSignedIn
+
+    if DesktopLocalProfile.isEnabled {
+      // Harness-owned emulator auth replaces any persisted cloud session.
+      self.isSignedIn = false
+      self.userEmail = nil
+      self.isRestoringAuth = true
+    } else {
+      self.isSignedIn = savedSignedIn
+      self.userEmail = savedEmail
+      self.isRestoringAuth = savedSignedIn
+    }
     NSLog(
-      "OMI AuthState: Initialized with savedSignedIn=%@, email=%@, isRestoringAuth=%@",
+      "OMI AuthState: Initialized localProfile=%@ savedSignedIn=%@ email=%@ isRestoringAuth=%@",
+      DesktopLocalProfile.isEnabled ? "true" : "false",
       savedSignedIn ? "true" : "false", savedEmail ?? "nil", self.isRestoringAuth ? "true" : "false"
     )
   }
@@ -211,6 +221,9 @@ struct OMIApp: App {
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   static var openMainWindow: (() -> Void)?
+  private static var appIsActive = false
+  private static var mainWindowIsKey = false
+  private static var lastMainWindowForegroundAt: Date?
 
   private var sentryHeartbeatTimer: Timer?
   private var globalHotkeyMonitor: Any?
@@ -237,6 +250,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
     signal(SIGPIPE, SIG_IGN)
 
+    // Load bundle .env before AuthState/Firebase so local harness env is visible to getenv().
+    BundleEnvironment.loadIfNeeded()
+
     DesktopAutomationBridge.shared.startIfNeeded()
     LocalAgentAPIServer.shared.startIfNeeded()
 
@@ -247,14 +263,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     log("AppDelegate: applicationDidFinishLaunching started (mode: \(OMIApp.launchMode.rawValue))")
     log("AppDelegate: AuthState.isSignedIn=\(AuthState.shared.isSignedIn)")
+    let restoreMainWindowAfterUpdateRelaunch = UpdateRelaunchWindowPolicy.consumePendingRelaunch()
+    if let restoreMainWindowAfterUpdateRelaunch {
+      log(
+        "AppDelegate: Sparkle update relaunch detected; restoreMainWindow=\(restoreMainWindowAfterUpdateRelaunch)"
+      )
+    }
 
     // Refresh the "Auto" realtime-voice model pick from Artificial Analysis (daily, cached).
     AutoModelSelector.shared.refreshIfStale()
 
     // After a Sparkle update, show a small "what's new" card in the corner of the
     // main window once. Delayed so the window/overlay exist to render it.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-      WhatsNewToast.shared.presentIfUpdated()
+    if restoreMainWindowAfterUpdateRelaunch != false {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+        WhatsNewToast.shared.presentIfUpdated()
+      }
     }
 
     // Proactive notifications are now OFF by default for everyone. Run the one-time
@@ -353,7 +377,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ]
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            let value = exc.value ?? ""
+            let value = exc.value
             return transientNetworkCodes.contains { entry in
               exc.type == entry.domain
                 && entry.codes.contains { value.contains("Code=\($0)") || value.contains("Code: \($0)") }
@@ -390,7 +414,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // UserDefaults; the 30s refresh timer will retry. Not actionable as a Sentry error.
         if let exceptions = event.exceptions,
           exceptions.contains(where: { exc in
-            exc.type == "Omi_Computer.AuthError" && (exc.value ?? "").contains("notSignedIn")
+            exc.type == "Omi_Computer.AuthError" && exc.value.contains("notSignedIn")
           })
         {
           return nil
@@ -400,14 +424,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
     log("Sentry initialized (environment: \(isDev ? "development" : "production"))")
 
-    // Initialize Firebase
+    // Initialize Firebase (skipped for local harness — Firebase SDK configure can hang;
+    // local dev uses Auth emulator REST + stored tokens instead).
     let plistPath = Bundle.main.path(forResource: "GoogleService-Info", ofType: "plist")
 
-    if let path = plistPath,
+    if DesktopLocalProfile.isEnabled {
+      log("Local harness: skipping Firebase SDK configure; bootstrapping Auth emulator via REST")
+      AuthState.shared.isRestoringAuth = true
+      Task { @MainActor in
+        await AuthService.shared.bootstrapLocalHarnessAuthIfNeeded()
+      }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) {
+        if AuthState.shared.isRestoringAuth {
+          log("Local harness auth watchdog: clearing stuck restoring_auth splash")
+          AuthState.shared.isRestoringAuth = false
+        }
+      }
+    } else if let path = plistPath,
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
       AuthService.shared.configure()
+    } else {
+      log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
     }
 
     // Initialize analytics (PostHog)
@@ -533,21 +572,30 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // Start Sentry heartbeat timer (every 5 minutes) to capture breadcrumbs periodically
     startSentryHeartbeat()
+    startForegroundTracking()
 
-    // Activate app and show main window after a brief delay
+    // Apply initial main-window policy after SwiftUI has created the window.
     DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
       log("AppDelegate: Checking windows after 0.2s delay, count=\(NSApp.windows.count)")
-      NSApp.activate()
+      let shouldSuppressMainWindow = restoreMainWindowAfterUpdateRelaunch == false
+      if !shouldSuppressMainWindow {
+        NSApp.activate()
+      }
       var foundOmiWindow = false
       for window in NSApp.windows {
         log("AppDelegate: Window title='\(window.title)', isVisible=\(window.isVisible)")
-        if window.title.hasPrefix("Omi") {
+        if Self.isMainOmiWindow(window) {
           foundOmiWindow = true
-          window.makeKeyAndOrderFront(nil)
           window.appearance = NSAppearance(named: .darkAqua)
           // Ensure fullscreen always creates a dedicated Space
           window.collectionBehavior.insert(.fullScreenPrimary)
-          log("AppDelegate: Main window shown on launch")
+          if shouldSuppressMainWindow {
+            window.orderOut(nil)
+            log("AppDelegate: Main window suppressed after background update relaunch")
+          } else {
+            window.makeKeyAndOrderFront(nil)
+            log("AppDelegate: Main window shown on launch")
+          }
         }
       }
       if !foundOmiWindow {
@@ -570,6 +618,77 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
       log("Sentry: Session heartbeat captured")
     }
+  }
+
+  private func startForegroundTracking() {
+    Self.recordForegroundState()
+
+    let center = NotificationCenter.default
+    windowObservers.append(
+      center.addObserver(
+        forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+    windowObservers.append(
+      center.addObserver(
+        forName: NSWindow.didResignKeyNotification, object: nil, queue: .main
+      ) { _ in
+        Self.recordForegroundState()
+      })
+  }
+
+  static func shouldRestoreMainWindowAfterUpdateRelaunch() -> Bool {
+    let readState = {
+      Self.recordForegroundState()
+      return UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
+        appIsActive: appIsActive,
+        frontmostBundleMatches: frontmostApplicationMatchesBundle(),
+        mainWindowIsKey: mainWindowIsKey,
+        lastMainWindowForegroundAt: lastMainWindowForegroundAt
+      )
+    }
+
+    if Thread.isMainThread {
+      return readState()
+    }
+
+    return DispatchQueue.main.sync(execute: readState)
+  }
+
+  private static func recordForegroundState(now: Date = Date()) {
+    appIsActive = NSApp.isActive
+    mainWindowIsKey = NSApp.keyWindow.map(isMainOmiWindow) ?? false
+
+    if UpdateRelaunchWindowPolicy.shouldRestoreMainWindow(
+      appIsActive: appIsActive,
+      frontmostBundleMatches: frontmostApplicationMatchesBundle(),
+      mainWindowIsKey: mainWindowIsKey,
+      lastMainWindowForegroundAt: nil,
+      now: now
+    ) {
+      lastMainWindowForegroundAt = now
+    }
+  }
+
+  private static func frontmostApplicationMatchesBundle() -> Bool {
+    NSWorkspace.shared.frontmostApplication?.bundleIdentifier == Bundle.main.bundleIdentifier
+  }
+
+  private static func isMainOmiWindow(_ window: NSWindow) -> Bool {
+    window.title.lowercased().hasPrefix("omi")
   }
 
   /// Strip com.apple.provenance extended attributes from our own bundle.
@@ -1201,8 +1320,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
 
-    // Mark clean shutdown so next launch skips expensive DB integrity check
-    RewindDatabase.markCleanShutdown()
+    // Finalize the active Rewind MP4 chunk while the app is still alive.
+    // AVAssetWriter files are not readable until finishWriting writes the trailer.
+    let didFlushRewind = RewindShutdownFlush.flush(timeout: 5, context: "AppDelegate")
+
+    // Mark clean shutdown only after Rewind finalized its active MP4 chunk.
+    if didFlushRewind {
+      RewindDatabase.markCleanShutdown()
+    }
 
     // Report final resources before termination
     ResourceMonitor.shared.reportResourcesNow(context: "app_terminating")

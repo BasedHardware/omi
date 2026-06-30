@@ -1,7 +1,7 @@
 import logging
 import math
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 
 import typesense
@@ -10,11 +10,28 @@ logger = logging.getLogger(__name__)
 
 client = typesense.Client(
     {
-        'nodes': [{'host': os.getenv('TYPESENSE_HOST'), 'port': os.getenv('TYPESENSE_HOST_PORT'), 'protocol': 'https'}],
+        'nodes': [
+            {
+                'host': os.getenv('TYPESENSE_HOST'),
+                'port': os.getenv('TYPESENSE_HOST_PORT'),
+                'protocol': os.getenv('TYPESENSE_PROTOCOL', 'https'),
+            }
+        ],
         'api_key': os.getenv('TYPESENSE_API_KEY'),
         'connection_timeout_seconds': 2,
     }
 )
+
+
+def _utc_iso(ts) -> str:
+    """Convert a stored unix timestamp to a timezone-aware UTC ISO 8601 string (with a +00:00 offset).
+
+    Typesense stores created_at/started_at/finished_at as unix timestamps. Rendering them with
+    ``datetime.utcfromtimestamp(ts).isoformat()`` produced a NAIVE string with no offset, so the chat
+    model and clients could read a UTC time as local time and show conversation times hours off
+    (issue #4643). Anchoring to UTC keeps the offset explicit so consumers interpret it correctly.
+    """
+    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
 def search_conversations(
@@ -25,8 +42,18 @@ def search_conversations(
     include_discarded: bool = True,
     start_date: int = None,
     end_date: int = None,
+    speaker_id: str = None,
 ) -> Dict:
     try:
+        stripped_query = query.strip() if query else ''
+        has_filter_only_browse = bool(speaker_id) or start_date is not None or end_date is not None
+        if not stripped_query and not has_filter_only_browse:
+            return {
+                'items': [],
+                'total_pages': page,
+                'current_page': page,
+                'per_page': per_page,
+            }
 
         filter_by = f'userId:={uid}'
         if not include_discarded:
@@ -38,8 +65,13 @@ def search_conversations(
         if end_date is not None:
             filter_by = filter_by + f' && created_at:<={end_date}'
 
+        if speaker_id == 'user':
+            filter_by = filter_by + ' && transcript_segments.is_user:=true'
+        elif speaker_id:
+            filter_by = filter_by + f' && transcript_segments.person_id:={speaker_id}'
+
         search_parameters = {
-            'q': query,
+            'q': stripped_query or '*',
             'query_by': 'structured.overview, structured.title',
             'filter_by': filter_by,
             'sort_by': 'created_at:desc',
@@ -57,9 +89,9 @@ def search_conversations(
             try:
                 # Convert all three into locals first, then assign, so a hit that fails partway is
                 # never left half-converted.
-                created_at = datetime.utcfromtimestamp(doc['created_at']).isoformat()
-                started_at = datetime.utcfromtimestamp(doc['started_at']).isoformat()
-                finished_at = datetime.utcfromtimestamp(doc['finished_at']).isoformat()
+                created_at = _utc_iso(doc['created_at'])
+                started_at = _utc_iso(doc['started_at'])
+                finished_at = _utc_iso(doc['finished_at'])
             except (KeyError, TypeError, ValueError, OverflowError, OSError) as e:
                 # One malformed/legacy indexed doc (missing, null, or out-of-range timestamp) must not
                 # 500 the whole search page; skip just this hit (mirrors the per-record tolerance in
@@ -94,6 +126,9 @@ def keyword_search_conversation_ids(
 
     Fail-open: any search error returns [] so callers can fall back to vector-only results.
     """
+    if not query.strip():
+        return []
+
     try:
         results = search_conversations(
             uid=uid,

@@ -9363,6 +9363,17 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcribeLaterPaused => 'Pozastaveno — zvuk se nenahrává';
 
   @override
+  String get memoryThisDevice => 'Toto zařízení';
+  @override
+  String get memoryThisIphone => 'Tento iPhone';
+  @override
+  String get memoryThisPhone => 'Tento telefon';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Jak používat Omi';
 
   @override
@@ -9458,6 +9469,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Přibližně 1 minuta';
+
   @override
   String get jumpToLatestMessage => 'Přejít na nejnovější zprávu';
 

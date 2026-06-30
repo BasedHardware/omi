@@ -74,6 +74,12 @@ class _AddReviewWidgetState extends State<AddReviewWidget> {
   }
 
   @override
+  void dispose() {
+    reviewController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,

@@ -256,10 +256,10 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
     if not uid:
         return f"Error: User ID not found for {app_tool.name}"
 
-    # Get geolocation from cache
+    # Get geolocation from cache (offloaded: the Redis read is sync and blocks the event loop)
     geolocation = None
     try:
-        geolocation = get_cached_user_geolocation(uid)
+        geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
     except Exception:
         pass
 

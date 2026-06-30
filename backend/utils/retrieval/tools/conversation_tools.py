@@ -32,6 +32,43 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+# A wide date range ("analyze my last 30 days") can match hundreds of conversations. Feeding all of
+# them to the chat model floods its context, so it freezes or refuses with "that's quite a bit of
+# information to process at once" (#4927). Bound both the count and the raw size of what we return.
+MAX_CONVERSATIONS_FOR_LLM = 100
+MAX_RESULT_CHARS = 60000
+
+
+def _cap_conversations_for_llm(conversations: list):
+    """Keep at most ``MAX_CONVERSATIONS_FOR_LLM`` conversations for the chat model.
+
+    The DB returns conversations newest-first, so this keeps the most recent ones. Returns
+    ``(capped_list, total_found, truncated)`` where ``truncated`` is True when some were dropped.
+    """
+    total_found = len(conversations)
+    if total_found > MAX_CONVERSATIONS_FOR_LLM:
+        return conversations[:MAX_CONVERSATIONS_FOR_LLM], total_found, True
+    return list(conversations), total_found, False
+
+
+def _bounded_result(result: str, total_found: int, truncated: bool) -> str:
+    """Apply a hard size budget and, when the range was truncated, append a note telling the model
+    to summarize what it has and offer to narrow, so it answers instead of freezing (#4927)."""
+    if len(result) > MAX_RESULT_CHARS:
+        # Cut at a conversation boundary when possible so a record is not split mid-way.
+        clipped = result[:MAX_RESULT_CHARS]
+        boundary = clipped.rfind("\nConversation #")
+        result = clipped[:boundary] if boundary > 0 else clipped
+        truncated = True
+    if truncated:
+        result += (
+            f"\n\n[This date range contains {total_found} conversations; only the most recent ones are "
+            f"shown to stay within limits. Summarize what is shown and tell the user they can narrow to a "
+            f"shorter time frame or a specific topic for more detail.]"
+        )
+    return result
+
+
 @tool
 def get_conversations_tool(
     start_date: Optional[str] = None,
@@ -55,9 +92,9 @@ def get_conversations_tool(
 
     **IMPORTANT for summarization queries:**
     When user asks for weekly, monthly, or yearly summaries/overviews:
-    - Set limit=5000 to retrieve ALL conversations in that period
-    - Set max_transcript_segments=0 to exclude transcripts (reduce context size)
-    - This prevents missing conversations and avoids context overflow from transcripts
+    - Set a high limit (e.g. 200) and max_transcript_segments=0 to retrieve summaries without transcripts
+    - For very wide ranges the result is automatically capped to the most recent conversations so it cannot
+      overflow context; summarize what is returned and offer to narrow the range if the user needs more detail
     Examples: "summarize my week", "what did I do this month", "recap my year"
 
     Transcript retrieval guidance:
@@ -184,8 +221,13 @@ def get_conversations_tool(
     if conversations_data:
         conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
 
+    # Bound how many conversations are formatted for the chat model so a wide date range cannot
+    # flood its context and freeze it (#4927). Newest-first, so this keeps the most recent.
+    conversations_data, total_found, results_truncated = _cap_conversations_for_llm(conversations_data or [])
+
     logger.info(
-        f"📊 get_conversations_tool - found {len(conversations_data) if conversations_data else 0} conversations"
+        f"📊 get_conversations_tool - found {total_found} conversations"
+        + (f" (showing most recent {len(conversations_data)})" if results_truncated else "")
     )
 
     if not conversations_data:
@@ -263,6 +305,7 @@ def get_conversations_tool(
             people=people,
             tz=notification_db.get_user_time_zone(uid),
         )
+        result = _bounded_result(result, total_found, results_truncated)
         logger.info(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
         return result
 
@@ -505,9 +548,5 @@ def search_conversations_tool(
         return result
 
     except Exception as e:
-        error_msg = f"Error performing vector search: {str(e)}"
-        logger.info(f"❌ search_conversations_tool - {error_msg}")
-        import traceback
-
-        traceback.print_exc()
-        return f"Found vector search results but encountered an error processing them: {str(e)}"
+        logger.warning("search_conversations_tool vector search failed (%s)", type(e).__name__)
+        return "Found vector search results but encountered an error processing them."

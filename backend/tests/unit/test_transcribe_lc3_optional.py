@@ -21,5 +21,5 @@ def test_lc3_codec_closes_cleanly_when_dependency_missing():
     assert "elif codec == 'lc3':" in source
     assert 'if lc3 is None:' in source
     assert 'LC3 codec requested but lc3py is not installed' in source
-    assert 'await websocket.close(code=websocket_close_code, reason="LC3 codec is not available")' in source
+    assert 'await websocket.close(code=session.close_code, reason="LC3 codec is not available")' in source
     assert '_get_lc3().Decoder(lc3_frame_duration_us, sample_rate)' in source

@@ -30,9 +30,9 @@ class OmiMultilineInput extends AdaptiveWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: ResponsiveHelper.backgroundTertiary.withOpacity(0.6),
+        color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withOpacity(0.3), width: 1),
+        border: Border.all(color: ResponsiveHelper.backgroundTertiary.withValues(alpha: 0.3), width: 1),
       ),
       child: ConstrainedBox(
         constraints: BoxConstraints(minHeight: minHeight, maxHeight: maxHeight),

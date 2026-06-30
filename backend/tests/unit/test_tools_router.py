@@ -86,6 +86,7 @@ for mod_name in [
 
 # Stub database packages
 _stub_package("database")
+sys.modules["database._client"].db = MagicMock()
 
 # Stub database.conversations
 conversations_db = _stub_module("database.conversations")
@@ -128,8 +129,52 @@ notif_mod.sync_action_item_reminder = MagicMock()
 _stub_package("utils")
 _stub_package("utils.conversations")
 _stub_package("utils.retrieval")
+_stub_package("utils.retrieval.tools")
 _stub_package("utils.retrieval.tool_services")
 _stub_package("utils.other")
+_stub_package("utils.memory")
+
+memory_adapter_stub = _stub_module("utils.memory.chat_memory_adapter")
+memory_adapter_stub.list_default_chat_memories_decision_text = MagicMock(
+    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
+)
+memory_adapter_stub.search_memory_default_chat_memories_vector_decision_text = MagicMock(
+    return_value=types.SimpleNamespace(read_decision="use_legacy_safe", text="", fallback_reason="test")
+)
+read_rollout_stub = _stub_module("utils.memory.default_read_rollout")
+read_rollout_stub.MemoryReadDecision = types.SimpleNamespace(
+    USE_MEMORY="use_memory",
+    USE_LEGACY_SAFE="use_legacy_safe",
+)
+
+memory_system_stub = _stub_module("utils.memory.memory_system")
+memory_system_stub.MemorySystem = types.SimpleNamespace(LEGACY="legacy", CANONICAL="canonical")
+
+memory_service_stub = _stub_module("utils.memory.memory_service")
+memory_service_stub.MemoryService = MagicMock
+
+surface_routing_stub = _stub_module("utils.memory.surface_routing")
+surface_routing_stub.pin_memory_system = MagicMock(return_value=memory_system_stub.MemorySystem.LEGACY)
+boundary_stub = _stub_module("utils.retrieval.tool_result_boundaries")
+boundary_stub.preserve_chat_memory_tool_result_boundary = MagicMock(side_effect=lambda _tool_name, result: result)
+
+
+class FakeCalendarEventTool:
+    def __init__(self):
+        self.calls = []
+        self.next_result = None
+
+    async def ainvoke(self, tool_input, config=None):
+        self.calls.append((tool_input, config))
+        if self.next_result is not None:
+            result = self.next_result
+            self.next_result = None
+            return result
+        return f"✅ Successfully created calendar event: {tool_input['title']}"
+
+
+calendar_tools_mod = _stub_module("utils.retrieval.tools.calendar_tools")
+calendar_tools_mod.create_calendar_event_tool = FakeCalendarEventTool()
 
 # Stub render and factory modules
 render_mod = _stub_module("utils.conversations.render")
@@ -568,6 +613,7 @@ class TestUpdateActionItemText:
         action_items_db.get_action_item.reset_mock()
         action_items_db.update_action_item.reset_mock()
         action_items_db.update_action_item.return_value = True
+        calendar_tools_mod.create_calendar_event_tool.calls.clear()
         notif_mod.send_action_item_completed_notification.reset_mock()
 
     def test_empty_id_rejected(self):
@@ -678,6 +724,8 @@ class TestRouterEndpoints:
         action_items_db.create_action_item.return_value = "test-item-id"
         action_items_db.update_action_item.reset_mock()
         action_items_db.update_action_item.return_value = True
+        calendar_tools_mod.create_calendar_event_tool.calls.clear()
+        calendar_tools_mod.create_calendar_event_tool.next_result = None
 
     def test_get_conversations_endpoint(self):
         resp = self.client.get("/v1/tools/conversations")
@@ -731,6 +779,69 @@ class TestRouterEndpoints:
         body = resp.json()
         assert body["tool_name"] == "update_action_item"
         assert "completed" in body["result_text"].lower()
+
+    def test_create_calendar_event_endpoint(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00-04:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+                "location": "Zoom",
+                "attendees": "sam@example.com",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "create_calendar_event"
+        assert "Design review" in body["result_text"]
+        assert body["is_error"] is False
+
+        tool_input, config = calendar_tools_mod.create_calendar_event_tool.calls[-1]
+        assert tool_input["title"] == "Design review"
+        assert tool_input["start_time"] == "2026-06-28T14:00:00-04:00"
+        assert tool_input["end_time"] == "2026-06-28T15:00:00-04:00"
+        assert tool_input["location"] == "Zoom"
+        assert tool_input["attendees"] == "sam@example.com"
+        assert config == {"configurable": {"user_id": "test-uid"}}
+
+    def test_create_calendar_event_rejects_malformed_datetimes(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "tomorrow at 2",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_create_calendar_event_requires_timezone(self):
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_create_calendar_event_marks_calendar_tool_failures_as_errors(self):
+        calendar_tools_mod.create_calendar_event_tool.next_result = "Google Calendar is not connected."
+        resp = self.client.post(
+            "/v1/tools/calendar-events",
+            json={
+                "title": "Design review",
+                "start_time": "2026-06-28T14:00:00-04:00",
+                "end_time": "2026-06-28T15:00:00-04:00",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["tool_name"] == "create_calendar_event"
+        assert body["result_text"] == "Google Calendar is not connected."
+        assert body["is_error"] is True
 
     def test_get_conversations_query_params(self):
         """Query params are forwarded correctly to the service."""

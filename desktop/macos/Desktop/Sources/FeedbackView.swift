@@ -147,6 +147,13 @@ struct FeedbackView: View {
         let attachment = Attachment(path: logPath, filename: logFilename, contentType: "text/plain")
         scope.addAttachment(attachment)
       }
+      if let diagnosticsURL = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+        let attachment = Attachment(
+          path: diagnosticsURL.path,
+          filename: "desktop_diagnostics.json",
+          contentType: "application/json")
+        scope.addAttachment(attachment)
+      }
     }
 
     // Also send as Sentry feedback if there's a message

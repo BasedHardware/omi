@@ -200,8 +200,8 @@ class AssistantSettings {
     }
 
     /// When system audio (audio from other apps) is captured during a recording.
-    /// Default `.always` preserves the prior behavior. The hidden `disableSystemAudioCapture`
-    /// debug UserDefault still forces "never" — see `AppState.effectiveSystemAudioMode`.
+    /// Default `.onlyDuringMeetings` limits system audio capture to detected conferencing calls.
+    /// The hidden `disableSystemAudioCapture` debug UserDefault still forces "never" — see `AppState.effectiveSystemAudioMode`.
     /// Posts `.systemAudioCaptureModeDidChange` so an active recording can re-apply the gate live.
     var systemAudioCaptureMode: SystemAudioCaptureMode {
         get {

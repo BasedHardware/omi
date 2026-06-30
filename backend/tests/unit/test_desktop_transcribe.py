@@ -9,6 +9,7 @@ import importlib.util
 import os
 import shutil as _shutil
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -300,8 +301,27 @@ _attach_existing_module('utils.stt.speaker_embedding')
 
 _ensure_package('google', BACKEND_DIR / 'tests')
 _ensure_package('google.cloud', BACKEND_DIR / 'tests')
+_ensure_package('google.auth', BACKEND_DIR / 'tests')
+_google_auth_exceptions = _install_module('google.auth.exceptions')
+_google_auth_exceptions.DefaultCredentialsError = type('DefaultCredentialsError', (Exception,), {})
+_google_auth_transport = _install_module('google.auth.transport')
+_google_auth_transport_requests = _install_module('google.auth.transport.requests')
+_google_auth_transport_requests.Request = MagicMock
+_ensure_package('google.api_core', BACKEND_DIR / 'tests')
+_api_core_exceptions = _install_module('google.api_core.exceptions')
+_api_core_exceptions.AlreadyExists = type('AlreadyExists', (Exception,), {})
+_api_core_exceptions.Conflict = type('Conflict', (Exception,), {})
+_api_core_exceptions.NotFound = type('NotFound', (Exception,), {})
 _gcs = _install_module('google.cloud.storage')
 _gcs.Client = MagicMock
+_tasks_v2 = _install_module('google.cloud.tasks_v2')
+_tasks_v2.CloudTasksClient = MagicMock
+_ensure_package('google.oauth2', BACKEND_DIR / 'tests')
+_id_token = _install_module('google.oauth2.id_token')
+_id_token.verify_oauth2_token = MagicMock()
+_ensure_package('google.protobuf', BACKEND_DIR / 'tests')
+_duration_pb2 = _install_module('google.protobuf.duration_pb2')
+_duration_pb2.Duration = MagicMock
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
 os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
@@ -332,6 +352,7 @@ for _ufull in [
     'utils.retrieval',
     'utils.retrieval.graph',
     'utils.fair_use',
+    'utils.cloud_tasks',
     'utils.log_sanitizer',
     'models.fair_use',
     'models.sync',
@@ -1380,6 +1401,9 @@ class TestWsBudgetAndSessionCap:
                             with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                 # Send 32000 bytes = 1s at 16kHz mono
                                 ws.send_bytes(b'\x00' * 32000)
+                                deadline = time.time() + 1.0
+                                while not mock_dg_socket.send.called and time.time() < deadline:
+                                    time.sleep(0.01)
                             # After WS close, finally block should have called record_actual_duration
                             mock_record.assert_called_once()
                             call_args = mock_record.call_args[0]

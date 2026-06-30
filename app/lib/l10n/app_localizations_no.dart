@@ -9360,6 +9360,17 @@ class AppLocalizationsNo extends AppLocalizations {
   String get transcribeLaterPaused => 'På pause – lyd tas ikke opp';
 
   @override
+  String get memoryThisDevice => 'Denne enheten';
+  @override
+  String get memoryThisIphone => 'Denne iPhone';
+  @override
+  String get memoryThisPhone => 'Denne telefonen';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Slik bruker du Omi';
 
   @override
@@ -9455,6 +9466,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Cirka 1 minutt';
+
   @override
   String get jumpToLatestMessage => 'Gå til nyeste melding';
 

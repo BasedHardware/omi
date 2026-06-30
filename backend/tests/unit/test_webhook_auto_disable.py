@@ -320,6 +320,59 @@ class TestDevWebhookHealthTracking:
 class TestDevWebhookAutoDisable:
     """Test developer webhook auto-disable integration in webhooks.py."""
 
+    def test_append_query_params_preserves_existing_query(self):
+        from utils.webhooks import _append_query_params
+
+        result = _append_query_params(
+            "https://example.com/webhook?token=abc&uid=stale",
+            {"uid": "uid-1", "sample_rate": 16000},
+        )
+
+        assert result == "https://example.com/webhook?token=abc&uid=uid-1&sample_rate=16000"
+
+    def test_retry_delays_can_be_overridden_by_env(self, monkeypatch):
+        from utils.webhooks import _get_dev_webhook_retry_delays
+
+        monkeypatch.setenv("DEV_WEBHOOK_RETRY_DELAYS", "0,0.25,1")
+
+        assert _get_dev_webhook_retry_delays() == (0.0, 0.25, 1.0)
+
+    @pytest.mark.asyncio
+    async def test_post_dev_webhook_retries_until_success(self):
+        from utils.webhooks import _post_dev_webhook
+
+        responses = [MagicMock(status_code=500), MagicMock(status_code=502), MagicMock(status_code=200)]
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=responses)
+
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        sleep_calls = []
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+        ):
+            response = await _post_dev_webhook(
+                "test_webhook",
+                "https://example.com/webhook",
+                json={"hello": "world"},
+                retry_delays=(0.1, 0.2),
+            )
+
+        assert response.status_code == 200
+        assert mock_client.post.await_count == 3
+        assert sleep_calls == [0.1, 0.2]
+        idempotency_keys = [call.kwargs["headers"]["Idempotency-Key"] for call in mock_client.post.await_args_list]
+        assert len(set(idempotency_keys)) == 1
+        assert idempotency_keys[0]
+
     @pytest.mark.asyncio
     async def test_dev_webhook_disabled_on_threshold(self):
         """When failure threshold exceeded, disable_user_webhook_db should be called."""
@@ -340,6 +393,7 @@ class TestDevWebhookAutoDisable:
             patch("utils.webhooks.record_dev_webhook_failure", return_value=True) as mock_fail,
             patch("utils.webhooks.disable_user_webhook_db") as mock_disable,
             patch("utils.webhooks.send_notification") as mock_notify,
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_fail.assert_called_once()
@@ -388,12 +442,54 @@ class TestDevWebhookAutoDisable:
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.record_dev_webhook_failure", return_value=False) as mock_fail,
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_fail.assert_called_once()
             args = mock_fail.call_args[0]
             assert args[2] == 0
             assert args[3] == 'ConnectionError'
+
+    @pytest.mark.asyncio
+    async def test_realtime_transcript_retry_success_records_success_only(self):
+        from utils.webhooks import realtime_transcript_webhook
+
+        first_response = MagicMock()
+        first_response.status_code = 500
+        second_response = MagicMock()
+        second_response.status_code = 200
+        second_response.json.return_value = {}
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=[first_response, second_response])
+
+        mock_cb = MagicMock()
+        mock_cb.allow_request.return_value = True
+
+        mock_sem = AsyncMock()
+        mock_sem.__aenter__ = AsyncMock()
+        mock_sem.__aexit__ = AsyncMock()
+
+        sleep_calls = []
+
+        async def fake_sleep(delay):
+            sleep_calls.append(delay)
+
+        with (
+            patch("utils.webhooks.get_webhook_client", return_value=mock_client),
+            patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
+            patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks.record_dev_webhook_success") as mock_success,
+            patch("utils.webhooks.record_dev_webhook_failure") as mock_fail,
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", (0.01,)),
+            patch("utils.webhooks.asyncio.sleep", side_effect=fake_sleep),
+        ):
+            await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
+
+        assert mock_client.post.await_count == 2
+        assert sleep_calls == [0.01]
+        mock_success.assert_called_once()
+        mock_fail.assert_not_called()
 
 
 class TestDisableAppInFirestore:
@@ -662,10 +758,17 @@ def _load_validate_helper():
         "database.conversations",
         "database.memories",
         "database.users",
+        "database._client",
+        "database.vector_db",
         "utils.stripe",
         "utils.llm",
         "utils.llm.persona",
         "utils.llm.usage_tracker",
+        "utils.llm.clients",
+        "utils.memory",
+        "utils.memory.memory_service",
+        "utils.memory.memory_system",
+        "utils.memory.surface_routing",
         "utils.social",
         "utils.conversations",
         "utils.conversations.factory",
@@ -2005,6 +2108,7 @@ class TestDevWebhookIntegrationPaths:
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             mock_memory = MagicMock()
             mock_memory.is_locked = False
@@ -2041,6 +2145,7 @@ class TestDevWebhookIntegrationPaths:
             patch("utils.webhooks.get_webhook_client", return_value=mock_client),
             patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb),
             patch("utils.webhooks.get_webhook_semaphore", return_value=mock_sem),
+            patch("utils.webhooks._DEV_WEBHOOK_RETRY_DELAYS", ()),
         ):
             mock_memory = MagicMock()
             mock_memory.is_locked = False

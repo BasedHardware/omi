@@ -9353,6 +9353,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String get transcribeLaterPaused => 'Đã tạm dừng — không ghi lại âm thanh';
 
   @override
+  String get memoryThisDevice => 'Thiết bị này';
+  @override
+  String get memoryThisIphone => 'iPhone này';
+  @override
+  String get memoryThisPhone => 'Điện thoại này';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Cách sử dụng Omi';
 
   @override
@@ -9447,6 +9458,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
+
   @override
   String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
 

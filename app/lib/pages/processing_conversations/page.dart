@@ -40,15 +40,17 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
   Widget build(BuildContext context) {
     return Consumer<ConversationProvider>(
       builder: (context, provider, child) {
-        // Track memory // FIXME
-        // if (widget.memory.status == ServerProcessingMemoryStatus.done &&
-        //     provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId) != null) {
-        //   _pushNewMemory(context, provider.memories.firstWhereOrNull((e) => e.id == widget.memory.memoryId));
-        // }
-
         // Conversation source
         var convoSource = widget.conversation.source;
         bool hasPhotos = (widget.conversation.photos ?? []).isNotEmpty;
+        String contentTabLabel;
+        if (convoSource == ConversationSource.openglass) {
+          contentTabLabel = context.l10n.photos;
+        } else if (convoSource == ConversationSource.screenpipe) {
+          contentTabLabel = context.l10n.rawData;
+        } else {
+          contentTabLabel = context.l10n.content;
+        }
 
         return PopScope(
           canPop: true,
@@ -87,13 +89,7 @@ class _ProcessingConversationPageState extends State<ProcessingConversationPage>
                   controller: _controller,
                   labelStyle: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 18),
                   tabs: [
-                    Tab(
-                      text: convoSource == ConversationSource.openglass
-                          ? context.l10n.photos
-                          : convoSource == ConversationSource.screenpipe
-                          ? context.l10n.rawData
-                          : context.l10n.content,
-                    ),
+                    Tab(text: contentTabLabel),
                     Tab(text: context.l10n.summary),
                   ],
                   indicator: BoxDecoration(color: Colors.transparent, borderRadius: BorderRadius.circular(16)),

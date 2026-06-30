@@ -3,6 +3,14 @@ import Foundation
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
 
+  nonisolated static func shouldEnablePlaywrightExtension(
+    useExtension: Bool,
+    token: String,
+    targetHasExtension: Bool
+  ) -> Bool {
+    useExtension && !token.isEmpty && targetHasExtension
+  }
+
   struct WarmupSessionConfig {
     let key: String
     let model: String?
@@ -479,11 +487,22 @@ actor AgentRuntimeProcess {
     let useExtension =
       defaults.object(forKey: "playwrightUseExtension") == nil
       || defaults.bool(forKey: "playwrightUseExtension")
-    if useExtension {
+    let playwrightToken = defaults.string(forKey: "playwrightExtensionToken") ?? ""
+    let playwrightTarget = BrowserAutomationTargetResolver.preferredTarget()
+    let hasInstalledPlaywrightBridge =
+      playwrightTarget.map { BrowserAutomationTargetResolver.isExtensionInstalled(in: $0) } ?? false
+    if Self.shouldEnablePlaywrightExtension(
+      useExtension: useExtension,
+      token: playwrightToken,
+      targetHasExtension: hasInstalledPlaywrightBridge)
+    {
+      env["PLAYWRIGHT_MCP_ENABLED"] = "true"
       env["PLAYWRIGHT_USE_EXTENSION"] = "true"
-      if let token = defaults.string(forKey: "playwrightExtensionToken"), !token.isEmpty {
-        env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = token
-      }
+      env["PLAYWRIGHT_MCP_EXTENSION_TOKEN"] = playwrightToken
+    } else {
+      env.removeValue(forKey: "PLAYWRIGHT_MCP_ENABLED")
+      env.removeValue(forKey: "PLAYWRIGHT_USE_EXTENSION")
+      env.removeValue(forKey: "PLAYWRIGHT_MCP_EXTENSION_TOKEN")
     }
 
     proc.environment = env
@@ -872,8 +891,17 @@ actor AgentRuntimeProcess {
       log("AgentRuntimeProcess: dropping unroutable result")
       return
     }
-    if (message.payload["terminalStatus"] as? String) == "cancelled" {
+    let terminalStatus = message.payload["terminalStatus"] as? String
+    if terminalStatus == "cancelled" {
       request.continuation.resume(throwing: BridgeError.stopped)
+      return
+    }
+    if let terminalStatus,
+       ["failed", "timed_out", "orphaned"].contains(terminalStatus) {
+      let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
+      let raw = failure?.displayMessage ?? message.payload["text"] as? String ?? "Agent failed"
+      log("AgentRuntimeProcess: agent result failed (raw): \(raw)")
+      request.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
       return
     }
     request.continuation.resume(returning: queryResult(from: message))
@@ -896,7 +924,7 @@ actor AgentRuntimeProcess {
       let controlRequest = activeControlRequests.removeValue(forKey: requestKey)
     {
       log("AgentRuntimeProcess: control tool error (raw): \(raw)")
-      controlRequest.continuation.resume(throwing: BridgeError.agentError(raw))
+      controlRequest.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
       return
     }
     guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
@@ -904,7 +932,7 @@ actor AgentRuntimeProcess {
       return
     }
     log("AgentRuntimeProcess: agent error (raw): \(raw)")
-    request.continuation.resume(throwing: BridgeError.agentError(raw))
+    request.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
   }
 
   private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {

@@ -10,12 +10,14 @@ from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.action_items as action_items_db
+import database.notifications as notification_db
 from utils.notifications import (
     send_action_item_completed_notification,
     send_action_item_created_notification,
     send_action_item_data_message,
     sync_action_item_reminder,
 )
+from utils.conversations.render import resolve_display_tz
 import logging
 
 logger = logging.getLogger(__name__)
@@ -26,6 +28,61 @@ try:
 except ImportError:
     # Fallback if import fails
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+def _format_local(dt, display_tz, tz_label: str) -> str:
+    """Render a stored timestamp in the user's local timezone with a tz label.
+
+    Action-item timestamps are stored tz-aware (UTC); a naive value is treated as
+    UTC defensively so the chat model never sees an unlabeled wall-clock time and
+    mislabels the time of day (issue #4643).
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
+# Bound the chat tool result so a broad request ("show me all my tasks") cannot flood the chat
+# model's context and make it freeze or refuse (issue #4927; the same fix already shipped for the
+# conversations tool in #8503). A single page can hold up to 500 items, each rendered over several
+# lines, which runs to tens of thousands of characters, so cap both the row count and the raw
+# character size and tell the model to summarize what it has and offer to narrow.
+MAX_ACTION_ITEMS_FOR_LLM = 200
+MAX_RESULT_CHARS = 60000
+
+
+def _cap_action_items_for_llm(items: list):
+    """Keep at most ``MAX_ACTION_ITEMS_FOR_LLM`` action items for the chat model.
+
+    Items arrive in the order the database returned them, so this keeps the first ones. Returns
+    ``(capped_list, truncated)`` where ``truncated`` is True when some rows were dropped.
+    """
+    if len(items) > MAX_ACTION_ITEMS_FOR_LLM:
+        return items[:MAX_ACTION_ITEMS_FOR_LLM], True
+    return list(items), False
+
+
+def _bounded_action_items_result(result: str, truncated: bool) -> str:
+    """Apply a hard character budget and, when the set was truncated, append a note telling the
+    model to summarize what it has and to offer to narrow, so it answers instead of freezing.
+
+    The note deliberately does not claim a total count: the database query is capped by ``limit``,
+    so the rows in hand are a page and not necessarily the full set, and stating a total would
+    mislead. When clipping for size, cut back to the last complete line so a record is not sliced
+    mid-field.
+    """
+    if len(result) > MAX_RESULT_CHARS:
+        clipped = result[:MAX_RESULT_CHARS]
+        boundary = clipped.rfind("\n")
+        result = clipped[:boundary] if boundary > 0 else clipped
+        truncated = True
+    if truncated:
+        result += (
+            "\n\n[Only the most relevant action items are shown here to stay within limits; more may exist. "
+            "Summarize what is shown and tell the user they can ask about a narrower topic or date range, "
+            "or page with the offset, for the rest.]"
+        )
+    return result
 
 
 @tool
@@ -76,7 +133,8 @@ def get_action_items_tool(
     - Use completed=True to get only completed tasks
     - Use conversation_id to get tasks from a specific conversation
     - Default limit is 50, which is suitable for most queries
-    - Use higher limit (up to 500) for comprehensive task reviews
+    - Prefer date or status filters over a large limit: only the most relevant items are returned to
+      stay within the chat context, and a broad pull is summarized rather than listed in full
 
     Args:
         limit: Number of action items to retrieve (default: 50, max: 500)
@@ -257,8 +315,22 @@ def get_action_items_tool(
         logger.info(f"✅ get_action_items_tool END - returning early (no items found)")
         return msg
 
-    # Format action items
-    result = f"User Action Items ({len(action_items)} total):\n\n"
+    # Bound how much goes back to the chat model so a broad request cannot overflow its context
+    # (issue #4927). A full page (len == limit) may mean more rows exist beyond it, so flag the
+    # result as truncated in that case too, not only when the per-call row cap trims it.
+    more_in_db = len(action_items) >= limit
+    action_items, capped_for_llm = _cap_action_items_for_llm(action_items)
+    results_truncated = capped_for_llm or more_in_db
+
+    # Format action items. Render timestamps in the user's local timezone so the
+    # chat model labels the time of day correctly (issue #4643). A timezone lookup
+    # failure must never abort retrieval, so fall back to UTC formatting.
+    try:
+        display_tz, tz_label = resolve_display_tz(notification_db.get_user_time_zone(uid))
+    except Exception as tz_error:
+        logger.warning(f"get_action_items_tool - timezone lookup failed, formatting in UTC: {tz_error}")
+        display_tz, tz_label = timezone.utc, "UTC"
+    result = f"User Action Items ({len(action_items)} shown):\n\n"
 
     for i, item in enumerate(action_items, 1):
         status = "✅ Completed" if item.get('completed', False) else "⬜ Pending"
@@ -267,18 +339,15 @@ def get_action_items_tool(
         # Add ID for reference in updates
         result += f"   ID: {item.get('id')}\n"
 
-        # Add dates if available
+        # Add dates if available (rendered in the user's local timezone)
         if item.get('created_at'):
-            created = item['created_at']
-            result += f"   Created: {created.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Created: {_format_local(item['created_at'], display_tz, tz_label)}\n"
 
         if item.get('due_at'):
-            due = item['due_at']
-            result += f"   Due: {due.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Due: {_format_local(item['due_at'], display_tz, tz_label)}\n"
 
         if item.get('completed_at'):
-            completed_at = item['completed_at']
-            result += f"   Completed: {completed_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            result += f"   Completed: {_format_local(item['completed_at'], display_tz, tz_label)}\n"
 
         if item.get('conversation_id'):
             result += f"   From conversation: {item['conversation_id']}\n"
@@ -286,7 +355,7 @@ def get_action_items_tool(
         result += "\n"
 
     logger.info(f"✅ get_action_items_tool END - returning {len(action_items)} items")
-    return result.strip()
+    return _bounded_action_items_result(result.strip(), results_truncated)
 
 
 @tool

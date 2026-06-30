@@ -208,6 +208,11 @@ def update_app_visibility_in_db(app_id: str, private: bool):
     app_ref = db.collection(apps_collection).document(app_id)
     if 'private' in app_id and not private:
         app = app_ref.get().to_dict()
+        if not app:
+            # The private app document is gone (deleted, or a stale read-cache pointed the caller
+            # here). There is nothing to republish, so skip the delete-and-recreate instead of
+            # dereferencing None below (which raised TypeError -> 500).
+            return
         app_ref.delete()
         new_app_id = app_id.split('-private')[0] + '-' + str(ULID())
         app['id'] = new_app_id

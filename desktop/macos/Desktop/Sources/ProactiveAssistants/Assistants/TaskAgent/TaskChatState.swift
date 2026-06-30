@@ -45,6 +45,10 @@ class TaskChatState: ObservableObject {
     /// Follow-up chaining
     private var pendingFollowUpText: String?
 
+    private var runtimeProjectionCancellable: AnyCancellable?
+    private var surfacedFailureKeys: Set<String> = []
+    private var activeAssistantMessageId: String?
+
     // MARK: - Streaming Buffers (mirrored from ChatProvider)
 
     private var streamingTextBuffer: String = ""
@@ -70,7 +74,11 @@ class TaskChatState: ObservableObject {
 
         do {
             let records = try await TaskChatMessageStorage.shared.getMessages(forTaskId: taskId)
-            guard !records.isEmpty else { return }
+            observeRuntimeProjectionFailures()
+            guard !records.isEmpty else {
+                surfaceCurrentRuntimeFailureIfNeeded()
+                return
+            }
 
             messages = records.map { $0.toChatMessage() }
 
@@ -78,6 +86,7 @@ class TaskChatState: ObservableObject {
                 self.legacyAcpSessionId = legacyAcpSessionId
             }
 
+            surfaceCurrentRuntimeFailureIfNeeded()
             log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
         } catch {
             logError("TaskChatState[\(taskId)]: Failed to load persisted messages", error: error)
@@ -213,6 +222,7 @@ class TaskChatState: ObservableObject {
             isStreaming: true
         )
         messages.append(aiMessage)
+        activeAssistantMessageId = aiMessageId
 
         do {
             let systemPrompt = systemPromptBuilder?() ?? ""
@@ -309,15 +319,43 @@ class TaskChatState: ObservableObject {
 
             // Finalize AI message
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
-                let messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
-                messages[index].text = messageText
-                messages[index].isStreaming = false
-                completeRemainingToolCalls(messageId: aiMessageId)
-                persistMessage(messages[index])
+                let terminalStatus = AgentRunProjectionStatus.fromWire(queryResult.terminalStatus) ?? .succeeded
+                if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {
+                    surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: "Agent failed")
+                    if let currentIndex = messages.firstIndex(where: { $0.id == aiMessageId }) {
+                        let shouldPersistPartial =
+                            messages[currentIndex].isStreaming
+                            && (
+                                !messages[currentIndex].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                || !messages[currentIndex].contentBlocks.isEmpty
+                            )
+                        messages[currentIndex].isStreaming = false
+                        completeRemainingToolCalls(messageId: aiMessageId)
+                        if shouldPersistPartial {
+                            persistMessage(messages[currentIndex])
+                        }
+                    }
+                } else {
+                    let messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
+                    messages[index].text = messageText
+                    messages[index].isStreaming = false
+                    completeRemainingToolCalls(messageId: aiMessageId)
+                    persistMessage(messages[index])
+                }
             }
 
             log("TaskChatState[\(taskId)]: response complete (cost=$\(queryResult.costUsd))")
-            TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
+            let terminalStatus = AgentRunProjectionStatus.fromWire(queryResult.terminalStatus) ?? .succeeded
+            if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {
+                let failureText =
+                    AgentRuntimeStatusStore.shared.projection(for: .taskChat(taskId: taskId))
+                    .flatMap(AgentFailureTranscriptFormatter.errorText(for:))
+                    ?? "Agent failed"
+                errorMessage = failureText
+                TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: failureText)
+            } else {
+                TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
+            }
         } catch {
             streamingFlushWorkItem?.cancel()
             streamingFlushWorkItem = nil
@@ -350,6 +388,7 @@ class TaskChatState: ObservableObject {
             logError("TaskChatState[\(taskId)]: query failed", error: error)
         }
 
+        activeAssistantMessageId = nil
         isSending = false
         isStopping = false
 
@@ -364,7 +403,87 @@ class TaskChatState: ObservableObject {
 
     static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
         if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            message.text = "Failed: \(errorDescription)"
+            message.text = AgentFailureTranscriptFormatter.transcriptText(for: errorDescription) ?? "Failed: Agent failed"
+        }
+    }
+
+    func surfaceRuntimeFailure(_ projection: AgentRunProjection, fallbackMessage: String? = nil, persist: Bool = true) {
+        guard projection.surface == .taskChat(taskId: taskId) else { return }
+        guard let errorText = AgentFailureTranscriptFormatter.errorText(for: projection) ?? fallbackMessage else { return }
+        let failureKey = [
+            projection.runId,
+            projection.attemptId,
+            projection.sessionId,
+            projection.completedAt.map { String($0.timeIntervalSinceReferenceDate) },
+            errorText,
+        ]
+        .compactMap { $0 }
+        .joined(separator: "|")
+        guard surfacedFailureKeys.insert(failureKey).inserted else { return }
+
+        appendFailureTranscriptMessage(errorText, persist: persist)
+        errorMessage = errorText
+    }
+
+    private func observeRuntimeProjectionFailures() {
+        guard runtimeProjectionCancellable == nil else { return }
+        let surface = AgentSurfaceReference.taskChat(taskId: taskId)
+        runtimeProjectionCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
+            .dropFirst()
+            .sink { [weak self] projections in
+                guard let self, let projection = projections[surface.key] else { return }
+                self.surfaceRuntimeFailure(projection)
+            }
+    }
+
+    private func surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: String? = nil) {
+        if let projection = AgentRuntimeStatusStore.shared.projection(for: .taskChat(taskId: taskId)) {
+            surfaceRuntimeFailure(projection, fallbackMessage: fallbackMessage)
+        } else if let fallbackMessage {
+            appendFailureTranscriptMessage(fallbackMessage)
+            errorMessage = fallbackMessage
+        }
+    }
+
+    private func appendFailureTranscriptMessage(_ errorText: String, persist: Bool = true) {
+        guard let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) else { return }
+        if messages.contains(where: { message in
+            message.sender == .ai
+                && message.text.trimmingCharacters(in: .whitespacesAndNewlines) == failureText
+        }) {
+            return
+        }
+
+        if let activeAssistantMessageId,
+           let index = messages.firstIndex(where: { $0.id == activeAssistantMessageId }),
+           messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
+            messages[index].isStreaming = false
+            completeRemainingToolCalls(messageId: activeAssistantMessageId)
+            if persist {
+                persistMessage(messages[index])
+            }
+            return
+        }
+
+        if let index = messages.lastIndex(where: { message in
+            message.sender == .ai
+                && message.isStreaming
+                && message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) {
+            Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: errorText)
+            messages[index].isStreaming = false
+            completeRemainingToolCalls(messageId: messages[index].id)
+            if persist {
+                persistMessage(messages[index])
+            }
+            return
+        }
+
+        let failureMessage = ChatMessage(text: failureText, sender: .ai)
+        messages.append(failureMessage)
+        if persist {
+            persistMessage(failureMessage)
         }
     }
 

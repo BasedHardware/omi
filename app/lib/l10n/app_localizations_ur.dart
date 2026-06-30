@@ -9372,6 +9372,17 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcribeLaterPaused => 'روکا گیا — آڈیو ریکارڈ نہیں ہو رہی';
 
   @override
+  String get memoryThisDevice => 'یہ ڈیوائس';
+  @override
+  String get memoryThisIphone => 'یہ iPhone';
+  @override
+  String get memoryThisPhone => 'یہ فون';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Omi کیسے استعمال کریں';
 
   @override
@@ -9467,6 +9478,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'تقریباً 1 منٹ';
+
   @override
   String get jumpToLatestMessage => 'تازہ ترین پیغام پر جائیں';
 

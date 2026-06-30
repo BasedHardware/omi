@@ -1,0 +1,7 @@
+{
+  "version": "0.11.576",
+  "date": "2026-06-30",
+  "changes": [
+    "Fixed legacy memories failing to load on desktop due to memory_id alias conflicts, and preserved device-scoped memory results after cache reload"
+  ]
+}

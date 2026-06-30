@@ -9360,6 +9360,17 @@ class AppLocalizationsFa extends AppLocalizations {
   String get transcribeLaterPaused => 'متوقف شد — صدا ضبط نمی‌شود';
 
   @override
+  String get memoryThisDevice => 'این دستگاه';
+  @override
+  String get memoryThisIphone => 'این iPhone';
+  @override
+  String get memoryThisPhone => 'این تلفن';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'نحوه استفاده از Omi';
 
   @override
@@ -9455,6 +9466,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'حدود ۱ دقیقه';
+
   @override
   String get jumpToLatestMessage => 'پرش به آخرین پیام';
 

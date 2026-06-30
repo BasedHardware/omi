@@ -45,6 +45,8 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
 
     XCTAssertTrue(source.contains("Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
     XCTAssertTrue(source.contains("persistMessage(messages[index])"))
+    XCTAssertTrue(source.contains("observeRuntimeProjectionFailures()"))
+    XCTAssertTrue(source.contains("surfaceRuntimeFailure(projection)"))
   }
 
   @MainActor
@@ -63,6 +65,83 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
 
     XCTAssertEqual(message.text, "Failed: OpenClaw failed")
     XCTAssertFalse(message.contentBlocks.isEmpty)
+  }
+
+  func testFailureTranscriptFormatterUsesStructuredProjectionFailure() {
+    let projection = AgentRunProjection(
+      surface: .taskChat(taskId: "task-runtime-failure"),
+      sessionId: "session-1",
+      runId: "run-1",
+      attemptId: "attempt-1",
+      adapterSessionId: nil,
+      status: .failed,
+      statusText: nil,
+      errorMessage: nil,
+      failure: AgentRuntimeFailure(
+        code: "adapter_process_exited",
+        userMessage: "OpenClaw failed: OpenAI API error: upstream unavailable",
+        technicalMessage: "OpenAI API error: upstream unavailable",
+        source: "adapter_process",
+        adapterId: "openclaw",
+        provider: "openai",
+        retryable: true
+      ),
+      updatedAt: Date(),
+      completedAt: Date(),
+      costUsd: nil,
+      inputTokens: nil,
+      outputTokens: nil
+    )
+
+    XCTAssertEqual(
+      AgentFailureTranscriptFormatter.errorText(for: projection),
+      "OpenClaw failed: OpenAI API error: upstream unavailable"
+    )
+    XCTAssertEqual(
+      AgentFailureTranscriptFormatter.transcriptText(for: AgentFailureTranscriptFormatter.errorText(for: projection) ?? ""),
+      "Failed: OpenClaw failed: OpenAI API error: upstream unavailable"
+    )
+  }
+
+  func testFailureTranscriptFormatterDoesNotDoublePrefix() {
+    XCTAssertEqual(
+      AgentFailureTranscriptFormatter.transcriptText(for: "OpenClaw failed"),
+      "Failed: OpenClaw failed"
+    )
+    XCTAssertEqual(
+      AgentFailureTranscriptFormatter.transcriptText(for: "Failed: OpenClaw failed"),
+      "Failed: OpenClaw failed"
+    )
+  }
+
+  func testRuntimeFailureProjectionSurfacingDoesNotReRecordStatus() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    guard let functionRange = source.range(of: "func surfaceRuntimeFailure(") else {
+      return XCTFail("surfaceRuntimeFailure function missing")
+    }
+    let rest = source[functionRange.lowerBound...]
+    let nextFunction = rest.range(of: "\n    private func observeRuntimeProjectionFailures()")
+    let body = nextFunction.map { String(rest[..<$0.lowerBound]) } ?? String(rest)
+
+    XCTAssertFalse(body.contains("TaskAgentStatusRegistry.shared.markFailed"))
+    XCTAssertTrue(body.contains("appendFailureTranscriptMessage(errorText"))
+  }
+
+  func testTerminalFailureFinalizeDoesNotPersistFailureTranscriptTwice() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    guard let branchRange = source.range(of: "if terminalStatus == .failed || terminalStatus == .timedOut || terminalStatus == .orphaned {") else {
+      return XCTFail("terminal failure branch missing")
+    }
+    let rest = source[branchRange.lowerBound...]
+    guard let elseRange = rest.range(of: "\n                } else {") else {
+      return XCTFail("terminal failure branch end missing")
+    }
+    let branch = String(rest[..<elseRange.lowerBound])
+
+    XCTAssertTrue(branch.contains("surfaceCurrentRuntimeFailureIfNeeded(fallbackMessage: \"Agent failed\")"))
+    XCTAssertTrue(branch.contains("let shouldPersistPartial"))
+    XCTAssertTrue(branch.contains("if shouldPersistPartial"))
+    XCTAssertFalse(branch.contains("persistMessage(messages[index])"))
   }
 
   func testActionItemChatSessionIdLegacyMarkerStillUsesTaskId() throws {

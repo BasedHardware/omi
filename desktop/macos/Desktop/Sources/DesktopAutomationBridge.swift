@@ -420,6 +420,91 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "memories_qa_export",
+      summary: "Export memory counts by tier from the live API (local QA automation)",
+      params: ["limit"]
+    ) { params in
+      let limit = Int(params["limit"] ?? "") ?? 50
+      let memories = try await APIClient.shared.getMemories(limit: limit, offset: 0)
+      let shortCount = memories.filter { $0.tier == .shortTerm }.count
+      let longCount = memories.filter { $0.tier == .longTerm }.count
+      let samples: [[String: String]] = memories.prefix(12).map { memory in
+        [
+          "id": memory.id,
+          "tier": memory.tier.rawValue,
+          "tierIsExplicit": memory.tierIsExplicit ? "true" : "false",
+          "content": String(memory.content.prefix(90)),
+          "conversationId": memory.conversationId ?? "",
+        ]
+      }
+      let samplesData = try JSONSerialization.data(withJSONObject: samples)
+      let samplesJson = String(data: samplesData, encoding: .utf8) ?? "[]"
+      return [
+        "total": "\(memories.count)",
+        "short_term": "\(shortCount)",
+        "long_term": "\(longCount)",
+        "samples_json": samplesJson,
+      ]
+    }
+
+    register(
+      name: "delete_conversation",
+      summary: "Delete conversation with cascade (API + conversationDeleted notification)",
+      params: ["id"]
+    ) { params in
+      guard let id = params["id"], !id.isEmpty else {
+        return ["error": "missing 'id'"]
+      }
+      try await APIClient.shared.deleteConversation(id: id)
+      await MainActor.run {
+        if let appState = AppState.current {
+          appState.deleteConversationLocally(id)
+        } else {
+          NotificationCenter.default.post(
+            name: .conversationDeleted,
+            object: nil,
+            userInfo: ["conversationId": id]
+          )
+        }
+      }
+      return ["deleted": id]
+    }
+
+    register(
+      name: "capture_main_window_png",
+      summary: "Write PNG of the frontmost Omi window (in-process capture)",
+      params: ["path"]
+    ) { params in
+      guard let path = params["path"], !path.isEmpty else {
+        return ["error": "missing 'path'"]
+      }
+      return await MainActor.run { () -> [String: String] in
+        guard
+          let window = NSApp.windows.first(where: {
+            $0.isVisible && $0.title.range(of: "omi", options: .caseInsensitive) != nil
+          }),
+          let contentView = window.contentView
+        else {
+          return ["error": "no_visible_window"]
+        }
+        let bounds = contentView.bounds
+        guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+          return ["error": "bitmap_rep_failed"]
+        }
+        contentView.cacheDisplay(in: bounds, to: rep)
+        guard let data = rep.representation(using: .png, properties: [:]) else {
+          return ["error": "png_encode_failed"]
+        }
+        do {
+          try data.write(to: URL(fileURLWithPath: path))
+          return ["path": path, "bytes": "\(data.count)"]
+        } catch {
+          return ["error": error.localizedDescription]
+        }
+      }
+    }
+
+    register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]
@@ -445,6 +530,56 @@ final class DesktopAutomationActionRegistry {
     ) { params in
       let wait = boolParam(params["wait"], default: true)
       return await FloatingControlBarManager.shared.backFromSubagentForAutomation(wait: wait)
+    }
+
+    register(
+      name: "spatial_overlay_present_fixture",
+      summary: "Present a deterministic spatial-overlay fixture for dogfood harnesses",
+      params: ["fixture", "settleMs"]
+    ) { params in
+      guard let fixture = SpatialOverlayDogfoodFixture(rawValue: params["fixture"] ?? "") else {
+        throw DesktopAutomationActionError.invalidParams(
+          "unknown fixture; expected one of \(SpatialOverlayDogfoodFixture.allCases.map(\.rawValue).joined(separator: ","))"
+        )
+      }
+      let state = CloudConnectorGuidanceOverlay.shared.presentAutomationFixture(fixture)
+      return state
+    }
+
+    register(
+      name: "spatial_overlay_state",
+      summary: "Return the current spatial-overlay dogfood state"
+    ) { _ in
+      CloudConnectorGuidanceOverlay.shared.automationState()
+    }
+
+    register(
+      name: "spatial_overlay_dismiss",
+      summary: "Dismiss the current spatial-overlay dogfood overlay"
+    ) { _ in
+      CloudConnectorGuidanceOverlay.shared.dismiss()
+      return ["dismissed": "true", "visible": "false"]
+    }
+
+    register(
+      name: "cloud_connector_guidance_probe",
+      summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
+    ) { _ in
+      await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
+    }
+
+    register(
+      name: "spatial_overlay_present_instruction",
+      summary: "Present the Screen Recording fallback instruction card (dogfood/visual)"
+    ) { params in
+      let title = params["title"] ?? "Allow Screen Recording for Omi"
+      let subtitle =
+        params["subtitle"]
+        ?? "Turn on Omi under Screen & System Audio Recording, then return to Claude and click Add."
+      let anchor = CloudConnectorGuidanceOverlay.anchorRect(fromParam: params["anchor"])
+      CloudConnectorGuidanceOverlay.shared.presentInstructionCard(
+        title: title, subtitle: subtitle, near: anchor)
+      return CloudConnectorGuidanceOverlay.shared.automationState()
     }
   }
 }
@@ -913,6 +1048,8 @@ final class DesktopAutomationBridge {
       let window: NSWindow?
       if payload.target == "floating" {
         window = NSApp.windows.first(where: { $0 is FloatingControlBarWindow && $0.isVisible })
+      } else if payload.target == "overlay" {
+        window = CloudConnectorGuidanceOverlay.shared.automationWindow
       } else {
         window = NSApp.windows.first(where: { window in
           window.title.lowercased().hasPrefix("omi") || window.isMainWindow || window.isKeyWindow

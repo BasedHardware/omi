@@ -82,4 +82,3 @@ pub struct GoalHistoryEntry {
     /// When the entry was recorded
     pub recorded_at: DateTime<Utc>,
 }
-

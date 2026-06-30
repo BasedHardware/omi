@@ -1,6 +1,9 @@
+"""Shared pytest hooks for the whole backend test tree."""
+
 import os
 import sys
 from pathlib import Path
+from types import ModuleType
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
@@ -10,3 +13,35 @@ os.environ.setdefault(
     'ENCRYPTION_SECRET',
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
+
+# Some canonical memory modules transitively import utils.llm.clients which
+# instantiates OpenAI clients at module import time; that requires an API key
+# even when the client is never called. Provide a fake key so collection does
+# not crash.
+os.environ.setdefault('OPENAI_API_KEY', 'fake-key-for-hermetic-tests')
+
+# Canonical memory modules transitively import utils.llm.clients which calls
+# tiktoken.encoding_for_model() at module import time; that downloads an
+# encoding file from the network and breaks hermetic CI. Stub it out before
+# any test module imports the chain.
+if 'tiktoken' not in sys.modules:
+    _tiktoken_stub = ModuleType('tiktoken')
+    _tiktoken_stub.encoding_for_model = lambda model: type('Encoding', (), {'encode': lambda self, text: list(text)})()
+    sys.modules['tiktoken'] = _tiktoken_stub
+
+from testing.hermetic_network import block_outbound_network
+
+_network_guard = None
+
+
+def pytest_sessionstart(session):
+    global _network_guard
+    _network_guard = block_outbound_network()
+    _network_guard.__enter__()
+
+
+def pytest_sessionfinish(session, exitstatus):
+    global _network_guard
+    if _network_guard is not None:
+        _network_guard.__exit__(None, None, None)
+        _network_guard = None

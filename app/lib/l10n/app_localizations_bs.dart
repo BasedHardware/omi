@@ -9383,6 +9383,17 @@ class AppLocalizationsBs extends AppLocalizations {
   String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
 
   @override
+  String get memoryThisDevice => 'Ovaj uređaj';
+  @override
+  String get memoryThisIphone => 'Ovaj iPhone';
+  @override
+  String get memoryThisPhone => 'Ovaj telefon';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Kako koristiti Omi';
 
   @override
@@ -9479,6 +9490,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get deviceOnboardingIntroDuration => 'Oko 1 minute';
+
   @override
   String get jumpToLatestMessage => 'Idi na najnoviju poruku';
 
