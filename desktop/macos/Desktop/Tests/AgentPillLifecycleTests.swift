@@ -726,8 +726,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("if pill.status.isFinished {\n            return\n        }"))
     XCTAssertTrue(source.contains("guard !pill.status.isFinished || projection.status.isTerminal else { return }"))
     XCTAssertTrue(source.contains("let activity = Self.describeActivity(for: aiMessage)"))
-    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordLocalSuccess("))
-    XCTAssertTrue(statusStoreSource.contains("func recordLocalSuccess(surface: AgentSurfaceReference, statusText: String? = nil)"))
+    XCTAssertFalse(source.contains("AgentRuntimeStatusStore.shared.recordPresentationCompletion("))
+    XCTAssertFalse(statusStoreSource.contains("func recordPresentationCompletion("))
+    XCTAssertFalse(statusStoreSource.contains("func recordLocalSuccess("))
     XCTAssertTrue(statusStoreSource.contains("if !terminal, projectionsBySurface[surface.key]?.status.isTerminal == true {\n      return\n    }"))
   }
 

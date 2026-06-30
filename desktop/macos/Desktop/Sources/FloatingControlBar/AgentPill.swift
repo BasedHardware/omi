@@ -1162,10 +1162,6 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .done
             pill.completedAt = Date()
             pill.markContentChanged()
-            AgentRuntimeStatusStore.shared.recordLocalSuccess(
-                surface: .floatingPill(pillId: pill.id),
-                statusText: trimmedFinalText
-            )
         } else {
             pill.status = .failed("Agent ended before reporting a final result")
             pill.completedAt = Date()

@@ -37,7 +37,48 @@ export type GrantEffect = "allow" | "deny";
 
 export type GrantSource = "legacy_default" | "policy" | "user" | "system";
 
-export type AgentIdKind = "session" | "run" | "attempt" | "event" | "binding" | "artifact" | "delegation" | "grant";
+export type AgentIdKind =
+  | "session"
+  | "run"
+  | "attempt"
+  | "event"
+  | "binding"
+  | "artifact"
+  | "delegation"
+  | "grant"
+  | "contextPacket"
+  | "dispatch"
+  | "artifactDelivery"
+  | "memoryCandidate"
+  | "taskCandidate"
+  | "contextAccess";
+
+export type DesktopContextRetentionClass = "ephemeral" | "debug" | "core";
+export type DesktopDispatchKind =
+  | "approval"
+  | "routing_choice"
+  | "failure_recovery"
+  | "artifact_review"
+  | "memory_candidate"
+  | "task_candidate"
+  | "external_draft"
+  | "screen_context";
+export type DesktopDispatchStatus = "pending" | "resolved" | "expired" | "cancelled";
+export type DesktopArtifactDeliveryTargetKind = "ask_omi" | "task_chat" | "local_file" | "external_draft";
+export type DesktopArtifactDeliveryReviewStatus = "not_required" | "pending" | "approved" | "rejected";
+export type DesktopArtifactDeliveryStatus = "pending" | "delivered" | "failed" | "retrying" | "cancelled";
+export type DesktopCandidateStatus = "pending" | "accepted" | "rejected" | "expired";
+export type DesktopTaskCandidateAction = "create" | "update" | "complete" | "delete";
+export type DesktopContextSourceKind =
+  | "omi_db"
+  | "rewind_timeline"
+  | "screen_current"
+  | "screenshot_image"
+  | "local_agent_api"
+  | "automation_bridge"
+  | "chat_surface"
+  | "task_chat";
+export type DesktopContextPolicyDecision = "allowed" | "denied" | "dispatch_created";
 
 export interface AgentSession {
   sessionId: string;
@@ -164,6 +205,144 @@ export interface AgentArtifact {
   createdAtMs: number;
 }
 
+export interface DesktopContextPacket {
+  packetId: string;
+  ownerId: string;
+  sessionId: string | null;
+  runId: string | null;
+  surfaceKind: string;
+  objective: string;
+  packetJson: string;
+  redactedPreviewJson: string;
+  contextHash: string;
+  tokenEstimate: number | null;
+  retentionClass: DesktopContextRetentionClass;
+  expiresAtMs: number | null;
+  createdAtMs: number;
+}
+
+export type NewDesktopContextPacket = Partial<DesktopContextPacket> &
+  Pick<DesktopContextPacket, "ownerId" | "surfaceKind" | "objective" | "packetJson" | "redactedPreviewJson" | "contextHash" | "retentionClass" | "expiresAtMs">;
+
+export interface DesktopCoordinatorDispatch {
+  dispatchId: string;
+  ownerId: string;
+  kind: DesktopDispatchKind;
+  priority: number;
+  status: DesktopDispatchStatus;
+  title: string;
+  decisionPrompt: string;
+  recommendedDefault: string | null;
+  sourceSessionId: string | null;
+  sourceRunId: string | null;
+  sourceAttemptId: string | null;
+  sourceArtifactId: string | null;
+  capability: string | null;
+  operation: string | null;
+  resourceRef: string | null;
+  payloadJson: string;
+  createdAtMs: number;
+  expiresAtMs: number | null;
+  resolvedAtMs: number | null;
+  resolvedBy: string | null;
+  resolutionJson: string | null;
+}
+
+export type NewDesktopCoordinatorDispatch = Partial<DesktopCoordinatorDispatch> &
+  Pick<DesktopCoordinatorDispatch, "ownerId" | "kind" | "priority" | "title" | "decisionPrompt">;
+
+export interface DesktopArtifactDelivery {
+  deliveryId: string;
+  artifactId: string;
+  ownerId: string;
+  sourceSessionId: string;
+  sourceRunId: string | null;
+  sourceAttemptId: string | null;
+  intendedSurface: string;
+  targetKind: DesktopArtifactDeliveryTargetKind;
+  targetRef: string | null;
+  contentHash: string | null;
+  reviewStatus: DesktopArtifactDeliveryReviewStatus;
+  deliveryStatus: DesktopArtifactDeliveryStatus;
+  attemptCount: number;
+  receiptJson: string | null;
+  errorJson: string | null;
+  createdAtMs: number;
+  updatedAtMs: number;
+  deliveredAtMs: number | null;
+}
+
+export type NewDesktopArtifactDelivery = Partial<DesktopArtifactDelivery> &
+  Pick<DesktopArtifactDelivery, "artifactId" | "ownerId" | "sourceSessionId" | "intendedSurface" | "targetKind">;
+
+export interface DesktopMemoryCandidate {
+  candidateId: string;
+  ownerId: string;
+  sourceSessionId: string;
+  sourceRunId: string | null;
+  sourceArtifactId: string | null;
+  proposedFact: string;
+  evidenceRefsJson: string;
+  confidence: number;
+  sensitivityTier: string;
+  status: DesktopCandidateStatus;
+  createdAtMs: number;
+  resolvedAtMs: number | null;
+}
+
+export type NewDesktopMemoryCandidate = Partial<DesktopMemoryCandidate> &
+  Pick<DesktopMemoryCandidate, "ownerId" | "sourceSessionId" | "proposedFact" | "evidenceRefsJson" | "confidence" | "sensitivityTier">;
+
+export interface DesktopTaskCandidate {
+  candidateId: string;
+  ownerId: string;
+  sourceSessionId: string | null;
+  sourceRunId: string | null;
+  action: DesktopTaskCandidateAction;
+  taskRef: string | null;
+  proposedChangeJson: string;
+  evidenceRefsJson: string;
+  confidence: number;
+  requiresApproval: 0 | 1;
+  status: DesktopCandidateStatus;
+  createdAtMs: number;
+  resolvedAtMs: number | null;
+}
+
+export type NewDesktopTaskCandidate = Partial<DesktopTaskCandidate> &
+  Pick<DesktopTaskCandidate, "ownerId" | "action" | "proposedChangeJson" | "evidenceRefsJson" | "confidence" | "requiresApproval">;
+
+export interface DesktopContextAccessLog {
+  accessId: string;
+  ownerId: string;
+  packetId: string | null;
+  runId: string | null;
+  sourceKind: DesktopContextSourceKind;
+  operation: string;
+  scopeJson: string;
+  sensitivityTier: string;
+  policyDecision: DesktopContextPolicyDecision;
+  dispatchId: string | null;
+  redactionSummaryJson: string;
+  createdAtMs: number;
+}
+
+export type NewDesktopContextAccessLog = Partial<DesktopContextAccessLog> &
+  Pick<DesktopContextAccessLog, "ownerId" | "sourceKind" | "operation" | "scopeJson" | "sensitivityTier" | "policyDecision">;
+
+export interface DesktopAttentionOverride {
+  ownerId: string;
+  subjectKind: string;
+  subjectId: string;
+  hiddenUntilMs: number | null;
+  dismissedAtMs: number | null;
+  reason: string | null;
+  createdAtMs: number;
+}
+
+export type NewDesktopAttentionOverride = Partial<DesktopAttentionOverride> &
+  Pick<DesktopAttentionOverride, "ownerId" | "subjectKind" | "subjectId">;
+
 // Artifact lifecycle records store references, not blobs. Keep adapter-native
 // references in `uri` or `metadataJson`, never in adapter_bindings:
 // - roles: input, result, checkpoint, tool_output, log, other
@@ -211,6 +390,9 @@ export interface StartupReconciliationResult {
   orphanedAttemptIds: string[];
   orphanedRunIds: string[];
   staleBindingIds: string[];
+  expiredContextPacketIds: string[];
+  failedArtifactDeliveryIds: string[];
+  recoveryDispatchIds: string[];
   clearedAttemptInstanceIds: number;
   clearedBindingInstanceIds: number;
   eventIds: string[];
@@ -227,6 +409,15 @@ export interface AgentStore {
   insertAdapterBinding(input: NewAdapterBinding): AdapterBinding;
   insertArtifact(input: NewAgentArtifact): AgentArtifact;
   appendEvent(input: NewAgentEvent): AgentEvent;
+  insertDesktopContextPacket(input: NewDesktopContextPacket): DesktopContextPacket;
+  insertDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch;
+  resolveDesktopDispatch(dispatchId: string, input: { ownerId: string; status: "resolved" | "cancelled"; resolvedBy?: string | null; resolutionJson?: string | null; resolvedAtMs?: number }): DesktopCoordinatorDispatch;
+  insertDesktopArtifactDelivery(input: NewDesktopArtifactDelivery): DesktopArtifactDelivery;
+  updateDesktopArtifactDelivery(deliveryId: string, input: { ownerId: string } & Partial<Pick<DesktopArtifactDelivery, "reviewStatus" | "deliveryStatus" | "attemptCount" | "receiptJson" | "errorJson" | "deliveredAtMs">>): DesktopArtifactDelivery;
+  insertDesktopMemoryCandidate(input: NewDesktopMemoryCandidate): DesktopMemoryCandidate;
+  insertDesktopTaskCandidate(input: NewDesktopTaskCandidate): DesktopTaskCandidate;
+  insertDesktopContextAccessLog(input: NewDesktopContextAccessLog): DesktopContextAccessLog;
+  upsertDesktopAttentionOverride(input: NewDesktopAttentionOverride): DesktopAttentionOverride;
   execute(sql: string, values?: unknown[]): number;
   getOptionalRow(sql: string, values?: unknown[]): Record<string, unknown> | undefined;
   getRow(sql: string, values?: unknown[]): Record<string, unknown>;

@@ -1,4 +1,11 @@
 export type AgentControlTimeoutClass = "normal" | "long";
+export type AgentControlRiskTier = "low" | "medium" | "high";
+export type AgentControlPrivacyTier = "low" | "local_private" | "sensitive";
+export type AgentControlApprovalPolicy = "allow" | "user_approval" | "policy_grant";
+export type AgentControlBundle =
+  | "desktop.agent_control.read"
+  | "desktop.agent_control.manage"
+  | "desktop.artifacts.manage";
 
 export interface AgentControlManifestProperty {
   type: "string" | "number" | "boolean" | "object";
@@ -32,12 +39,41 @@ export interface AgentControlManifestTool {
   promptGuidelines: string[];
   latency: "fast local" | "async background";
   surfaces: AgentControlSurface[];
+  riskTier: AgentControlRiskTier;
+  privacyTier: AgentControlPrivacyTier;
+  approvalPolicy: AgentControlApprovalPolicy;
+  bundles: readonly AgentControlBundle[];
+  allowedSurfaces: readonly AgentControlSurface[];
   runtimePreconditions: string[];
   timeoutClass: AgentControlTimeoutClass;
   properties: Record<string, AgentControlManifestProperty>;
   required: string[];
   mcpInputSchemaOptions?: AgentControlMcpInputSchemaOptions;
 }
+
+const agentControlReadPolicy = {
+  riskTier: "low",
+  privacyTier: "local_private",
+  approvalPolicy: "allow",
+  bundles: ["desktop.agent_control.read"],
+  allowedSurfaces: ["desktopChat", "realtimeHub"],
+} as const;
+
+const agentControlManagePolicy = {
+  riskTier: "medium",
+  privacyTier: "local_private",
+  approvalPolicy: "policy_grant",
+  bundles: ["desktop.agent_control.manage"],
+  allowedSurfaces: ["desktopChat", "realtimeHub"],
+} as const;
+
+const artifactManagePolicy = {
+  riskTier: "medium",
+  privacyTier: "local_private",
+  approvalPolicy: "policy_grant",
+  bundles: ["desktop.artifacts.manage"],
+  allowedSurfaces: ["desktopChat", "realtimeHub"],
+} as const;
 
 export const agentControlCapabilityManifest = [
   {
@@ -54,6 +90,7 @@ Returns canonical Omi session IDs, latest/active run summaries, and adapter bind
     ],
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlReadPolicy,
     runtimePreconditions: ["Defaults ownerId to the active signed-in owner when omitted."],
     timeoutClass: "normal",
     properties: {
@@ -82,6 +119,7 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
     ],
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlReadPolicy,
     runtimePreconditions: [
       "Requires a canonical Omi run_id.",
       "Defaults ownerId to the active signed-in owner when omitted and rejects runs outside that owner.",
@@ -108,6 +146,7 @@ Use when the user asks to stop a running Omi agent/subagent. Returns whether can
     ],
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlManagePolicy,
     runtimePreconditions: [
       "Requires a canonical Omi run_id.",
       "Defaults ownerId to the active signed-in owner when omitted and rejects runs outside that owner.",
@@ -132,6 +171,7 @@ Returns metadata and references only. It does not read arbitrary artifact conten
     ],
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlReadPolicy,
     runtimePreconditions: [
       "Requires at least one of artifactId, sessionId, runId, or attemptId.",
       "Defaults ownerId to the active signed-in owner when omitted and rejects selectors outside that owner.",
@@ -170,6 +210,7 @@ This only records artifact metadata state and ordered kernel events. It does not
     ],
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
+    ...artifactManagePolicy,
     runtimePreconditions: [
       "Requires artifactId.",
       "Defaults ownerId to the active signed-in owner when omitted and rejects artifacts outside that owner.",
@@ -201,6 +242,11 @@ Creates a new run in that session through the runtime kernel. Use this for multi
     ],
     latency: "async background",
     surfaces: ["desktopChat"],
+    riskTier: "medium",
+    privacyTier: "local_private",
+    approvalPolicy: "policy_grant",
+    bundles: ["desktop.agent_control.manage"],
+    allowedSurfaces: ["desktopChat"],
     runtimePreconditions: [
       "Defaults ownerId to the active signed-in owner when omitted.",
       "Rejects synchronous nested runs when the selected adapter is already executing for the session or has no capacity.",
@@ -234,6 +280,11 @@ Supports call, spawn, and continue modes. Child context is intentionally minimal
     ],
     latency: "async background",
     surfaces: ["desktopChat"],
+    riskTier: "medium",
+    privacyTier: "local_private",
+    approvalPolicy: "policy_grant",
+    bundles: ["desktop.agent_control.manage"],
+    allowedSurfaces: ["desktopChat"],
     runtimePreconditions: [
       "Requires childSessionId when mode is continue.",
       "Rejects synchronous nested call/continue runs when the selected adapter is already executing for the child session or has no capacity.",

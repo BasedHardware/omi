@@ -66,6 +66,27 @@ describe("agent control tools", () => {
     );
   });
 
+  it("declares coordinator policy metadata for every control tool", () => {
+    for (const tool of agentControlCapabilityManifest) {
+      expect(tool.riskTier).toMatch(/^(low|medium|high)$/);
+      expect(tool.privacyTier).toMatch(/^(low|local_private|sensitive)$/);
+      expect(tool.approvalPolicy).toMatch(/^(allow|user_approval|policy_grant)$/);
+      expect(tool.bundles.length).toBeGreaterThan(0);
+      expect(tool.allowedSurfaces.length).toBeGreaterThan(0);
+    }
+
+    expect(agentControlCapabilityManifest.find((tool) => tool.name === "list_agent_sessions")).toMatchObject({
+      riskTier: "low",
+      approvalPolicy: "allow",
+      bundles: ["desktop.agent_control.read"],
+    });
+    expect(agentControlCapabilityManifest.find((tool) => tool.name === "cancel_agent_run")).toMatchObject({
+      riskTier: "medium",
+      approvalPolicy: "policy_grant",
+      bundles: ["desktop.agent_control.manage"],
+    });
+  });
+
   it("constrains canonical list surfaceKind to known surfaces", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const invalid = parseToolResult(
@@ -659,9 +680,22 @@ describe("agent control tools", () => {
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
       },
-      event: null,
+      event: {
+        omiSessionId: result.session.sessionId,
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+        type: "artifact.lifecycle_updated",
+        payload: {
+          artifactId: artifact.artifactId,
+          previousState: "retained",
+          state: "dismissed",
+          reason: "not useful",
+          metadata: { source: "test" },
+        },
+      },
     });
     expect(dismissed.artifact.lifecycleUpdatedAtMs).toEqual(expect.any(Number));
+    expect(dismissed.event.payload.lifecycleUpdatedAtMs).toEqual(dismissed.artifact.lifecycleUpdatedAtMs);
 
     const idempotent = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "update_agent_artifact_lifecycle", {
@@ -693,13 +727,24 @@ describe("agent control tools", () => {
         artifactId: artifact.artifactId,
         lifecycleState: "opened",
       },
-      event: null,
+      event: {
+        type: "artifact.lifecycle_updated",
+        payload: {
+          artifactId: artifact.artifactId,
+          previousState: "dismissed",
+          state: "opened",
+        },
+      },
     });
 
     const events = kernel
       .getRun({ runId: result.run.runId, includeEvents: true, eventLimit: 100 })
       .events.filter((event) => event.type.startsWith("artifact."));
-    expect(events.map((event) => event.type)).toEqual(["artifact.created"]);
+    expect(events.map((event) => event.type)).toEqual([
+      "artifact.created",
+      "artifact.lifecycle_updated",
+      "artifact.lifecycle_updated",
+    ]);
     expect(store.getRow("SELECT lifecycle_state FROM artifacts WHERE artifact_id = ?", [artifact.artifactId]).lifecycle_state).toBe("opened");
     store.close();
   });

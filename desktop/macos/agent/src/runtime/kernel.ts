@@ -882,7 +882,21 @@ export class AgentRuntimeKernel {
         [input.state, now, artifact.artifactId],
       );
       const updatedArtifact = this.readArtifact(artifact.artifactId);
-      return { artifact: updatedArtifact, changed: true, event: null };
+      const event = this.appendEvent({
+        sessionId: updatedArtifact.sessionId,
+        runId: updatedArtifact.runId,
+        attemptId: updatedArtifact.attemptId,
+        type: "artifact.lifecycle_updated",
+        payload: {
+          artifactId: updatedArtifact.artifactId,
+          previousState: artifact.lifecycleState,
+          state: updatedArtifact.lifecycleState,
+          reason: input.reason ?? null,
+          metadata: input.metadata ?? {},
+          lifecycleUpdatedAtMs: now,
+        },
+      });
+      return { artifact: updatedArtifact, changed: true, event };
     });
   }
 
