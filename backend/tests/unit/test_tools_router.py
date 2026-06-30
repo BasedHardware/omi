@@ -273,6 +273,21 @@ action_items_svc = _load_module_from_file(
 )
 
 
+_saved_sysmodules = {k: v for k, v in sys.modules.items()}
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _reinstall_stubs():
+    for k, mod in _saved_sysmodules.items():
+        if sys.modules.get(k) is not mod:
+            sys.modules[k] = mod
+            if '.' in k:
+                parent_name, attr_name = k.rsplit('.', 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None:
+                    setattr(parent, attr_name, mod)
+
+
 # ===========================================================================
 # Tests: parse_iso_date
 # ===========================================================================
