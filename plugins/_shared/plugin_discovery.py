@@ -61,6 +61,21 @@ from pathlib import Path
 #  - it's readable from any language (Python, Swift) without platform glue
 #  - the user can find it in Finder by going to ~/ (Go → "Go to Folder")
 DISCOVERY_DIR = Path.home() / ".config" / "omi"
+# Per-plugin discovery files. cubic P1: a single fixed file path breaks
+# concurrent multi-plugin discovery (Telegram + WhatsApp running
+# simultaneously). Each plugin gets its own file keyed by plugin_type.
+_DISCOVERY_FILES = {}  # plugin_type → Path, populated lazily
+
+
+def discovery_file(plugin_type: str = "telegram") -> Path:
+    """Return the discovery file path for a specific plugin type."""
+    if plugin_type not in _DISCOVERY_FILES:
+        _DISCOVERY_FILES[plugin_type] = DISCOVERY_DIR / f"ai-clone-plugin-{plugin_type}.json"
+    return _DISCOVERY_FILES[plugin_type]
+
+
+# Backward compat: the default file (for single-plugin dev).
+# Desktop reads this as fallback if no per-plugin file is found.
 DISCOVERY_FILE = DISCOVERY_DIR / "ai-clone-plugin.json"
 
 # Bump on breaking schema changes. The desktop refuses to read a
@@ -115,13 +130,18 @@ def write_discovery(
         "omi_base_url": omi_base_url,
     }
 
-    # Atomic write so the desktop never reads a half-flushed file.
-    tmp = DISCOVERY_FILE.with_suffix(".tmp")
+    # Per-plugin file (cubic P1: concurrent Telegram + WhatsApp
+    # plugins must not overwrite each other's discovery file).
+    target = discovery_file(plugin_type)
+    # Unique tmp filename to avoid race between concurrent writers.
+    tmp = target.with_suffix(f".{os.getpid()}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         with os.fdopen(fd, "w") as f:
             json.dump(payload, f, indent=2)
             f.flush()
+        os.replace(tmp, target)
+        return target
     except Exception:
         # Make sure we don't leave the temp file behind with stale
         # bearer material. Unlink errors are swallowed — the next
@@ -131,11 +151,9 @@ def write_discovery(
         except OSError:
             pass
         raise
-    os.replace(tmp, DISCOVERY_FILE)
-    return DISCOVERY_FILE
 
 
-def clear_discovery(instance_id: str | None = None) -> None:
+def clear_discovery(plugin_type: str = "telegram", instance_id: str | None = None) -> None:
     """Remove the discovery file.
 
     If `instance_id` is given, only delete the file when its stored
@@ -143,11 +161,12 @@ def clear_discovery(instance_id: str | None = None) -> None:
     previous process being removed by a new process that thinks it
     owns the path.
     """
-    if not DISCOVERY_FILE.exists():
+    target = discovery_file(plugin_type)
+    if not target.exists():
         return
     if instance_id:
         try:
-            data = json.loads(DISCOVERY_FILE.read_text())
+            data = json.loads(target.read_text())
             if data.get("instance_id") != instance_id:
                 return
         except (OSError, json.JSONDecodeError):
@@ -155,6 +174,6 @@ def clear_discovery(instance_id: str | None = None) -> None:
             # remove it so a fresh plugin can write a clean one.
             pass
     try:
-        DISCOVERY_FILE.unlink()
+        target.unlink()
     except FileNotFoundError:
         pass
