@@ -1,4 +1,6 @@
 import importlib.util
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -226,7 +228,14 @@ def test_f4_risk_confirmations_are_required_before_any_real_read():
 
 def test_docs_test_runner_and_parent_readiness_link_f5_preparation():
     root = ROOT.parent
-    assert "test_v3_f5_real_service_evidence_readiness.py" in (ROOT / "test.sh").read_text(encoding="utf-8")
+    test_sh = (ROOT / "test.sh").read_text(encoding="utf-8")
+    selected_tests = subprocess.check_output(
+        [sys.executable, str(ROOT / "scripts" / "select_backend_unit_tests.py"), "--all"],
+        text=True,
+        cwd=ROOT,
+    ).splitlines()
+    assert "scripts/select_backend_unit_tests.py --all" in test_sh
+    assert "tests/unit/test_v3_f5_real_service_evidence_readiness.py" in selected_tests
     f5_script = (ROOT / "scripts" / "v3_f5_real_service_evidence_readiness.py").read_text(encoding="utf-8")
     f5_utils = (ROOT / "testing" / "memory" / "v3_f5_evidence.py").read_text(encoding="utf-8")
     assert "memory-V3-F5 real-service read-only evidence preparation" in f5_script
