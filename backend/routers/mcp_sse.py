@@ -49,6 +49,7 @@ from utils.mcp_memories import (
     parse_mcp_int,
     parse_optional_mcp_bool,
 )
+from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -61,29 +62,8 @@ MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
-MCP_SCOPES_SUPPORTED = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
-
-MCP_LEGACY_API_KEY_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
+MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
+MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,

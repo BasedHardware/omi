@@ -8,17 +8,17 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
 
 from database._client import get_firestore_client
-from database.mcp_api_key import (
+from utils.mcp_scopes import (
     MCP_APP_KEY_MEMORY_GRANTS_DOC_ID,
     MCP_DEFAULT_APP_ID,
-    MCP_FULL_ACCESS_SCOPES,
     MCP_MEMORY_CONTROL_COLLECTION,
     MCP_MEMORY_GRANT_SCOPES,
+    normalize_mcp_scopes,
 )
 
 
 def _normalized_scopes(scopes):
-    return sorted(set(MCP_FULL_ACCESS_SCOPES).union(scopes or []))
+    return normalize_mcp_scopes(scopes)
 
 
 def _grant_ok(grant) -> bool:
@@ -28,7 +28,7 @@ def _grant_ok(grant) -> bool:
         grant.get("enabled") is True
         and grant.get("write") is True
         and grant.get("default_read") is True
-        and "memories.write" in set(grant.get("scopes") or [])
+        and set(MCP_MEMORY_GRANT_SCOPES).issubset(set(grant.get("scopes") or []))
     )
 
 
@@ -113,7 +113,8 @@ def main():
         if not isinstance(data.get("scopes"), list):
             counts["missing_scopes"] += 1
             needs_key_update = True
-        if "memories.write" not in set(data.get("scopes") or []):
+        stored_scopes = data.get("scopes") if isinstance(data.get("scopes"), list) else []
+        if "memories.write" not in set(stored_scopes):
             counts["missing_memories_write"] += 1
             needs_key_update = True
         if not uid:
