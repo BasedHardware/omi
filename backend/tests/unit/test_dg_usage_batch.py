@@ -56,6 +56,8 @@ class TestDgUsageBatchingStructure:
         source = _read_transcribe_source()
         flush_pos = source.find('record_dg_usage_ms(uid, session.dg_usage_ms_pending)')
         guard_pos = source.find('if use_custom_stt:\n')
+        assert flush_pos != -1, 'DG flush call not found'
+        assert guard_pos != -1, 'use_custom_stt guard not found'
         assert flush_pos < guard_pos, 'DG flush must be before use_custom_stt guard'
 
 
