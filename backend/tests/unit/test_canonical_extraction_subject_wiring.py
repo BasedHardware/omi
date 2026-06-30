@@ -68,7 +68,10 @@ def test_memory_service_write_persists_subject_and_predicate(monkeypatch_trusted
 
     db = _FakeDb(_control_seed(uid))
     service = MemoryService(db_client=db)
-    with patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL):
+    with (
+        patch("utils.memory.memory_service.resolve_pinned_memory_system", return_value=MemorySystem.CANONICAL),
+        patch("utils.memory.memory_service.canonical_write_enabled", return_value=True),
+    ):
         service.write(uid, payload)
 
     items = read_canonical_memories(uid, db_client=db)
