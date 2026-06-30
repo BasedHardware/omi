@@ -162,7 +162,7 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.speaker_sample_migration import maybe_migrate_person_samples
-from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
+from utils.executors import db_executor, storage_executor, sync_executor, run_blocking, start_background_task
 from utils.log_sanitizer import sanitize, sanitize_pii
 from utils.async_tasks import WebSocketTaskSupervisor, drain_tasks, wait_for_event
 
@@ -626,9 +626,9 @@ async def _stream_handler(
                         logger.info(
                             f'fair_use: soft cap triggered for {uid} session={session_id} caps={triggered_caps}'
                         )
-                        task_supervisor.create_task(
+                        start_background_task(
                             trigger_classifier_if_needed(uid, triggered_caps, session_id),
-                            name="fair_use_classifier",
+                            name=f"fair_use_classifier:{uid}:{session_id}",
                         )
                         # Start DG tracking proactively — classifier may escalate to restrict
                         # before next poll. Harmless if user isn't actually escalated.
