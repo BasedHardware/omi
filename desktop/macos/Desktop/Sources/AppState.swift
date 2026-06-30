@@ -693,6 +693,8 @@ extension Notification.Name {
   static let navigateToSidebarItem = Notification.Name("navigateToSidebarItem")
   /// Posted by Cmd+R to refresh all data (conversations, chat, tasks, memories)
   static let refreshAllData = Notification.Name("refreshAllData")
+  /// Posted after a conversation is deleted so dependent views can prune local state.
+  static let conversationDeleted = Notification.Name("conversationDeleted")
   /// Posted by the local desktop automation bridge to request semantic navigation.
   static let desktopAutomationNavigateRequested = Notification.Name(
     "desktopAutomationNavigateRequested")

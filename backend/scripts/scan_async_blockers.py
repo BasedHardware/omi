@@ -509,6 +509,8 @@ def main():
         ),
     )
     args = parser.parse_args()
+    if args.dirs == ["backend/routers", "backend/utils"] and not os.path.isdir("backend/routers"):
+        args.dirs = ["routers", "utils"]
     fail_on = normalize_fail_on(args.fail_on or [",".join(DEFAULT_FAIL_ON)])
 
     for d in args.dirs:

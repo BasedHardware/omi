@@ -1712,12 +1712,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ĮRENGINIAI',
-      one: 'ĮRENGINYS',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -9382,6 +9377,17 @@ class AppLocalizationsLt extends AppLocalizations {
   String get transcribeLaterPaused => 'Pristabdyta — garsas neįrašomas';
 
   @override
+  String get memoryThisDevice => 'Šis įrenginys';
+  @override
+  String get memoryThisIphone => 'Šis iPhone';
+  @override
+  String get memoryThisPhone => 'Šis telefonas';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Kaip naudoti Omi';
 
   @override

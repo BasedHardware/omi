@@ -981,7 +981,10 @@ class GraphPainter3D extends CustomPainter {
         final midY = (p1.y + p2.y) / 2;
         final textSpan = TextSpan(
           text: edge.label,
-          style: TextStyle(color: Colors.white54.withValues(alpha: alpha * 2), fontSize: (9 * avgScale).clamp(7, 11)),
+          style: TextStyle(
+            color: Colors.white54.withValues(alpha: alpha * 2),
+            fontSize: (9 * avgScale).clamp(7, 11),
+          ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();

@@ -7,6 +7,12 @@ from firebase_admin import auth
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
 from utils.scopes import Scopes, has_scope
+from utils.memory.product_authorization import ProductAuthorizationContext
+from utils.mcp_memories import (
+    McpVerifiedAuth,
+    build_mcp_default_memory_read_context,
+    build_mcp_default_memory_write_context,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,11 +51,85 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
     return user_id
 
 
+async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiKeyAuth":
+    """Extract uid plus persisted MCP app/key/scope context from an MCP API key.
+
+    Existing uid-only MCP auth remains available through get_uid_from_mcp_api_key.
+    Missing scopes/app_id/key_id are preserved as missing values so memory memory
+    authorization fails closed instead of inferring advertised MCP tool scopes.
+    """
+    if not api_key or not api_key.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or invalid Authorization header. Must be 'Bearer API_KEY'",
+        )
+
+    token = api_key.replace("Bearer ", "")
+    user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+    if not user_data:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+
+    return ApiKeyAuth(
+        uid=user_data["user_id"],
+        scopes=user_data.get("scopes"),
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+    )
+
+
+async def get_mcp_memory_default_memory_read_context(
+    auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth),
+) -> ProductAuthorizationContext:
+    if not has_scope(auth.scopes, 'memories.read'):
+        raise HTTPException(status_code=403, detail="Insufficient permissions. Required scope: memories.read")
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(status_code=403, detail="Missing MCP API app/key identity for memory memory authorization")
+    return build_mcp_default_memory_read_context(
+        McpVerifiedAuth(
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            scopes=tuple(auth.scopes or ()),
+        )
+    )
+
+
+async def get_mcp_memory_default_memory_write_context(
+    auth: "ApiKeyAuth" = Depends(get_mcp_api_key_auth),
+) -> ProductAuthorizationContext:
+    """Authenticate an MCP key and build the memory write authorization context.
+
+    Requires a persisted ``memories.write`` scope so legacy/read-only MCP keys
+    cannot mutate canonical memories. Missing app/key identity fails closed; the
+    shared grant seam enforces the persisted ``write`` capability separately.
+    """
+    if not has_scope(auth.scopes, 'memories.write'):
+        raise HTTPException(status_code=403, detail="Insufficient permissions. Required scope: memories.write")
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(status_code=403, detail="Missing MCP API app/key identity for memory memory authorization")
+    return build_mcp_default_memory_write_context(
+        McpVerifiedAuth(
+            uid=auth.uid,
+            app_id=auth.app_id,
+            key_id=auth.key_id,
+            scopes=tuple(auth.scopes or ()),
+        )
+    )
+
+
 # Data structure to return from auth
 class ApiKeyAuth:
-    def __init__(self, uid: str, scopes: Optional[List[str]]):
+    def __init__(
+        self,
+        uid: str,
+        scopes: Optional[List[str]],
+        app_id: Optional[str] = None,
+        key_id: Optional[str] = None,
+    ):
         self.uid = uid
         self.scopes = scopes
+        self.app_id = app_id
+        self.key_id = key_id
 
 
 async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAuth:
@@ -66,7 +146,12 @@ async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAut
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid API Key")
 
-    return ApiKeyAuth(uid=user_data["user_id"], scopes=user_data.get("scopes"))
+    return ApiKeyAuth(
+        uid=user_data["user_id"],
+        scopes=user_data.get("scopes"),
+        app_id=user_data.get("app_id"),
+        key_id=user_data.get("key_id"),
+    )
 
 
 async def get_uid_from_dev_api_key(api_key: str = Security(api_key_header)) -> str:
@@ -96,6 +181,60 @@ async def get_uid_with_memories_read(auth: ApiKeyAuth = Depends(get_api_key_auth
     if not has_scope(auth.scopes, Scopes.MEMORIES_READ):
         raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_READ}")
     return auth.uid
+
+
+DEVELOPER_TO_MEMORY_SCOPES = {
+    Scopes.MEMORIES_READ: 'memories.read',
+    Scopes.MEMORIES_WRITE: 'memories.write',
+}
+
+
+def _memory_memory_scopes_from_developer_scopes(scopes: Optional[List[str]]) -> tuple[str, ...]:
+    return tuple(
+        memory_scope
+        for developer_scope, memory_scope in DEVELOPER_TO_MEMORY_SCOPES.items()
+        if has_scope(scopes, developer_scope)
+    )
+
+
+async def get_developer_memory_default_memory_read_context(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+) -> ProductAuthorizationContext:
+    if not has_scope(auth.scopes, Scopes.MEMORIES_READ):
+        raise HTTPException(status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_READ}")
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(
+            status_code=403, detail="Missing Developer API app/key identity for memory memory authorization"
+        )
+    return ProductAuthorizationContext(
+        uid=auth.uid,
+        consumer='developer_api',
+        surface='developer_default_memory_read',
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        scopes=_memory_memory_scopes_from_developer_scopes(auth.scopes),
+    )
+
+
+async def get_developer_memory_default_memory_write_context(
+    auth: ApiKeyAuth = Depends(get_api_key_auth),
+) -> ProductAuthorizationContext:
+    if not has_scope(auth.scopes, Scopes.MEMORIES_WRITE):
+        raise HTTPException(
+            status_code=403, detail=f"Insufficient permissions. Required scope: {Scopes.MEMORIES_WRITE}"
+        )
+    if not auth.app_id or not auth.key_id:
+        raise HTTPException(
+            status_code=403, detail="Missing Developer API app/key identity for memory memory authorization"
+        )
+    return ProductAuthorizationContext(
+        uid=auth.uid,
+        consumer='developer_api',
+        surface='developer_default_memory_write',
+        app_id=auth.app_id,
+        key_id=auth.key_id,
+        scopes=_memory_memory_scopes_from_developer_scopes(auth.scopes),
+    )
 
 
 async def get_uid_with_memories_write(auth: ApiKeyAuth = Depends(get_api_key_auth)) -> str:

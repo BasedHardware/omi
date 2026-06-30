@@ -84,10 +84,17 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
           placeholder: (context, url) => SizedBox(
             width: size,
             height: size,
-            child: Icon(Icons.apps, size: size * 0.7, color: Colors.white.withValues(alpha: opacity)),
+            child: Icon(
+              Icons.apps,
+              size: size * 0.7,
+              color: Colors.white.withValues(alpha: opacity),
+            ),
           ),
-          errorWidget: (context, url, error) =>
-              Icon(Icons.apps, size: size * 0.7, color: Colors.white.withValues(alpha: opacity)),
+          errorWidget: (context, url, error) => Icon(
+            Icons.apps,
+            size: size * 0.7,
+            color: Colors.white.withValues(alpha: opacity),
+          ),
         ),
       ),
     );
@@ -96,7 +103,11 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   // Fallback to generic icon if app not found
   return Opacity(
     opacity: opacity,
-    child: Icon(Icons.apps, size: size, color: Colors.white.withValues(alpha: opacity)),
+    child: Icon(
+      Icons.apps,
+      size: size,
+      color: Colors.white.withValues(alpha: opacity),
+    ),
   );
 }
 

@@ -1718,12 +1718,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'THIẾT BỊ',
-      one: 'THIẾT BỊ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'THIẾT BỊ', one: 'THIẾT BỊ');
     return 'ĐÃ TÌM THẤY $count $_temp0 GẦN ĐÂY';
   }
 
@@ -9194,11 +9189,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count bản ghi sẵn sàng để đồng bộ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count bản ghi sẵn sàng để đồng bộ');
     return '$_temp0';
   }
 
@@ -9210,11 +9201,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count bản ghi cần chú ý',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count bản ghi cần chú ý');
     return '$_temp0';
   }
 
@@ -9366,6 +9353,17 @@ class AppLocalizationsVi extends AppLocalizations {
   String get transcribeLaterPaused => 'Đã tạm dừng — không ghi lại âm thanh';
 
   @override
+  String get memoryThisDevice => 'Thiết bị này';
+  @override
+  String get memoryThisIphone => 'iPhone này';
+  @override
+  String get memoryThisPhone => 'Điện thoại này';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Cách sử dụng Omi';
 
   @override

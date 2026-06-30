@@ -3,6 +3,7 @@ schema_version: 1
 environments:
   dev:
     gcp_project: based-hardware-dev
+    runtime_gcp_project: based-hardware
     region: us-central1
     gke:
       backend-listen:
@@ -21,9 +22,25 @@ environments:
             secret:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+          MEMORY_MODE:
+            value: write
+            category: memory_rollout
+          MEMORY_ENABLED_USERS:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: memory_rollout
+          MEMORY_V3_GET_ENABLED:
+            value: "false"
+            category: memory_rollout
+          MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            value: "false"
+            category: memory_rollout
+          MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            value: "false"
+            category: memory_rollout
     cloud_run:
       workflow_files:
         - .github/workflows/gcp_backend_auto_dev.yml
+        - .github/workflows/gcp_backend.yml
       network:
         flags:
           --network: omi-dev-vpc-1
@@ -43,6 +60,21 @@ environments:
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            MEMORY_MODE:
+              value: write
+              category: memory_rollout
+            MEMORY_ENABLED_USERS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+              value: "false"
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -66,6 +98,21 @@ environments:
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            MEMORY_MODE:
+              value: write
+              category: memory_rollout
+            MEMORY_ENABLED_USERS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+              value: "false"
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -89,6 +136,21 @@ environments:
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            MEMORY_MODE:
+              value: write
+              category: memory_rollout
+            MEMORY_ENABLED_USERS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+              value: "false"
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -102,6 +164,7 @@ environments:
 
   prod:
     gcp_project: based-hardware
+    runtime_gcp_project: based-hardware
     region: us-central1
     gke:
       backend-listen:
@@ -118,6 +181,21 @@ environments:
             secret:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
+          MEMORY_MODE:
+            value: "off"
+            category: memory_rollout
+          MEMORY_ENABLED_USERS:
+            value: ""
+            category: memory_rollout
+          MEMORY_V3_GET_ENABLED:
+            value: "false"
+            category: memory_rollout
+          MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            value: "false"
+            category: memory_rollout
+          MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            value: "false"
+            category: memory_rollout
     cloud_run:
       workflow_files:
         - .github/workflows/gcp_backend.yml
@@ -134,6 +212,22 @@ environments:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
+              provisional: true
+            MEMORY_MODE:
+              value: "off"
+              category: memory_rollout
+            MEMORY_ENABLED_USERS:
+              value: ""
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+              value: "false"
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -149,6 +243,22 @@ environments:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
+              provisional: true
+            MEMORY_MODE:
+              value: "off"
+              category: memory_rollout
+            MEMORY_ENABLED_USERS:
+              value: ""
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+              value: "false"
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -164,6 +274,22 @@ environments:
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
+              provisional: true
+            MEMORY_MODE:
+              value: "off"
+              category: memory_rollout
+            MEMORY_ENABLED_USERS:
+              value: ""
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+              value: "false"
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+              value: "false"
+              category: memory_rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
