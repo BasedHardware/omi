@@ -193,6 +193,10 @@ extension PostHogManager {
         ])
     }
 
+    func authFlowEvent(_ eventName: String, properties: [String: Any]) {
+        track(eventName, properties: properties)
+    }
+
     func signedOut() {
         track("Signed Out")
     }

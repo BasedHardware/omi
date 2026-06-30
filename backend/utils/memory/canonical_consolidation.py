@@ -59,7 +59,7 @@ def _coerce_aware_utc(value: datetime) -> datetime:
 
 def _read_control_state(uid: str, *, db_client) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
-    ref = db_client.document(collections.memory_control_state)
+    ref = db_client.document(collections.memory_apply_control_state)
     snapshot = ref.get()
     if getattr(snapshot, "exists", False):
         return MemoryControlState(**(snapshot.to_dict() or {}))
@@ -69,7 +69,15 @@ def _read_control_state(uid: str, *, db_client) -> MemoryControlState:
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client) -> None:
-    db_client.document(MemoryCollections(uid=control.uid).memory_control_state).set(control.model_dump(mode="json"))
+    db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
+        {
+            "last_consolidation_run_at": (
+                control.last_consolidation_run_at.isoformat() if control.last_consolidation_run_at is not None else None
+            ),
+            "updated_at": control.updated_at.isoformat() if control.updated_at is not None else None,
+        },
+        merge=True,
+    )
 
 
 def _is_promotable_for_consolidation(item: MemoryItem, *, now: datetime) -> bool:

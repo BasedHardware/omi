@@ -97,7 +97,7 @@ def _legacy_db_with_control(uid: str = LEGACY_UID) -> "_FakeDb":
     """Default memory_control/state with no ``memory_system=canonical`` — real resolver → LEGACY."""
     return _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid,
                 head_commit_id="head0",
                 account_generation=1,
@@ -240,7 +240,7 @@ def canonical_db():
     uid = "uid-canonical-ws-j"
     return _FakeDb(
         {
-            f"users/{uid}/memory_control/state": MemoryControlState(
+            f"users/{uid}/memory_state/apply_control": MemoryControlState(
                 uid=uid,
                 head_commit_id="head0",
                 account_generation=1,

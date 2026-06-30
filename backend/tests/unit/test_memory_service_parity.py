@@ -1,7 +1,9 @@
 import os
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+from fastapi import HTTPException
 import pytest
 
 from tests.unit.memory_import_isolation import (
@@ -182,6 +184,20 @@ class TestResolveMemorySystem:
 
 
 class TestMemoryServiceParity:
+    def test_canonical_write_decision_malformed_rollout_fails_closed_for_code_cohort(self, monkeypatch):
+        from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
+        from utils.memory.canonical_activation import canonical_write_decision
+
+        set_canonical_cohort(monkeypatch, "uid-canonical")
+        monkeypatch.setenv("MEMORY_MODE", "not-a-valid-mode")
+
+        decision = canonical_write_decision("uid-canonical", db_client=_FirestoreFake())
+
+        assert decision.enabled is False
+        assert decision.memory_system == MemorySystem.CANONICAL
+        assert decision.fail_closed is True
+        assert decision.reason == "invalid_rollout_config"
+
     def test_read_matches_direct_legacy_helper(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
         memories = [_sample_memory_dict("mem-1"), _sample_memory_dict("mem-2")]
@@ -229,6 +245,88 @@ class TestMemoryServiceParity:
         assert get_by_ids.call_count == 2
         get_by_ids.assert_called_with("uid-test", ["mem-1", "mem-2"])
         assert via_service == direct
+
+    def test_external_canonical_write_gate_failure_does_not_fallback_to_legacy_create(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        memory_db = service_mod.MemoryDB.model_validate(_sample_memory_dict())
+        create_memory = MagicMock()
+        monkeypatch.setattr(service_mod.memories_db, "create_memory", create_memory)
+        monkeypatch.setattr(
+            service_mod,
+            "canonical_write_decision",
+            lambda *args, **kwargs: SimpleNamespace(enabled=False, fail_closed=True, reason="malformed_state"),
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            service_mod.MemoryService(db_client=_FirestoreFake()).create_external_memory(
+                "uid-test",
+                memory_db,
+                memory_system=MemorySystem.CANONICAL,
+                consumer="mcp",
+                operation="mcp_tool_memory_create",
+            )
+
+        assert exc.value.status_code == 503
+        create_memory.assert_not_called()
+
+    def test_external_canonical_create_uses_canonical_backend_without_rechecking_public_write(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        memory_db = service_mod.MemoryDB.model_validate(_sample_memory_dict())
+        create_memory = MagicMock()
+        canonical_write = MagicMock(return_value="mem-1")
+        monkeypatch.setattr(service_mod.memories_db, "create_memory", create_memory)
+        monkeypatch.setattr(
+            service_mod,
+            "canonical_write_decision",
+            lambda *args, **kwargs: SimpleNamespace(enabled=True, fail_closed=False, reason="ok"),
+        )
+        monkeypatch.setattr(
+            service_mod.MemoryService,
+            "write",
+            MagicMock(side_effect=AssertionError("external canonical writes must not re-enter public write")),
+        )
+        monkeypatch.setattr(service_mod, "_read_canonical_memory_item", MagicMock(return_value=None))
+
+        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service._canonical.write = canonical_write
+
+        result = service.create_external_memory(
+            "uid-test",
+            memory_db,
+            memory_system=MemorySystem.CANONICAL,
+            consumer="mcp",
+            operation="mcp_tool_memory_create",
+        )
+
+        assert result == memory_db
+        canonical_write.assert_called_once()
+        create_memory.assert_not_called()
+
+    def test_external_canonical_edit_value_error_maps_to_404_without_legacy_fallback(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        edit_memory = MagicMock()
+        monkeypatch.setattr(service_mod.memories_db, "edit_memory", edit_memory)
+        monkeypatch.setattr(
+            service_mod,
+            "canonical_write_decision",
+            lambda *args, **kwargs: SimpleNamespace(enabled=True, fail_closed=False, reason="ok"),
+        )
+
+        service = service_mod.MemoryService(db_client=_FirestoreFake())
+        service._canonical.update_content = MagicMock(side_effect=ValueError("memory not found"))
+
+        with pytest.raises(HTTPException) as exc:
+            service.update_external_memory_content(
+                "uid-test",
+                "missing-memory",
+                "new content",
+                memory_system=MemorySystem.CANONICAL,
+                consumer="mcp",
+                operation="mcp_tool_memory_edit",
+            )
+
+        assert exc.value.status_code == 404
+        edit_memory.assert_not_called()
 
     def test_canonical_backend_delegates_to_adapter(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)

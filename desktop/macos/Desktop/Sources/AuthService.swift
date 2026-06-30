@@ -36,6 +36,7 @@ class AuthService {
 
     // OAuth state for CSRF protection
     private var pendingOAuthState: String?
+    private var pendingOAuthFlow: OAuthFlowContext?
     private var oauthContinuation: CheckedContinuation<(code: String, state: String), Error>?
 
     // Native Apple Sign In
@@ -63,6 +64,13 @@ class AuthService {
             return scheme
         }
         return "omi-computer"
+    }
+
+    private struct OAuthFlowContext {
+        let id: String
+        let provider: String
+        let state: String
+        let startedAt: Date
     }
 
     // UserDefaults keys for auth persistence (dev builds with ad-hoc signing)
@@ -490,10 +498,13 @@ class AuthService {
 
         do {
             // Step 1: Generate state for CSRF protection
-            let state = generateState()
+            let flowId = generateOAuthFlowID()
+            let state = generateState(flowId: flowId)
             let codeVerifier = generateCodeVerifier()
             let codeChallenge = makeCodeChallenge(for: codeVerifier)
             pendingOAuthState = state
+            pendingOAuthFlow = OAuthFlowContext(id: flowId, provider: provider, state: state, startedAt: Date())
+            trackAuthFlowEvent("Auth Flow Started", stage: "started", provider: provider, authFlowId: flowId)
             NSLog("OMI AUTH: Generated OAuth state")
 
             // Step 2: Build authorization URL
@@ -502,9 +513,11 @@ class AuthService {
 
             // Step 3: Open browser for authentication
             guard let url = URL(string: authURL) else {
+                trackAuthFlowEvent("Auth Callback Invalid", stage: "authorize_url", provider: provider, authFlowId: flowId, failureClass: "invalid_url")
                 throw AuthError.invalidURL
             }
             NSWorkspace.shared.open(url)
+            trackAuthFlowEvent("Auth Browser Opened", stage: "browser_opened", provider: provider, authFlowId: flowId)
 
             // Step 4: Wait for callback with authorization code
             NSLog("OMI AUTH: Waiting for OAuth callback...")
@@ -513,13 +526,35 @@ class AuthService {
             // Step 5: Verify state matches
             guard returnedState == state else {
                 NSLog("OMI AUTH: State mismatch - potential CSRF attack")
+                trackAuthFlowEvent(
+                    "Auth Callback Invalid",
+                    stage: "state_verified",
+                    provider: provider,
+                    authFlowId: flowId,
+                    failureClass: "state_mismatch"
+                )
                 throw AuthError.stateMismatch
             }
             NSLog("OMI AUTH: Received valid authorization code")
 
             // Step 6: Exchange code for custom token and user info
             NSLog("OMI AUTH: Exchanging code for Firebase token...")
-            let tokenResult = try await exchangeCodeForToken(code: code, codeVerifier: codeVerifier)
+            trackAuthFlowEvent("Auth Token Exchange Started", stage: "token_exchange", provider: provider, authFlowId: flowId)
+            let tokenResult: TokenExchangeResult
+            do {
+                tokenResult = try await exchangeCodeForToken(code: code, codeVerifier: codeVerifier)
+            } catch {
+                trackAuthFlowEvent(
+                    "Auth Token Exchange Failed",
+                    stage: "token_exchange",
+                    provider: provider,
+                    authFlowId: flowId,
+                    failureClass: authFailureClass(for: error),
+                    error: error.localizedDescription
+                )
+                throw error
+            }
+            trackAuthFlowEvent("Auth Token Exchange Completed", stage: "token_exchange", provider: provider, authFlowId: flowId)
             NSLog("OMI AUTH: Got Firebase custom token")
 
             // Save user info from OAuth response immediately (before Firebase sign-in)
@@ -536,7 +571,32 @@ class AuthService {
             // Step 7: Exchange custom token for ID token via REST API
             // This bypasses keychain issues with Firebase SDK on dev builds
             NSLog("OMI AUTH: Exchanging custom token for ID token via REST API...")
-            let firebaseTokens = try await exchangeCustomTokenForIdToken(customToken: tokenResult.customToken)
+            trackAuthFlowEvent(
+                "Firebase Custom Token Exchange Started",
+                stage: "firebase_custom_token_exchange",
+                provider: provider,
+                authFlowId: flowId
+            )
+            let firebaseTokens: FirebaseTokenResult
+            do {
+                firebaseTokens = try await exchangeCustomTokenForIdToken(customToken: tokenResult.customToken)
+            } catch {
+                trackAuthFlowEvent(
+                    "Firebase Custom Token Exchange Failed",
+                    stage: "firebase_custom_token_exchange",
+                    provider: provider,
+                    authFlowId: flowId,
+                    failureClass: authFailureClass(for: error),
+                    error: error.localizedDescription
+                )
+                throw error
+            }
+            trackAuthFlowEvent(
+                "Firebase Custom Token Exchange Completed",
+                stage: "firebase_custom_token_exchange",
+                provider: provider,
+                authFlowId: flowId
+            )
             NSLog("OMI AUTH: Got Firebase ID token via REST API")
 
             // Store tokens for API calls (include userId to validate token ownership on retrieval)
@@ -566,7 +626,17 @@ class AuthService {
             // Identify user first, then track sign-in completed
             // (identify must happen before events for PostHog person profiles to work)
             AnalyticsManager.shared.identify()
+            trackAuthFlowEvent(
+                "Auth Flow Completed",
+                stage: "completed",
+                provider: provider,
+                authFlowId: flowId,
+                terminalState: "completed",
+                durationMs: authFlowDurationMs()
+            )
             AnalyticsManager.shared.signInCompleted(provider: provider)
+            pendingOAuthFlow = nil
+            pendingOAuthState = nil
             APIKeyService.shared.startFetchingKeys()
             Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
 
@@ -595,13 +665,33 @@ class AuthService {
         } catch AuthError.cancelled {
             // User-initiated cancel: clear any stale error and stay silent.
             NSLog("OMI AUTH: %@ web OAuth sign-in cancelled by user", provider)
+            trackCurrentAuthFlowEvent("Auth Flow Cancelled", stage: "cancelled", terminalState: "cancelled")
+            pendingOAuthFlow = nil
+            pendingOAuthState = nil
             self.error = nil
             throw AuthError.cancelled
+        } catch AuthError.timeout {
+            NSLog("OMI AUTH: %@ web OAuth sign-in timed out", provider)
+            trackCurrentAuthFlowEvent("Auth Flow Timed Out", stage: "timed_out", terminalState: "timed_out", failureClass: "timeout")
+            AnalyticsManager.shared.signInFailed(provider: provider, error: AuthError.timeout.localizedDescription)
+            pendingOAuthFlow = nil
+            pendingOAuthState = nil
+            self.error = AuthError.timeout.localizedDescription
+            throw AuthError.timeout
         } catch {
             let nsError = error as NSError
             NSLog("OMI AUTH: Error during sign in: %@", error.localizedDescription)
             logError("AUTH: \(provider) web OAuth sign-in failed (domain=\(nsError.domain) code=\(nsError.code))", error: error)
+            trackCurrentAuthFlowEvent(
+                "Auth Flow Failed",
+                stage: "failed",
+                terminalState: "failed",
+                failureClass: authFailureClass(for: error),
+                error: error.localizedDescription
+            )
             AnalyticsManager.shared.signInFailed(provider: provider, error: error.localizedDescription)
+            pendingOAuthFlow = nil
+            pendingOAuthState = nil
             self.error = error.localizedDescription
             throw error
         }
@@ -615,6 +705,89 @@ class AuthService {
             codeChallenge.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? codeChallenge
         return "\(apiBaseURL)v1/auth/authorize?provider=\(provider)&redirect_uri=\(encodedRedirectURI)"
             + "&state=\(state)&code_challenge=\(encodedCodeChallenge)&code_challenge_method=S256"
+    }
+
+    private func trackCurrentAuthFlowEvent(
+        _ eventName: String,
+        stage: String,
+        terminalState: String? = nil,
+        failureClass: String? = nil,
+        error: String? = nil
+    ) {
+        trackAuthFlowEvent(
+            eventName,
+            stage: stage,
+            provider: pendingOAuthFlow?.provider ?? "unknown",
+            authFlowId: pendingOAuthFlow?.id,
+            terminalState: terminalState,
+            failureClass: failureClass,
+            error: error,
+            durationMs: terminalState == nil ? nil : authFlowDurationMs()
+        )
+    }
+
+    private func trackAuthFlowEvent(
+        _ eventName: String,
+        stage: String,
+        provider: String,
+        authFlowId: String?,
+        terminalState: String? = nil,
+        failureClass: String? = nil,
+        error: String? = nil,
+        durationMs: Int? = nil,
+        extraProperties: [String: Any] = [:]
+    ) {
+        var properties = extraProperties
+        properties["provider"] = provider
+        properties["platform"] = "macos"
+        properties["stage"] = stage
+        properties["bundle_id"] = currentBundleIdentifier
+        properties["url_scheme"] = urlScheme
+        properties["auth_flow_id"] = authFlowId ?? "missing"
+        properties["app_version"] = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        properties["app_build"] = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        if let terminalState {
+            properties["terminal_state"] = terminalState
+        }
+        if let failureClass {
+            properties["failure_class"] = failureClass
+        }
+        if let error {
+            properties["error"] = String(error.prefix(200))
+        }
+        if let durationMs {
+            properties["duration_ms"] = durationMs
+        }
+        AnalyticsManager.shared.authFlowEvent(eventName, properties: properties)
+    }
+
+    private func authFlowDurationMs() -> Int? {
+        guard let startedAt = pendingOAuthFlow?.startedAt else { return nil }
+        return max(0, Int(Date().timeIntervalSince(startedAt) * 1000))
+    }
+
+    private func authFailureClass(for error: Error) -> String {
+        guard let authError = error as? AuthError else {
+            let nsError = error as NSError
+            return "\(nsError.domain)_\(nsError.code)"
+        }
+
+        switch authError {
+        case .invalidCredential: return "invalid_credential"
+        case .invalidNonce: return "invalid_nonce"
+        case .missingToken: return "missing_token"
+        case .notSignedIn: return "not_signed_in"
+        case .invalidURL: return "invalid_url"
+        case .stateMismatch: return "state_mismatch"
+        case .timeout: return "timeout"
+        case .invalidCallback: return "invalid_callback"
+        case .oauthError: return "oauth_error"
+        case .missingCodeOrState: return "missing_code_or_state"
+        case .invalidResponse: return "invalid_response"
+        case .tokenExchangeFailed(let code): return "token_exchange_http_\(code)"
+        case .missingCustomToken: return "missing_custom_token"
+        case .cancelled: return "cancelled"
+        }
     }
 
     // MARK: - OAuth Callback Handling
@@ -641,6 +814,11 @@ class AuthService {
 
         guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
             NSLog("OMI AUTH: Failed to parse callback URL")
+            trackCurrentAuthFlowEvent(
+                "Auth Callback Invalid",
+                stage: "callback_parse",
+                failureClass: "invalid_callback"
+            )
             oauthContinuation?.resume(throwing: AuthError.invalidCallback)
             oauthContinuation = nil
             return
@@ -656,6 +834,13 @@ class AuthService {
         let code = queryItems.first(where: { $0.name == "code" })?.value
         let state = queryItems.first(where: { $0.name == "state" })?.value
         let error = queryItems.first(where: { $0.name == "error" })?.value
+        let callbackFlowId = state.flatMap(authFlowId(from:))
+        trackAuthFlowEvent(
+            "Auth Callback Received",
+            stage: "callback_received",
+            provider: pendingOAuthFlow?.provider ?? "unknown",
+            authFlowId: callbackFlowId ?? pendingOAuthFlow?.id
+        )
 
         if let state, let targetBundleId = targetBundleIdentifier(from: state), targetBundleId != currentBundleIdentifier {
             NSLog(
@@ -663,12 +848,27 @@ class AuthService {
                 targetBundleId,
                 currentBundleIdentifier
             )
-            forwardOAuthCallback(url: url, toBundleId: targetBundleId)
+            trackAuthFlowEvent(
+                "Auth Callback IgnoredWrongBundle",
+                stage: "callback_bundle_check",
+                provider: pendingOAuthFlow?.provider ?? "unknown",
+                authFlowId: callbackFlowId,
+                extraProperties: ["target_bundle_id": targetBundleId]
+            )
+            forwardOAuthCallback(url: url, toBundleId: targetBundleId, authFlowId: callbackFlowId)
             return
         }
 
         if let error = error {
             NSLog("OMI AUTH: OAuth error: %@", error)
+            trackAuthFlowEvent(
+                "Auth Callback Invalid",
+                stage: "callback_provider_error",
+                provider: pendingOAuthFlow?.provider ?? "unknown",
+                authFlowId: callbackFlowId ?? pendingOAuthFlow?.id,
+                failureClass: "provider_error",
+                error: error
+            )
             oauthContinuation?.resume(throwing: AuthError.oauthError(error))
             oauthContinuation = nil
             return
@@ -676,12 +876,25 @@ class AuthService {
 
         guard let code = code, let state = state else {
             NSLog("OMI AUTH: Missing code or state in callback")
+            trackAuthFlowEvent(
+                "Auth Callback Invalid",
+                stage: "callback_params",
+                provider: pendingOAuthFlow?.provider ?? "unknown",
+                authFlowId: callbackFlowId ?? pendingOAuthFlow?.id,
+                failureClass: "missing_code_or_state"
+            )
             oauthContinuation?.resume(throwing: AuthError.missingCodeOrState)
             oauthContinuation = nil
             return
         }
 
         NSLog("OMI AUTH: Successfully extracted code and state from callback")
+        trackAuthFlowEvent(
+            "Auth Callback Valid",
+            stage: "callback_validated",
+            provider: pendingOAuthFlow?.provider ?? "unknown",
+            authFlowId: callbackFlowId
+        )
         oauthContinuation?.resume(returning: (code: code, state: state))
         oauthContinuation = nil
     }
@@ -1258,16 +1471,19 @@ class AuthService {
 
     // MARK: - Helper Methods
 
-    private func generateState() -> String {
+    private func generateOAuthFlowID() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        let nonce = Data(bytes).base64EncodedString()
+        return Data(bytes).base64EncodedString()
             .replacingOccurrences(of: "+", with: "-")
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
+    }
+
+    private func generateState(flowId: String) -> String {
         // Encode source bundle in state so callbacks can be routed back to the
         // originating app, even when multiple dev builds share URL schemes.
-        return "\(nonce)|\(currentBundleIdentifier)"
+        return "\(flowId)|\(currentBundleIdentifier)"
     }
 
     private func generateCodeVerifier(length: Int = 64) -> String {
@@ -1292,9 +1508,23 @@ class AuthService {
         return bundleId.isEmpty ? nil : bundleId
     }
 
-    private func forwardOAuthCallback(url: URL, toBundleId bundleId: String) {
+    private func authFlowId(from state: String) -> String? {
+        let flowId = state.split(separator: "|", maxSplits: 1).first.map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return flowId?.isEmpty == false ? flowId : nil
+    }
+
+    private func forwardOAuthCallback(url: URL, toBundleId bundleId: String, authFlowId: String?) {
         guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
             NSLog("OMI AUTH: Unable to forward callback. Bundle %@ not found.", bundleId)
+            trackAuthFlowEvent(
+                "Auth Callback Forward Failed",
+                stage: "callback_forwarded",
+                provider: pendingOAuthFlow?.provider ?? "unknown",
+                authFlowId: authFlowId,
+                failureClass: "target_bundle_not_found",
+                extraProperties: ["target_bundle_id": bundleId]
+            )
             return
         }
 
@@ -1304,8 +1534,28 @@ class AuthService {
         NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: config) { _, error in
             if let error {
                 NSLog("OMI AUTH: Failed to forward callback to %@: %@", bundleId, error.localizedDescription)
+                Task { @MainActor in
+                    self.trackAuthFlowEvent(
+                        "Auth Callback Forward Failed",
+                        stage: "callback_forwarded",
+                        provider: self.pendingOAuthFlow?.provider ?? "unknown",
+                        authFlowId: authFlowId,
+                        failureClass: "workspace_open_failed",
+                        error: error.localizedDescription,
+                        extraProperties: ["target_bundle_id": bundleId]
+                    )
+                }
             } else {
                 NSLog("OMI AUTH: Forwarded callback to %@", bundleId)
+                Task { @MainActor in
+                    self.trackAuthFlowEvent(
+                        "Auth Callback Forwarded",
+                        stage: "callback_forwarded",
+                        provider: self.pendingOAuthFlow?.provider ?? "unknown",
+                        authFlowId: authFlowId,
+                        extraProperties: ["target_bundle_id": bundleId]
+                    )
+                }
             }
         }
     }

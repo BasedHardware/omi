@@ -19,6 +19,11 @@ ok()   { echo -e "  ${GREEN}✓${NC} $1"; pass=$((pass + 1)); }
 skip() { echo -e "  ${YELLOW}⚠${NC} $1"; warn=$((warn + 1)); }
 bad()  { echo -e "  ${RED}✗${NC} $1"; fail=$((fail + 1)); }
 
+EXPECTED_PYTHON_VERSION=""
+if [[ -f .python-version ]]; then
+  EXPECTED_PYTHON_VERSION="$(tr -d '[:space:]' < .python-version)"
+fi
+
 # ── Tools ──
 echo "Tools:"
 
@@ -38,7 +43,16 @@ done
 PYTHON_BIN="${PYTHON_BIN:-$FIRST_PYTHON_BIN}"
 
 if [[ -n "$PYTHON_BIN" ]]; then
-  ok "$PYTHON_BIN $("$PYTHON_BIN" --version 2>&1 | awk '{print $2}')"
+  python_version="$("$PYTHON_BIN" --version 2>&1 | awk '{print $2}')"
+  ok "$PYTHON_BIN $python_version"
+  if [[ -n "$EXPECTED_PYTHON_VERSION" ]]; then
+    if [[ "$python_version" == "$EXPECTED_PYTHON_VERSION" ]]; then
+      ok "Python version matches .python-version ($EXPECTED_PYTHON_VERSION)"
+    else
+      bad "Python version mismatch: expected $EXPECTED_PYTHON_VERSION from .python-version, got $python_version from $PYTHON_BIN"
+      echo -e "  ${YELLOW}→${NC} Run: ./scripts/sync-python-deps.sh, then PYTHON=.venv/bin/python bash test-preflight.sh"
+    fi
+  fi
 else
   bad "python not found"
 fi

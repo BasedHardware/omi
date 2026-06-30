@@ -232,38 +232,37 @@ def test_mcp_rest_write_routes_guard_legacy_mutation_before_side_effects():
 
 def test_mcp_sse_write_tools_guard_legacy_mutation_before_side_effects():
     mcp_sse_py = Path(__file__).resolve().parents[2] / 'routers' / 'mcp_sse.py'
+    memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
     contents = mcp_sse_py.read_text(encoding='utf-8')
-    assert 'guard_legacy_memory_write' in contents
-    guard = "guard_legacy_memory_write("
-    create_tool = _legacy_branch_after_canonical(
-        contents[
-            contents.index('elif tool_name == "create_memory":') : contents.index('elif tool_name == "delete_memory":')
-        ],
-        marker='memory_write_guard = guard_legacy_memory_write',
-    )
+    service_contents = memory_service_py.read_text(encoding='utf-8')
+    assert '_canonical_external_write_enabled_or_fail_closed' in service_contents
+    assert 'guard_legacy_memory_write(uid, db_client, consumer=consumer, operation=operation)' in service_contents
+    create_tool = contents[
+        contents.index('elif tool_name == "create_memory":') : contents.index('elif tool_name == "delete_memory":')
+    ]
+    assert 'create_external_memory(' in create_tool
     assert 'operation="mcp_tool_memory_create"' in create_tool
-    assert create_tool.index(guard) < create_tool.index('identify_category_for_memory(content)')
-    assert create_tool.index(guard) < create_tool.index('memories_db.create_memory(user_id, memory_db.model_dump())')
-    delete_tool = _legacy_branch_after_canonical(
-        contents[
-            contents.index('elif tool_name == "delete_memory":') : contents.index('elif tool_name == "edit_memory":')
-        ],
-        marker='memory_write_guard = guard_legacy_memory_write',
+    assert 'resolve_external_memory_write_context(' in create_tool
+    assert 'raise_if_legacy_write_blocked(write_context)' in create_tool
+    assert create_tool.index('resolve_external_memory_write_context(') < create_tool.index(
+        'identify_category_for_memory'
     )
+    assert create_tool.index('raise_if_legacy_write_blocked(write_context)') < create_tool.index(
+        'identify_category_for_memory'
+    )
+    assert 'memories_db.create_memory(user_id, memory_db.model_dump())' not in create_tool
+    delete_tool = contents[
+        contents.index('elif tool_name == "delete_memory":') : contents.index('elif tool_name == "edit_memory":')
+    ]
+    assert 'delete_external_memory(' in delete_tool
     assert 'operation="mcp_tool_memory_delete"' in delete_tool
-    assert delete_tool.index(guard) < delete_tool.index('memories_db.get_memory(user_id, memory_id)')
-    assert delete_tool.index(guard) < delete_tool.index('memories_db.delete_memory(user_id, memory_id)')
-    edit_tool = _legacy_branch_after_canonical(
-        contents[
-            contents.index('elif tool_name == "edit_memory":') : contents.index(
-                'elif tool_name == "get_conversations":'
-            )
-        ],
-        marker='memory_write_guard = guard_legacy_memory_write',
-    )
+    assert 'memories_db.delete_memory(user_id, memory_id)' not in delete_tool
+    edit_tool = contents[
+        contents.index('elif tool_name == "edit_memory":') : contents.index('elif tool_name == "get_conversations":')
+    ]
+    assert 'update_external_memory_content(' in edit_tool
     assert 'operation="mcp_tool_memory_edit"' in edit_tool
-    assert edit_tool.index(guard) < edit_tool.index('memories_db.get_memory(user_id, memory_id)')
-    assert edit_tool.index(guard) < edit_tool.index('memories_db.edit_memory(user_id, memory_id, content)')
+    assert 'memories_db.edit_memory(user_id, memory_id, content)' not in edit_tool
 
 
 _MCP_QUOTE_TEXT = 'User prefers deterministic MCP memory reads.'
