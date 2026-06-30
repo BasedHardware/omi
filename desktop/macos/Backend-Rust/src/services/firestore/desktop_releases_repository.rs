@@ -91,6 +91,7 @@ impl FirestoreService {
             download_url: self
                 .parse_string(fields, "download_url")
                 .unwrap_or_default(),
+            manual_download_url: self.parse_string(fields, "manual_download_url"),
             ed_signature: self
                 .parse_string(fields, "ed_signature")
                 .unwrap_or_default(),
@@ -126,11 +127,17 @@ impl FirestoreService {
             _ => json!({"stringValue": "staging"}),
         };
 
+        let manual_download_url_value = match &release.manual_download_url {
+            Some(url) if !url.trim().is_empty() => json!({"stringValue": url}),
+            _ => json!({"nullValue": null}),
+        };
+
         let doc = json!({
             "fields": {
                 "version": {"stringValue": release.version},
                 "build_number": {"integerValue": release.build_number.to_string()},
                 "download_url": {"stringValue": release.download_url},
+                "manual_download_url": manual_download_url_value,
                 "ed_signature": {"stringValue": release.ed_signature},
                 "published_at": {"stringValue": release.published_at},
                 "changelog": {"arrayValue": {"values": changelog_values}},

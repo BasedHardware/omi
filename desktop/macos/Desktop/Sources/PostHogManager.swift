@@ -622,6 +622,10 @@ extension PostHogManager {
         ])
     }
 
+    func updateCheckFailed(diagnostics: UpdateFailureDiagnostics) {
+        track("Update Check Failed", properties: diagnostics.analyticsProperties)
+    }
+
     // MARK: - Notification Events
 
     func notificationSent(notificationId: String, title: String, assistantId: String, surface: String) {
