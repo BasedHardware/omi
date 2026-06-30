@@ -216,10 +216,13 @@ def generate_comprehensive_daily_summary(
         (c.finished_at - c.started_at).total_seconds() / 60 for c in non_discarded if c.finished_at and c.started_at
     )
 
-    # Extract ALL locations from non-discarded conversations
+    # Extract ALL locations from non-discarded conversations.
+    # latitude/longitude are required floats on the Geolocation model, so guarding on
+    # their truthiness wrongly drops a valid coordinate of exactly 0.0 (for example
+    # longitude 0.0 on the prime meridian). Guard on the geolocation's presence instead.
     locations = []
     for c in non_discarded:
-        if c.geolocation and c.geolocation.latitude and c.geolocation.longitude:
+        if c.geolocation:
             # Convert UTC time to user's local timezone
             local_time = None
             if c.started_at:
