@@ -14,11 +14,13 @@ import re
 import sys
 import threading
 import time
+import types
 import unittest
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.routing import APIRoute
 
 # ---------------------------------------------------------------------------
 # 1. Structural tests — verify v2 code exists with correct patterns
@@ -1266,6 +1268,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.analytics',
             'utils.byok',
             'utils.cloud_tasks',
+            'utils.multipart',
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
@@ -1296,6 +1299,11 @@ class TestAsyncCoordinatorBehavioral:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        sys.modules['utils'] = types.ModuleType('utils')
+        sys.modules['utils'].__path__ = []
+        sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
+        sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
+        sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
 
@@ -1762,6 +1770,7 @@ class TestV2EndpointExecution:
             'utils.analytics',
             'utils.byok',
             'utils.cloud_tasks',
+            'utils.multipart',
             'utils.conversations',
             'utils.conversations.process_conversation',
             'utils.conversations.factory',
@@ -1792,6 +1801,11 @@ class TestV2EndpointExecution:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
 
+        sys.modules['utils'] = types.ModuleType('utils')
+        sys.modules['utils'].__path__ = []
+        sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
+        sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
+        sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
 
