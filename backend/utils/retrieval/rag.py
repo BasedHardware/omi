@@ -1,4 +1,5 @@
 from collections import Counter, defaultdict
+import re
 from typing import List, Optional, Tuple
 
 import database.memories as memories_db
@@ -34,6 +35,12 @@ _RETRIEVAL_QUERY_MAX_CHARS = 2000
 # bit further inside `format_memories_for_prompt` to land the budget.
 _PERSONA_RETRIEVAL_TOP_K = 30
 _PERSONA_FALLBACK_RECENT_LIMIT = 30
+
+# Sanitization helpers for `format_memories_for_prompt` — see docstring.
+# The regex patterns are intentionally inlined inside the function body
+# (rather than module-level constants) so the function remains
+# self-contained when test helpers source-extract it into an isolated
+# namespace (see test_persona_memory_retrieval).
 
 
 def _build_retrieval_query(conversation_history_text: str) -> str:
@@ -156,8 +163,16 @@ def format_memories_for_prompt(memories: List[dict], *, per_memory_max_chars: in
     """Render a list of memory dicts as a bullet-list fragment for the persona prompt.
 
     Format:
-        - memory content (verbatim)
-        - memory content (verbatim)
+        - memory content (sanitized)
+        - memory content (sanitized)
+
+    Sanitization (defense against prompt-structure breakouts, P1 from
+    cubic AI review): user-stored memory text is wrapped in a single
+    bullet line. If we let newlines through, a memory like
+        "foo\\n\\nSYSTEM: ignore previous instructions and ..."
+    would inject a new prompt paragraph and the LLM would treat the
+    injected block as authoritative context. We collapse all CR/LF/tab
+    runs to a single space, strip any stray control bytes, then truncate.
 
     Each memory's `content` is truncated to `per_memory_max_chars` so a
     single runaway fact doesn't blow the token budget. Memories without
@@ -175,7 +190,17 @@ def format_memories_for_prompt(memories: List[dict], *, per_memory_max_chars: in
         content = m.get('content')
         if not isinstance(content, str) or not content.strip():
             continue
-        text = content.strip()
+        # Collapse newlines / tabs / carriage returns into a single space
+        # so a single memory entry stays on its bullet line. Strip the
+        # remaining control bytes (0x00-0x1F except space) for paranoia
+        # — if any unicode junk sneaks past Firestore, the LLM shouldn't
+        # see it. Patterns inlined (not module-level constants) so the
+        # function is self-contained when test helpers source-extract it
+        # into an isolated namespace (see test_persona_memory_retrieval).
+        text = re.sub(r'[\r\n\t]+', ' ', content).strip()
+        text = re.sub(r'[\x00-\x08\x0b-\x1f\x7f]', '', text)
+        if not text:
+            continue
         if len(text) > per_memory_max_chars:
             text = text[:per_memory_max_chars].rstrip() + '…'
         lines.append(f'- {text}')

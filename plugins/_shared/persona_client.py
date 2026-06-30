@@ -37,6 +37,7 @@ async def chat(
     uid: str,
     timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
     context: Optional[dict] = None,
+    previous_messages: Optional[list] = None,
 ) -> str:
     """POST /v2/integrations/{app_id}/user/persona-chat and return the joined reply.
 
@@ -52,6 +53,14 @@ async def chat(
         timeout_seconds: Total request timeout. On timeout the function returns "".
         context: Optional platform context (sender name, chat title, etc.).
             Forwarded to the persona prompt but not used for retrieval.
+        previous_messages: Optional recent prior turns (oldest first) from
+            the same chat. Each entry is `{'role': 'human'|'ai', 'text': str}`.
+            Truncated client-side to the same caps the backend re-enforces
+            (20 turns / 8192 chars per turn) so an oversized payload doesn't
+            waste bandwidth or hit server-side 422s. Added in T-020; the
+            shared client signature was updated to accept it after cubic
+            caught the crash where plugins passed it as a kwarg and the
+            old signature raised TypeError (P0).
 
     Returns:
         The concatenated persona reply (single string). Empty string on timeout/connect error.
@@ -68,6 +77,22 @@ async def chat(
     body: dict = {"text": text}
     if context:
         body["context"] = context
+    if previous_messages:
+        # Match the server-side cap (routers/integration.py persona_chat_via_integration)
+        # so a chatty buffer doesn't blow the body budget or get a 422. The
+        # server re-validates — this is just to keep payloads small.
+        capped = previous_messages[:20] if isinstance(previous_messages, list) else []
+        body["previous_messages"] = [
+            {
+                "role": str(t.get("role"))[:8],
+                "text": str(t.get("text"))[:8192],
+            }
+            for t in capped
+            if isinstance(t, dict)
+            and t.get("role") in ("human", "ai")
+            and isinstance(t.get("text"), str)
+            and t.get("text")
+        ]
 
     # httpx.Timeout sets per-phase timeouts (connect/read/write/pool) — it does
     # NOT enforce a wall-clock deadline. For SSE streams the read timeout resets

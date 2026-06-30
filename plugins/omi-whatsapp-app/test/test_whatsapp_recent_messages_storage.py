@@ -45,13 +45,13 @@ def _isolated_storage(tmp_path, monkeypatch):
     yield
 
 
-def _make_user(phone='+15550000001'):
+def _make_user(phone='+15550000001', persona='persona-1', uid='uid-1'):
     """Insert a minimal user record so we can exercise the buffer."""
     mod = load_simple_storage()
     mod.save_user(
         phone=phone,
-        omi_uid='uid-1',
-        persona_id='persona-1',
+        omi_uid=uid,
+        persona_id=persona,
         omi_dev_api_key='dev-key',
         access_token='access-token',
         phone_number_id='phone-id-1',
@@ -154,6 +154,107 @@ class TestClearRecentMessages:
         mod = load_simple_storage()
         # Should not raise — caller might pass a stale phone.
         mod.clear_recent_messages('+19990000000')
+
+
+class TestRebindWipesHistory:
+    """P1 from cubic AI review: rebinding a phone to a different persona
+    or omi_uid MUST wipe the previous owner's history. Same shape as the
+    Telegram plugin's TestRebindWipesHistory."""
+
+    def test_rebind_to_different_persona_wipes_history(self):
+        _make_user('+15550000001', persona='persona-A', uid='uid-A')
+        mod = load_simple_storage()
+        mod.append_message('+15550000001', 'human', 'alice told bob a secret')
+        mod.append_message('+15550000001', 'ai', 'ack secret')
+        assert len(mod.get_recent_messages('+15550000001')) == 2
+
+        mod.save_user(
+            phone='+15550000001',
+            omi_uid='uid-A',
+            persona_id='persona-B',
+            omi_dev_api_key='dev-key',
+            access_token='access-token',
+            phone_number_id='phone-id-1',
+            verify_token='verify-token-1',
+            auto_reply_enabled=True,
+        )
+        assert mod.get_recent_messages('+15550000001') == []
+
+    def test_rebind_to_different_uid_wipes_history(self):
+        _make_user('+15550000001', persona='persona-X', uid='uid-X')
+        mod = load_simple_storage()
+        mod.append_message('+15550000001', 'human', 'leaky message')
+        mod.append_message('+15550000001', 'ai', 'leaky reply')
+        assert len(mod.get_recent_messages('+15550000001')) == 2
+
+        mod.save_user(
+            phone='+15550000001',
+            omi_uid='uid-Y',
+            persona_id='persona-X',
+            omi_dev_api_key='dev-key',
+            access_token='access-token',
+            phone_number_id='phone-id-1',
+            verify_token='verify-token-1',
+            auto_reply_enabled=True,
+        )
+        assert mod.get_recent_messages('+15550000001') == []
+
+    def test_same_identity_re_save_preserves_history(self):
+        _make_user('+15550000001', persona='persona-X', uid='uid-X')
+        mod = load_simple_storage()
+        mod.append_message('+15550000001', 'human', 'keep me')
+        mod.append_message('+15550000001', 'ai', 'kept')
+
+        mod.save_user(
+            phone='+15550000001',
+            omi_uid='uid-X',
+            persona_id='persona-X',
+            omi_dev_api_key='dev-key',
+            access_token='access-token',
+            phone_number_id='phone-id-1',
+            verify_token='verify-token-1',
+            auto_reply_enabled=False,
+        )
+        assert len(mod.get_recent_messages('+15550000001')) == 2
+
+
+class TestAppendTurnAtomic:
+    """P2 from cubic AI review: append_turn commits both halves of a
+    turn in a single save so a crash between writes can't persist a
+    half-turn."""
+
+    def test_human_and_ai_land_together(self):
+        _make_user('+15550000001')
+        mod = load_simple_storage()
+        mod.append_turn('+15550000001', human_text='hello', ai_text='hi back')
+        msgs = mod.get_recent_messages('+15550000001')
+        assert len(msgs) == 2
+        assert msgs[0]['role'] == 'human'
+        assert msgs[0]['text'] == 'hello'
+        assert msgs[1]['role'] == 'ai'
+        assert msgs[1]['text'] == 'hi back'
+
+    def test_empty_ai_text_no_op(self):
+        _make_user('+15550000001')
+        mod = load_simple_storage()
+        mod.append_turn('+15550000001', human_text='hello', ai_text='')
+        assert mod.get_recent_messages('+15550000001') == []
+
+
+class TestGetReturnsDeepCopy:
+    """P2 from cubic AI review: verify deep-copy semantics for the
+    returned recent-messages list."""
+
+    def test_mutating_nested_dict_does_not_affect_storage(self):
+        _make_user('+15550000001')
+        mod = load_simple_storage()
+        mod.append_message('+15550000001', 'human', 'keep me safe')
+        msgs = mod.get_recent_messages('+15550000001')
+        msgs[0]['text'] = 'MUTATED'
+        msgs[0]['role'] = 'system'
+        fresh = mod.get_recent_messages('+15550000001')
+        assert fresh[0]['text'] == 'keep me safe'
+        assert fresh[0]['role'] == 'human'
 
 
 class TestPerPhoneIsolation:

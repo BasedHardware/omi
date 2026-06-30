@@ -10,6 +10,7 @@ Two stores:
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -18,9 +19,21 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
-if os.path.exists("/app/data"):
+# STORAGE_DIR resolution (P1 from cubic AI review on tests): the env var
+# must win over the Docker-default `/app/data` so test fixtures can use
+# `monkeypatch.setenv('STORAGE_DIR', tmp_path)` to isolate storage. The
+# previous order unconditionally overrode STORAGE_DIR whenever
+# `/app/data` existed — fine in production, but it broke test isolation
+# any time the test environment happened to have that path mounted.
+# Order: explicit env > /app/data (Docker production) > this file's dir
+# (local dev fallback).
+_explicit_storage_dir = os.getenv("STORAGE_DIR")
+if _explicit_storage_dir:
+    STORAGE_DIR = _explicit_storage_dir
+elif os.path.exists("/app/data"):
     STORAGE_DIR = "/app/data"
+else:
+    STORAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 USERS_FILE = os.path.join(STORAGE_DIR, "users_data.json")
 PENDING_FILE = os.path.join(STORAGE_DIR, "pending_setups.json")
@@ -96,6 +109,14 @@ def save_user(
     bot_username: str = "",
 ) -> None:
     existing = users.get(chat_id, {})
+    # Cross-identity history leak (P1 from cubic AI review): if the chat
+    # is being rebound to a DIFFERENT persona or omi_uid, the previous
+    # owner's conversation history MUST NOT carry over — that would let
+    # user A's chat history leak into user B's persona prompt. Wipe on
+    # any identity change; only preserve the buffer across re-saves of
+    # the same persona (e.g., token rotation, nudge cooldown updates).
+    same_identity = existing.get("omi_uid") == omi_uid and existing.get("persona_id") == persona_id
+    preserved_history = list(existing.get("recent_messages", [])) if same_identity else []
     users[chat_id] = {
         "chat_id": chat_id,
         "omi_uid": omi_uid,
@@ -112,8 +133,10 @@ def save_user(
         # T-020: ring buffer of recent conversation turns, oldest first.
         # Pre-seeded as empty list on user-create so callers don't need to
         # handle the missing-key case. Appended to on every persona dispatch
-        # and trimmed to CHAT_HISTORY_MAX by append_message().
-        "recent_messages": list(existing.get("recent_messages", [])),
+        # and trimmed to CHAT_HISTORY_MAX by append_message(). Wiped on
+        # identity change above so a rebound chat doesn't inherit the old
+        # owner's turns.
+        "recent_messages": preserved_history,
     }
     _save(USERS_FILE, users)
 
@@ -256,13 +279,16 @@ def get_recent_messages(chat_id: str) -> list[dict]:
 
     Returns [] if the chat isn't bound, the user record has no
     recent_messages key (legacy data from before T-020), or the buffer
-    is empty. The returned list is a copy — mutating it does not change
-    what's persisted; use append_message() for that.
+    is empty. The returned list is a deep copy — mutating it (or any
+    nested dict / str inside it) does not change what's persisted;
+    use append_message() for that. (P2 from cubic AI review: shallow
+    list() copies silently corrupt stored history when callers mutate
+    nested fields.)
     """
     user = users.get(str(chat_id))
     if user is None:
         return []
-    return list(user.get("recent_messages", []))
+    return copy.deepcopy(user.get("recent_messages", []))
 
 
 def append_message(chat_id: str, role: str, text: str) -> None:
@@ -279,6 +305,14 @@ def append_message(chat_id: str, role: str, text: str) -> None:
     No-op (with a warning) if the chat_id isn't bound — append_message
     shouldn't be called before the /start handshake, but if it is, we'd
     rather log and continue than raise into the webhook.
+
+    Atomic-turn save (P2 from cubic AI review): the webhook handler calls
+    append_message twice per reply (human + ai). The first call writes
+    to disk; if the second call crashes / SIGTERMs / fails to write
+    between them, we persist a half-turn that the persona will see on
+    the next dispatch. To prevent that, callers should pass both turns
+    via append_turn() instead. This function remains for the legacy
+    single-append callers and writes immediately.
     """
     user = users.get(str(chat_id))
     if user is None:
@@ -295,6 +329,41 @@ def append_message(chat_id: str, role: str, text: str) -> None:
     if len(history) > CHAT_HISTORY_MAX:
         user["recent_messages"] = history[-CHAT_HISTORY_MAX:]
     user["updated_at"] = datetime.utcnow().isoformat()
+    _save(USERS_FILE, users)
+
+
+def append_turn(chat_id: str, *, human_text: str, ai_text: str) -> None:
+    """Append a complete human→ai turn atomically in a single save.
+
+    P2 from cubic AI review: the webhook calls append_message twice per
+    reply (once for the inbound text, once for the persona reply). With
+    separate calls, a crash / SIGTERM / disk-full between the two writes
+    leaves the buffer with a half-turn (human with no matching ai),
+    which the persona then sees on the next dispatch and may treat as a
+    prompt to "answer". This helper appends BOTH entries and persists
+    exactly once, so either both land or neither does.
+
+    No-op (with a warning) on invalid input or unknown chat_id; same
+    contract as append_message.
+    """
+    user = users.get(str(chat_id))
+    if user is None:
+        logger.warning(f"append_turn: unknown chat_id {chat_id!r}, ignoring")
+        return
+    if not isinstance(human_text, str) or not human_text:
+        return
+    if not isinstance(ai_text, str) or not ai_text:
+        # Refuse to persist a half-turn even when called via the atomic
+        # helper. Caller must invoke append_message directly for an
+        # ai-only / human-only update.
+        return
+    now = datetime.utcnow().isoformat()
+    history = user.setdefault("recent_messages", [])
+    history.append({"role": "human", "text": human_text, "ts": now})
+    history.append({"role": "ai", "text": ai_text, "ts": now})
+    if len(history) > CHAT_HISTORY_MAX:
+        user["recent_messages"] = history[-CHAT_HISTORY_MAX:]
+    user["updated_at"] = now
     _save(USERS_FILE, users)
 
 

@@ -253,6 +253,44 @@ class TestPersonaChatRequest:
         with pytest.raises(ValidationError):
             PersonaChatRequest()  # type: ignore[call-arg]
 
+    def test_rejects_oversized_previous_messages(self):
+        """P2 from cubic AI review: Pydantic should reject more than 20
+        previous_messages entries at parse time, not after reading the
+        full body into memory."""
+        from pydantic import ValidationError
+
+        from models.integrations import PersonaChatRequest
+
+        big = [{'role': 'human', 'text': f'msg-{i}'} for i in range(50)]
+        with pytest.raises(ValidationError):
+            PersonaChatRequest(text='hello', previous_messages=big)
+
+    def test_caps_previous_message_text_length(self):
+        """P2 from cubic AI review: Pydantic should truncate an
+        oversized turn.text to 8192 chars (matching the server-side cap)
+        rather than reject the whole request. Clients occasionally send
+        a single huge turn and we don't want them to hard-fail."""
+        from models.integrations import PersonaChatRequest
+
+        huge_text = 'x' * 100_000
+        req = PersonaChatRequest(
+            text='hello',
+            previous_messages=[{'role': 'human', 'text': huge_text}],
+        )
+        assert len(req.previous_messages[0]['text']) == 8192
+
+    def test_rejects_oversized_context(self):
+        """P2 from cubic AI review: Pydantic should reject a context
+        dict with more than the recognized 5 keys (sender_name /
+        sender_username / chat_type / platform / 1 spare)."""
+        from pydantic import ValidationError
+
+        from models.integrations import PersonaChatRequest
+
+        too_many_keys = {f'k{i}': 'v' for i in range(10)}
+        with pytest.raises(ValidationError):
+            PersonaChatRequest(text='hello', context=too_many_keys)
+
 
 # ---------------------------------------------------------------------------
 # 3. Endpoint behavior

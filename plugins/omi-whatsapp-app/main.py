@@ -325,6 +325,13 @@ async def _handle_inbound_message(msg: dict, contacts: Optional[list] = None) ->
                 if isinstance(profile.get("name"), str) and profile["name"].strip():
                     sender_name = profile["name"].strip()
                 break
+    # Doc-vs-code mismatch (P2 from cubic AI review): when Meta omits
+    # `contacts` (common for unsaved numbers) or the contact lacks a
+    # profile name, we promised the persona "at least the phone number"
+    # so it knows who it's talking to. Fall back to the wa_id rather
+    # than sending the inbound message with no sender identity at all.
+    if not sender_name:
+        sender_name = str(from_phone)
 
     await _dispatch_auto_reply(user, str(from_phone), text, sender_name=sender_name)
 
@@ -490,8 +497,9 @@ async def _dispatch_auto_reply(user: dict, phone: str, text: str, sender_name: O
 
     # T-020: record both sides of the exchange AFTER successful send so a
     # mid-flight failure doesn't poison subsequent context with a half-turn.
-    simple_storage.append_message(phone, "human", text)
-    simple_storage.append_message(phone, "ai", reply)
+    # Use append_turn (atomic — single fsync) so a crash between the two
+    # writes can't persist a human-without-ai or ai-without-human entry.
+    simple_storage.append_turn(phone, human_text=text, ai_text=reply)
 
 
 # ---------------------------------------------------------------------------

@@ -43,14 +43,14 @@ def _isolated_storage(tmp_path, monkeypatch):
     yield
 
 
-def _make_user(chat_id='42'):
+def _make_user(chat_id='42', persona='persona-1', uid='uid-1'):
     """Insert a minimal user record so we can exercise the buffer."""
     import simple_storage
 
     simple_storage.save_user(
         chat_id=chat_id,
-        omi_uid='uid-1',
-        persona_id='persona-1',
+        omi_uid=uid,
+        persona_id=persona,
         omi_dev_api_key='dev-key',
         bot_token='bot-token',
         auto_reply_enabled=True,
@@ -165,6 +165,139 @@ class TestClearRecentMessages:
 
         # Should not raise — caller might pass a stale chat_id.
         simple_storage.clear_recent_messages('999')
+
+
+class TestRebindWipesHistory:
+    """P1 from cubic AI review: rebinding a chat to a different persona
+    or omi_uid MUST wipe the previous owner's history. Without this,
+    user A's chat history would silently leak into user B's persona
+    prompt on a re-bind."""
+
+    def test_rebind_to_different_persona_wipes_history(self):
+        import simple_storage
+
+        _make_user('42', persona='persona-A', uid='uid-A')
+        simple_storage.append_message('42', 'human', 'alice told bob a secret')
+        simple_storage.append_message('42', 'ai', 'ack secret')
+        assert len(simple_storage.get_recent_messages('42')) == 2
+
+        # Rebind to a different persona (same omi_uid is fine — the
+        # existing user record would be carried forward, but we expect
+        # the persona change to trigger a wipe).
+        simple_storage.save_user(
+            chat_id='42',
+            omi_uid='uid-A',
+            persona_id='persona-B',
+            omi_dev_api_key='dev-key',
+            bot_token='bot-token',
+            auto_reply_enabled=True,
+        )
+        assert simple_storage.get_recent_messages('42') == []
+
+    def test_rebind_to_different_uid_wipes_history(self):
+        import simple_storage
+
+        _make_user('42', persona='persona-X', uid='uid-X')
+        simple_storage.append_message('42', 'human', 'leaky message')
+        simple_storage.append_message('42', 'ai', 'leaky reply')
+        assert len(simple_storage.get_recent_messages('42')) == 2
+
+        simple_storage.save_user(
+            chat_id='42',
+            omi_uid='uid-Y',
+            persona_id='persona-X',
+            omi_dev_api_key='dev-key',
+            bot_token='bot-token',
+            auto_reply_enabled=True,
+        )
+        assert simple_storage.get_recent_messages('42') == []
+
+    def test_same_identity_re_save_preserves_history(self):
+        """Re-saving the same chat (e.g., token rotation, nudge update)
+        MUST NOT wipe the buffer — that would erase legitimate context."""
+        import simple_storage
+
+        _make_user('42', persona='persona-X', uid='uid-X')
+        simple_storage.append_message('42', 'human', 'keep me')
+        simple_storage.append_message('42', 'ai', 'kept')
+
+        simple_storage.save_user(
+            chat_id='42',
+            omi_uid='uid-X',
+            persona_id='persona-X',
+            omi_dev_api_key='dev-key',
+            bot_token='bot-token',
+            auto_reply_enabled=False,
+        )
+        assert len(simple_storage.get_recent_messages('42')) == 2
+
+
+class TestAppendTurnAtomic:
+    """P2 from cubic AI review: appending both halves of a turn via two
+    separate append_message() calls risks persisting a half-turn on
+    crash. append_turn() commits both entries in a single save so they
+    land together or not at all."""
+
+    def test_human_and_ai_land_together(self):
+        import simple_storage
+
+        _make_user('42')
+        simple_storage.append_turn('42', human_text='hello', ai_text='hi back')
+        msgs = simple_storage.get_recent_messages('42')
+        assert len(msgs) == 2
+        assert msgs[0]['role'] == 'human'
+        assert msgs[0]['text'] == 'hello'
+        assert msgs[1]['role'] == 'ai'
+        assert msgs[1]['text'] == 'hi back'
+
+    def test_empty_ai_text_no_op(self):
+        """append_turn refuses to persist a half-turn even when called
+        via the atomic helper. Both human and ai must be non-empty."""
+        import simple_storage
+
+        _make_user('42')
+        simple_storage.append_turn('42', human_text='hello', ai_text='')
+        assert simple_storage.get_recent_messages('42') == []
+
+    def test_empty_human_text_no_op(self):
+        import simple_storage
+
+        _make_user('42')
+        simple_storage.append_turn('42', human_text='', ai_text='hi')
+        assert simple_storage.get_recent_messages('42') == []
+
+
+class TestGetReturnsDeepCopy:
+    """P2 from cubic AI review: the previous shallow list() copy let
+    callers mutate nested fields and silently corrupt the stored
+    history. Verify deep-copy semantics."""
+
+    def test_mutating_returned_list_does_not_affect_storage(self):
+        import simple_storage
+
+        _make_user('42')
+        simple_storage.append_message('42', 'human', 'keep me safe')
+        msgs = simple_storage.get_recent_messages('42')
+        original_ts = msgs[0]['ts']
+        msgs.clear()
+        # Storage still has the entry — a deep copy means clearing the
+        # returned list leaves the in-memory dict intact.
+        fresh = simple_storage.get_recent_messages('42')
+        assert len(fresh) == 1
+        assert fresh[0] == {'role': 'human', 'text': 'keep me safe', 'ts': original_ts}
+
+    def test_mutating_nested_dict_does_not_affect_storage(self):
+        import simple_storage
+
+        _make_user('42')
+        simple_storage.append_message('42', 'human', 'keep me safe')
+        msgs = simple_storage.get_recent_messages('42')
+        msgs[0]['text'] = 'MUTATED'
+        msgs[0]['role'] = 'system'
+        # Re-read; should still see the original.
+        fresh = simple_storage.get_recent_messages('42')
+        assert fresh[0]['text'] == 'keep me safe'
+        assert fresh[0]['role'] == 'human'
 
 
 class TestPerChatIsolation:

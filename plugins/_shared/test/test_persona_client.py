@@ -227,6 +227,75 @@ class TestChatSuccess:
         call_kwargs = client.stream.call_args.kwargs
         assert call_kwargs["json"] == {"text": "what's the weather?"}
 
+    @pytest.mark.asyncio
+    async def test_accepts_previous_messages_kwarg(self):
+        """P0 from cubic AI review: the shared `chat()` signature must
+        accept `previous_messages=`. Otherwise the Telegram / WhatsApp
+        plugins — which pass this kwarg — raise TypeError and crash the
+        webhook on every auto-reply."""
+        resp = _sse_response(["ok"])
+        client = _mock_async_client_post(resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            reply = await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+                uid="u-1",
+                previous_messages=[
+                    {"role": "human", "text": "earlier message"},
+                    {"role": "ai", "text": "earlier reply"},
+                ],
+            )
+
+        assert reply == "ok"
+        sent_body = client.stream.call_args.kwargs["json"]
+        assert sent_body["previous_messages"] == [
+            {"role": "human", "text": "earlier message"},
+            {"role": "ai", "text": "earlier reply"},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_caps_previous_messages_at_20(self):
+        """Belt-and-suspenders match for the server-side cap
+        (routers/integration.persona_chat_via_integration slices to 20)."""
+        resp = _sse_response(["ok"])
+        client = _mock_async_client_post(resp)
+
+        msgs = [{"role": "human", "text": f"msg-{i}"} for i in range(50)]
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+                uid="u-1",
+                previous_messages=msgs,
+            )
+
+        sent = client.stream.call_args.kwargs["json"]["previous_messages"]
+        assert len(sent) == 20
+
+    @pytest.mark.asyncio
+    async def test_caps_previous_message_text_at_8192(self):
+        resp = _sse_response(["ok"])
+        client = _mock_async_client_post(resp)
+
+        with patch("persona_client.httpx.AsyncClient", return_value=client):
+            await persona_client.chat(
+                app_id="app-1",
+                api_key="k",
+                omi_base="https://api.omi.me",
+                text="hi",
+                uid="u-1",
+                previous_messages=[{"role": "human", "text": "x" * 100_000}],
+            )
+
+        sent = client.stream.call_args.kwargs["json"]["previous_messages"]
+        assert len(sent[0]["text"]) == 8192
+
 
 # ---------------------------------------------------------------------------
 # 2. SSE edge cases

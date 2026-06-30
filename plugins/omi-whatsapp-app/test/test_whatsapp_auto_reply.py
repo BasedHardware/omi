@@ -93,9 +93,83 @@ def _meta_message(from_phone, text):
     }
 
 
+def _meta_message_with_profile(from_phone, text, profile_name):
+    """Like _meta_message but also attaches a contacts[] entry with a
+    profile name so the dispatcher can look up sender_name."""
+    msg = _meta_message(from_phone, text)
+    msg["entry"][0]["changes"][0]["value"]["contacts"] = [
+        {"wa_id": from_phone, "profile": {"name": profile_name}},
+    ]
+    return msg
+
+
+def _meta_message_no_contacts(from_phone, text):
+    """Like _meta_message but WITHOUT a contacts[] entry — the common
+    case for unsaved numbers. The dispatcher must fall back to the
+    phone number as sender_name rather than sending the message with
+    no sender identity."""
+    msg = _meta_message(from_phone, text)
+    msg["entry"][0]["changes"][0]["value"]["contacts"] = []
+    return msg
+
+
 # ---------------------------------------------------------------------------
 # Happy path: persona returns text \u2192 reply sent
 # ---------------------------------------------------------------------------
+class TestSenderNameFallback:
+    """P2 from cubic AI review: when Meta omits `contacts` (common for
+    unsaved numbers) or the contact lacks a profile name, the
+    dispatcher's docstring promises "we just send the phone number as
+    the sender_name". Without this fallback the persona receives no
+    sender identity at all."""
+
+    def _capture_persona_kwargs(self):
+        """Helper: patch _persona_chat to capture its kwargs."""
+        captured = {}
+
+        async def fake(**kwargs):
+            captured.update(kwargs)
+            return "ok"
+
+        return captured, fake
+
+    def test_contacts_with_profile_passes_profile_name(self, client):
+        _seed_user()
+        captured, fake = self._capture_persona_kwargs()
+        mock_send = AsyncMock(return_value={})
+        with patch.object(main, "_persona_chat", new=AsyncMock(side_effect=fake)):
+            with patch("main.whatsapp_client.send_message", new=mock_send):
+                client.post("/webhook", json=_meta_message_with_profile("15550001111", "hi", "Alice"))
+        assert captured["context"]["sender_name"] == "Alice"
+
+    def test_no_contacts_falls_back_to_phone(self, client):
+        _seed_user()
+        captured, fake = self._capture_persona_kwargs()
+        mock_send = AsyncMock(return_value={})
+        with patch.object(main, "_persona_chat", new=AsyncMock(side_effect=fake)):
+            with patch("main.whatsapp_client.send_message", new=mock_send):
+                client.post("/webhook", json=_meta_message_no_contacts("15550001111", "hi"))
+        # Phone-as-sender_name so the persona still has a sender identity.
+        assert captured["context"]["sender_name"] == "15550001111"
+        assert captured["context"]["platform"] == "whatsapp"
+        assert captured["context"]["chat_type"] == "private"
+
+    def test_contacts_without_profile_falls_back_to_phone(self, client):
+        """A contact with no profile.name (rare but possible) should also
+        fall back to the phone, not send an empty sender_name."""
+        _seed_user()
+        msg = _meta_message("15550001111", "hi")
+        msg["entry"][0]["changes"][0]["value"]["contacts"] = [
+            {"wa_id": "15550001111", "profile": {}},
+        ]
+        captured, fake = self._capture_persona_kwargs()
+        mock_send = AsyncMock(return_value={})
+        with patch.object(main, "_persona_chat", new=AsyncMock(side_effect=fake)):
+            with patch("main.whatsapp_client.send_message", new=mock_send):
+                client.post("/webhook", json=msg)
+        assert captured["context"]["sender_name"] == "15550001111"
+
+
 class TestAutoReplyHappyPath:
     def test_persona_returns_text_sends_reply(self, client):
         _seed_user()

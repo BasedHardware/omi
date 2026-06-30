@@ -1,9 +1,21 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone
 
 from models.memories import MemoryCategory, MemoryDB
+
+# Bounds for PersonaChatRequest.context / PersonaChatRequest.previous_messages.
+# These mirror the server-side caps enforced in
+# `routers/integration.persona_chat_via_integration` (20 turns, 8192 chars
+# per turn, ~500 chars per recognized context key). Putting them at the
+# Pydantic layer (P2 from cubic AI review) rejects oversized payloads at
+# parse time instead of after a full JSON body has already been read into
+# memory — defense against accidental 100MB bodies from a buggy client.
+_PERSONA_CONTEXT_MAX_KEYS = 5
+_PERSONA_CONTEXT_VALUE_MAX_CHARS = 200
+_PERSONA_PREVIOUS_MESSAGES_MAX_ITEMS = 20
+_PERSONA_PREVIOUS_MESSAGE_TEXT_MAX_CHARS = 8192
 
 
 class ConversationTimestampRange(BaseModel):
@@ -83,6 +95,7 @@ class PersonaChatRequest(BaseModel):
             "platform ('telegram'|'whatsapp'|'imessage'). Unknown keys are "
             "preserved verbatim — the renderer ignores them."
         ),
+        max_length=_PERSONA_CONTEXT_MAX_KEYS,
     )
 
     previous_messages: Optional[List[dict]] = Field(
@@ -94,7 +107,42 @@ class PersonaChatRequest(BaseModel):
             "'text' HumanMessage. Capped at 20 entries server-side; per-text "
             "length capped at 8192 to mirror the inbound text limit."
         ),
+        max_length=_PERSONA_PREVIOUS_MESSAGES_MAX_ITEMS,
     )
+
+    @field_validator('context')
+    @classmethod
+    def _cap_context_values(cls, v: Optional[dict]) -> Optional[dict]:
+        # Pydantic's `max_length` checks the number of keys (Dict allows
+        # arbitrary types). We additionally cap each value's serialized
+        # length to keep an oversized sender_name etc. from filling
+        # memory before the server re-truncates.
+        if v is None:
+            return v
+        capped: dict = {}
+        for k, val in v.items():
+            if isinstance(val, str) and len(val) > _PERSONA_CONTEXT_VALUE_MAX_CHARS:
+                capped[k] = val[:_PERSONA_CONTEXT_VALUE_MAX_CHARS]
+            else:
+                capped[k] = val
+        return capped
+
+    @field_validator('previous_messages')
+    @classmethod
+    def _cap_previous_message_text(cls, v: Optional[List[dict]]) -> Optional[List[dict]]:
+        if v is None:
+            return v
+        # Mirror the server-side cap (text per turn) so a chatty buffer
+        # doesn't blow the request body budget.
+        capped: List[dict] = []
+        for turn in v:
+            if not isinstance(turn, dict):
+                continue
+            text = turn.get('text')
+            if isinstance(text, str) and len(text) > _PERSONA_PREVIOUS_MESSAGE_TEXT_MAX_CHARS:
+                turn = {**turn, 'text': text[:_PERSONA_PREVIOUS_MESSAGE_TEXT_MAX_CHARS]}
+            capped.append(turn)
+        return capped
 
 
 class ConversationCreateResponse(BaseModel):

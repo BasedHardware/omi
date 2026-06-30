@@ -526,10 +526,9 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str, sender: Opti
 
     # T-020: record both sides of the exchange AFTER successful send so a
     # mid-flight failure doesn't poison subsequent context with a half-turn.
-    # Order matters: human turn first, then ai turn, so the buffer stays in
-    # chronological order without re-sorting.
-    simple_storage.append_message(chat_id, "human", text)
-    simple_storage.append_message(chat_id, "ai", reply)
+    # Use append_turn (atomic — single fsync) so a crash between the two
+    # writes can't persist a human-without-ai or ai-without-human entry.
+    simple_storage.append_turn(chat_id, human_text=text, ai_text=reply)
 
 
 # ---------------------------------------------------------------------------
