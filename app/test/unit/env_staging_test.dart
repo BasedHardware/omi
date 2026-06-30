@@ -7,9 +7,6 @@ class _StagingEnvFields implements EnvFields {
   @override
   String? get stagingApiUrl => 'https://staging.omiapi.com/';
 
-  @override
-  String? get openAIAPIKey => null;
-  @override
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => 'https://api.prod.example.com/';
@@ -23,9 +20,6 @@ class _StagingEnvFields implements EnvFields {
   String? get intercomAndroidApiKey => null;
   @override
   String? get googleClientId => null;
-  @override
-  String? get googleClientSecret => null;
-  @override
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;

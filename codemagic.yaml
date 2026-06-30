@@ -82,7 +82,6 @@ workflows:
 
       - name: Set up App .env
         script: |
-          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
@@ -92,7 +91,6 @@ workflows:
           echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
-          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
@@ -336,7 +334,6 @@ workflows:
 
       - name: Set up App .env
         script: |
-          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
@@ -346,7 +343,6 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
-          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
@@ -530,7 +526,6 @@ workflows:
 
       - name: Set up App .env
         script: |
-          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
@@ -540,7 +535,6 @@ workflows:
           echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
-          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
@@ -709,7 +703,6 @@ workflows:
 
       - name: Set up App .env
         script: |
-          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
@@ -719,7 +712,6 @@ workflows:
           echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
-          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
@@ -948,7 +940,6 @@ workflows:
 
       - name: Set up App .env
         script: |
-          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
@@ -958,7 +949,6 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
-          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
@@ -1089,7 +1079,6 @@ workflows:
 
       - name: Set up App .env
         script: |
-          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
@@ -1099,7 +1088,6 @@ workflows:
           echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
-          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Set up Google Service Info
@@ -1202,7 +1190,6 @@ workflows:
 
       - name: Set up App .env
         script: |
-          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
@@ -1212,7 +1199,6 @@ workflows:
           echo INTERCOM_IOS_API_KEY=$INTERCOM_IOS_API_KEY >> .env
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
-          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
           echo GEMINI_API_KEY=$GEMINI_API_KEY >> .env
 
@@ -1869,7 +1855,6 @@ workflows:
 
       - name: Set up App .env
         script: |
-          echo OPENAI_API_KEY=$OPENAI_API_KEY >> .env
           echo INSTABUG_API_KEY=$INSTABUG_API_KEY >> .env
           echo ONESIGNAL_APP_ID=$ONESIGNAL_APP_ID >> .env
           echo API_BASE_URL=$API_BASE_URL >> .env
@@ -1879,7 +1864,6 @@ workflows:
           echo INTERCOM_ANDROID_API_KEY=$INTERCOM_ANDROID_API_KEY >> .env
           echo POSTHOG_API_KEY=$POSTHOG_API_KEY >> .env
           echo GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID >> .env
-          echo GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET >> .env
           echo STAGING_API_URL=$STAGING_API_URL >> .env
 
       - name: Get Flutter packages
@@ -1947,7 +1931,7 @@ workflows:
   #   (mapped to DEEPGRAM_API_KEY, ANTHROPIC_API_KEY, GOOGLE_CALENDAR_API_KEY inside the container)
   #
   # Re-uses from existing groups:
-  #   app_env:            GEMINI_API_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+  #   app_env:            GEMINI_API_KEY, GOOGLE_CLIENT_ID
   #   appstore_credentials: APP_STORE_CONNECT_PRIVATE_KEY, APP_STORE_CONNECT_KEY_IDENTIFIER,
   #                         APP_STORE_CONNECT_ISSUER_ID (notarization),
   #                         MACOS_DEVELOPER_ID_P12 — base64 .p12 (Developer ID Application: Based Hardware INC 9536L8KLMP)

@@ -9,10 +9,6 @@ final class ProdEnv implements EnvFields {
   ProdEnv();
 
   @override
-  @EnviedField(varName: 'OPENAI_API_KEY', obfuscate: true)
-  final String? openAIAPIKey = _ProdEnv.openAIAPIKey;
-
-  @override
   @EnviedField(varName: 'POSTHOG_API_KEY', obfuscate: true)
   final String? posthogApiKey = _ProdEnv.posthogApiKey;
 
@@ -39,10 +35,6 @@ final class ProdEnv implements EnvFields {
   @override
   @EnviedField(varName: 'GOOGLE_CLIENT_ID', obfuscate: true)
   final String? googleClientId = _ProdEnv.googleClientId;
-
-  @override
-  @EnviedField(varName: 'GOOGLE_CLIENT_SECRET', obfuscate: true)
-  final String? googleClientSecret = _ProdEnv.googleClientSecret;
 
   @override
   @EnviedField(varName: 'USE_WEB_AUTH', obfuscate: false, defaultValue: false)

@@ -84,9 +84,6 @@ BtDevice _device({required String id, required DeviceType type, String name = 'T
 /// Minimal EnvFields stub so Env-backed code paths (e.g. native BLE stream
 /// config reading Env.apiBaseUrl) don't hit a LateInitializationError.
 class _TestEnvFields implements EnvFields {
-  @override
-  String? get openAIAPIKey => null;
-  @override
   String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => null;
@@ -100,9 +97,6 @@ class _TestEnvFields implements EnvFields {
   String? get intercomAndroidApiKey => null;
   @override
   String? get googleClientId => null;
-  @override
-  String? get googleClientSecret => null;
-  @override
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;
