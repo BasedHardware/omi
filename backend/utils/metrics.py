@@ -32,6 +32,12 @@ LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     ['feature', 'outcome', 'reason'],
 )
 
+LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
+    'llm_gateway_chat_extraction_comparisons_total',
+    'Privacy-safe comparison buckets between shadow gateway output and legacy extraction output',
+    ['feature', 'field', 'outcome'],
+)
+
 
 def metrics_response() -> Response:
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)

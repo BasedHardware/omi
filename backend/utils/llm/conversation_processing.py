@@ -1,5 +1,6 @@
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 from typing import List, Optional, Tuple
 
@@ -12,11 +13,12 @@ from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
-from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
+from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction, StructuredExtraction
 from .clients import get_llm, parser
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import invoke_chat_structured_gateway, record_chat_extraction_gateway_result
 from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
+from utils.metrics import LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS
 import logging
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,99 @@ def _coerce_structured(response: Structured | StructuredExtraction) -> Structure
     if isinstance(response, StructuredExtraction):
         return response.to_structured()
     return response
+
+
+def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
+    try:
+        LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS.labels(feature=feature, field=field, outcome=outcome).inc()
+    except Exception:
+        pass
+
+
+def _normalized_text(value: object) -> str:
+    if value is None:
+        return ''
+    return ' '.join(str(value).casefold().split())
+
+
+def _text_similarity_bucket(left: object, right: object) -> str:
+    normalized_left = _normalized_text(left)
+    normalized_right = _normalized_text(right)
+    if not normalized_left and not normalized_right:
+        return 'both_empty'
+    if not normalized_left:
+        return 'legacy_empty_gateway_present'
+    if not normalized_right:
+        return 'legacy_present_gateway_empty'
+    if normalized_left == normalized_right:
+        return 'exact_match'
+    ratio = SequenceMatcher(None, normalized_left, normalized_right).ratio()
+    if ratio >= 0.85:
+        return 'high_similarity'
+    if ratio >= 0.60:
+        return 'medium_similarity'
+    return 'low_similarity'
+
+
+def _length_ratio_bucket(left: object, right: object) -> str:
+    normalized_left = _normalized_text(left)
+    normalized_right = _normalized_text(right)
+    left_len = len(normalized_left)
+    right_len = len(normalized_right)
+    if left_len == 0 and right_len == 0:
+        return 'both_empty'
+    if left_len == 0:
+        return 'legacy_empty_gateway_present'
+    if right_len == 0:
+        return 'legacy_present_gateway_empty'
+    ratio = right_len / left_len
+    if ratio < 0.5:
+        return 'gateway_much_shorter'
+    if ratio < 0.8:
+        return 'gateway_shorter'
+    if ratio <= 1.25:
+        return 'similar_length'
+    if ratio <= 2.0:
+        return 'gateway_longer'
+    return 'gateway_much_longer'
+
+
+def _record_conversation_structure_shadow_comparison(
+    gateway_response: ConversationStructureExtraction | None,
+    legacy_response: Structured,
+) -> None:
+    if gateway_response is None:
+        return
+
+    feature = 'conversation_structure.extract.shadow'
+    legacy_category = getattr(legacy_response.category, 'value', legacy_response.category)
+    gateway_category = getattr(gateway_response.category, 'value', gateway_response.category)
+
+    _record_chat_extraction_comparison(
+        feature=feature,
+        field='category',
+        outcome='exact_match' if legacy_category == gateway_category else 'mismatch',
+    )
+    _record_chat_extraction_comparison(
+        feature=feature,
+        field='emoji',
+        outcome='exact_match' if legacy_response.emoji == gateway_response.emoji else 'mismatch',
+    )
+    _record_chat_extraction_comparison(
+        feature=feature,
+        field='title_similarity',
+        outcome=_text_similarity_bucket(legacy_response.title, gateway_response.title),
+    )
+    _record_chat_extraction_comparison(
+        feature=feature,
+        field='overview_similarity',
+        outcome=_text_similarity_bucket(legacy_response.overview, gateway_response.overview),
+    )
+    _record_chat_extraction_comparison(
+        feature=feature,
+        field='overview_length_ratio',
+        outcome=_length_ratio_bucket(legacy_response.overview, gateway_response.overview),
+    )
 
 
 def should_discard_conversation(
@@ -585,19 +680,28 @@ def get_transcript_structure(
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+    structure_shadow_parser = PydanticOutputParser(pydantic_object=ConversationStructureExtraction)
+    legacy_prompt_values = {
+        'conversation_context': conversation_context,
+        'format_instructions': parser.get_format_instructions(),
+        'language_code': language_code,
+        'response_language': response_language,
+        'started_at': _local_started_at_iso(started_at, tz),
+        'tz': tz or 'UTC',
+    }
+    shadow_prompt_values = {
+        **legacy_prompt_values,
+        'format_instructions': structure_shadow_parser.get_format_instructions(),
+    }
 
-    response = _coerce_structured(
-        chain.invoke(
-            {
-                'conversation_context': conversation_context,
-                'format_instructions': parser.get_format_instructions(),
-                'language_code': language_code,
-                'response_language': response_language,
-                'started_at': _local_started_at_iso(started_at, tz),
-                'tz': tz or 'UTC',
-            }
-        )
+    gateway_response = _invoke_gateway_unless_byok(
+        f'{instructions_text.format(**shadow_prompt_values)}\n\n{context_message.format(**shadow_prompt_values)}',
+        ConversationStructureExtraction,
+        feature='conversation_structure.extract.shadow',
     )
+
+    response = _coerce_structured(chain.invoke(legacy_prompt_values))
+    _record_conversation_structure_shadow_comparison(gateway_response, response)
 
     for event in response.events or []:
         if event.duration > 180:

@@ -601,6 +601,12 @@ Labels are bounded and low-cardinality: `lane_id`, `route_artifact_id`, `provide
 
 The backend caller also exposes `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for app-level success/fallback/skipped behavior.
 
+Shadow-only features can also emit privacy-safe comparison buckets through
+`llm_gateway_chat_extraction_comparisons_total{feature,field,outcome}`. These
+metrics compare derived properties such as category match, empty/non-empty
+status, length ratio, and normalized similarity bands. They must not store raw
+transcripts, prompts, titles, overviews, memories, or provider responses.
+
 Do not log raw prompts, transcripts, screenshots, memory contents, provider response bodies, or BYOK keys. Use existing sanitizer patterns for error bodies and user text.
 
 ## Build Status
