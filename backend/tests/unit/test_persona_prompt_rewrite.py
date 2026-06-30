@@ -530,7 +530,7 @@ class TestRenderPersonaPromptTemplate:
 
 
 class TestDeadMemoryFetchesRemoved:
-    """P2 from cubic AI review (PR #8682 follow-up 4601668066).
+    """P2 from cubic AI review (PR #8682 follow-ups 4601668066 + 4601825081).
 
     After the T-022 retrieval refactor, generate_persona_prompt and
     update_persona_prompt no longer needed the legacy
@@ -542,8 +542,22 @@ class TestDeadMemoryFetchesRemoved:
     removal by asserting the dead fetch functions are NOT called
     during prompt generation.
 
-    Strategy: spy on database.memories.get_memories /
-    get_user_public_memories and assert zero calls.
+    Critical detail (cubic 4601825081): utils/apps.py imports the
+    fetch helpers with `from database.memories import get_memories`
+    — that binds the symbol as a MODULE-LEVEL attribute on
+    utils.apps at import time. The call inside
+    generate_persona_prompt looks up the local binding
+    (utils.apps.get_memories), NOT database.memories.get_memories.
+    Patching database.memories.get_memories therefore has no effect
+    on what the function under test actually calls — the spy would
+    see zero calls for the wrong reason (it can't see anything).
+    The previous version of these tests had this bug; the spy
+    always passed regardless of whether the dead fetch was
+    reintroduced.
+
+    Fix: patch the symbol on utils.apps directly via
+    patch.object(apps_mod, 'get_memories'). That rebinds the
+    local binding the function under test actually looks up.
     """
 
     @pytest.mark.asyncio
@@ -551,53 +565,90 @@ class TestDeadMemoryFetchesRemoved:
         """generate_persona_prompt must NOT touch get_memories anymore.
 
         Only get_user_name, get_conversations, retrieve_relevant_memories,
-        and format_memories_for_prompt should fire.
+        and format_memories_for_prompt should fire. The spy is patched
+        on apps_mod.get_memories (the local binding), not on
+        database.memories.get_memories (which is irrelevant after the
+        `from X import Y` import — see class docstring).
+
+        Note: get_user_public_memories was dropped from the
+        utils.apps import in this round, so we don't (and can't)
+        patch it here — it isn't a candidate for a regression in
+        this code path.
         """
         from unittest.mock import patch
 
-        from database import memories as memories_mod
-
         apps_mod, old_mod = _load_real_apps_module()
         try:
-            with patch.object(memories_mod, 'get_memories') as spy_get_memories:
-                with patch.object(memories_mod, 'get_user_public_memories') as spy_get_public:
-                    await apps_mod.generate_persona_prompt('test-uid', {'connected_accounts': [], 'twitter': None})
-                    assert spy_get_memories.call_count == 0, (
-                        f'get_memories called {spy_get_memories.call_count} times — ' 'the T-022 dead fetch is back!'
-                    )
-                    assert spy_get_public.call_count == 0, (
-                        f'get_user_public_memories called {spy_get_public.call_count} times — '
-                        'wrong function being called from generate_persona_prompt'
-                    )
+            with patch.object(apps_mod, 'get_memories') as spy_get_memories:
+                await apps_mod.generate_persona_prompt('test-uid', {'connected_accounts': [], 'twitter': None})
+                assert spy_get_memories.call_count == 0, (
+                    f'get_memories called {spy_get_memories.call_count} times — ' 'the T-022 dead fetch is back!'
+                )
         finally:
             _restore(old_mod)
 
     @pytest.mark.asyncio
     async def test_update_does_not_call_get_user_public_memories(self):
-        from unittest.mock import patch
+        """update_persona_prompt must NOT touch get_user_public_memories.
 
-        from database import memories as memories_mod
+        Same spy pattern as test_generate_does_not_call_get_memories.
+        get_user_public_memories is also gone from the utils.apps
+        import in this round (only get_memories remains, used by
+        generate_persona_desc). The function under test calls into
+        the local binding only if it does `from database.memories
+        import get_user_public_memories` — which it doesn't, so the
+        spy needs create=True to add the attribute to apps_mod.
+        """
+        from unittest.mock import patch
 
         apps_mod, old_mod = _load_real_apps_module()
         try:
-            with patch.object(memories_mod, 'get_user_public_memories') as spy_get_public:
-                with patch.object(memories_mod, 'get_memories') as spy_get_mem:
-                    persona = {
-                        'id': 'persona-1',
-                        'uid': 'test-uid',
-                        'name': 'Choguun',
-                        'connected_accounts': [],
-                        'twitter': None,
-                    }
-                    await apps_mod.update_persona_prompt(persona)
-                    assert spy_get_public.call_count == 0, (
-                        f'get_user_public_memories called {spy_get_public.call_count} times — '
-                        'the T-022 dead fetch is back!'
-                    )
-                    assert spy_get_mem.call_count == 0, (
-                        f'get_memories called {spy_get_mem.call_count} times — '
-                        'wrong function being called from update_persona_prompt'
-                    )
+            with patch.object(apps_mod, 'get_user_public_memories', create=True) as spy_get_public:
+                persona = {
+                    'id': 'persona-1',
+                    'uid': 'test-uid',
+                    'name': 'Choguun',
+                    'connected_accounts': [],
+                    'twitter': None,
+                }
+                await apps_mod.update_persona_prompt(persona)
+                assert spy_get_public.call_count == 0, (
+                    f'get_user_public_memories called {spy_get_public.call_count} times — '
+                    'the T-022 dead fetch is back!'
+                )
+        finally:
+            _restore(old_mod)
+
+    @pytest.mark.asyncio
+    async def test_spy_actually_intercepts_calls(self):
+        """Regression pin for cubic 4601825081: prove the spy works.
+
+        Force a known call into get_memories via the patched symbol and
+        confirm the spy records it. Without this, a future regression
+        that re-binds utils.apps.get_memories to a DIFFERENT function
+        (e.g., a wrapper that calls through to the database) could
+        silently break the previous zero-call assertion while still
+        triggering DB IO behind the scenes.
+
+        Strategy: invoke apps_mod.get_memories() directly inside the
+        patch context. If the spy records the call, the patch is wired
+        up correctly. If it records zero, the spy is bypassing
+        (cubic's original concern).
+        """
+        from unittest.mock import patch
+
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            with patch.object(apps_mod, 'get_memories') as spy_get_memories:
+                # Direct invocation through the patched binding.
+                apps_mod.get_memories('test-uid', limit=250)
+                assert spy_get_memories.call_count == 1, (
+                    f'spy recorded {spy_get_memories.call_count} calls after direct '
+                    'invocation — patch.object on apps_mod.get_memories is NOT '
+                    'intercepting as expected (cubic 4601825081)'
+                )
+                assert spy_get_memories.call_args.args == ('test-uid',)
+                assert spy_get_memories.call_args.kwargs == {'limit': 250}
         finally:
             _restore(old_mod)
 
