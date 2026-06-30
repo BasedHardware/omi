@@ -3,7 +3,7 @@ from threading import Lock
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
-from utils.google_credentials import prepare_google_credentials
+from database.google_credentials import prepare_google_credentials
 
 _firestore_client = None
 _firestore_client_lock = Lock()

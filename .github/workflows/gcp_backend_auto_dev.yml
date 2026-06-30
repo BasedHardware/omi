@@ -43,7 +43,9 @@ jobs:
 
       - name: Compute short SHA
         id: image-tag
-        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
@@ -66,6 +68,7 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           no_traffic: true
           flags: >-
+            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --network=omi-dev-vpc-1
             --subnet=omi-us-central1-dev-vpc-1-subnet-1
             --vpc-egress=private-ranges-only
@@ -80,8 +83,7 @@ jobs:
       - name: Capture ${{ env.SERVICE }} revision
         id: capture-backend-revision
         run: |
-          revision="$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')"
-          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "revision=backend-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
@@ -92,6 +94,7 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           no_traffic: true
           flags: >-
+            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --network=omi-dev-vpc-1
             --subnet=omi-us-central1-dev-vpc-1-subnet-1
             --vpc-egress=private-ranges-only
@@ -106,8 +109,7 @@ jobs:
       - name: Capture ${{ env.SERVICE }}-sync revision
         id: capture-backend-sync-revision
         run: |
-          revision="$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')"
-          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
@@ -137,6 +139,7 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           no_traffic: true
           flags: >-
+            --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
             --network=omi-dev-vpc-1
             --subnet=omi-us-central1-dev-vpc-1-subnet-1
             --vpc-egress=private-ranges-only
@@ -151,8 +154,7 @@ jobs:
       - name: Capture ${{ env.SERVICE }}-integration revision
         id: capture-backend-integration-revision
         run: |
-          revision="$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')"
-          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+          echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env
         run: |

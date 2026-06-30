@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from utils import google_credentials
+from database import google_credentials
 
 
 def test_service_account_json_materializes_credentials_file(monkeypatch, tmp_path):
