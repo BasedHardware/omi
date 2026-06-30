@@ -66,12 +66,14 @@ _DEV_MODE_ENV_VAR = "OMI_DEV_MODE"
 
 
 def get_plugin_token() -> str:
-    """Return the configured plugin token, or "" if unset.
+    """Return the configured plugin token, or "" if unset/blank.
 
-    Empty string is the sentinel for "no token configured" — see the
-    policy matrix in this module's docstring.
+    Whitespace-only tokens are treated as unset — a token of spaces
+    would otherwise be "configured" but accept `Bearer    ` as valid.
+    Identified by maintainer review on PR #8528.
     """
-    return os.getenv(_TOKEN_ENV_VAR, "")
+    raw = os.getenv(_TOKEN_ENV_VAR, "")
+    return raw.strip()
 
 
 def _is_dev_mode() -> bool:
