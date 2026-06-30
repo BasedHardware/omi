@@ -143,22 +143,32 @@ final class ClipboardWatcherTests: XCTestCase {
     }
 
     func test_stop_prevents_further_emits() {
+        // P2 (cubic, PR #8682): the previous version used a real Timer
+        // with pollInterval=0.01s + DispatchQueue.main.asyncAfter to
+        // wait for the timer to fire, which races against the
+        // dispatch-to-MainActor Task the timer creates and produced
+        // intermittent CI failures. The watcher's `isRunning` getter
+        // lets us assert start()/stop() lifecycle synchronously
+        // without spinning a real timer.
         var callCount = 0
-        let watcher = makeWatcher(pollInterval: 0.01) { _ in callCount += 1 }
-        fake.setString("v1")
+        let watcher = makeWatcher { _ in callCount += 1 }
+        XCTAssertFalse(watcher.isRunning, "watcher must not be running before start()")
+
         watcher.start()
-        // Give the timer a chance to fire (pollInterval is 0.01s).
-        let waitWindow = expectation(description: "wait for first emit")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { waitWindow.fulfill() }
-        wait(for: [waitWindow], timeout: 1.0)
-        let beforeStop = callCount
+        XCTAssertTrue(watcher.isRunning, "start() must schedule the timer")
+
+        // Drive one tick to confirm the watcher works when running.
+        fake.setString("v1")
+        watcher.checkClipboard()
+        XCTAssertEqual(callCount, 1, "watcher must emit v1 while running")
 
         watcher.stop()
-        fake.setString("v2")
-        let postStop = expectation(description: "post-stop wait")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { postStop.fulfill() }
-        wait(for: [postStop], timeout: 1.0)
-        XCTAssertEqual(callCount, beforeStop, "watcher must not emit after stop()")
+        XCTAssertFalse(watcher.isRunning, "stop() must invalidate the timer")
+        XCTAssertTrue(callCount == 1, "stop() must not retroactively roll back emissions")
+
+        // stop() is safe to call repeatedly.
+        watcher.stop()
+        XCTAssertFalse(watcher.isRunning)
     }
 
     func test_checkClipboard_is_idempotent() {

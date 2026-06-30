@@ -134,13 +134,21 @@ final class AICloneConfig: ObservableObject {
             return
         }
 
-        // Use the LOCAL pluginURL (not the tunnel publicURL) for the
+        // Use the LOCAL pluginURL (NOT the tunnel publicURL) for the
         // desktop client's API base URL. Desktop and plugin run on the
-        // same machine, so /health, /setup, /toggle should hit the
-        // Prefer public_url (the tunnel URL) — Telegram/Meta need HTTPS
-        // to reach the plugin from outside. Falls back to plugin_url
-        // (localhost) for same-machine-only testing.
-        let discoveryURL = discovery.publicURL ?? discovery.pluginURL
+        // same machine, so /health, /setup, /status, /toggle should hit
+        // the plugin directly over loopback / LAN. The publicURL (the
+        // tunnel) is needed by Telegram/Meta to reach the plugin from
+        // outside, but routing our own control traffic through the
+        // tunnel adds latency and exposes control calls to a third
+        // party. Falls back to pluginURL when publicURL is absent
+        // (same-machine-only testing).
+        //
+        // P1 from cubic AI review (PR #8682): the previous code used
+        // `discovery.publicURL ?? discovery.pluginURL`, which meant a
+        // configured tunnel would silently route all desktop control
+        // calls through the external tunnel. Switched to pluginURL.
+        let discoveryURL = discovery.pluginURL
 
         var changed = false
 

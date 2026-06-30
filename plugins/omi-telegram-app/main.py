@@ -110,6 +110,15 @@ async def _plugin_lifespan(app: FastAPI):
     try:
         yield
     finally:
+        # P2 (cubic, PR #8682): close the shared httpx client pool on
+        # shutdown. telegram_client exposes a module-level
+        # httpx.AsyncClient for connection pooling across webhook
+        # calls; without this hook the pool stayed open until process
+        # exit, leaking TCP/TLS sockets on long-running workers.
+        try:
+            await telegram_client.aclose()
+        except Exception as e:
+            logger.warning("telegram_client.aclose() raised during shutdown: %s", e)
         try:
             clear_discovery(plugin_type="telegram", instance_id=_PLUGIN_INSTANCE_ID)
             logger.info("cleared plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)

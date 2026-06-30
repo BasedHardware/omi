@@ -48,6 +48,7 @@ The file contains a bearer token. Mitigations:
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import time
@@ -61,6 +62,15 @@ from pathlib import Path
 #  - it's readable from any language (Python, Swift) without platform glue
 #  - the user can find it in Finder by going to ~/ (Go → "Go to Folder")
 DISCOVERY_DIR = Path.home() / ".config" / "omi"
+
+# Per-process monotonic counter used to make tmp filenames unique within
+# a single process. P2 from cubic AI review (PR #8682): the previous
+# design used `.{os.getpid()}.tmp` which collides if two threads / tasks
+# in the same process call write_discovery concurrently (same-process
+# concurrent writes, e.g. a plugin reconfiguring itself in a test setup
+# or a hot-reload). PID alone is not unique within a process; pairing
+# PID with a counter gives every concurrent writer its own tmp path.
+_tmp_counter = itertools.count()
 # Per-plugin discovery files. cubic P1: a single fixed file path breaks
 # concurrent multi-plugin discovery (Telegram + WhatsApp running
 # simultaneously). Each plugin gets its own file keyed by plugin_type.
@@ -134,7 +144,11 @@ def write_discovery(
     # plugins must not overwrite each other's discovery file).
     target = discovery_file(plugin_type)
     # Unique tmp filename to avoid race between concurrent writers.
-    tmp = target.with_suffix(f".{os.getpid()}.tmp")
+    # P2 (cubic, PR #8682): include a process-unique counter alongside
+    # PID so same-process concurrent writers (threads / asyncio tasks
+    # racing in a test setup or hot-reload) don't collide on the same
+    # tmp path.
+    tmp = target.with_suffix(f".{os.getpid()}.{next(_tmp_counter)}.tmp")
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
         with os.fdopen(fd, "w") as f:

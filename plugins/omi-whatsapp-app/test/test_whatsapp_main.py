@@ -57,6 +57,52 @@ class TestHealth:
 
 
 # ---------------------------------------------------------------------------
+# /status — bound-phone count + auto-reply state. Added for PR #8682
+# (cubic P1): the Omi desktop's ConnectSheet handshake polls /status
+# instead of /health so the user-side setup completion can be confirmed
+# (connected_phones >= 1 requires a real /start-equivalent message).
+# Mirrors plugins/omi-telegram-app/test/test_main.py::TestStatus.
+# ---------------------------------------------------------------------------
+import os
+
+PLUGIN_BEARER = os.environ.get("AI_CLONE_PLUGIN_TOKEN", "test-token")
+AUTH = {"Authorization": f"Bearer {PLUGIN_BEARER}"}
+
+
+class TestStatus:
+    def test_status_authenticated_no_users(self, client):
+        r = client.get("/status", headers=AUTH)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["connected_phones"] == 0
+        assert body["auto_reply_enabled"] is False
+        assert body["first_phone"] is None
+        assert body["service"] == "omi-whatsapp-clone"
+
+    def test_status_reflects_bound_phone_and_auto_reply(self, client):
+        from conftest import load_simple_storage
+
+        ss = load_simple_storage()
+        ss.save_user(
+            phone="15550001111",
+            omi_uid="uid-1",
+            persona_id="persona-1",
+            omi_dev_api_key="dev-key",
+            access_token="access-token",
+            phone_number_id="phone-id-1",
+            verify_token="verify-token-1",
+            auto_reply_enabled=True,
+        )
+
+        r = client.get("/status", headers=AUTH)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["connected_phones"] == 1
+        assert body["first_phone"] == "15550001111"
+        assert body["auto_reply_enabled"] is True
+
+
+# ---------------------------------------------------------------------------
 # /webhook GET — Meta verification handshake
 # ---------------------------------------------------------------------------
 class TestWebhookVerify:

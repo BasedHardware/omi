@@ -116,6 +116,15 @@ final class ClipboardWatcher {
         timer = nil
     }
 
+    /// True if the polling timer is currently scheduled. Used by unit
+    /// tests (P2 from cubic AI review, PR #8682) to assert that
+    /// `stop()` actually invalidates the timer — checking this is more
+    /// reliable than spinning a real Timer with a 10ms poll interval
+    /// and racing against its dispatch-to-MainActor Task.
+    var isRunning: Bool {
+        timer != nil
+    }
+
     deinit {
         timer?.invalidate()
     }

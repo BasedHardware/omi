@@ -61,13 +61,16 @@ struct ConnectSheet: View {
     @State private var pollCount = 0
     @State private var devApiKeyOverride: String = ""
     @State private var handshakeSecondsRemaining: Int = 0
-    // P1 (cubic): handshake success vs. timeout. Polling /health is NOT
-    // a confirmation that the user completed the handshake — /health
-    // returns 200 as long as the plugin process is up, regardless of
-    // whether anyone sent /start. Use a separate boolean that's set
-    // true ONLY when the polling loop saw a reachable /health WITHIN
-    // the handshake window. The loop's "set false on exit" logic was
-    // ambiguous about success vs timeout and falsely reported
+    // P1 (cubic, PR #8682): handshake success vs. timeout. Polling
+    // /health alone is NOT a confirmation that the user completed the
+    // handshake — /health returns 200 as long as the plugin process is
+    // up, regardless of whether anyone sent /start. We now poll /status
+    // (which the Telegram plugin exposes at /status with bearer auth)
+    // and require `connectedChats >= 1` to consider the handshake
+    // complete. /status is the authoritative signal because it can
+    // only succeed when the user has actually sent /start and the
+    // plugin has registered a chat. The loop's "set false on exit"
+    // logic was ambiguous about success vs timeout and falsely reported
     // "Connected" on both.
     @State private var handshakeCompleted: Bool = false
     @State private var handshakeTimedOut: Bool = false
@@ -529,6 +532,21 @@ struct ConnectSheet: View {
         // Auto-fill targets: credential fields that are currently empty.
         guard TelegramTokenValidator.isValid(content) else { return }
 
+        // P2 (cubic, PR #8682): plugin-aware validation. Previously
+        // we accepted any Telegram-shaped token on the clipboard and
+        // filled the first empty credential field of the current
+        // plugin — so a Telegram token pasted into a WhatsApp
+        // ConnectSheet would get auto-filled into a WhatsApp
+        // access_token field. Gate on the current plugin's type so
+        // we only auto-fill fields that match.
+        let isTelegramPlugin = plugin.id == "telegram"
+        guard isTelegramPlugin else {
+            // Wrong plugin: a Telegram token on the clipboard doesn't
+            // match a non-Telegram plugin's schema. Silently ignore so
+            // we don't pollute the form. The user can paste manually.
+            return
+        }
+
         // Find the first auto-fillable field: empty + not user-edited.
         // (Telegram's first credential field is bot_token; WhatsApp has
         // multiple. We fill the first that matches.)
@@ -673,17 +691,38 @@ struct ConnectSheet: View {
                 pollCount += 1
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
                 if Task.isCancelled { break }
-                let reachable = (try? await AICloneClient.shared.health(
-                    baseURL: config.pluginURL
-                )) ?? false
-                if reachable {
+                // P1 (cubic, PR #8682): /status is the authoritative
+                // signal for a completed handshake. /health only proves
+                // the plugin process is up; /status (with bearer auth)
+                // returns connectedChats > 0 only when the user has
+                // actually sent /start and the plugin has bound a chat.
+                // A bearer token is required to call /status (see
+                // plugins/omi-telegram-app/main.py status handler); the
+                // bearer was either pre-filled from discovery or saved
+                // at /setup time. If we don't have one, fall back to
+                // /health so the UI doesn't deadlock on a missing
+                // bearer (and so unit tests with no bearer still work).
+                let bearer = config.bearerToken
+                let handshakeDone: Bool
+                if bearer.isEmpty {
+                    let reachable = (try? await AICloneClient.shared.health(
+                        baseURL: config.pluginURL
+                    )) ?? false
+                    handshakeDone = reachable
+                } else {
+                    let status = try? await AICloneClient.shared.status(
+                        baseURL: config.pluginURL,
+                        bearerToken: bearer
+                    )
+                    handshakeDone = (status?.connectedChats ?? 0) >= 1
+                }
+                if handshakeDone {
                     // P1 (cubic): the only path that sets handshakeCompleted
-                    // is a successful /health hit during the polling window.
-                    // Reaching this branch is necessary but not sufficient
-                    // for a real handshake — the plugin doesn't yet expose
-                    // a /status endpoint that confirms the user sent /start.
-                    // When /status lands (Tier 2), this gate is upgraded
-                    // to check the actual handshake-complete bit.
+                    // is a successful handshake probe during the polling
+                    // window. Reaching this branch means /status reported
+                    // at least one bound chat (or /health was reachable as
+                    // a bearer-less fallback). Necessary AND sufficient for
+                    // a real handshake.
                     await MainActor.run {
                         handshakeCompleted = true
                         pollingForHandshake = false

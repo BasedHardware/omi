@@ -11,7 +11,14 @@
 #
 # Correct invocation from this directory:
 #   docker build .
-FROM python:3.11-slim
+# P2 (cubic, PR #8682): pin the Dockerfile to the exact patch version
+# declared in plugins/omi-whatsapp-app/runtime.txt so the Heroku /
+# Docker interpreters don't drift apart. Without this, runtime.txt
+# could pin 3.11.11 while the Docker image silently upgrades to the
+# latest 3.11.x slim point release — which on Heroku means the user's
+# local Docker testing sees a different interpreter than the deployed
+# workers. Keep the two values in lockstep when bumping.
+FROM python:3.11.11-slim
 
 # Create non-root user early so owned dirs/files get correct uid/gid
 RUN groupadd --system --gid 1001 omi \
@@ -23,6 +30,30 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+
+# Belt-and-suspenders against accidental secret inclusion regardless of
+# the build context. P1 from cubic AI review (PR #8682): the previous
+# design relied entirely on the caller passing this plugin's directory
+# as the build context (`docker build plugins/omi-whatsapp-app/`) so
+# that .dockerignore at plugins/omi-whatsapp-app/.dockerignore would
+# exclude .env / users_data.json / pending_setups.json. Invoking
+# `docker build -f plugins/omi-whatsapp-app/Dockerfile .` from the repo
+# root would silently use the repo-root .dockerignore (which doesn't
+# exclude our secrets) and bake them into the image. To make secret
+# exclusion robust regardless of context, refuse to build if any of
+# the secret-bearing files are present after COPY — this catches the
+# "wrong context" mistake at build time, not at image-push time.
+RUN set -eu; \
+    secrets_found=0; \
+    for path in .env .env.local users_data.json pending_setups.json; do \
+        if [ -e "$path" ]; then \
+            echo "ERROR: secret-bearing file '$path' found in build context. \
+Build context must be the plugin directory, not the repo root. \
+Run 'docker build plugins/omi-whatsapp-app/' or 'cd plugins/omi-whatsapp-app && docker build .'." >&2; \
+            secrets_found=1; \
+        fi; \
+    done; \
+    [ "$secrets_found" = "0" ] || exit 1
 
 ENV STORAGE_DIR=/app/data
 RUN mkdir -p /app/data && chown -R omi:omi /app

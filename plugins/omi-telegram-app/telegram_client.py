@@ -85,9 +85,25 @@ async def send_message(bot_token: str, chat_id: int | str, text: str) -> Optiona
     Does not raise — Telegram's API is best-effort for our purposes; if a
     reply fails we log and move on rather than crash the webhook handler.
 
+    P2 (cubic, PR #8682): bail early on an empty bot_token. The webhook
+    can hit the "invalid setup token" branch for an unknown chat_id and
+    tries to reply via _bot_token_for_unknown_chat() — that helper
+    returns "" when we have no record, and the previous code passed
+    the empty token straight to httpx, producing a request to
+    https://api.telegram.org/bot/sendMessage (note the empty bot
+    segment) which Telegram answers with a 404 and a loud ERROR log.
+    Skip the round trip + log spam when we already know we can't reach
+    the user.
+
     Telegram caps messages at 4096 chars. Longer replies are truncated and a
     trailing ellipsis is added so the user sees their reply ended mid-sentence.
     """
+    if not bot_token:
+        logger.debug(
+            "send_message skipped: empty bot_token for chat_id=%s (chat not bound yet)",
+            chat_id,
+        )
+        return None
     # Telegram Bot API hard limit on text length.
     MAX_LEN = 4096
     if text and len(text) > MAX_LEN:

@@ -100,6 +100,30 @@ class TestHealth:
         assert resp.json()["status"] == "ok"
 
 
+class TestLifespanClosesClient:
+    """P2 from cubic AI review (PR #8682): the FastAPI lifespan must
+    call telegram_client.aclose() on shutdown so the module-level
+    httpx.AsyncClient pool isn't held open until process exit. The
+    fixture is per-test so we can patch aclose() and watch for the
+    call when the TestClient context exits."""
+
+    def test_aclose_called_on_shutdown(self):
+        from unittest.mock import AsyncMock, patch
+
+        from fastapi.testclient import TestClient
+
+        from main import app
+
+        with patch("main.telegram_client.aclose", new=AsyncMock()) as mock_aclose:
+            with TestClient(app) as client:
+                # Any request triggers startup, which schedules the
+                # shutdown hook. Trigger one to be safe.
+                client.get("/health")
+            # TestClient context exit runs the lifespan shutdown,
+            # which must call aclose() exactly once.
+            assert mock_aclose.await_count == 1
+
+
 # ---------------------------------------------------------------------------
 # /setup
 # ---------------------------------------------------------------------------

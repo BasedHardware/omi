@@ -23,7 +23,8 @@ import secrets
 import sys
 import urllib.parse
 from collections import OrderedDict
-from typing import Optional
+from contextlib import asynccontextmanager
+from typing import Optional, AsyncIterator
 
 # Add plugins/_shared to sys.path so `from persona_client import chat` works.
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -75,10 +76,29 @@ if not _WHATSAPP_APP_SECRET:
     )
 
 
+@asynccontextmanager
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """P2 (cubic, PR #8682): close the shared httpx client pool on shutdown.
+
+    whatsapp_client exposes a module-level httpx.AsyncClient for connection
+    pooling across webhook calls. Without this lifespan hook, the pool
+    stayed open until process exit — on long-running workers this leaks
+    TCP/TLS sockets and can starve the file-descriptor table. Mirrors
+    plugins/omi-telegram-app/main.py so both plugins share the same
+    lifecycle contract.
+    """
+    yield
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        await whatsapp_client.aclose()
+
+
 app = FastAPI(
     title="OMI WhatsApp AI-Clone",
     description="Self-hosted WhatsApp plugin that lets Omi reply on the user's behalf.",
     version="0.1.0",
+    lifespan=_lifespan,
 )
 
 
@@ -118,6 +138,32 @@ async def omi_tools_manifest():
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "omi-whatsapp-clone", "version": "0.1.0"}
+
+
+# ---------------------------------------------------------------------------
+# /status — connected-phone count + auto-reply state.
+#
+# Used by the Omi desktop's ConnectSheet to gate the handshake on a
+# genuine user-side setup completion (a reachable /status with
+# connected_phones >= 1 proves the user sent a message to the bot, the
+# plugin bound a phone, and the persona will respond). /health alone
+# proves only that the plugin process is running — see ConnectSheet
+# for the corresponding gating change (P1 from cubic AI review on PR
+# #8682). Mirrors plugins/omi-telegram-app/main.py /status.
+# ---------------------------------------------------------------------------
+@app.get("/status", dependencies=[Depends(require_bearer)])
+def status():
+    phones = list(simple_storage.users.keys())
+    phone_count = len(phones)
+    any_auto_reply = any(u.get("auto_reply_enabled") for u in simple_storage.users.values())
+    first_user = simple_storage.users.get(phones[0], {}) if phones else {}
+    return {
+        "connected_phones": phone_count,
+        "auto_reply_enabled": any_auto_reply,
+        "first_phone": phones[0] if phones else None,
+        "service": "omi-whatsapp-clone",
+        "version": "0.1.0",
+    }
 
 
 # ---------------------------------------------------------------------------
