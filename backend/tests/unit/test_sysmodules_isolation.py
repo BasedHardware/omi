@@ -16,6 +16,13 @@ import types
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
+def _is_under(path, parent):
+    try:
+        return os.path.commonpath([os.path.abspath(path), parent]) == parent
+    except ValueError:
+        return False
+
+
 def _assert_real_package(name):
     """Import the package and verify it's real and rooted under backend/."""
     mod = importlib.import_module(name)
@@ -24,14 +31,12 @@ def _assert_real_package(name):
     mod_path = getattr(mod, '__path__', None)
 
     if mod_file is not None:
-        assert os.path.abspath(mod_file).startswith(
-            _BACKEND_DIR
-        ), f"{name}.__file__ = {mod_file} is not under {_BACKEND_DIR}"
+        assert _is_under(mod_file, _BACKEND_DIR), f"{name}.__file__ = {mod_file} is not under {_BACKEND_DIR}"
         return
 
     if mod_path is not None and len(mod_path) > 0:
         for p in mod_path:
-            assert os.path.abspath(p).startswith(_BACKEND_DIR), f"{name}.__path__ entry {p} is not under {_BACKEND_DIR}"
+            assert _is_under(p, _BACKEND_DIR), f"{name}.__path__ entry {p} is not under {_BACKEND_DIR}"
         return
 
     raise AssertionError(
