@@ -243,6 +243,11 @@ TOOL_REQUIRED_SCOPE = {
     "get_goals": "goals.read",
     "get_chat_messages": "chat.read",
     "get_people": "people.read",
+    "get_person": "people.read",
+    "find_person_by_name": "people.read",
+    "create_person": "people.write",
+    "update_person": "people.write",
+    "delete_person": "people.write",
     "get_screen_activity": "screen_activity.read",
     "get_daily_summaries": "conversations.read",
 }
