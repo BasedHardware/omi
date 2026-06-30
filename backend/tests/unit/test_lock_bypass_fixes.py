@@ -291,9 +291,11 @@ def _allow_memory_product_auth(module):
 
 def _force_legacy_memory_paths(module):
     from utils.memory.default_read_rollout import MemoryReadDecision
+    from utils.memory import memory_service
     from utils.memory.memory_system import MemorySystem
 
     legacy = SimpleNamespace(read_decision=MemoryReadDecision.USE_LEGACY_SAFE, memories=[], text=None)
+    allowed_write = SimpleNamespace(allowed=True, detail={})
     module.pin_memory_system = MagicMock(return_value=MemorySystem.LEGACY)
     if hasattr(module, 'read_default_read_rollout'):
         module.read_default_read_rollout = MagicMock(return_value=legacy)
@@ -305,7 +307,8 @@ def _force_legacy_memory_paths(module):
         if hasattr(module, attr):
             setattr(module, attr, MagicMock(return_value=legacy))
     if hasattr(module, 'guard_legacy_memory_write'):
-        module.guard_legacy_memory_write = MagicMock(return_value=SimpleNamespace(allowed=True, detail={}))
+        module.guard_legacy_memory_write = MagicMock(return_value=allowed_write)
+    memory_service.guard_legacy_memory_write = MagicMock(return_value=allowed_write)
 
 
 # =============================================================================

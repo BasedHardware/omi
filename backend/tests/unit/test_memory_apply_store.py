@@ -1,9 +1,7 @@
 import copy
 import os
-import sys
 from datetime import datetime, timezone
 from typing import Optional
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -12,10 +10,9 @@ os.environ.setdefault(
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
-sys.modules["database._client"] = MagicMock()
+from tests.unit.memory_import_isolation import install_database_client_stub, install_firestore_transactional_stub
 
-from tests.unit.memory_import_isolation import install_firestore_transactional_stub
-
+install_database_client_stub()
 install_firestore_transactional_stub()
 
 from database.memory_apply_store import apply_long_term_patch_firestore
@@ -146,7 +143,7 @@ def _db_with(control=None, operation=None, evidence=None, target_items=None):
     operation = operation or _operation()
     evidence = evidence or _evidence()
     docs = {
-        "users/u1/memory_control/state": _stored_model(control),
+        "users/u1/memory_state/apply_control": _stored_model(control),
         f"users/u1/memory_operations/{operation.operation_id}": _stored_model(operation),
         "users/u1/memory_evidence/ev1": _stored_model(evidence),
     }
@@ -196,7 +193,7 @@ def test_firestore_apply_reads_authoritative_docs_and_writes_commit_projection_o
 
     assert result.status == ApplyStatus.committed
     written_paths = [path for path, _ in db.transaction_obj.sets]
-    assert "users/u1/memory_control/state" in written_paths
+    assert "users/u1/memory_state/apply_control" in written_paths
     assert f"users/u1/memory_operations/{operation.operation_id}" in written_paths
     assert any(path.startswith("users/u1/memory_items/") for path in written_paths)
     assert any(path.startswith("users/u1/memory_outbox/") for path in written_paths)
@@ -359,6 +356,6 @@ def test_firestore_transaction_set_failure_leaves_store_unchanged_and_retry_comm
         db.docs[f"users/u1/memory_operations/{operation.operation_id}"]["committed_head_commit_id"]
         == retry.control_state.head_commit_id
     )
-    assert db.docs["users/u1/memory_control/state"]["head_commit_id"] == retry.control_state.head_commit_id
+    assert db.docs["users/u1/memory_state/apply_control"]["head_commit_id"] == retry.control_state.head_commit_id
     assert retry.operation.committed_memory_item_ids == [item.memory_id for item in retry.memory_items]
     assert retry.operation.committed_outbox_event_ids == [event.event_id for event in retry.outbox_events]
