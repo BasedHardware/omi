@@ -19,13 +19,51 @@ fi
 
 BASE_REF=$(git merge-base "$BASE_REMOTE_REF" HEAD)
 CURRENT_BRANCH=$(git symbolic-ref --short -q HEAD || true)
+ZERO_SHA="0000000000000000000000000000000000000000"
 
-echo "Running fast pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+declare -a PUSH_UPDATES=()
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [ -n "${local_ref:-}" ] || continue
+  [ "${local_oid:-$ZERO_SHA}" != "$ZERO_SHA" ] || continue
+  PUSH_UPDATES+=("$local_oid:$remote_oid:$remote_ref")
+done
+
+if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
+  echo "Running fast pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s)."
+else
+  echo "Running fast pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+fi
 
 declare -a CHANGED_FILES=()
-while IFS= read -r file; do
-  [ -n "$file" ] && CHANGED_FILES+=("$file")
-done < <(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
+if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
+  for update in "${PUSH_UPDATES[@]}"; do
+    IFS=: read -r local_oid remote_oid remote_ref <<<"$update"
+    if [ -z "$remote_oid" ] || [ "$remote_oid" = "$ZERO_SHA" ]; then
+      DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
+    elif git cat-file -e "$remote_oid^{commit}" 2>/dev/null; then
+      DIFF_BASE="$remote_oid"
+    elif TRACKING_REF="refs/remotes/${REMOTE}/${remote_ref#refs/heads/}" && git rev-parse --verify "$TRACKING_REF" >/dev/null 2>&1; then
+      DIFF_BASE=$(git rev-parse "$TRACKING_REF")
+    else
+      DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
+    fi
+    while IFS= read -r file; do
+      [ -n "$file" ] && CHANGED_FILES+=("$file")
+    done < <(git diff --name-only --diff-filter=ACM "$DIFF_BASE" "$local_oid")
+  done
+else
+  while IFS= read -r file; do
+    [ -n "$file" ] && CHANGED_FILES+=("$file")
+  done < <(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
+fi
+
+if [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
+  declare -a UNIQUE_CHANGED_FILES=()
+  while IFS= read -r file; do
+    [ -n "$file" ] && UNIQUE_CHANGED_FILES+=("$file")
+  done < <(printf '%s\n' "${CHANGED_FILES[@]}" | sort -u)
+  CHANGED_FILES=("${UNIQUE_CHANGED_FILES[@]}")
+fi
 
 run_step() {
   echo "==> $*"

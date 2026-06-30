@@ -10,11 +10,7 @@ setup: setup-hooks
 	@echo "Worktree setup complete."
 
 setup-hooks:
-	@mkdir -p "$(HOOKS_DIR)"
-	@ln -s -f "$(ROOT)/scripts/pre-commit" "$(HOOKS_DIR)/pre-commit"
-	@ln -s -f "$(ROOT)/scripts/pre-push" "$(HOOKS_DIR)/pre-push"
-	@chmod +x "$(ROOT)/scripts/pre-commit" "$(ROOT)/scripts/pre-push"
-	@echo "Installed Git hooks in $(HOOKS_DIR)."
+	@bash scripts/install-git-hooks.sh
 
 dev-check:
 	bash scripts/dev-harness/dev-check.sh
