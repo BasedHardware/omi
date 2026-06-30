@@ -273,17 +273,60 @@ actor ConversationFinalizationService {
           return
         }
       }
-      let segmentCount = try await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
-      if segmentCount > 0 {
-        log(
-          "ConversationFinalization: Cloud reconciliation exhausted for session \(sessionId); uploading \(segmentCount) saved local segments"
-        )
-        try await uploadLocalSegments(sessionId: sessionId)
+      if try await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId) {
         return
       }
     }
 
     throw TranscriptionStorageError.invalidState("No matching backend conversation found")
+  }
+
+  @discardableResult
+  func resolveExhaustedCloudReconciliation(
+    session: TranscriptionSessionRecord,
+    sessionId: Int64
+  ) async throws -> Bool {
+    let segmentCount = try await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
+    switch Self.cloudReconciliationExhaustionAction(session: session, segmentCount: segmentCount) {
+    case .keepRetrying:
+      return false
+    case .uploadLocalSegments:
+      log(
+        "ConversationFinalization: Cloud reconciliation exhausted for session \(sessionId); uploading \(segmentCount) saved local segments"
+      )
+      try await uploadLocalSegments(sessionId: sessionId)
+      return true
+    case .discardEmptyDesktopSession:
+      log("ConversationFinalization: Deleting empty unreconciled desktop session \(sessionId)")
+      try await TranscriptionStorage.shared.deleteSession(id: sessionId)
+      return true
+    case .reportFailure:
+      return false
+    }
+  }
+
+  enum CloudReconciliationExhaustionAction: Equatable {
+    case keepRetrying
+    case uploadLocalSegments
+    case discardEmptyDesktopSession
+    case reportFailure
+  }
+
+  static func cloudReconciliationExhaustionAction(
+    session: TranscriptionSessionRecord,
+    segmentCount: Int,
+    maxRetries: Int = 5
+  ) -> CloudReconciliationExhaustionAction {
+    guard session.retryCount >= maxRetries - 1 else {
+      return .keepRetrying
+    }
+    guard segmentCount == 0 else {
+      return .uploadLocalSegments
+    }
+    guard session.source == ConversationSource.desktop.rawValue else {
+      return .reportFailure
+    }
+    return .discardEmptyDesktopSession
   }
 
   private func completeCloudConversation(
