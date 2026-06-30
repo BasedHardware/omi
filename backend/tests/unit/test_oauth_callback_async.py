@@ -46,10 +46,20 @@ def _direct_calls(node):
 
 
 def _offloaded_via_run_blocking(node):
+    """Names passed as the function arg to an AWAITED ``run_blocking(executor, fn, ...)`` call.
+
+    The ``run_blocking`` call must be the operand of an ``await``. A bare ``run_blocking(...)``
+    without ``await`` returns a coroutine that never runs, so the offload would silently break
+    while still passing a looser "is it wrapped in run_blocking" check. Requiring the await
+    closes that regression gap.
+    """
     offloaded = set()
     for sub in ast.walk(node):
-        if isinstance(sub, ast.Call) and _dotted(sub.func) == "run_blocking" and len(sub.args) >= 2:
-            name = _dotted(sub.args[1])
+        if not (isinstance(sub, ast.Await) and isinstance(sub.value, ast.Call)):
+            continue
+        call = sub.value
+        if _dotted(call.func) == "run_blocking" and len(call.args) >= 2:
+            name = _dotted(call.args[1])
             if name:
                 offloaded.add(name)
     return offloaded
@@ -66,6 +76,21 @@ class TestOAuthCallbackOffloadsFirestore:
     def test_set_integration_is_offloaded_via_run_blocking(self):
         offloaded = _offloaded_via_run_blocking(_handler_node())
         assert _BLOCKING in offloaded, f"{_BLOCKING} is not offloaded via run_blocking in {_HANDLER}"
+
+    def test_offload_is_awaited_not_a_dangling_coroutine(self):
+        # A bare run_blocking(...) without await returns a coroutine that never runs, which
+        # would silently break the offload (set_integration would never execute) while still
+        # passing a looser wrapped-in-run_blocking check. Assert the call is awaited.
+        node = _handler_node()
+        awaited = any(
+            isinstance(sub, ast.Await)
+            and isinstance(sub.value, ast.Call)
+            and _dotted(sub.value.func) == "run_blocking"
+            and len(sub.value.args) >= 2
+            and _dotted(sub.value.args[1]) == _BLOCKING
+            for sub in ast.walk(node)
+        )
+        assert awaited, f"the run_blocking({_BLOCKING}) call must be awaited, not a dangling coroutine"
 
     def test_handler_is_async(self):
         assert isinstance(_handler_node(), ast.AsyncFunctionDef)
