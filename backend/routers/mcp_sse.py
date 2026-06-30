@@ -11,10 +11,9 @@ import asyncio
 import json
 import logging
 import os
-import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Union, List, Any
+from typing import Optional, Any
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
 import firebase_admin.auth
@@ -58,13 +57,11 @@ from utils.mcp_memories import (
     parse_mcp_int,
     parse_optional_mcp_bool,
 )
+from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
-
-# Store active sessions
-active_sessions: dict = {}
 
 MCP_RESOURCE_URL = mcp_oauth_db.MCP_RESOURCE_URL
 MCP_AUTHORIZATION_SERVER_URL = os.getenv("MCP_AUTHORIZATION_SERVER_URL", "https://api.omi.me")
@@ -73,31 +70,8 @@ MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
-MCP_SCOPES_SUPPORTED = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-    "calendar.read",
-]
-
-MCP_LEGACY_API_KEY_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-    "calendar.read",
-]
+MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
+MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -129,21 +103,13 @@ PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 CALENDAR_READ_SECURITY = [{"type": "oauth2", "scopes": ["calendar.read"]}]
 
 
-class MCPSession:
-    """Represents an active MCP session."""
-
-    def __init__(self, session_id: str, user_id: str):
-        self.session_id = session_id
-        self.user_id = user_id
-        self.created_at = datetime.utcnow()
-        self.initialized = False
-
-
 @dataclass
 class MCPAuthContext:
     uid: str
     auth_type: str
     scopes: list[str]
+    app_id: Optional[str] = None
+    key_id: Optional[str] = None
     client_id: Optional[str] = None
     resource: Optional[str] = None
     grant_id: Optional[str] = None
@@ -159,10 +125,16 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_id = mcp_api_key_db.get_user_id_by_api_key(token)
-        if not user_id:
+        auth_context = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        if not auth_context or not auth_context.get("user_id"):
             return None
-        return MCPAuthContext(uid=user_id, auth_type="legacy_mcp_key", scopes=MCP_LEGACY_API_KEY_SCOPES)
+        return MCPAuthContext(
+            uid=auth_context["user_id"],
+            auth_type="legacy_mcp_key",
+            scopes=auth_context.get("scopes") or MCP_LEGACY_API_KEY_SCOPES,
+            app_id=auth_context.get("app_id"),
+            key_id=auth_context.get("key_id"),
+        )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)
     if not oauth_context:
@@ -1227,9 +1199,7 @@ def create_mcp_error(id: Any, code: int, message: str) -> dict:
     return {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
 
 
-def handle_mcp_message(
-    auth_context: MCPAuthContext, message: dict, session: Optional[MCPSession] = None
-) -> tuple[Optional[dict], Optional[str]]:
+def handle_mcp_message(auth_context: MCPAuthContext, message: dict) -> tuple[Optional[dict], Optional[str]]:
     """
     Process an incoming MCP JSON-RPC message and return a response.
     Returns (response, new_session_id) tuple.
@@ -1237,16 +1207,8 @@ def handle_mcp_message(
     msg_id = message.get("id")
     method = message.get("method")
     params = message.get("params", {})
-    new_session_id = None
 
     if method == "initialize":
-        # Create a new session
-        session_id = str(uuid.uuid4())
-        new_session = MCPSession(session_id, auth_context.uid)
-        new_session.initialized = True
-        active_sessions[session_id] = new_session
-        new_session_id = session_id
-
         return (
             create_mcp_response(
                 msg_id,
@@ -1262,7 +1224,7 @@ def handle_mcp_message(
                     ),
                 },
             ),
-            new_session_id,
+            None,
         )
 
     elif method == "notifications/initialized":
@@ -1347,6 +1309,18 @@ def _redirect_with_code(redirect_uri: str, code: str, state: Optional[str]) -> s
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), parts.fragment))
 
 
+async def _get_token_request_data(request: Request) -> dict:
+    content_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+    if content_type == "application/json":
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Invalid request body")
+        return body
+
+    form_data = await request.form()
+    return dict(form_data)
+
+
 @router.get("/authorize", response_class=HTMLResponse, tags=["mcp"])
 def mcp_authorize(
     request: Request,
@@ -1361,17 +1335,19 @@ def mcp_authorize(
 ):
     """OAuth authorize endpoint."""
     try:
-        _, scopes = _validate_authorize_request(
+        client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
         )
     except ValueError as e:
         return _oauth_error("invalid_request", str(e))
 
+    client_name = str(client.get("name") or client_id)
     permissions = [SCOPE_PERMISSION_TEXT[item] for item in scopes]
     return templates.TemplateResponse(
         "mcp_oauth_authorize.html",
         {
             "request": request,
+            "client_name": client_name,
             "oauth_params": {
                 "response_type": response_type,
                 "client_id": client_id,
@@ -1428,30 +1404,19 @@ def mcp_authorize_consent(
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
     try:
-        form_data = await request.form()
-        client_secret = form_data.get("client_secret")
-        client_id = form_data.get("client_id")
-        grant_type = form_data.get("grant_type")
-        code = form_data.get("code")
-        redirect_uri = form_data.get("redirect_uri")
-        resource = form_data.get("resource")
-        code_verifier = form_data.get("code_verifier")
-        refresh_token = form_data.get("refresh_token")
-        scope = form_data.get("scope")
+        request_data = await _get_token_request_data(request)
     except Exception:
-        try:
-            body = await request.json()
-            client_secret = body.get("client_secret")
-            client_id = body.get("client_id")
-            grant_type = body.get("grant_type")
-            code = body.get("code")
-            redirect_uri = body.get("redirect_uri")
-            resource = body.get("resource")
-            code_verifier = body.get("code_verifier")
-            refresh_token = body.get("refresh_token")
-            scope = body.get("scope")
-        except Exception:
-            return _oauth_error("invalid_request", "Invalid request body")
+        return _oauth_error("invalid_request", "Invalid request body")
+
+    client_secret = request_data.get("client_secret")
+    client_id = request_data.get("client_id")
+    grant_type = request_data.get("grant_type")
+    code = request_data.get("code")
+    redirect_uri = request_data.get("redirect_uri")
+    resource = request_data.get("resource")
+    code_verifier = request_data.get("code_verifier")
+    refresh_token = request_data.get("refresh_token")
+    scope = request_data.get("scope")
 
     client = await run_blocking(db_executor, mcp_oauth_db.get_client, client_id or "")
     if (
@@ -1508,7 +1473,7 @@ async def mcp_streamable_http(
 
     - POST JSON-RPC messages to this endpoint
     - Responses are returned as SSE stream or JSON depending on Accept header
-    - Session ID is returned in Mcp-Session-Id header after initialization
+    - This hosted transport is stateless; bearer-token auth scopes every request
     """
     # Authenticate
     auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
@@ -1524,16 +1489,6 @@ async def mcp_streamable_http(
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON body")
 
-    # Get session if provided
-    session = None
-    if mcp_session_id:
-        if mcp_session_id not in active_sessions:
-            raise HTTPException(status_code=404, detail="Session not found")
-        session = active_sessions[mcp_session_id]
-        # Verify session belongs to this user
-        if session.user_id != auth_context.uid:
-            raise HTTPException(status_code=403, detail="Session does not belong to this user")
-
     # Handle batch requests (array of messages)
     messages = body if isinstance(body, list) else [body]
 
@@ -1543,7 +1498,7 @@ async def mcp_streamable_http(
     if all_notifications:
         # Process notifications without response
         for msg in messages:
-            await run_blocking(db_executor, handle_mcp_message, auth_context, msg, session)
+            await run_blocking(db_executor, handle_mcp_message, auth_context, msg)
         return Response(status_code=202)
 
     # Process messages and collect responses
@@ -1551,7 +1506,7 @@ async def mcp_streamable_http(
     new_session_id = None
 
     for msg in messages:
-        response, session_id = await run_blocking(db_executor, handle_mcp_message, auth_context, msg, session)
+        response, session_id = await run_blocking(db_executor, handle_mcp_message, auth_context, msg)
         if session_id:
             new_session_id = session_id
         if response:
@@ -1601,6 +1556,8 @@ async def mcp_sse_get(
     if not auth_context:
         raise invalid_mcp_auth_exception()
 
+    await run_blocking(critical_executor, check_rate_limit_inline, auth_context.uid, "mcp:sse")
+
     # For backwards compatibility, also support the old SSE flow
     # Return an empty SSE stream that just sends keepalives
     async def event_generator():
@@ -1642,18 +1599,8 @@ def mcp_delete_session(
     if not auth_context:
         raise invalid_mcp_auth_exception("Invalid or missing API key")
 
-    if not mcp_session_id:
-        raise HTTPException(status_code=400, detail="Mcp-Session-Id header required")
-
-    if mcp_session_id not in active_sessions:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    session = active_sessions[mcp_session_id]
-    if session.user_id != auth_context.uid:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this session")
-
-    # Delete the session
-    del active_sessions[mcp_session_id]
+    # Hosted MCP is stateless; terminate requests are best-effort so stale
+    # or load-balanced session ids do not create client-visible errors.
     return Response(status_code=204)
 
 

@@ -1,0 +1,10 @@
+{
+  "version": "0.11.568",
+  "date": "2026-06-29",
+  "changes": [
+    "Improved OpenClaw and Hermes agent handoff so unavailable local providers prompt for setup instead of creating failed pills",
+    "Improved the onboarding second-brain graph branding for sharing",
+    "Improved desktop backend consistency for conversations and memories",
+    "Improved desktop AI timeout handling so slow Gemini requests fail clearly before the backend deadline"
+  ]
+}

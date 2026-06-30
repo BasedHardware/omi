@@ -30,6 +30,26 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertEqual(toolNames, Set(DesktopCapabilityRegistry.realtimeToolNames))
     }
 
+    func testRealtimeSpawnAgentProviderEnumOnlyAdvertisesAvailableProviders() {
+        let tools = RealtimeHubTools.openAITools(availableDirectedProviders: ["openclaw"])
+        let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }
+        let parameters = spawnAgent?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+        let provider = properties?["provider"] as? [String: Any]
+
+        XCTAssertEqual(provider?["enum"] as? [String], ["openclaw"])
+    }
+
+    func testRealtimeSpawnAgentOmitsProviderWhenNoLocalProvidersAreAvailable() {
+        let tools = RealtimeHubTools.openAITools(availableDirectedProviders: [])
+        let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }
+        let parameters = spawnAgent?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+
+        XCTAssertNil(properties?["provider"])
+        XCTAssertNotNil(properties?["brief"])
+    }
+
     func testRealtimeTaskAgentStatusToolIsExposed() {
         let tools = RealtimeHubTools.openAITools
         let statusTool = tools.first { ($0["name"] as? String) == HubTool.getTaskAgentStatus.rawValue }

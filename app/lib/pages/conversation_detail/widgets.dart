@@ -262,7 +262,7 @@ class GetSummaryWidgets extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: folder != null ? folder.colorValue.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+          color: folder != null ? folder.colorValue.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(

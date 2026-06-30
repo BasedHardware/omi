@@ -295,6 +295,7 @@ enum BridgeError: LocalizedError {
   case restarting
   case requestAlreadyActive
   case agentError(String)
+  case agentRuntimeFailure(AgentRuntimeFailure)
   case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
   case authMissing
 
@@ -326,6 +327,8 @@ enum BridgeError: LocalizedError {
       return "A response is already running for this chat."
     case .authMissing:
       return "Please sign in to use AI chat."
+    case .agentRuntimeFailure(let failure):
+      return failure.displayMessage
     case .agentError(let msg):
       let lower = msg.lowercased()
       if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")

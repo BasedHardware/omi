@@ -10,3 +10,15 @@ feature_bundles:
       false_negative_regression: none
       p95_latency_ms: "<= LKG + 10%"
       cost_per_success: "<= LKG + 15%"
+  - feature: conversation_structure.extract.shadow
+    lane_id: omi:auto:chat-structured
+    prompt_version: conversation_structure.extract.v1
+    parser_version: ConversationStructureExtraction.v1
+    eval_suite: conversation_structure_extract.v1
+    promotion_gates:
+      schema_valid_rate: ">= 99.5%"
+      category_match_rate: ">= 95%"
+      title_empty_regression: none
+      overview_empty_regression: none
+      p95_latency_ms: "<= LKG + 10%"
+      cost_per_success: "<= LKG + 15%"

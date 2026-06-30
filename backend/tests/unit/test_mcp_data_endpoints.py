@@ -7,6 +7,7 @@ stubbing pattern in test_mcp_search_memories.py.
 """
 
 from datetime import datetime, timezone
+import json
 from unittest.mock import patch, MagicMock
 import os
 import sys
@@ -148,6 +149,53 @@ NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
 
 
+async def _run_blocking_inline(_executor, func, *args, **kwargs):
+    return func(*args, **kwargs)
+
+
+class _JsonRequest:
+    def __init__(self, body):
+        self.headers = {"content-type": "application/json"}
+        self.body = body
+
+    async def json(self):
+        return self.body
+
+    async def is_disconnected(self):
+        return False
+
+
+class _FormRequest:
+    def __init__(self, body):
+        self.headers = {"content-type": "application/x-www-form-urlencoded"}
+        self.body = body
+
+    async def form(self):
+        return self.body
+
+
+@pytest.mark.asyncio
+async def test_token_request_parser_reads_json_body():
+    body = {
+        'grant_type': 'authorization_code',
+        'client_id': 'omi-chatgpt-prod',
+        'code': 'omi_code_test',
+    }
+
+    assert await sse._get_token_request_data(_JsonRequest(body)) == body
+
+
+@pytest.mark.asyncio
+async def test_token_request_parser_reads_form_body():
+    body = {
+        'grant_type': 'authorization_code',
+        'client_id': 'omi-chatgpt-prod',
+        'code': 'omi_code_test',
+    }
+
+    assert await sse._get_token_request_data(_FormRequest(body)) == body
+
+
 def test_sse_tools_list_filters_by_oauth_scopes():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     response, session_id = sse.handle_mcp_message(auth_context, {'id': 1, 'method': 'tools/list'})
@@ -158,6 +206,57 @@ def test_sse_tools_list_filters_by_oauth_scopes():
     assert 'search_memories' in names
     assert 'create_memory' not in names
     assert 'get_conversations' not in names
+
+
+@pytest.mark.asyncio
+async def test_sse_post_tools_list_accepts_missing_session_id():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
+
+    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
+        sse, 'authenticate_mcp_request', return_value=auth_context
+    ):
+        response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
+
+    payload = json.loads(response.body)
+    names = {tool['name'] for tool in payload['result']['tools']}
+    assert response.status_code == 200
+    assert 'get_memories' in names
+
+
+@pytest.mark.asyncio
+async def test_sse_post_tools_list_ignores_stale_session_id():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
+
+    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
+        sse, 'authenticate_mcp_request', return_value=auth_context
+    ):
+        response = await sse.mcp_streamable_http(
+            request,
+            authorization='Bearer token',
+            mcp_session_id='session-from-another-instance',
+            accept=None,
+        )
+
+    payload = json.loads(response.body)
+    names = {tool['name'] for tool in payload['result']['tools']}
+    assert response.status_code == 200
+    assert 'get_memories' in names
+
+
+@pytest.mark.asyncio
+async def test_sse_get_keepalive_uses_transport_rate_limit():
+    auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
+    request = _JsonRequest({})
+
+    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
+        sse, 'authenticate_mcp_request', return_value=auth_context
+    ), patch.object(sse, 'check_rate_limit_inline') as check_rate_limit:
+        response = await sse.mcp_sse_get(request, authorization='Bearer token')
+
+    assert response.status_code == 200
+    check_rate_limit.assert_called_once_with(UID, 'mcp:sse')
 
 
 def test_sse_tool_security_schemes_match_runtime_scope_map():

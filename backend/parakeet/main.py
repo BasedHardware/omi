@@ -1,12 +1,15 @@
 import asyncio
 import functools
 import gc
+import math
 import os
 import time
 import uuid
 import logging
 import io as _io
 import wave as _wave
+
+import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -86,10 +89,23 @@ _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
     try:
+        info = sf.info(_io.BytesIO(data))
+        return info.duration
+    except Exception:
+        pass
+    try:
         with _wave.open(_io.BytesIO(data), 'rb') as wf:
             return wf.getnframes() / wf.getframerate()
     except Exception:
+        if _max_file_duration_sec > 0:
+            return float('inf')
         return 0.0
+
+
+def _duration_limit_detail(audio_dur: float) -> str:
+    if math.isinf(audio_dur):
+        return "Cannot determine audio duration"
+    return f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"
 
 
 def _on_batch_complete(queue_durations, inference_seconds, batch_size):
@@ -122,6 +138,10 @@ async def lifespan(app: FastAPI):
             max_queue_depth=int(os.getenv("PARAKEET_MAX_QUEUE_DEPTH", "4096")),
             on_batch_complete=_on_batch_complete,
             on_gpu_oom=_on_gpu_oom,
+            vram_safety_factor=float(os.getenv("PARAKEET_VRAM_SAFETY_FACTOR", "0.8")),
+            vram_bytes_per_t2=float(os.getenv("PARAKEET_VRAM_BYTES_PER_T2", "136.6")),
+            starvation_timeout_sec=float(os.getenv("PARAKEET_STARVATION_TIMEOUT", "5.0")),
+            max_inflight=int(os.getenv("PARAKEET_MAX_INFLIGHT", "2")),
         )
         await batch_engine.start()
         logger.info("Server started, GPU model loading in background...")
@@ -169,14 +189,14 @@ async def transcribe(file: UploadFile = File(...)):
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
-        if audio_dur > 0:
-            AUDIO_DURATION.observe(audio_dur)
         if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
             status = "rejected"
             return JSONResponse(
                 status_code=413,
-                content={"detail": f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"},
+                content={"detail": _duration_limit_detail(audio_dur)},
             )
+        if audio_dur > 0 and math.isfinite(audio_dur):
+            AUDIO_DURATION.observe(audio_dur)
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
@@ -225,14 +245,14 @@ async def transcribe_v2(
     try:
         data = await file.read()
         audio_dur = _get_audio_duration_from_bytes(data)
-        if audio_dur > 0:
-            AUDIO_DURATION.observe(audio_dur)
         if _max_file_duration_sec > 0 and audio_dur > _max_file_duration_sec:
             status = "rejected"
             return JSONResponse(
                 status_code=413,
-                content={"detail": f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"},
+                content={"detail": _duration_limit_detail(audio_dur)},
             )
+        if audio_dur > 0 and math.isfinite(audio_dur):
+            AUDIO_DURATION.observe(audio_dur)
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:

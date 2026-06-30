@@ -1,0 +1,9 @@
+{
+  "version": "0.11.565",
+  "date": "2026-06-29",
+  "changes": [
+    "Improved desktop app maintainability for settings, app state, and backend data sync",
+    "Restored the home page ambient glow to purple",
+    "Fixed push-to-talk getting stuck with silent microphone capture until Omi was relaunched"
+  ]
+}

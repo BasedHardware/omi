@@ -123,6 +123,10 @@ def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
     return resolved_route.last_known_good_route
 
 
+def selected_serving_route_artifact_id(resolved_route: ResolvedRoute) -> str:
+    return _select_serving_route(resolved_route).route_artifact_id
+
+
 def _is_route_eligible_to_serve(route: RouteArtifact, validated_request: ValidatedChatCompletionRequest) -> bool:
     """Whether a route should receive live traffic based on rollout stage and percent."""
     if route.rollout.stage in (RolloutStage.SHADOW, RolloutStage.DISABLED):

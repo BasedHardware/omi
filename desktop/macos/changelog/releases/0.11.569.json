@@ -1,0 +1,7 @@
+{
+  "version": "0.11.569",
+  "date": "2026-06-30",
+  "changes": [
+    "Fixed desktop recording reconciliation so cloud sessions use a durable client id and recover from missing backend matches"
+  ]
+}

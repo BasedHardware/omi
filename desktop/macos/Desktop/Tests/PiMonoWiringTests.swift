@@ -44,6 +44,68 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
   }
 
+  func testLocalAgentProviderDetectorUsesExplicitCommand() {
+    let availability = LocalAgentProviderDetector.availability(
+      for: .hermes,
+      environment: ["OMI_HERMES_ADAPTER_COMMAND": " /usr/local/bin/hermes acp "],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertTrue(availability.isAvailable)
+    XCTAssertEqual(availability.status, .available(command: "/usr/local/bin/hermes acp"))
+  }
+
+  func testLocalAgentProviderDetectorFindsExecutableInActivationPath() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-detector-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("openclaw")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .openclaw,
+      environment: [:],
+      homeDirectory: home.path)
+
+    XCTAssertEqual(availability.status, .available(command: executable.path))
+  }
+
+  func testLocalAgentProviderDetectorIgnoresArbitraryPathEntries() throws {
+    let root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-path-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let executable = root.appendingPathComponent("hermes")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .hermes,
+      environment: ["PATH": root.path],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertFalse(availability.isAvailable)
+  }
+
+  func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {
+    let availability = LocalAgentProviderDetector.availability(
+      for: .openclaw,
+      environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
+      homeDirectory: "/tmp/missing-home")
+
+    XCTAssertFalse(availability.isAvailable)
+    XCTAssertEqual(
+      availability.setupPrompt,
+      "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+    XCTAssertEqual(
+      availability.toolError,
+      "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+  }
+
   // MARK: - ApiKeysResponse shape assertion
   // After #6594, the response must NOT contain anthropic_api_key.
 

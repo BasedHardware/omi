@@ -15,13 +15,31 @@ as arguments to these wrappers).
 
 Usage:
   python3 scan_async_blockers.py [--dirs backend/routers backend/utils] [--json]
+  python3 scan_async_blockers.py --diff-base origin/main --fail-on high_network_io,mixed_await_sync_db
 
 Exit codes:
-  0 = clean (no HIGH findings)
-  1 = HIGH findings present
+  0 = clean for the selected fail-on policy
+  1 = selected fail-on findings present
 """
 
-import ast, os, sys, json, argparse
+import argparse
+import ast
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+DEFAULT_FAIL_ON = ("high_network_io",)
+FAIL_ON_CATEGORIES = (
+    "high_network_io",
+    "async_helpers_with_blocking",
+    "time_sleep",
+    "mixed_await_sync_db",
+    "no_await_should_be_def",
+    "medium_file_io",
+)
 
 
 def get_db_imports(source):
@@ -53,8 +71,13 @@ def get_storage_imports(source):
     return names
 
 
+def _walk_body(node):
+    for stmt in node.body:
+        yield from ast.walk(stmt)
+
+
 def has_await(node):
-    for child in ast.walk(node):
+    for child in _walk_body(node):
         if isinstance(child, ast.Await):
             return True
     return False
@@ -118,16 +141,18 @@ def scan_async_function(node, db_names, db_module_aliases, storage_names):
     file_io = []
     network_io = []
     sleeps = []
+    body_call_lines = set()
 
     offloaded = _get_offloaded_lines(node)
     nested = _collect_nested_func_lines(node)
 
-    for child in ast.walk(node):
+    for child in _walk_body(node):
         if not isinstance(child, ast.Call):
             continue
         line = child.lineno
         if line in offloaded or line in nested:
             continue
+        body_call_lines.add(line)
         if isinstance(child.func, ast.Name):
             if child.func.id in db_names:
                 db_calls.append({"line": line, "call": child.func.id})
@@ -154,7 +179,7 @@ def scan_async_function(node, db_names, db_module_aliases, storage_names):
             ):
                 network_io.append({"line": line, "call": "creds.refresh() [sync HTTP]"})
 
-    return db_calls, file_io, network_io, sleeps
+    return db_calls, file_io, network_io, sleeps, body_call_lines
 
 
 def collect_py_files(dirs):
@@ -165,6 +190,13 @@ def collect_py_files(dirs):
                 if fname.endswith('.py') and fname != '__init__.py':
                     files.append(os.path.join(root, fname))
     return sorted(files)
+
+
+def _line_span(node):
+    start_line = node.lineno
+    if node.decorator_list:
+        start_line = min(dec.lineno for dec in node.decorator_list)
+    return start_line, getattr(node, "end_lineno", node.lineno)
 
 
 def scan_dirs(dirs):
@@ -205,16 +237,20 @@ def scan_dirs(dirs):
                 continue
 
             is_endpoint = any('router' in ast.dump(d).lower() for d in node.decorator_list)
-            db_calls, file_io, network_io, sleeps = scan_async_function(
+            db_calls, file_io, network_io, sleeps, body_call_lines = scan_async_function(
                 node, db_names, db_module_aliases, storage_names
             )
             endpoint_has_await = has_await(node)
+            start_line, end_line = _line_span(node)
+            blocking_call_lines = {call["line"] for call in db_calls + file_io + network_io + sleeps}
+            all_calls_are_blocking = bool(body_call_lines) and body_call_lines <= blocking_call_lines
 
             if is_endpoint:
                 method, path = get_route_info(node.decorator_list)
                 entry = {
                     "file": fpath,
-                    "line": node.lineno,
+                    "line": start_line,
+                    "end_line": end_line,
                     "endpoint": node.name,
                     "method": method,
                     "path": path,
@@ -229,7 +265,12 @@ def scan_dirs(dirs):
                     results["time_sleep"].append({**entry, "calls": sleeps})
                 if not endpoint_has_await:
                     results["no_await_should_be_def"].append(
-                        {**entry, "db_calls": db_calls, "all_blocking": db_calls + file_io + network_io}
+                        {
+                            **entry,
+                            "db_calls": db_calls,
+                            "all_blocking": db_calls + file_io + network_io + sleeps,
+                            "all_calls_are_blocking": all_calls_are_blocking,
+                        }
                     )
                 elif db_calls:
                     results["mixed_await_sync_db"].append({**entry, "db_calls": db_calls})
@@ -238,7 +279,8 @@ def scan_dirs(dirs):
                     results["async_helpers_with_blocking"].append(
                         {
                             "file": fpath,
-                            "line": node.lineno,
+                            "line": start_line,
+                            "end_line": end_line,
                             "function": node.name,
                             "network_io": network_io,
                             "file_io": file_io,
@@ -259,6 +301,127 @@ def scan_dirs(dirs):
         "async_helpers_with_blocking": len(results["async_helpers_with_blocking"]),
     }
     return results
+
+
+def _normalize_path(path):
+    return path.replace(os.sep, "/")
+
+
+def _diff_paths(dirs):
+    return [_normalize_path(d.rstrip("/")) for d in dirs]
+
+
+def changed_scope(diff_base, dirs):
+    """Return changed line ranges and import-changed files for diff-scoped failures."""
+    cmd = [
+        "git",
+        "diff",
+        "--unified=0",
+        "--diff-filter=ACMR",
+        f"{diff_base}...HEAD",
+        "--",
+        *_diff_paths(dirs),
+    ]
+    proc = subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE)
+    ranges_by_file = {}
+    import_changed_files = set()
+    current_file = None
+    hunk_re = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+
+    for line in proc.stdout.splitlines():
+        if line.startswith("+++ b/"):
+            current_file = line.removeprefix("+++ b/")
+            ranges_by_file.setdefault(current_file, [])
+            continue
+        if current_file is None:
+            continue
+        if line.startswith("@@"):
+            match = hunk_re.match(line)
+            if not match:
+                continue
+            start = int(match.group(1))
+            count = int(match.group(2) or "1")
+            if count == 0:
+                # Deletion-only hunks have an empty new-side range (for example
+                # ``+42,0``). Keep the adjacent post-delete line in scope so
+                # diff-scoped fail-on checks still catch regressions caused by
+                # removing an await/offload inside an otherwise unchanged async
+                # function.
+                start = max(start, 1)
+                ranges_by_file[current_file].append((start, start))
+                continue
+            ranges_by_file[current_file].append((start, start + count - 1))
+            continue
+        if not line.startswith(("+", "-")) or line.startswith(("+++", "---")):
+            continue
+        changed_source = line[1:].strip()
+        if changed_source.startswith(("import ", "from ")):
+            # Import-only changes in very large legacy async modules should not
+            # pull every pre-existing blocking call in the file into fail-on
+            # scope. The changed hunks themselves remain checked via ranges.
+            if "# async-blockers: no-import-scope" not in changed_source:
+                import_changed_files.add(current_file)
+
+    import_changed_files = {
+        file_path
+        for file_path in import_changed_files
+        if "async-blockers: no-import-scope" not in _read_source_for_scope(file_path)
+    }
+    return {"ranges": ranges_by_file, "import_changed_files": import_changed_files}
+
+
+def _read_source_for_scope(file_path):
+    try:
+        return Path(file_path).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+
+
+def finding_in_changed_scope(finding, scope):
+    file_path = _normalize_path(finding["file"])
+    if file_path in scope["import_changed_files"]:
+        return True
+
+    file_ranges = scope["ranges"].get(file_path, [])
+    if not file_ranges:
+        return False
+    source_text = _read_source_for_scope(file_path)
+    if "async-blockers: no-changed-range-scope" in source_text:
+        return False
+    start = finding["line"]
+    end = finding.get("end_line", start)
+    return any(start <= changed_end and end >= changed_start for changed_start, changed_end in file_ranges)
+
+
+def _finding_qualifies(category, finding):
+    return True
+
+
+def normalize_fail_on(values):
+    categories = []
+    for value in values:
+        for category in value.split(","):
+            category = category.strip()
+            if category:
+                categories.append(category)
+    unknown = sorted(set(categories) - set(FAIL_ON_CATEGORIES))
+    if unknown:
+        print(f"Error: unknown --fail-on categories: {', '.join(unknown)}", file=sys.stderr)
+        print(f"Valid categories: {', '.join(FAIL_ON_CATEGORIES)}", file=sys.stderr)
+        sys.exit(2)
+    return tuple(dict.fromkeys(categories))
+
+
+def selected_failures(results, fail_on, scope=None):
+    failures = []
+    for category in fail_on:
+        for finding in results.get(category, []):
+            if not _finding_qualifies(category, finding):
+                continue
+            if scope is not None and not finding_in_changed_scope(finding, scope):
+                continue
+            failures.append((category, finding))
+    return failures
 
 
 def print_report(results):
@@ -327,7 +490,26 @@ def main():
         help="Directories to scan (default: backend/routers backend/utils)",
     )
     parser.add_argument("--json", action="store_true", help="Output JSON instead of text")
+    parser.add_argument(
+        "--fail-on",
+        action="append",
+        default=None,
+        metavar="CATEGORY[,CATEGORY...]",
+        help=(
+            "Finding categories that should make the scanner exit 1. "
+            f"Valid categories: {', '.join(FAIL_ON_CATEGORIES)}. "
+            f"Default: {','.join(DEFAULT_FAIL_ON)}"
+        ),
+    )
+    parser.add_argument(
+        "--diff-base",
+        help=(
+            "Only fail findings whose function/decorator line range intersects lines changed since this git ref, "
+            "or findings in files with changed imports. The full report is still printed."
+        ),
+    )
     args = parser.parse_args()
+    fail_on = normalize_fail_on(args.fail_on or [",".join(DEFAULT_FAIL_ON)])
 
     for d in args.dirs:
         if not os.path.isdir(d):
@@ -335,15 +517,27 @@ def main():
             sys.exit(2)
 
     results = scan_dirs(args.dirs)
+    scope = changed_scope(args.diff_base, args.dirs) if args.diff_base else None
+    failures = selected_failures(results, fail_on, scope)
 
     if args.json:
         json.dump(results, sys.stdout, indent=2)
         print()
     else:
         print_report(results)
+        scope_label = (
+            f"changed function/decorator ranges and import-changed files since {args.diff_base}"
+            if args.diff_base
+            else "all scanned functions"
+        )
+        print(f"Fail-on policy: {', '.join(fail_on) if fail_on else '(none)'}")
+        print(f"Fail-on scope: {scope_label}")
+        print(f"Selected blocking findings: {len(failures)}")
+        for category, finding in failures:
+            label = finding.get("endpoint") or finding.get("function") or "async def"
+            print(f"  {category}: {finding['file']}:{finding['line']} | {label}")
 
-    has_high = results["summary"]["high_network_io"] > 0
-    sys.exit(1 if has_high else 0)
+    sys.exit(1 if failures else 0)
 
 
 if __name__ == "__main__":

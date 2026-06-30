@@ -6,6 +6,33 @@ cd "$ROOT_DIR"
 
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 
+pytest() {
+  python3 -m pytest "$@"
+}
+
+if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
+  if [[ ! -f "$BACKEND_UNIT_TEST_FILE_LIST" ]]; then
+    echo "BACKEND_UNIT_TEST_FILE_LIST does not exist: $BACKEND_UNIT_TEST_FILE_LIST" >&2
+    exit 1
+  fi
+
+  selected_tests=()
+  while IFS= read -r test_path; do
+    [[ -n "$test_path" ]] && selected_tests+=("$test_path")
+  done < "$BACKEND_UNIT_TEST_FILE_LIST"
+
+  if [[ ${#selected_tests[@]} -eq 0 ]]; then
+    echo "No backend unit tests selected."
+    exit 0
+  fi
+
+  echo "Running ${#selected_tests[@]} selected backend unit test file(s)."
+  for test_path in "${selected_tests[@]}"; do
+    pytest "$test_path" -v
+  done
+  exit 0
+fi
+
 pytest tests/unit/test_transcript_segment.py -v
 pytest tests/unit/test_import_job_status_detail_enum.py -v
 pytest tests/unit/test_text_similarity.py -v
@@ -26,6 +53,10 @@ pytest tests/unit/test_parakeet_nim.py -v
 pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
+pytest tests/unit/test_flush_pending_batch1.py -v
+pytest tests/unit/test_gpu_worker_submit_lock.py -v
+pytest tests/unit/test_vram_batch.py -v
+pytest tests/unit/test_oom_reproduction.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
 pytest tests/unit/test_parakeet_builtin_embedding.py -v
 pytest tests/unit/test_parakeet_endpoints.py -v
@@ -36,6 +67,7 @@ pytest tests/unit/test_mcp_search_conversations_poison.py -v
 pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
+pytest tests/unit/test_mcp_api_key_full_access.py -v
 pytest tests/unit/test_mcp_oauth.py -v
 pytest tests/unit/test_mcp_action_item_writes.py -v
 pytest tests/unit/test_mcp_conversations_poison.py -v
@@ -60,6 +92,7 @@ pytest tests/unit/test_llm_gateway_route_refs.py -v
 pytest tests/unit/test_llm_gateway_dependencies.py -v
 pytest tests/unit/test_llm_gateway_chat_extraction_pilot.py -v
 pytest tests/unit/test_backend_runtime_env_validator.py -v
+pytest tests/unit/test_google_credentials.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_llm_provider_plugin_structure.py -v
 pytest tests/unit/test_process_conversation_usage_context.py -v

@@ -784,6 +784,25 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("rejects extra top-level control tool keys to match advertised schemas", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const invalid = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        unexpected: "drift",
+      }),
+    );
+
+    expect(invalid).toMatchObject({
+      ok: false,
+      error: {
+        code: "invalid_tool_input",
+      },
+    });
+    expect(invalid.error.message).toContain("Unrecognized key");
+    store.close();
+  });
+
   it("filters persisted artifacts by session, run, attempt, and role", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const first = await kernel.executeRun(baseRunInput);

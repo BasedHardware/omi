@@ -93,9 +93,9 @@ export function adapterActivationError(adapterId: ProductionAdapterId): string |
   if (!envName) return undefined;
   const label = adapterId === "pi-mono" ? "pi-mono" : adapterId === "openclaw" ? "OpenClaw" : "Hermes";
   if (adapterId === "hermes" || adapterId === "openclaw") {
-    return `${label} command is not configured. Install ${label} or choose a custom ${label} command in settings. Advanced override: ${envName}.`;
+    return `${label} is not available. Make sure ${label} is installed first, then try again.`;
   }
-  return `${label} adapter is unavailable. Advanced override: ${envName}.`;
+  return `${label} adapter is unavailable.`;
 }
 
 export function ensureRegisteredAdapter(

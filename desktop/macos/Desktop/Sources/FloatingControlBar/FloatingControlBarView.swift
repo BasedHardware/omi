@@ -3,6 +3,12 @@ import Combine
 import MarkdownUI
 import SwiftUI
 
+enum ShortcutHintLayout {
+    static func visibleTokens(for keys: [String]) -> [String] {
+        keys
+    }
+}
+
 /// Main floating control bar SwiftUI view composing all sub-views.
 struct FloatingControlBarView: View {
     @EnvironmentObject var state: FloatingControlBarState
@@ -115,6 +121,10 @@ struct FloatingControlBarView: View {
         state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation
     }
 
+    private var shouldUseOmiChatOverlayHitTarget: Bool {
+        shouldShowNotchHoverMenu && !showingNotchWaveform
+    }
+
     private var notchModeBody: some View {
         VStack(spacing: 0) {
             notchChrome
@@ -124,7 +134,7 @@ struct FloatingControlBarView: View {
                     notchOmiChatRow
                         .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
                         .opacity(notchSwitcherProgress)
-                        .allowsHitTesting(notchSwitcherProgress > 0.6)
+                        .allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)
 
                     Color.clear
                         .frame(
@@ -153,7 +163,7 @@ struct FloatingControlBarView: View {
             }
         }
         .overlay(alignment: .top) {
-            if shouldShowNotchHoverMenu && !showingNotchWaveform {
+            if shouldUseOmiChatOverlayHitTarget {
                 ZStack(alignment: .top) {
                     if !agentPills.pills.isEmpty {
                         NotchAgentMorphField(
@@ -162,17 +172,25 @@ struct FloatingControlBarView: View {
                             progress: notchSwitcherProgress,
                             notchHiddenCenterWidth: notchHiddenCenterWidth,
                             notchSideWidth: notchSideWidth,
+                            notchChromeHeight: notchChromeHeight,
                             rowTopOffset: FloatingControlBarWindow.notchAgentListRowHeight,
                             onSelect: openAgentInChat
                         )
-                        .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                        .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)
                         .allowsHitTesting(notchSwitcherProgress > 0.6)
 
                         notchAgentLogoHitTarget
-                            .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight)
+                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)
                     }
+
+                    notchOmiChatOverlayHitTarget
+                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)
+                        .offset(y: notchChromeHeight)
+                        .opacity(notchSwitcherProgress)
+                        .allowsHitTesting(notchSwitcherProgress > 0.6)
+                        .zIndex(2)
                 }
-                .frame(width: notchChromeLayoutWidth, height: FloatingControlBarWindow.notchChromeHeight + notchHoverMenuHeight)
+                .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)
                 .onHover { setAgentSwitcherHovering($0) }
             }
         }
@@ -358,7 +376,7 @@ struct FloatingControlBarView: View {
 
     private var notchOmiChatRow: some View {
         Button {
-            onAskAI()
+            openOmiChatFromNotchRow()
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "message.fill")
@@ -392,6 +410,20 @@ struct FloatingControlBarView: View {
         .buttonStyle(.plain)
     }
 
+    private var notchOmiChatOverlayHitTarget: some View {
+        Button {
+            openOmiChatFromNotchRow()
+        } label: {
+            Color.clear
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Omi Chat")
+        .accessibilityHint("Open Omi Chat")
+        .accessibilityAddTraits(.isButton)
+    }
+
     private func notchShortcutHint(_ title: String, keys: [String]) -> some View {
         HStack(spacing: 3) {
             Text(title)
@@ -412,7 +444,7 @@ struct FloatingControlBarView: View {
     }
 
     private func notchShortcutKeys(_ keys: [String]) -> some View {
-        ForEach(keys.prefix(2), id: \.self) { key in
+        ForEach(ShortcutHintLayout.visibleTokens(for: keys), id: \.self) { key in
             Text(key)
                 .scaledFont(size: 8, weight: .medium)
                 .foregroundStyle(.white.opacity(0.75))
@@ -423,10 +455,11 @@ struct FloatingControlBarView: View {
                 .background(Color.white.opacity(0.12))
                 .cornerRadius(3)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private var notchChromeHeight: CGFloat {
-        FloatingControlBarWindow.notchChromeHeight
+        FloatingControlBarWindow.notchChromeHeight(for: window?.screen ?? NSScreen.main)
     }
 
     private var barChrome: some View {
@@ -660,6 +693,12 @@ struct FloatingControlBarView: View {
         barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
     }
 
+    private func openOmiChatFromNotchRow() {
+        state.setNotchHoverMenuOpen(false)
+        notchLogoHovering = false
+        onAskAI()
+    }
+
     private func showAgentListFromConversation() {
         (window as? FloatingControlBarWindow)?.leaveAgentConversation() ?? onCloseAI()
     }
@@ -699,7 +738,7 @@ struct FloatingControlBarView: View {
         guard state.usesNotchIsland else { return true }
         guard let window else { return false }
         let hitHeight = state.isAgentSwitcherExpanded
-            ? max(FloatingControlBarWindow.notchChromeHeight, window.frame.height - notchSurfaceBottomInset)
+            ? max(notchChromeHeight, window.frame.height - notchSurfaceBottomInset)
             : FloatingControlBarWindow.notchActivationHeight
         return FloatingControlBarGeometry.notchChromeActivationContains(
             mouseLocation: NSEvent.mouseLocation,
@@ -1030,7 +1069,7 @@ struct FloatingControlBarView: View {
                 }
             }
         )
-        .onChange(of: agentPills.pills.count) { _ in
+        .onChange(of: agentPills.pills.count) {
             // The agent-pills header budget depends on whether pills exist, so
             // recompute the input height when the pill list changes while the
             // input/chat view is open. Without this the budget goes stale and
@@ -1748,6 +1787,7 @@ private struct NotchAgentMorphField: View {
     let progress: CGFloat
     let notchHiddenCenterWidth: CGFloat
     let notchSideWidth: CGFloat
+    let notchChromeHeight: CGFloat
     let rowTopOffset: CGFloat
     let onSelect: (AgentPill) -> Void
     @State private var pillStatusCancellables: [UUID: AnyCancellable] = [:]
@@ -1761,7 +1801,7 @@ private struct NotchAgentMorphField: View {
     var body: some View {
         GeometryReader { geometry in
             let width = geometry.size.width
-            let chromeHeight = FloatingControlBarWindow.notchChromeHeight
+            let chromeHeight = notchChromeHeight
             let rowHeight = FloatingControlBarWindow.notchAgentListRowHeight
             let rowSpacing = FloatingControlBarWindow.notchAgentListRowSpacing
             let verticalPadding = FloatingControlBarWindow.notchAgentListVerticalPadding

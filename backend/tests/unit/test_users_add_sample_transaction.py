@@ -11,6 +11,8 @@ os.environ.setdefault(
 # Mock the database client to avoid needing GCP credentials
 sys.modules["database._client"] = MagicMock()
 sys.modules["stripe"] = MagicMock()
+sys.modules["firebase_admin"] = MagicMock()
+sys.modules["firebase_admin.auth"] = MagicMock()
 
 
 class NotFound(Exception):

@@ -36,6 +36,7 @@ AUTH_CODE_TTL_SECONDS = int(os.getenv("MCP_OAUTH_AUTH_CODE_TTL_SECONDS", "600"))
 REFRESH_TOKEN_TTL_DAYS = int(os.getenv("MCP_OAUTH_REFRESH_TOKEN_TTL_DAYS", "365"))
 PKCE_ALLOWED_RE = re.compile(r"^[A-Za-z0-9._~-]{43,128}$")
 SUPPORTED_TOKEN_AUTH_METHODS = ["client_secret_post", "none"]
+PUBLIC_CHATGPT_CLIENT_IDS = {"omi-chatgpt-prod"}
 
 
 def hash_secret(secret: str) -> str:
@@ -127,6 +128,12 @@ def _env_clients() -> dict[str, dict]:
 def _legacy_chatgpt_client() -> dict:
     secret = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_SECRET", "")
     secret_hash = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_SECRET_SHA256", "")
+    auth_method = os.getenv("MCP_OAUTH_CHATGPT_TOKEN_AUTH_METHOD", "").strip()
+    if not auth_method and DEFAULT_CLIENT_ID in PUBLIC_CHATGPT_CLIENT_IDS:
+        auth_method = "none"
+    auth_method = auth_method or "client_secret_post"
+    if auth_method not in SUPPORTED_TOKEN_AUTH_METHODS:
+        auth_method = "client_secret_post"
     return {
         "id": DEFAULT_CLIENT_ID,
         "name": DEFAULT_CLIENT_NAME,
@@ -134,8 +141,9 @@ def _legacy_chatgpt_client() -> dict:
         "allowed_redirect_uris": _csv_env("MCP_OAUTH_CHATGPT_REDIRECT_URIS"),
         "allowed_resources": [MCP_RESOURCE_URL],
         "allowed_scopes": SUPPORTED_SCOPES,
-        "token_endpoint_auth_method": "client_secret_post",
-        "client_secret_hash": secret_hash or (hash_secret(secret) if secret else ""),
+        "token_endpoint_auth_method": auth_method,
+        "client_secret_hash": secret_hash
+        or (hash_secret(secret) if secret and auth_method == "client_secret_post" else ""),
         "disabled_at": None,
     }
 

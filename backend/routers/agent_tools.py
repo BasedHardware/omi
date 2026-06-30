@@ -133,11 +133,11 @@ async def _restart_vm_background(uid: str, vm_name: str, zone: str):
     """Background task: start stopped VM, update Firestore with new IP when ready."""
     try:
         ip = await _start_vm_and_wait(vm_name, zone)
-        _update_firestore_vm(uid, ip, "ready")
+        await run_blocking(db_executor, _update_firestore_vm, uid, ip, "ready")
         logger.info(f"[vm-ensure] VM {vm_name} restarted, ip={ip}")
     except Exception as e:
         logger.error(f"[vm-ensure] Failed to restart VM {vm_name}: {e}")
-        _update_firestore_vm(uid, None, "error")
+        await run_blocking(db_executor, _update_firestore_vm, uid, None, "error")
 
 
 # --------------- endpoints ---------------
@@ -181,12 +181,12 @@ async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_cu
 
         if gce_status in ("TERMINATED", "STOPPED"):
             logger.info(f"[vm-ensure] VM {vm_name} is {gce_status}, restarting...")
-            _update_firestore_vm(uid, None, "provisioning")
+            await run_blocking(db_executor, _update_firestore_vm, uid, None, "provisioning")
             background_tasks.add_task(_restart_vm_background, uid, vm_name, zone)
             return {"has_vm": True, "status": "provisioning"}
 
         if gce_status == "RUNNING" and fs_status != "ready":
-            _update_firestore_vm(uid, vm.get("ip"), "ready")
+            await run_blocking(db_executor, _update_firestore_vm, uid, vm.get("ip"), "ready")
             return {"has_vm": True, "status": "ready"}
 
     return {"has_vm": True, "status": fs_status}
