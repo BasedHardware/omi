@@ -49,10 +49,14 @@ describe("adapter selection and activation", () => {
       activationEnv: "OMI_OPENCLAW_ADAPTER_COMMAND",
       capabilities: { supportsTools: false, supportsModelSwitching: false },
     });
-    expect(adapterActivationError("hermes")).toContain("Hermes command is not configured");
-    expect(adapterActivationError("hermes")).toContain("Advanced override: OMI_HERMES_ADAPTER_COMMAND");
-    expect(adapterActivationError("openclaw")).toContain("OpenClaw command is not configured");
-    expect(adapterActivationError("openclaw")).toContain("Advanced override: OMI_OPENCLAW_ADAPTER_COMMAND");
+    expect(adapterActivationError("hermes")).toBe(
+      "Hermes is not available. Make sure Hermes is installed first, then try again."
+    );
+    expect(adapterActivationError("hermes")).not.toContain("OMI_HERMES_ADAPTER_COMMAND");
+    expect(adapterActivationError("openclaw")).toBe(
+      "OpenClaw is not available. Make sure OpenClaw is installed first, then try again."
+    );
+    expect(adapterActivationError("openclaw")).not.toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
   });
 
   it("source: daemon registers Hermes/OpenClaw explicitly and does not stamp MCP env as ACP", () => {

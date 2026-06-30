@@ -100,7 +100,10 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see OpenClaw on your PATH. Install OpenClaw or set OMI_OPENCLAW_ADAPTER_COMMAND.")
+      "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+    XCTAssertEqual(
+      availability.toolError,
+      "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
   }
 
   // MARK: - ApiKeysResponse shape assertion
