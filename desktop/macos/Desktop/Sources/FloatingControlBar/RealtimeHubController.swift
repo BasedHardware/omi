@@ -902,9 +902,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         ).resultText
       }
     case .getTaskAgentStatus:
-      let result = TaskAgentStatusRegistry.shared.combinedSummary()
-      log("RealtimeHub[\(providerTag)]: tool get_task_agent_status")
-      sendToolResultIfCurrent(source: source, callId: callId, name: name, output: result)
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "coordinator_open_loops",
+        emptyText: "No active agent attention items.",
+        errorText: "Could not read the agent coordinator right now."
+      ) {
+        do {
+          return try await DesktopCoordinatorService.shared.openLoopsJSON()
+        } catch {
+          logError("RealtimeHub[\(self.providerTag)]: coordinator status fallback failed", error: error)
+          return TaskAgentStatusRegistry.shared.combinedSummary()
+        }
+      }
     case .manageAgentPills:
       let action = ((arguments["action"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
         .flatMap { $0.isEmpty ? nil : $0 } ?? "list"

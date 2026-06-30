@@ -986,8 +986,8 @@ function normalizeProjectedSchema(schema: any): Record<string, unknown> {
   return normalized;
 }
 
-test("OMI_TOOLS: exactly 27 tools defined via defineTool()", () => {
-  assert.equal(OMI_TOOLS.length, 27);
+test("OMI_TOOLS: exact tool count matches canonical pi-mono projection", () => {
+  assert.equal(OMI_TOOLS.length, toolNamesForAdapter("pi-mono").length);
 });
 
 test("OMI_TOOLS: exact pi-mono projection from canonical manifest", () => {
@@ -1081,6 +1081,14 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     fill_cloud_connector_form: ["provider", "server_url", "oauth_client_secret"],
     list_agent_sessions: [],
     get_agent_run: ["runId"],
+    build_desktop_awareness_snapshot: [],
+    list_desktop_action_queue: [],
+    get_desktop_open_loops: [],
+    build_desktop_context_packet: ["objective", "packetJson", "retentionClass", "surfaceKind", "ttlMs"],
+    route_desktop_intent: ["surfaceKind", "utterance"],
+    evaluate_desktop_tool_policy: ["selectedBundles"],
+    create_desktop_dispatch: ["decisionPrompt", "kind", "priority", "title"],
+    resolve_desktop_dispatch: ["dispatchId", "status"],
     cancel_agent_run: ["runId"],
     inspect_agent_artifacts: [],
     update_agent_artifact_lifecycle: ["artifactId", "state"],

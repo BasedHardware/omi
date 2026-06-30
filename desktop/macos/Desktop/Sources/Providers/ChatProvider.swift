@@ -2102,6 +2102,88 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }.joined(separator: "\n")
     }
 
+    private func buildMainChatContextPacketPrompt(
+        for userMessage: String,
+        bridge: AgentBridge,
+        surface: AgentSurfaceReference?,
+        sessionKey: String
+    ) async -> String? {
+        guard surface?.surfaceKind == "main_chat" else { return nil }
+        let recentMessages = messages
+            .filter { !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            .suffix(6)
+            .enumerated()
+            .map { index, message in
+                [
+                    "snippetId": "recent_message_\(index + 1)",
+                    "sourceKind": "main_chat",
+                    "operation": message.sender == .user ? "recent_user_message" : "recent_assistant_message",
+                    "provenance": ["sessionKey": sessionKey, "messageId": message.id],
+                    "content": String(message.text.prefix(2_000)),
+                    "redactedContent": String(message.text.prefix(2_000)),
+                    "sensitivityTier": "low",
+                ] as [String: Any]
+            }
+
+        var snippets = recentMessages
+        snippets.append([
+            "snippetId": "current_user_message",
+            "sourceKind": "main_chat",
+            "operation": "current_user_message",
+            "provenance": ["sessionKey": sessionKey],
+            "content": userMessage,
+            "redactedContent": userMessage,
+            "sensitivityTier": "low",
+        ])
+
+        let input: [String: Any] = [
+            "ownerId": AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown",
+            "surfaceKind": "main_chat",
+            "objective": userMessage,
+            "retentionClass": "ephemeral",
+            "ttlMs": 15 * 60 * 1_000,
+            "packetJson": [
+                "snippets": snippets,
+                "selectedToolBundles": ["desktop.context.local_read", "desktop.context.screen_summary"],
+                "constraints": ["Use the persisted context packet; request dispatch before broad screen image access or mutation."],
+                "evidenceRequired": ["Cite local context, task, memory, run, or artifact evidence before claiming completion."],
+                "boundaryPolicy": [
+                    "taskMutations": "candidate_or_dispatch",
+                    "memoryWrites": "candidate_or_dispatch",
+                    "screenshotImages": "dispatch_required",
+                ],
+            ],
+        ]
+
+        do {
+            let raw = try await bridge.controlTool(name: "build_desktop_context_packet", input: input)
+            guard let data = raw.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  object["ok"] as? Bool == true,
+                  let packet = object["packet"] as? [String: Any],
+                  let packetId = packet["packetId"] as? String,
+                  let preview = packet["redactedPreviewJson"] as? [String: Any] else {
+                return nil
+            }
+            let previewData = try? JSONSerialization.data(withJSONObject: preview, options: [.sortedKeys])
+            let previewText = previewData.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+            return """
+            # Context Packet
+
+            Use persisted DesktopContextPacket `\(packetId)` as the scoped main-chat context. Redacted preview:
+
+            \(previewText)
+
+            # User Message
+
+            \(userMessage)
+            """
+        } catch {
+            logError("ChatProvider: failed to build main-chat context packet", error: error)
+            return nil
+        }
+    }
+
     /// Initialize chat: fetch sessions and load messages
     func initialize() async {
         await initializeVisibleMessages()
@@ -3351,9 +3433,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let resolvedLegacyClientScope =
                 legacyClientScope
                 ?? (resolvedSurface?.surfaceKind == "main_chat" ? "main-chat:\(resolvedSessionKey)" : nil)
+            let promptForBridge = await buildMainChatContextPacketPrompt(
+                for: trimmedText,
+                bridge: agentBridge,
+                surface: resolvedSurface,
+                sessionKey: resolvedSessionKey
+            ) ?? trimmedText
 
             let queryResult = try await agentBridge.query(
-                prompt: trimmedText,
+                prompt: promptForBridge,
                 systemPrompt: systemPrompt,
                 sessionKey: resolvedSessionKey,
                 omiSessionId: resolvedOmiSessionId,

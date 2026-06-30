@@ -23,6 +23,34 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(source.contains("recordPresentationCompletion"))
   }
 
+  func testMainChatUsesContextPacketInsteadOfRawPromptOnly() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+
+    XCTAssertTrue(source.contains("buildMainChatContextPacketPrompt("))
+    XCTAssertTrue(source.contains("build_desktop_context_packet"))
+    XCTAssertTrue(source.contains("DesktopContextPacket"))
+    XCTAssertTrue(source.contains("prompt: promptForBridge"))
+    XCTAssertTrue(source.contains("\"screenshotImages\": \"dispatch_required\""))
+  }
+
+  func testRealtimeStatusReadsCoordinatorOpenLoops() throws {
+    let source = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.openLoopsJSON()"))
+    XCTAssertTrue(source.contains("coordinator_open_loops"))
+    XCTAssertTrue(source.contains("TaskAgentStatusRegistry.shared.combinedSummary()"))
+  }
+
+  func testLocalAgentAPIRejectsUnexpectedHostAndOrigin() throws {
+    let source = try sourceFile("LocalAgentAPIServer.swift")
+
+    XCTAssertTrue(source.contains("acceptsLoopbackHostAndOrigin"))
+    XCTAssertTrue(source.contains("invalid_host_or_origin"))
+    XCTAssertTrue(source.contains("\"127.0.0.1:\\(LocalAgentAPISettings.port)\""))
+    XCTAssertTrue(source.contains("\"localhost:\\(LocalAgentAPISettings.port)\""))
+    XCTAssertTrue(source.contains("\"[::1]:\\(LocalAgentAPISettings.port)\""))
+  }
+
   private func sourceFile(_ relativePath: String) throws -> String {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
