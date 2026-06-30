@@ -400,7 +400,11 @@ def apply_long_term_patch_transaction(
             extra_item_updates[timestamp_key] = datetime.fromisoformat(
                 extra_item_updates[timestamp_key].replace("Z", "+00:00")
             )
-    if "confidence" in extra_item_updates and not isinstance(extra_item_updates["confidence"], (int, float)):
+    if (
+        "confidence" in extra_item_updates
+        and extra_item_updates["confidence"] is not None
+        and not isinstance(extra_item_updates["confidence"], (int, float))
+    ):
         extra_item_updates.pop("confidence")
     evidence = raw.pop("evidence", None) or [
         MemoryEvidence(

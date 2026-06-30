@@ -42,7 +42,7 @@ from utils.memory.canonical_memory_adapter import extraction_memory_id
 from utils.memory.canonical_vector_sync import sync_canonical_memory_vector
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
-from utils.log_sanitizer import sanitize
+from utils.log_sanitizer import sanitize, sanitize_pii
 
 logger = logging.getLogger(__name__)
 
@@ -264,9 +264,11 @@ def classify_legacy_backfill_bucket(row: dict) -> LegacyBackfillBucket:
     return LegacyBackfillBucket.archive_review
 
 
-def _legacy_bucket_sample(row: dict) -> Dict[str, Any]:
+def _legacy_bucket_sample(row: dict, *, bucket: LegacyBackfillBucket) -> Dict[str, Any]:
     content = " ".join((row.get("content") or "").strip().split())
-    if len(content) > 160:
+    if bucket == LegacyBackfillBucket.hold_sensitive:
+        content = "[redacted sensitive memory content]"
+    elif len(content) > 160:
         content = f"{content[:157]}..."
     return {
         "id": row.get("id"),
@@ -289,7 +291,7 @@ def _bucket_counts_and_samples(
         bucket = classify_legacy_backfill_bucket(row)
         counts[bucket.value] += 1
         if len(samples[bucket.value]) < sample_size:
-            samples[bucket.value].append(_legacy_bucket_sample(row))
+            samples[bucket.value].append(_legacy_bucket_sample(row, bucket=bucket))
     return counts, {bucket: sample_rows for bucket, sample_rows in samples.items() if sample_rows}
 
 
@@ -827,8 +829,10 @@ def backfill_user_bucketed(
             if row_vector_sync_failed:
                 vector_sync_failures += 1
         except Exception as exc:
-            logger.exception("bucketed legacy backfill failed for %s row %s", uid, legacy_row.get("id"))
-            errors.append(f"{legacy_row.get('id')}: {exc}")
+            safe_uid = sanitize_pii(uid)
+            safe_legacy_id = sanitize_pii(legacy_row.get("id") or "unknown")
+            logger.exception("bucketed legacy backfill failed for %s row %s", safe_uid, safe_legacy_id)
+            errors.append(f"{safe_legacy_id}: {sanitize(exc)}")
             break
 
     destination_count = _count_any_destination_backfill_items(uid, selected_rows, db_client=client)
@@ -975,8 +979,10 @@ def backfill_user(
             if row_vector_sync_failed:
                 vector_sync_failures += 1
         except Exception as exc:
-            logger.exception("legacy backfill failed for %s row %s", uid, legacy_row.get("id"))
-            errors.append(f"{legacy_row.get('id')}: {exc}")
+            safe_uid = sanitize_pii(uid)
+            safe_legacy_id = sanitize_pii(legacy_row.get("id") or "unknown")
+            logger.exception("legacy backfill failed for %s row %s", safe_uid, safe_legacy_id)
+            errors.append(f"{safe_legacy_id}: {sanitize(exc)}")
             break
 
         processed_index += 1

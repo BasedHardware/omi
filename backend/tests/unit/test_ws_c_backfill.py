@@ -519,6 +519,10 @@ def test_bucketed_inventory_dry_run_reports_counts_and_writes_nothing(_trusted_a
     assert report.intended_count == 1
     assert report.written_count == 0
     assert report.bucket_samples[LegacyBackfillBucket.manual_required_promotion.value][0]["id"] == "leg-manual"
+    assert report.bucket_samples[LegacyBackfillBucket.hold_sensitive.value][0]["content"] == (
+        "[redacted sensitive memory content]"
+    )
+    assert "password token" not in report.bucket_samples[LegacyBackfillBucket.hold_sensitive.value][0]["content"]
     assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
     assert get_non_filtered_fn(LEGACY_UID, limit=10, offset=0) == rows
     assert active_snapshot == rows

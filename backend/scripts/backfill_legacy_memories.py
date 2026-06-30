@@ -23,14 +23,9 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-BUCKET_CHOICES = [
-    "reviewed_long_term",
-    "manual_required_promotion",
-    "profile_required_promotion",
-    "archive_review",
-    "hold_noise",
-    "hold_sensitive",
-]
+from utils.memory.legacy_backfill import LegacyBackfillBucket, backfill_user, backfill_user_bucketed
+
+BUCKET_CHOICES = [bucket.value for bucket in LegacyBackfillBucket]
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -79,8 +74,6 @@ def main(argv: list[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 2
-        from utils.memory.legacy_backfill import backfill_user_bucketed
-
         report = backfill_user_bucketed(
             args.uid,
             bucket=args.bucket,
@@ -93,8 +86,6 @@ def main(argv: list[str] | None = None) -> int:
         if args.bucket is not None:
             print("--bucket requires --strategy bucketed", file=sys.stderr)
             return 2
-        from utils.memory.legacy_backfill import backfill_user
-
         report = backfill_user(
             args.uid,
             dry_run=args.dry_run,

@@ -288,6 +288,36 @@ def test_firestore_apply_allows_update_when_target_is_authoritative_active_same_
     assert result.status == ApplyStatus.committed
 
 
+def test_firestore_apply_update_allows_explicit_confidence_clear():
+    operation = _operation(
+        target_memory_id="mem1",
+        logical_payload={
+            "decision": "update",
+            "target_memory_id": "mem1",
+            "memory_text": "Updated.",
+            "result_status": "active",
+        },
+    )
+    db = _db_with(operation=operation, target_items=[_target_item(confidence=0.8)])
+    patch = _patch(
+        decision=DurablePatchDecision.update,
+        target_memory_id="mem1",
+        memory_text="Updated.",
+        confidence=None,
+    )
+
+    result = apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=patch,
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert result.memory_items[0].confidence is None
+    assert db.docs["users/u1/memory_items/mem1"]["confidence"] is None
+
+
 def test_firestore_apply_retries_committed_operation_from_stored_result_without_rereading_mutable_evidence_or_target():
     operation = _operation(
         target_memory_id="mem1",
