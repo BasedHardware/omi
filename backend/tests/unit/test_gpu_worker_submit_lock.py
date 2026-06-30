@@ -104,6 +104,52 @@ class TestSubmitLockRace(unittest.TestCase):
         loop.close()
         self.assertEqual(len(enqueued_after_stop), 0, "No work should be enqueued after _running is set to False")
 
+    def test_concurrent_stop_and_submit_sync_no_enqueue(self):
+        """Concurrent stop() + submit_sync() must not enqueue to dead queue."""
+        worker = self._make_started_worker()
+        errors = []
+
+        def submitter():
+            for _ in range(50):
+                try:
+                    worker.submit_sync({"audio_paths": ["/tmp/x.wav"]}, timeout=0.01)
+                except (RuntimeError, TimeoutError):
+                    pass
+                except Exception as e:
+                    errors.append(e)
+
+        threads = [threading.Thread(target=submitter) for _ in range(4)]
+        threads.append(threading.Thread(target=worker.stop))
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        self.assertEqual(len(errors), 0, f"Unexpected errors: {errors}")
+
+    def test_concurrent_stop_and_submit_embedding_sync_no_enqueue(self):
+        """Concurrent stop() + submit_embedding_sync() must not enqueue to dead queue."""
+        worker = self._make_started_worker()
+        errors = []
+
+        def submitter():
+            for _ in range(50):
+                try:
+                    worker.submit_embedding_sync({"waveform": None, "sample_rate": 16000}, timeout=0.01)
+                except (RuntimeError, TimeoutError):
+                    pass
+                except Exception as e:
+                    errors.append(e)
+
+        threads = [threading.Thread(target=submitter) for _ in range(4)]
+        threads.append(threading.Thread(target=worker.stop))
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        self.assertEqual(len(errors), 0, f"Unexpected errors: {errors}")
+
     def test_stop_sets_running_false_atomically(self):
         """stop() must set _running=False under the lock before releasing it."""
         worker = self._make_started_worker()
