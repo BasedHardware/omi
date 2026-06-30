@@ -229,6 +229,21 @@ create_action_item_tool = action_item_tools.create_action_item_tool
 update_action_item_tool = action_item_tools.update_action_item_tool
 
 
+_saved_sysmodules = {k: v for k, v in sys.modules.items()}
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _reinstall_stubs():
+    for k, mod in _saved_sysmodules.items():
+        if sys.modules.get(k) is not mod:
+            sys.modules[k] = mod
+            if '.' in k:
+                parent_name, attr_name = k.rsplit('.', 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None:
+                    setattr(parent, attr_name, mod)
+
+
 def _make_config(uid="test-user-123"):
     return {"configurable": {"user_id": uid}}
 
