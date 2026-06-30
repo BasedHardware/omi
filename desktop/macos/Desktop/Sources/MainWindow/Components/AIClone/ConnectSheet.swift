@@ -597,7 +597,7 @@ struct ConnectSheet: View {
                 var effectiveDevKey = config.omiDevApiKey
                 if effectiveDevKey.isEmpty {
                     let backendURL = config.discoveryBackendURL ?? "https://api.omi.me"
-                    let isLocal = backendURL.contains("localhost") || backendURL.contains("127.0.0.1")
+                    let isLocal = Self.isLoopbackURL(backendURL)
                     if isLocal {
                         // Can't create API key on local backend (Firebase
                         // audience mismatch). Leave empty — the plugin
@@ -713,27 +713,31 @@ struct ConnectSheet: View {
     }
 
     private func currentPersonaId() async throws -> String {
-        // If the plugin uses a local backend (not prod), we can't create
-        // the persona from the desktop because the desktop's Firebase
-        // token is from prod and the local backend rejects it (audience
-        // mismatch). Instead, return an empty string and let the plugin's
-        // /setup handler use whatever persona_id is already stored or
-        // fall back to a default.
+        // If the plugin uses a local backend, skip remote persona creation
+        // (Firebase audience mismatch between prod and dev projects).
         let backendURL = config.discoveryBackendURL ?? "https://api.omi.me"
-        let isLocal = backendURL.contains("localhost") || backendURL.contains("127.0.0.1")
 
-        if isLocal {
+        if Self.isLoopbackURL(backendURL) {
             log("ConnectSheet: plugin uses local backend, skipping remote persona creation")
-            // Return empty — the plugin will use the persona_id from its
-            // own storage (set up via the test persona script) or the
-            // plugin will handle it at /setup time.
             return ""
         }
 
-        // Prod path
-        if let persona = try? await APIClient.shared.getPersona() {
-            return persona.id
+        // Prod path: try to get existing persona. Use do/catch (not try?)
+        // so we distinguish 'no persona' (404) from real errors (network,
+        // auth, decoding). Identified by cubic + maintainer review: try?
+        // collapses all failures into 'no persona' and triggers
+        // unnecessary creation that masks the real problem.
+        do {
+            if let persona = try await APIClient.shared.getPersona() {
+                return persona.id
+            }
+        } catch {
+            // Re-throw — the caller (submit) will show the error to the user
+            log("ConnectSheet: getPersona failed: \(error)")
+            throw error
         }
+
+        // No persona found (nil return, not error) → create one
         log("ConnectSheet: no persona found, auto-creating one")
         let persona = try await APIClient.shared.getOrCreatePersona()
         return persona.id
@@ -745,6 +749,17 @@ struct ConnectSheet: View {
         pb.clearContents()
         pb.setString(s, forType: .string)
         #endif
+    }
+
+    /// Check if a URL points to a local loopback address.
+    /// Uses URL parsing + exact host comparison instead of substring
+    /// matching. Identified by cubic + maintainer review: substring
+    /// matching falsely classifies 'localhost.evil.com' as local.
+    private static func isLoopbackURL(_ urlString: String) -> Bool {
+        guard let url = URL(string: urlString), let host = url.host?.lowercased() else {
+            return false
+        }
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
     }
 
     private func openURL(_ s: String) {
