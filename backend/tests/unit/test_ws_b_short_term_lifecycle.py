@@ -204,6 +204,7 @@ def _clear_canonical_cohort_fixture(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
     clear_canonical_cohort(monkeypatch)
+    monkeypatch.setattr("utils.memory.short_term_promotion.extract_kg_for_promoted_memory", lambda *_, **__: None)
 
 
 def test_promotion_fires_on_batch_threshold_via_apply(monkeypatch):

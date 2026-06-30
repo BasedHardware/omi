@@ -519,6 +519,9 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
     ), patch(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
         return_value=None,
+    ), patch(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
+        return_value=None,
     ):
         promoted, _ = promote_short_term_item_via_apply(
             uid,
@@ -555,6 +558,9 @@ def test_promotion_path_updates_same_vector_id_layer(monkeypatch):
         return_value=SimpleNamespace(operation_id="op-promo-2"),
     ), patch(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
+        return_value=None,
+    ), patch(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
         return_value=None,
     ):
         promoted, _ = promote_short_term_item_via_apply(
@@ -601,6 +607,10 @@ def test_promotion_vector_sync_failure_increments_report(monkeypatch):
     )
     monkeypatch.setattr(
         "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
         lambda *_args, **_kwargs: None,
     )
     db = _canonical_db_with_control(uid)
