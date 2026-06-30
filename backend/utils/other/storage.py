@@ -60,7 +60,8 @@ if os.environ.get('SERVICE_ACCOUNT_JSON'):
     credentials = service_account.Credentials.from_service_account_info(service_account_info)
     storage_client = storage.Client(credentials=credentials)
 else:
-    storage_client = storage.Client()
+    _gcs_project = (os.environ.get('GOOGLE_CLOUD_PROJECT') or os.environ.get('FIREBASE_PROJECT_ID') or '').strip()
+    storage_client = storage.Client(project=_gcs_project) if _gcs_project else storage.Client()
 
 speech_profiles_bucket = (os.getenv('BUCKET_SPEECH_PROFILES') or '').strip() or None
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')

@@ -52,6 +52,11 @@ sys.modules["utils.notifications"].send_notification = MagicMock()
 from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
 
 
+@pytest.fixture(autouse=True)
+def _disable_webhook_retry_sleeps(monkeypatch):
+    monkeypatch.setenv("DEV_WEBHOOK_RETRY_DELAYS", "")
+
+
 class TestRealtimeTranscriptWebhook:
     """Test realtime_transcript_webhook uses httpx async."""
 
