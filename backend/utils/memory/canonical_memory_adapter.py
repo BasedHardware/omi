@@ -281,7 +281,7 @@ def search_canonical_memories(
 
 def _ensure_control_state(uid: str, *, db_client) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
-    ref = db_client.document(collections.memory_control_state)
+    ref = db_client.document(collections.memory_apply_control_state)
     snapshot = ref.get()
     if getattr(snapshot, "exists", False):
         return MemoryControlState(**(snapshot.to_dict() or {}))

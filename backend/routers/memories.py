@@ -20,7 +20,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from utils.apps import update_personas_async
 from utils.memory.v3_composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3_production_runtime import build_v3_production_runtime
-from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_enabled
+from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision, canonical_write_enabled
 from utils.memory.canonical_memory_adapter import (
     _read_canonical_memory_item,
     memory_item_to_memorydb,
@@ -29,6 +29,7 @@ from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.memory.required_promotion import required_promotion_payload
 from utils.client_device import DeviceScopeRequest, DeviceScopeValidationError, resolve_client_device
 from utils.memory.device_scope_filter import device_scope_validation_error
+from utils.log_sanitizer import sanitize_pii
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -201,6 +202,16 @@ def _set_device_scope_capability_header(http_response: Response, *, supported: b
     http_response.headers['X-Omi-Memory-Device-Scope-Supported'] = 'true' if supported else 'false'
 
 
+def _canonical_write_enabled_or_fail_closed(uid: str, *, db_client) -> bool:
+    decision = canonical_write_decision(uid, db_client=db_client)
+    if decision.enabled:
+        return True
+    if decision.fail_closed:
+        logger.warning("canonical_write fail_closed uid=%s reason=%s", sanitize_pii(uid), decision.reason)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+    return False
+
+
 def _validate_memory(uid: str, memory_id: str) -> dict:
     return fetch_memory_dict(uid, memory_id, db_client=getattr(db_client_module, 'db', None))
 
@@ -233,7 +244,7 @@ async def create_memory(
     payload = memory_db.dict()
 
     db_client = getattr(db_client_module, 'db', None)
-    if canonical_write_enabled(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         try:
             memory_service = MemoryService(db_client=db_client)
             if manually_added:
@@ -312,7 +323,7 @@ async def create_memories_batch(
             has_public = True
 
     db_client = getattr(db_client_module, 'db', None)
-    if canonical_write_enabled(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         memory_service = MemoryService(db_client=db_client)
         # Pre-validate the entire batch so a whitespace-only (or otherwise
         # canonical-rejected) item fails fast *before* any per-item write
@@ -499,7 +510,7 @@ def delete_memory(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
 ):
     db_client = getattr(db_client_module, 'db', None)
-    if canonical_write_enabled(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         try:
             MemoryService(db_client=db_client).delete(uid, memory_id)
         except ValueError:
@@ -520,7 +531,7 @@ def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
     db_client = getattr(db_client_module, 'db', None)
-    if canonical_write_enabled(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         MemoryService(db_client=db_client).delete_all(uid)
         return {'status': 'ok'}
 
@@ -553,7 +564,7 @@ def review_memory(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
     db_client = getattr(db_client_module, 'db', None)
-    if canonical_write_enabled(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
         MemoryService(db_client=db_client).review(uid, memory_id, value)
         return {'status': 'ok'}
@@ -569,7 +580,7 @@ def edit_memory(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:modify")),
 ):
     db_client = getattr(db_client_module, 'db', None)
-    if canonical_write_enabled(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
         MemoryService(db_client=db_client).update_content(uid, memory_id, value)
         return {'status': 'ok'}
@@ -597,7 +608,7 @@ def update_memory_visibility(
     if value not in ['public', 'private']:
         raise HTTPException(status_code=400, detail='Invalid visibility value')
     db_client = getattr(db_client_module, 'db', None)
-    if canonical_write_enabled(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         _validate_mutable_memory(uid, memory_id, db_client=db_client)
         MemoryService(db_client=db_client).update_visibility(uid, memory_id, value)
         postprocess_executor.submit(update_personas_async, uid)
