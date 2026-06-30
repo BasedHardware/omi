@@ -1,6 +1,5 @@
 """Shared unit-test fallbacks for optional import-time dependencies."""
 
-from contextlib import contextmanager
 import importlib.util
 import sys
 import types
@@ -15,9 +14,11 @@ import pytest
 # imported AFTER a poisoning file sees empty stubs instead of real packages.
 #
 # Proper fix: move module-level stubbing into fixtures/context managers.
-# Until then, snapshot sys.modules before each Module collection and restore
-# after.  Files that need stubs during execution re-apply them via
-# module-scoped autouse fixtures with explicit teardown.
+# Until then, snapshot protected package names before each Module collection
+# and restore after.  Files that need stubs during execution re-apply them
+# via module-scoped autouse fixtures (use ``stub_modules`` helper below).
+#
+# New test files MUST NOT rely on this hook — use fixtures instead.
 
 _module_snapshots = {}
 
@@ -56,10 +57,18 @@ def pytest_collectreport(report):
         cur = sys.modules.get(k)
         if cur is not mod:
             sys.modules[k] = mod
+            if '.' in k:
+                parent_name, attr_name = k.rsplit('.', 1)
+                parent = sys.modules.get(parent_name)
+                if parent is not None:
+                    setattr(parent, attr_name, mod)
     for k, orig_path in saved_paths.items():
         mod = sys.modules.get(k)
         if mod is not None and list(getattr(mod, '__path__', [])) != orig_path:
             mod.__path__ = orig_path
+
+
+from tests.unit._sysmodules_helpers import stub_modules  # noqa: F401
 
 
 def _install_prometheus_client_stub():
