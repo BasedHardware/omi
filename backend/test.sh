@@ -6,6 +6,29 @@ cd "$ROOT_DIR"
 
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 
+if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
+  if [[ ! -f "$BACKEND_UNIT_TEST_FILE_LIST" ]]; then
+    echo "BACKEND_UNIT_TEST_FILE_LIST does not exist: $BACKEND_UNIT_TEST_FILE_LIST" >&2
+    exit 1
+  fi
+
+  selected_tests=()
+  while IFS= read -r test_path; do
+    [[ -n "$test_path" ]] && selected_tests+=("$test_path")
+  done < "$BACKEND_UNIT_TEST_FILE_LIST"
+
+  if [[ ${#selected_tests[@]} -eq 0 ]]; then
+    echo "No backend unit tests selected."
+    exit 0
+  fi
+
+  echo "Running ${#selected_tests[@]} selected backend unit test file(s)."
+  for test_path in "${selected_tests[@]}"; do
+    pytest "$test_path" -v
+  done
+  exit 0
+fi
+
 pytest tests/unit/test_transcript_segment.py -v
 pytest tests/unit/test_import_job_status_detail_enum.py -v
 pytest tests/unit/test_text_similarity.py -v
