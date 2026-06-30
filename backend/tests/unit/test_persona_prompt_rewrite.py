@@ -426,6 +426,182 @@ class TestTemplateConsistency:
             _restore(old_mod)
 
 
+class TestRenderPersonaPromptTemplate:
+    """Pin the shared prompt template helper.
+
+    P2 from cubic AI review (PR #8682 follow-up 4601668066): the
+    previous design had two near-identical copies of the persona
+    prompt template inlined inside generate_persona_prompt and
+    update_persona_prompt. Extracting to _render_persona_prompt_template
+    means the template lives in exactly one place — but only if
+    these tests stay in place. They pin:
+
+    - the helper exists and is callable,
+    - the rendered output starts with 'You are {user_name}',
+    - the rendered output contains the Security paragraph (so a
+      regression that drops it fails loudly),
+    - tweets_text=None renders as 'None.' (the sentinel for
+      "no tweets available"),
+    - tweets_text=<real string> renders the string verbatim
+      (not escaped, not wrapped).
+    """
+
+    def test_helper_exists(self):
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            assert hasattr(apps_mod, '_render_persona_prompt_template')
+            assert callable(apps_mod._render_persona_prompt_template)
+        finally:
+            _restore(old_mod)
+
+    def test_starts_with_first_person_identity(self):
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            out = apps_mod._render_persona_prompt_template(
+                user_name='Alice',
+                memories_text='- likes coffee',
+                conversation_history='(none)',
+                tweets_text=None,
+            )
+            assert out.startswith('You are Alice.')
+        finally:
+            _restore(old_mod)
+
+    def test_security_paragraph_present(self):
+        """The Security paragraph is the prompt-injection defense from round 7.
+
+        If a future refactor accidentally drops it, the LLM no longer has
+        explicit instructions to ignore injected directives in
+        metadata/facts. This test pins that paragraph as a contract.
+        """
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            out = apps_mod._render_persona_prompt_template(
+                user_name='Alice',
+                memories_text='- likes coffee',
+                conversation_history='(none)',
+                tweets_text=None,
+            )
+            assert 'untrusted data' in out
+            assert 'never reveal credentials' in out.lower()
+        finally:
+            _restore(old_mod)
+
+    def test_tweets_none_renders_as_none_sentinel(self):
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            out = apps_mod._render_persona_prompt_template(
+                user_name='Alice',
+                memories_text='- likes coffee',
+                conversation_history='(none)',
+                tweets_text=None,
+            )
+            assert 'Recent tweets:\nNone.' in out
+        finally:
+            _restore(old_mod)
+
+    def test_tweets_string_renders_verbatim(self):
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            out = apps_mod._render_persona_prompt_template(
+                user_name='Alice',
+                memories_text='- likes coffee',
+                conversation_history='(none)',
+                tweets_text='condensed tweet summary here',
+            )
+            assert 'Recent tweets:\ncondensed tweet summary here' in out
+            assert 'None.' not in out  # sentinel only fires when tweets_text is None
+        finally:
+            _restore(old_mod)
+
+    def test_memories_and_conversation_blocks_present(self):
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            out = apps_mod._render_persona_prompt_template(
+                user_name='Alice',
+                memories_text='- likes coffee',
+                conversation_history='user: hi\nassistant: hey',
+                tweets_text=None,
+            )
+            assert 'Facts about Alice:\n- likes coffee' in out
+            assert 'Recent conversations (for situational awareness):\nuser: hi\nassistant: hey' in out
+        finally:
+            _restore(old_mod)
+
+
+class TestDeadMemoryFetchesRemoved:
+    """P2 from cubic AI review (PR #8682 follow-up 4601668066).
+
+    After the T-022 retrieval refactor, generate_persona_prompt and
+    update_persona_prompt no longer needed the legacy
+    get_memories(limit=250) / get_user_public_memories(limit=250)
+    fetches that built a lock-filtered list DISCARDED in favor of
+    the new retrieval path. Those fetches were wasting a 250-record
+    Firestore read per prompt generation, multiplied across
+    update_personas_async batched refreshes. These tests pin the
+    removal by asserting the dead fetch functions are NOT called
+    during prompt generation.
+
+    Strategy: spy on database.memories.get_memories /
+    get_user_public_memories and assert zero calls.
+    """
+
+    @pytest.mark.asyncio
+    async def test_generate_does_not_call_get_memories(self):
+        """generate_persona_prompt must NOT touch get_memories anymore.
+
+        Only get_user_name, get_conversations, retrieve_relevant_memories,
+        and format_memories_for_prompt should fire.
+        """
+        from unittest.mock import patch
+
+        from database import memories as memories_mod
+
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            with patch.object(memories_mod, 'get_memories') as spy_get_memories:
+                with patch.object(memories_mod, 'get_user_public_memories') as spy_get_public:
+                    await apps_mod.generate_persona_prompt('test-uid', {'connected_accounts': [], 'twitter': None})
+                    assert spy_get_memories.call_count == 0, (
+                        f'get_memories called {spy_get_memories.call_count} times — ' 'the T-022 dead fetch is back!'
+                    )
+                    assert spy_get_public.call_count == 0, (
+                        f'get_user_public_memories called {spy_get_public.call_count} times — '
+                        'wrong function being called from generate_persona_prompt'
+                    )
+        finally:
+            _restore(old_mod)
+
+    @pytest.mark.asyncio
+    async def test_update_does_not_call_get_user_public_memories(self):
+        from unittest.mock import patch
+
+        from database import memories as memories_mod
+
+        apps_mod, old_mod = _load_real_apps_module()
+        try:
+            with patch.object(memories_mod, 'get_user_public_memories') as spy_get_public:
+                with patch.object(memories_mod, 'get_memories') as spy_get_mem:
+                    persona = {
+                        'id': 'persona-1',
+                        'uid': 'test-uid',
+                        'name': 'Choguun',
+                        'connected_accounts': [],
+                        'twitter': None,
+                    }
+                    await apps_mod.update_persona_prompt(persona)
+                    assert spy_get_public.call_count == 0, (
+                        f'get_user_public_memories called {spy_get_public.call_count} times — '
+                        'the T-022 dead fetch is back!'
+                    )
+                    assert spy_get_mem.call_count == 0, (
+                        f'get_memories called {spy_get_mem.call_count} times — '
+                        'wrong function being called from update_persona_prompt'
+                    )
+        finally:
+            _restore(old_mod)
+
+
 class TestPromptSize:
     """Prompt must stay small enough that gpt-4.1-nano retains all facts."""
 

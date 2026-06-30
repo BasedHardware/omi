@@ -24,7 +24,7 @@ import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.chat import Message, MessageSender, MessageType
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from models.conversation import SearchRequest
 from models.app import App
 from utils.app_integrations import send_app_notification, trigger_external_integrations
