@@ -162,12 +162,14 @@ class CompositeTranscriptionSocket implements IPureSocket {
         final filterResult = _dropSecretSegments(segments);
         segments = filterResult.segments;
         if (filterResult.droppedCount > 0) {
-          unawaited(DebugLogManager.logEvent('hard_secret_artifact_dropped', {
-            'source': 'custom_stt_primary',
-            'artifact_type': 'transcript_segment',
-            'dropped_count': filterResult.droppedCount,
-            'categories': filterResult.categories,
-          }));
+          unawaited(
+            DebugLogManager.logEvent('hard_secret_artifact_dropped', {
+              'source': 'custom_stt_primary',
+              'artifact_type': 'transcript_segment',
+              'dropped_count': filterResult.droppedCount,
+              'categories': filterResult.categories,
+            }),
+          );
         }
         if (segments.isEmpty) {
           return;
