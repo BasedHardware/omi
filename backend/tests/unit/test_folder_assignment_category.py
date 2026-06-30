@@ -111,6 +111,13 @@ class TestResolveCategoryFolderId:
         assert folders_db.resolve_category_folder_id('', SYSTEM) is None
         assert folders_db.resolve_category_folder_id(None, SYSTEM) is None
 
+    def test_other_catchall_returns_none_not_personal(self):
+        # 'other' (and a missing category, which the caller maps to 'other') is the catch-all,
+        # not a meaningful topic. It must NOT fold onto Personal; resolving to None lets an
+        # uncertain conversation fall back to the default folder. Regression for #4043.
+        assert folders_db.resolve_category_folder_id('other', SYSTEM) is None
+        assert folders_db.resolve_category_folder_id('OTHER', SYSTEM) is None
+
     def test_returns_none_when_user_lacks_that_system_folder(self):
         only_work = [{'id': 'w', 'category_mapping': 'work'}]
         # 'music' folds onto social, which this user does not have.
@@ -156,6 +163,14 @@ class TestValidateFolderAssignment:
 
     def test_category_folder_not_in_user_folders_is_ignored(self):
         r = conv_folder.validate_folder_assignment(_resp('s', 0.3), SYSTEM, 'def', category_folder_id='ghost')
+        assert r.folder_id == 'def' and r.validation_status == 'low_confidence_defaulted'
+
+    def test_other_category_low_confidence_routes_to_default_not_personal(self):
+        # End-to-end of the missing/'other' path: resolve gives no category folder, so a
+        # low-confidence pick lands in the default folder, not Personal. Before #4043's fix
+        # 'other' folded onto Personal and this would have returned 'p'.
+        cat_folder = folders_db.resolve_category_folder_id('other', SYSTEM)
+        r = conv_folder.validate_folder_assignment(_resp('s', 0.3), SYSTEM, 'def', category_folder_id=cat_folder)
         assert r.folder_id == 'def' and r.validation_status == 'low_confidence_defaulted'
 
 
