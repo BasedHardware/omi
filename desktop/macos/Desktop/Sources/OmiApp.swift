@@ -1292,6 +1292,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Stop recurring task scheduler
     RecurringTaskScheduler.shared.stop()
 
+    // Finalize the active Rewind MP4 chunk while the app is still alive.
+    // AVAssetWriter files are not readable until finishWriting writes the trailer.
+    let rewindFlushSemaphore = DispatchSemaphore(value: 0)
+    Task.detached(priority: .userInitiated) {
+      await RewindIndexer.shared.stop()
+      rewindFlushSemaphore.signal()
+    }
+    if rewindFlushSemaphore.wait(timeout: .now() + 5) == .timedOut {
+      logError("AppDelegate: Timed out flushing Rewind chunk during termination")
+    }
+
     // Mark clean shutdown so next launch skips expensive DB integrity check
     RewindDatabase.markCleanShutdown()
 

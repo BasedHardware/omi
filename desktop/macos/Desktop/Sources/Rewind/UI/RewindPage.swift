@@ -11,6 +11,8 @@ struct RewindPage: View {
     @State private var currentIndex: Int = 0
     @State private var currentImage: NSImage?
     @State private var isLoadingFrame = false
+    @State private var frameLoadTask: Task<Void, Never>?
+    @State private var frameLoadRequestID = UUID()
     @State private var showDatePicker = false
 
     @State private var searchViewMode: SearchViewMode? = nil
@@ -173,7 +175,7 @@ struct RewindPage: View {
                 // First load or current screenshot deleted — start at newest (last index, ASC order)
                 currentIndex = newScreenshots.count - 1
                 selectedGroupIndex = 0
-                Task { await loadCurrentFrame() }
+                scheduleLoadCurrentFrame()
             }
         }
         .onChange(of: viewModel.activeSearchQuery) { oldQuery, newQuery in
@@ -436,7 +438,7 @@ struct RewindPage: View {
                         searchViewMode = .results
                         if !viewModel.screenshots.isEmpty {
                             currentIndex = 0
-                            Task { await loadCurrentFrame() }
+                            scheduleLoadCurrentFrame()
                         }
                     } label: {
                         Image(systemName: "list.bullet")
@@ -452,7 +454,7 @@ struct RewindPage: View {
                     Button {
                         if searchViewMode != .timeline && !viewModel.screenshots.isEmpty {
                             currentIndex = 0
-                            Task { await loadCurrentFrame() }
+                            scheduleLoadCurrentFrame()
                         }
                         searchViewMode = .timeline
                     } label: {
@@ -530,7 +532,7 @@ struct RewindPage: View {
                                 selectedGroupIndex = groupIndex
                                 currentIndex = 0
                                 searchViewMode = .timeline
-                                Task { await loadCurrentFrame() }
+                                scheduleLoadCurrentFrame()
                             }
                         )
                         .id(groupIndex)
@@ -817,22 +819,39 @@ struct RewindPage: View {
 
     // MARK: - Playback
 
-    private func loadCurrentFrame() async {
+    private func scheduleLoadCurrentFrame() {
+        frameLoadTask?.cancel()
+        frameLoadRequestID = UUID()
+        let requestID = frameLoadRequestID
+        let requestedIndex = currentIndex
+        frameLoadTask = Task {
+            await loadCurrentFrame(at: requestedIndex, requestID: requestID)
+        }
+    }
+
+    private func isCurrentFrameLoad(index: Int, requestID: UUID) -> Bool {
+        !Task.isCancelled && frameLoadRequestID == requestID && currentIndex == index
+    }
+
+    private func loadCurrentFrame(at requestedIndex: Int, requestID: UUID) async {
         let screenshots = activeScreenshots
-        guard currentIndex < screenshots.count else { return }
+        guard requestedIndex < screenshots.count else { return }
 
         isLoadingFrame = true
 
-        // Try to load the current frame
-        if let image = await tryLoadFrame(at: currentIndex) {
+        // Try to load the requested frame. Scrubbing can launch several loads;
+        // only the newest request is allowed to update visible state.
+        if let image = await tryLoadFrame(at: requestedIndex) {
+            guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID) else { return }
             currentImage = image
-            viewModel.selectScreenshot(screenshots[currentIndex])
+            viewModel.selectScreenshot(screenshots[requestedIndex])
             isLoadingFrame = false
             return
         }
 
         // Frame failed to load (likely in an unfinalized video chunk).
         // Do NOT move currentIndex — keep the user's position and show the last valid image.
+        guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID) else { return }
         isLoadingFrame = false
     }
 
@@ -886,7 +905,7 @@ struct RewindPage: View {
         guard newIndex != currentIndex else { return }
 
         currentIndex = newIndex
-        Task { await loadCurrentFrame() }
+        scheduleLoadCurrentFrame()
     }
 
     private func nextFrame() {

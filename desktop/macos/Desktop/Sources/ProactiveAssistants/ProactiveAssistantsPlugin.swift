@@ -534,6 +534,9 @@ public class ProactiveAssistantsPlugin: NSObject {
                 await memory.stop()
             }
         }
+        Task {
+            await RewindIndexer.shared.stop()
+        }
 
         focusAssistant = nil
         taskAssistant = nil
