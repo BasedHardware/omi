@@ -155,9 +155,7 @@ def test_update_canonical_memory_content_refreshes_kg_for_long_term():
     with (
         patch("utils.memory.canonical_memory_adapter.resolve_memory_system", return_value=MemorySystem.CANONICAL),
         patch("utils.memory.canonical_memory_adapter.invalidate_kg_for_memory_retraction") as mock_prune,
-        patch(
-            "utils.memory.canonical_memory_adapter.extract_kg_for_promoted_memory", return_value=True
-        ) as mock_extract,
+        patch("utils.memory.canonical_kg_promotion.extract_kg_for_promoted_memory", return_value=True) as mock_extract,
         patch("utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item"),
         patch("utils.memory.canonical_memory_adapter.sync_canonical_memory_vector"),
     ):
