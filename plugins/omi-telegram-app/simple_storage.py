@@ -57,7 +57,7 @@ def load_storage() -> None:
 
 
 def _save(path: str, payload: dict) -> None:
-    """Atomically write payload to path. Write to <path>.tmp, fsync, then os.replace.
+    """Atomically write payload to path. Write to <path>.tmp, then os.replace.
 
     A process crash mid-write leaves the original file untouched and a stray
     .tmp on disk for the next startup to clean up.
@@ -66,6 +66,18 @@ def _save(path: str, payload: dict) -> None:
     contain user tokens and API keys. Identified by cubic (P1): without
     explicit restrictive perms, a shared host or permissive umask leaves
     the JSON readable by other users on the box.
+
+    P2 from cubic AI review (PR #8682): the previous version called
+    `os.fsync()` here, which forces the kernel page cache to disk on
+    every save. The webhook handler hits this path twice per reply
+    turn (human + ai) and an fsync can take 5-30ms on slow disks —
+    blocking the asyncio event loop before the webhook returns 200 to
+    Meta/Telegram, occasionally exceeding the 10s timeout. Atomicity
+    is preserved by the tmp+rename pair (we never observe a torn
+    write on crash) — what we lose by skipping fsync is power-loss
+    durability for non-critical conversation history, which is
+    rebuildable from the Telegram/WhatsApp APIs if needed. We
+    deliberately do NOT fsync here.
     """
     tmp = f"{path}.{os.getpid()}.tmp"
     try:
@@ -76,7 +88,6 @@ def _save(path: str, payload: dict) -> None:
         with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
             f.flush()
-            os.fsync(f.fileno())
         os.replace(tmp, path)
         try:
             os.chmod(path, 0o600)
@@ -213,6 +224,15 @@ def pop_pending_setup(token: str) -> Optional[dict]:
     These one-shot records contain platform credentials and Omi
     developer API keys, so abandoned/leaked setup links should not
     remain redeemable indefinitely. Identified by maintainer review.
+
+    P2 from cubic AI review (PR #8682): the previous version
+    unconditionally called _save at the end even when nothing
+    changed — if the requested token was unknown AND there were
+    no stale entries to purge, we'd still rewrite (or remove)
+    the on-disk file. The webhook can hit this path with an
+    unknown / forged token; that's exactly the case where we
+    want the cheapest possible response. Track a `changed` flag
+    and only persist when state actually moved.
     """
     # Purge stale entries first
     now = datetime.utcnow()
@@ -238,17 +258,23 @@ def pop_pending_setup(token: str) -> Optional[dict]:
         except Exception:
             pass
 
-    # Pop the requested token
+    # Pop the requested token. Track whether the pop actually removed
+    # anything so we don't rewrite the file when both the pop AND the
+    # purge were no-ops (e.g. unknown token, no stale entries).
     payload = pending_setups.pop(token, None)
-    if pending_setups:
-        _save(PENDING_FILE, pending_setups)
-    else:
-        # Empty dict — clear the file so it doesn't linger with stale data.
-        try:
-            if os.path.exists(PENDING_FILE):
-                os.remove(PENDING_FILE)
-        except Exception:
-            pass
+    if payload is not None:
+        # Pop succeeded — persist the updated (smaller) dict or clear
+        # the file if it's now empty.
+        if pending_setups:
+            _save(PENDING_FILE, pending_setups)
+        else:
+            try:
+                if os.path.exists(PENDING_FILE):
+                    os.remove(PENDING_FILE)
+            except Exception:
+                pass
+    # If payload is None AND no stale tokens were purged, the in-memory
+    # dict and on-disk file are both unchanged — skip the IO entirely.
     return payload
 
 

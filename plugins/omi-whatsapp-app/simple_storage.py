@@ -62,7 +62,7 @@ def load_storage() -> None:
 
 
 def _save(path: str, payload: dict) -> None:
-    """Atomically write payload to path. Write to <path>.tmp, fsync, then os.replace.
+    """Atomically write payload to path. Write to <path>.tmp, then os.replace.
 
     Files are written with mode 0o600 (owner read/write only) because they
     contain user access_tokens and verify_tokens. Identified by cubic (P1):
@@ -72,6 +72,18 @@ def _save(path: str, payload: dict) -> None:
     Also ensures the parent directory exists before opening the tmp file —
     without this the first save after a fresh STORAGE_DIR change fails with
     FileNotFoundError and the user is silently never persisted. (cubic P1.)
+
+    P2 from cubic AI review (PR #8682): the previous version called
+    `os.fsync()` here, which forces the kernel page cache to disk on
+    every save. The webhook handler hits this path twice per reply
+    turn (human + ai) and an fsync can take 5-30ms on slow disks —
+    blocking the asyncio event loop before the webhook returns 200 to
+    Meta, occasionally exceeding the 10s timeout. Atomicity is
+    preserved by the tmp+rename pair (we never observe a torn write on
+    crash) — what we lose by skipping fsync is power-loss durability
+    for non-critical conversation history, which is rebuildable from
+    the WhatsApp Cloud API if needed. We deliberately do NOT fsync
+    here. Mirrors the Telegram plugin's `_save`.
     """
     tmp = f"{path}.{os.getpid()}.tmp"
     try:
@@ -79,7 +91,6 @@ def _save(path: str, payload: dict) -> None:
         with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
             f.flush()
-            os.fsync(f.fileno())
         os.replace(tmp, path)
         try:
             os.chmod(path, 0o600)

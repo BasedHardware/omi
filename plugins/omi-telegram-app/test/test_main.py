@@ -374,6 +374,32 @@ class TestSimpleStorage:
         # Second pop returns None (one-shot)
         assert pop_pending_setup("tok-1") is None
 
+    def test_pop_pending_setup_no_op_skips_disk_write(self):
+        """P2 from cubic AI review (PR #8682): pop_pending_setup must
+        NOT touch the disk when both the token lookup AND the stale
+        purge are no-ops. The webhook hits this path on every
+        forged / unknown setup token, so the previous 'always rewrite'
+        behavior wasted an fsync + JSON serialize per request."""
+        from unittest.mock import patch
+
+        from simple_storage import pending_setups, pop_pending_setup, save_pending_setup
+
+        pending_setups.clear()
+        save_pending_setup("tok-real", {"omi_uid": "u-1"})
+        save_pending_setup("tok-real-2", {"omi_uid": "u-2"})  # so the dict isn't emptied by the pop
+
+        with patch("simple_storage._save") as mock_save:
+            # Unknown token, no stale entries — must NOT call _save.
+            result = pop_pending_setup("tok-forged")
+            assert result is None
+            assert mock_save.call_count == 0
+
+        # A real pop still persists (writes the smaller dict).
+        with patch("simple_storage._save") as mock_save:
+            result = pop_pending_setup("tok-real")
+            assert result is not None
+            assert mock_save.call_count == 1
+
     def test_update_auto_reply(self):
         from simple_storage import save_user, update_auto_reply, get_user_by_chat_id, users
 
