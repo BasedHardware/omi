@@ -37,7 +37,11 @@ def restore_sys_modules(saved: Mapping[str, ModuleType | None]) -> None:
             if "." in name:
                 parent_name, child_name = name.rsplit(".", 1)
                 parent = sys.modules.get(parent_name)
-                if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is (removed or current):
+                if (
+                    isinstance(parent, ModuleType)
+                    and hasattr(parent, child_name)
+                    and getattr(parent, child_name, None) is (removed or current)
+                ):
                     delattr(parent, child_name)
         else:
             sys.modules[name] = original

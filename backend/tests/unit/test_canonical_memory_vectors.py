@@ -25,6 +25,7 @@ _VECTOR_DB_STUB_MODULE_NAMES = (
     "utils.llm.clients",
     "database.projection_repair",
     "database.vector_db",
+    "canonical_vector_vector_db",
 )
 
 _CANONICAL_VECTOR_TEST_STUB_MODULE_NAMES = tuple(
@@ -177,6 +178,10 @@ def _load_vector_db_with_stubs():
     spec = importlib.util.spec_from_file_location("canonical_vector_vector_db", vector_db_path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    # dataclasses with postponed annotations inspect sys.modules[__module__]
+    # while the class body is processed, so register the synthetic module
+    # before executing it.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -590,6 +595,14 @@ def test_promotion_vector_sync_failure_increments_report(monkeypatch):
     now = datetime(2026, 6, 24, 12, 0, tzinfo=timezone.utc)
     uid = "uid-canonical-vector-fail"
     _set_canonical_cohort(monkeypatch, uid)
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.sync_atom_keyword_index_for_item",
+        lambda *_args, **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        "utils.memory.short_term_promotion.sync_atom_keyword_index_for_item",
+        lambda *_args, **_kwargs: None,
+    )
     db = _canonical_db_with_control(uid)
     threshold = 25
     for index in range(threshold):
