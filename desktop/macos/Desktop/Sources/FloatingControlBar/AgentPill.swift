@@ -1183,9 +1183,8 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private static func ensureFailureMessage(_ errorText: String, for pill: AgentPill) {
-        let text = errorText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        let failureMessage = ChatMessage(text: "Failed: \(text)", sender: .ai)
+        guard let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) else { return }
+        let failureMessage = ChatMessage(text: failureText, sender: .ai)
         if pill.conversationMessages.isEmpty {
             pill.conversationMessages = [
                 ChatMessage(text: pill.query, sender: .user),

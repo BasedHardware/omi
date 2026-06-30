@@ -715,7 +715,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("Self.ensureFailureMessage(\"Agent ended before reporting a final result\", for: pill)"))
     XCTAssertTrue(source.contains("ensureFailureMessage(message, for: pill)"))
     XCTAssertTrue(source.contains("projection.failure?.displayMessage ?? projection.errorMessage ?? \"Agent failed\""))
-    XCTAssertTrue(source.contains("ChatMessage(text: \"Failed: \\(text)\", sender: .ai)"))
+    XCTAssertTrue(source.contains("AgentFailureTranscriptFormatter.transcriptText(for: errorText)"))
+    XCTAssertTrue(source.contains("ChatMessage(text: failureText, sender: .ai)"))
   }
 
   func testLateMessageActivityCannotOverwriteTerminalPillStatus() throws {
