@@ -7,12 +7,11 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 #
-# Total: 83 entries.
+# Total: 78 entries.
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
 backend/tests/unit/test_async_webhooks.py
-backend/tests/unit/test_available_plans_resilience.py
 backend/tests/unit/test_batch_upload_storage.py
 backend/tests/unit/test_billable_transcription_seconds.py
 backend/tests/unit/test_byok_security.py
@@ -48,9 +47,6 @@ backend/tests/unit/test_memory_tools.py
 backend/tests/unit/test_memorydb_memory_id_alias.py
 backend/tests/unit/test_modulate_stt.py
 backend/tests/unit/test_neo_desktop_grandfather.py
-backend/tests/unit/test_non_active_route_audit.py
-backend/tests/unit/test_non_active_route_report.py
-backend/tests/unit/test_non_active_routes.py
 backend/tests/unit/test_oom_reproduction.py
 backend/tests/unit/test_parakeet_batch_engine.py
 backend/tests/unit/test_parakeet_batch_routing.py
@@ -63,7 +59,6 @@ backend/tests/unit/test_parakeet_prerecorded.py
 backend/tests/unit/test_parakeet_stream_session.py
 backend/tests/unit/test_patch_adapter.py
 backend/tests/unit/test_people_conversations_500s.py
-backend/tests/unit/test_phone_calls.py
 backend/tests/unit/test_process_conversation_usage_context.py
 backend/tests/unit/test_prompt_caching.py
 backend/tests/unit/test_rate_limiting.py
