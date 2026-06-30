@@ -5,6 +5,7 @@ from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database._client as db_client_module
 import database.action_items as action_items_db
 import database.memories as memories_db
 import database.redis_db as redis_db
@@ -39,7 +40,11 @@ from models.transcript_segment import TranscriptSegment
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
-from utils.executors import postprocess_executor, submit_with_context, run_blocking, db_executor
+from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
@@ -534,6 +539,9 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
+    # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
+    # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
+    # docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
@@ -546,11 +554,15 @@ def delete_conversation(
         # Delete audio files
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-        # Delete associated memories and their vectors
-        memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
-        for memory_id in memory_ids:
-            background_tasks.add_task(delete_memory_vector, uid, memory_id)
+        # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
+        db_client = getattr(db_client_module, 'db', None)
+        memory_system = pin_memory_system(uid, db_client=db_client)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
+        else:
+            deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
+            for memory_id in deletion_result.get('vector_delete_ids', []):
+                delete_memory_vector(uid, memory_id)
 
         # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)

@@ -8318,12 +8318,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count件の会話を作成',
-      one: '1件の会話を作成',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count件の会話を作成', one: '1件の会話を作成');
     return '$_temp0';
   }
 
@@ -9047,11 +9042,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 件の録音を同期できます',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 件の録音を同期できます');
     return '$_temp0';
   }
 
@@ -9063,11 +9054,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '確認が必要な録音が$count件',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '確認が必要な録音が$count件');
     return '$_temp0';
   }
 
@@ -9214,6 +9201,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcribeLaterPaused => '一時停止中 — 音声は録音されていません';
 
   @override
+  String get memoryThisDevice => 'このデバイス';
+  @override
+  String get memoryThisIphone => 'このiPhone';
+  @override
+  String get memoryThisPhone => 'この電話';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Omi の使い方';
 
   @override

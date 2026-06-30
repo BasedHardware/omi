@@ -8307,12 +8307,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已创建 $count 个对话',
-      one: '已创建 1 个对话',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
     return '$_temp0';
   }
 
@@ -9033,11 +9028,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音可同步',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音可同步');
     return '$_temp0';
   }
 
@@ -9049,11 +9040,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音需要关注',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音需要关注');
     return '$_temp0';
   }
 
@@ -9198,6 +9185,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterPaused => '已暂停 — 当前未在录音';
 
   @override
+  String get memoryThisDevice => '此设备';
+  @override
+  String get memoryThisIphone => '这台 iPhone';
+  @override
+  String get memoryThisPhone => '这部手机';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => '如何使用 Omi';
 
   @override

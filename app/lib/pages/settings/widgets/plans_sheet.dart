@@ -1444,10 +1444,7 @@ class _PlansSheetState extends State<PlansSheet> {
             children: [
               Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 18),
               const SizedBox(width: 8),
-              Text(
-                context.l10n.promoCode,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              ),
+              Text(context.l10n.promoCode, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
               const SizedBox(width: 4),
               Icon(
                 _showPromoCodeField ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
@@ -2088,11 +2085,7 @@ class _PlansSheetState extends State<PlansSheet> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            granted ? Icons.check : Icons.close,
-            color: granted ? Colors.green[400] : Colors.red[400],
-            size: 14,
-          ),
+          Icon(granted ? Icons.check : Icons.close, color: granted ? Colors.green[400] : Colors.red[400], size: 14),
           const SizedBox(width: 6),
           Expanded(
             child: Text(

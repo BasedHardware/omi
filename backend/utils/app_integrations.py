@@ -632,7 +632,10 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             return
 
         url = app.external_integration.webhook_url
-        url += f'?sample_rate={sample_rate}&uid={uid}'
+        # The configured webhook_url may already carry a query string (auth token,
+        # routing param), so pick the right separator instead of always using '?'.
+        separator = '&' if '?' in url else '?'
+        url += f'{separator}sample_rate={sample_rate}&uid={uid}'
 
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():

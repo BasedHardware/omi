@@ -88,6 +88,7 @@ jobs:
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           no_traffic: true
           flags: >-
@@ -96,7 +97,13 @@ jobs:
             --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
             --vpc-egress=private-ranges-only
           env_vars: |
+            GOOGLE_CLOUD_PROJECT=${{ vars.RUNTIME_GCP_PROJECT_ID }}
             OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+            MEMORY_MODE=${{ vars.MEMORY_MODE }}
+            MEMORY_ENABLED_USERS=${{ vars.MEMORY_ENABLED_USERS }}
+            MEMORY_V3_GET_ENABLED=${{ vars.MEMORY_V3_GET_ENABLED }}
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
@@ -113,6 +120,7 @@ jobs:
         with:
           service: ${{ env.SERVICE }}-sync
           region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           no_traffic: true
           flags: >-
@@ -121,7 +129,13 @@ jobs:
             --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
             --vpc-egress=private-ranges-only
           env_vars: |
+            GOOGLE_CLOUD_PROJECT=${{ vars.RUNTIME_GCP_PROJECT_ID }}
             OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+            MEMORY_MODE=${{ vars.MEMORY_MODE }}
+            MEMORY_ENABLED_USERS=${{ vars.MEMORY_ENABLED_USERS }}
+            MEMORY_V3_GET_ENABLED=${{ vars.MEMORY_V3_GET_ENABLED }}
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
@@ -139,10 +153,33 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Deploy backend-secrets to GKE using Helm
+        env:
+          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+        run: |
+          if [[ -n "${BACKEND_SECRETS_GSA}" ]]; then
+            gsa_name="${BACKEND_SECRETS_GSA}"
+          else
+            gsa_name="${{ vars.ENV }}-omi-backend-eso-gsa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
+          fi
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets ./backend/charts/backend-secrets \
+            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml \
+            --set gke.projectID=${{ vars.GCP_PROJECT_ID }} \
+            --set gke.clusterLocation=${{ env.REGION }} \
+            --set gke.clusterName=${{ vars.GKE_CLUSTER }} \
+            --set gsa.name="${gsa_name}"
+          kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
+            ${{ vars.ENV }}-omi-backend-external-secret \
+            force-sync="$(date +%s)" --overwrite
+          sleep 10
+
       - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
+            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
+            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set image.tag=${{ steps.image-tag.outputs.short_sha }}
           kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s
 
@@ -152,6 +189,7 @@ jobs:
         with:
           service: ${{ env.SERVICE }}-integration
           region: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           no_traffic: true
           flags: >-
@@ -160,7 +198,13 @@ jobs:
             --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
             --vpc-egress=private-ranges-only
           env_vars: |
+            GOOGLE_CLOUD_PROJECT=${{ vars.RUNTIME_GCP_PROJECT_ID }}
             OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+            MEMORY_MODE=${{ vars.MEMORY_MODE }}
+            MEMORY_ENABLED_USERS=${{ vars.MEMORY_ENABLED_USERS }}
+            MEMORY_V3_GET_ENABLED=${{ vars.MEMORY_V3_GET_ENABLED }}
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}
           secrets: |
             SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

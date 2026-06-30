@@ -114,8 +114,14 @@ from fastapi import HTTPException  # noqa: E402
 
 
 def test_invalid_stored_timestamp_returns_400_not_500():
+    async def _run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
     convo = {'id': 'c1', 'started_at': 'not-a-real-timestamp', 'finished_at': 'not-a-real-timestamp'}
-    with patch.object(conv_mod, '_get_valid_conversation_by_id', return_value=convo):
+    with (
+        patch.object(conv_mod, '_get_valid_conversation_by_id', return_value=convo),
+        patch.object(conv_mod, 'run_blocking', _run_blocking),
+    ):
         with pytest.raises(HTTPException) as e:
             asyncio.run(conv_mod.auto_link_calendar_event(conversation_id='c1', uid='uid1'))
     assert e.value.status_code == 400

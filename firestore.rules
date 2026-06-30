@@ -1,0 +1,44 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedInUser(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function isServerOwnedMemoryPath(collectionId) {
+      return collectionId in [
+        'memory_items',
+        'memory_operations',
+        'memory_outbox',
+        'memory_control',
+        'memory_state',
+        'memory_commits',
+        'memory_evidence',
+        'v3_compatibility_projection',
+        'v3_compatibility_projection_items',
+        'short_term_lifecycle_transitions'
+      ];
+    }
+
+    // Canonical memory state is server-owned. The backend/Admin SDK performs all
+    // reads and writes through IAM and bypasses Firestore client rules. Mobile
+    // and web clients must use backend APIs instead of reading internals or
+    // writing around the memory apply gateway, operation journal, head/control
+    // documents, evidence records, outbox, or app/key grant state such as
+    // users/{uid}/memory_control/app_key_memory_grants.
+    match /users/{uid}/{collectionId}/{document=**} {
+      allow read, create, update, delete: if false;
+    }
+
+    // MCP API-key documents (mcp_api_keys/{key_id}) are also server-owned and
+    // must only be inventoried or assigned by backend/Admin tooling with IAM.
+    // Client SDKs cannot read or mutate keys/scopes/app_id fields directly.
+    // No new broad client access is introduced by this memory rules file. Existing
+    // non-memory client-access rules must be added explicitly before deployment if
+    // a Firebase project relies on direct client Firestore access.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

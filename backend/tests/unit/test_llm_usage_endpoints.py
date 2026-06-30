@@ -83,6 +83,7 @@ pytz_module.timezone = MagicMock()
 # Stub Firestore client to avoid ADC lookups during import.
 mock_client_module = _install_stub("database._client")
 mock_client_module.db = MagicMock()
+mock_client_module.document_id_from_seed = MagicMock(return_value="stubbed-document-id")
 
 # Stub firebase_admin auth to keep dependency injection lightweight.
 firebase_admin = _install_stub("firebase_admin")

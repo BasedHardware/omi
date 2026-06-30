@@ -690,8 +690,11 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Text(
                   '/',
-                  style:
-                      TextStyle(fontSize: 36, fontWeight: FontWeight.w200, color: Colors.white.withValues(alpha: 0.2)),
+                  style: TextStyle(
+                    fontSize: 36,
+                    fontWeight: FontWeight.w200,
+                    color: Colors.white.withValues(alpha: 0.2),
+                  ),
                 ),
               ),
               _numField(_targetValueController, context.l10n.target.toUpperCase(), Colors.white60),
@@ -734,7 +737,10 @@ class _GoalTrackerWidgetState extends State<GoalTrackerWidget> with WidgetsBindi
                   child: Text(
                     context.l10n.cancel,
                     style: TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white.withValues(alpha: 0.6)),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
                   ),
                 ),
               ),

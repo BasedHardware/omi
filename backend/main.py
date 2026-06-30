@@ -1,10 +1,11 @@
 import asyncio
+import json
 import logging
 import os
 
-from dotenv import load_dotenv
+from utils.env_loader import load_backend_env
 
-load_dotenv()  # No-op if .env doesn't exist (production); loads local dev secrets otherwise
+load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -64,6 +65,8 @@ from routers import (
     chat_sessions,
     scores,
     tts,
+    memory_admin,
+    memory_product,
 )
 
 from utils.other.timeout import TimeoutMiddleware
@@ -85,7 +88,20 @@ log_langsmith_status()
 # Validate Stripe price IDs so misconfigured plans fail loud
 validate_stripe_price_ids()
 
-firebase_admin.initialize_app()
+_auth_emulator_host = os.environ.get("FIREBASE_AUTH_EMULATOR_HOST", "").strip()
+if _auth_emulator_host:
+    for _adc_key in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
+        os.environ.pop(_adc_key, None)
+    _firebase_project_id = (
+        os.environ.get("FIREBASE_AUTH_PROJECT_ID") or os.environ.get("FIREBASE_PROJECT_ID") or "demo-omi-local"
+    )
+    firebase_admin.initialize_app(options={"projectId": _firebase_project_id})
+elif os.environ.get("SERVICE_ACCOUNT_JSON"):
+    service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
+    credentials = firebase_admin.credentials.Certificate(service_account_info)
+    firebase_admin.initialize_app(credentials)
+else:
+    firebase_admin.initialize_app()
 
 # starlette 0.40 added a default 1 MB cap per multipart form part. Voice
 # messages, audio uploads, and persona/app images legitimately exceed that.
@@ -149,6 +165,8 @@ app.include_router(advice.router)
 app.include_router(chat_sessions.router)
 app.include_router(scores.router)
 app.include_router(tts.router)
+app.include_router(memory_admin.router)
+app.include_router(memory_product.router)
 
 
 methods_timeout = {

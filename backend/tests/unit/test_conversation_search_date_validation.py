@@ -9,6 +9,7 @@ The handler now catches it and returns HTTP 400. These tests mount the conversat
 import os
 import sys
 from datetime import datetime, timezone
+from enum import Enum
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -155,6 +156,32 @@ _request_validation = ModuleType('utils.request_validation')
 _request_validation.NonNegativeOffset = int
 _request_validation.PositiveLimit = int
 _register_module('utils.request_validation', _request_validation)
+
+_utils_memory_pkg = ModuleType('utils.memory')
+_utils_memory_pkg.__path__ = []
+_register_module('utils.memory', _utils_memory_pkg)
+
+_memory_service_stub = ModuleType('utils.memory.memory_service')
+setattr(_memory_service_stub, 'MemoryService', MagicMock())
+_register_module('utils.memory.memory_service', _memory_service_stub)
+
+
+class _MemorySystem(str, Enum):
+    LEGACY = 'legacy'
+    CANONICAL = 'canonical'
+
+
+_memory_system_stub = ModuleType('utils.memory.memory_system')
+setattr(_memory_system_stub, 'MemorySystem', _MemorySystem)
+_register_module('utils.memory.memory_system', _memory_system_stub)
+
+_canonical_activation_stub = ModuleType('utils.memory.canonical_activation')
+setattr(_canonical_activation_stub, 'canonical_write_enabled', MagicMock(return_value=False))
+_register_module('utils.memory.canonical_activation', _canonical_activation_stub)
+
+_surface_routing_stub = ModuleType('utils.memory.surface_routing')
+setattr(_surface_routing_stub, 'pin_memory_system', MagicMock())
+_register_module('utils.memory.surface_routing', _surface_routing_stub)
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

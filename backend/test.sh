@@ -5,6 +5,11 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
+export OPENAI_API_KEY="test-openai-key-not-real"
+
+pytest() {
+  python3 -m pytest "$@"
+}
 
 if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
   if [[ ! -f "$BACKEND_UNIT_TEST_FILE_LIST" ]]; then
@@ -50,6 +55,7 @@ pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
 pytest tests/unit/test_flush_pending_batch1.py -v
+pytest tests/unit/test_gpu_worker_submit_lock.py -v
 pytest tests/unit/test_vram_batch.py -v
 pytest tests/unit/test_oom_reproduction.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
@@ -62,6 +68,7 @@ pytest tests/unit/test_mcp_search_conversations_poison.py -v
 pytest tests/unit/test_mcp_memory_filters.py -v
 pytest tests/unit/test_mcp_client_tool_result.py -v
 pytest tests/unit/test_mcp_data_endpoints.py -v
+pytest tests/unit/test_mcp_api_key_full_access.py -v
 pytest tests/unit/test_mcp_oauth.py -v
 pytest tests/unit/test_mcp_action_item_writes.py -v
 pytest tests/unit/test_mcp_conversations_poison.py -v
@@ -69,8 +76,126 @@ pytest tests/unit/test_mcp_profile_contact.py -v
 pytest tests/unit/test_memory_temporal_brain.py -v
 pytest tests/unit/test_memory_category_auto.py -v
 pytest tests/unit/test_memories_validation.py -v
+pytest tests/unit/test_memory_domain.py -v
+pytest tests/unit/test_memory_system_cohort.py -v
+pytest tests/unit/test_canonical_memory_vectors.py -v
+pytest tests/unit/test_no_module_level_sys_modules_stub.py -v
+pytest tests/unit/test_ws_k_layer_field.py -v
+pytest tests/unit/test_memory_service_parity.py -v
+pytest tests/unit/test_ws_i_write_convergence.py -v
+pytest tests/unit/test_ws_i_hardening.py -v
+pytest tests/unit/test_ws_b_short_term_lifecycle.py -v
+pytest tests/unit/test_canonical_consolidation.py -v
+pytest tests/unit/test_canonical_consolidation_apply.py -v
+pytest tests/unit/test_canonical_kg_promotion.py -v
+pytest tests/unit/test_canonical_extraction_subject_wiring.py -v
+pytest tests/unit/test_review_queue_cascade_purge.py -v
+pytest tests/unit/test_canonical_maintenance_ordering.py -v
+pytest tests/unit/test_canonical_short_term_maintenance_cron.py -v
+pytest tests/unit/test_ws_c_backfill.py -v
+pytest tests/unit/test_ws_j_delete_privacy.py -v
+pytest tests/unit/test_ws_l_surface_routing.py -v
+pytest tests/unit/test_ws_g_module_aliases.py -v
+pytest tests/unit/test_ws_m_atom_keyword_index.py -v
+pytest tests/unit/test_ws_n_graph_traversal.py -v
+pytest tests/unit/test_upstream_boundary.py -v
 pytest tests/unit/test_memories_user_review.py -v
 pytest tests/unit/test_announcement_malformed_type.py -v
+pytest tests/unit/test_short_term_lifecycle.py -v
+pytest tests/unit/test_product_memory_items.py -v
+pytest tests/unit/test_product_memory_read_service.py -v
+pytest tests/unit/test_default_read_rollout_decision.py -v
+pytest tests/unit/test_rollout_schema_readiness.py -v
+pytest tests/unit/test_chat_memory_adapter.py -v
+pytest tests/unit/test_chat_memory_tool_caller.py -v
+pytest tests/unit/test_tools_agent_route_response_shape.py -v
+pytest tests/unit/test_tools_rest_memory_runtime_adapter.py -v
+pytest tests/unit/test_p1_5_tools_fastapi_testclient_readiness.py -v
+pytest tests/unit/test_developer_memory_adapter.py -v
+pytest tests/unit/test_mcp_memory_adapter.py -v
+pytest tests/unit/test_product_memory_router.py -v
+pytest tests/unit/test_product_authorization.py -v
+pytest tests/unit/test_memory_app_key_grants.py -v
+pytest tests/unit/test_app_key_memory_grant_assignment_readiness.py -v
+pytest tests/unit/test_developer_auth_context_static.py -v
+pytest tests/unit/test_mcp_auth_context_static.py -v
+pytest tests/unit/test_mcp_api_key_auth_context.py -v
+pytest tests/unit/test_mcp_api_key_scope_readiness.py -v
+pytest tests/unit/test_short_term_lifecycle_worker.py -v
+pytest tests/unit/test_short_term_lifecycle_firestore_store.py -v
+pytest tests/unit/test_memory_contracts.py -v
+pytest tests/unit/test_working_observations_extractor.py -v
+pytest tests/unit/test_durable_memory_patches.py -v
+pytest tests/unit/test_patch_adapter.py -v
+pytest tests/unit/test_memory_read_api.py -v
+pytest tests/unit/test_projections.py -v
+pytest tests/unit/test_vector_metadata.py -v
+pytest tests/unit/test_vector_filters.py -v
+pytest tests/unit/test_vector_search_service.py -v
+pytest tests/unit/test_vector_repair_outbox_worker.py -v
+pytest tests/unit/test_vector_repair_outbox_infra.py -v
+pytest tests/unit/test_firestore_rules_iam_proof.py -v
+pytest tests/unit/test_pinecone_repair_validation_readiness.py -v
+pytest tests/unit/test_shared_ns2_legacy_isolation_readiness.py -v
+pytest tests/unit/test_vector_search_provider_readiness.py -v
+# /v3 router behavioral probes (replaces readiness gate framework).
+pytest tests/unit/test_v3_fastapi_route_contract.py -v
+pytest tests/unit/test_v3_get_dependency_auth.py -v
+pytest tests/unit/test_v3_real_router_dependency_map.py -v
+pytest tests/unit/test_v3_real_router_get_testclient.py -v
+pytest tests/unit/test_v3_real_router_fail_closed_matrix.py -v
+pytest tests/unit/test_v3_route_signature_integration.py -v
+pytest tests/unit/test_v3_canary_approval_production_read.py -v
+pytest tests/unit/test_v3_cursor_secret_production_read.py -v
+pytest tests/unit/test_v3_projection_write_convergence_read.py -v
+pytest tests/unit/test_v3_runtime_config_source_read.py -v
+pytest tests/unit/test_v3_compatibility.py -v
+pytest tests/unit/test_v3_cursor.py -v
+pytest tests/unit/test_v3_projection_readiness.py -v
+pytest tests/unit/test_v3_memory_read_service.py -v
+pytest tests/unit/test_v3_write_convergence.py -v
+pytest tests/unit/test_v3_response_adapter.py -v
+pytest tests/unit/test_v3_request_adapter.py -v
+pytest tests/unit/test_v3_route_planner.py -v
+pytest tests/unit/test_v3_get_dependency_seam.py -v
+pytest tests/unit/test_v3_archive_visibility_readiness.py -v
+pytest tests/unit/test_v3_local_telemetry.py -v
+# memory /v3 canary approval schema + fake-injectable reader readiness seam.
+pytest tests/unit/test_v3_canary_approval_artifact.py -v
+pytest tests/unit/test_v3_control_reader_contract.py -v
+pytest tests/unit/test_v3_control_state_adapter.py -v
+pytest tests/unit/test_v3_account_generation_source.py -v
+pytest tests/unit/test_v3_compatibility_projection.py -v
+pytest tests/unit/test_v3_production_runtime_wiring.py -v
+pytest tests/unit/test_v3_limited_rollout_config.py -v
+pytest tests/unit/test_v3_f5_real_service_evidence_readiness.py -v
+pytest tests/unit/test_v3_gcp_evidence_config.py -v
+pytest tests/unit/test_v3_gcp_evidence_run_record.py -v
+pytest tests/unit/test_v3_gcp_evidence_redaction.py -v
+pytest tests/unit/test_v3_f6_readonly_contracts.py -v
+pytest tests/unit/test_v3_f6_pre_gcp_aggregate.py -v
+pytest tests/unit/test_v3_dev_cloud_readiness.py -v
+pytest tests/unit/test_cutover_evidence_readiness.py -v
+pytest tests/unit/test_firestore_indexes.py -v
+pytest tests/unit/test_firestore_index_config.py -v
+pytest tests/unit/test_normative_foundations.py -v
+pytest tests/unit/test_typed_synthesis.py -v
+pytest tests/unit/test_memory_operations.py -v
+pytest tests/unit/test_atomic_apply.py -v
+pytest tests/unit/test_memory_search_gateway.py -v
+pytest tests/unit/test_memory_apply_store.py -v
+pytest tests/unit/test_firestore_security_rules.py -v
+pytest tests/unit/test_firestore_emulator_harness_wiring.py -v
+pytest tests/unit/test_firestore_iam_deployment_doc.py -v
+pytest tests/unit/test_non_active_routes.py -v
+pytest tests/unit/test_non_active_route_audit.py -v
+pytest tests/unit/test_non_active_route_report.py -v
+pytest tests/unit/test_non_active_route_admin_endpoint.py -v
+pytest tests/unit/test_review_queue_non_active_routes.py -v
+pytest tests/unit/test_l2_promotion_agent_v2.py -v
+pytest tests/unit/test_memory_tools.py -v
+pytest tests/unit/test_memory_ingestion_pipeline.py -v
+pytest tests/unit/test_working_memory_candidate_schema.py -v
 pytest tests/unit/test_llm_gateway_service.py -v
 pytest tests/unit/test_llm_gateway_config.py -v
 pytest tests/unit/test_llm_gateway_auth.py -v
@@ -103,6 +228,13 @@ pytest tests/unit/test_chat_tools_messages.py -v
 pytest tests/unit/test_chat_tool_parameters_json.py -v
 pytest tests/unit/test_prompt_caching.py -v
 pytest tests/unit/test_mentor_notifications.py -v
+# Canonical memory system tests (added with the new 2-layer runtime).
+pytest tests/unit/test_claim_dedup.py -v
+pytest tests/unit/test_client_device_provenance.py -v
+pytest tests/unit/test_memory_ledger.py -v
+pytest tests/unit/test_memory_rollout.py -v
+pytest tests/unit/test_v3_composed_get_service.py -v
+pytest tests/unit/test_v3_get_runtime_snapshot.py -v
 pytest tests/unit/test_proactive_notification_language.py -v
 pytest tests/unit/test_notification_token_cleanup.py -v
 pytest tests/unit/test_integration_notification_validation.py -v
@@ -111,7 +243,6 @@ pytest tests/unit/test_location_maps_status_guard.py -v
 pytest tests/unit/test_conversation_render_factory.py -v
 pytest tests/unit/test_conversation_redact_enrich.py -v
 pytest tests/unit/test_retrieval_semantics.py -v
-pytest tests/unit/test_conversation_tool_date_range_bound.py -v
 pytest tests/unit/test_folder_name_enrichment.py -v
 pytest tests/unit/test_folder_conversations_malformed.py -v
 pytest tests/unit/test_conversations_count.py -v
@@ -161,7 +292,6 @@ pytest tests/unit/test_executors.py -v
 pytest tests/unit/test_modulate_stt.py -v
 pytest tests/unit/test_batch_upload_storage.py -v
 pytest tests/unit/test_action_item_date_validation.py -v
-pytest tests/unit/test_action_items_timezone.py -v
 pytest tests/unit/test_request_validation_contracts.py -v
 pytest tests/unit/test_conversation_structure_timezone.py -v
 pytest tests/unit/test_action_item_dedup.py -v
@@ -171,6 +301,7 @@ pytest tests/unit/test_goals_id_fallback.py -v
 pytest tests/unit/test_tools_router.py -v
 pytest tests/unit/test_kg_user_type_mismatch.py -v
 pytest tests/unit/test_kg_edge_id_sanitization.py -v
+pytest tests/unit/test_kg_prune_memory_citations.py -v
 pytest tests/unit/test_goal_extraction_batch.py -v
 pytest tests/unit/test_listen_pipeline.py -v
 pytest tests/unit/test_resample_pcm_divzero.py -v
@@ -202,6 +333,7 @@ pytest tests/unit/test_dev_api_lock_bypass.py -v
 pytest tests/unit/test_dev_api_folder_filters.py -v
 pytest tests/unit/test_dev_api_conversations_poison.py -v
 pytest tests/unit/test_dev_api_memories_pagination.py -v
+pytest tests/unit/test_env_loader.py -v
 pytest tests/unit/test_dev_api_action_items_poison.py -v
 pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_rate_limit_json_failopen.py -v
