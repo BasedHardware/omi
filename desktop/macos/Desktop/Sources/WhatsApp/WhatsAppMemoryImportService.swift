@@ -313,7 +313,7 @@ final class WhatsAppMemoryImportService: ObservableObject {
     WhatsAppContactResolver.shared.displayName(for: message.chatJid, fallback: message.senderName)
   }
 
-  private func parseMessages(from output: String) -> [WhatsAppSyncedMessage] {
+  func parseMessages(from output: String) -> [WhatsAppSyncedMessage] {
     guard let data = output.data(using: .utf8),
       let json = try? JSONSerialization.jsonObject(with: data)
     else {
@@ -375,11 +375,11 @@ final class WhatsAppMemoryImportService: ObservableObject {
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
   }
 
-  private nonisolated func dedupeKey(for message: WhatsAppSyncedMessage) -> String {
+  nonisolated func dedupeKey(for message: WhatsAppSyncedMessage) -> String {
     "\(message.chatJid)|\(message.senderJid)|\(message.id)|\(Int(message.timestamp?.timeIntervalSince1970 ?? 0))"
   }
 
-  private nonisolated func stableFallbackMessageID(
+  nonisolated func stableFallbackMessageID(
     chatJid: String,
     senderJid: String,
     timestamp: Date?,

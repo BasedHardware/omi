@@ -76,7 +76,7 @@ final class WhatsAppReplySettings: ObservableObject {
     static let toneMatchEnabled = "whatsapp.reply.toneMatchEnabled"
   }
 
-  private init(defaults: UserDefaults = .standard) {
+  init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
     self.mode = WhatsAppReplyMode(rawValue: defaults.string(forKey: Keys.mode) ?? "") ?? .draft
     self.killSwitchEnabled = defaults.bool(forKey: Keys.killSwitchEnabled)
@@ -233,7 +233,7 @@ final class WhatsAppReplySettings: ObservableObject {
     return String(data: data, encoding: .utf8)
   }
 
-  private func isQuietHoursActive(date: Date = Date()) -> Bool {
+  func isQuietHoursActive(at date: Date = Date()) -> Bool {
     guard quietHoursEnabled else { return false }
     let hour = Calendar.current.component(.hour, from: date)
     let start = min(max(quietHoursStart, 0), 23)
@@ -247,7 +247,7 @@ final class WhatsAppReplySettings: ObservableObject {
     return hour >= start || hour < end
   }
 
-  private func containsSensitiveContent(_ text: String) -> Bool {
+  func containsSensitiveContent(_ text: String) -> Bool {
     let lower = text.lowercased()
     let sensitiveTerms = [
       "bank", "rent", "payment", "pay", "money", "invoice", "legal", "lawyer", "court",

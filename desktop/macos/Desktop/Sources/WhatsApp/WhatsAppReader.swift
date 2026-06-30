@@ -379,3 +379,42 @@ enum WhatsAppReader {
     arguments.prefix(2).joined(separator: " ")
   }
 }
+
+#if DEBUG
+extension WhatsAppReader {
+  static func testingUnwrapJSONEnvelope(_ json: Any) -> Any? {
+    if let envelope = json as? [String: Any], envelope.keys.contains("data") {
+      return envelope["data"]
+    }
+    return json
+  }
+
+  static func testingParseChats(from data: Any?) async -> [MessageThread] {
+    await parseChats(data)
+  }
+
+  static func testingParseMessages(from data: Any?) async -> [MessageItem] {
+    await parseMessages(data)
+  }
+
+  static func testingIsPlaceholderMessage(
+    rawText: String?,
+    displayText: String?,
+    object: [String: Any]
+  ) -> Bool {
+    isPlaceholderMessage(rawText: rawText, displayText: displayText, object: object)
+  }
+
+  static func testingStableFallbackMessageID(
+    senderJid: String?,
+    timestamp: Date?,
+    text: String
+  ) -> String {
+    stableFallbackMessageID(senderJid: senderJid, timestamp: timestamp, text: text)
+  }
+
+  static func testingDisplayTitle(for jid: String, rawTitle: String?, isGroup: Bool) async -> String {
+    await displayTitle(for: jid, rawTitle: rawTitle, isGroup: isGroup)
+  }
+}
+#endif

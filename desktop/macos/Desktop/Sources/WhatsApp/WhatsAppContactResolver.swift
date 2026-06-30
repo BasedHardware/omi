@@ -42,9 +42,44 @@ final class WhatsAppContactResolver: ObservableObject {
   private let cacheFileName = "contacts-cache.json"
   private var refreshTask: Task<Void, Never>?
 
-  private init() {
-    loadCache()
+  private init(shouldLoadCache: Bool = true) {
+    if shouldLoadCache {
+      loadCache()
+    }
   }
+
+  #if DEBUG
+  private var skipsPersistence = false
+
+  internal init(testingContacts: [String: WhatsAppContact]) {
+    self.contactsByJid = testingContacts
+    self.skipsPersistence = true
+  }
+
+  internal func testing_collectContacts(from value: Any) -> [WhatsAppContact] {
+    collectContacts(from: value)
+  }
+
+  internal func testing_contacts(fromJSON output: String) -> [WhatsAppContact] {
+    contacts(from: output)
+  }
+
+  internal func testing_isJidLike(_ value: String) -> Bool {
+    isJidLike(value)
+  }
+
+  internal func testing_jidFromPhone(_ value: String) -> String? {
+    jidFromPhone(value)
+  }
+
+  internal func testing_stableCycleRepresentative(_ jids: [String]) -> String {
+    stableCycleRepresentative(jids)
+  }
+
+  internal func testing_phoneNumber(from jid: String) -> String? {
+    phoneNumber(from: jid)
+  }
+  #endif
 
   func displayName(for jid: String, fallback: String? = nil) -> String {
     let normalized = canonicalJid(for: jid)
@@ -309,6 +344,9 @@ final class WhatsAppContactResolver: ObservableObject {
   }
 
   private func saveCache() {
+    #if DEBUG
+    if skipsPersistence { return }
+    #endif
     let url = cacheURL()
     do {
       try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)

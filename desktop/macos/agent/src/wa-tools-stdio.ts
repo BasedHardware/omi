@@ -7,6 +7,8 @@ import { readFileSync } from "fs";
 import { createConnection } from "net";
 import { createInterface } from "readline";
 import { createHash } from "crypto";
+import { fileURLToPath } from "url";
+import { resolve } from "path";
 
 const bridgePipePath = process.env.OMI_BRIDGE_PIPE;
 
@@ -61,7 +63,7 @@ function activeOmiContext(): Record<string, unknown> {
   };
 }
 
-function stableJSONStringify(value: unknown): string {
+export function stableJSONStringify(value: unknown): string {
   if (Array.isArray(value)) {
     return `[${value.map(stableJSONStringify).join(",")}]`;
   }
@@ -74,7 +76,7 @@ function stableJSONStringify(value: unknown): string {
   return JSON.stringify(value);
 }
 
-function requestScopeValue(value: unknown): string | undefined {
+export function requestScopeValue(value: unknown): string | undefined {
   if (typeof value === "string") {
     return value.trim() || undefined;
   }
@@ -84,7 +86,7 @@ function requestScopeValue(value: unknown): string | undefined {
   return undefined;
 }
 
-function withIdempotencyKey(
+export function withIdempotencyKey(
   name: string,
   input: Record<string, unknown>,
   context: Record<string, unknown>,
@@ -370,7 +372,14 @@ async function main(): Promise<void> {
   logErr("wa-tools stdio MCP server started");
 }
 
-main().catch((err) => {
-  logErr(`Fatal: ${err}`);
-  process.exit(1);
-});
+const modulePath = fileURLToPath(import.meta.url);
+const isDirectRun =
+  typeof process.argv[1] === "string" &&
+  resolve(process.argv[1]) === resolve(modulePath);
+
+if (isDirectRun) {
+  main().catch((err) => {
+    logErr(`Fatal: ${err}`);
+    process.exit(1);
+  });
+}
