@@ -4,7 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Connect ChatGPT to Omi</title>
+    {% set display_client_name = client_name | default("ChatGPT") %}
+    <title>Connect {{ display_client_name }} to Omi</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/ui/6.0.1/firebase-ui-auth.js"></script>
@@ -68,13 +69,13 @@
                             </svg>
                         </span>
                     </div>
-                    <h1>Connect ChatGPT</h1>
-                    <p class="oauth-subtitle">Sign in to review what <strong>ChatGPT</strong> can access and allow the
+                    <h1>Connect {{ display_client_name }}</h1>
+                    <p class="oauth-subtitle">Sign in to review what <strong>{{ display_client_name }}</strong> can access and allow the
                         connection to your Omi account.</p>
                 </div>
 
                 <section class="permissions-card" aria-labelledby="permissions-title">
-                    <p class="permissions-title" id="permissions-title">ChatGPT will be able to</p>
+                    <p class="permissions-title" id="permissions-title">{{ display_client_name }} will be able to</p>
                     <ul class="permissions-list" tabindex="0" role="list" aria-labelledby="permissions-title">
                         {% for permission in permissions %}
                         <li>
@@ -139,7 +140,7 @@
                     <path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"
                         stroke-linejoin="round" />
                 </svg>
-                <span>Only continue if you trust <strong>ChatGPT</strong> with the Omi data shown above. You can revoke
+                <span>Only continue if you trust <strong>{{ display_client_name }}</strong> with the Omi data shown above. You can revoke
                     access anytime from your Omi settings.</span>
             </div>
         </div>
