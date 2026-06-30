@@ -306,15 +306,11 @@ check_openapi_contract_if_needed() {
   fi
 
   if ! changed_matches \
-    'backend/main.py' \
-    'backend/routers/*.py' \
-    'backend/routers/**/*.py' \
-    'backend/models/*.py' \
-    'backend/models/**/*.py' \
-    'backend/scripts/export_openapi.py' \
+    'backend/**' \
     'docs/api-reference/openapi.json' \
     'docs/docs.json' \
-    '.github/workflows/openapi-contract.yml'
+    '.github/workflows/openapi-contract.yml' \
+    'scripts/pre-push'
   then
     return
   fi
