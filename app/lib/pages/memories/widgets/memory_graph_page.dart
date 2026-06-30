@@ -630,11 +630,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
+              // NOTE: the legacy bare ElevatedButton here resolved to the theme
+              // primary/onPrimary (black-on-black, an effectively invisible label)
+              // on this dark theme. Render the visible canonical button instead.
               OmiButton(
                 label: context.l10n.retry,
                 onPressed: _loadGraph,
-                color: Colors.black,
-                textColor: Colors.black,
                 borderRadius: 4,
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
