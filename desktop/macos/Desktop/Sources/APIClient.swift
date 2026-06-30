@@ -3388,16 +3388,13 @@ extension APIClient {
 
   /// Auto-create a developer API key for the user's persona app.
   /// Calls POST /v1/apps/{app_id}/keys using the user's Firebase auth.
-  /// Returns the raw secret (shown once; not retrievable later).
-  /// Used by the AI Clone Connect flow so the user doesn't have to
-  /// manually create + paste an API key.
-  func createAppKey(appId: String, backendURL: String? = nil) async throws -> String {
+  func createAppKey(appId: String) async throws -> String {
     struct KeyResponse: Decodable {
       let id: String
       let secret: String
       let label: String
     }
-    let response: KeyResponse = try await post("v1/apps/\(appId)/keys", customBaseURL: backendURL)
+    let response: KeyResponse = try await post("v1/apps/\(appId)/keys")
     return response.secret
   }
 
@@ -3412,11 +3409,12 @@ extension APIClient {
   }
 
   /// Get or create the user's persona via POST /v1/user/persona.
-  /// This endpoint doesn't require a file upload (unlike POST /v1/personas)
-  /// and handles both cases: returns existing persona if present, creates
-  /// a new one if not. Used by the AI Clone Connect flow for zero-config.
-  func getOrCreatePersona(backendURL: String? = nil) async throws -> Persona {
-    return try await post("v1/user/persona", customBaseURL: backendURL)
+  /// Always targets the prod backend (api.omi.me). Local backend
+  /// persona creation is handled by the plugin, not the desktop.
+  /// Identified by cubic + maintainer review: removing the backendURL
+  /// override prevents accidental auth header leakage to untrusted URLs.
+  func getOrCreatePersona() async throws -> Persona {
+    return try await post("v1/user/persona")
   }
 
   /// Updates an existing persona
@@ -3477,8 +3475,8 @@ struct Persona: Codable, Identifiable {
   let isPrivate: Bool
   let author: String
   let email: String?
-  let createdAt: Date
-  let updatedAt: Date
+  let createdAt: Date?
+  let updatedAt: Date?
   let publicMemoriesCount: Int?
 
   enum CodingKeys: String, CodingKey {
