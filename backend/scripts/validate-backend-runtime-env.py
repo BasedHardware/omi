@@ -217,9 +217,12 @@ def _validate_cloud_run_workflows(
         if service_state is None:
             errors.append(ValidationError(f'cloud_run_workflow/{service}', 'missing deploy-cloudrun env_vars block'))
             continue
+        runtime_gcp_project = str(env_config.get('runtime_gcp_project', env_config['gcp_project']))
         workflow_vars = {
             '${{ vars.GCP_PROJECT_ID }}': str(env_config['gcp_project']),
             '${{vars.GCP_PROJECT_ID}}': str(env_config['gcp_project']),
+            '${{ vars.RUNTIME_GCP_PROJECT_ID }}': runtime_gcp_project,
+            '${{vars.RUNTIME_GCP_PROJECT_ID}}': runtime_gcp_project,
         }
         actual_env = _literal_env_entries_by_name(service_state.get('env_vars', {}), variables=workflow_vars)
         errors.extend(

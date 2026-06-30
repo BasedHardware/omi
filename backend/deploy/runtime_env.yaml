@@ -3,6 +3,7 @@ schema_version: 1
 environments:
   dev:
     gcp_project: based-hardware-dev
+    runtime_gcp_project: based-hardware
     region: us-central1
     gke:
       backend-listen:
@@ -27,7 +28,7 @@ environments:
         backend:
           env:
             GOOGLE_CLOUD_PROJECT:
-              value: based-hardware-dev
+              value: based-hardware
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -44,7 +45,7 @@ environments:
         backend-sync:
           env:
             GOOGLE_CLOUD_PROJECT:
-              value: based-hardware-dev
+              value: based-hardware
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -61,7 +62,7 @@ environments:
         backend-integration:
           env:
             GOOGLE_CLOUD_PROJECT:
-              value: based-hardware-dev
+              value: based-hardware
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
@@ -78,6 +79,7 @@ environments:
 
   prod:
     gcp_project: based-hardware
+    runtime_gcp_project: based-hardware
     region: us-central1
     gke:
       backend-listen:

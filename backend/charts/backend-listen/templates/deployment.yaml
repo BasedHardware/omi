@@ -54,8 +54,8 @@ spec:
           env:
             {{- range .Values.env }}
             - name: {{ .name }}
-              {{- if and (eq .name "GOOGLE_CLOUD_PROJECT") $.Values.gcpProjectId }}
-              value: {{ required "gcpProjectId is required" $.Values.gcpProjectId | quote }}
+              {{- if and (eq .name "GOOGLE_CLOUD_PROJECT") $.Values.runtimeGcpProjectId }}
+              value: {{ required "runtimeGcpProjectId is required" $.Values.runtimeGcpProjectId | quote }}
               {{- else if hasKey . "value" }}
               value: {{ .value | quote }}
               {{- else if hasKey . "valueFrom" }}
