@@ -26,6 +26,7 @@ pytest tests/unit/test_parakeet_nim.py -v
 pytest tests/unit/test_parakeet_stream_session.py -v
 pytest tests/unit/test_parakeet_gpu_worker.py -v
 pytest tests/unit/test_parakeet_batch_engine.py -v
+pytest tests/unit/test_flush_pending_batch1.py -v
 pytest tests/unit/test_vram_batch.py -v
 pytest tests/unit/test_oom_reproduction.py -v
 pytest tests/unit/test_parakeet_batch_routing.py -v
