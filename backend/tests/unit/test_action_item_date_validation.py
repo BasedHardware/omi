@@ -235,26 +235,7 @@ _STUB_NAMES = [
     "database.auth",
     "database.notifications",
     "database.redis_db",
-    "firebase_admin",
-    "firebase_admin.auth",
-    "firebase_admin.credentials",
-    "firebase_admin.firestore",
-    "firebase_admin.messaging",
-    "google.auth",
-    "google.auth.transport",
-    "google.auth.transport.requests",
-    "google.cloud.firestore",
-    "google.cloud.firestore_v1",
-    "google.cloud.firestore_v1.base_query",
-    "google.cloud.storage",
-    "langchain_core",
-    "langchain_core.output_parsers",
-    "langchain_core.prompts",
-    "langchain_core.runnables",
-    "langchain_core.tools",
     "models",
-    "opuslib",
-    "sentry_sdk",
     "utils",
     "utils.byok",
     "utils.conversations",
@@ -273,20 +254,11 @@ _stub_snapshot = {k: sys.modules[k] for k in _STUB_NAMES if k in sys.modules}
 
 @pytest.fixture(autouse=True, scope="module")
 def _reinstall_stubs():
-    prev = {k: sys.modules.get(k) for k in _STUB_NAMES}
-    for k, mod in _stub_snapshot.items():
-        sys.modules[k] = mod
-        if '.' in k:
-            parent_name, attr_name = k.rsplit('.', 1)
-            parent = sys.modules.get(parent_name)
-            if parent is not None:
-                setattr(parent, attr_name, mod)
-    yield
-    for k, old in prev.items():
-        if old is None:
-            sys.modules.pop(k, None)
-        else:
-            sys.modules[k] = old
+    from tests.unit._sysmodules_helpers import stub_modules
+
+    with stub_modules(_STUB_NAMES) as install:
+        install(_stub_snapshot)
+        yield
 
 
 def _make_config(uid="test-user-123"):
