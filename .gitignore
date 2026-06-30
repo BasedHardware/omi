@@ -2,6 +2,7 @@
 .env*
 !.env.template
 !.env.example
+.personal_configs/
 *__pycache__/
 *venv/
 libraries/

@@ -1,1 +1,2 @@
 APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12
+APP_GROUP_IDENTIFIER=group.com.friend-app-with-wearable.ios12
