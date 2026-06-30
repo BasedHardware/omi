@@ -565,19 +565,20 @@ class TestConcurrentFlush:
 
 class TestMaxInflight2:
 
-    def test_two_batches_inflight_concurrently(self):
-        concurrent_count = {"current": 0, "peak": 0}
+    def test_sequential_batching_accumulates_requests(self):
+        """With max_inflight=2, batches process sequentially via _flush_pending
+        guard. Requests accumulate during GPU processing, forming larger batches
+        instead of flushing one-at-a-time."""
+        batch_sizes = []
         gate = asyncio.Event()
 
         def mock_submit(payload, loop):
             fut = loop.create_future()
             item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
-            concurrent_count["current"] += 1
-            concurrent_count["peak"] = max(concurrent_count["peak"], concurrent_count["current"])
+            batch_sizes.append(payload["batch_size"])
 
             async def delayed_resolve():
                 await gate.wait()
-                concurrent_count["current"] -= 1
                 results = [{"text": f"ok_{i}"} for i in range(payload["batch_size"])]
                 if not fut.done():
                     fut.set_result(results)
@@ -591,23 +592,24 @@ class TestMaxInflight2:
         gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
         gpu.submit.side_effect = mock_submit
 
-        engine = BatchEngine(gpu, max_batch_size=2, max_wait_seconds=0.005, max_inflight=2, vram_safety_factor=0)
+        engine = BatchEngine(gpu, max_batch_size=4, max_wait_seconds=0.005, max_inflight=2, vram_safety_factor=0)
         loop = asyncio.new_event_loop()
         try:
 
             async def run():
                 await engine.start()
                 try:
-                    futs = [asyncio.ensure_future(engine.submit(f"/tmp/a{i}.wav")) for i in range(4)]
-                    for _ in range(50):
+                    futs = [asyncio.ensure_future(engine.submit(f"/tmp/a{i}.wav")) for i in range(6)]
+                    for _ in range(20):
                         await asyncio.sleep(0.01)
-                        if concurrent_count["current"] >= 2:
+                        if len(batch_sizes) >= 1:
                             break
-                    assert concurrent_count["peak"] >= 2, f"peak={concurrent_count['peak']} should be >=2"
                     gate.set()
                     results = await asyncio.wait_for(asyncio.gather(*futs, return_exceptions=True), timeout=10)
                     successes = [r for r in results if not isinstance(r, Exception)]
-                    assert len(successes) == 4
+                    assert len(successes) == 6
+                    assert sum(batch_sizes) == 6
+                    assert max(batch_sizes) > 1, f"At least one batch should accumulate >1 file, got {batch_sizes}"
                 finally:
                     await engine.stop()
 
