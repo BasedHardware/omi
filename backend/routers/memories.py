@@ -343,8 +343,20 @@ async def create_memories_batch(
                 server_memories.append(next(m for m in memory_dbs if m.id == memory_id))
         return BatchMemoriesResponse(memories=server_memories, created_count=len(server_memories))
 
-    await run_blocking(db_executor, memories_db.save_memories, uid, [m.dict() for m in memory_dbs])
+    # Persist to Firestore first — that write is the authoritative result.
+    # Mirror create_memory above: isolate the best-effort vector upsert so a
+    # transient/BYOK embedding failure (e.g. an OpenAI key without
+    # text-embedding-3-large access -> 403) can't 500 a request whose memories
+    # were already saved, which would make the client retry and duplicate them.
+    try:
+        await run_blocking(db_executor, memories_db.save_memories, uid, [m.dict() for m in memory_dbs])
+    except Exception:
+        logger.exception("Firestore save_memories failed uid=%s count=%s", uid, len(memory_dbs))
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
+    # Pinecone batch upsert runs on a worker thread (postprocess pool, like the
+    # single-create path) so a slow embeddings/Pinecone call can't starve the
+    # FastAPI sync threadpool.
     try:
         await run_blocking(
             postprocess_executor,

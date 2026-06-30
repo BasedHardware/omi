@@ -11,7 +11,7 @@ class McpApiKey(BaseModel):
     created_at: datetime
     last_used_at: Optional[datetime] = None
     app_id: Optional[str] = None
-    scopes: Optional[List[str]] = None
+    scopes: Optional[list[str]] = None
 
 
 class McpApiKeyDB(McpApiKey):

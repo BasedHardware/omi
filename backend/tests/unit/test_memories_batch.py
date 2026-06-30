@@ -152,6 +152,53 @@ class TestUpsertMemoryVectorsBatch:
         }
 
 
+class TestBatchMemoriesEndpointErrorIsolation:
+    """
+    Regression for the BYOK embedding-403 cluster: POST /v3/memories/batch must
+    isolate the best-effort vector upsert from the authoritative Firestore
+    write. A 403 from `text-embedding-3-large` (or any embedding/Pinecone error)
+    must NOT 500 the request after the memories were already saved — otherwise
+    the client retries and creates duplicate memories. The single create_memory
+    path already isolates its upsert; this guards the batch path the same way.
+
+    Source-structural like TestBatchMemoriesRequestValidation above: importing
+    routers.memories in a unit test pulls in the whole Firestore stack, so we
+    assert the contract against the function source instead.
+    """
+
+    @staticmethod
+    def _batch_fn_source() -> str:
+        import os
+
+        path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'memories.py')
+        with open(os.path.abspath(path), 'r', encoding='utf-8') as f:
+            content = f.read()
+        start = content.index('async def create_memories_batch')
+        # Function body ends at the next top-level decorator/def.
+        rest = content[start:]
+        end = rest.find('\n@router')
+        return rest if end == -1 else rest[:end]
+
+    def test_save_and_upsert_are_separate_steps(self):
+        """The bug was bundling save+upsert in one _persist whose vector failure
+        500s the whole (already-saved) request. They must be separate steps."""
+        src = self._batch_fn_source()
+        assert 'def _persist' not in src, "save and vector upsert must not be bundled into one fallible step"
+        assert 'save_memories' in src
+        assert 'upsert_memory_vectors_batch' in src
+
+    def test_vector_upsert_failure_is_swallowed(self):
+        """The vector upsert must be wrapped so its failure does not fail the
+        request — proven by the 'memories saved, vectors missing' marker."""
+        src = self._batch_fn_source()
+        assert 'memories saved, vectors missing' in src
+
+    def test_firestore_write_failure_still_raises_503(self):
+        """A genuine Firestore write failure must still surface as a retryable 503."""
+        src = self._batch_fn_source()
+        assert 'status_code=503' in src
+
+
 class TestBatchMemoriesRateLimitPolicy:
     def test_policy_exists_with_expected_limits(self):
         """Guardrail so the policy isn't accidentally dropped from the config."""

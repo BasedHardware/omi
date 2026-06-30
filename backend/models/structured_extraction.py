@@ -25,6 +25,26 @@ class ActionItemsExtraction(BaseModel):
         return [item.to_action_item() for item in self.action_items]
 
 
+class ConversationStructureExtraction(BaseModel):
+    title: str = Field(description="A title/name for this conversation", default='')
+    overview: str = Field(
+        description="A brief overview of the conversation, highlighting the key details from it",
+        default='',
+    )
+    emoji: str = Field(description="An emoji to represent the conversation", default='🧠')
+    category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
+
+    @field_validator('category', mode='before')
+    @classmethod
+    def set_category_default_on_error(cls, v: any) -> 'CategoryEnum':
+        if isinstance(v, CategoryEnum):
+            return v
+        try:
+            return CategoryEnum(v)
+        except ValueError:
+            return CategoryEnum.other
+
+
 class ExtractedEvent(BaseModel):
     title: str = Field(description="The title of the event")
     description: str = Field(description="A brief description of the event", default='')

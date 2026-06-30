@@ -290,6 +290,10 @@ def get_memories(
     categories: Optional[str] = None,
 ):
     uid = auth_context.uid
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     category_list = []
     if categories:
         try:
@@ -866,6 +870,10 @@ def get_action_items(
     - **limit**: Maximum number of items to return
     - **offset**: Number of items to skip
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     action_items = action_items_db.get_action_items(
         uid=uid,
         conversation_id=conversation_id,
@@ -1303,6 +1311,10 @@ def get_conversations(
     - **folder_id**: Filter by folder ID (must be a non-empty string if provided)
     - **starred**: Filter by starred status (true/false)
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    offset = max(0, offset)
+    limit = max(1, min(limit, 1000))
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
     except ValueError as e:

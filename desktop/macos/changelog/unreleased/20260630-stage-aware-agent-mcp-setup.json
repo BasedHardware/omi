@@ -1,0 +1,3 @@
+{
+  "change": "Improved agent MCP setup so generated Hermes and OpenClaw instructions use the current app backend stage"
+}

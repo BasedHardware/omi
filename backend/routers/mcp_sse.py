@@ -72,6 +72,7 @@ from utils.mcp_memories import (
     parse_optional_mcp_bool,
     search_default_mcp_memories_vector,
 )
+from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 
 router = APIRouter()
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -84,29 +85,8 @@ MCP_TOKEN_ENDPOINT = f"{MCP_AUTHORIZATION_SERVER_URL}/token"
 MCP_PROTECTED_RESOURCE_METADATA_URL = f"{MCP_AUTHORIZATION_SERVER_URL}/.well-known/oauth-protected-resource/v1/mcp/sse"
 OPENAI_APPS_CHALLENGE_TOKEN = "ZsVB_wpc4R35_tHloCZCokY6H2fBkKyBJrz-4MtXjYE"
 
-MCP_SCOPES_SUPPORTED = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
-
-MCP_LEGACY_API_KEY_SCOPES = [
-    "memories.read",
-    "memories.write",
-    "conversations.read",
-    "action_items.read",
-    "action_items.write",
-    "goals.read",
-    "chat.read",
-    "screen_activity.read",
-    "people.read",
-]
+MCP_SCOPES_SUPPORTED = list(MCP_FULL_ACCESS_SCOPES)
+MCP_LEGACY_API_KEY_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
 READ_ONLY_ANNOTATIONS = {
     "readOnlyHint": True,
@@ -142,6 +122,8 @@ class MCPAuthContext:
     uid: str
     auth_type: str
     scopes: list[str]
+    app_id: Optional[str] = None
+    key_id: Optional[str] = None
     client_id: Optional[str] = None
     resource: Optional[str] = None
     grant_id: Optional[str] = None
@@ -186,14 +168,16 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     if token.startswith("omi_mcp_"):
-        user_data = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
-        if not user_data or not user_data.get("user_id"):
+        auth_context = mcp_api_key_db.get_user_and_scopes_by_api_key(token)
+        if not auth_context or not auth_context.get("user_id"):
             return None
         return MCPAuthContext(
-            uid=user_data["user_id"],
+            uid=auth_context["user_id"],
             auth_type="legacy_mcp_key",
-            scopes=list(user_data.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
-            memory_context=_mcp_memory_context_from_api_key_user_data(user_data),
+            scopes=list(auth_context.get("scopes") or MCP_LEGACY_API_KEY_SCOPES),
+            app_id=auth_context.get("app_id"),
+            key_id=auth_context.get("key_id"),
+            memory_context=_mcp_memory_context_from_api_key_user_data(auth_context),
         )
 
     oauth_context = mcp_oauth_db.validate_access_token(token, MCP_RESOURCE_URL)

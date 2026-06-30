@@ -24,6 +24,23 @@ def _goal_dict(doc) -> Dict[str, Any]:
     return data
 
 
+def _coerce_created_at(value: Any) -> datetime:
+    """Coerce a created_at value to a timezone-aware datetime for safe sorting.
+
+    Goals normally carry a timezone-aware datetime, but a missing field or a legacy/manual ISO-string
+    value would mix types in a comparison and raise TypeError. Anything that is not a datetime
+    (missing, falsy, or a string) maps to datetime.min so it sorts first instead of crashing; naive
+    datetimes are normalized to UTC.
+    """
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _goal_created_at_sort_key(goal: Dict[str, Any]) -> datetime:
+    return _coerce_created_at(goal.get('created_at'))
+
+
 def get_user_goal(uid: str) -> Optional[Dict[str, Any]]:
     """Get the current active goal for a user (backward compatibility - returns first active goal)."""
     user_ref = db.collection(users_collection).document(uid)
@@ -47,9 +64,12 @@ def get_user_goals(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
     query = goals_ref.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
     docs = list(query.stream())
 
-    # Sort in Python instead of Firestore (avoids composite index requirement)
+    # Sort in Python instead of Firestore (avoids composite index requirement). The sort key always
+    # returns a timezone-aware datetime, because a missing, falsy, or non-datetime created_at (e.g. a
+    # legacy ISO string) would otherwise mix types in the comparison and raise TypeError, crashing the
+    # whole list.
     goals = [_goal_dict(doc) for doc in docs]
-    goals.sort(key=lambda x: x.get('created_at') or '', reverse=False)
+    goals.sort(key=_goal_created_at_sort_key, reverse=False)
 
     return goals
 
@@ -66,7 +86,7 @@ def create_goal(uid: str, goal_data: Dict[str, Any], max_goals: int = 4) -> Dict
     if len(active_goals) >= max_goals:
         # Sort by created_at and deactivate oldest
         active_goals_data = [(doc, doc.to_dict().get('created_at')) for doc in active_goals]
-        active_goals_data.sort(key=lambda x: x[1] if x[1] else datetime.min.replace(tzinfo=timezone.utc))
+        active_goals_data.sort(key=lambda x: _coerce_created_at(x[1]))
         oldest_doc = active_goals_data[0][0]
         oldest_doc.reference.update({'is_active': False, 'ended_at': datetime.now(timezone.utc)})
 

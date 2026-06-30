@@ -397,13 +397,15 @@ class TestTranscribePathFairUseImports:
         import re
 
         source = self._read_transcribe_source()
-        # Must be used as a conditional guard (if/not/and), not just defined or commented
-        conditional_uses = re.findall(r'(?:if|and|not)\s+fair_use_dg_budget_exhausted', source)
+        # Must be used as a guard, either inline or passed into the STT decision helpers.
+        guard_uses = re.findall(
+            r'(?:if|and|not)\s+session\.fair_use_dg_budget_exhausted'
+            r'|fair_use_dg_budget_exhausted=session\.fair_use_dg_budget_exhausted',
+            source,
+        )
         # Expect at least 3 guard points: session-start, periodic check, single-ch DG,
         # multi-channel (speech-profile excluded — small chunks, not budget-gated)
-        assert (
-            len(conditional_uses) >= 3
-        ), f'Expected >=3 conditional uses of fair_use_dg_budget_exhausted, found {len(conditional_uses)}'
+        assert len(guard_uses) >= 3, f'Expected >=3 guard uses of fair_use_dg_budget_exhausted, found {len(guard_uses)}'
 
     def test_budget_accounting_across_providers(self):
         """DG usage must be tracked for STT provider paths (DG single-channel + multi-channel).
@@ -416,9 +418,9 @@ class TestTranscribePathFairUseImports:
         import re
 
         # Verify accumulation points cover DG single + multi-channel (#5854 batching)
-        accum_calls = re.findall(r'^\s+dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
+        accum_calls = re.findall(r'^\s+session\.dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
         assert len(accum_calls) >= 2, f'Expected >=2 dg_usage_ms_pending accumulation points, found {len(accum_calls)}'
 
         # Verify flush calls exist (periodic + session-end)
-        flush_calls = re.findall(r'^\s+record_dg_usage_ms\(', source, re.MULTILINE)
+        flush_calls = re.findall(r'^\s+record_dg_usage_ms\(uid, session\.dg_usage_ms_pending\)', source, re.MULTILINE)
         assert len(flush_calls) >= 2, f'Expected >=2 record_dg_usage_ms flush calls, found {len(flush_calls)}'

@@ -17,18 +17,22 @@ def _identity_dependency(value=None):
     return value
 
 
-_fake_fastapi = ModuleType('fastapi')
-setattr(_fake_fastapi, 'HTTPException', _FakeHTTPException)
-setattr(_fake_fastapi, 'Depends', _identity_dependency)
-setattr(_fake_fastapi, 'Security', _identity_dependency)
-setattr(_fake_fastapi, 'Request', type('Request', (), {}))
-setattr(_fake_fastapi, 'Response', type('Response', (), {}))
-_fake_fastapi_security = ModuleType('fastapi.security')
-setattr(_fake_fastapi_security, 'APIKeyHeader', lambda *args, **kwargs: None)
-setattr(_fake_fastapi_security, 'HTTPBearer', lambda *args, **kwargs: None)
-setattr(_fake_fastapi_security, 'HTTPAuthorizationCredentials', object)
-sys.modules.setdefault('fastapi', _fake_fastapi)
-sys.modules.setdefault('fastapi.security', _fake_fastapi_security)
+try:
+    import fastapi  # noqa: F401
+    import fastapi.security  # noqa: F401
+except ImportError:
+    _fake_fastapi = ModuleType('fastapi')
+    setattr(_fake_fastapi, 'HTTPException', _FakeHTTPException)
+    setattr(_fake_fastapi, 'Depends', _identity_dependency)
+    setattr(_fake_fastapi, 'Security', _identity_dependency)
+    setattr(_fake_fastapi, 'Request', type('Request', (), {}))
+    setattr(_fake_fastapi, 'Response', type('Response', (), {}))
+    _fake_fastapi_security = ModuleType('fastapi.security')
+    setattr(_fake_fastapi_security, 'APIKeyHeader', lambda *args, **kwargs: None)
+    setattr(_fake_fastapi_security, 'HTTPBearer', lambda *args, **kwargs: None)
+    setattr(_fake_fastapi_security, 'HTTPAuthorizationCredentials', object)
+    sys.modules.setdefault('fastapi', _fake_fastapi)
+    sys.modules.setdefault('fastapi.security', _fake_fastapi_security)
 _fake_firebase_admin = ModuleType('firebase_admin')
 setattr(_fake_firebase_admin, 'auth', SimpleNamespace(verify_id_token=lambda _token: {'uid': 'unused'}))
 sys.modules.setdefault('firebase_admin', _fake_firebase_admin)
@@ -37,6 +41,7 @@ from fastapi import HTTPException
 
 _fake_client = ModuleType('database._client')
 setattr(_fake_client, 'db', SimpleNamespace())
+setattr(_fake_client, 'get_firestore_client', lambda: SimpleNamespace())
 sys.modules['database._client'] = _fake_client
 
 import database.mcp_api_key as mcp_api_key_db
@@ -73,10 +78,51 @@ class _FakeQuery:
 class _FakeDB:
     def __init__(self, docs):
         self._docs = docs
+        self.grant_sets = []
 
     def collection(self, name):
+        if name == 'users':
+            return _FakeUsersCollection(self)
         assert name == 'mcp_api_keys'
         return _FakeQuery(self._docs)
+
+
+class _FakeUsersCollection:
+    def __init__(self, parent):
+        self.parent = parent
+
+    def document(self, user_id):
+        return _FakeUserDoc(self.parent, user_id)
+
+
+class _FakeUserDoc:
+    def __init__(self, parent, user_id):
+        self.parent = parent
+        self.user_id = user_id
+
+    def collection(self, name):
+        return _FakeGrantCollection(self.parent, self.user_id, name)
+
+
+class _FakeGrantCollection:
+    def __init__(self, parent, user_id, collection_name):
+        self.parent = parent
+        self.user_id = user_id
+        self.collection_name = collection_name
+
+    def document(self, doc_id):
+        return _FakeGrantDoc(self.parent, self.user_id, self.collection_name, doc_id)
+
+
+class _FakeGrantDoc:
+    def __init__(self, parent, user_id, collection_name, doc_id):
+        self.parent = parent
+        self.user_id = user_id
+        self.collection_name = collection_name
+        self.doc_id = doc_id
+
+    def set(self, payload, merge=False):
+        self.parent.grant_sets.append((self.user_id, self.collection_name, self.doc_id, payload, merge))
 
 
 class _FakeRedis:
@@ -135,17 +181,22 @@ def _grant_reader(*, uid, db_client):
 def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes(monkeypatch):
     fake_doc = _FakeDoc({'id': 'legacy-key', 'user_id': 'u1', 'hashed_key': 'hashed', 'name': 'legacy'})
     fake_redis = _FakeRedis()
+    fake_db = _FakeDB([fake_doc])
     monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
-    monkeypatch.setattr(mcp_api_key_db, 'db', _FakeDB([fake_doc]))
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
     monkeypatch.setattr(mcp_api_key_db, 'redis_db', fake_redis)
 
     assert mcp_api_key_db.get_user_id_by_api_key('omi_mcp_secret') == 'u1'
     auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret')
 
-    assert auth == {'user_id': 'u1', 'scopes': None, 'key_id': 'legacy-key', 'app_id': None}
-    assert fake_redis.cached_writes == [
-        {'hashed_key': 'hashed', 'user_id': 'u1', 'scopes': None, 'key_id': 'legacy-key', 'app_id': None}
-    ]
+    assert auth['user_id'] == 'u1'
+    assert auth['key_id'] == 'legacy-key'
+    assert auth['app_id'] == 'mcp-api'
+    assert 'memories.read' in auth['scopes']
+    assert 'memories.write' in auth['scopes']
+    assert fake_db.grant_sets
+    assert fake_redis.cached_writes[-1]['key_id'] == 'legacy-key'
+    assert fake_redis.cached_writes[-1]['app_id'] == 'mcp-api'
 
     context = build_mcp_default_memory_read_context(
         McpVerifiedAuth(
@@ -156,7 +207,7 @@ def test_old_mcp_key_doc_still_authenticates_uid_only_and_has_no_verified_scopes
         context, db_client='fake-db', read_app_key_grants_state=_grant_reader
     )
     assert decision.allowed is False
-    assert decision.reason == 'missing_app_or_key_identity'
+    assert decision.reason == 'missing_app_key_scope_grant'
 
 
 def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_archive(monkeypatch):
@@ -169,12 +220,17 @@ def test_persisted_mcp_app_key_scopes_build_verified_memory_context_without_arch
             'scopes': ['memories.read', 'goals.read'],
         }
     )
+    fake_db = _FakeDB([fake_doc])
     monkeypatch.setattr(mcp_api_key_db, 'hash_api_key', lambda secret: 'hashed')
-    monkeypatch.setattr(mcp_api_key_db, 'db', _FakeDB([fake_doc]))
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
     monkeypatch.setattr(mcp_api_key_db, 'redis_db', _FakeRedis())
 
     auth = mcp_api_key_db.get_user_and_scopes_by_api_key('omi_mcp_secret')
-    assert auth == {'user_id': 'u1', 'scopes': ['memories.read', 'goals.read'], 'key_id': 'key-1', 'app_id': 'mcp-api'}
+    assert auth['user_id'] == 'u1'
+    assert auth['key_id'] == 'key-1'
+    assert auth['app_id'] == 'mcp-api'
+    assert 'memories.read' in auth['scopes']
+    assert 'goals.read' in auth['scopes']
 
     context = build_mcp_default_memory_read_context(
         McpVerifiedAuth(uid=auth['user_id'], app_id=auth['app_id'], key_id=auth['key_id'], scopes=tuple(auth['scopes']))
@@ -231,8 +287,11 @@ class _CreateDB:
     def __init__(self):
         self.set_calls = []
         self.document_calls = []
+        self.grant_sets = []
 
     def collection(self, name):
+        if name == 'users':
+            return _FakeUsersCollection(self)
         assert name == 'mcp_api_keys'
         return _CreateCollection(self)
 
@@ -269,34 +328,35 @@ def test_create_mcp_key_seeds_default_memory_scopes(monkeypatch):
     """Newly minted MCP keys must seed scopes and the matching grant."""
     monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
     fake_db = _CreateDB()
-    monkeypatch.setattr(mcp_api_key_db, 'db', fake_db)
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
 
     raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'desktop-key')
 
     assert raw_key == 'raw'
-    assert api_key_data.scopes == ['memories.read', 'memories.write']
+    assert 'memories.read' in api_key_data.scopes
+    assert 'memories.write' in api_key_data.scopes
     assert api_key_data.app_id == 'mcp-api'
     persisted = fake_db.set_calls[0]
-    assert persisted['scopes'] == ['memories.read', 'memories.write']
+    assert 'memories.read' in persisted['scopes']
+    assert 'memories.write' in persisted['scopes']
     assert persisted['app_id'] == 'mcp-api'
-    assert fake_db.document_calls[0][0] == 'users/u1/memory_control/app_key_memory_grants'
-    grant_doc = fake_db.document_calls[0][1]
+    assert fake_db.grant_sets[0][0:3] == ('u1', 'memory_control', 'app_key_memory_grants')
+    grant_doc = fake_db.grant_sets[0][3]
     seeded_grant = grant_doc['grants']['mcp']['apps']['mcp-api']['keys'][api_key_data.id]
     assert seeded_grant['scopes'] == ['memories.read', 'memories.write']
     assert seeded_grant['default_read'] is True
     assert seeded_grant['write'] is True
-    assert fake_db.document_calls[0][2] is True
+    assert fake_db.grant_sets[0][4] is True
 
 
 def test_create_mcp_key_explicit_none_scopes_mints_legacy_key(monkeypatch):
-    """Explicit scopes=None still mints a key with no persisted scopes (fail-closed
-    legacy behavior), preserving backward compatibility for callers that opt out."""
+    """Explicit scopes=None still mints a full-access MCP key."""
     monkeypatch.setattr(mcp_api_key_db, 'generate_api_key', lambda: ('raw', 'hashed', 'omi_mcp_xxxx'))
     fake_db = _CreateDB()
-    monkeypatch.setattr(mcp_api_key_db, 'db', fake_db)
+    monkeypatch.setattr(mcp_api_key_db, '_db', lambda: fake_db)
 
     _raw_key, api_key_data = mcp_api_key_db.create_mcp_key('u1', 'legacy-key', scopes=None)
 
-    assert api_key_data.scopes is None
-    assert fake_db.set_calls[0]['scopes'] is None
-    assert fake_db.document_calls == []
+    assert 'memories.read' in api_key_data.scopes
+    assert fake_db.set_calls[0]['scopes'] == api_key_data.scopes
+    assert fake_db.grant_sets

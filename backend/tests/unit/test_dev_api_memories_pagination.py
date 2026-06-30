@@ -289,3 +289,16 @@ def test_all_valid_records_returned():
         resp = client.get('/v1/dev/user/memories')
     assert resp.status_code == 200
     assert len(resp.json()) == 2
+
+
+def test_pagination_is_clamped_before_firestore():
+    # Out-of-range pagination is clamped before the Firestore query: a negative offset/limit
+    # would raise (HTTP 500), an oversized/zero limit would stream the whole collection. Mirrors
+    # the mobile /v3/memories hardening. get_memories(uid, limit, offset, categories) is positional.
+    with patch.object(memories_db, 'get_memories', return_value=[]) as m:
+        client = _build()
+        assert client.get('/v1/dev/user/memories?limit=99999&offset=-1').status_code == 200
+        assert client.get('/v1/dev/user/memories?limit=0&offset=5').status_code == 200
+    high = m.call_args_list[0].args
+    assert high[1] == 1000 and high[2] == 0  # limit 99999 -> 1000, offset -1 -> 0
+    assert m.call_args_list[1].args[1] == 1  # limit 0 -> 1

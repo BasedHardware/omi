@@ -39,6 +39,13 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertEqual(MemoryExportDestination.gemini.mcpExecuteKind, .assisted)
   }
 
+  func testAgentSkillHandlesNullableHostedProfileAndRemoteTransport() {
+    let skill = MemoryExportService.omiAgentSkillText
+    XCTAssertTrue(skill.contains(MemoryExportDestination.mcpServerURL))
+    XCTAssertTrue(skill.contains("profile: null"))
+    XCTAssertTrue(skill.contains("mcp-remote"))
+  }
+
   func testChatGPTAtlasIsSupportedBrowserTarget() throws {
     let atlas = try XCTUnwrap(
       BrowserAutomationTargetResolver.knownTargets.first {
@@ -290,6 +297,13 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertEqual(
       CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
         "AXText claude.ai/customize/connectors Omi CUSTOM You are connected to Omi"
+      ),
+      .connectorDetailConnected
+    )
+
+    XCTAssertEqual(
+      CloudConnectorFormAutomation.classifyClaudeConnectorPageText(
+        "AXText claude.ai/customize/connectors Omi \(MemoryExportDestination.mcpServerURL) You are connected to Omi"
       ),
       .connectorDetailConnected
     )
