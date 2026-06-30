@@ -752,6 +752,71 @@ class TestLazyVramInit:
             loop.close()
 
 
+class TestFlushPendingHeldDuringInference:
+    """Regression for #8664.
+
+    PR #8535 added an early ``self._flush_pending = False`` inside ``_flush_batch``
+    right after the batch was popped — *before* GPU inference ran. With the 2ms
+    flush timer that let a new flush fire immediately, so requests submitted while
+    a batch was on the GPU each became their own batch=1 flush instead of
+    accumulating. The flag must stay set for the whole inference and reset only in
+    ``_guarded_flush``'s ``finally``.
+    """
+
+    def test_flush_pending_held_until_inference_completes(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        observed = {"at_dispatch": None, "during_inference": None}
+        release = asyncio.Event()
+        started = asyncio.Event()
+
+        def mock_submit(payload, loop):
+            # Captured synchronously the instant GPU work is dispatched — after the
+            # batch was popped. The buggy early reset would make this False.
+            observed["at_dispatch"] = engine._flush_pending
+            fut = loop.create_future()
+            item = WorkItem(WorkType.BATCH_TRANSCRIBE, payload, future=fut, loop=loop)
+            item.inference_seconds = 0.01
+            loop.call_soon(started.set)
+
+            async def resolve():
+                await release.wait()
+                if not fut.done():
+                    fut.set_result([{"text": "ok"} for _ in range(payload["batch_size"])])
+
+            asyncio.ensure_future(resolve())
+            return fut, item
+
+        gpu = MagicMock(spec=GPUWorker)
+        gpu.is_ready = True
+        gpu.vram_info = {"total_mb": 0, "baseline_mb": 0, "attention_mode": "full", "auto_threshold_sec": 300}
+        gpu.submit.side_effect = mock_submit
+
+        engine = BatchEngine(gpu, max_batch_size=100, max_wait_seconds=0.002, max_inflight=2, vram_safety_factor=0)
+        try:
+
+            async def run():
+                await engine.start()
+                try:
+                    f0 = asyncio.ensure_future(engine.submit("/tmp/a0.wav"))
+                    await asyncio.wait_for(started.wait(), timeout=5)
+                    # Inference is now blocked on `release`; flag must still be set.
+                    observed["during_inference"] = engine._flush_pending
+                    release.set()
+                    await asyncio.wait_for(f0, timeout=10)
+                finally:
+                    release.set()
+                    await engine.stop()
+
+            loop.run_until_complete(run())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
+        assert observed["at_dispatch"] is True, "_flush_pending cleared before GPU inference dispatched (#8664)"
+        assert observed["during_inference"] is True, "_flush_pending cleared while GPU inference in flight (#8664)"
+
+
 class TestUnlinkSafe:
 
     def test_unlink_existing(self):

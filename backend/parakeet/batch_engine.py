@@ -270,7 +270,11 @@ class BatchEngine:
                 batch_set = set(id(r) for r in batch)
                 self._pending = [r for r in self._pending if id(r) not in batch_set]
 
-            self._flush_pending = False
+            # _flush_pending is reset only in _guarded_flush's finally (after GPU
+            # inference completes). Clearing it here — before inference — let the
+            # 2ms flush timer fire again immediately and spawn batch=1 flushes,
+            # collapsing GPU batch size ~4x (#8664). Keep the flag held so
+            # requests accumulate during inference into the next batch.
 
             if not batch:
                 return
