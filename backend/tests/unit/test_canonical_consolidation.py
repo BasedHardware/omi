@@ -235,6 +235,7 @@ def test_supersede_golden_path_with_mock_agent():
         patch("utils.memory.canonical_consolidation.delete_canonical_memory_vector"),
         patch("utils.memory.canonical_consolidation.invalidate_kg_for_memory_retraction"),
         patch("utils.memory.canonical_consolidation.delete_atom_keyword_doc"),
+        patch("utils.memory.canonical_consolidation.purge_stale_review_conflicts_for_memories"),
     ):
         mock_gather.return_value = ConsolidationContext(uid=uid, pending_items=[old, new], candidates_by_anchor={})
         report = run_canonical_consolidation(
