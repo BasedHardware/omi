@@ -37,6 +37,12 @@ environments:
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -54,6 +60,12 @@ environments:
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -71,6 +83,12 @@ environments:
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+              value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
+              value: "1.0"
+              category: rollout
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -106,19 +124,16 @@ environments:
       network:
         flags:
           --network:
-            value: ${{vars.CLOUD_RUN_VPC_NETWORK}}
-            provisional: true
+            env_var: CLOUD_RUN_VPC_NETWORK
           --subnet:
-            value: ${{vars.CLOUD_RUN_VPC_SUBNET}}
-            provisional: true
+            env_var: CLOUD_RUN_VPC_SUBNET
           --vpc-egress: private-ranges-only
       services:
         backend:
           env:
             OMI_LLM_GATEWAY_URL:
-              value: TBD_STABLE_PRIVATE_ENDPOINT
+              env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
-              provisional: true
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -132,9 +147,8 @@ environments:
         backend-sync:
           env:
             OMI_LLM_GATEWAY_URL:
-              value: TBD_STABLE_PRIVATE_ENDPOINT
+              env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
-              provisional: true
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -148,9 +162,8 @@ environments:
         backend-integration:
           env:
             OMI_LLM_GATEWAY_URL:
-              value: TBD_STABLE_PRIVATE_ENDPOINT
+              env_var: OMI_LLM_GATEWAY_URL
               category: service_discovery
-              provisional: true
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
