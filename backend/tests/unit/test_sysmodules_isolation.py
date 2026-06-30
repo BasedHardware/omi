@@ -1,19 +1,22 @@
 """Regression tests: real backend packages must survive collection poisoning.
 
-These tests run AFTER the poisoning files (alphabetically: test_action_item_*,
-test_async_app_*, test_desktop_*, test_tools_router) and verify that the
-conftest isolation hooks restored real packages correctly.
-
-A fresh import of each protected package must return the real module, not a
-types.ModuleType stub left behind by a poisoning test file.
+Self-contained: each test poisons sys.modules, triggers the hook restore,
+then verifies the real package was recovered. Does not depend on test
+ordering or the existence of poisoning test files.
 """
 
 import importlib
+import importlib.util
 import os
 import sys
 import types
 
 _BACKEND_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+_conftest_path = os.path.join(os.path.dirname(__file__), "conftest.py")
+_spec = importlib.util.spec_from_file_location("_unit_conftest_iso", _conftest_path)
+_conftest = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_conftest)
 
 
 def _is_under(path, parent):
@@ -45,20 +48,49 @@ def _assert_real_package(name):
     )
 
 
-def test_utils_is_real_package():
-    _assert_real_package("utils")
+def _poison_and_recover(name):
+    """Poison name with a stub, run the hook restore, verify recovery."""
+    real_mod = importlib.import_module(name)
+    snapshots = _conftest._module_snapshots
+
+    modules = {}
+    paths = {}
+    for k, v in list(sys.modules.items()):
+        modules[k] = v
+        p = getattr(v, '__path__', None)
+        if p is not None:
+            paths[k] = list(p)
+    nodeid = f"test_sysmodules_isolation.py::_poison_{name}"
+    snapshots[nodeid] = (modules, paths)
+
+    stub = types.ModuleType(name)
+    sys.modules[name] = stub
+
+    class FakeReport:
+        pass
+
+    report = FakeReport()
+    report.nodeid = nodeid
+    _conftest.pytest_collectreport(report)
+
+    assert sys.modules[name] is real_mod, f"{name} was not restored after poisoning"
+    _assert_real_package(name)
 
 
-def test_database_is_real_package():
-    _assert_real_package("database")
+def test_utils_survives_poisoning():
+    _poison_and_recover("utils")
 
 
-def test_models_is_real_package():
-    _assert_real_package("models")
+def test_database_survives_poisoning():
+    _poison_and_recover("database")
 
 
-def test_routers_is_real_package():
-    _assert_real_package("routers")
+def test_models_survives_poisoning():
+    _poison_and_recover("models")
+
+
+def test_routers_survives_poisoning():
+    _poison_and_recover("routers")
 
 
 def test_path_not_mutated():
