@@ -37,6 +37,10 @@ def _stub_leaf(name):
     sys.modules[name] = MagicMock(name=name)
 
 
+# Snapshot sys.modules first so the stubs below do not leak into other test files during
+# bulk ``pytest tests/unit/`` collection (issue #8661); restored right after the import.
+_SYS_MODULES_SNAPSHOT = dict(sys.modules)
+
 for _pkg, _rel in [
     ("utils", ("utils",)),
     ("utils.other", ("utils", "other")),
@@ -65,6 +69,17 @@ for _leaf in [
     _stub_leaf(_leaf)
 
 import utils.other.notifications as notif  # noqa: E402
+
+# Restore sys.modules so the stubs above do not leak into other test files during bulk
+# collection (issue #8661). ``notif`` is already bound to the stubbed deps, and the test
+# patches ``notif.datetime`` directly, so the restore does not change behaviour.
+for _name in list(sys.modules):
+    if _name in _SYS_MODULES_SNAPSHOT:
+        if sys.modules[_name] is not _SYS_MODULES_SNAPSHOT[_name]:
+            sys.modules[_name] = _SYS_MODULES_SNAPSHOT[_name]
+    else:
+        del sys.modules[_name]
+del _SYS_MODULES_SNAPSHOT
 
 
 class _FixedDateTime:
