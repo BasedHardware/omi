@@ -20,6 +20,7 @@ import types
 from unittest.mock import MagicMock, patch
 
 import pytest
+from fastapi.routing import APIRoute
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -101,7 +102,18 @@ class _Finder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         return _AutoMock(spec.name)
 
     def exec_module(self, module):
+        if module.__name__ == 'utils.multipart':
+            module.APP_IMAGE_MAX_PART_SIZE = 10 * 1024 * 1024
+            module.MultipartMaxPartSizeRoute = APIRoute
+            module.max_part_size = _identity_max_part_size
         pass
+
+
+def _identity_max_part_size(_bytes_size):
+    def decorator(endpoint):
+        return endpoint
+
+    return decorator
 
 
 _finder = _Finder()
