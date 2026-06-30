@@ -43,4 +43,4 @@ def test_reserve_current_month_slot_is_atomic_and_rolls_back_over_limit():
     assert used_before == 4
     assert rejected is False
     assert rejected_used_before == 5
-    redis_client.decr.assert_called_once()
+    redis_client.decr.assert_called_once_with("phone_call_usage:uid1:2026-06", 1)
