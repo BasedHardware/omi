@@ -26,3 +26,9 @@ tests/unit/test_user_usage.py
 tests/unit/test_chat_quota.py
 tests/unit/test_llm_usage_endpoints.py
 tests/unit/test_memories_stale_updates.py
+tests/unit/test_non_active_routes.py
+tests/unit/test_non_active_route_audit.py
+tests/unit/test_non_active_route_report.py
+tests/unit/test_conversations_count.py
+tests/unit/test_phone_calls.py
+tests/unit/test_available_plans_resilience.py
