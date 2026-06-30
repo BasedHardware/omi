@@ -191,6 +191,10 @@ _full_stub(
 # utils.retrieval.graph (imported by integration.py transitively)
 _full_stub("utils.retrieval", "graph")
 sys.modules["utils.retrieval.graph"] = MagicMock(execute_chat_stream=MagicMock())
+# T-022: utils.apps now also imports utils.retrieval.rag (memory RAG
+# helper). Stub it so this test can import utils.apps without dragging
+# in the full retrieval module.
+_rag_stub = _full_stub("utils.retrieval.rag", "retrieve_relevant_memories_for_persona", "format_memories_for_prompt")
 
 import utils.apps as apps_utils  # noqa: E402
 

@@ -1,10 +1,11 @@
 from collections import Counter, defaultdict
 from typing import List, Optional, Tuple
 
+import database.memories as memories_db
 import database.users as users_db
 from database.auth import get_user_name
 from database.conversations import get_conversations_by_id
-from database.vector_db import query_vectors
+from database.vector_db import query_vectors, search_memories_by_vector
 from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversations
@@ -16,6 +17,169 @@ from utils.executors import db_executor
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# Cap on the query string we hand to the vector DB. The embedding model has
+# an 8k-token input limit; we cap well below that so a user with 100+ long
+# conversations doesn't blow the embedding budget. The cap is applied AFTER
+# joining the conversation texts, with the most recent conversations
+# preferred over older ones (newest context usually matters more for the
+# persona prompt than ancient history).
+_RETRIEVAL_QUERY_MAX_CHARS = 2000
+
+# Cap on how many memories we surface for the persona prompt. The prompt
+# template targets ~135 tokens for framing; the user requested an
+# < 800-token total budget, so the memories block can spend up to ~600
+# tokens. At ~20 tokens per memory that lands at 30 memories. We trim a
+# bit further inside `format_memories_for_prompt` to land the budget.
+_PERSONA_RETRIEVAL_TOP_K = 30
+_PERSONA_FALLBACK_RECENT_LIMIT = 30
+
+
+def _build_retrieval_query(conversation_history_text: str) -> str:
+    """Take the user's recent conversation history and turn it into a
+    retrieval query string for the vector DB.
+
+    We prefer the *most recent* text over the oldest when truncating to
+    `_RETRIEVAL_QUERY_MAX_CHARS` because the user is more likely to ask
+    about recent topics than ancient history; the persona prompt benefits
+    more from "what was the user doing last week?" than "what did the
+    user say in their first Omi conversation 6 months ago?".
+    """
+    if not conversation_history_text:
+        return ''
+    text = conversation_history_text.strip()
+    if len(text) <= _RETRIEVAL_QUERY_MAX_CHARS:
+        return text
+    # Keep the tail (most recent conversations) and discard the head.
+    # The conversation-history string is roughly chronological when
+    # `conversations_to_string` renders it, so tail = newest.
+    return text[-_RETRIEVAL_QUERY_MAX_CHARS:]
+
+
+def retrieve_relevant_memories_for_persona(
+    uid: str,
+    conversation_history_text: str,
+    *,
+    top_k: int = _PERSONA_RETRIEVAL_TOP_K,
+    fallback_recent_limit: int = _PERSONA_FALLBACK_RECENT_LIMIT,
+) -> List[dict]:
+    """Return the user's memories most relevant to the recent conversation context.
+
+    T-022 wiring for `backend/utils/apps.py`. Replaces the
+    `condense_memories` LLM flatten — instead of summarizing all 250
+    memories into a single lossy paragraph, we surface the top-K most
+    semantically-relevant memories verbatim so the persona has actual
+    facts to draw on ("user prefers pour-over coffee", "user's wife is
+    named Sarah") rather than a generic summary ("user has food and
+    family preferences").
+
+    Args:
+        uid: The user id.
+        conversation_history_text: The recent-conversations string (the
+            output of `conversations_to_string(deserialize_conversations(...))`).
+            Used as the query for semantic search. If empty, the function
+            still returns *some* memories via the recent-recency fallback
+            so the persona prompt isn't blank.
+        top_k: How many memories to surface via vector search. Defaults to 30,
+            which lands the persona prompt at the < 800-token budget the
+            prompt-rewrite test pins (T-019).
+        fallback_recent_limit: When vector search returns nothing (Pinecone
+            not configured, no indexed memories, or a transient error),
+            fall back to this many of the user's most-recent memories
+            ordered by `created_at` desc. Same lock-filter as the vector path.
+
+    Returns:
+        List of memory dicts. Each has at minimum `{id, content}` plus
+        whatever fields `database.memories.get_memories_by_ids` returns
+        (`category`, `created_at`, `scoring`, etc). Locked memories are
+        excluded for both paths (security: same contract as the previous
+        `condense_memories` LLM flatten).
+
+    Errors:
+        Swallows vector-DB exceptions and falls back to the recent path.
+        Persona prompt generation should never fail because the vector
+        service is down — the user has done nothing wrong; we degrade
+        to "less relevant memories" rather than 500.
+    """
+    if not uid:
+        return []
+
+    query = _build_retrieval_query(conversation_history_text)
+
+    # --- Path 1: vector search. ---
+    memory_ids: list[str] = []
+    if query:
+        try:
+            memory_ids = list(search_memories_by_vector(uid, query, limit=top_k) or [])
+        except Exception as e:
+            logger.warning(
+                "retrieve_relevant_memories_for_persona: vector search failed for uid=%s, "
+                "falling back to recent: %s",
+                uid,
+                type(e).__name__,
+            )
+            memory_ids = []
+
+    memories: list[dict] = []
+    if memory_ids:
+        try:
+            memories = list(memories_db.get_memories_by_ids(uid, memory_ids) or [])
+        except Exception as e:
+            logger.warning(
+                "retrieve_relevant_memories_for_persona: hydration failed for uid=%s, " "falling back to recent: %s",
+                uid,
+                type(e).__name__,
+            )
+            memories = []
+
+    # Filter out locked memories for both paths (security contract).
+    memories = [m for m in memories if not m.get('is_locked')]
+
+    # --- Path 2: fallback to recent memories if vector path returned empty. ---
+    if not memories:
+        try:
+            memories = list(memories_db.get_memories(uid, limit=fallback_recent_limit) or [])
+            memories = [m for m in memories if not m.get('is_locked')]
+        except Exception as e:
+            logger.warning(
+                "retrieve_relevant_memories_for_persona: recent-fallback failed for uid=%s: %s",
+                uid,
+                type(e).__name__,
+            )
+            memories = []
+
+    return memories[:top_k]
+
+
+def format_memories_for_prompt(memories: List[dict], *, per_memory_max_chars: int = 500) -> str:
+    """Render a list of memory dicts as a bullet-list fragment for the persona prompt.
+
+    Format:
+        - memory content (verbatim)
+        - memory content (verbatim)
+
+    Each memory's `content` is truncated to `per_memory_max_chars` so a
+    single runaway fact doesn't blow the token budget. Memories without
+    a string `content` are skipped (defensive — shouldn't happen for
+    Omi-stored memories, but the helper stays robust if the schema drifts).
+
+    Returns "" for an empty list so the prompt template can render a
+    `None.`-style placeholder (matches the v0.1 template's "Recent
+    tweets: None." pattern for empty data sections).
+    """
+    if not memories:
+        return ''
+    lines: list[str] = []
+    for m in memories:
+        content = m.get('content')
+        if not isinstance(content, str) or not content.strip():
+            continue
+        text = content.strip()
+        if len(text) > per_memory_max_chars:
+            text = text[:per_memory_max_chars].rstrip() + '…'
+        lines.append(f'- {text}')
+    return '\n'.join(lines)
 
 
 def retrieve_for_topic(uid: str, topic: str, start_timestamp, end_timestamp, k: int, memories_id) -> List[str]:

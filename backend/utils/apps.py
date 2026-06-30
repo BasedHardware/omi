@@ -77,7 +77,8 @@ from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from utils import stripe
-from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
+from utils.llm.persona import condense_conversations, generate_persona_description, condense_tweets
+from utils.retrieval.rag import retrieve_relevant_memories_for_persona, format_memories_for_prompt
 from utils.llm.usage_tracker import track_usage, Features
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.social import get_twitter_timeline
@@ -709,11 +710,26 @@ async def generate_persona_prompt(uid: str, persona: dict):
         timeline = await get_twitter_timeline(persona['twitter']['username'])
         tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
-    # Condense memories
-    with track_usage(uid, Features.PERSONA):
-        memories_text = await run_blocking(
-            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name
-        )
+    # T-022: similarity retrieval — pick the top-K memories most relevant
+    # to the recent-conversation context instead of LLM-flattening all 250
+    # memories into a single lossy paragraph. The persona now sees actual
+    # facts ("user prefers pour-over coffee") rather than a summary
+    # ("user has food preferences"). Falls back to recent memories if
+    # Pinecone isn't configured or no indexed memories match. Same
+    # lock-filter as before (locked memories excluded).
+    memories_text = await run_blocking(
+        db_executor,
+        retrieve_relevant_memories_for_persona,
+        uid,
+        conversation_history,
+        top_k=30,
+    )
+    memories_text = await run_blocking(
+        db_executor,
+        format_memories_for_prompt,
+        memories_text,
+        per_memory_max_chars=500,
+    )
 
     # Persona prompt — first-person framing. Earlier versions opened with
     # "You are {user_name} AI" / "personify" / "1:1 cloning", which caused
@@ -802,11 +818,23 @@ async def update_persona_prompt(persona: dict):
         with track_usage(uid, Features.PERSONA):
             condensed_tweets = await run_blocking(llm_executor, condense_tweets, tweets, persona['name'])
 
-    # Condense memories
-    with track_usage(uid, Features.PERSONA):
-        memories_text = await run_blocking(
-            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name
-        )
+    # T-022: same retrieval logic as generate_persona_prompt. The two
+    # functions must produce identical framing so a persona's
+    # persona_prompt field in Firestore means the same thing whether it
+    # was set at create-time or by the periodic refresh.
+    memories_text = await run_blocking(
+        db_executor,
+        retrieve_relevant_memories_for_persona,
+        uid,
+        conversation_history,
+        top_k=30,
+    )
+    memories_text = await run_blocking(
+        db_executor,
+        format_memories_for_prompt,
+        memories_text,
+        per_memory_max_chars=500,
+    )
 
     # Generate updated chat prompt — same template as generate_persona_prompt.
     # Kept in lockstep with that function so a persona's persona_prompt field
