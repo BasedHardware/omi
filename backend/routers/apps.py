@@ -3,6 +3,7 @@ import logging
 import os
 import asyncio
 import time
+from html import escape
 from datetime import datetime, timezone
 
 import httpx
@@ -1667,7 +1668,7 @@ async def mcp_oauth_callback(code: str, state: str):
     await run_blocking(db_executor, enable_app, uid, app_id)
 
     tool_count = len(tools)
-    tool_names = ', '.join(t.name for t in tools)
+    tool_names = ', '.join(escape(t.name) for t in tools)
 
     return HTMLResponse(f"""
     <html>

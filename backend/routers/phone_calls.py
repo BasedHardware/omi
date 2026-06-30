@@ -12,8 +12,7 @@ from twilio.base.exceptions import TwilioRestException
 from twilio.twiml.voice_response import VoiceResponse, Dial
 
 import database.phone_calls as phone_calls_db
-import database.phone_call_usage as phone_call_usage_db
-from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot
+from utils.phone_calls import check_call_access, check_destination_allowed, get_quota_snapshot, reserve_phone_call_quota
 from utils.other import endpoints as auth
 from utils.other.endpoints import rate_limit_dependency
 from utils.executors import critical_executor, db_executor, run_blocking
@@ -287,8 +286,8 @@ async def twiml_voice_webhook(request: Request):
     # on exhausted monthly buckets or disallowed destinations are turned away
     # here so Twilio never actually dials; we then refuse to count the attempt.
     snapshot = await run_blocking(db_executor, get_quota_snapshot, uid)
-    if not snapshot.has_access:
-        response.say('Monthly phone call limit reached. Goodbye.')
+    if not snapshot.is_paid and (snapshot.monthly_limit or 0) <= 0:
+        response.say('Phone calls require a paid subscription. Goodbye.')
         return Response(content=str(response), media_type='text/xml')
     try:
         check_destination_allowed(snapshot, to_number)
@@ -307,14 +306,14 @@ async def twiml_voice_webhook(request: Request):
         response.say('Your caller ID is not verified. Please re-verify your phone number.')
         return Response(content=str(response), media_type='text/xml')
 
-    # Count the call against the free-tier bucket before handing Twilio the
-    # dial instructions. We increment only after all guards pass so rejected
-    # attempts don't eat the user's quota.
-    try:
-        if not snapshot.is_paid:
-            await run_blocking(db_executor, phone_call_usage_db.increment_current_month, uid)
-    except Exception:
-        traceback.print_exc()
+    # Reserve quota immediately before handing Twilio the dial instructions.
+    # The reservation is atomic so concurrent TwiML requests cannot all pass
+    # the same stale quota snapshot.
+    if not snapshot.is_paid:
+        snapshot = await run_blocking(db_executor, reserve_phone_call_quota, uid)
+        if not snapshot.has_access:
+            response.say('Monthly phone call limit reached. Goodbye.')
+            return Response(content=str(response), media_type='text/xml')
 
     dial_kwargs = {'caller_id': caller_number}
     if snapshot.max_duration_seconds and snapshot.max_duration_seconds > 0:
