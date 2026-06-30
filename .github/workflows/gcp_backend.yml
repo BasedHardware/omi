@@ -82,6 +82,16 @@ jobs:
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Render backend runtime env
+        id: runtime-env
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/render-backend-runtime-env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
+
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
         uses: google-github-actions/deploy-cloudrun@v2
@@ -93,21 +103,9 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            --network=${{vars.CLOUD_RUN_VPC_NETWORK}}
-            --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
-            --vpc-egress=private-ranges-only
-          env_vars: |
-            GOOGLE_CLOUD_PROJECT=${{ vars.RUNTIME_GCP_PROJECT_ID }}
-            OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
-            MEMORY_MODE=${{ vars.MEMORY_MODE }}
-            MEMORY_ENABLED_USERS=${{ vars.MEMORY_ENABLED_USERS }}
-            MEMORY_V3_GET_ENABLED=${{ vars.MEMORY_V3_GET_ENABLED }}
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}
-          secrets: |
-            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
+            ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
 
       - name: Capture ${{ env.SERVICE }} revision
         id: capture-backend-revision
@@ -125,21 +123,9 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            --network=${{vars.CLOUD_RUN_VPC_NETWORK}}
-            --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
-            --vpc-egress=private-ranges-only
-          env_vars: |
-            GOOGLE_CLOUD_PROJECT=${{ vars.RUNTIME_GCP_PROJECT_ID }}
-            OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
-            MEMORY_MODE=${{ vars.MEMORY_MODE }}
-            MEMORY_ENABLED_USERS=${{ vars.MEMORY_ENABLED_USERS }}
-            MEMORY_V3_GET_ENABLED=${{ vars.MEMORY_V3_GET_ENABLED }}
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}
-          secrets: |
-            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
+            ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
 
       - name: Capture ${{ env.SERVICE }}-sync revision
         id: capture-backend-sync-revision
@@ -194,21 +180,9 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
-            --network=${{vars.CLOUD_RUN_VPC_NETWORK}}
-            --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
-            --vpc-egress=private-ranges-only
-          env_vars: |
-            GOOGLE_CLOUD_PROJECT=${{ vars.RUNTIME_GCP_PROJECT_ID }}
-            OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
-            MEMORY_MODE=${{ vars.MEMORY_MODE }}
-            MEMORY_ENABLED_USERS=${{ vars.MEMORY_ENABLED_USERS }}
-            MEMORY_V3_GET_ENABLED=${{ vars.MEMORY_V3_GET_ENABLED }}
-            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}
-            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}
-          secrets: |
-            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
+            ${{ steps.runtime-env.outputs.cloud_run_flags }}
+          env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
+          secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
 
       - name: Capture ${{ env.SERVICE }}-integration revision
         id: capture-backend-integration-revision
