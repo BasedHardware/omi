@@ -82,7 +82,14 @@ def validate_runtime_env(
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     if check_workflows:
-        errors.extend(_validate_cloud_run_workflows(env_config, strict_provisional=strict_provisional))
+        errors.extend(
+            _validate_cloud_run_workflows(
+                env,
+                env_config,
+                strict_provisional=strict_provisional,
+                manifest_path=manifest_path,
+            )
+        )
 
     cloud_run_state = None
     if cloud_run_state_path is not None:
@@ -193,9 +200,11 @@ def _validate_cloud_run(
 
 
 def _validate_cloud_run_workflows(
+    env: str,
     env_config: dict[str, Any],
     *,
     strict_provisional: bool,
+    manifest_path: Path,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     workflow_files = env_config.get('cloud_run', {}).get('workflow_files', [])
@@ -210,7 +219,7 @@ def _validate_cloud_run_workflows(
             continue
         workflow_path = ROOT / workflow_file
         workflow = _load_yaml(workflow_path)
-        workflow_services.update(_extract_workflow_cloud_run_services(workflow))
+        workflow_services.update(_extract_workflow_cloud_run_services(workflow, env=env, manifest_path=manifest_path))
 
     for service, service_config in expected_services.items():
         service_state = workflow_services.get(service)
@@ -314,6 +323,9 @@ def _validate_env_entries(
             expected_value = str(expected_entry['value'])
             if actual_value != expected_value:
                 errors.append(ValidationError(scope, f'env {name} value mismatch: expected {expected_value!r}'))
+        elif 'env_var' in expected_entry:
+            if not _has_literal_value(actual_entry):
+                errors.append(ValidationError(scope, f'env {name} must have a literal value'))
         elif 'secret' in expected_entry:
             expected_secret = expected_entry['secret']
             actual_secret = _secret_ref(actual_entry)
@@ -380,10 +392,16 @@ def _workflow_secret_entries_by_name(raw_secrets: Any) -> dict[str, dict[str, An
     return result
 
 
-def _extract_workflow_cloud_run_services(workflow: dict[str, Any]) -> dict[str, dict[str, Any]]:
+def _extract_workflow_cloud_run_services(
+    workflow: dict[str, Any],
+    *,
+    env: str,
+    manifest_path: Path,
+) -> dict[str, dict[str, Any]]:
     workflow_env = workflow.get('env', {})
     if not isinstance(workflow_env, dict):
         workflow_env = {}
+    rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest_path=manifest_path)
     result: dict[str, dict[str, Any]] = {}
     jobs = workflow.get('jobs', {})
     if not isinstance(jobs, dict):
@@ -401,9 +419,13 @@ def _extract_workflow_cloud_run_services(workflow: dict[str, Any]) -> dict[str, 
             service = _resolve_workflow_string(step_with.get('service'), workflow_env)
             if service is None:
                 continue
-            env_vars = _parse_workflow_env_vars(step_with.get('env_vars'))
-            secrets = _parse_workflow_env_vars(step_with.get('secrets'))
-            flags = _parse_workflow_flags(step_with.get('flags'))
+            env_vars = _parse_workflow_env_vars(
+                _resolve_step_output_reference(step_with.get('env_vars'), rendered_runtime_env)
+            )
+            secrets = _parse_workflow_env_vars(
+                _resolve_step_output_reference(step_with.get('secrets'), rendered_runtime_env)
+            )
+            flags = _parse_workflow_flags(_resolve_step_output_reference(step_with.get('flags'), rendered_runtime_env))
             if env_vars or secrets or flags:
                 result[service] = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
     return result
@@ -423,6 +445,108 @@ def _resolve_workflow_string(value: Any, workflow_env: dict[str, Any]) -> str | 
     for env_name, env_value in workflow_env.items():
         resolved = resolved.replace('${{ env.' + str(env_name) + ' }}', str(env_value))
     return resolved
+
+
+def _rendered_runtime_env_outputs(workflow: dict[str, Any], *, env: str, manifest_path: Path) -> dict[str, str]:
+    outputs: dict[str, str] = {}
+    for step in _workflow_steps(workflow):
+        if not isinstance(step, dict):
+            continue
+        if step.get('id') != 'runtime-env':
+            continue
+        run = step.get('run')
+        if not isinstance(run, str) or 'render-backend-runtime-env.py' not in run:
+            continue
+        rendered_env = _extract_renderer_env(run, env=env)
+        if rendered_env is None:
+            continue
+        manifest = _load_yaml(manifest_path)
+        env_config = _get_env_config(manifest, rendered_env)
+        cloud_run = env_config.get('cloud_run', {})
+        outputs['cloud_run_flags'] = _render_cloud_run_flags(cloud_run.get('network', {}).get('flags', {}))
+        services = cloud_run.get('services', {})
+        if not isinstance(services, dict):
+            continue
+        for service, service_config in services.items():
+            if not isinstance(service_config, dict):
+                continue
+            output_prefix = service.replace('-', '_')
+            outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(service_config.get('env', {}))
+            outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(service_config.get('secrets', {}))
+    return outputs
+
+
+def _workflow_steps(workflow: dict[str, Any]) -> list[Any]:
+    steps: list[Any] = []
+    jobs = workflow.get('jobs', {})
+    if not isinstance(jobs, dict):
+        return steps
+    for job in jobs.values():
+        if isinstance(job, dict) and isinstance(job.get('steps'), list):
+            steps.extend(job['steps'])
+    return steps
+
+
+def _extract_renderer_env(run: str, *, env: str) -> str | None:
+    if '--env dev' in run:
+        return 'dev'
+    if '--env prod' in run:
+        return 'prod'
+    if '--env ${{ vars.ENV }}' in run:
+        return env
+    return None
+
+
+def _resolve_step_output_reference(raw_value: Any, rendered_outputs: dict[str, str]) -> Any:
+    if not isinstance(raw_value, str):
+        return raw_value
+    prefix = '${{ steps.runtime-env.outputs.'
+    suffix = ' }}'
+    resolved = raw_value
+    for output_name, output_value in rendered_outputs.items():
+        resolved = resolved.replace(f'{prefix}{output_name}{suffix}', output_value)
+    return resolved
+
+
+def _render_cloud_run_env_vars(env_entries: Any) -> str:
+    if not isinstance(env_entries, dict):
+        return ''
+    lines = []
+    for name, entry in env_entries.items():
+        if isinstance(entry, dict) and ('value' in entry or 'env_var' in entry):
+            lines.append(f'{name}={_render_manifest_value(name, entry)}')
+    return '\n'.join(lines)
+
+
+def _render_cloud_run_secrets(secret_entries: Any) -> str:
+    if not isinstance(secret_entries, dict):
+        return ''
+    lines = []
+    for name, entry in secret_entries.items():
+        if not isinstance(entry, dict) or 'secret' not in entry:
+            continue
+        version = entry.get('version', 'latest')
+        lines.append(f'{name}={entry["secret"]}:{version}')
+    return '\n'.join(lines)
+
+
+def _render_cloud_run_flags(flag_entries: Any) -> str:
+    if not isinstance(flag_entries, dict):
+        return ''
+    flags = []
+    for name, entry in flag_entries.items():
+        value = _render_manifest_value(name, entry) if isinstance(entry, dict) else entry
+        flags.append(f'{name}={value}')
+    return ' '.join(flags)
+
+
+def _render_manifest_value(name: str, entry: dict[str, Any]) -> str:
+    if 'value' in entry:
+        return str(entry['value'])
+    env_var = entry.get('env_var')
+    if isinstance(env_var, str) and env_var:
+        return f'__{name.strip("-").replace("-", "_")}__'
+    return ''
 
 
 def _parse_workflow_env_vars(raw_env_vars: Any) -> dict[str, str]:
@@ -478,6 +602,10 @@ def _validate_workflow_flags(
         actual_value = actual.get(name)
         if actual_value is None:
             errors.append(ValidationError(scope, f'missing Cloud Run flag {name}'))
+            continue
+        if isinstance(expected_entry, dict) and 'env_var' in expected_entry:
+            if actual_value == '':
+                errors.append(ValidationError(scope, f'Cloud Run flag {name} must have a value'))
             continue
         expected_value = _expected_flag_value(expected_entry)
         if _is_provisional(expected_entry) and not strict_provisional:

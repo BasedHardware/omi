@@ -12,6 +12,7 @@ from langchain_openai import ChatOpenAI
 from models.transcript_segment import TranscriptSegment
 from pydantic import BaseModel, Field
 from utils.prompts import extract_memories_prompt
+from utils.llm.temporal import current_date_in_tz
 from utils.memory_ingestion.adapters.typed_extraction_prompt import (
     TYPED_PREDICATES,
     render_source_guidance,
@@ -437,6 +438,7 @@ def _extract_memories_with_production_prompt(
         "memories_str": memories_str,
         "language_instruction": _language_instruction(language),
         "format_instructions": parser.get_format_instructions(),
+        "current_date": current_date_in_tz(None),
         "source_guidance": (
             render_source_guidance(source_type)
             + ("\n\n" + _VOICE_RECALL_EXTRA_GUIDANCE if is_voice_recall_route else "")
