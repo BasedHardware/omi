@@ -177,6 +177,17 @@ final class AICloneConfig: ObservableObject {
             changed = true
         }
 
+        // ALWAYS refresh the public/tunnel URL from the discovery file.
+        // Telegram / Meta can't reach pluginURL (loopback) from outside;
+        // they need the tunnel URL. ConnectSheet reads this field and
+        // sends it as publicBaseUrl to the plugin's /setup endpoint.
+        // Previously this lived inside the `if changed` block above —
+        // but if both pluginURL and bearerToken were already populated
+        // from UserDefaults (auth-seed case), changed stayed false and
+        // publicBaseURL kept its default nil value, so ConnectSheet
+        // fell back to pluginURL (the loopback URL Telegram rejects).
+        self.publicBaseURL = discovery.publicURL ?? discovery.pluginURL
+
         if changed {
             // Use the app's log() function so it appears in /tmp/omi-dev.log
             // (NSLog goes to unified logging only, not the dev log file).
@@ -184,12 +195,6 @@ final class AICloneConfig: ObservableObject {
             self.isAutoDiscovered = true
             self.pluginDevMode = discovery.devMode
             self.discoveryBackendURL = discovery.omiBaseURL
-            // Capture the public/tunnel URL so ConnectSheet can pass it
-            // to the plugin's /setup endpoint as publicBaseUrl. Telegram
-            // and Meta can't reach pluginURL (loopback) from outside;
-            // they need the tunnel URL. Falls back to pluginURL when
-            // publicURL is absent (same-machine testing only).
-            self.publicBaseURL = discovery.publicURL ?? discovery.pluginURL
         }
     }
 
