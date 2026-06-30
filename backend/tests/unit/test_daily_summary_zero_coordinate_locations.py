@@ -44,6 +44,11 @@ def _stub_leaf(name, **attrs):
 
 # Parent packages kept on their real disk paths so the real module under test resolves,
 # while __init__.py is skipped (they are already present in sys.modules).
+#
+# Snapshot sys.modules first so the stubs below do not leak into other test files during
+# bulk ``pytest tests/unit/`` collection (issue #8661); restored right after the import.
+_SYS_MODULES_SNAPSHOT = dict(sys.modules)
+
 _real_pkg("utils", "utils")
 _real_pkg("utils.llm", "utils", "llm")
 _real_pkg("utils.llms", "utils", "llms")
@@ -68,6 +73,17 @@ sys.modules["langchain_core"] = MagicMock(name="langchain_core")
 _stub_leaf("langchain_core.prompts", ChatPromptTemplate=MagicMock())
 
 import utils.llm.external_integrations as ext  # noqa: E402
+
+# Restore sys.modules so the stubs above do not leak into other test files during bulk
+# collection (issue #8661). ``ext`` is already bound to the stubbed deps, and the tests
+# patch attributes on ``ext`` directly, so the restore does not change behaviour.
+for _name in list(sys.modules):
+    if _name in _SYS_MODULES_SNAPSHOT:
+        if sys.modules[_name] is not _SYS_MODULES_SNAPSHOT[_name]:
+            sys.modules[_name] = _SYS_MODULES_SNAPSHOT[_name]
+    else:
+        del sys.modules[_name]
+del _SYS_MODULES_SNAPSHOT
 
 
 class _Geo:
