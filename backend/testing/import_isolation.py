@@ -121,4 +121,31 @@ def _get_parent_attr(name: str) -> ModuleType | None:
     return None
 
 
-__all__ = ["AutoMockModule", "stub_modules"]
+def load_module_fresh(name: str, path: str) -> ModuleType:
+    """Execute a module from ``path`` into ``sys.modules[name]`` fresh.
+
+    Use inside a ``stub_modules`` block when the target module binds a dependency at
+    import time (e.g. ``from database._client import db``) and must therefore be
+    re-exec'd against the fake. Drops any prior cached instance first so the exec
+    always runs against the current (faked) ``sys.modules``.
+
+    Example::
+
+        with stub_modules({"database._client": fake_client, "google.cloud.firestore": fake}):
+            goals = load_module_fresh("database.goals", "database/goals.py")
+    """
+    import importlib.util
+
+    sys.modules.pop(name, None)
+    # Do NOT pass submodule_search_locations: passing it (even []) marks the module
+    # as a package, which corrupts ``__package__`` and breaks relative imports
+    # (e.g. ``from ._client import db`` in database/*.py would resolve to the wrong
+    # dotted name). A regular module load inherits the correct parent package.
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+__all__ = ["AutoMockModule", "stub_modules", "load_module_fresh"]

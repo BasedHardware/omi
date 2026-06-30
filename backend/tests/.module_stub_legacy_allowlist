@@ -7,7 +7,7 @@
 #
 # Terminal state: this file is deleted (PLAN.md §4, condition #1).
 #
-# Total: 101 entries.
+# Total: 99 entries.
 backend/tests/integration/test_fair_use_api.py
 backend/tests/integration/test_fair_use_live.py
 backend/tests/routers/test_users.py
@@ -38,8 +38,6 @@ backend/tests/unit/test_firmware_pagination.py
 backend/tests/unit/test_flush_pending_batch1.py
 backend/tests/unit/test_folder_name_enrichment.py
 backend/tests/unit/test_geocoding_cache.py
-backend/tests/unit/test_goals_id_fallback.py
-backend/tests/unit/test_goals_sort_missing_created_at.py
 backend/tests/unit/test_gpu_worker_submit_lock.py
 backend/tests/unit/test_kg_edge_id_sanitization.py
 backend/tests/unit/test_kg_user_type_mismatch.py
