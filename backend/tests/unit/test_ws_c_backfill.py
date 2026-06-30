@@ -33,7 +33,9 @@ def _ws_c_import_isolation():
     saved.update(snapshot_sys_modules(touched))
     from utils.memory.legacy_backfill import (
         _fetch_active_legacy_memories,
+        backfill_user_bucketed,
         backfill_user,
+        classify_legacy_backfill_bucket,
         is_active_legacy_row,
         legacy_backfill_memory_id,
         reconcile_backfill_counts,
@@ -42,6 +44,8 @@ def _ws_c_import_isolation():
     module_globals = globals()
     module_globals["_fetch_active_legacy_memories"] = _fetch_active_legacy_memories
     module_globals["backfill_user"] = backfill_user
+    module_globals["backfill_user_bucketed"] = backfill_user_bucketed
+    module_globals["classify_legacy_backfill_bucket"] = classify_legacy_backfill_bucket
     module_globals["is_active_legacy_row"] = is_active_legacy_row
     module_globals["legacy_backfill_memory_id"] = legacy_backfill_memory_id
     module_globals["reconcile_backfill_counts"] = reconcile_backfill_counts
@@ -60,6 +64,7 @@ from models.product_memory import MemoryItemStatus, MemoryTier, ProcessingState,
 from utils.memory.canonical_memory_adapter import extraction_memory_id, read_canonical_memories
 from utils.memory.legacy_backfill import (
     BackfillCohortGateError,
+    LegacyBackfillBucket,
     assert_canonical_cohort_for_backfill,
     both_store_canonical_duplicate_exists,
     live_extraction_memory_id_for_legacy_row,
@@ -462,6 +467,153 @@ def test_dry_run_writes_nothing(_trusted_account):
     assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
     assert get_non_filtered_fn(LEGACY_UID, limit=10, offset=0) == rows
     assert active_snapshot == rows
+
+
+def test_bucket_classifier_holds_noise_and_sensitive_rows():
+    sensitive = _legacy_row(legacy_id="leg-sensitive", content="User API key token is stored elsewhere")
+    downloads = _legacy_row(legacy_id="leg-downloads", content="Local downloads include report.pdf")
+    focused = _legacy_row(legacy_id="leg-focused", content="Focused on Safari")
+    manual = _legacy_row(legacy_id="leg-manual", content="User prefers fast code reviews")
+    manual["manually_added"] = True
+    reviewed = _legacy_row(legacy_id="leg-reviewed", content="David uses Omi Beta for daily dogfood")
+    reviewed["user_review"] = True
+    profile = _legacy_row(legacy_id="leg-profile", content="The user wants concise launch checklists")
+    unmatched = _legacy_row(legacy_id="leg-unmatched", content="Coffee near the office was mentioned")
+
+    assert classify_legacy_backfill_bucket(sensitive) == LegacyBackfillBucket.hold_sensitive
+    assert classify_legacy_backfill_bucket(downloads) == LegacyBackfillBucket.hold_noise
+    assert classify_legacy_backfill_bucket(focused) == LegacyBackfillBucket.hold_noise
+    assert classify_legacy_backfill_bucket(manual) == LegacyBackfillBucket.manual_required_promotion
+    assert classify_legacy_backfill_bucket(reviewed) == LegacyBackfillBucket.reviewed_long_term
+    assert classify_legacy_backfill_bucket(profile) == LegacyBackfillBucket.profile_required_promotion
+    assert classify_legacy_backfill_bucket(unmatched) == LegacyBackfillBucket.archive_review
+
+
+def test_bucketed_inventory_dry_run_reports_counts_and_writes_nothing(_trusted_account):
+    rows = [
+        _legacy_row(legacy_id="leg-manual", content="User prefers concise docs", conversation_id="conv-manual"),
+        _legacy_row(
+            legacy_id="leg-sensitive",
+            content="User password token should never migrate",
+            conversation_id="conv-sensitive",
+        ),
+        _legacy_row(
+            legacy_id="leg-noise", content="Local downloads include installer.dmg", conversation_id="conv-noise"
+        ),
+    ]
+    rows[0]["manually_added"] = True
+    get_non_filtered_fn, active_snapshot = _make_non_filtered_store(rows)
+    db = _PromotionFakeDb({})
+
+    report = backfill_user_bucketed(
+        LEGACY_UID,
+        dry_run=True,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
+
+    assert report.dry_run is True
+    assert report.bucket_counts[LegacyBackfillBucket.manual_required_promotion.value] == 1
+    assert report.bucket_counts[LegacyBackfillBucket.hold_sensitive.value] == 1
+    assert report.bucket_counts[LegacyBackfillBucket.hold_noise.value] == 1
+    assert report.intended_count == 1
+    assert report.written_count == 0
+    assert report.bucket_samples[LegacyBackfillBucket.manual_required_promotion.value][0]["id"] == "leg-manual"
+    assert report.bucket_samples[LegacyBackfillBucket.hold_sensitive.value][0]["content"] == (
+        "[redacted sensitive memory content]"
+    )
+    assert "password token" not in report.bucket_samples[LegacyBackfillBucket.hold_sensitive.value][0]["content"]
+    assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
+    assert get_non_filtered_fn(LEGACY_UID, limit=10, offset=0) == rows
+    assert active_snapshot == rows
+
+
+def test_bucketed_manual_apply_writes_required_promotion_with_legacy_timestamps(_trusted_account):
+    created_at = datetime(2024, 3, 4, 5, 6, tzinfo=timezone.utc)
+    updated_at = datetime(2024, 4, 5, 6, 7, tzinfo=timezone.utc)
+    row = _legacy_row(
+        legacy_id="leg-manual-apply", content="User prefers launch checklists", conversation_id="conv-manual"
+    )
+    row["manually_added"] = True
+    row["created_at"] = created_at
+    row["updated_at"] = updated_at
+    rows = [row]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    report = backfill_user_bucketed(
+        LEGACY_UID,
+        bucket=LegacyBackfillBucket.manual_required_promotion,
+        dry_run=False,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
+
+    assert report.completed is True
+    assert report.verified is True
+    assert report.written_count == 1
+    canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
+    stored = db.docs[f"users/{LEGACY_UID}/memory_items/{canonical_id}"]
+    assert stored["tier"] == MemoryTier.short_term.value
+    assert stored["user_asserted"] is True
+    assert stored["captured_at"] == created_at
+    assert stored["updated_at"] == updated_at
+    assert stored["expires_at"] > datetime.now(timezone.utc)
+    assert stored["promotion"]["required"] is True
+    assert stored["promotion"]["status"] == "pending"
+    assert stored["promotion"]["bucket"] == LegacyBackfillBucket.manual_required_promotion.value
+    assert stored["promotion"]["legacy_memory_id"] == row["id"]
+
+
+def test_bucketed_reviewed_apply_writes_long_term_with_legacy_timestamp(_trusted_account):
+    created_at = datetime(2024, 5, 6, 7, 8, tzinfo=timezone.utc)
+    row = _legacy_row(
+        legacy_id="leg-reviewed-apply", content="David uses Omi Beta daily", conversation_id="conv-reviewed"
+    )
+    row["user_review"] = True
+    row["created_at"] = created_at
+    row["updated_at"] = created_at
+    rows = [row]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    report = backfill_user_bucketed(
+        LEGACY_UID,
+        bucket=LegacyBackfillBucket.reviewed_long_term,
+        dry_run=False,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
+
+    assert report.completed is True
+    assert report.verified is True
+    canonical_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=row["id"])
+    stored = db.docs[f"users/{LEGACY_UID}/memory_items/{canonical_id}"]
+    assert stored["tier"] == MemoryTier.long_term.value
+    assert stored["captured_at"] == created_at
+    assert stored["expires_at"] is None
+    assert stored["promotion"]["bucket"] == LegacyBackfillBucket.reviewed_long_term.value
+
+
+def test_bucketed_hold_bucket_never_writes(_trusted_account):
+    rows = [_legacy_row(legacy_id="leg-sensitive", content="User secret token should stay held")]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+
+    report = backfill_user_bucketed(
+        LEGACY_UID,
+        bucket=LegacyBackfillBucket.hold_sensitive,
+        dry_run=False,
+        db_client=db,
+        get_non_filtered_memories_fn=get_non_filtered_fn,
+    )
+
+    assert report.completed is True
+    assert report.skipped_bucket_not_writable == 1
+    assert report.written_count == 0
+    assert not any(path.startswith(f"users/{LEGACY_UID}/memory_items/") for path in db.docs)
 
 
 def test_resume_after_interruption(_trusted_account):
