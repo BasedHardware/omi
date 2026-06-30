@@ -295,7 +295,7 @@ check_backend_unit_tests_if_needed() {
   (
     cd backend
     bash test-preflight.sh
-    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" bash test.sh
+    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" BACKEND_PYTEST_XDIST=auto BACKEND_PYTEST_WORKERS=auto bash test.sh
   )
 }
 
