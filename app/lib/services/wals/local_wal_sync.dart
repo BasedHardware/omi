@@ -729,7 +729,12 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     await _flush();
 
-    var walToSync = _wals.where((w) => w == wal).toList().first;
+    final matches = _wals.where((w) => w == wal).toList();
+    if (matches.isEmpty) {
+      DebugLogManager.logInfo('Single WAL upload skipped — WAL no longer tracked', {'walId': wal.id});
+      return null;
+    }
+    final walToSync = matches.first;
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 

@@ -12,6 +12,19 @@ enum TranscriptionSessionStatus: String, Codable, CaseIterable {
     case failed = "failed"
 }
 
+enum TranscriptionFinalizationStrategy: String, Codable, CaseIterable {
+    case localSegments = "local_segments"
+    case cloudReconcile = "cloud_reconcile"
+}
+
+enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
+    case userStop = "user_stop"
+    case finishAndContinue = "finish_and_continue"
+    case maxDurationRotation = "max_duration_rotation"
+    case crashRecovery = "crash_recovery"
+    case retry = "retry"
+}
+
 /// Conversation processing status (from backend)
 /// Matches ConversationStatus in APIClient.swift
 enum LocalConversationStatus: String, Codable, CaseIterable {
@@ -39,9 +52,14 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
     var retryCount: Int
     var lastError: String?
     var backendId: String?                // Server conversation ID
+    var clientConversationId: String?     // Client-generated stable conversation ID for listen reconciliation
     var backendSynced: Bool
     var createdAt: Date
     var updatedAt: Date
+    var finalizationStrategy: TranscriptionFinalizationStrategy?
+    var finalizationReason: TranscriptionFinalizationReason?
+    var finalizationStartedAt: Date?
+    var finalizationCompletedAt: Date?
 
     // MARK: - Structured Data (from ServerConversation.Structured)
     var title: String?
@@ -80,9 +98,14 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         retryCount: Int = 0,
         lastError: String? = nil,
         backendId: String? = nil,
+        clientConversationId: String? = nil,
         backendSynced: Bool = false,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
+        finalizationStrategy: TranscriptionFinalizationStrategy? = nil,
+        finalizationReason: TranscriptionFinalizationReason? = nil,
+        finalizationStartedAt: Date? = nil,
+        finalizationCompletedAt: Date? = nil,
         // Structured data
         title: String? = nil,
         overview: String? = nil,
@@ -113,9 +136,14 @@ struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, 
         self.retryCount = retryCount
         self.lastError = lastError
         self.backendId = backendId
+        self.clientConversationId = clientConversationId
         self.backendSynced = backendSynced
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.finalizationStrategy = finalizationStrategy
+        self.finalizationReason = finalizationReason
+        self.finalizationStartedAt = finalizationStartedAt
+        self.finalizationCompletedAt = finalizationCompletedAt
         // Structured data
         self.title = title
         self.overview = overview
@@ -345,6 +373,10 @@ extension TranscriptionSessionRecord {
             backendSynced: true,
             createdAt: conversation.createdAt,
             updatedAt: Date(),
+            finalizationStrategy: nil,
+            finalizationReason: nil,
+            finalizationStartedAt: nil,
+            finalizationCompletedAt: localStatus == .completed ? (conversation.finishedAt ?? Date()) : nil,
             title: conversation.structured.title,
             overview: conversation.structured.overview,
             emoji: conversation.structured.emoji,

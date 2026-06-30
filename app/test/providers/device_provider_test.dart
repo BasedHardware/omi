@@ -200,12 +200,15 @@ void main() {
     test('alert fires again after recovery — the core bug scenario', () {
       // 50% → 15% (alert) → 25% (recover) → 10% (should alert AGAIN)
       final alerts = runSequence([50, 15, 25, 10]);
-      expect(alerts, [
-        false,
-        true,
-        false,
-        true,
-      ], reason: 'Before fix: [false, true, false, false] — second alert never fires');
+      expect(
+          alerts,
+          [
+            false,
+            true,
+            false,
+            true,
+          ],
+          reason: 'Before fix: [false, true, false, false] — second alert never fires');
     });
 
     test('full lifecycle: multiple charge cycles', () {

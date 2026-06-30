@@ -1,5 +1,8 @@
+import hashlib
+import os
 import unicodedata
 from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
 from typing import List, Optional, Tuple
 
@@ -11,7 +14,8 @@ from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
-from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
+from models.structured import ActionItem, Event, Structured
+from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction, StructuredExtraction
 from .clients import get_llm, parser
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import invoke_chat_structured_gateway, record_chat_extraction_gateway_result
@@ -19,6 +23,10 @@ from utils.llm.conversation_folder import FolderAssignment, assign_conversation_
 import logging
 
 logger = logging.getLogger(__name__)
+CONVERSATION_STRUCTURE_SHADOW_FEATURE = 'conversation_structure.extract.shadow'
+CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED'
+CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE'
+LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = None
 
 # =============================================
 #            FOLDER ASSIGNMENT
@@ -49,6 +57,206 @@ def _word_count(text: str) -> int:
     if cjk_chars > len(text) * 0.3:
         return cjk_chars // 2
     return len(text.split())
+
+
+def _coerce_action_items(response: ActionItemsExtraction) -> List[ActionItem]:
+    return response.to_action_items()
+
+
+def _coerce_structured(response: Structured | StructuredExtraction) -> Structured:
+    if isinstance(response, StructuredExtraction):
+        return response.to_structured()
+    return response
+
+
+def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
+    try:
+        global LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS
+        if LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS is None:
+            from utils.metrics import LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS as comparison_counter
+
+            LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = comparison_counter
+        LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS.labels(feature=feature, field=field, outcome=outcome).inc()
+    except Exception:
+        pass
+
+
+def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
+
+
+def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except ValueError:
+        return default
+
+
+def _should_run_conversation_structure_shadow(uid: str, started_at: datetime, conversation_context: str) -> bool:
+    if has_byok_keys():
+        record_chat_extraction_gateway_result(
+            feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+            outcome='skipped',
+            reason='byok',
+        )
+        return False
+
+    if not _env_flag_enabled(CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV):
+        record_chat_extraction_gateway_result(
+            feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+            outcome='skipped',
+            reason='disabled',
+        )
+        return False
+
+    sample_rate = _env_sample_rate(CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV, default=1.0)
+    if sample_rate <= 0:
+        record_chat_extraction_gateway_result(
+            feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+            outcome='skipped',
+            reason='sample_rate_zero',
+        )
+        return False
+    if sample_rate >= 1:
+        return True
+
+    sample_key = f'{uid}:{started_at.isoformat()}:{len(conversation_context)}'
+    sample_value = int(hashlib.sha256(sample_key.encode('utf-8')).hexdigest()[:8], 16) / 0xFFFFFFFF
+    if sample_value < sample_rate:
+        return True
+
+    record_chat_extraction_gateway_result(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        outcome='skipped',
+        reason='sampled_out',
+    )
+    return False
+
+
+def _normalized_text(value: object) -> str:
+    if value is None:
+        return ''
+    return ' '.join(str(value).casefold().split())
+
+
+def _text_similarity_bucket(left: object, right: object) -> str:
+    normalized_left = _normalized_text(left)
+    normalized_right = _normalized_text(right)
+    if not normalized_left and not normalized_right:
+        return 'both_empty'
+    if not normalized_left:
+        return 'legacy_empty_gateway_present'
+    if not normalized_right:
+        return 'legacy_present_gateway_empty'
+    if normalized_left == normalized_right:
+        return 'exact_match'
+    ratio = SequenceMatcher(None, normalized_left, normalized_right).ratio()
+    if ratio >= 0.85:
+        return 'high_similarity'
+    if ratio >= 0.60:
+        return 'medium_similarity'
+    return 'low_similarity'
+
+
+def _length_ratio_bucket(left: object, right: object) -> str:
+    normalized_left = _normalized_text(left)
+    normalized_right = _normalized_text(right)
+    left_len = len(normalized_left)
+    right_len = len(normalized_right)
+    if left_len == 0 and right_len == 0:
+        return 'both_empty'
+    if left_len == 0:
+        return 'legacy_empty_gateway_present'
+    if right_len == 0:
+        return 'legacy_present_gateway_empty'
+    ratio = right_len / left_len
+    if ratio < 0.5:
+        return 'gateway_much_shorter'
+    if ratio < 0.8:
+        return 'gateway_shorter'
+    if ratio <= 1.25:
+        return 'similar_length'
+    if ratio <= 2.0:
+        return 'gateway_longer'
+    return 'gateway_much_longer'
+
+
+def _record_conversation_structure_shadow_comparison(
+    gateway_response: ConversationStructureExtraction | None,
+    legacy_response: Structured,
+) -> None:
+    if gateway_response is None:
+        return
+
+    legacy_category = getattr(legacy_response.category, 'value', legacy_response.category)
+    gateway_category = getattr(gateway_response.category, 'value', gateway_response.category)
+
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='category',
+        outcome='exact_match' if legacy_category == gateway_category else 'mismatch',
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='emoji',
+        outcome='exact_match' if legacy_response.emoji == gateway_response.emoji else 'mismatch',
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='title_similarity',
+        outcome=_text_similarity_bucket(legacy_response.title, gateway_response.title),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='overview_similarity',
+        outcome=_text_similarity_bucket(legacy_response.overview, gateway_response.overview),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='overview_length_ratio',
+        outcome=_length_ratio_bucket(legacy_response.overview, gateway_response.overview),
+    )
+
+
+def _run_conversation_structure_shadow(prompt: str, legacy_response: Structured) -> None:
+    gateway_response = _invoke_gateway_unless_byok(
+        prompt,
+        ConversationStructureExtraction,
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+    )
+    _record_conversation_structure_shadow_comparison(gateway_response, legacy_response)
+
+
+def _submit_llm_background(fn, *args):
+    from utils.executors import llm_executor, submit_with_context
+
+    return submit_with_context(llm_executor, fn, *args)
+
+
+def _submit_conversation_structure_shadow(prompt: str, legacy_response: Structured) -> None:
+    try:
+        future = _submit_llm_background(_run_conversation_structure_shadow, prompt, legacy_response)
+    except Exception:
+        record_chat_extraction_gateway_result(
+            feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+            outcome='skipped',
+            reason='submit_error',
+        )
+        return
+
+    def _log_shadow_failure(completed_future):
+        try:
+            completed_future.result()
+        except Exception:
+            logger.exception('conversation_structure shadow task failed')
+
+    future.add_done_callback(_log_shadow_failure)
 
 
 def should_discard_conversation(
@@ -466,10 +674,11 @@ def extract_action_items(
 
     try:
         response = chain.invoke(prompt_values)
+        action_items = _coerce_action_items(response)
 
         # Set created_at for action items if not already set
         now = current_time
-        for action_item in response.action_items or []:
+        for action_item in action_items:
             if action_item.created_at is None:
                 action_item.created_at = now
             # The LLM returns naive LOCAL time; convert to UTC deterministically (and normalize any
@@ -485,7 +694,7 @@ def extract_action_items(
                     )
                     action_item.due_at = None
 
-        return response.action_items or []
+        return action_items
 
     except Exception as e:
         logger.error(f'Error extracting action items: {e}')
@@ -573,17 +782,26 @@ def get_transcript_structure(
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
     prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+    legacy_prompt_values = {
+        'conversation_context': conversation_context,
+        'format_instructions': parser.get_format_instructions(),
+        'language_code': language_code,
+        'response_language': response_language,
+        'started_at': _local_started_at_iso(started_at, tz),
+        'tz': tz or 'UTC',
+    }
 
-    response = chain.invoke(
-        {
-            'conversation_context': conversation_context,
-            'format_instructions': parser.get_format_instructions(),
-            'language_code': language_code,
-            'response_language': response_language,
-            'started_at': _local_started_at_iso(started_at, tz),
-            'tz': tz or 'UTC',
+    response = _coerce_structured(chain.invoke(legacy_prompt_values))
+    if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
+        structure_shadow_parser = PydanticOutputParser(pydantic_object=ConversationStructureExtraction)
+        shadow_prompt_values = {
+            **legacy_prompt_values,
+            'format_instructions': structure_shadow_parser.get_format_instructions(),
         }
-    )
+        _submit_conversation_structure_shadow(
+            f'{instructions_text.format(**shadow_prompt_values)}\n\n{context_message.format(**shadow_prompt_values)}',
+            response,
+        )
 
     for event in response.events or []:
         if event.duration > 180:
@@ -658,16 +876,18 @@ def get_reprocess_transcript_structure(
     prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
     chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
 
-    response = chain.invoke(
-        {
-            'full_context': full_context,
-            'title': title,
-            'format_instructions': parser.get_format_instructions(),
-            'language_code': language_code,
-            'response_language': response_language,
-            'started_at': _local_started_at_iso(started_at, tz),
-            'tz': tz or 'UTC',
-        }
+    response = _coerce_structured(
+        chain.invoke(
+            {
+                'full_context': full_context,
+                'title': title,
+                'format_instructions': parser.get_format_instructions(),
+                'language_code': language_code,
+                'response_language': response_language,
+                'started_at': _local_started_at_iso(started_at, tz),
+                'tz': tz or 'UTC',
+            }
+        )
     )
 
     for event in response.events or []:

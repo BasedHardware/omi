@@ -3,7 +3,7 @@
 # Prerequisites (stable versions, use these or higher):
 #
 # Common for all developers:
-# - Flutter SDK (v3.35.3)
+# - Flutter SDK (v3.41.9)
 # - Opus Codec: https://opus-codec.org
 #
 # For iOS Developers:
@@ -25,7 +25,7 @@ Write-Host "👋 Yo folks! Welcome to the OMI Mobile Project - We're hiring! Joi
 Write-Host "Prerequisites (stable versions, use these or higher):"
 Write-Host ""
 Write-Host "Common for all developers:"
-Write-Host "- Flutter SDK (v3.35.3)"
+Write-Host "- Flutter SDK (v3.41.9)"
 Write-Host "- Opus Codec: https://opus-codec.org"
 Write-Host ""
 Write-Host "For iOS Developers:"

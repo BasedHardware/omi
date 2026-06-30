@@ -13,6 +13,7 @@ use axum::{
     routing::post,
     Router,
 };
+use std::time::{Duration, Instant};
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
@@ -47,10 +48,19 @@ const MAX_OUTPUT_TOKENS_CAP: u64 = 8192;
 /// explicitly on all production paths.
 const DEFAULT_THINKING_BUDGET: u64 = 1024;
 
+/// Keep non-streaming upstream calls comfortably below Cloud Run's 300s request
+/// deadline so the proxy owns timeout mapping and logging.
+const GEMINI_UPSTREAM_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Bound TCP/TLS setup for all Gemini proxy calls. Streaming requests must not
+/// use a total response timeout because long SSE replies are expected.
+const GEMINI_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
 /// Proxy-specific error type — allows JSON 429 responses alongside bare status codes.
 enum ProxyError {
     Status(StatusCode),
     RateLimited,
+    UpstreamTimeout,
 }
 
 impl IntoResponse for ProxyError {
@@ -70,7 +80,63 @@ impl IntoResponse for ProxyError {
                     .body(axum::body::Body::from(body))
                     .unwrap()
             }
+            ProxyError::UpstreamTimeout => Response::builder()
+                .status(StatusCode::GATEWAY_TIMEOUT)
+                .header("content-type", "application/json")
+                .header("retry-after", "30")
+                .body(axum::body::Body::from(upstream_timeout_json()))
+                .unwrap(),
         }
+    }
+}
+
+fn upstream_timeout_json() -> &'static str {
+    r#"{"error":"upstream_timeout","message":"Gemini request timed out before the backend deadline. Please retry or shorten the request."}"#
+}
+
+pub fn gemini_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(GEMINI_CONNECT_TIMEOUT)
+        .timeout(GEMINI_UPSTREAM_TIMEOUT)
+        .build()
+        .unwrap_or_default()
+}
+
+pub fn gemini_stream_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .connect_timeout(GEMINI_CONNECT_TIMEOUT)
+        .build()
+        .unwrap_or_default()
+}
+
+fn payload_bucket(bytes: usize) -> &'static str {
+    match bytes {
+        0..=16_384 => "0-16kb",
+        16_385..=131_072 => "16-128kb",
+        131_073..=524_288 => "128-512kb",
+        524_289..=1_048_576 => "512kb-1mb",
+        _ => "1mb+",
+    }
+}
+
+fn duration_bucket(elapsed: Duration) -> &'static str {
+    match elapsed.as_secs() {
+        0..=4 => "0-5s",
+        5..=14 => "5-15s",
+        15..=59 => "15-60s",
+        60..=119 => "60-120s",
+        _ => "120s+",
+    }
+}
+
+fn map_upstream_error(error: reqwest::Error, operation: &str) -> ProxyError {
+    let error = error.without_url();
+    if error.is_timeout() {
+        tracing::warn!("gemini_proxy: {} timed out: {}", operation, error);
+        ProxyError::UpstreamTimeout
+    } else {
+        tracing::error!("gemini_proxy: {} failed: {}", operation, error);
+        ProxyError::Status(StatusCode::BAD_GATEWAY)
     }
 }
 
@@ -93,7 +159,11 @@ async fn gemini_proxy(
     // Validate the action is in our allowlist
     let action = extract_gemini_action(&path);
     if !is_gemini_action_allowed(action) {
-        tracing::warn!("gemini_proxy: blocked action '{}' in path '{}'", action, path);
+        tracing::warn!(
+            "gemini_proxy: blocked action '{}' in path '{}'",
+            action,
+            path
+        );
         return Err(ProxyError::Status(StatusCode::FORBIDDEN));
     }
 
@@ -115,12 +185,16 @@ async fn gemini_proxy(
     // When present, use AI Studio with the user's key, skip Vertex AI routing
     // and server-key rate limiting (the user pays their own bill).
     // If byok_stripped, the user is not BYOK-enrolled — ignore their headers.
-    let byok_gemini_key = byok::get_byok_key_if_active(&headers, byok::HEADER_GEMINI, byok_stripped);
+    let byok_gemini_key =
+        byok::get_byok_key_if_active(&headers, byok::HEADER_GEMINI, byok_stripped);
     let is_byok = byok_gemini_key.is_some();
 
     // Rate limit check — skip when using BYOK key
     if !is_byok {
-        let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
+        let decision = state
+            .gemini_rate_limiter
+            .check_and_record(&user.uid, state.redis.as_ref())
+            .await;
         if decision == RateDecision::Reject {
             tracing::warn!("gemini_proxy: rate limit rejected uid={}", user.uid);
             return Err(ProxyError::RateLimited);
@@ -139,7 +213,12 @@ async fn gemini_proxy(
 
         // Non-BYOK path: use server key with Vertex AI / AI Studio routing
         let response = gemini_proxy_server_key(
-            &state, &user, &effective_path, action, model, &sanitized_body,
+            &state,
+            &user,
+            &effective_path,
+            action,
+            model,
+            &sanitized_body,
         )
         .await?;
         if response.status().is_success() {
@@ -160,24 +239,32 @@ async fn gemini_proxy(
     tracing::info!("gemini_proxy: using BYOK Gemini key for uid={}", user.uid);
 
     let url = build_gemini_url(&path, byok_key);
-    let upstream = reqwest::Client::new()
+    let request_payload_bucket = payload_bucket(sanitized_body.len());
+    let started = Instant::now();
+    let upstream = state
+        .gemini_client
         .post(&url)
         .header("content-type", "application/json")
         .body(sanitized_body)
         .send()
         .await
-        .map_err(|e| {
-            // Use without_url() to avoid leaking BYOK API key from the query string
-            tracing::error!("gemini_proxy: BYOK upstream request failed: {}", e.without_url());
-            ProxyError::Status(StatusCode::BAD_GATEWAY)
-        })?;
+        .map_err(|e| map_upstream_error(e, "BYOK upstream request"))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream.bytes().await.map_err(|e| {
-        tracing::error!("gemini_proxy: failed to read upstream body: {}", e.without_url());
-        ProxyError::Status(StatusCode::BAD_GATEWAY)
-    })?;
+    let bytes = upstream
+        .bytes()
+        .await
+        .map_err(|e| map_upstream_error(e, "BYOK upstream body read"))?;
+    tracing::info!(
+        "gemini_proxy: upstream_result uid={} provider=ai_studio_byok model={} action={} payload_bucket={} duration_bucket={} status={}",
+        user.uid,
+        model,
+        action,
+        request_payload_bucket,
+        duration_bucket(started.elapsed()),
+        status.as_u16()
+    );
 
     Ok((status, bytes).into_response())
 }
@@ -213,20 +300,31 @@ async fn gemini_proxy_server_key(
     } else {
         effective_path.to_string()
     };
+    let request_payload_bucket = payload_bucket(request_body.len());
+    let started = Instant::now();
 
     // Build and send request: Vertex AI (Bearer token) or AI Studio (API key).
     // Falls back to AI Studio if Vertex token fetch fails.
     let mut used_vertex = false;
+    let mut upstream_provider = if route.provider == Provider::VertexAi {
+        "vertex_ai"
+    } else {
+        "ai_studio"
+    };
     let upstream = if route.provider == Provider::VertexAi {
         if let Some(ref vertex) = state.vertex_auth {
             let url = vertex.build_url_from_path(&vertex_path).ok_or_else(|| {
-                tracing::error!("gemini_proxy: failed to parse path for Vertex AI: {}", vertex_path);
+                tracing::error!(
+                    "gemini_proxy: failed to parse path for Vertex AI: {}",
+                    vertex_path
+                );
                 ProxyError::Status(StatusCode::BAD_REQUEST)
             })?;
             match vertex.token().await {
                 Ok(token) => {
                     used_vertex = true;
-                    reqwest::Client::new()
+                    state
+                        .gemini_client
                         .post(&url)
                         .header("content-type", "application/json")
                         .header("authorization", format!("Bearer {}", token))
@@ -236,26 +334,39 @@ async fn gemini_proxy_server_key(
                 }
                 Err(e) => {
                     if let Some(gemini_key) = state.config.gemini_api_key.as_ref() {
-                        tracing::warn!("gemini_proxy: Vertex AI token failed, falling back to API key: {}", e);
+                        tracing::warn!(
+                            "gemini_proxy: Vertex AI token failed, falling back to API key: {}",
+                            e
+                        );
+                        upstream_provider = "ai_studio_fallback";
                         let url = build_gemini_url(effective_path, gemini_key);
-                        reqwest::Client::new()
+                        state
+                            .gemini_client
                             .post(&url)
                             .header("content-type", "application/json")
                             .body(sanitized_body.to_vec())
                             .send()
                             .await
                     } else {
-                        tracing::error!("gemini_proxy: Vertex AI token error and no fallback: {}", e);
+                        tracing::error!(
+                            "gemini_proxy: Vertex AI token error and no fallback: {}",
+                            e
+                        );
                         return Err(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE));
                     }
                 }
             }
         } else {
             // Vertex AI requested but not configured → AI Studio
-            let gemini_key = state.config.gemini_api_key.as_ref()
+            let gemini_key = state
+                .config
+                .gemini_api_key
+                .as_ref()
                 .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
+            upstream_provider = "ai_studio_fallback";
             let url = build_gemini_url(effective_path, gemini_key);
-            reqwest::Client::new()
+            state
+                .gemini_client
                 .post(&url)
                 .header("content-type", "application/json")
                 .body(sanitized_body.to_vec())
@@ -264,10 +375,14 @@ async fn gemini_proxy_server_key(
         }
     } else {
         // AI Studio route
-        let gemini_key = state.config.gemini_api_key.as_ref()
+        let gemini_key = state
+            .config
+            .gemini_api_key
+            .as_ref()
             .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
         let url = build_gemini_url(effective_path, gemini_key);
-        reqwest::Client::new()
+        state
+            .gemini_client
             .post(&url)
             .header("content-type", "application/json")
             .body(sanitized_body.to_vec())
@@ -275,17 +390,24 @@ async fn gemini_proxy_server_key(
             .await
     };
 
-    let upstream = upstream.map_err(|e| {
-        tracing::error!("gemini_proxy: upstream request failed: {}", e);
-        ProxyError::Status(StatusCode::BAD_GATEWAY)
-    })?;
+    let upstream = upstream.map_err(|e| map_upstream_error(e, "upstream request"))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
-    let bytes = upstream.bytes().await.map_err(|e| {
-        tracing::error!("gemini_proxy: failed to read upstream body: {}", e);
-        ProxyError::Status(StatusCode::BAD_GATEWAY)
-    })?;
+    let bytes = upstream
+        .bytes()
+        .await
+        .map_err(|e| map_upstream_error(e, "upstream body read"))?;
+    tracing::info!(
+        "gemini_proxy: upstream_result uid={} provider={} model={} action={} payload_bucket={} duration_bucket={} status={}",
+        user.uid,
+        upstream_provider,
+        model,
+        action,
+        request_payload_bucket,
+        duration_bucket(started.elapsed()),
+        status.as_u16()
+    );
 
     // Apply response transform if needed (e.g., Vertex predict → AI Studio embed format)
     if used_vertex && status.is_success() && route.response_transform != ResponseTransform::None {
@@ -331,7 +453,11 @@ async fn gemini_stream_proxy(
     // Validate the model is in our allowlist (issue #6624)
     let model = extract_gemini_model(&path);
     if !is_gemini_model_allowed(model) {
-        tracing::warn!("gemini_stream_proxy: blocked model '{}' in path '{}'", model, path);
+        tracing::warn!(
+            "gemini_stream_proxy: blocked model '{}' in path '{}'",
+            model,
+            path
+        );
         return Err(ProxyError::Status(StatusCode::FORBIDDEN));
     }
 
@@ -342,12 +468,16 @@ async fn gemini_stream_proxy(
     })?;
 
     // BYOK: check for user-provided Gemini API key (issue #7357).
-    let byok_gemini_key = byok::get_byok_key_if_active(&headers, byok::HEADER_GEMINI, byok_stripped);
+    let byok_gemini_key =
+        byok::get_byok_key_if_active(&headers, byok::HEADER_GEMINI, byok_stripped);
     let is_byok = byok_gemini_key.is_some();
 
     // Rate limit check — skip when using BYOK key
     if !is_byok {
-        let decision = state.gemini_rate_limiter.check_and_record(&user.uid, state.redis.as_ref()).await;
+        let decision = state
+            .gemini_rate_limiter
+            .check_and_record(&user.uid, state.redis.as_ref())
+            .await;
         if decision == RateDecision::Reject {
             tracing::warn!("gemini_stream_proxy: rate limit rejected uid={}", user.uid);
             return Err(ProxyError::RateLimited);
@@ -386,20 +516,20 @@ async fn gemini_stream_proxy(
 
     // BYOK path: always use AI Studio with user's key, skip Vertex AI.
     let byok_key = byok_gemini_key.unwrap();
-    tracing::info!("gemini_stream_proxy: using BYOK Gemini key for uid={}", user.uid);
+    tracing::info!(
+        "gemini_stream_proxy: using BYOK Gemini key for uid={}",
+        user.uid
+    );
 
     let upstream_url = build_gemini_stream_url(&path, byok_key, &query);
-    let upstream = reqwest::Client::new()
+    let upstream = state
+        .gemini_stream_client
         .post(&upstream_url)
         .header("content-type", "application/json")
         .body(sanitized_body)
         .send()
         .await
-        .map_err(|e| {
-            // Use without_url() to avoid leaking BYOK API key from the query string
-            tracing::error!("gemini_stream_proxy: BYOK upstream request failed: {}", e.without_url());
-            ProxyError::Status(StatusCode::BAD_GATEWAY)
-        })?;
+        .map_err(|e| map_upstream_error(e, "BYOK stream upstream request"))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -431,7 +561,10 @@ async fn gemini_stream_server_key(
     let upstream = if route.provider == Provider::VertexAi {
         if let Some(ref vertex) = state.vertex_auth {
             let mut url = vertex.build_url_from_path(effective_path).ok_or_else(|| {
-                tracing::error!("gemini_stream_proxy: failed to parse path for Vertex AI: {}", effective_path);
+                tracing::error!(
+                    "gemini_stream_proxy: failed to parse path for Vertex AI: {}",
+                    effective_path
+                );
                 ProxyError::Status(StatusCode::BAD_REQUEST)
             })?;
             // Append extra query params (e.g., alt=sse) for streaming
@@ -443,7 +576,8 @@ async fn gemini_stream_server_key(
             }
             match vertex.token().await {
                 Ok(token) => {
-                    reqwest::Client::new()
+                    state
+                        .gemini_stream_client
                         .post(&url)
                         .header("content-type", "application/json")
                         .header("authorization", format!("Bearer {}", token))
@@ -454,25 +588,34 @@ async fn gemini_stream_server_key(
                 Err(e) => {
                     if let Some(gemini_key) = state.config.gemini_api_key.as_ref() {
                         tracing::warn!("gemini_stream_proxy: Vertex AI token failed, falling back to API key: {}", e);
-                        let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
-                        reqwest::Client::new()
+                        let upstream_url =
+                            build_gemini_stream_url(effective_path, gemini_key, query);
+                        state
+                            .gemini_stream_client
                             .post(&upstream_url)
                             .header("content-type", "application/json")
                             .body(sanitized_body)
                             .send()
                             .await
                     } else {
-                        tracing::error!("gemini_stream_proxy: Vertex AI token error and no fallback: {}", e);
+                        tracing::error!(
+                            "gemini_stream_proxy: Vertex AI token error and no fallback: {}",
+                            e
+                        );
                         return Err(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE));
                     }
                 }
             }
         } else {
             // Vertex AI requested but not configured → AI Studio
-            let gemini_key = state.config.gemini_api_key.as_ref()
+            let gemini_key = state
+                .config
+                .gemini_api_key
+                .as_ref()
                 .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
             let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
-            reqwest::Client::new()
+            state
+                .gemini_stream_client
                 .post(&upstream_url)
                 .header("content-type", "application/json")
                 .body(sanitized_body)
@@ -481,10 +624,14 @@ async fn gemini_stream_server_key(
         }
     } else {
         // AI Studio route
-        let gemini_key = state.config.gemini_api_key.as_ref()
+        let gemini_key = state
+            .config
+            .gemini_api_key
+            .as_ref()
             .ok_or(ProxyError::Status(StatusCode::SERVICE_UNAVAILABLE))?;
         let upstream_url = build_gemini_stream_url(effective_path, gemini_key, query);
-        reqwest::Client::new()
+        state
+            .gemini_stream_client
             .post(&upstream_url)
             .header("content-type", "application/json")
             .body(sanitized_body)
@@ -492,10 +639,7 @@ async fn gemini_stream_server_key(
             .await
     };
 
-    let upstream = upstream.map_err(|e| {
-        tracing::error!("gemini_stream_proxy: upstream request failed: {}", e);
-        ProxyError::Status(StatusCode::BAD_GATEWAY)
-    })?;
+    let upstream = upstream.map_err(|e| map_upstream_error(e, "stream upstream request"))?;
 
     let status =
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
@@ -546,10 +690,11 @@ fn is_gemini_model_allowed(model: &str) -> bool {
 ///   - Skip generation-specific validation (different schema)
 ///   - Strip safety_settings and cached_content only
 fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
-    let mut json: serde_json::Value = serde_json::from_slice(body)
-        .map_err(|e| format!("invalid JSON: {}", e))?;
+    let mut json: serde_json::Value =
+        serde_json::from_slice(body).map_err(|e| format!("invalid JSON: {}", e))?;
 
-    let obj = json.as_object_mut()
+    let obj = json
+        .as_object_mut()
         .ok_or_else(|| "request body must be a JSON object".to_string())?;
 
     // Strip dangerous fields from all request types
@@ -569,7 +714,10 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
         for content in contents.iter_mut() {
             if let Some(content_obj) = content.as_object_mut() {
                 if !content_obj.contains_key("role") {
-                    content_obj.insert("role".to_string(), serde_json::Value::String("user".to_string()));
+                    content_obj.insert(
+                        "role".to_string(),
+                        serde_json::Value::String("user".to_string()),
+                    );
                 }
             }
         }
@@ -598,7 +746,9 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
                 "systemInstruction"
             };
             if let Some(existing) = obj.get_mut(si_key).and_then(|v| v.as_object_mut()) {
-                if let Some(existing_parts) = existing.get_mut("parts").and_then(|v| v.as_array_mut()) {
+                if let Some(existing_parts) =
+                    existing.get_mut("parts").and_then(|v| v.as_array_mut())
+                {
                     existing_parts.extend(system_parts);
                 }
             } else {
@@ -632,7 +782,10 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
         };
 
         // Reject top-level candidate_count > 1
-        if let Some(cc) = obj.get("candidate_count").or_else(|| obj.get("candidateCount")) {
+        if let Some(cc) = obj
+            .get("candidate_count")
+            .or_else(|| obj.get("candidateCount"))
+        {
             if let Some(n) = parse_as_u64(cc) {
                 if n > 1 {
                     return Err(format!("candidate_count must be 1 or absent, got {}", n));
@@ -653,7 +806,10 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
                     if let Some(v) = gc.get(*cc_key) {
                         if let Some(n) = parse_as_u64(v) {
                             if n > 1 {
-                                return Err(format!("candidate_count must be 1 or absent, got {}", n));
+                                return Err(format!(
+                                    "candidate_count must be 1 or absent, got {}",
+                                    n
+                                ));
                             }
                         }
                     }
@@ -673,8 +829,8 @@ fn sanitize_gemini_body(body: &[u8], action: &str) -> Result<Vec<u8>, String> {
                 // Defense-in-depth: inject default thinking budget if client omits it.
                 // Gemini 2.5 Flash defaults to unlimited thinking which is 5.8x more
                 // expensive than regular output tokens. Cap at 1024 when absent.
-                let has_thinking = gc.contains_key("thinking_config")
-                    || gc.contains_key("thinkingConfig");
+                let has_thinking =
+                    gc.contains_key("thinking_config") || gc.contains_key("thinkingConfig");
                 if !has_thinking {
                     gc.insert(
                         "thinkingConfig".to_string(),
@@ -800,6 +956,37 @@ pub fn proxy_routes() -> Router<AppState> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn gemini_upstream_timeout_stays_below_cloud_run_deadline() {
+        assert!(GEMINI_CONNECT_TIMEOUT < GEMINI_UPSTREAM_TIMEOUT);
+        assert!(GEMINI_UPSTREAM_TIMEOUT < Duration::from_secs(300));
+    }
+
+    #[test]
+    fn upstream_timeout_response_is_retryable_and_sanitized() {
+        let response = ProxyError::UpstreamTimeout.into_response();
+        assert_eq!(response.status(), StatusCode::GATEWAY_TIMEOUT);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "30");
+
+        let body = upstream_timeout_json();
+        assert!(body.contains("upstream_timeout"));
+        assert!(body.contains("retry"));
+        assert!(!body.contains("uid"));
+        assert!(!body.contains("prompt"));
+        assert!(!body.contains("key"));
+    }
+
+    #[test]
+    fn proxy_metric_buckets_are_stable() {
+        assert_eq!(payload_bucket(0), "0-16kb");
+        assert_eq!(payload_bucket(16_385), "16-128kb");
+        assert_eq!(payload_bucket(524_289), "512kb-1mb");
+        assert_eq!(payload_bucket(1_048_577), "1mb+");
+        assert_eq!(duration_bucket(Duration::from_secs(4)), "0-5s");
+        assert_eq!(duration_bucket(Duration::from_secs(60)), "60-120s");
+        assert_eq!(duration_bucket(Duration::from_secs(120)), "120s+");
+    }
+
     // --- Gemini action extraction ---
 
     #[test]
@@ -909,13 +1096,19 @@ mod tests {
     fn model_allowlist_permits_valid_models() {
         assert!(is_gemini_model_allowed("gemini-2.5-flash"));
         assert!(is_gemini_model_allowed("gemini-2.5-pro"));
-        assert!(is_gemini_model_allowed("gemini-3-flash-preview"), "kept for old app compat");
+        assert!(
+            is_gemini_model_allowed("gemini-3-flash-preview"),
+            "kept for old app compat"
+        );
         assert!(is_gemini_model_allowed("gemini-embedding-001"));
     }
 
     #[test]
     fn model_allowlist_blocks_unknown() {
-        assert!(!is_gemini_model_allowed("gemini-pro-latest"), "legacy pro not in allowlist");
+        assert!(
+            !is_gemini_model_allowed("gemini-pro-latest"),
+            "legacy pro not in allowlist"
+        );
         assert!(!is_gemini_model_allowed("gemini-1.5-pro"));
         assert!(!is_gemini_model_allowed("gemini-ultra"));
         assert!(!is_gemini_model_allowed(""));
@@ -938,7 +1131,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(
             parsed["generation_config"]["max_output_tokens"],
@@ -955,7 +1149,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["generation_config"]["max_output_tokens"], 4096);
     }
@@ -969,7 +1164,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(
             parsed["generationConfig"]["maxOutputTokens"],
@@ -1072,7 +1268,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["generation_config"]["max_output_tokens"], 100);
         assert_eq!(
@@ -1106,7 +1303,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(
             parsed["generationConfig"]["maxOutputTokens"],
@@ -1154,7 +1352,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(
             parsed["generationConfig"]["maxOutputTokens"],
@@ -1193,7 +1392,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert!(parsed.get("safety_settings").is_none());
         assert!(parsed.get("safetySettings").is_none());
@@ -1208,7 +1408,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert!(parsed.get("cachedContent").is_none());
         assert!(parsed.get("cached_content").is_none());
@@ -1224,7 +1425,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["contents"][0]["role"], "user");
     }
@@ -1240,7 +1442,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["contents"][0]["role"], "user");
         assert_eq!(parsed["contents"][1]["role"], "model");
@@ -1258,7 +1461,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["contents"][0]["role"], "user");
         assert_eq!(parsed["contents"][1]["role"], "model");
@@ -1273,7 +1477,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert!(parsed["contents"].as_array().unwrap().is_empty());
     }
@@ -1287,7 +1492,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         // key exists so we don't inject — preserves explicit null
         assert!(parsed["contents"][0]["role"].is_null());
@@ -1302,7 +1508,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["contents"][0]["role"], "");
     }
@@ -1319,7 +1526,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         // System content removed from contents
         assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
@@ -1344,7 +1552,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
         let si_parts = parsed["systemInstruction"]["parts"].as_array().unwrap();
@@ -1366,7 +1575,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         let si_parts = parsed["system_instruction"]["parts"].as_array().unwrap();
         assert_eq!(si_parts.len(), 2);
@@ -1387,7 +1597,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["contents"].as_array().unwrap().len(), 1);
         assert_eq!(parsed["contents"][0]["role"], "user");
@@ -1408,7 +1619,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert!(parsed.get("systemInstruction").is_none());
         assert!(parsed.get("system_instruction").is_none());
@@ -1424,7 +1636,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert!(parsed.get("tools").is_some());
     }
@@ -1455,7 +1668,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "embedContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert!(parsed.get("safetySettings").is_none());
     }
@@ -1499,11 +1713,8 @@ mod tests {
     #[test]
     fn gemini_stream_url_empty_params() {
         let params = std::collections::HashMap::new();
-        let url = build_gemini_stream_url(
-            "models/gemini-3-flash:generateContent",
-            "key-789",
-            &params,
-        );
+        let url =
+            build_gemini_stream_url("models/gemini-3-flash:generateContent", "key-789", &params);
         assert_eq!(
             url,
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash:generateContent?key=key-789"
@@ -1544,9 +1755,9 @@ mod tests {
             "content": {"parts": [{"text": "hello world"}]},
             "taskType": "RETRIEVAL_DOCUMENT"
         });
-        let result = transform_embed_request_to_vertex(
-            serde_json::to_vec(&body).unwrap().as_slice(),
-        ).unwrap();
+        let result =
+            transform_embed_request_to_vertex(serde_json::to_vec(&body).unwrap().as_slice())
+                .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["instances"][0]["content"], "hello world");
         assert_eq!(parsed["instances"][0]["task_type"], "RETRIEVAL_DOCUMENT");
@@ -1559,9 +1770,9 @@ mod tests {
             "taskType": "RETRIEVAL_DOCUMENT",
             "title": "My Document"
         });
-        let result = transform_embed_request_to_vertex(
-            serde_json::to_vec(&body).unwrap().as_slice(),
-        ).unwrap();
+        let result =
+            transform_embed_request_to_vertex(serde_json::to_vec(&body).unwrap().as_slice())
+                .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["instances"][0]["title"], "My Document");
     }
@@ -1571,9 +1782,9 @@ mod tests {
         let body = serde_json::json!({
             "content": {"parts": [{"text": "simple text"}]}
         });
-        let result = transform_embed_request_to_vertex(
-            serde_json::to_vec(&body).unwrap().as_slice(),
-        ).unwrap();
+        let result =
+            transform_embed_request_to_vertex(serde_json::to_vec(&body).unwrap().as_slice())
+                .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         assert_eq!(parsed["instances"][0]["content"], "simple text");
         assert!(parsed["instances"][0].get("task_type").is_none());
@@ -1582,9 +1793,8 @@ mod tests {
     #[test]
     fn embed_request_transform_rejects_missing_content() {
         let body = serde_json::json!({"taskType": "RETRIEVAL_QUERY"});
-        let result = transform_embed_request_to_vertex(
-            serde_json::to_vec(&body).unwrap().as_slice(),
-        );
+        let result =
+            transform_embed_request_to_vertex(serde_json::to_vec(&body).unwrap().as_slice());
         assert!(result.is_err());
     }
 
@@ -1600,9 +1810,9 @@ mod tests {
                 }
             }]
         });
-        let result = transform_vertex_embed_response(
-            serde_json::to_vec(&vertex_resp).unwrap().as_slice(),
-        ).unwrap();
+        let result =
+            transform_vertex_embed_response(serde_json::to_vec(&vertex_resp).unwrap().as_slice())
+                .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         let values = parsed["embedding"]["values"].as_array().unwrap();
         assert_eq!(values.len(), 3);
@@ -1612,9 +1822,7 @@ mod tests {
     #[test]
     fn embed_response_transform_rejects_missing_predictions() {
         let resp = serde_json::json!({"error": "bad request"});
-        let result = transform_vertex_embed_response(
-            serde_json::to_vec(&resp).unwrap().as_slice(),
-        );
+        let result = transform_vertex_embed_response(serde_json::to_vec(&resp).unwrap().as_slice());
         assert!(result.is_err());
     }
 
@@ -1648,10 +1856,14 @@ mod tests {
         });
         let vertex_body = transform_embed_request_to_vertex(
             serde_json::to_vec(&ai_studio_body).unwrap().as_slice(),
-        ).unwrap();
+        )
+        .unwrap();
         let parsed_req: serde_json::Value = serde_json::from_slice(&vertex_body).unwrap();
         assert_eq!(parsed_req["instances"][0]["content"], "test embedding");
-        assert_eq!(parsed_req["instances"][0]["task_type"], "RETRIEVAL_DOCUMENT");
+        assert_eq!(
+            parsed_req["instances"][0]["task_type"],
+            "RETRIEVAL_DOCUMENT"
+        );
 
         // 4. Response transform: Vertex predict response → AI Studio embed response
         let vertex_response = serde_json::json!({
@@ -1664,7 +1876,8 @@ mod tests {
         });
         let ai_studio_resp = transform_vertex_embed_response(
             serde_json::to_vec(&vertex_response).unwrap().as_slice(),
-        ).unwrap();
+        )
+        .unwrap();
         let parsed_resp: serde_json::Value = serde_json::from_slice(&ai_studio_resp).unwrap();
         let values = parsed_resp["embedding"]["values"].as_array().unwrap();
         assert_eq!(values.len(), 4);
@@ -1676,7 +1889,7 @@ mod tests {
     /// (old apps requesting preview get rewritten to flash → routed to Vertex).
     #[test]
     fn preview_rewrite_then_resolve_routes_to_vertex() {
-        use crate::llm::model_qos::{rewrite_preview_model, resolve_route, Provider};
+        use crate::llm::model_qos::{resolve_route, rewrite_preview_model, Provider};
 
         let original_path = "models/gemini-3-flash-preview:generateContent";
         let rewritten = rewrite_preview_model(original_path);
@@ -1701,7 +1914,8 @@ mod tests {
         let query: std::collections::HashMap<String, String> = [
             ("alt".to_string(), "sse".to_string()),
             ("key".to_string(), "should-not-appear".to_string()),
-        ].into();
+        ]
+        .into();
         for (k, v) in &query {
             url.push(if url.contains('?') { '&' } else { '?' });
             url.push_str(&urlencoding::encode(k));
@@ -1725,7 +1939,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         let gc = &parsed["generation_config"];
         assert_eq!(
@@ -1747,12 +1962,19 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         let gc = &parsed["generation_config"];
         // Should not overwrite existing thinking_config
-        assert_eq!(gc["thinking_config"]["thinking_budget"], serde_json::json!(0));
-        assert!(gc.get("thinkingConfig").is_none(), "should not inject when thinking_config present");
+        assert_eq!(
+            gc["thinking_config"]["thinking_budget"],
+            serde_json::json!(0)
+        );
+        assert!(
+            gc.get("thinkingConfig").is_none(),
+            "should not inject when thinking_config present"
+        );
     }
 
     #[test]
@@ -1767,10 +1989,14 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         let gc = &parsed["generationConfig"];
-        assert_eq!(gc["thinkingConfig"]["thinkingBudget"], serde_json::json!(4096));
+        assert_eq!(
+            gc["thinkingConfig"]["thinkingBudget"],
+            serde_json::json!(4096)
+        );
     }
 
     #[test]
@@ -1781,7 +2007,8 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "embedContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         // Embed requests have no generation_config, so no injection
         assert!(parsed.get("thinkingConfig").is_none());
@@ -1799,10 +2026,15 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
-        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
-        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        let gc = parsed
+            .get("generationConfig")
+            .expect("generationConfig should be created");
+        let tc = gc
+            .get("thinkingConfig")
+            .expect("thinkingConfig should be injected");
         assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
     }
 
@@ -1817,10 +2049,15 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         // Both casings should have thinkingConfig injected
-        let gc_snake = parsed.get("generation_config").unwrap().as_object().unwrap();
+        let gc_snake = parsed
+            .get("generation_config")
+            .unwrap()
+            .as_object()
+            .unwrap();
         assert!(gc_snake.contains_key("thinkingConfig"));
         let gc_camel = parsed.get("generationConfig").unwrap().as_object().unwrap();
         assert!(gc_camel.contains_key("thinkingConfig"));
@@ -1836,11 +2073,16 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
         // null generation_config is not an object, so proxy creates generationConfig
-        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
-        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        let gc = parsed
+            .get("generationConfig")
+            .expect("generationConfig should be created");
+        let tc = gc
+            .get("thinkingConfig")
+            .expect("thinkingConfig should be injected");
         assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
     }
 
@@ -1854,10 +2096,15 @@ mod tests {
         let result = sanitize_gemini_body(
             serde_json::to_vec(&body).unwrap().as_slice(),
             "generateContent",
-        ).unwrap();
+        )
+        .unwrap();
         let parsed: serde_json::Value = serde_json::from_slice(&result).unwrap();
-        let gc = parsed.get("generationConfig").expect("generationConfig should be created");
-        let tc = gc.get("thinkingConfig").expect("thinkingConfig should be injected");
+        let gc = parsed
+            .get("generationConfig")
+            .expect("generationConfig should be created");
+        let tc = gc
+            .get("thinkingConfig")
+            .expect("thinkingConfig should be injected");
         assert_eq!(tc["thinkingBudget"], DEFAULT_THINKING_BUDGET);
     }
 }

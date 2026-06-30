@@ -76,6 +76,10 @@ enum AppBuild {
     return raw == "staging" ? "beta" : raw
   }
 
+  static var manualDownloadURL: URL {
+    URL(string: "https://api.omi.me/v2/desktop/download/latest?channel=\(currentUpdateChannel)")!
+  }
+
   static var inferredUpdateChannel: String {
     let bundlePath = Bundle.main.bundleURL.path.lowercased()
     let display = displayName.lowercased()

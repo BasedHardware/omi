@@ -144,6 +144,7 @@ import database.action_items as action_items_db  # noqa: E402  (the stub)
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
+import routers.developer as developer_module  # noqa: E402
 from dependencies import get_uid_with_action_items_read  # noqa: E402
 
 
@@ -164,3 +165,15 @@ def test_malformed_action_item_skipped_not_500():
         resp = _build().get('/v1/dev/user/action-items')
     assert resp.status_code == 200
     assert [i['id'] for i in resp.json()] == ['a1', 'a2']
+
+
+def test_pagination_is_clamped_before_firestore():
+    # Out-of-range pagination is clamped before the query: a negative limit/offset would raise
+    # (HTTP 500) and limit=0 hit the falsy `if limit:` guard and streamed the whole collection.
+    # Call the handler directly; get_action_items passes limit/offset as keyword args.
+    with patch.object(action_items_db, 'get_action_items', return_value=[]) as m:
+        developer_module.get_action_items(uid='uid1', limit=99999, offset=-1)
+        developer_module.get_action_items(uid='uid1', limit=0, offset=5)
+    high = m.call_args_list[0].kwargs
+    assert high['limit'] == 1000 and high['offset'] == 0  # 99999 -> 1000, -1 -> 0
+    assert m.call_args_list[1].kwargs['limit'] == 1  # 0 -> 1

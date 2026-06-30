@@ -10,9 +10,8 @@
 import { createInterface } from "readline";
 import { createConnection } from "net";
 import { readFileSync, writeFileSync } from "fs";
-import { join } from "path";
-import { homedir } from "os";
 import { isAgentControlToolName } from "./runtime/control-tools.js";
+import { loadSkillInstructions } from "./runtime/node-tools.js";
 import {
   buildToolAvailabilitySnapshot,
   mcpToolDefinitionsForAdapter,
@@ -361,27 +360,7 @@ async function handleJsonRpc(
         }
       } else if (toolName === "load_skill") {
         const name = (args.name as string || "").trim();
-        const workspace = process.env.OMI_WORKSPACE || "";
-        const candidates = [
-          workspace ? join(workspace, ".claude", "skills", name, "SKILL.md") : "",
-          join(homedir(), ".claude", "skills", name, "SKILL.md"),
-        ].filter(Boolean);
-
-        let content: string | null = null;
-        for (const filePath of candidates) {
-          try {
-            content = readFileSync(filePath, "utf8");
-            logErr(`load_skill: loaded '${name}' from ${filePath}`);
-            break;
-          } catch {
-            // not at this path, try next
-          }
-        }
-
-        // For dev-mode, prepend workspace path so Claude has that context
-        if (content && name === "dev-mode" && workspace) {
-          content = `Workspace: ${workspace}\n\n${content}`;
-        }
+        const content = await loadSkillInstructions(name);
 
         if (!isNotification) {
           send({
@@ -390,7 +369,7 @@ async function handleJsonRpc(
             result: {
               content: [{
                 type: "text",
-                text: content ?? `Skill '${name}' not found. Check the name matches one listed in <available_skills>.`,
+                text: content,
               }],
             },
           });

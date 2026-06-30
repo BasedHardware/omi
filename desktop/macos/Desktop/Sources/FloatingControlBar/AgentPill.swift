@@ -186,6 +186,24 @@ final class AgentPillsManager: ObservableObject {
             case .openclaw: return .openclaw
             }
         }
+
+        var executableName: String {
+            switch self {
+            case .hermes: return "hermes"
+            case .openclaw: return "openclaw"
+            }
+        }
+
+        var commandEnvironmentName: String {
+            switch self {
+            case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
+            case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+            }
+        }
+
+        var setupNeededStatus: String {
+            "\(displayName) needs setup"
+        }
     }
 
     struct ProviderDirective: Equatable {
@@ -1165,9 +1183,8 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private static func ensureFailureMessage(_ errorText: String, for pill: AgentPill) {
-        let text = errorText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-        let failureMessage = ChatMessage(text: "Failed: \(text)", sender: .ai)
+        guard let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) else { return }
+        let failureMessage = ChatMessage(text: failureText, sender: .ai)
         if pill.conversationMessages.isEmpty {
             pill.conversationMessages = [
                 ChatMessage(text: pill.query, sender: .user),

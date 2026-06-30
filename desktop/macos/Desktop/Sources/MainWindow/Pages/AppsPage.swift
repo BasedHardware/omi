@@ -1589,13 +1589,13 @@ struct ImportConnectorSheet: View {
     private var primaryActionTitle: String {
         switch connector.id {
         case "calendar":
-            return model.isRunning ? "Importing…" : "Connect Calendar"
+            return model.isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Calendar")
         case "email":
-            return model.isRunning ? "Importing…" : "Connect Gmail"
+            return model.isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Gmail")
         case "apple-notes":
-            return model.isRunning ? "Importing…" : "Connect Apple Notes"
+            return model.isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Apple Notes")
         case "x":
-            return model.isRunning ? "Connecting…" : "Connect X"
+            return model.isRunning ? "Connecting…" : (snapshot.isConnected ? "Sync now" : "Connect X")
         case "local-files":
             return model.isRunning ? "Reindexing…" : "Reindex Local Files"
         default:

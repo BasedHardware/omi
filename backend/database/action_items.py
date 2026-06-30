@@ -286,12 +286,6 @@ def get_action_items(
 
         query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Apply pagination
-    if offset > 0:
-        query = query.offset(offset)
-    if limit:
-        query = query.limit(limit)
-
     # Execute query
     docs = query.stream()
 
@@ -302,7 +296,10 @@ def get_action_items(
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
 
-    # Sort results by due_at first (items without due_at come last), then by created_at
+    # Sort results by due_at first (items without due_at come last), then by created_at.
+    # The final order differs from the Firestore order_by (due_at/created_at DESC), so pagination
+    # must be applied AFTER this sort. Slicing the Firestore-ordered set with offset/limit and then
+    # re-sorting only that slice returns the wrong items for any page (even page 0 with a limit).
     action_items.sort(
         key=lambda x: (
             x.get('due_at') is None,
@@ -310,6 +307,12 @@ def get_action_items(
             -(x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
         )
     )
+
+    # Apply pagination after sorting so it matches the returned order.
+    if offset > 0:
+        action_items = action_items[offset:]
+    if limit is not None and limit > 0:
+        action_items = action_items[:limit]
 
     return action_items
 

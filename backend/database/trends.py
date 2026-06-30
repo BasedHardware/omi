@@ -30,12 +30,17 @@ def get_trends_data() -> List[Dict]:
             category_topics_ref = trends_ref.document(category_data['id']).collection('topics')
             topics_docs = [topic.to_dict() for topic in category_topics_ref.stream(retry=Retry())]
             cleaned_topics = []
-            topics = sorted(topics_docs, key=lambda e: len(e['memory_ids']), reverse=True)
+            # A topic doc can be missing 'memory_ids'. save_trends writes the doc and its
+            # memory_ids in two separate Firestore calls (set, then update with ArrayUnion),
+            # so an interrupted or failed second write leaves a topic with no memory_ids field.
+            # Treat a missing/empty value as a count of 0 so one such topic cannot raise
+            # KeyError and drop the entire category from the public /v1/trends response.
+            topics = sorted(topics_docs, key=lambda e: len(e.get('memory_ids') or []), reverse=True)
             for topic in topics:
                 if topic['topic'] not in valid_items:
                     continue
-                topic['memories_count'] = len(topic['memory_ids'])
-                del topic['memory_ids']
+                topic['memories_count'] = len(topic.get('memory_ids') or [])
+                topic.pop('memory_ids', None)
                 cleaned_topics.append(topic)
 
             category_data['topics'] = cleaned_topics

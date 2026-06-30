@@ -55,7 +55,6 @@ class TestReExportsRemoved:
 
         reexport_symbols = [
             'ActionItem',
-            'ActionItemsExtraction',
             'AudioFile',
             'CalendarMeetingContext',
             'CategoryEnum',
@@ -81,7 +80,8 @@ class TestReExportsRemoved:
     def test_canonical_imports_work(self):
         """All moved symbols import from their canonical modules."""
         from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
-        from models.structured import Structured, ActionItem, Event, ActionItemsExtraction
+        from models.structured import Structured, ActionItem, Event
+        from models.structured_extraction import ActionItemsExtraction
         from models.audio_file import AudioFile
         from models.calendar_context import CalendarMeetingContext, MeetingParticipant
         from models.conversation_photo import ConversationPhoto

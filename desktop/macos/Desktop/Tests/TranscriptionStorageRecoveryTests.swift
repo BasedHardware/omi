@@ -52,7 +52,7 @@ final class TranscriptionStorageRecoveryTests: XCTestCase {
             id: sessionId,
             backendId: "backend-conversation-pending"
         )
-        try await TranscriptionStorage.shared.finishSession(id: sessionId)
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .crashRecovery)
 
         let pending = try await TranscriptionStorage.shared.getPendingUploadSessions()
 
