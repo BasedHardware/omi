@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import sys
+import types
 
 import pytest
 
@@ -197,6 +199,13 @@ def _ready_db(uid='uid-a'):
 def _route_client(monkeypatch, db, legacy_calls):
     monkeypatch.setenv('ENCRYPTION_SECRET', 'memory-test-encryption-secret-32bytes!!')
     monkeypatch.setenv('OPENAI_API_KEY', 'sk-test-memory-route-proof')
+    fake_storage = types.ModuleType('utils.other.storage')
+    setattr(fake_storage, 'list_audio_chunks', lambda *args, **kwargs: [])
+    setattr(fake_storage, 'delete_conversation_audio_files', lambda *args, **kwargs: None)
+    setattr(fake_storage, 'storage_client', None)
+    setattr(fake_storage, 'private_cloud_sync_bucket', None)
+    setattr(fake_storage, '_get_extension_for_path', lambda path: '')
+    monkeypatch.setitem(sys.modules, 'utils.other.storage', fake_storage)
     import routers.memories as memories_router
 
     monkeypatch.setattr(memories_router.db_client_module, 'db', db)
