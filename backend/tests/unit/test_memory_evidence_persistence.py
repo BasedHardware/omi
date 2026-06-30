@@ -40,6 +40,7 @@ firestore_v1_stub.transactional = _transactional
 if 'database._client' not in sys.modules:
     client_stub = types.ModuleType('database._client')
     client_stub.db = _FakeDB()
+    client_stub.get_firestore_client = lambda: client_stub.db
     client_stub.document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
     sys.modules['database._client'] = client_stub
 else:

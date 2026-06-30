@@ -4,7 +4,14 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
 
-from google.api_core.exceptions import NotFound as FirestoreNotFound
+try:
+    from google.api_core.exceptions import NotFound as FirestoreNotFound
+except Exception:  # pragma: no cover - lightweight tests may stub only google.cloud
+
+    class FirestoreNotFound(Exception):
+        pass
+
+
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
