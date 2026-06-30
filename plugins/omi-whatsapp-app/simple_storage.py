@@ -16,9 +16,12 @@ Three stores:
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 STORAGE_DIR = os.getenv("STORAGE_DIR", os.path.dirname(os.path.abspath(__file__)))
 if os.path.exists("/app/data"):
@@ -109,6 +112,11 @@ def save_user(
         "created_at": existing.get("created_at", datetime.utcnow().isoformat()),
         "updated_at": datetime.utcnow().isoformat(),
         "last_nudge_at": existing.get("last_nudge_at"),
+        # T-020: ring buffer of recent conversation turns, oldest first.
+        # Mirrors plugins/omi-telegram-app/simple_storage.py so a future
+        # shared base class can host both. Phone-keyed (vs chat_id-keyed)
+        # because WhatsApp identifies chats by phone number, not chat id.
+        "recent_messages": list(existing.get("recent_messages", [])),
     }
     _save(USERS_FILE, users)
 
@@ -217,3 +225,60 @@ def pop_pending_setup(token: str) -> Optional[dict]:
 def pending_setups_match_verify_token(verify_token: str) -> bool:
     """True if any pending setup has this verify_token (for /webhook GET)."""
     return any(p.get("verify_token") == verify_token for p in pending_setups.values())
+
+
+# ---------------------------------------------------------------------------
+# Recent conversation turns (T-020)
+# ---------------------------------------------------------------------------
+# Phone-keyed ring buffer (vs chat_id-keyed for Telegram). The Meta WhatsApp
+# Cloud API identifies a 1:1 conversation by the sender's phone number, so
+# this buffer is keyed by phone. The shape and semantics mirror the Telegram
+# plugin so the persona-chat endpoint doesn't need to know which platform
+# produced the prior messages.
+#
+# Buffer size: 10 entries (5 turns). Same rationale as the Telegram plugin.
+CHAT_HISTORY_MAX = 10
+
+
+def get_recent_messages(phone: str) -> list[dict]:
+    """Return the recent-message list for a phone (oldest first).
+
+    Returns [] if the phone isn't bound or the buffer is empty.
+    """
+    user = users.get(str(phone))
+    if user is None:
+        return []
+    return list(user.get("recent_messages", []))
+
+
+def append_message(phone: str, role: str, text: str) -> None:
+    """Append a turn to the phone's ring buffer (FIFO at CHAT_HISTORY_MAX).
+
+    No-op with a warning if the phone isn't bound — append_message
+    shouldn't run before the /start handshake.
+    """
+    user = users.get(str(phone))
+    if user is None:
+        logger.warning(f"append_message: unknown phone {phone!r}, ignoring")
+        return
+    if role not in ("human", "ai"):
+        logger.warning(f"append_message: invalid role {role!r} for phone {phone}, ignoring")
+        return
+    if not isinstance(text, str) or not text:
+        return
+    history = user.setdefault("recent_messages", [])
+    history.append({"role": role, "text": text, "ts": datetime.utcnow().isoformat()})
+    if len(history) > CHAT_HISTORY_MAX:
+        user["recent_messages"] = history[-CHAT_HISTORY_MAX:]
+    user["updated_at"] = datetime.utcnow().isoformat()
+    _save(USERS_FILE, users)
+
+
+def clear_recent_messages(phone: str) -> None:
+    """Wipe the phone's ring buffer. Exposed for tests / future UI affordance."""
+    user = users.get(str(phone))
+    if user is None:
+        return
+    user["recent_messages"] = []
+    user["updated_at"] = datetime.utcnow().isoformat()
+    _save(USERS_FILE, users)

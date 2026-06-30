@@ -109,6 +109,11 @@ def save_user(
         # last_nudge_at tracks when we last told the user their auto-reply was off,
         # so we don't spam them on every message. 4h cooldown; see main._NUDGE_COOLDOWN.
         "last_nudge_at": existing.get("last_nudge_at"),
+        # T-020: ring buffer of recent conversation turns, oldest first.
+        # Pre-seeded as empty list on user-create so callers don't need to
+        # handle the missing-key case. Appended to on every persona dispatch
+        # and trimmed to CHAT_HISTORY_MAX by append_message().
+        "recent_messages": list(existing.get("recent_messages", [])),
     }
     _save(USERS_FILE, users)
 
@@ -222,3 +227,83 @@ def pop_pending_setup(token: str) -> Optional[dict]:
         except Exception:
             pass
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Recent conversation turns (T-020)
+# ---------------------------------------------------------------------------
+# Per-chat ring buffer so the persona has continuity across webhook calls.
+# Telegram sends each message as a fresh POST; without this buffer the
+# LLM has zero memory of what the user said 30 seconds ago and answers
+# like "yo / what's up / I'm looking for a coffee shop in Asok" lose the
+# thread after the second message.
+#
+# Storage shape: list[{"role": "human"|"ai", "text": str, "ts": iso8601}]
+#   - role == "human" for inbound Telegram messages
+#   - role == "ai" for the persona's outbound replies
+#   - ts is when we observed the message (UTC, ISO format)
+#
+# Buffer size: 10 entries (5 turns). Older entries drop FIFO via list
+# slicing in append_message. 5 turns is enough for short text-message
+# threads; we deliberately don't keep long histories because the model
+# has a token budget and the persona doesn't need a 100-message
+# transcript to answer "what's my favorite coffee?".
+CHAT_HISTORY_MAX = 10
+
+
+def get_recent_messages(chat_id: str) -> list[dict]:
+    """Return the recent-message list for a chat (oldest first).
+
+    Returns [] if the chat isn't bound, the user record has no
+    recent_messages key (legacy data from before T-020), or the buffer
+    is empty. The returned list is a copy — mutating it does not change
+    what's persisted; use append_message() for that.
+    """
+    user = users.get(str(chat_id))
+    if user is None:
+        return []
+    return list(user.get("recent_messages", []))
+
+
+def append_message(chat_id: str, role: str, text: str) -> None:
+    """Append a turn to the chat's ring buffer.
+
+    Args:
+        chat_id: Telegram chat id (str-coerced for dict key consistency).
+        role: 'human' for inbound messages, 'ai' for the persona's reply.
+        text: The message text. Not truncated here — the inbound text
+            path already caps at Telegram's 4096-char limit, and replies
+            are bounded by the LLM output. We trim on append to keep
+            the buffer at CHAT_HISTORY_MAX entries (FIFO).
+
+    No-op (with a warning) if the chat_id isn't bound — append_message
+    shouldn't be called before the /start handshake, but if it is, we'd
+    rather log and continue than raise into the webhook.
+    """
+    user = users.get(str(chat_id))
+    if user is None:
+        logger.warning(f"append_message: unknown chat_id {chat_id!r}, ignoring")
+        return
+    if role not in ("human", "ai"):
+        logger.warning(f"append_message: invalid role {role!r} for chat {chat_id}, ignoring")
+        return
+    if not isinstance(text, str) or not text:
+        return
+    history = user.setdefault("recent_messages", [])
+    history.append({"role": role, "text": text, "ts": datetime.utcnow().isoformat()})
+    # FIFO trim. Slicing keeps the last CHAT_HISTORY_MAX entries.
+    if len(history) > CHAT_HISTORY_MAX:
+        user["recent_messages"] = history[-CHAT_HISTORY_MAX:]
+    user["updated_at"] = datetime.utcnow().isoformat()
+    _save(USERS_FILE, users)
+
+
+def clear_recent_messages(chat_id: str) -> None:
+    """Wipe the chat's ring buffer. Not used in v0.1 but exposed for tests
+    and for a future "reset conversation" UI affordance."""
+    user = users.get(str(chat_id))
+    if user is None:
+        return
+    user["recent_messages"] = []
+    user["updated_at"] = datetime.utcnow().isoformat()
+    _save(USERS_FILE, users)

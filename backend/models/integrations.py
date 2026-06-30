@@ -54,13 +54,46 @@ class EmptyResponse(BaseModel):
 
 
 class PersonaChatRequest(BaseModel):
-    """Single-turn persona chat request from a 3rd-party integration (e.g. AI clone plugins)."""
+    """Single-turn persona chat request from a 3rd-party integration (e.g. AI clone plugins).
+
+    The optional `context` and `previous_messages` fields (added in T-020)
+    let the plugin tell the persona who they're talking to and what was
+    said in the recent turns. Without them, the LLM treats every inbound
+    webhook as a fresh conversation and can't answer "who am I?" /
+    "remind me about X" / "what did I just say?" in a way that's
+    grounded in the actual chat history. Both fields are optional — the
+    desktop persona chat (which has its own session continuity) still
+    works without them, and the regular `text`-only path is unchanged.
+    """
 
     # Telegram caps messages at 4096 chars; WhatsApp at ~65536; iMessage at
     # ~20000. We pick a conservative 8192 so the cap covers the largest
     # platform and the LLM has plenty of room to think.
     text: str = Field(
         description="The inbound message from the chat platform (1:1 DM, text only)", min_length=1, max_length=8192
+    )
+
+    context: Optional[dict] = Field(
+        default=None,
+        description=(
+            "Free-form platform context (sender name, sender username, chat type, "
+            "platform). Forwarded to the persona prompt as a SystemMessage so the "
+            "persona knows who they're talking to. Recognized keys: sender_name "
+            "(str), sender_username (str), chat_type ('private'|'group'), "
+            "platform ('telegram'|'whatsapp'|'imessage'). Unknown keys are "
+            "preserved verbatim — the renderer ignores them."
+        ),
+    )
+
+    previous_messages: Optional[List[dict]] = Field(
+        default=None,
+        description=(
+            "Recent prior turns from the same chat, oldest first. Each entry is "
+            "{'role': 'human'|'ai', 'text': '<message>'}. Inserted into the "
+            "persona prompt as HumanMessage / AIMessage before the current "
+            "'text' HumanMessage. Capped at 20 entries server-side; per-text "
+            "length capped at 8192 to mirror the inbound text limit."
+        ),
     )
 
 

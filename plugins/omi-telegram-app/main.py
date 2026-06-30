@@ -70,7 +70,6 @@ except ValueError:
 import uuid
 from contextlib import asynccontextmanager
 
-
 _PLUGIN_INSTANCE_ID = str(uuid.uuid4())
 
 
@@ -451,18 +450,48 @@ async def webhook(
         return {"ok": True}
 
     # Auto-reply on -> call the persona, send the reply.
-    await _dispatch_auto_reply(user, str(chat_id), text)
+    await _dispatch_auto_reply(user, str(chat_id), text, sender=update.get("message", {}).get("from"))
     return {"ok": True}
 
 
-async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
+async def _dispatch_auto_reply(user: dict, chat_id: str, text: str, sender: Optional[dict] = None) -> None:
     """Call the persona API and send the reply back to Telegram.
+
+    T-020 wiring: passes the sender profile (name, username) as `context`
+    so the persona knows who it's talking to, and the per-chat ring buffer
+    of recent turns as `previous_messages` so the persona has continuity
+    across webhook calls. Both are appended to after a successful reply.
 
     Empty replies (timeout/connect error) and HTTP errors are logged but do not
     raise — the webhook must always return 200 to Telegram. The except clause
     is narrowed to httpx + asyncio errors so genuine bugs in our code surface
     via FastAPI's error middleware rather than being silently swallowed.
     """
+    # Build the context dict from the Telegram `from` object. Telegram sends
+    # {id, is_bot, first_name, last_name?, username?, language_code?} for
+    # private chats. We only forward the fields the persona renderer
+    # recognizes (sender_name, sender_username); unknown fields are
+    # silently dropped server-side. We deliberately don't forward `id`
+    # (numeric Telegram user id) — that's a stable identifier but the
+    # persona doesn't need it and it would be PII in logs / model context.
+    ctx: Optional[dict] = None
+    if isinstance(sender, dict):
+        first = (sender.get("first_name") or "").strip()
+        last = (sender.get("last_name") or "").strip()
+        sender_name = " ".join(p for p in (first, last) if p) or None
+        sender_username = (sender.get("username") or "").strip() or None
+        if sender_name or sender_username:
+            ctx = {
+                "sender_name": sender_name,
+                "sender_username": sender_username,
+                "chat_type": "private",  # _is_group_or_channel already gated this
+                "platform": "telegram",
+            }
+
+    # Load recent turns. Oldest first so the model sees the conversation
+    # in chronological order.
+    previous_messages = simple_storage.get_recent_messages(chat_id)
+
     try:
         reply = await _persona_chat(
             app_id=user["persona_id"],
@@ -470,6 +499,8 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
             omi_base=OMI_BASE_URL,
             text=text,
             uid=user["omi_uid"],
+            context=ctx,
+            previous_messages=previous_messages,
         )
     except httpx.HTTPStatusError as e:
         # httpx.HTTPStatusError.__str__ includes the request URL (which contains
@@ -487,10 +518,18 @@ async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
 
     if not reply:
         logger.info("persona chat returned empty reply for chat %s (skipping send)", chat_id)
+        # Don't append empty replies to history — they poison subsequent context.
         return
 
     await telegram_client.send_message(user["bot_token"], chat_id, reply)
     logger.info("auto-reply sent to chat %s (%d chars)", chat_id, len(reply))
+
+    # T-020: record both sides of the exchange AFTER successful send so a
+    # mid-flight failure doesn't poison subsequent context with a half-turn.
+    # Order matters: human turn first, then ai turn, so the buffer stays in
+    # chronological order without re-sorting.
+    simple_storage.append_message(chat_id, "human", text)
+    simple_storage.append_message(chat_id, "ai", reply)
 
 
 # ---------------------------------------------------------------------------

@@ -119,6 +119,7 @@ async def execute_persona_chat_stream(
     cited: Optional[bool] = False,
     callback_data: dict = None,
     chat_session: Optional[str] = None,
+    extra_system_messages: Optional[List["SystemMessage"]] = None,
 ) -> AsyncGenerator[str, None]:
     """Handle streaming chat responses for persona-type apps.
 
@@ -130,9 +131,21 @@ async def execute_persona_chat_stream(
     HTTP body (tokens went into the LLM's internal generator and were
     never pushed to the queue). astream() yields chunks as an
     async iterator — we just push each chunk to the SSE consumer.
+
+    `extra_system_messages` (T-020) are inserted immediately after the
+    persona_prompt SystemMessage and before any prior turns. Used by the
+    integration persona-chat route to inject "you are talking to Alice on
+    Telegram" without changing the persona_prompt template itself. Pass
+    None or an empty list for the existing single-shot desktop flow.
     """
     system_prompt = app.persona_prompt
     formatted_messages = [SystemMessage(content=system_prompt)]
+
+    # T-020: optional context blocks (sender name, platform, chat type).
+    # Inserted at position 1 so they sit next to the persona_prompt and
+    # before any prior turns. Empty list = no-op (preserves existing behavior).
+    if extra_system_messages:
+        formatted_messages.extend(extra_system_messages)
 
     for msg in messages:
         if msg.sender == "ai":
@@ -236,19 +249,30 @@ async def execute_chat_stream(
     callback_data: dict = {},
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
+    extra_system_messages: Optional[List["SystemMessage"]] = None,
 ) -> AsyncGenerator[str, None]:
     """Route chat requests to the appropriate handler.
 
     - Persona apps -> persona chat (LangChain/OpenAI)
     - File attachments -> file chat (OpenAI Assistants)
     - Everything else -> Anthropic agentic chat (Claude decides whether to use tools)
+
+    `extra_system_messages` (T-020) are forwarded only to the persona
+    handler. The agentic / file-chat paths ignore them — those don't use
+    a persona_prompt and the context doesn't apply.
     """
     logger.info(f'execute_chat_stream app: {app.id if app else "<none>"}')
 
     # 1. Persona apps
     if app and app.is_a_persona():
         async for chunk in execute_persona_chat_stream(
-            uid, messages, app, cited=cited, callback_data=callback_data, chat_session=chat_session
+            uid,
+            messages,
+            app,
+            cited=cited,
+            callback_data=callback_data,
+            chat_session=chat_session,
+            extra_system_messages=extra_system_messages,
         ):
             yield chunk
         return

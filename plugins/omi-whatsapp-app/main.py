@@ -231,18 +231,29 @@ async def webhook_delivery(
     # Skip messages whose wamid we have already seen — Meta retries carry the
     # same id and we don't want to fire the persona twice for one user
     # message. See _already_processed for the bounded FIFO set.
+    contacts = payload.get("entry", [{}])[0].get("changes", [{}])[0].get("value", {}).get("contacts") or []
     for msg in inbound_messages:
         wamid = msg.get("id")
         if wamid and _already_processed(wamid):
             logger.info("skipping duplicate wamid=%s", wamid)
             continue
-        await _handle_inbound_message(msg)
+        # T-020: pass the contact profile (display name) so the persona
+        # knows who it's talking to. We do a per-message lookup by wa_id
+        # since multiple contacts can share one webhook POST.
+        await _handle_inbound_message(msg, contacts=contacts)
 
     return {"ok": True}
 
 
-async def _handle_inbound_message(msg: dict) -> None:
-    """Handle a single inbound Meta WhatsApp message (text only in v0.1)."""
+async def _handle_inbound_message(msg: dict, contacts: Optional[list] = None) -> None:
+    """Handle a single inbound Meta WhatsApp message (text only in v0.1).
+
+    T-020: `contacts` is the entry's contacts[] array (one element per
+    sender). We use it to look up the sender's display name for the
+    persona's context. Contacts are optional — Meta sometimes omits
+    them (e.g. for messages from unsaved numbers), in which case we
+    just send the phone number as the sender_name.
+    """
     from_phone = msg.get("from")
     text = _extract_text(msg)
     if not from_phone:
@@ -301,7 +312,21 @@ async def _handle_inbound_message(msg: dict) -> None:
             simple_storage.mark_nudged(str(from_phone))
         return
 
-    await _dispatch_auto_reply(user, str(from_phone), text)
+    # T-020: look up the sender's profile name (if Meta included it) so the
+    # persona knows who they're talking to. We only forward name/wa_id; the
+    # raw contacts[] object stays in the plugin.
+    sender_name = None
+    if isinstance(contacts, list):
+        for contact in contacts:
+            if not isinstance(contact, dict):
+                continue
+            if contact.get("wa_id") == str(from_phone):
+                profile = contact.get("profile") or {}
+                if isinstance(profile.get("name"), str) and profile["name"].strip():
+                    sender_name = profile["name"].strip()
+                break
+
+    await _dispatch_auto_reply(user, str(from_phone), text, sender_name=sender_name)
 
 
 # ---------------------------------------------------------------------------
@@ -408,14 +433,28 @@ async def _send_auto_reply_disabled_notice(user: dict, phone: str) -> None:
     )
 
 
-async def _dispatch_auto_reply(user: dict, phone: str, text: str) -> None:
+async def _dispatch_auto_reply(user: dict, phone: str, text: str, sender_name: Optional[str] = None) -> None:
     """Call the persona API and send the reply back to WhatsApp.
+
+    T-020 wiring: passes the sender's display name (from Meta's contacts[]
+    array) as `context` so the persona knows who they're talking to, and
+    the per-phone ring buffer as `previous_messages` for continuity.
 
     Empty replies (timeout/connect error) and HTTP errors are logged but do not
     raise — the webhook must always return 200. The except clause is narrowed
     to httpx + asyncio errors so genuine bugs in our code surface via FastAPI's
     error middleware rather than being silently swallowed.
     """
+    ctx: Optional[dict] = None
+    if sender_name:
+        ctx = {
+            "sender_name": sender_name,
+            "chat_type": "private",
+            "platform": "whatsapp",
+        }
+
+    previous_messages = simple_storage.get_recent_messages(phone)
+
     try:
         reply = await _persona_chat(
             app_id=user["persona_id"],
@@ -423,6 +462,8 @@ async def _dispatch_auto_reply(user: dict, phone: str, text: str) -> None:
             omi_base=OMI_BASE_URL,
             text=text,
             uid=user["omi_uid"],
+            context=ctx,
+            previous_messages=previous_messages,
         )
     except httpx.HTTPStatusError as e:
         # httpx.HTTPStatusError.__str__ includes the request URL. The URL
@@ -446,6 +487,11 @@ async def _dispatch_auto_reply(user: dict, phone: str, text: str) -> None:
         # whatsapp_client.send_message already logs the failure; nothing else to do.
         return
     logger.info("auto-reply sent to phone %s (%d chars)", phone, len(reply))
+
+    # T-020: record both sides of the exchange AFTER successful send so a
+    # mid-flight failure doesn't poison subsequent context with a half-turn.
+    simple_storage.append_message(phone, "human", text)
+    simple_storage.append_message(phone, "ai", reply)
 
 
 # ---------------------------------------------------------------------------

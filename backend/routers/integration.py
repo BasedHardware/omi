@@ -23,6 +23,7 @@ import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.chat import Message, MessageSender, MessageType
+from langchain_core.messages import SystemMessage
 from models.conversation import SearchRequest
 from models.app import App
 from utils.app_integrations import send_app_notification, trigger_external_integrations
@@ -804,12 +805,44 @@ async def persona_chat_via_integration(
     if not app.is_a_persona():
         raise HTTPException(status_code=403, detail="App is not a persona")
 
-    # Build a single HumanMessage and stream the persona reply via the
-    # existing execute_chat_stream (which dispatches to the persona handler
-    # when app.is_a_persona()). The same generator the chat UI uses.
+    # Build the conversation. The persona handler in execute_chat_stream
+    # inserts the SystemMessage(persona_prompt) at position 0; we add the
+    # optional context SystemMessage right after, then any prior turns
+    # (previous_messages) in order, then the current inbound message as
+    # the final HumanMessage. Adding prior turns before the current text
+    # preserves "oldest first" semantics — the model sees the conversation
+    # as if it had been there for the prior turns too.
+    #
+    # T-020 wiring. previous_messages is capped server-side (20 turns / 8192
+    # chars per turn) so a malicious or buggy client can't blow up the
+    # token budget. The Model layer also rejects extra-long fields, but
+    # we re-check here to harden against direct API misuse.
     import secrets
 
-    messages = [
+    prior_messages: list[Message] = []
+    if body.previous_messages:
+        for turn in body.previous_messages[:20]:
+            if not isinstance(turn, dict):
+                continue
+            role = turn.get("role")
+            text = turn.get("text")
+            if role not in ("human", "ai") or not isinstance(text, str):
+                continue
+            text = text[:8192]
+            if not text:
+                continue
+            prior_messages.append(
+                Message(
+                    id=f"integration-persona-chat:prev:{secrets.token_urlsafe(6)}",
+                    created_at=datetime.now(timezone.utc),
+                    sender=MessageSender.ai if role == "ai" else MessageSender.human,
+                    text=text,
+                    type=MessageType.text,
+                    app_id=app_id,
+                )
+            )
+
+    messages = prior_messages + [
         Message(
             id=f"integration-persona-chat:{secrets.token_urlsafe(8)}",
             created_at=datetime.now(timezone.utc),
@@ -820,6 +853,17 @@ async def persona_chat_via_integration(
         )
     ]
 
+    # Context block — rendered as a SystemMessage so it sits next to the
+    # persona_prompt in the model's view. We only emit it when the client
+    # sent a context dict with at least one recognized key, otherwise the
+    # prompt gets a redundant empty SystemMessage that costs tokens for no
+    # benefit.
+    extra_system_messages: list = []
+    if body.context:
+        rendered = _render_persona_context_block(body.context)
+        if rendered:
+            extra_system_messages.append(SystemMessage(content=rendered))
+
     async def _stream():
         # SSE wire format: each event is "data: <content>\n\n".
         # execute_chat_stream yields chunks already prefixed with "data: "
@@ -829,7 +873,9 @@ async def persona_chat_via_integration(
         # addition beyond chat.py is the explicit "data: [DONE]" terminator
         # at the end — needed because the plugin's EventSource consumer
         # blocks until it sees [DONE] or a closed connection.
-        async for chunk in execute_chat_stream(uid, messages, app=app):
+        async for chunk in execute_chat_stream(
+            uid, messages, app=app, extra_system_messages=extra_system_messages or None
+        ):
             if chunk is None:
                 continue
             msg = chunk.replace("\n", "__CRLF__")
@@ -837,3 +883,54 @@ async def persona_chat_via_integration(
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Context rendering (T-020)
+# ---------------------------------------------------------------------------
+
+
+_RECOGNIZED_CONTEXT_KEYS = ("sender_name", "sender_username", "chat_type", "platform")
+
+
+def _render_persona_context_block(context: Optional[dict]) -> str:
+    """Turn a `context` dict from PersonaChatRequest into a prompt fragment.
+
+    Returns "" if the dict is empty or all keys are unrecognized — the
+    route then skips emitting an empty SystemMessage. Recognized keys:
+        sender_name, sender_username, chat_type, platform. Unknown keys
+        are silently ignored; the plugin is allowed to send extras for
+    forward-compat but they don't influence the prompt.
+
+    The fragment is rendered as plain prose, not JSON, so it reads
+    naturally to the model: "You are talking to Alice (@alice_t) on
+    telegram in a private chat." The persona handler doesn't parse this
+    — it just sees a SystemMessage string.
+    """
+    if not context or not isinstance(context, dict):
+        return ""
+
+    sender_name = context.get("sender_name") if isinstance(context.get("sender_name"), str) else None
+    sender_username = context.get("sender_username") if isinstance(context.get("sender_username"), str) else None
+    chat_type = context.get("chat_type") if isinstance(context.get("chat_type"), str) else None
+    platform = context.get("platform") if isinstance(context.get("platform"), str) else None
+
+    # Build the subject ("Alice" or "Alice (@alice_t)" or just the username).
+    subject = None
+    if sender_name and sender_name.strip():
+        subject = sender_name.strip()
+        if sender_username and sender_username.strip() and sender_username.strip() != subject:
+            subject = f"{subject} (@{sender_username.strip()})"
+    elif sender_username and sender_username.strip():
+        subject = f"@{sender_username.strip()}"
+
+    if not subject and not platform and not chat_type:
+        # All keys missing/empty/unrecognized — drop the SystemMessage entirely.
+        return ""
+
+    prefix = f"You are talking to {subject}" if subject else "You are talking to someone"
+    if platform and platform.strip():
+        prefix += f" on {platform.strip()}"
+    if chat_type and chat_type.strip():
+        prefix += f" in a {chat_type.strip()} chat"
+    return prefix + "."
