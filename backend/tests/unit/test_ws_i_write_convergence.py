@@ -643,10 +643,12 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
     patch_payload = apply_mock.call_args.kwargs["patch_payload"]
     assert patch_payload["visibility"] == "public"
     assert patch_payload["user_asserted"] is True
+    assert patch_payload["initial_tier"] == MemoryTier.short_term.value
 
     stored = db.docs[f"users/{uid}/memory_items/{memory_id}"]
     assert stored["visibility"] == "public"
     assert stored["user_asserted"] is True
+    assert stored["tier"] == MemoryTier.short_term.value
     assert stored["promotion"]["category"] == MemoryCategory.manual.value
     assert stored["promotion"]["tags"] == ["user-note"]
 
@@ -656,7 +658,7 @@ def test_canonical_external_write_preserves_public_visibility_and_manual_flag(mo
     assert mapped.manually_added is True
     assert mapped.category == MemoryCategory.manual
     assert mapped.tags == ["user-note"]
-    assert mapped.memory_tier == MemoryTier.long_term
+    assert mapped.memory_tier == MemoryTier.short_term
 
     memories = read_canonical_memories(uid, db_client=db)
     assert len(memories) == 1

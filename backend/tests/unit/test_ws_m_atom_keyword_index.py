@@ -299,8 +299,24 @@ class TestKeywordSearchAndHybrid:
             lambda uid, **_: MemorySystem.CANONICAL,
         )
         monkeypatch.setattr(
+            "utils.memory.memory_service.canonical_read_enabled",
+            lambda uid, db_client=None: True,
+        )
+        monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
             lambda uid, db_client=None: [item],
+        )
+        monkeypatch.setattr(
+            "utils.memory.memory_service.search_canonical_memories",
+            lambda uid, query, limit=5, db_client=None, device_scope_request=None: [
+                {
+                    "memory_id": item.memory_id,
+                    "content": item.content,
+                    "tier": item.tier.value,
+                    "date": item.updated_at.isoformat(),
+                    "visibility": item.visibility,
+                }
+            ],
         )
 
         def _empty_vector(*args, **kwargs):
@@ -372,6 +388,7 @@ class TestPurgeAndRebuild:
             "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
             lambda **_: types.SimpleNamespace(account_generation=1, head_commit_id="head0", read_error_reason=None),
         )
+        monkeypatch.setattr("utils.memory.canonical_memory_adapter.kg_db.delete_knowledge_graph", lambda uid: None)
 
         result = purge_canonical_derived_user_data(CANONICAL_UID, db_client=MagicMock())
         assert result["purged"] is True
@@ -396,6 +413,10 @@ class TestPurgeAndRebuild:
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.atomic_bump_source_generation",
             lambda uid, db_client=None: types.SimpleNamespace(source_generation=2),
+        )
+        monkeypatch.setattr(
+            "utils.memory.canonical_memory_adapter.kg_db.prune_memory_citations_from_kg",
+            lambda uid, memory_ids: 0,
         )
 
         retract_conversation_sourced_memories(CANONICAL_UID, "conv-1", db_client=MagicMock())

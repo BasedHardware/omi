@@ -1,3 +1,4 @@
+import ast
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from config.memory_rollout import MemoryRolloutMode
@@ -25,6 +26,37 @@ from utils.memory.default_read_rollout import (
 )
 
 _DEVELOPER_QUOTE_TEXT = 'User prefers concrete developer memory reads.'
+
+
+def _developer_source() -> str:
+    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
+    return developer_py.read_text(encoding='utf-8')
+
+
+def _function_source_for_route(path: str, method: str) -> str:
+    contents = _developer_source()
+    module = ast.parse(contents)
+    lines = contents.splitlines(keepends=True)
+    for node in module.body:
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        for decorator in node.decorator_list:
+            if not isinstance(decorator, ast.Call):
+                continue
+            func = decorator.func
+            if not (
+                isinstance(func, ast.Attribute)
+                and func.attr == method
+                and isinstance(func.value, ast.Name)
+                and func.value.id == 'router'
+            ):
+                continue
+            if not decorator.args or not isinstance(decorator.args[0], ast.Constant):
+                continue
+            if decorator.args[0].value != path:
+                continue
+            return ''.join(lines[node.lineno - 1 : node.end_lineno])
+    raise AssertionError(f'route not found: {method.upper()} {path}')
 
 
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
@@ -89,88 +121,73 @@ def test_developer_vector_route_wires_app_key_scope_grant_before_memory_vector_r
 
 
 def test_developer_create_route_checks_split_brain_guard_before_legacy_write():
-    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
-    contents = developer_py.read_text(encoding='utf-8')
+    route_source = _function_source_for_route('/v1/dev/user/memories', 'post')
     service_contents = memory_service_py.read_text(encoding='utf-8')
-    route = '@router.post("/v1/dev/user/memories", response_model=MemoryResponse, tags=["developer"])'
     pin_call = 'pin_memory_system(uid, db_client=db)'
-    external_create = 'create_external_memory('
+    external_create = '.create_external_memory('
     guard_call = 'guard_legacy_memory_write('
-    assert pin_call in contents
-    assert external_create in contents
+    assert pin_call in route_source
+    assert external_create in route_source
     assert guard_call in service_contents
-    route_index = contents.index(route)
-    assert route_index < contents.index(pin_call, route_index) < contents.index(external_create, route_index)
+    assert route_source.index(pin_call) < route_source.index(external_create)
 
 
 def test_developer_batch_create_route_checks_split_brain_guard_before_categorization_and_legacy_writes():
-    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
-    contents = developer_py.read_text(encoding='utf-8')
+    route_source = _function_source_for_route('/v1/dev/user/memories/batch', 'post')
     service_contents = memory_service_py.read_text(encoding='utf-8')
-    route = '@router.post("/v1/dev/user/memories/batch", response_model=BatchMemoriesResponse, tags=["developer"])'
     pin_call = 'pin_memory_system(uid, db_client=db)'
     categorization = 'identify_category_for_memory(mem_req.content.strip())'
-    external_batch = 'create_external_memory_batch('
+    external_batch = '.create_external_memory_batch('
     guard_call = 'guard_legacy_memory_write('
     legacy_write = 'memories_db.save_memories(uid, [memory.model_dump() for memory in memory_dbs])'
     vector_write = 'upsert_memory_vectors_batch('
-    assert pin_call in contents
-    assert categorization in contents
-    assert external_batch in contents
+    assert pin_call in route_source
+    assert categorization in route_source
+    assert external_batch in route_source
     assert guard_call in service_contents
     assert legacy_write in service_contents
     assert vector_write in service_contents
-    route_index = contents.index(route)
-    pin_index = contents.index(pin_call, route_index)
-    categorization_index = contents.index(categorization, route_index)
-    assert route_index < categorization_index
-    assert pin_index < contents.index(external_batch, route_index)
+    assert route_source.index(categorization) < route_source.index(pin_call)
+    assert route_source.index(pin_call) < route_source.index(external_batch)
     guard_index = service_contents.index(guard_call)
     assert guard_index < service_contents.index(legacy_write)
     assert service_contents.index(legacy_write) < service_contents.index(vector_write)
 
 
 def test_developer_delete_route_checks_split_brain_guard_before_reads_and_legacy_delete():
-    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
     memory_service_py = Path(__file__).resolve().parents[2] / 'utils' / 'memory' / 'memory_service.py'
-    contents = developer_py.read_text(encoding='utf-8')
+    route_source = _function_source_for_route('/v1/dev/user/memories/{memory_id}', 'delete')
     service_contents = memory_service_py.read_text(encoding='utf-8')
-    route = '@router.delete("/v1/dev/user/memories/{memory_id}", tags=["developer"])'
     pin_call = 'pin_memory_system(uid, db_client=db)'
-    external_delete = 'delete_external_memory('
+    external_delete = '.delete_external_memory('
     guard_call = 'guard_legacy_memory_write('
     legacy_read = 'memory = memories_db.get_memory(uid, memory_id)'
     legacy_delete = 'memories_db.delete_memory(uid, memory_id)'
-    assert pin_call in contents
-    assert external_delete in contents
+    assert pin_call in route_source
+    assert external_delete in route_source
     assert guard_call in service_contents
     assert legacy_read in service_contents
     assert legacy_delete in service_contents
-    route_index = contents.index(route)
-    pin_index = contents.index(pin_call, route_index)
-    assert route_index < pin_index < contents.index(external_delete, route_index)
+    assert route_source.index(pin_call) < route_source.index(external_delete)
     guard_index = service_contents.index(guard_call)
     assert guard_index < service_contents.index(legacy_read) < service_contents.index(legacy_delete)
 
 
 def test_developer_update_route_checks_split_brain_guard_before_reads_and_legacy_mutations():
-    developer_py = Path(__file__).resolve().parents[2] / 'routers' / 'developer.py'
-    contents = developer_py.read_text(encoding='utf-8')
-    route = '@router.patch("/v1/dev/user/memories/{memory_id}", response_model=CleanerMemory, tags=["developer"])'
+    route_source = _function_source_for_route('/v1/dev/user/memories/{memory_id}', 'patch')
     guard_call = 'guard_legacy_memory_write('
     legacy_read = 'memory = memories_db.get_memory(uid, memory_id)'
     legacy_edit = 'memories_db.edit_memory(uid, memory_id, request.content.strip())'
     legacy_update = 'memories_db.update_memory_fields(uid, memory_id, update_data)'
-    assert guard_call in contents
-    assert legacy_read in contents
-    assert legacy_edit in contents
-    assert legacy_update in contents
-    route_index = contents.index(route)
-    guard_index = contents.index(guard_call, route_index)
-    assert route_index < guard_index < contents.index(legacy_read, route_index)
-    assert guard_index < contents.index(legacy_edit, route_index) < contents.index(legacy_update, route_index)
+    assert guard_call in route_source
+    assert legacy_read in route_source
+    assert legacy_edit in route_source
+    assert legacy_update in route_source
+    guard_index = route_source.index(guard_call)
+    assert guard_index < route_source.index(legacy_read)
+    assert guard_index < route_source.index(legacy_edit) < route_source.index(legacy_update)
 
 
 def test_developer_routes_only_reach_legacy_after_explicit_legacy_safe_decision():

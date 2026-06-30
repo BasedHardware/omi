@@ -508,11 +508,11 @@ def test_conversation_delete_cascade_branches_memory_delete_by_cohort():
     source = CONVERSATIONS_ROUTER_PATH.read_text(encoding="utf-8")
     cascade_start = source.index("if cascade:")
     cascade_block = source[cascade_start : source.index("return {\"status\": \"Ok\"}", cascade_start)]
-    assert "memory_system = pin_memory_system(uid)" in cascade_block
-    assert "if memory_system == MemorySystem.CANONICAL:" in cascade_block
-    assert "MemoryService().retract_conversation_memories(uid, conversation_id)" in cascade_block
+    assert "memory_system = pin_memory_system(uid" in cascade_block
+    assert "memory_system == MemorySystem.CANONICAL" in cascade_block
+    assert ".retract_conversation_memories(uid, conversation_id)" in cascade_block
     assert "memories_db.delete_memories_for_conversation(uid, conversation_id)" in cascade_block
-    canonical_branch_start = cascade_block.index("if memory_system == MemorySystem.CANONICAL:")
+    canonical_branch_start = cascade_block.index("memory_system == MemorySystem.CANONICAL")
     legacy_delete_idx = cascade_block.index("memories_db.delete_memories_for_conversation")
     assert legacy_delete_idx > canonical_branch_start
 
