@@ -1069,7 +1069,7 @@ struct FloatingControlBarView: View {
                 }
             }
         )
-        .onChange(of: agentPills.pills.count) { _ in
+        .onChange(of: agentPills.pills.count) {
             // The agent-pills header budget depends on whether pills exist, so
             // recompute the input height when the pill list changes while the
             // input/chat view is open. Without this the budget goes stale and
