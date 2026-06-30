@@ -166,6 +166,7 @@ _full_stub(
 _full_stub("utils.llm.usage_tracker", "track_usage", "Features")
 _full_stub("utils.app_integrations", "send_app_notification")
 _full_stub("utils.conversations")
+_full_stub("utils.conversations.process_conversation", "process_conversation", "retrieve_in_progress_conversation")
 _full_stub("utils.conversations.location", "get_google_maps_location")
 _full_stub("utils.conversations.render", "redact_conversation_for_integration", "conversations_to_string")
 _full_stub("utils.conversations.memories", "process_external_integration_memory")
