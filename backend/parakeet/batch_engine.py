@@ -270,8 +270,6 @@ class BatchEngine:
                 batch_set = set(id(r) for r in batch)
                 self._pending = [r for r in self._pending if id(r) not in batch_set]
 
-            self._flush_pending = False
-
             if not batch:
                 return
 
