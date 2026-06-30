@@ -47,12 +47,18 @@ class _DocRef:
             self._store.data[self._path] = data
         self._store.set_calls.append((self._path, merge))
 
+    def get(self):
+        return types.SimpleNamespace(
+            exists=self._path in self._store.data,
+            to_dict=lambda: self._store.data.get(self._path, {}),
+        )
+
     def update(self, fields):
         if self._path not in self._store.data:
             self._store.data[self._path] = {}
         target = self._store.data[self._path]
         for dotted_path, value in fields.items():
-            parts = dotted_path.split('.')
+            parts = dotted_path.split('.') if isinstance(dotted_path, str) else list(dotted_path)
             for part in parts[:-1]:
                 target = target.setdefault(part, {})
             if value is _DELETE_SENTINEL:
@@ -73,9 +79,10 @@ class FakeDbStore:
 
 
 def _install_fake_firestore():
-    """Patch google.cloud.firestore with a module exposing DELETE_FIELD."""
+    """Patch google.cloud.firestore with DELETE_FIELD and FieldPath stand-ins."""
     fake = types.ModuleType('google.cloud.firestore')
     setattr(fake, 'DELETE_FIELD', _DELETE_SENTINEL)
+    setattr(fake, 'FieldPath', lambda *parts: parts)
     original = sys_modules_set('google.cloud.firestore', fake)
     return original
 
