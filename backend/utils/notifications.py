@@ -216,8 +216,9 @@ async def send_subscription_paid_personalized_notification(user_id: str, data: d
 
 async def send_credit_limit_notification(user_id: str):
     """Send a personalized credit limit notification if not sent recently"""
-    # Check if notification was sent recently (within 6 hours)
-    if has_credit_limit_notification_been_sent(user_id):
+    # Check if notification was sent recently (within 6 hours). Offloaded: the Redis read is sync
+    # and blocks the event loop in this async path.
+    if await run_blocking(db_executor, has_credit_limit_notification_been_sent, user_id):
         logger.info(f"Credit limit notification already sent recently for user {user_id}")
         return
 
@@ -239,8 +240,9 @@ async def send_credit_limit_notification(user_id: str):
     # Send notification
     send_notification(user_id, title, body)
 
-    # Cache that notification was sent (6 hours TTL)
-    set_credit_limit_notification_sent(user_id)
+    # Cache that notification was sent (6 hours TTL). Offloaded: the Redis write is sync and blocks
+    # the event loop in this async path.
+    await run_blocking(db_executor, set_credit_limit_notification_sent, user_id)
     logger.info(f"Credit limit notification sent to user {user_id}")
 
 
