@@ -67,7 +67,7 @@ class TestPluginDiscoveryContract:
 
         target = tmp_path / "ai-clone-plugin.json"
         monkeypatch.setattr(plugin_discovery, "DISCOVERY_DIR", tmp_path)
-        monkeypatch.setattr(plugin_discovery, "DISCOVERY_FILE", target)
+        monkeypatch.setattr(plugin_discovery, "discovery_file", lambda pt="telegram": target)
 
         plugin_discovery.write_discovery(
             plugin_url="http://127.0.0.1:18800",
@@ -77,7 +77,7 @@ class TestPluginDiscoveryContract:
 
         # Re-read DISCOVERY_FILE via the module (not a captured local)
         # so the monkeypatch actually applies.
-        mode = stat.S_IMODE(os.stat(plugin_discovery.DISCOVERY_FILE).st_mode)
+        mode = stat.S_IMODE(os.stat(target).st_mode)
         assert mode == 0o600, (
             f"discovery file must be 0o600, got 0o{mode:o}. "
             "A looser mode would expose the bearer token to other "
@@ -102,7 +102,7 @@ class TestPluginDiscoveryContract:
         target = loose_dir / "ai-clone-plugin.json"
 
         monkeypatch.setattr(plugin_discovery, "DISCOVERY_DIR", loose_dir)
-        monkeypatch.setattr(plugin_discovery, "DISCOVERY_FILE", target)
+        monkeypatch.setattr(plugin_discovery, "discovery_file", lambda pt="telegram": target)
 
         plugin_discovery.write_discovery(
             plugin_url="http://127.0.0.1:18800",
@@ -127,7 +127,7 @@ class TestPluginDiscoveryContract:
 
         target = tmp_path / "ai-clone-plugin.json"
         monkeypatch.setattr(plugin_discovery, "DISCOVERY_DIR", tmp_path)
-        monkeypatch.setattr(plugin_discovery, "DISCOVERY_FILE", target)
+        monkeypatch.setattr(plugin_discovery, "discovery_file", lambda pt="telegram": target)
 
         plugin_discovery.write_discovery(
             plugin_url="http://127.0.0.1:18800",

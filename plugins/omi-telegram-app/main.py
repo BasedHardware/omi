@@ -112,7 +112,7 @@ async def _plugin_lifespan(app: FastAPI):
         yield
     finally:
         try:
-            clear_discovery(instance_id=_PLUGIN_INSTANCE_ID)
+            clear_discovery(plugin_type="telegram", instance_id=_PLUGIN_INSTANCE_ID)
             logger.info("cleared plugin discovery file (instance=%s)", _PLUGIN_INSTANCE_ID)
         except OSError:
             pass

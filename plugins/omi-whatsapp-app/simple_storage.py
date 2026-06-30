@@ -57,7 +57,7 @@ def _save(path: str, payload: dict) -> None:
     without this the first save after a fresh STORAGE_DIR change fails with
     FileNotFoundError and the user is silently never persisted. (cubic P1.)
     """
-    tmp = path + ".tmp"
+    tmp = f"{path}.{os.getpid()}.tmp"
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(tmp, "w") as f:
