@@ -6,8 +6,13 @@ TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "templates"
 
 
 def _render_mcp_template() -> str:
+    return _render_mcp_template_for_client("ChatGPT")
+
+
+def _render_mcp_template_for_client(client_name: str) -> str:
     env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
     return env.get_template("mcp_oauth_authorize.html").render(
+        client_name=client_name,
         permissions=[
             "Read your Omi memories",
             "Create, update, and delete your Omi action items",
@@ -78,6 +83,22 @@ def test_mcp_oauth_template_still_renders_permissions_and_social_sign_in():
     assert "Create, update, and delete your Omi action items" in html
     assert "firebase.auth.GoogleAuthProvider.PROVIDER_ID" in html
     assert "firebaseui-auth-container" in html
+
+
+def test_mcp_oauth_template_uses_client_display_name():
+    html = _render_mcp_template_for_client("Claude")
+
+    assert "Connect Claude" in html
+    assert "Claude will be able to" in html
+    assert "<strong>Claude</strong>" in html
+    assert "ChatGPT will be able to" not in html
+
+
+def test_mcp_oauth_template_escapes_client_display_name():
+    html = _render_mcp_template_for_client("<script>alert(1)</script>")
+
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "<script>alert(1)</script>" not in html
 
 
 def test_app_oauth_template_uses_deterministic_email_password_sign_in():

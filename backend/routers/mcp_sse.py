@@ -1256,6 +1256,18 @@ def _redirect_with_code(redirect_uri: str, code: str, state: Optional[str]) -> s
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(params), parts.fragment))
 
 
+async def _get_token_request_data(request: Request) -> dict:
+    content_type = (request.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+    if content_type == "application/json":
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Invalid request body")
+        return body
+
+    form_data = await request.form()
+    return dict(form_data)
+
+
 @router.get("/authorize", response_class=HTMLResponse, tags=["mcp"])
 def mcp_authorize(
     request: Request,
@@ -1270,17 +1282,19 @@ def mcp_authorize(
 ):
     """OAuth authorize endpoint."""
     try:
-        _, scopes = _validate_authorize_request(
+        client, scopes = _validate_authorize_request(
             response_type, client_id, redirect_uri, resource, scope, code_challenge, code_challenge_method
         )
     except ValueError as e:
         return _oauth_error("invalid_request", str(e))
 
+    client_name = str(client.get("name") or client_id)
     permissions = [SCOPE_PERMISSION_TEXT[item] for item in scopes]
     return templates.TemplateResponse(
         "mcp_oauth_authorize.html",
         {
             "request": request,
+            "client_name": client_name,
             "oauth_params": {
                 "response_type": response_type,
                 "client_id": client_id,
@@ -1337,30 +1351,19 @@ def mcp_authorize_consent(
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
     try:
-        form_data = await request.form()
-        client_secret = form_data.get("client_secret")
-        client_id = form_data.get("client_id")
-        grant_type = form_data.get("grant_type")
-        code = form_data.get("code")
-        redirect_uri = form_data.get("redirect_uri")
-        resource = form_data.get("resource")
-        code_verifier = form_data.get("code_verifier")
-        refresh_token = form_data.get("refresh_token")
-        scope = form_data.get("scope")
+        request_data = await _get_token_request_data(request)
     except Exception:
-        try:
-            body = await request.json()
-            client_secret = body.get("client_secret")
-            client_id = body.get("client_id")
-            grant_type = body.get("grant_type")
-            code = body.get("code")
-            redirect_uri = body.get("redirect_uri")
-            resource = body.get("resource")
-            code_verifier = body.get("code_verifier")
-            refresh_token = body.get("refresh_token")
-            scope = body.get("scope")
-        except Exception:
-            return _oauth_error("invalid_request", "Invalid request body")
+        return _oauth_error("invalid_request", "Invalid request body")
+
+    client_secret = request_data.get("client_secret")
+    client_id = request_data.get("client_id")
+    grant_type = request_data.get("grant_type")
+    code = request_data.get("code")
+    redirect_uri = request_data.get("redirect_uri")
+    resource = request_data.get("resource")
+    code_verifier = request_data.get("code_verifier")
+    refresh_token = request_data.get("refresh_token")
+    scope = request_data.get("scope")
 
     client = await run_blocking(db_executor, mcp_oauth_db.get_client, client_id or "")
     if (
