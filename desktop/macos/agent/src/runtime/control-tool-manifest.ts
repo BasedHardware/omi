@@ -5,7 +5,15 @@ export type AgentControlApprovalPolicy = "allow" | "user_approval" | "policy_gra
 export type AgentControlBundle =
   | "desktop.agent_control.read"
   | "desktop.agent_control.manage"
-  | "desktop.artifacts.manage";
+  | "desktop.context.local_read"
+  | "desktop.context.screen_summary"
+  | "desktop.context.screenshot_image"
+  | "desktop.tasks.readwrite"
+  | "desktop.artifacts.manage"
+  | "desktop.automation.read"
+  | "desktop.automation.act_dev_only"
+  | "external.write_prepare"
+  | "external.write_send";
 
 export interface AgentControlManifestProperty {
   type: "string" | "number" | "boolean" | "object";
@@ -28,6 +36,14 @@ export interface AgentControlManifestTool {
   name:
     | "list_agent_sessions"
     | "get_agent_run"
+    | "build_desktop_awareness_snapshot"
+    | "list_desktop_action_queue"
+    | "get_desktop_open_loops"
+    | "build_desktop_context_packet"
+    | "route_desktop_intent"
+    | "evaluate_desktop_tool_policy"
+    | "create_desktop_dispatch"
+    | "resolve_desktop_dispatch"
     | "cancel_agent_run"
     | "inspect_agent_artifacts"
     | "update_agent_artifact_lifecycle"
@@ -72,6 +88,22 @@ const artifactManagePolicy = {
   privacyTier: "local_private",
   approvalPolicy: "policy_grant",
   bundles: ["desktop.artifacts.manage"],
+  allowedSurfaces: ["desktopChat", "realtimeHub"],
+} as const;
+
+const contextReadPolicy = {
+  riskTier: "low",
+  privacyTier: "local_private",
+  approvalPolicy: "allow",
+  bundles: ["desktop.context.local_read"],
+  allowedSurfaces: ["desktopChat", "realtimeHub"],
+} as const;
+
+const contextSensitivePolicy = {
+  riskTier: "high",
+  privacyTier: "sensitive",
+  approvalPolicy: "user_approval",
+  bundles: ["desktop.context.screen_summary"],
   allowedSurfaces: ["desktopChat", "realtimeHub"],
 } as const;
 
@@ -132,6 +164,171 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       eventLimit: { type: "number", description: "Maximum events to return. Default 100, max 500." },
     },
     required: ["runId"],
+  },
+  {
+    name: "build_desktop_awareness_snapshot",
+    label: "Build Desktop Awareness Snapshot",
+    description: "Build a local coordinator snapshot from kernel sessions, runs, dispatches, deliveries, candidates, and runtime health.",
+    promptSnippet: "build_desktop_awareness_snapshot - Inspect local coordinator state",
+    promptGuidelines: [
+      "Use before routing new local work or summarizing open agent loops.",
+      "Returns metadata and local state summaries, not raw transcripts or screenshot bytes.",
+    ],
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlReadPolicy,
+    runtimePreconditions: ["Defaults ownerId to the active signed-in owner when omitted."],
+    timeoutClass: "normal",
+    properties: {
+      ownerId: { type: "string", description: "Owner id. Defaults to active owner." },
+      limit: { type: "number", description: "Maximum rows per collection. Default 50, max 200." },
+    },
+    required: [],
+  },
+  {
+    name: "list_desktop_action_queue",
+    label: "List Desktop Action Queue",
+    description: "Return the derived Desktop action queue from runs, dispatches, deliveries, candidates, legacy projections, and overrides.",
+    promptSnippet: "list_desktop_action_queue - List pending local agent attention items",
+    promptGuidelines: [
+      "Use for approvals, failed runs, artifact review, stale work, and candidate review.",
+      "The queue is derived and not persisted as authority.",
+    ],
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlReadPolicy,
+    runtimePreconditions: ["Defaults ownerId to active owner. Does not persist queue rows."],
+    timeoutClass: "normal",
+    properties: {
+      ownerId: { type: "string", description: "Owner id. Defaults to active owner." },
+      staleAfterMs: { type: "number", description: "Age after which active runs are considered stale." },
+      limit: { type: "number", description: "Maximum queue items. Default 50, max 200." },
+    },
+    required: [],
+  },
+  {
+    name: "get_desktop_open_loops",
+    label: "Get Desktop Open Loops",
+    description: "Summarize unresolved local coordinator loops: blocking dispatches, failed/stale runs, undelivered artifacts, and candidate reviews.",
+    promptSnippet: "get_desktop_open_loops - Summarize unresolved local agent work",
+    promptGuidelines: ["Use for quick status answers and voice status summaries."],
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlReadPolicy,
+    runtimePreconditions: ["Defaults ownerId to active owner."],
+    timeoutClass: "normal",
+    properties: {
+      ownerId: { type: "string", description: "Owner id. Defaults to active owner." },
+      limit: { type: "number", description: "Maximum loops. Default 50, max 200." },
+    },
+    required: [],
+  },
+  {
+    name: "build_desktop_context_packet",
+    label: "Build Desktop Context Packet",
+    description: "Persist a minimized DesktopContextPacket plus context-access audit rows from explicit selected snippets.",
+    promptSnippet: "build_desktop_context_packet - Build scoped context for a local worker run",
+    promptGuidelines: [
+      "Use selected snippets with provenance, not full transcripts or screenshot image bytes.",
+      "Requires a positive TTL and writes context-access audit rows.",
+    ],
+    latency: "fast local",
+    surfaces: ["desktopChat"],
+    ...contextSensitivePolicy,
+    bundles: ["desktop.context.local_read", "desktop.context.screen_summary"],
+    runtimePreconditions: ["Rejects missing TTL and raw screenshot image bytes."],
+    timeoutClass: "normal",
+    properties: {
+      ownerId: { type: "string", description: "Owner id. Defaults to active owner." },
+      sessionId: { type: "string", description: "Optional canonical session id scope." },
+      runId: { type: "string", description: "Optional canonical run id scope." },
+      surfaceKind: { type: "string", description: "Surface kind such as main_chat or task_chat." },
+      objective: { type: "string", description: "Worker objective." },
+      packetJson: { type: "object", description: "Selected context snippets and policy fields.", additionalProperties: true },
+      ttlMs: { type: "number", description: "Positive TTL in milliseconds." },
+      retentionClass: { type: "string", enum: ["ephemeral", "debug", "core"] },
+    },
+    required: ["surfaceKind", "objective", "packetJson", "ttlMs", "retentionClass"],
+  },
+  {
+    name: "route_desktop_intent",
+    label: "Route Desktop Intent",
+    description: "Run deterministic local intent routing over action queue and reusable session candidates.",
+    promptSnippet: "route_desktop_intent - Decide quick answer, resume, fork, delegate, dispatch, or new run",
+    promptGuidelines: ["Use before creating a new run when existing local context may be relevant."],
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlReadPolicy,
+    runtimePreconditions: ["Uses deterministic rules and returns an explanation."],
+    timeoutClass: "normal",
+    properties: {
+      ownerId: { type: "string", description: "Owner id. Defaults to active owner." },
+      utterance: { type: "string", description: "User request to route." },
+      surfaceKind: { type: "string", description: "Current surface kind." },
+      taskId: { type: "string", description: "Optional current task id." },
+    },
+    required: ["utterance", "surfaceKind"],
+  },
+  {
+    name: "evaluate_desktop_tool_policy",
+    label: "Evaluate Desktop Tool Policy",
+    description: "Evaluate local coordinator policy for a tool/capability request without executing the tool.",
+    promptSnippet: "evaluate_desktop_tool_policy - Check local capability policy",
+    promptGuidelines: ["Use to explain why a sensitive local action needs dispatch or approval."],
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlReadPolicy,
+    runtimePreconditions: ["Does not create grants or execute tools."],
+    timeoutClass: "normal",
+    properties: {
+      toolName: { type: "string", description: "Optional tool name." },
+      selectedBundles: { type: "object", description: "Selected capability bundles array.", additionalProperties: true },
+      sql: { type: "string", description: "Optional SQL statement to classify." },
+      operation: { type: "string", description: "Optional operation." },
+      resourceRef: { type: "string", description: "Optional resource ref." },
+    },
+    required: ["selectedBundles"],
+  },
+  {
+    name: "create_desktop_dispatch",
+    label: "Create Desktop Dispatch",
+    description: "Create a durable local DesktopCoordinatorDispatch for approvals, routing choices, artifact review, candidates, or sensitive context.",
+    promptSnippet: "create_desktop_dispatch - Create a durable local decision item",
+    promptGuidelines: ["Use when user attention or approval is required before crossing a boundary."],
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlManagePolicy,
+    runtimePreconditions: ["Defaults ownerId to active owner. Source refs must match owner scope."],
+    timeoutClass: "normal",
+    properties: {
+      ownerId: { type: "string", description: "Owner id. Defaults to active owner." },
+      kind: { type: "string", enum: ["approval", "routing_choice", "failure_recovery", "artifact_review", "memory_candidate", "task_candidate", "external_draft", "screen_context"] },
+      priority: { type: "number", description: "Priority integer." },
+      title: { type: "string", description: "Short title." },
+      decisionPrompt: { type: "string", description: "Exact decision prompt." },
+      payload: { type: "object", description: "Small structured payload.", additionalProperties: true },
+    },
+    required: ["kind", "priority", "title", "decisionPrompt"],
+  },
+  {
+    name: "resolve_desktop_dispatch",
+    label: "Resolve Desktop Dispatch",
+    description: "Resolve or cancel a pending local DesktopCoordinatorDispatch.",
+    promptSnippet: "resolve_desktop_dispatch - Resolve a durable local decision item",
+    promptGuidelines: ["Use only for explicit user approval/denial/cancel decisions."],
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlManagePolicy,
+    runtimePreconditions: ["Defaults ownerId to active owner and refuses expired dispatches."],
+    timeoutClass: "normal",
+    properties: {
+      dispatchId: { type: "string", description: "Dispatch id." },
+      ownerId: { type: "string", description: "Owner guard. Defaults to active owner." },
+      status: { type: "string", enum: ["resolved", "cancelled"] },
+      resolvedBy: { type: "string", description: "Resolver id, usually user." },
+      resolution: { type: "object", description: "Resolution payload.", additionalProperties: true },
+    },
+    required: ["dispatchId", "status"],
   },
   {
     name: "cancel_agent_run",
