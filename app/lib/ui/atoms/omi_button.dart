@@ -39,6 +39,17 @@ class OmiButton extends AdaptiveWidget {
   final double? borderRadius;
   final double? fontSize;
 
+  /// Label weight override (primary defaults to w600).
+  final FontWeight? fontWeight;
+
+  /// Icon size override (defaults to fontSize + 2) and label↔icon gap (defaults to 8).
+  final double? iconSize;
+  final double? iconGap;
+
+  /// Internal padding override (primary). When null, the button's height is
+  /// driven by its content / an outer SizedBox, matching the default CTA.
+  final EdgeInsetsGeometry? padding;
+
   const OmiButton({
     super.key,
     required this.label,
@@ -56,6 +67,10 @@ class OmiButton extends AdaptiveWidget {
     this.height,
     this.borderRadius,
     this.fontSize,
+    this.fontWeight,
+    this.iconSize,
+    this.iconGap,
+    this.padding,
   });
 
   bool get _active => enabled && !isLoading && onPressed != null;
@@ -91,6 +106,7 @@ class OmiButton extends AdaptiveWidget {
         disabledBackgroundColor: disabledColor ?? ResponsiveHelper.backgroundTertiary,
         disabledForegroundColor: disabledTextColor ?? ResponsiveHelper.textQuaternary,
         elevation: 0,
+        padding: padding,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
       ),
       child: isLoading
@@ -99,7 +115,13 @@ class OmiButton extends AdaptiveWidget {
               height: size + 4,
               child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation<Color>(fg)),
             )
-          : _labelRow(size: size, weight: FontWeight.w600, color: fg, iconSize: size + 2),
+          : _labelRow(
+              size: size,
+              weight: fontWeight ?? FontWeight.w600,
+              color: fg,
+              iconSize: iconSize ?? (size + 2),
+              iconGap: iconGap ?? 8,
+            ),
     );
 
     if (width != null || height != null) {
