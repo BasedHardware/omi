@@ -64,9 +64,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
-
       - name: Compute short SHA
         id: image-tag
         run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
@@ -90,6 +87,23 @@ jobs:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          no_traffic: true
+          flags: >-
+            --network=${{vars.CLOUD_RUN_VPC_NETWORK}}
+            --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
+            --vpc-egress=private-ranges-only
+          env_vars: |
+            OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+          secrets: |
+            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
+
+      - name: Capture ${{ env.SERVICE }} revision
+        id: capture-backend-revision
+        run: |
+          revision="$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
 
       - name: Deploy ${{ env.SERVICE }}-sync to Cloud Run
         id: deploy-backend-sync
@@ -98,6 +112,23 @@ jobs:
           service: ${{ env.SERVICE }}-sync
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          no_traffic: true
+          flags: >-
+            --network=${{vars.CLOUD_RUN_VPC_NETWORK}}
+            --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
+            --vpc-egress=private-ranges-only
+          env_vars: |
+            OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+          secrets: |
+            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
+
+      - name: Capture ${{ env.SERVICE }}-sync revision
+        id: capture-backend-sync-revision
+        run: |
+          revision="$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
@@ -120,23 +151,40 @@ jobs:
           service: ${{ env.SERVICE }}-integration
           region: ${{ env.REGION }}
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+          no_traffic: true
+          flags: >-
+            --network=${{vars.CLOUD_RUN_VPC_NETWORK}}
+            --subnet=${{vars.CLOUD_RUN_VPC_SUBNET}}
+            --vpc-egress=private-ranges-only
+          env_vars: |
+            OMI_LLM_GATEWAY_URL=${{ vars.OMI_LLM_GATEWAY_URL }}
+          secrets: |
+            SERVICE_ACCOUNT_JSON=SERVICE_ACCOUNT_JSON:latest
+            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
+            OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest
 
-      # Mirror every secret declared in the backend-secrets chart into the
-      # three Cloud Run revisions (additive). GKE picks them up via the helm
-      # chart's ExternalSecret + deployment env refs; Cloud Run needs the
-      # matching --update-secrets bindings. Without this, a new chart key
-      # ships to GKE but stays undefined on Cloud Run, and the new code
-      # reads None even though everything looks deployed.
-      - name: Sync Cloud Run secrets from backend-secrets chart
+      - name: Capture ${{ env.SERVICE }}-integration revision
+        id: capture-backend-integration-revision
         run: |
-          curl -sL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
-          chmod +x /usr/local/bin/yq
-          bash backend/scripts/sync_cloudrun_secrets_from_chart.sh ${{ vars.ENV }} backend backend-sync backend-integration
+          revision="$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
 
       - name: Validate backend runtime env
         run: |
           python3 -m pip install -q pyyaml
-          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-live-cloud-run
+          python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
+
+      - name: Verify validated revisions are still current
+        run: |
+          test "$(gcloud run services describe backend --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-sync --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-sync-revision.outputs.revision }}"
+          test "$(gcloud run services describe backend-integration --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
+
+      - name: Shift Cloud Run traffic to validated revisions
+        run: |
+          gcloud run services update-traffic backend --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-sync --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
+          gcloud run services update-traffic backend-integration --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
