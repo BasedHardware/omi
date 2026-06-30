@@ -13,3 +13,8 @@ tests/unit/test_goals_id_fallback.py
 tests/unit/test_review_queue_cascade_purge.py
 tests/unit/test_firmware_pagination.py
 tests/unit/test_folder_name_enrichment.py
+tests/unit/test_staged_tasks_dedup.py
+tests/unit/test_delete_account_stripe_cancel.py
+tests/unit/test_action_item_dedup.py
+tests/unit/test_omi_product_tool_failsoft.py
+tests/unit/test_users_add_sample_transaction.py
