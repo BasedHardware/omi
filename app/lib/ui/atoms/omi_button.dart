@@ -29,6 +29,11 @@ class OmiButton extends AdaptiveWidget {
   /// Foreground (label/icon) color override. Defaults to black for primary.
   final Color? textColor;
 
+  /// Disabled-state background / foreground overrides (primary). Default to the
+  /// neutral tokens used by the canonical CTA.
+  final Color? disabledColor;
+  final Color? disabledTextColor;
+
   final double? width;
   final double? height;
   final double? borderRadius;
@@ -45,6 +50,8 @@ class OmiButton extends AdaptiveWidget {
     this.trailingIcon = false,
     this.color,
     this.textColor,
+    this.disabledColor,
+    this.disabledTextColor,
     this.width,
     this.height,
     this.borderRadius,
@@ -81,8 +88,8 @@ class OmiButton extends AdaptiveWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: bg,
         foregroundColor: fg,
-        disabledBackgroundColor: ResponsiveHelper.backgroundTertiary,
-        disabledForegroundColor: ResponsiveHelper.textQuaternary,
+        disabledBackgroundColor: disabledColor ?? ResponsiveHelper.backgroundTertiary,
+        disabledForegroundColor: disabledTextColor ?? ResponsiveHelper.textQuaternary,
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radius)),
       ),

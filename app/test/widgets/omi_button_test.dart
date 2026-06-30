@@ -114,5 +114,24 @@ void main() {
       );
       expect(tester.widget<ElevatedButton>(find.byType(ElevatedButton)).onPressed, isNull);
     });
+
+    testWidgets('disabledColor/disabledTextColor override the disabled state', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: OmiButton(
+              label: 'Go',
+              onPressed: null,
+              disabledColor: Color(0xFF111111),
+              disabledTextColor: Color(0xFF222222),
+            ),
+          ),
+        ),
+      );
+      final style = tester.widget<ElevatedButton>(find.byType(ElevatedButton)).style!;
+      const disabled = <WidgetState>{WidgetState.disabled};
+      expect(style.backgroundColor!.resolve(disabled), const Color(0xFF111111));
+      expect(style.foregroundColor!.resolve(disabled), const Color(0xFF222222));
+    });
   });
 }
