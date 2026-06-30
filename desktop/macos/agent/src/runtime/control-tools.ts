@@ -139,6 +139,17 @@ const resolveDesktopDispatchSchema = strictObject({
   status: z.enum(["resolved", "cancelled"]),
   resolvedBy: z.string().nullable().optional(),
   resolution: z.record(z.string(), z.unknown()).default({}),
+  grant: strictObject({
+    sessionId: z.string().min(1).optional(),
+    runId: z.string().min(1).nullable().optional(),
+    capability: z.string().min(1),
+    operation: z.string().min(1),
+    resourcePattern: z.string().min(1),
+    effect: z.enum(["allow", "deny"]).default("allow"),
+    source: z.enum(["legacy_default", "policy", "user", "system"]).default("user"),
+    constraintsJson: z.string().default("{}"),
+    expiresAtMs: z.coerce.number().int().positive().nullable().optional(),
+  }).optional(),
 });
 
 const cancelAgentRunSchema = strictObject({
@@ -482,13 +493,18 @@ export async function handleAgentControlToolCall(
       }
       case "resolve_desktop_dispatch": {
         const parsed = agentControlToolSchemas.resolve_desktop_dispatch.parse(input);
-        const dispatch = context.kernel.resolveDesktopDispatch(parsed.dispatchId, {
+        const result = context.kernel.resolveDesktopDispatch(parsed.dispatchId, {
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
           status: parsed.status,
           resolvedBy: parsed.resolvedBy ?? "user",
           resolutionJson: JSON.stringify(parsed.resolution),
+          grant: parsed.grant,
         });
-        return stringifyToolResult({ dispatch });
+        return stringifyToolResult({
+          dispatch: result.dispatch,
+          grant: result.grant,
+          event: result.event ? serializeEvent(result.event) : null,
+        });
       }
       case "cancel_agent_run": {
         const parsed = agentControlToolSchemas.cancel_agent_run.parse(input);

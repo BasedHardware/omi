@@ -5,6 +5,7 @@ import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqli
 import type {
   AdapterBinding,
   AgentArtifact,
+  AgentGrant,
   DesktopArtifactDelivery,
   DesktopAttentionOverride,
   DesktopContextAccessLog,
@@ -20,6 +21,7 @@ import type {
   NewAdapterBinding,
   NewAgentEvent,
   NewAgentArtifact,
+  NewAgentGrant,
   NewAgentRun,
   NewAgentSession,
   NewDesktopArtifactDelivery,
@@ -810,6 +812,30 @@ export class SqliteAgentStore implements AgentStore {
     ).run(...eventValues(event));
     const row = this.getRow("SELECT event_seq FROM events WHERE event_id = ?", [event.eventId]);
     return { ...event, eventSeq: Number(row.event_seq) };
+  }
+
+  insertGrant(input: NewAgentGrant): AgentGrant {
+    const grant: AgentGrant = {
+      grantId: input.grantId ?? generateAgentId("grant"),
+      sessionId: input.sessionId,
+      runId: input.runId ?? null,
+      capability: input.capability,
+      operation: input.operation,
+      resourcePattern: input.resourcePattern,
+      effect: input.effect,
+      source: input.source,
+      constraintsJson: input.constraintsJson ?? "{}",
+      createdAtMs: input.createdAtMs ?? this.nowMs(),
+      expiresAtMs: input.expiresAtMs ?? null,
+      revokedAtMs: input.revokedAtMs ?? null,
+    };
+    this.db.prepare(
+      `INSERT INTO grants (
+        grant_id, session_id, run_id, capability, operation, resource_pattern,
+        effect, source, constraints_json, created_at_ms, expires_at_ms, revoked_at_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(...grantValues(grant));
+    return grant;
   }
 
   insertDesktopContextPacket(input: NewDesktopContextPacket): DesktopContextPacket {
@@ -1725,6 +1751,23 @@ function artifactValues(artifact: AgentArtifact): SQLInputValue[] {
     artifact.lifecycleUpdatedAtMs,
     artifact.metadataJson,
     artifact.createdAtMs,
+  ];
+}
+
+function grantValues(grant: AgentGrant): SQLInputValue[] {
+  return [
+    grant.grantId,
+    grant.sessionId,
+    grant.runId,
+    grant.capability,
+    grant.operation,
+    grant.resourcePattern,
+    grant.effect,
+    grant.source,
+    grant.constraintsJson,
+    grant.createdAtMs,
+    grant.expiresAtMs,
+    grant.revokedAtMs,
   ];
 }
 

@@ -313,13 +313,16 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
   {
     name: "resolve_desktop_dispatch",
     label: "Resolve Desktop Dispatch",
-    description: "Resolve or cancel a pending local DesktopCoordinatorDispatch.",
+    description: "Resolve or cancel a pending local DesktopCoordinatorDispatch, optionally creating a scoped allow grant for an explicit approval.",
     promptSnippet: "resolve_desktop_dispatch - Resolve a durable local decision item",
     promptGuidelines: ["Use only for explicit user approval/denial/cancel decisions."],
     latency: "fast local",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlManagePolicy,
-    runtimePreconditions: ["Defaults ownerId to active owner and refuses expired dispatches."],
+    runtimePreconditions: [
+      "Defaults ownerId to active owner and refuses expired dispatches.",
+      "When grant is supplied for a resolved approval, grant creation and approval.resolved event append happen in one transaction.",
+    ],
     timeoutClass: "normal",
     properties: {
       dispatchId: { type: "string", description: "Dispatch id." },
@@ -327,6 +330,7 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       status: { type: "string", enum: ["resolved", "cancelled"] },
       resolvedBy: { type: "string", description: "Resolver id, usually user." },
       resolution: { type: "object", description: "Resolution payload.", additionalProperties: true },
+      grant: { type: "object", description: "Optional scoped grant to create for an explicit allow resolution.", additionalProperties: true },
     },
     required: ["dispatchId", "status"],
   },

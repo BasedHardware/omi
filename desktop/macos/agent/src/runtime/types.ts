@@ -373,6 +373,21 @@ export interface AgentDelegation {
   completedAtMs: number | null;
 }
 
+export interface AgentGrant {
+  grantId: string;
+  sessionId: string;
+  runId: string | null;
+  capability: string;
+  operation: string;
+  resourcePattern: string;
+  effect: GrantEffect;
+  source: GrantSource;
+  constraintsJson: string;
+  createdAtMs: number;
+  expiresAtMs: number | null;
+  revokedAtMs: number | null;
+}
+
 export type NewAgentSession = Partial<AgentSession> & Pick<AgentSession, "ownerId" | "surfaceKind" | "defaultAdapterId">;
 
 export type NewAgentRun = Partial<AgentRun> &
@@ -387,6 +402,9 @@ export type NewAdapterBinding = Partial<AdapterBinding> &
   Pick<AdapterBinding, "sessionId" | "adapterId" | "bindingGeneration" | "resumeFidelity" | "status">;
 
 export type NewAgentEvent = Partial<AgentEvent> & Pick<AgentEvent, "sessionId" | "type">;
+
+export type NewAgentGrant = Partial<AgentGrant> &
+  Pick<AgentGrant, "sessionId" | "capability" | "operation" | "resourcePattern" | "effect" | "source">;
 
 export interface StartupReconciliationResult {
   orphanedAttemptIds: string[];
@@ -411,6 +429,7 @@ export interface AgentStore {
   insertAdapterBinding(input: NewAdapterBinding): AdapterBinding;
   insertArtifact(input: NewAgentArtifact): AgentArtifact;
   appendEvent(input: NewAgentEvent): AgentEvent;
+  insertGrant(input: NewAgentGrant): AgentGrant;
   insertDesktopContextPacket(input: NewDesktopContextPacket): DesktopContextPacket;
   insertDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch;
   resolveDesktopDispatch(dispatchId: string, input: { ownerId: string; status: "resolved" | "cancelled"; resolvedBy?: string | null; resolutionJson?: string | null; resolvedAtMs?: number }): DesktopCoordinatorDispatch;

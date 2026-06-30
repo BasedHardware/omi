@@ -19,10 +19,12 @@ import type {
   AgentRun,
   AgentSession,
   AgentStore,
+  AgentGrant,
   ArtifactLifecycleState,
   ArtifactRole,
   AttemptStatus,
   NewAgentArtifact,
+  NewAgentGrant,
   ResumeFidelity,
   RunAttempt,
   RunMode,
@@ -266,6 +268,21 @@ export interface DesktopOpenLoopsInput {
 
 export interface DesktopContextPacketPersistInput extends Omit<DesktopContextPacketBuildInput, "ownerId"> {
   ownerId?: string;
+}
+
+export interface ResolveDesktopDispatchInput {
+  ownerId: string;
+  status: "resolved" | "cancelled";
+  resolvedBy?: string | null;
+  resolutionJson?: string | null;
+  resolvedAtMs?: number;
+  grant?: Omit<NewAgentGrant, "sessionId"> & { sessionId?: string };
+}
+
+export interface ResolveDesktopDispatchResult {
+  dispatch: DesktopCoordinatorDispatch;
+  grant: AgentGrant | null;
+  event: AgentEvent | null;
 }
 
 export interface UpdateArtifactLifecycleInput {
@@ -976,11 +993,40 @@ export class AgentRuntimeKernel {
     return this.store.insertDesktopDispatch(input);
   }
 
-  resolveDesktopDispatch(
-    dispatchId: string,
-    input: { ownerId: string; status: "resolved" | "cancelled"; resolvedBy?: string | null; resolutionJson?: string | null; resolvedAtMs?: number },
-  ): DesktopCoordinatorDispatch {
-    return this.store.resolveDesktopDispatch(dispatchId, input);
+  resolveDesktopDispatch(dispatchId: string, input: ResolveDesktopDispatchInput): ResolveDesktopDispatchResult {
+    return this.withTransaction(() => {
+      const dispatch = this.store.resolveDesktopDispatch(dispatchId, input);
+      let grant: AgentGrant | null = null;
+      if (input.status === "resolved" && input.grant && input.grant.effect === "allow") {
+        const sessionId = input.grant.sessionId ?? dispatch.sourceSessionId;
+        if (!sessionId) {
+          throw new Error("Resolved dispatch grants require a session scope");
+        }
+        this.assertSessionOwner(this.readSession(sessionId), input.ownerId);
+        grant = this.store.insertGrant({
+          ...input.grant,
+          sessionId,
+          runId: input.grant.runId ?? dispatch.sourceRunId,
+          source: input.grant.source ?? "user",
+        });
+      }
+      const event = dispatch.sourceSessionId
+        ? this.appendEvent({
+            sessionId: dispatch.sourceSessionId,
+            runId: dispatch.sourceRunId,
+            attemptId: dispatch.sourceAttemptId,
+            type: "approval.resolved",
+            payload: {
+              dispatchId: dispatch.dispatchId,
+              status: dispatch.status,
+              resolvedBy: dispatch.resolvedBy,
+              resolution: parseJsonObject(dispatch.resolutionJson),
+              grantId: grant?.grantId ?? null,
+            },
+          })
+        : null;
+      return { dispatch, grant, event };
+    });
   }
 
   getRun(input: GetRunInput): KernelRunDetails {

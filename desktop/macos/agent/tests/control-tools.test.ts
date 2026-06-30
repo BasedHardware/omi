@@ -131,6 +131,64 @@ describe("agent control tools", () => {
     );
   });
 
+  it("resolves desktop approval dispatches with a scoped grant and event evidence", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const session = store.insertSession({
+      ownerId: "owner",
+      surfaceKind: "main_chat",
+      defaultAdapterId: "fake",
+    });
+    const run = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "client",
+      requestId: "request",
+      status: "waiting_approval",
+      mode: "act",
+    });
+    const created = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "create_desktop_dispatch", {
+      kind: "approval",
+      priority: 100,
+      title: "Approve screenshot",
+      decisionPrompt: "Allow screenshot image bytes?",
+      sourceSessionId: session.sessionId,
+      sourceRunId: run.runId,
+      capability: "desktop.context.screenshot_image",
+      operation: "get_screenshot",
+      resourceRef: "screenshot:42",
+    }));
+
+    const resolved = parseToolResult(await handleAgentControlToolCall(ownerContext(kernel), "resolve_desktop_dispatch", {
+      dispatchId: created.dispatch.dispatchId,
+      status: "resolved",
+      resolution: { decision: "allow" },
+      grant: {
+        capability: "desktop.context.screenshot_image",
+        operation: "get_screenshot",
+        resourcePattern: "screenshot:42",
+        effect: "allow",
+        expiresAtMs: Date.now() + 60_000,
+      },
+    }));
+
+    expect(resolved).toMatchObject({
+      ok: true,
+      dispatch: { status: "resolved" },
+      grant: {
+        sessionId: session.sessionId,
+        runId: run.runId,
+        capability: "desktop.context.screenshot_image",
+        operation: "get_screenshot",
+        resourcePattern: "screenshot:42",
+        effect: "allow",
+        source: "user",
+      },
+      event: { type: "approval.resolved" },
+    });
+    expect(store.getRow("SELECT COUNT(*) AS count FROM grants WHERE session_id = ?", [session.sessionId]).count).toBe(1);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM events WHERE type = ?", ["approval.resolved"]).count).toBe(1);
+    store.close();
+  });
+
   it("lists sessions and inspects runs using canonical runtime ids", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = await kernel.executeRun(baseRunInput);
