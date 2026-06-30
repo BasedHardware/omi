@@ -405,9 +405,7 @@ async def sync_x_for_user(uid: str) -> Dict:
     # Vector-index the raw posts so agents can semantically search the actual
     # tweets (not just the extracted memories) via the MCP search_x_posts tool.
     # Chunk to stay within Pinecone's per-upsert vector limit (~100).
-    items_to_index = [
-        {'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh
-    ]
+    items_to_index = [{'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh]
     for i in range(0, len(items_to_index), 100):
         try:
             upsert_x_post_vectors_batch(uid, items_to_index[i : i + 100])
