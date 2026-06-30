@@ -197,7 +197,7 @@ class TestAtomicWrites:
 
         monkeypatch.setattr("simple_storage.os.replace", _spy_replace)
 
-        _save(str(target), {"a": 1})
+        _save(str(target), {"a": 1}, fsync=True)
 
         # Verify .tmp was used as the source and was cleaned up after replace
         assert captured.get("dst") == str(target)
@@ -216,7 +216,7 @@ class TestAtomicWrites:
 
         monkeypatch.setattr("simple_storage.json.dump", _boom)
 
-        _save(str(target), {"a": 1})
+        _save(str(target), {"a": 1}, fsync=True)
 
         # Tmp should not be left behind
         assert not os.path.exists(str(target) + ".tmp")

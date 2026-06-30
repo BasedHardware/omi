@@ -56,7 +56,7 @@ def load_storage() -> None:
             print(f"⚠️  Could not load {path}: {e}", flush=True)
 
 
-def _save(path: str, payload: dict) -> None:
+def _save(path: str, payload: dict, *, fsync: bool = True) -> None:
     """Atomically write payload to path. Write to <path>.tmp, then os.replace.
 
     A process crash mid-write leaves the original file untouched and a stray
@@ -67,17 +67,24 @@ def _save(path: str, payload: dict) -> None:
     explicit restrictive perms, a shared host or permissive umask leaves
     the JSON readable by other users on the box.
 
-    P2 from cubic AI review (PR #8682): the previous version called
-    `os.fsync()` here, which forces the kernel page cache to disk on
-    every save. The webhook handler hits this path twice per reply
-    turn (human + ai) and an fsync can take 5-30ms on slow disks —
-    blocking the asyncio event loop before the webhook returns 200 to
-    Meta/Telegram, occasionally exceeding the 10s timeout. Atomicity
-    is preserved by the tmp+rename pair (we never observe a torn
-    write on crash) — what we lose by skipping fsync is power-loss
-    durability for non-critical conversation history, which is
-    rebuildable from the Telegram/WhatsApp APIs if needed. We
-    deliberately do NOT fsync here.
+    P1 from cubic AI review (PR #8682): this helper is shared by
+    credential writes (save_user, save_pending_setup) and history
+    writes (append_turn, append_message). The credentials
+    (`access_token`, `verify_token`, `omi_dev_api_key`, `bot_token`,
+    setup payloads) are NOT rebuildable from the chat platform APIs
+    — losing them on power loss means the user has to redo the
+    full /setup handshake. The history buffer IS rebuildable from
+    the platform APIs (we just lose the last few turns of context).
+
+    To balance the two, the `fsync` parameter is REQUIRED at the
+    call site (no default would hide the decision). Credential
+    writes pass fsync=True so they survive power loss; history
+    writes pass fsync=False so they don't block the asyncio event
+    loop for 5-30ms per reply turn on slow disks (occasionally
+    exceeding the 10s Meta/Telegram webhook timeout). Atomicity is
+    preserved by the tmp+rename pair regardless — we never observe
+    a torn write on crash; we only trade power-loss durability
+    for the history path.
     """
     tmp = f"{path}.{os.getpid()}.tmp"
     try:
@@ -87,7 +94,9 @@ def _save(path: str, payload: dict) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(tmp, "w") as f:
             json.dump(payload, f, default=str, indent=2)
-            f.flush()
+            if fsync:
+                f.flush()
+                os.fsync(f.fileno())
         os.replace(tmp, path)
         try:
             os.chmod(path, 0o600)
@@ -149,7 +158,10 @@ def save_user(
         # owner's turns.
         "recent_messages": preserved_history,
     }
-    _save(USERS_FILE, users)
+    # Credential-bearing record — fsync so a power loss doesn't lose
+    # the user's bot_token / omi_dev_api_key and force a full /setup
+    # redo. (See _save docstring for the credential-vs-history split.)
+    _save(USERS_FILE, users, fsync=True)
 
 
 def get_user_by_chat_id(chat_id: str) -> Optional[dict]:
@@ -174,7 +186,7 @@ def update_auto_reply(chat_id: str, enabled: bool) -> None:
         raise KeyError(f"Unknown chat_id: {chat_id}")
     users[str(chat_id)]["auto_reply_enabled"] = enabled
     users[str(chat_id)]["updated_at"] = datetime.utcnow().isoformat()
-    _save(USERS_FILE, users)
+    _save(USERS_FILE, users, fsync=True)
 
 
 def should_nudge(user: dict, cooldown_seconds: float) -> bool:
@@ -200,7 +212,7 @@ def mark_nudged(chat_id: str) -> None:
     if str(chat_id) in users:
         users[str(chat_id)]["last_nudge_at"] = datetime.utcnow().isoformat()
         users[str(chat_id)]["updated_at"] = datetime.utcnow().isoformat()
-        _save(USERS_FILE, users)
+        _save(USERS_FILE, users, fsync=True)
 
 
 # ---------------------------------------------------------------------------
@@ -211,7 +223,9 @@ def save_pending_setup(token: str, payload: dict) -> None:
         **payload,
         "created_at": datetime.utcnow().isoformat(),
     }
-    _save(PENDING_FILE, pending_setups)
+    # Setup credentials (bot_token, omi_uid, persona_id, omi_dev_api_key).
+    # fsync so a power loss doesn't strand the user mid-/setup.
+    _save(PENDING_FILE, pending_setups, fsync=True)
 
 
 PENDING_SETUP_TTL_SECONDS = 3600  # 1 hour — setup links expire after this
@@ -250,7 +264,7 @@ def pop_pending_setup(token: str) -> Optional[dict]:
         pending_setups.pop(t, None)
         logger.info(f"purged stale setup token {t[:8]}... (expired)")
     if stale_tokens and pending_setups:
-        _save(PENDING_FILE, pending_setups)
+        _save(PENDING_FILE, pending_setups, fsync=True)
     elif stale_tokens:
         try:
             if os.path.exists(PENDING_FILE):
@@ -264,9 +278,11 @@ def pop_pending_setup(token: str) -> Optional[dict]:
     payload = pending_setups.pop(token, None)
     if payload is not None:
         # Pop succeeded — persist the updated (smaller) dict or clear
-        # the file if it's now empty.
+        # the file if it's now empty. fsync=True: setup credentials
+        # aren't rebuildable from the platform API; we want this
+        # durable.
         if pending_setups:
-            _save(PENDING_FILE, pending_setups)
+            _save(PENDING_FILE, pending_setups, fsync=True)
         else:
             try:
                 if os.path.exists(PENDING_FILE):
@@ -355,7 +371,13 @@ def append_message(chat_id: str, role: str, text: str) -> None:
     if len(history) > CHAT_HISTORY_MAX:
         user["recent_messages"] = history[-CHAT_HISTORY_MAX:]
     user["updated_at"] = datetime.utcnow().isoformat()
-    _save(USERS_FILE, users)
+    # History write — skip fsync so the webhook handler doesn't block
+    # the asyncio event loop for 5-30ms per reply turn on slow disks.
+    # The history buffer is rebuildable from the Telegram API on
+    # power loss (we just lose the last few turns of context). The
+    # credentials in USERS_FILE were already durably committed by
+    # save_user() before this call ran. (See _save docstring.)
+    _save(USERS_FILE, users, fsync=False)
 
 
 def append_turn(chat_id: str, *, human_text: str, ai_text: str) -> None:
@@ -390,7 +412,9 @@ def append_turn(chat_id: str, *, human_text: str, ai_text: str) -> None:
     if len(history) > CHAT_HISTORY_MAX:
         user["recent_messages"] = history[-CHAT_HISTORY_MAX:]
     user["updated_at"] = now
-    _save(USERS_FILE, users)
+    # History write — skip fsync so the webhook handler doesn't block
+    # the asyncio event loop. See append_message above.
+    _save(USERS_FILE, users, fsync=False)
 
 
 def clear_recent_messages(chat_id: str) -> None:
@@ -401,4 +425,5 @@ def clear_recent_messages(chat_id: str) -> None:
         return
     user["recent_messages"] = []
     user["updated_at"] = datetime.utcnow().isoformat()
-    _save(USERS_FILE, users)
+    # History wipe — skip fsync (same reason as append_turn).
+    _save(USERS_FILE, users, fsync=False)

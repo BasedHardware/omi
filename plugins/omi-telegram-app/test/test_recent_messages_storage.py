@@ -313,3 +313,95 @@ class TestPerChatIsolation:
         msgs_99 = simple_storage.get_recent_messages('99')
         assert [m['text'] for m in msgs_42] == ['to alice']
         assert [m['text'] for m in msgs_99] == ['to bob']
+
+
+class TestFsyncSplitForCredentialsAndHistory:
+    """P1 from cubic AI review (PR #8682): the no-fsync optimization
+    must apply ONLY to history writes, NOT to credential writes. The
+    shared `_save` helper takes an explicit `fsync` parameter so each
+    call site has to declare its intent — a default would hide the
+    decision.
+
+    History writes (append_message, append_turn, clear_recent_messages)
+    pass fsync=False because the conversation history is rebuildable
+    from the Telegram / WhatsApp APIs on power loss — and skipping
+    fsync avoids blocking the webhook event loop for 5-30ms per
+    reply turn on slow disks.
+
+    Credential writes (save_user, save_pending_setup, update_auto_reply,
+    mark_nudged, pop_pending_setup) pass fsync=True because losing
+    a user's bot_token / omi_dev_api_key on power loss would force a
+    full /setup redo.
+    """
+
+    def test_history_writes_skip_fsync(self):
+        """append_message, append_turn, clear_recent_messages must
+        call _save with fsync=False so the webhook event loop isn't
+        blocked per reply turn."""
+        from unittest.mock import patch
+
+        import simple_storage
+
+        _make_user('42')
+        with patch('simple_storage._save') as mock_save:
+            simple_storage.append_message('42', 'human', 'hi')
+            assert (
+                mock_save.call_args.kwargs.get('fsync') is False
+            ), f"append_message must pass fsync=False, got {mock_save.call_args.kwargs}"
+
+        with patch('simple_storage._save') as mock_save:
+            simple_storage.append_turn('42', human_text='hi', ai_text='hey')
+            assert mock_save.call_args.kwargs.get('fsync') is False
+
+        with patch('simple_storage._save') as mock_save:
+            simple_storage.clear_recent_messages('42')
+            assert mock_save.call_args.kwargs.get('fsync') is False
+
+    def test_credential_writes_use_fsync(self):
+        """save_user, update_auto_reply, mark_nudged, save_pending_setup,
+        pop_pending_setup must call _save with fsync=True so credentials
+        survive power loss. Without this, a power loss after _save's
+        os.replace but before the kernel page-cache flush would force
+        the user to redo /setup."""
+        from unittest.mock import patch
+
+        import simple_storage
+
+        with patch('simple_storage._save') as mock_save:
+            simple_storage.save_user(
+                chat_id='42',
+                omi_uid='uid-1',
+                persona_id='persona-1',
+                omi_dev_api_key='dev-key',
+                bot_token='bot-token',
+                auto_reply_enabled=True,
+            )
+            assert (
+                mock_save.call_args.kwargs.get('fsync') is True
+            ), f"save_user must pass fsync=True, got {mock_save.call_args.kwargs}"
+
+        with patch('simple_storage._save') as mock_save:
+            simple_storage.update_auto_reply('42', True)
+            assert mock_save.call_args.kwargs.get('fsync') is True
+
+        with patch('simple_storage._save') as mock_save:
+            simple_storage.mark_nudged('42')
+            assert mock_save.call_args.kwargs.get('fsync') is True
+
+        with patch('simple_storage._save') as mock_save:
+            simple_storage.save_pending_setup('tok-1', {'omi_uid': 'u-1'})
+            assert mock_save.call_args.kwargs.get('fsync') is True
+
+        # pop_pending_setup persists only if the token was actually
+        # found (skip-on-no-op). Seed in-memory (real save, no mock)
+        # then pop under a mock so the test exercises the persistence
+        # path, not the skip path. Add a second entry so the post-pop
+        # dict is non-empty (otherwise the code removes the file
+        # instead of calling _save).
+        simple_storage.pending_setups.clear()
+        simple_storage.save_pending_setup('tok-2', {'omi_uid': 'u-2'})
+        simple_storage.save_pending_setup('tok-3', {'omi_uid': 'u-3'})
+        with patch('simple_storage._save') as mock_save:
+            simple_storage.pop_pending_setup('tok-2')
+            assert mock_save.call_count == 1, "pop should have persisted"
+            assert mock_save.call_args.kwargs.get('fsync') is True
