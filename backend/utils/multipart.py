@@ -48,9 +48,8 @@ class FileSizeLimitedMultiPartParser(MultiPartParser):
         self._current_file_part_size = 0
 
     def on_part_data(self, data: bytes, start: int, end: int) -> None:
-        message_bytes = data[start:end]
         if self._current_part.file is not None:
-            self._current_file_part_size += len(message_bytes)
+            self._current_file_part_size += end - start
             if self._current_file_part_size > self.max_part_size:
                 raise MultiPartException(f"Part exceeded maximum size of {int(self.max_part_size / 1024)}KB.")
         super().on_part_data(data, start, end)
