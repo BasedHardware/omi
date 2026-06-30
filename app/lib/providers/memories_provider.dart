@@ -202,6 +202,10 @@ class MemoriesProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
 
+    if (_filterThisDeviceOnly) {
+      await _ensureClientDeviceInitialized();
+    }
+
     final result = await getMemoriesResult(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
     _memories = result.memories;
     _deviceScopeSupported = result.deviceScopeSupported;
