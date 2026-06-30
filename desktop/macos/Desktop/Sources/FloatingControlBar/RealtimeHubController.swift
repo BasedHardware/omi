@@ -904,12 +904,21 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     case .getTaskAgentStatus:
       runToolAndSpeak(
         source: source,
-        callId: callId, name: name, detail: "coordinator_open_loops",
+        callId: callId, name: name, detail: "coordinator_open_loops_and_completion_delta",
         emptyText: "No active agent attention items.",
         errorText: "Could not read the agent coordinator right now."
       ) {
         do {
-          return try await DesktopCoordinatorService.shared.openLoopsJSON()
+          let openLoops = try await DesktopCoordinatorService.shared.openLoopsJSON()
+          if let completionDelta = await DesktopCoordinatorService.shared.completedAgentDeltaPrompt(surfaceKind: "ptt") {
+            return """
+            \(openLoops)
+
+            # Completed Agent Delta
+            \(completionDelta)
+            """
+          }
+          return openLoops
         } catch {
           logError("RealtimeHub[\(self.providerTag)]: coordinator status fallback failed", error: error)
           return TaskAgentStatusRegistry.shared.combinedSummary()

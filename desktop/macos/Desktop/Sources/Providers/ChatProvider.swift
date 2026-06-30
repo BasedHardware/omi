@@ -2214,6 +2214,26 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
+    private func buildMainChatCoordinatorCompletionDeltaIfNeeded(
+        systemPromptStyle: ChatSystemPromptStyle,
+        surfaceRef: AgentSurfaceReference?,
+        sessionKey: String?,
+        legacyClientScope: String?,
+        imageData: Data?,
+        attachmentMetadataJSON: String?
+    ) async -> String? {
+        guard systemPromptStyle == .main,
+              !isOnboarding,
+              surfaceRef == nil,
+              sessionKey == nil,
+              legacyClientScope == nil,
+              imageData == nil,
+              attachmentMetadataJSON == nil
+        else { return nil }
+
+        return await DesktopCoordinatorService.shared.completedAgentDeltaPrompt(surfaceKind: "main_chat")
+    }
+
     private func routeIntentJSONWithFailOpenTimeout(intent: String, surfaceKind: String) async throws -> String? {
         try await withThrowingTaskGroup(of: String?.self) { group in
             group.addTask {
@@ -3255,6 +3275,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             imageData: imageData,
             attachmentMetadataJSON: attachmentMetadataJSON
         )
+        let coordinatorCompletionDeltaContext = await buildMainChatCoordinatorCompletionDeltaIfNeeded(
+            systemPromptStyle: systemPromptStyle,
+            surfaceRef: surfaceRef,
+            sessionKey: sessionKey,
+            legacyClientScope: legacyClientScope,
+            imageData: imageData,
+            attachmentMetadataJSON: attachmentMetadataJSON
+        )
 
         // Create a placeholder AI message shown immediately in the UI while
         // streaming. It starts with a local UUID (isSynced=false, no rating buttons).
@@ -3333,6 +3361,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 # Desktop Coordinator Route Context
 
                 \(coordinatorRouteContext)
+                """
+            }
+            if let coordinatorCompletionDeltaContext {
+                systemPrompt += """
+
+                # Desktop Completed Agent Delta
+
+                \(coordinatorCompletionDeltaContext)
                 """
             }
 
