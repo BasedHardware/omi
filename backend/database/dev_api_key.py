@@ -130,22 +130,12 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
     # Check cache first
     cached_data = redis_db.get_cached_dev_api_key_data(hashed_key)
     if cached_data:
-        # Normalize legacy cached entries that predate the app/key context
-        # fields so downstream authorization fails closed consistently
-        # instead of spuriously rejecting otherwise-valid keys until TTL expiry.
-        if "app_id" not in cached_data or "key_id" not in cached_data:
-            cached_data.setdefault("app_id", "developer_api")
-            cached_data.setdefault("key_id", None)
-            cached_user_id = cached_data.get("user_id")
-            if cached_user_id:
-                redis_db.cache_dev_api_key(
-                    hashed_key,
-                    cached_user_id,
-                    cached_data.get("scopes"),
-                    key_id=cached_data.get("key_id"),
-                    app_id=cached_data.get("app_id"),
-                )
-        return cached_data
+        # Legacy Redis entries predate app/key identity and only contain
+        # user_id/scopes. Do not return those for memory authorization paths:
+        # fall through to Firestore so otherwise-valid keys recover their real
+        # key_id/app_id immediately instead of 403ing until cache TTL expiry.
+        if cached_data.get("key_id") and cached_data.get("app_id"):
+            return cached_data
 
     # If not in cache, query database
     keys_ref = db.collection("dev_api_keys").where("hashed_key", "==", hashed_key).limit(1)

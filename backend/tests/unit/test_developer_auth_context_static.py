@@ -26,3 +26,5 @@ def test_developer_api_key_lookup_returns_key_id_and_stable_app_id_for_memory_co
     assert '"app_id": app_id' in source
     assert "key_data.get(\"app_id\") or \"developer_api\"" in source
     assert 'redis_db.cache_dev_api_key(hashed_key, user_id, scopes, key_id=key_id, app_id=app_id)' in source
+    assert 'if cached_data.get("key_id") and cached_data.get("app_id"):' in source
+    assert '# Legacy Redis entries predate app/key identity' in source

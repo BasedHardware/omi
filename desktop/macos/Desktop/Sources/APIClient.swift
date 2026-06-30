@@ -409,6 +409,7 @@ enum APIError: LocalizedError {
   case unauthorized
   case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
+  case unsupportedTierScopedBulkMutation(String)
 
   var detail: String? {
     if case .httpError(_, let detail) = self { return detail }
@@ -426,6 +427,8 @@ enum APIError: LocalizedError {
       return "HTTP error: \(statusCode)"
     case .decodingError(let error):
       return "Failed to decode response: \(error.localizedDescription)"
+    case .unsupportedTierScopedBulkMutation(let operation):
+      return "Layer-scoped bulk memory \(operation) is not supported yet."
     }
   }
 }
@@ -1335,12 +1338,118 @@ enum MemoryCategory: String, Codable, CaseIterable {
   }
 }
 
-struct ServerMemory: Codable, Identifiable {
+enum MemoryLayer: String, Codable, CaseIterable, Identifiable {
+  case shortTerm = "short_term"
+  case longTerm = "long_term"
+  case archive
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    let rawValue = try container.decode(String.self)
+    guard let layer = MemoryLayer(rawValue: rawValue) else {
+      throw DecodingError.dataCorruptedError(
+        in: container,
+        debugDescription: "Unknown ServerMemory layer '\(rawValue)'"
+      )
+    }
+    self = layer
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    try container.encode(rawValue)
+  }
+
+  var id: String { rawValue }
+
+  var displayName: String {
+    switch self {
+    case .shortTerm: return "Short-term"
+    case .longTerm: return "Long-term"
+    case .archive: return "Archive"
+    }
+  }
+
+  var icon: String {
+    switch self {
+    case .shortTerm: return "clock"
+    case .longTerm: return "brain.head.profile"
+    case .archive: return "archivebox"
+    }
+  }
+
+  var isDefaultAccessible: Bool {
+    self == .shortTerm || self == .longTerm
+  }
+
+  var layerInfoText: String {
+    switch self {
+    case .shortTerm:
+      return
+        "Recent observations from your activity. May decay or promote to Long-term when corroborated."
+    case .longTerm:
+      return
+        "Durable facts Omi keeps long-term - stable details about you, your preferences, and your life."
+    case .archive:
+      return "Aged-out long-term memories. Hidden by default; search Archive to find them."
+    }
+  }
+}
+
+/// Reversible alias during WS-G client rename.
+typealias MemoryTier = MemoryLayer
+
+struct MemoryLayerScope: Equatable {
+  let tiers: [MemoryLayer]
+  let requiresArchiveAcknowledgement: Bool
+
+  static let defaultAccess = MemoryLayerScope(
+    tiers: [.shortTerm, .longTerm],
+    requiresArchiveAcknowledgement: false
+  )
+  static let archiveOnly = MemoryLayerScope(
+    tiers: [.archive],
+    requiresArchiveAcknowledgement: true
+  )
+  static let allIncludingArchive = MemoryLayerScope(
+    tiers: [.shortTerm, .longTerm, .archive],
+    requiresArchiveAcknowledgement: true
+  )
+
+  var includesArchive: Bool { tiers.contains(.archive) }
+  var sqlTierRawValues: [String] { tiers.map { $0.rawValue } }
+}
+
+/// Reversible alias during WS-G client rename.
+typealias MemoryTierScope = MemoryLayerScope
+
+private enum ServerMemoryAliasDecodeError {
+  static func conflict(
+    _ firstField: String,
+    _ firstValue: String,
+    _ secondField: String,
+    _ secondValue: String,
+    codingPath: [CodingKey]
+  ) -> DecodingError {
+    DecodingError.dataCorrupted(
+      DecodingError.Context(
+        codingPath: codingPath,
+        debugDescription: "Conflicting ServerMemory aliases: \(firstField)=\(firstValue) differs from \(secondField)=\(secondValue)"
+      )
+    )
+  }
+}
+
+struct ServerMemory: Decodable, Identifiable {
   let id: String
   let content: String
   let category: MemoryCategory
   let createdAt: Date
   let updatedAt: Date
+  let capturedAt: Date?
+  let expiresAt: Date?
+  let tier: MemoryLayer
+  let tierIsExplicit: Bool
   let conversationId: String?
   let reviewed: Bool
   let userReview: Bool?
@@ -1364,14 +1473,21 @@ struct ServerMemory: Codable, Identifiable {
   let inputDeviceName: String?
   // Window title when memory was extracted
   let windowTitle: String?
+  // Capture-device provenance (optional; absent on legacy memories)
+  let primaryCaptureDevice: String?
+  let captureDeviceIds: [String]
   // Short headline for notification preview (advice/tips only)
   let headline: String?
 
   enum CodingKeys: String, CodingKey {
     case id, content, category, reviewed, visibility, scoring, source, confidence, tags, reasoning,
-      headline
+      headline, tier, layer
+    case memoryId = "memory_id"
+    case memoryTier = "memory_tier"
     case createdAt = "created_at"
     case updatedAt = "updated_at"
+    case capturedAt = "captured_at"
+    case expiresAt = "expires_at"
     case conversationId = "conversation_id"
     case userReview = "user_review"
     case manuallyAdded = "manually_added"
@@ -1382,15 +1498,68 @@ struct ServerMemory: Codable, Identifiable {
     case currentActivity = "current_activity"
     case inputDeviceName = "input_device_name"
     case windowTitle = "window_title"
+    case primaryCaptureDevice = "primary_capture_device"
+    case captureDeviceIds = "capture_device_ids"
   }
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
+    let idValue = try container.decodeIfPresent(String.self, forKey: .id)
+    let memoryIdValue = try container.decodeIfPresent(String.self, forKey: .memoryId)
+    switch (idValue, memoryIdValue) {
+    case let (.some(id), .some(memoryId)) where id != memoryId:
+      throw ServerMemoryAliasDecodeError.conflict(
+        "id", id, "memory_id", memoryId, codingPath: container.codingPath)
+    case let (.some(id), _):
+      self.id = id
+    case let (_, .some(memoryId)):
+      self.id = memoryId
+    case (.none, .none):
+      throw DecodingError.keyNotFound(
+        CodingKeys.id,
+        DecodingError.Context(
+          codingPath: container.codingPath,
+          debugDescription: "ServerMemory requires either id or memory_id"
+        )
+      )
+    }
+
     content = try container.decode(String.self, forKey: .content)
     category = try container.decodeIfPresent(MemoryCategory.self, forKey: .category) ?? .system
-    createdAt = try container.decode(Date.self, forKey: .createdAt)
-    updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    capturedAt = try container.decodeIfPresent(Date.self, forKey: .capturedAt)
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? capturedAt ?? Date()
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+    expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
+
+    let layerValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
+    let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
+    let memoryTierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
+    tierIsExplicit = layerValue != nil || tierValue != nil || memoryTierValue != nil
+
+    let presentTierAliases: [(String, MemoryLayer)] = [
+      layerValue.map { ("layer", $0) },
+      tierValue.map { ("tier", $0) },
+      memoryTierValue.map { ("memory_tier", $0) },
+    ].compactMap { $0 }
+    if presentTierAliases.count >= 2 {
+      let first = presentTierAliases[0]
+      for other in presentTierAliases.dropFirst() where other.1 != first.1 {
+        throw ServerMemoryAliasDecodeError.conflict(
+          first.0, first.1.rawValue, other.0, other.1.rawValue, codingPath: container.codingPath)
+      }
+    }
+
+    switch (layerValue, tierValue, memoryTierValue) {
+    case let (.some(layer), _, _):
+      self.tier = layer
+    case let (_, .some(tier), _):
+      self.tier = tier
+    case let (_, _, .some(memoryTier)):
+      self.tier = memoryTier
+    case (.none, .none, .none):
+      self.tier = .longTerm
+    }
+
     conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId)
     reviewed = try container.decodeIfPresent(Bool.self, forKey: .reviewed) ?? false
     userReview = try container.decodeIfPresent(Bool.self, forKey: .userReview)
@@ -1408,6 +1577,8 @@ struct ServerMemory: Codable, Identifiable {
     currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
     windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
+    primaryCaptureDevice = try container.decodeIfPresent(String.self, forKey: .primaryCaptureDevice)
+    captureDeviceIds = try container.decodeIfPresent([String].self, forKey: .captureDeviceIds) ?? []
     headline = try container.decodeIfPresent(String.self, forKey: .headline)
   }
 
@@ -1586,7 +1757,8 @@ extension APIClient {
     offset: Int = 0,
     category: String? = nil,
     tags: [String]? = nil,
-    includeDismissed: Bool = false
+    includeDismissed: Bool = false,
+    deviceScope: String? = nil
   ) async throws -> [ServerMemory] {
     var endpoint = "v3/memories?limit=\(limit)&offset=\(offset)"
     if let category = category {
@@ -1597,6 +1769,9 @@ extension APIClient {
     }
     if includeDismissed {
       endpoint += "&include_dismissed=true"
+    }
+    if let deviceScope = deviceScope {
+      endpoint += "&device_scope=\(deviceScope)"
     }
     return try await get(endpoint)
   }
@@ -1722,6 +1897,11 @@ extension APIClient {
     let _: MemoryStatusResponse = try await post("v3/memories/mark-all-read", body: EmptyBody())
   }
 
+  /// Layer/archive scoped bulk read-state mutations remain disabled until backend semantics exist.
+  func markAllMemoriesRead(scope: MemoryLayerScope) async throws {
+    throw APIError.unsupportedTierScopedBulkMutation("read-state updates")
+  }
+
   /// Updates visibility of all memories
   func updateAllMemoriesVisibility(visibility: String) async throws {
     struct VisibilityRequest: Encodable {
@@ -1731,9 +1911,21 @@ extension APIClient {
     let _: MemoryStatusResponse = try await patch("v3/memories/visibility", body: body)
   }
 
+  /// Updates visibility of all default-scope memories.
+  /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
+  func updateAllMemoriesVisibility(scope: MemoryLayerScope, visibility: String) async throws {
+    throw APIError.unsupportedTierScopedBulkMutation("visibility updates")
+  }
+
   /// Deletes all memories
   func deleteAllMemories() async throws {
     try await delete("v3/memories")
+  }
+
+  /// Deletes all default-scope memories.
+  /// Layer/archive scoped bulk mutations remain disabled until backend semantics exist.
+  func deleteAllMemories(scope: MemoryLayerScope) async throws {
+    throw APIError.unsupportedTierScopedBulkMutation("deletion")
   }
 
   // MARK: - PATCH helper
