@@ -77,6 +77,7 @@ def _load_tts_router_module():
 
     endpoints_stub.get_current_user_uid = _fake_dep_factory()
     endpoints_stub.with_rate_limit = lambda _auth, _policy: _fake_dep_factory()
+    endpoints_stub.with_rate_limit_context = lambda _auth, _policy: _fake_dep_factory()
     sys.modules["utils.other.endpoints"] = endpoints_stub
 
     # Stub redis_db helpers

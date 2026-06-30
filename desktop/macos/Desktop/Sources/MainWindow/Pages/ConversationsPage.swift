@@ -73,8 +73,7 @@ struct ConversationsPage: View {
             await appState.moveConversationToFolder(conversationId, folderId: folderId)
           },
           onDelete: {
-            appState.deleteConversationLocally(selected.id)
-            selectedConversation = nil
+            // Cascade is owned by ConversationDetailView; refresh list after dismiss.
             Task {
               await appState.refreshConversations()
             }

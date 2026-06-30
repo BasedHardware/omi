@@ -1,0 +1,285 @@
+# memory vector repair outbox Cloud Run/Tasks/Scheduler deployment contract
+# Status: disabled-by-default readiness artifact; not applied to any cloud project.
+#
+# This file is intentionally checked in as a static, reviewable contract only. It
+# documents the Cloud Run service shape, Cloud Tasks queue/HTTP dispatch shape,
+# Cloud Scheduler trigger shape, OIDC audience, IAM bindings, retry/dead-letter
+# expectations, and proof commands required before production enablement.
+#
+# Important non-claims:
+# - No cloud resources are created by this file.
+# - No production IAM, deployed Firestore rules, Pinecone delete/upsert, shared
+#   ns2 isolation, or Scheduler/Tasks execution has been proven by this artifact.
+# - The current Python entrypoint exposes both a CLI smoke path and a minimal
+#   POST /memory-vector-repair-outbox-worker/tick ASGI shim. The shim delegates
+#   authentication to Cloud Run IAM (roles/run.invoker) plus Scheduler/Tasks
+#   OIDC audience checks at the platform layer; it does not implement an
+#   app-level bearer token.
+
+contract:
+  name: memory-vector-repair-outbox-worker
+  status: disabled-by-default; not applied
+  owner: server-owned memory memory operations
+  requiredBeforeEnablement:
+    - production Firestore IAM proof for the worker service account
+    - deployed Firestore Security Rules proof for protected memory client denial
+    - real Pinecone duplicate stale physical ID delete/repair validation in ns2
+    - shared ns2 isolation evidence or a separate namespace/filter decision
+    - central low-cardinality retry/dead-letter/backlog telemetry seam wired to production metrics/log sink
+    - alert rules for dead letters, retry spikes, ack failures, and oldest pending backlog age
+    - server-owned uid shard/backlog inventory and ownership model
+  resources:
+    - apiVersion: serving.knative.dev/v1
+      kind: Service
+      metadata:
+        name: memory-vector-repair-outbox-worker
+        annotations:
+          run.googleapis.com/ingress: internal-and-cloud-load-balancing
+          run.googleapis.com/invoker-iam-disabled: "false"
+          run.googleapis.com/description: >-
+            Disabled-by-default memory vector_repair_purge outbox worker HTTP shim.
+            Do not set MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true until all
+            production gates pass.
+      spec:
+        template:
+          metadata:
+            annotations:
+              autoscaling.knative.dev/minScale: "0"
+              autoscaling.knative.dev/maxScale: "1"
+              run.googleapis.com/execution-environment: gen2
+          spec:
+            serviceAccountName: memory-vector-repair-outbox-worker@PROJECT_ID.iam.gserviceaccount.com
+            timeoutSeconds: 900
+            containerConcurrency: 1
+            containers:
+              - image: REGION-docker.pkg.dev/PROJECT_ID/omi/backend:MEMORY_VECTOR_REPAIR_IMAGE_DIGEST
+                command: ["uvicorn"]
+                args:
+                  - scripts.vector_repair_outbox_worker_entrypoint:app
+                  - --host
+                  - 0.0.0.0
+                  - --port
+                  - "8080"
+                env:
+                  - name: MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED
+                    value: "false"
+                  - name: MEMORY_VECTOR_REPAIR_OUTBOX_UID
+                    value: SERVER_OWNED_UID_SHARD_PLACEHOLDER
+                  - name: MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ID
+                    value: cloud-run:REGION:memory-vector-repair-outbox-worker:REVISION
+                  - name: MEMORY_VECTOR_REPAIR_OUTBOX_LIMIT
+                    value: "25"
+                  - name: MEMORY_VECTOR_REPAIR_OUTBOX_LEASE_SECONDS
+                    value: "300"
+                  - name: MEMORY_VECTOR_REPAIR_OUTBOX_MAX_ATTEMPTS
+                    value: "3"
+                  - name: VECTOR_REPAIR_PINECONE_NAMESPACE
+                    value: ns2
+                  - name: PINECONE_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: memory-vector-repair-pinecone-api-key
+                        key: latest
+                  - name: PINECONE_INDEX_NAME
+                    valueFrom:
+                      secretKeyRef:
+                        name: memory-vector-repair-pinecone-index-name
+                        key: latest
+                  - name: OPENAI_API_KEY
+                    valueFrom:
+                      secretKeyRef:
+                        name: memory-vector-repair-openai-api-key
+                        key: latest
+
+    - apiVersion: cloudtasks.googleapis.com/v2
+      kind: Queue
+      metadata:
+        name: memory-vector-repair-outbox-worker
+      spec:
+        description: Cloud Tasks queue for one-at-a-time HTTP worker dispatch; keep disabled until gates pass.
+        location: REGION
+        rateLimits:
+          maxDispatchesPerSecond: 0.05
+          maxConcurrentDispatches: 1
+        retryConfig:
+          maxAttempts: 3
+          minBackoff: 60s
+          maxBackoff: 600s
+          maxDoublings: 3
+          maxRetryDuration: 3600s
+        deadLetterPolicy:
+          # dead-letter backlog must be exported to central logs/alerts before enablement.
+          deadLetterQueue: projects/PROJECT_ID/locations/REGION/queues/memory-vector-repair-outbox-worker-dead-letter
+          maxDeliveryAttempts: 3
+
+    - apiVersion: cloudscheduler.googleapis.com/v1
+      kind: Job
+      metadata:
+        name: memory-vector-repair-outbox-worker-tick
+      spec:
+        description: >-
+          Cloud Scheduler tick that enqueues one server-owned memory vector repair
+          outbox worker HTTP task. Keep state: PAUSED and worker env disabled
+          until all P0-4 gates pass.
+        schedule: "*/15 * * * *"
+        timeZone: UTC
+        state: PAUSED
+        httpTarget:
+          httpMethod: POST
+          uri: https://REGION-PROJECT_ID.run.app/memory-vector-repair-outbox-worker/tick
+          oidcToken:
+            serviceAccountEmail: memory-vector-repair-scheduler@PROJECT_ID.iam.gserviceaccount.com
+            audience: https://REGION-PROJECT_ID.run.app/memory-vector-repair-outbox-worker/tick
+          headers:
+            Content-Type: application/json
+          body: |
+            {
+              "contract": "vector_repair_outbox_worker",
+              "uid_source": "server-owned-shard",
+              "enabled_env_required": "MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true"
+            }
+
+    - apiVersion: iam.cnrm.cloud.google.com/v1beta1
+      kind: IAMPolicyMember
+      metadata:
+        name: memory-vector-repair-scheduler-run-invoker
+      spec:
+        member: serviceAccount:memory-vector-repair-scheduler@PROJECT_ID.iam.gserviceaccount.com
+        role: roles/run.invoker
+        resourceRef:
+          apiVersion: serving.knative.dev/v1
+          kind: Service
+          name: memory-vector-repair-outbox-worker
+
+    - apiVersion: iam.cnrm.cloud.google.com/v1beta1
+      kind: IAMPolicyMember
+      metadata:
+        name: memory-vector-repair-scheduler-token-creator
+      spec:
+        member: serviceAccount:cloudscheduler@system.gserviceaccount.com
+        role: roles/iam.serviceAccountTokenCreator
+        resourceRef:
+          external: projects/PROJECT_ID/serviceAccounts/memory-vector-repair-scheduler@PROJECT_ID.iam.gserviceaccount.com
+
+    - apiVersion: iam.cnrm.cloud.google.com/v1beta1
+      kind: IAMPolicyMember
+      metadata:
+        name: memory-vector-repair-scheduler-tasks-enqueuer
+      spec:
+        member: serviceAccount:memory-vector-repair-scheduler@PROJECT_ID.iam.gserviceaccount.com
+        role: roles/cloudtasks.enqueuer
+        resourceRef:
+          external: projects/PROJECT_ID/locations/REGION/queues/memory-vector-repair-outbox-worker
+
+    - apiVersion: iam.cnrm.cloud.google.com/v1beta1
+      kind: IAMPolicyMember
+      metadata:
+        name: memory-vector-repair-worker-firestore-user
+      spec:
+        member: serviceAccount:memory-vector-repair-outbox-worker@PROJECT_ID.iam.gserviceaccount.com
+        role: roles/datastore.user
+        resourceRef:
+          external: projects/PROJECT_ID
+
+  proofChecklist:
+    disabledSmoke:
+      command: python3 backend/scripts/vector_repair_outbox_worker_entrypoint.py
+      passCriteria:
+        - JSON has enabled=false and config_valid=true
+        - leased_count=0 processed_count=0 failed_count=0 ack_failed_count=0
+        - no Pinecone/OpenAI/Firestore dependency initialization occurs
+    staticConfigReview:
+      passCriteria:
+        - Cloud Run service command exposes POST /memory-vector-repair-outbox-worker/tick via scripts.vector_repair_outbox_worker_entrypoint:app
+        - MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED remains value: "false"
+        - Cloud Scheduler state remains PAUSED
+        - Cloud Run ingress is restricted and invoker IAM is required
+        - Auth enforcement is Cloud Run IAM (roles/run.invoker) with OIDC audience; the app shim has no app-level bearer token
+        - OIDC oidcToken audience exactly matches the worker tick URI
+        - uid source is server-owned; clients cannot choose arbitrary uid
+        - retryConfig maxAttempts/maxRetryDuration and dead-letter handling are documented
+    telemetryAndAlertContract:
+      status: seam only; not wired to production metrics backend by this artifact
+      emitterSeam: database.memory_vector_repair_outbox_telemetry.emit_vector_repair_outbox_worker_telemetry
+      lowCardinalityLabels:
+        allowed: [worker_component, status, action, reason, event_type]
+        forbidden: [uid, worker_id, record_id, vector_id, memory_id, idempotency_key, raw_error]
+      metrics:
+        - name: vector_repair_outbox_worker_records_total
+          labels: [worker_component, status]
+          statuses: [leased, processed, skipped, failed]
+        - name: vector_repair_outbox_worker_action_total
+          labels: [worker_component, action]
+          actions: [delete, repair]
+        - name: vector_repair_outbox_worker_retry_total
+          labels: [worker_component, reason]
+          reasons: [worker_failure, lease_failure, ack_failure, tick_failure, dependencies_failure, config_failure]
+        - name: vector_repair_outbox_worker_dead_letter_total
+          labels: [worker_component, reason]
+        - name: vector_repair_outbox_worker_ack_failure_total
+          labels: [worker_component, reason]
+        - name: vector_repair_outbox_worker_backlog_count
+          labels: [worker_component, status]
+          statuses: [pending, dead_letter]
+        - name: vector_repair_outbox_worker_oldest_pending_age_seconds
+          labels: [worker_component, status]
+        - name: vector_repair_outbox_worker_duration_ms
+          labels: [worker_component, status]
+      events:
+        - vector_repair_outbox_worker_dead_letter
+        - vector_repair_outbox_worker_ack_failure
+      alertThresholdsBeforeEnablement:
+        - dead_letter_count > 0 for any uid shard over a 15 minute window pages memory memory on-call and pauses enablement/expansion.
+        - ack_failed_count > 0 over a 5 minute window pages because Pinecone may have mutated while Firestore ack is ambiguous.
+        - failed_count / leased_count >= 0.10 for 15 minutes warns; >= 0.25 for 15 minutes pages and disables worker expansion.
+        - oldest_pending_age_seconds > 3600 warns; > 21600 pages and blocks cutover because repair backlog is stale.
+        - leased_count == 0 while pending backlog_count > 0 for 30 minutes warns for scheduler/IAM/lease starvation.
+      passFailCriteria:
+        pass:
+          - central sink receives monotonic counters/events with only allowed labels
+          - alert policies exist for dead letters, ack failures, retry spike ratio, and oldest pending backlog age
+          - telemetry emitter failure is recorded separately and never masks worker cleanup/ack result
+        fail:
+          - any metric/event label contains uid, worker_id, vector_id, memory_id, record_id, idempotency_key, or raw error text
+          - production worker can be enabled before alert policies and dashboard queries exist
+          - telemetry exceptions change the worker outbox ack/delete/repair result
+    readOnlyProofRunner:
+      commandInventory: >-
+        python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py
+        --project PROJECT_ID --region REGION
+      executeCommand: >-
+        python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py
+        --project PROJECT_ID --region REGION --execute
+      notes:
+        - The proof runner is read-only and allowlists only gcloud describe/get-iam-policy commands.
+        - Without --execute it prints a NOT_RUN readiness inventory with exact commands and prerequisites.
+        - With --execute it fails honestly when gcloud auth/project/service/job/queue/IAM resources are missing.
+        - production Firestore IAM/deployed rules validation gates remain open until a target project run passes and deployed rules are separately proven.
+        - real Pinecone duplicate stale physical ID delete/repair validation remains open until real ns2 fixtures pass.
+    commandsToRunLater:
+      # Replace PROJECT_ID/REGION/service account names before execution. These
+      # are proof commands only; they were not run while adding this artifact.
+      - python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION
+      - python3 backend/scripts/vector_repair_outbox_oidc_iam_proof.py --project PROJECT_ID --region REGION --execute
+      - gcloud run services describe memory-vector-repair-outbox-worker --region=REGION --project=PROJECT_ID --format=json
+      - gcloud run services get-iam-policy memory-vector-repair-outbox-worker --region=REGION --project=PROJECT_ID --format=json
+      - gcloud scheduler jobs describe memory-vector-repair-outbox-worker-tick --location=REGION --project=PROJECT_ID --format=json
+      - gcloud tasks queues describe memory-vector-repair-outbox-worker --location=REGION --project=PROJECT_ID --format=json
+      - gcloud projects get-iam-policy PROJECT_ID --flatten=bindings[].members --filter='bindings.members:memory-vector-repair-outbox-worker@PROJECT_ID.iam.gserviceaccount.com' --format=json
+      - firebase deploy --only firestore:rules --project PROJECT_ID --dry-run
+    passFailCriteria:
+      pass:
+        - worker service account has roles/datastore.user or narrower custom Firestore role, not owner/editor
+        - scheduler principal has roles/run.invoker and OIDC token creation for only the scheduler service account
+        - scheduler job is paused until explicit rollout approval
+        - task queue concurrency is one and retry/dead-letter settings match this contract
+        - enabled env remains false until all Oracle P0-4 real-service gates pass
+      fail:
+        - any unauthenticated invoker binding exists
+        - any default production deployment sets MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED=true
+        - uid is accepted from a client body without server-owned shard validation
+        - missing dead-letter/backlog alerting or missing Pinecone ns2 proof
+
+  enablementPatchAfterGatesOnly:
+    MEMORY_VECTOR_REPAIR_OUTBOX_WORKER_ENABLED: true
+    warning: Do not set the true value until all production gates pass.

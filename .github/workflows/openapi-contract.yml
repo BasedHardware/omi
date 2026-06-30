@@ -39,21 +39,8 @@ jobs:
         uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
         with:
           enable-cache: true
-          cache-dependency-glob: backend/pylock*.toml
-
-      - name: Install backend dependencies
-        working-directory: backend
-        run: uv pip sync pylock.toml --system
-
-      - name: Prewarm tokenizer cache
-        working-directory: backend
-        run: |
-          python - <<'PY'
-          import tiktoken
-
-          tiktoken.encoding_for_model('gpt-4')
-          PY
+          cache-dependency-glob: backend/openapi-requirements.txt
 
       - name: Check committed OpenAPI contract
         working-directory: backend
-        run: python scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+        run: scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json

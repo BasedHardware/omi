@@ -438,7 +438,10 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                   Text(
                     summary.formattedDate,
                     style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6), fontSize: 13, fontWeight: FontWeight.w500),
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   // Emoji and title row
@@ -901,14 +904,16 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                       shape: BoxShape.circle,
                       border: Border.all(color: const Color(0xFF0A0A0A), width: 2),
                       boxShadow: [
-                        BoxShadow(color: Colors.deepPurple.withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1)
+                        BoxShadow(color: Colors.deepPurple.withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1),
                       ],
                     ),
                   ),
                   // Bottom line (hidden for last item)
                   Expanded(
                     child: Container(
-                        width: 2, color: isLast ? Colors.transparent : Colors.deepPurple.withValues(alpha: 0.4)),
+                      width: 2,
+                      color: isLast ? Colors.transparent : Colors.deepPurple.withValues(alpha: 0.4),
+                    ),
                   ),
                 ],
               ),

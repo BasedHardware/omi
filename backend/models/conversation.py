@@ -129,6 +129,10 @@ class Conversation(BaseModel):
     # Calendar event link - set when conversation overlaps with a Google Calendar event
     calendar_event: Optional[CalendarEventLink] = None
 
+    # Capture-device provenance (optional; absent on legacy conversations).
+    client_device_id: Optional[str] = None
+    client_platform: Optional[str] = None
+
     def __init__(self, **data):
         super().__init__(**data)
         # Update plugins_results based on apps_results
@@ -183,6 +187,9 @@ class CreateConversation(BaseModel):
     is_locked: bool = False
     private_cloud_sync_enabled: bool = False
 
+    client_device_id: Optional[str] = None
+    client_platform: Optional[str] = None
+
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
             self.transcript_segments, include_timestamps=include_timestamps, user_name=user_name, people=people
@@ -206,6 +213,9 @@ class ExternalIntegrationCreateConversation(BaseModel):
     language: Optional[str] = None
 
     app_id: Optional[str] = None
+
+    client_device_id: Optional[str] = None
+    client_platform: Optional[str] = None
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return self.text

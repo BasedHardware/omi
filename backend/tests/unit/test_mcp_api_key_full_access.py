@@ -11,6 +11,7 @@ sys.modules["google.cloud"] = google_cloud
 sys.modules["google.cloud.firestore"] = firestore_module
 
 database_client = ModuleType("database._client")
+database_client.db = None
 database_client.get_firestore_client = lambda: None
 sys.modules["database._client"] = database_client
 redis_stub = ModuleType("database.redis_db")

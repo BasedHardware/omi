@@ -56,6 +56,9 @@ from .preference_tools import (
 from .web_tools import (
     fetch_url_tool,
 )
+from .graph_tools import (
+    traverse_knowledge_graph_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
@@ -83,4 +86,5 @@ __all__ = [
     'search_screen_activity_tool',
     'save_user_preference_tool',
     'fetch_url_tool',
+    'traverse_knowledge_graph_tool',
 ]

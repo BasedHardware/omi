@@ -9401,6 +9401,17 @@ class AppLocalizationsRu extends AppLocalizations {
   String get transcribeLaterPaused => 'Пауза — аудио не записывается';
 
   @override
+  String get memoryThisDevice => 'Это устройство';
+  @override
+  String get memoryThisIphone => 'Этот iPhone';
+  @override
+  String get memoryThisPhone => 'Этот телефон';
+  @override
+  String get memoryProvenanceMac => 'Mac';
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+  @override
+  String get memoryProvenanceAndroid => 'Android';
   String get deviceTutorial => 'Как пользоваться Omi';
 
   @override

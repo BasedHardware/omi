@@ -147,6 +147,8 @@ if not hasattr(_endpoints, 'get_current_user_uid'):
     _endpoints.get_current_user_uid = _fake_get_current_user_uid
 if not hasattr(_endpoints, 'with_rate_limit'):
     _endpoints.with_rate_limit = _fake_with_rate_limit
+if not hasattr(_endpoints, 'with_rate_limit_context'):
+    setattr(_endpoints, 'with_rate_limit_context', _fake_with_rate_limit)
 if not hasattr(_endpoints, 'get_user'):
     _endpoints.get_user = MagicMock()
 
@@ -173,7 +175,8 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
-from dependencies import get_uid_with_memories_read  # noqa: E402
+from dependencies import get_developer_memory_default_memory_read_context  # noqa: E402
+from utils.memory.product_authorization import ProductAuthorizationDecision  # noqa: E402
 
 _VALID_CATEGORY = next(iter(MemoryCategory)).value
 
@@ -219,9 +222,35 @@ def _legacy_memory(mid):
 
 
 def _build():
+    auth_context = developer_module.ProductAuthorizationContext(
+        uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
+    )
+    developer_module.authorize_memory_external_default_memory_read = MagicMock(
+        return_value=ProductAuthorizationDecision(
+            allowed=True,
+            context=auth_context,
+            db_client=None,
+            read_decision=developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
+            reason='test_legacy_safe',
+            observability={'enabled': True},
+            status_code=200,
+        )
+    )
+    developer_module.search_memory_default_developer_memories = MagicMock(
+        return_value=type(
+            'LegacySafeMemoryResult',
+            (),
+            {
+                'read_decision': developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
+                'memories': [],
+                'fallback_reason': 'test_legacy_safe',
+                'should_use_legacy_fallback': True,
+            },
+        )()
+    )
     app = FastAPI()
     app.include_router(developer_router)
-    app.dependency_overrides[get_uid_with_memories_read] = lambda: 'uid1'
+    app.dependency_overrides[get_developer_memory_default_memory_read_context] = lambda: auth_context
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -267,8 +296,9 @@ def test_pagination_is_clamped_before_firestore():
     # would raise (HTTP 500), an oversized/zero limit would stream the whole collection. Mirrors
     # the mobile /v3/memories hardening. get_memories(uid, limit, offset, categories) is positional.
     with patch.object(memories_db, 'get_memories', return_value=[]) as m:
-        developer_module.get_memories(uid='uid1', limit=99999, offset=-1)
-        developer_module.get_memories(uid='uid1', limit=0, offset=5)
+        client = _build()
+        assert client.get('/v1/dev/user/memories?limit=99999&offset=-1').status_code == 200
+        assert client.get('/v1/dev/user/memories?limit=0&offset=5').status_code == 200
     high = m.call_args_list[0].args
     assert high[1] == 1000 and high[2] == 0  # limit 99999 -> 1000, offset -1 -> 0
     assert m.call_args_list[1].args[1] == 1  # limit 0 -> 1

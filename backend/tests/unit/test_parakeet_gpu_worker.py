@@ -205,11 +205,8 @@ class TestGPUWorkerQueueFull:
         worker = GPUWorker()
         worker._running = True
         worker._ready.set()
-        for _ in range(512):
-            try:
-                worker._queue.put_nowait(WorkItem(WorkType.BATCH_TRANSCRIBE, {}))
-            except queue.Full:
-                break
+        worker._queue = MagicMock()
+        worker._queue.put.side_effect = queue.Full
 
         with pytest.raises(RuntimeError, match="GPU queue full"):
             worker.submit_sync({"audio_paths": ["/tmp/a.wav"]}, timeout=0.1)
