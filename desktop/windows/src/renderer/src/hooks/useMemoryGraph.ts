@@ -3,9 +3,15 @@ import type { KnowledgeGraph } from '../../../shared/types'
 import type { Memory } from './useMemories'
 import { useKnowledgeGraph } from './useKnowledgeGraph'
 import { mergeGraphs, scopeGraphToMemories } from '../lib/mergeGraphs'
+import { capGraphToMostConnected, starGraphToCenter } from '../lib/graphCap'
 import { USER_NODE_ID } from '../lib/onboardingGraphModel'
 
 const EMPTY: KnowledgeGraph = { nodes: [], edges: [] }
+
+// Most-connected nodes kept on the brain map. Kept deliberately small: each node
+// is a sphere + glow + an SDF text label rendered every frame, so a high count
+// both clutters the globe and drags the framerate. The rest stay in the list below.
+const MAX_GRAPH_NODES = 24
 
 // The Memories brain map is the onboarding graph "and beyond": the persisted
 // onboarding graph (you → language → apps, seeded during onboarding so it's
@@ -60,7 +66,7 @@ export function useMemoryGraph(memories: Memory[]): {
   // KG down to entities that reference a memory the user actually has.
   const memoryIds = useMemo(() => new Set(memories.map((m) => m.id)), [memories])
 
-  const graph = useMemo(() => {
+  const merged = useMemo(() => {
     if (memoryCount === 0 || !kg) return mergeGraphs(floor, EMPTY)
     // Scope the account-wide KG to entities tied to a current memory. An empty
     // result is CORRECT (not a bug to paper over): it means the server snapshot
@@ -69,9 +75,22 @@ export function useMemoryGraph(memories: Memory[]): {
     // memories' phantom nodes reappear.
     return mergeGraphs(floor, scopeGraphToMemories(kg, memoryIds))
   }, [floor, kg, memoryCount, memoryIds])
-  const centerNodeId = graph.nodes.some((n) => n.id === USER_NODE_ID)
+
+  const centerNodeId = merged.nodes.some((n) => n.id === USER_NODE_ID)
     ? USER_NODE_ID
-    : graph.nodes.find((n) => n.nodeType === 'person')?.id
+    : merged.nodes.find((n) => n.nodeType === 'person')?.id
+
+  // Cap to the most-connected nodes (by real connectivity) so a large memory set
+  // can't freeze the map, then collapse to a STAR around the center — every node
+  // connects only to "you", no inter-node edges — matching the macOS brain map.
+  const graph = useMemo(
+    () =>
+      starGraphToCenter(
+        capGraphToMostConnected(merged, centerNodeId, MAX_GRAPH_NODES),
+        centerNodeId
+      ),
+    [merged, centerNodeId]
+  )
 
   return { graph, centerNodeId }
 }

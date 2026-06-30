@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { startTranscription, type TranscriptionHandle } from '../lib/transcriptionClient'
+import { getPreferences } from '../lib/preferences'
+import { micAudioConstraints } from '../lib/micDevices'
 import type { TranscriptLine } from '../../../shared/types'
 import {
   HOLD_THRESHOLD_MS,
@@ -37,11 +39,6 @@ type Options = {
    *  the caller can render it in the input box before it's sent. Fires '' at the
    *  start of a capture to clear any leftover. */
   onTranscript: (text: string) => void
-  /** Fires when a hold-capture finalizes, whether or not it produced any
-   *  transcript. Lets a caller treat the GESTURE as complete even when cloud
-   *  transcription was unavailable (e.g. quota/1008 closed the socket) — used by
-   *  onboarding so a no-quota account isn't dead-ended on "hold Space and speak". */
-  onCaptureEnd?: () => void
   /** Restore the input to its pre-hold contents, removing the space(s) that were
    *  typed while the key was held. Receives the snapshot captured at key-down. */
   restoreDraft: (snapshot: string) => void
@@ -142,7 +139,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
 
   const startAudioViz = async (session: number): Promise<void> => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      // Visualize the SAME input the transcription stream uses (Settings → General).
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: micAudioConstraints(getPreferences().micDeviceId)
+      })
       // Superseded OR already released while awaiting permission — drop the stream so
       // a fast key-drop doesn't leave the mic open.
       if (sessionRef.current !== session || !recordingRef.current) {
@@ -310,9 +310,6 @@ export function usePushToTalk(opts: Options): PushToTalk {
       linesRef.current = []
       interimRef.current = ''
       sessionRef.current++ // invalidate any still-pending async work from this session
-      // The hold-capture gesture completed (even if STT produced nothing, e.g.
-      // quota/1008 or silence) — notify before the text-gated send.
-      opts.onCaptureEnd?.()
       if (text) onCommit(text)
     }
 

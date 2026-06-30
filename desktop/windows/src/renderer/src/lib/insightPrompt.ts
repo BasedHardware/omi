@@ -25,17 +25,35 @@ export const INSIGHT_RESPONSE_SCHEMA = {
   required: ['has_insight']
 } as const
 
-export function buildInsightPrompt(activitySummary: string, recentHeadlines: string[]): string {
+export function buildInsightPrompt(
+  activitySummary: string,
+  recentHeadlines: string[],
+  opts: { force?: boolean } = {}
+): string {
   const recent = recentHeadlines.length
     ? `\nAlready-given insights (do NOT repeat these):\n- ${recentHeadlines.join('\n- ')}`
     : ''
+  // Normal runs are selective (most of the time there's nothing worth a toast).
+  // A forced run (Settings "test" button) must ALWAYS return one so the user can
+  // see a real insight built from their current screen.
+  const decision = opts.force
+    ? [
+        'Look at a summary of what the user has been doing on screen (from OCR) and return the ONE',
+        'most useful insight or piece of advice about their CURRENT activity. ALWAYS return',
+        'has_insight=true — if nothing is clearly actionable, give a brief, specific observation about',
+        'what they are doing right now. Never decline.'
+      ]
+    : [
+        'You look at a summary of what the user has been doing on screen (from OCR) and decide if there',
+        'is ONE genuinely useful, non-obvious insight or piece of advice worth interrupting them for.',
+        'Most of the time there is NOT — only surface something clearly helpful. If you have one, return',
+        'has_insight=true; otherwise has_insight=false.'
+      ]
   return [
-    'You look at a summary of what the user has been doing on screen (from OCR) and decide if there',
-    'is ONE genuinely useful, non-obvious insight or piece of advice worth interrupting them for.',
-    'Most of the time there is NOT — only surface something clearly helpful.',
-    'If you have one, return has_insight=true with: headline (<=5 words), advice (1-2 sentences,',
-    '<=100 chars), reasoning, category (productivity|communication|learning|health|other),',
-    'source_app, confidence (0-1). Otherwise has_insight=false. Do not invent anything not in the text.',
+    ...decision,
+    'When returning an insight include: headline (<=5 words), advice (1-2 sentences, <=100 chars),',
+    'reasoning, category (productivity|communication|learning|health|other), source_app,',
+    'confidence (0-1). Do not invent anything not in the text.',
     recent,
     '',
     'Recent screen activity:',

@@ -67,21 +67,24 @@ export function RewindTimelineBar({
   const ticks = span ? localAxisTicks(minTs, maxTs, Math.max(4, Math.round(contentWidth / 110))) : []
   const segments = span ? activitySegments(frames.map((f) => f.ts), REWIND_ACTIVITY_GAP_MS) : []
 
-  // Center the cursor whenever it actually CHANGES — the initial open position
-  // (the newest frame, so the bar lands on the recent edge), a seek, or live-follow.
-  // NOT on the per-second live poll: `span` is a fresh object every render, so
-  // without this guard the effect would fire each tick and yank the bar back to the
-  // cursor while the user is panning through history. Guarding on the cursor value
-  // (not a one-shot `didInit`) also survives the load race where the frames and the
-  // most-recent cursor arrive in separate renders.
-  const lastCursorRef = useRef<number | null>(null)
+  // Auto-center the view on the cursor for the INITIAL open (land on the recent
+  // edge). Stick to the live edge (newest is on the RIGHT): scroll to the end on
+  // open and as new frames extend the timeline — UNTIL the user scrolls back into
+  // history, then leave their position alone (no yank). It re-sticks if they
+  // scroll back to the end. (Classic "stick to bottom unless scrolled up".)
+  const stickToEndRef = useRef(true)
   useEffect(() => {
     const outer = outerRef.current
-    if (!outer || !span) return
-    if (lastCursorRef.current === cursorTs) return // not a seek → leave the user's pan alone
-    lastCursorRef.current = cursorTs
-    outer.scrollLeft = Math.max(0, tsToX(cursorTs, span) - outer.clientWidth / 2)
-  }, [contentWidth, cursorTs, span])
+    if (!outer || !span || !stickToEndRef.current) return
+    outer.scrollLeft = outer.scrollWidth // clamped to max → flush to the live edge
+  }, [contentWidth, span])
+
+  const onUserScroll = (): void => {
+    const outer = outerRef.current
+    if (!outer) return
+    const maxScroll = outer.scrollWidth - outer.clientWidth
+    stickToEndRef.current = outer.scrollLeft >= maxScroll - 24 // within 24px of the end
+  }
 
   return (
     <div className="w-full">
@@ -90,6 +93,7 @@ export function RewindTimelineBar({
       </div>
       <div
         ref={outerRef}
+        onScroll={onUserScroll}
         // A vertical wheel doesn't scroll an overflow-x container, so translate it.
         onWheel={(e) => {
           const el = outerRef.current

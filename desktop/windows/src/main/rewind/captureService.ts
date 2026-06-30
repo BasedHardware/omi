@@ -7,9 +7,11 @@ import { shouldCaptureFrame } from './captureDecision'
 import { rewindFramePath } from './paths'
 import { helperProcess } from '../ocr/helperProcess'
 import { insertRewindFrame, setRewindFrameOcr } from '../ipc/db'
-import { setCurrentScreen } from './currentScreen'
+import { setCurrentScreen, reaffirmCurrentScreen } from './currentScreen'
+import { createLatestRunner } from './latestRunner'
 import { getPersistedRewindSettings, persistRewindSettings } from './rewindSettings'
 import { BUILT_IN_EXCLUDED_APPS } from '../../shared/rewindExclusions'
+import { DEFAULT_CAPTURE_MAX_EDGE } from '../../shared/rewindResolution'
 import type { RewindSettings } from '../../shared/types'
 
 const HASH_W = 16
@@ -19,6 +21,9 @@ const IDLE_THRESHOLD_SECONDS = 60
 let locked = false
 let lastHash: string | null = null
 let powerListenersBound = false
+// Last logged frame dimensions, so the resolution-change log fires only on change.
+let lastLoggedWidth = 0
+let lastLoggedHeight = 0
 // In-memory mirror of the persisted settings. startRewindCapture() loads the
 // saved value (defaulting to capture-on) at startup; updateRewindSettings()
 // keeps this and the on-disk copy in sync. Defaults to capture-on for any
@@ -27,7 +32,8 @@ let settings: RewindSettings = {
   captureEnabled: true,
   intervalMs: 1000,
   retentionDays: 14,
-  excludedApps: []
+  excludedApps: [],
+  captureMaxEdge: DEFAULT_CAPTURE_MAX_EDGE
 }
 
 function bindPowerListeners(): void {
@@ -39,33 +45,32 @@ function bindPowerListeners(): void {
 
 export type IngestResult = { captured: boolean; reason?: string }
 
-// Single-flight guard so the background "current screen" OCR never stacks: the
-// helper processes one frame at a time, and a captured frame arrives ~every second.
-// If an OCR is already running we skip this frame — the cache stays ~1-2s fresh,
-// which is plenty for the chat's instant read.
-let screenOcrInFlight = false
-
 /**
  * Keep the chat's hot "current screen" cache fresh: OCR a just-captured frame in
  * the background and store the text in {@link setCurrentScreen}, so the chat reads
  * it with zero latency. Also persists the OCR onto the frame so the slower
  * backfiller doesn't re-OCR it. Best-effort and NEVER awaited by the capture path.
+ *
+ * Single-flight with trailing-edge coalescing to the LATEST frame: the helper
+ * OCRs one frame at a time (~0.2-2.5s) while captured frames arrive every ~1s, so
+ * when the screen changes faster than OCR completes we must keep the NEWEST frame
+ * and process it next — not drop it. A plain "skip if busy" guard dropped the new
+ * frame, and since `lastHash` had already advanced, every later (identical) frame
+ * was a duplicate → OCR never re-ran → the cache stayed stranded on the OLD
+ * screen's text (the "reads an old screen / looks frozen" bug).
  */
-async function refreshCurrentScreen(frameId: number, jpeg: Buffer): Promise<void> {
-  if (screenOcrInFlight) return
-  screenOcrInFlight = true
-  try {
+const submitScreenOcr = createLatestRunner<{ frameId: number; jpeg: Buffer }>(
+  async ({ frameId, jpeg }) => {
     const res = await helperProcess.ocr(jpeg)
     if (res.ok) {
       setCurrentScreen(res.fullText)
       setRewindFrameOcr(frameId, res.fullText)
+      console.log(`[rewind:screen] cache <- ${res.fullText.length} chars (frame ${frameId})`)
+    } else {
+      console.warn(`[rewind:screen] OCR failed (frame ${frameId}): ${res.code} ${res.message ?? ''}`)
     }
-  } catch {
-    /* best-effort: keep the last good cached value */
-  } finally {
-    screenOcrInFlight = false
   }
-}
+)
 
 /**
  * Ingest one screen frame (JPEG bytes) sampled by the renderer's capture host
@@ -83,34 +88,28 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
   // other app; the timeline keeps filling (and the chat's screen cache stays fresh)
   // even while Omi is focused. The dedup hash below still skips unchanged frames.
 
+  // Read foreground-window metadata (for exclusion + sensitive-title gating and
+  // for storage) from the always-instant, in-process user32 readers — NOT the C#
+  // helper. The helper is single-threaded and now constantly busy OCRing the live
+  // screen, so a windowInfo() call there queues behind the in-flight OCR
+  // (~0.5-2.5s, measured) and stalls EVERY capture, stretching the cadence and
+  // delaying how fast a screen change reaches the chat. user32 is ~ms and never
+  // contends. (Slight cosmetic cost: the timeline shows the capitalized exe name
+  // "Chrome" rather than the helper's friendly "Google Chrome"; exclusion
+  // matching is unaffected since it's case-insensitive substring on app + proc.)
   let win = { app: '', title: '', processName: '' }
-  try {
-    const info = await helperProcess.windowInfo()
-    // Prefer the friendly app name ("Google Chrome") over the exe ("chrome");
-    // keep the raw process name in its own field.
-    win = { app: info.app || info.processName, title: info.title, processName: info.processName }
-  } catch {
-    /* helper unavailable; fall back below */
-  }
-  // The C# helper isn't always running (OCR is shelved), so windowInfo() often
-  // yields nothing → every frame would read "Unknown app". Fall back to the
-  // always-available koffi/user32 foreground reader (same source app-usage uses)
-  // and derive a name from the foreground exe.
-  if (!win.app) {
-    const exe = getForegroundExePath()
-    if (exe) {
-      const proc = basename(exe).replace(/\.exe$/i, '')
-      win = {
-        app: proc ? proc.charAt(0).toUpperCase() + proc.slice(1) : '',
-        title: win.title,
-        processName: win.processName || proc
-      }
+  const exe = getForegroundExePath()
+  if (exe) {
+    const proc = basename(exe).replace(/\.exe$/i, '')
+    win = {
+      app: proc ? proc.charAt(0).toUpperCase() + proc.slice(1) : '',
+      title: '',
+      processName: proc
     }
   }
-  // The helper rarely runs (OCR shelved), so the title is usually empty — but the
-  // window title is what catches login/private-browsing screens in a normal
-  // browser. Read it directly from user32 (GetWindowTextW) as a fallback.
-  if (!win.title) win.title = getForegroundWindowTitle() ?? ''
+  // The window title is what catches login/private-browsing screens in a normal
+  // browser, so always read it (GetWindowTextW).
+  win.title = getForegroundWindowTitle() ?? ''
 
   const image = nativeImage.createFromBuffer(jpeg)
   if (image.isEmpty()) return { captured: false, reason: 'decode-failed' }
@@ -130,13 +129,28 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
     hash,
     lastHash
   })
-  if (!decision.capture) return { captured: false, reason: decision.reason }
+  if (!decision.capture) {
+    // A duplicate frame means the screen is unchanged since the last captured +
+    // OCR'd frame, so the hot "current screen" cache text is still accurate right
+    // now — re-affirm its freshness (no re-OCR) so a static screen doesn't age the
+    // cache out (CACHE_FRESH_MS) and leave the chat unable to read it. Other skip
+    // reasons (idle/lock/excluded/sensitive) intentionally let the cache go stale.
+    if (decision.reason === 'duplicate') reaffirmCurrentScreen()
+    return { captured: false, reason: decision.reason }
+  }
 
   try {
     const ts = Date.now()
     const path = rewindFramePath(ts)
     writeFileSync(path, jpeg)
     const { width, height } = image.getSize()
+    // Log frame dimensions only when they change — lets the resolution Setting be
+    // verified (the longest edge should track captureMaxEdge) without per-frame spam.
+    if (width !== lastLoggedWidth || height !== lastLoggedHeight) {
+      lastLoggedWidth = width
+      lastLoggedHeight = height
+      console.log(`[rewind] frame size ${width}x${height} (captureMaxEdge=${settings.captureMaxEdge})`)
+    }
     const id = insertRewindFrame({
       ts,
       app: win.app,
@@ -150,8 +164,9 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
     })
     lastHash = hash
     // Update the chat's hot "current screen" cache from this fresh frame, in the
-    // background (single-flight). Not awaited: capture cadence must not wait on OCR.
-    void refreshCurrentScreen(id, jpeg)
+    // background. Coalesces to the latest frame; never awaited (capture cadence
+    // must not wait on OCR).
+    submitScreenOcr({ frameId: id, jpeg })
     return { captured: true }
   } catch (e) {
     console.error('[rewind] capture failed:', (e as Error).message)

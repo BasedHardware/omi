@@ -5,7 +5,16 @@ import { PageHeader } from '../components/layout/PageHeader'
 import { liveConversation, requestFinalize, type LiveStatus } from '../lib/liveConversation'
 import { startLiveMicSession } from '../lib/liveMicSession'
 import { getPreferences } from '../lib/preferences'
+import { makeSpeakerLabeler } from '../lib/speakerLabel'
 import type { TranscriptLine } from '../../../shared/types'
+
+// Live lines carry only the raw diarization fields (no `source`); the labeler
+// keeps a solo speaker as "You" and numbers the voices once more than one is
+// heard (live can't yet tell which of several is you — the saved conversation
+// gets that from the backend's per-speaker identification).
+function lineFields(line: TranscriptLine): { speaker_id?: number; is_user?: boolean } {
+  return { speaker_id: line.speakerId, is_user: line.isUser }
+}
 
 function statusLabel(status: LiveStatus): string {
   if (status === 'connecting') return 'Connecting…'
@@ -90,16 +99,19 @@ export function LiveConversation(): React.JSX.Element {
             </div>
             {segments.length > 0 ? (
               <ul className="space-y-4">
-                {segments.map((s, i) => (
-                  <li key={s.id ?? i} className="flex gap-3 animate-fade-in">
-                    <span className="shrink-0 self-start rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/75">
-                      {s.speaker || 'speaker'}
-                    </span>
-                    <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-white/85">
-                      {s.text}
-                    </p>
-                  </li>
-                ))}
+                {(() => {
+                  const labelFor = makeSpeakerLabeler(segments.map(lineFields))
+                  return segments.map((s, i) => (
+                    <li key={s.id ?? i} className="flex gap-3 animate-fade-in">
+                      <span className="shrink-0 self-start rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/75">
+                        {labelFor(lineFields(s)) || s.speaker || 'Speaker'}
+                      </span>
+                      <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-white/85">
+                        {s.text}
+                      </p>
+                    </li>
+                  ))
+                })()}
               </ul>
             ) : (
               <p className="text-sm text-white/45">

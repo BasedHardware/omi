@@ -13,6 +13,9 @@ export type ConversationRow = {
   // True for optimistic placeholder rows shown immediately on finalize (titled
   // client-side, dropped once the backend's real conversation arrives).
   pending?: boolean
+  // Full transcript text — kept only for pending rows so their detail view can
+  // render without a cloud GET (their `pending-*` id doesn't exist cloud-side).
+  transcript?: string
   sortAt: number
 }
 
@@ -80,6 +83,12 @@ export function getPendingConversations(): ConversationRow[] {
   return pending
 }
 
+// Look up a single optimistic pending row by id so the detail view can render it
+// locally instead of doing a cloud GET (which 404s — pending ids aren't cloud-side).
+export function getPendingConversation(id: string): ConversationRow | undefined {
+  return pending.find((p) => p.id === id)
+}
+
 // Add a placeholder row (empty title → the list renders "loading…" in italic) and
 // notify mounted lists. Returns its id so the titler can fill it in.
 export function addPendingConversation(transcript: string): string {
@@ -94,6 +103,7 @@ export function addPendingConversation(transcript: string): string {
       preview: transcript.slice(0, 200) || '(no transcript)',
       source: 'cloud',
       pending: true,
+      transcript,
       sortAt: now
     },
     ...pending
@@ -102,6 +112,16 @@ export function addPendingConversation(transcript: string): string {
   // its already-loaded rows.
   subscribers.forEach((cb) => cb())
   return id
+}
+
+// Remove an optimistic pending row — e.g. the user deleted it from the list
+// before the backend's real conversation arrived. Without this, a "delete" on a
+// pending row hits the cloud DELETE with a `pending-*` id (404) and the row
+// survives in this in-memory store, reappearing on the next list load.
+export function removePendingConversation(id: string): void {
+  const before = pending.length
+  pending = pending.filter((p) => p.id !== id)
+  if (pending.length !== before) subscribers.forEach((cb) => cb())
 }
 
 export function setPendingTopic(id: string, title: string, emoji: string): void {

@@ -2,18 +2,43 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw, Loader2, Trash2, Sparkles, Copy, Check } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
-import { invalidateConversationsCache } from '../lib/pageCache'
+import {
+  invalidateConversationsCache,
+  getPendingConversation,
+  subscribeConversations
+} from '../lib/pageCache'
+import { classifyConversationId } from '../lib/conversationTypes'
 import { toast } from '../lib/toast'
 import type { ChatMessage } from '../../../shared/types'
 import { PageHeader } from '../components/layout/PageHeader'
 import { Spinner } from '../components/ui/Spinner'
+import { Markdown } from '../components/Markdown'
+import { normalizeAppResults, getAppName, type AppResult } from '../lib/chatApps'
+import { makeSpeakerLabeler } from '../lib/speakerLabel'
+
+// A transcript line. `speaker` may be a raw diarization tag ("SPEAKER_00") or a
+// real assigned name; `is_user`/`speaker_id` carry the identity the auto-assign
+// pipeline produces. speakerLabel() turns these into a readable badge.
+type TranscriptSegment = {
+  text: string
+  speaker?: string
+  is_user?: boolean
+  speaker_id?: number
+  // A person the backend matched this voice to (speaker identification).
+  person_name?: string
+  // For local screen recordings: which stream this line came from, so the mic
+  // and system-audio speakers (numbered independently) stay distinguishable.
+  source?: 'mic' | 'system'
+  start?: number
+  end?: number
+}
 
 type ServerConversation = {
   id: string
   title?: string | null
   overview?: string | null
   status?: string | null
-  transcript_segments?: { text: string; speaker?: string; start?: number; end?: number }[]
+  transcript_segments?: TranscriptSegment[]
   structured?: {
     title?: string | null
     overview?: string | null
@@ -21,6 +46,9 @@ type ServerConversation = {
     category?: string | null
     emoji?: string | null
   } | null
+  // Per-app outputs produced server-side by the user's enabled apps (summary/
+  // memory-capable). Each is { app_id, content }.
+  apps_results?: { app_id?: string; content?: string }[]
   created_at?: string
   finished_at?: string
 }
@@ -30,11 +58,15 @@ type Display = {
   emoji?: string
   subtitle?: string
   overview?: string
-  segments?: { text: string; speaker?: string; start?: number; end?: number }[]
+  segments?: TranscriptSegment[]
   transcript?: string
   actionItems?: { id?: string; description: string; completed?: boolean }[]
   chatMessages?: ChatMessage[]
+  appResults?: AppResult[]
   isLocal: boolean
+  // True for optimistic `pending-*` placeholders: rendered from the in-memory
+  // pending store (no cloud row yet), read-only, shown as still-processing.
+  isPending?: boolean
   status?: string
   processing: boolean
 }
@@ -50,6 +82,7 @@ function mapServer(c: ServerConversation): Display {
     overview,
     segments: c.transcript_segments,
     actionItems: c.structured?.action_items,
+    appResults: normalizeAppResults(c.apps_results),
     isLocal: false,
     status,
     processing: status === 'processing'
@@ -75,6 +108,31 @@ function CopyTranscriptButton(props: { transcript: string }): React.JSX.Element 
       {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
       {copied ? 'Copied' : 'Copy'}
     </button>
+  )
+}
+
+/** One app's output for a conversation. Resolves the app_id → display name from
+ *  the cached catalog (best-effort; falls back to a generic label). */
+function AppResultCard({ result }: { result: AppResult }): React.JSX.Element {
+  const [name, setName] = useState<string | null>(null)
+  useEffect(() => {
+    let active = true
+    if (result.app_id) {
+      void getAppName(result.app_id).then((n) => {
+        if (active && n) setName(n)
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [result.app_id])
+  return (
+    <div className="surface-card p-6 animate-fade-in">
+      <h2 className="section-label mb-3">{name ?? 'App insight'}</h2>
+      <div className="text-sm leading-relaxed text-white/85">
+        <Markdown text={result.content} />
+      </div>
+    </div>
   )
 }
 
@@ -115,8 +173,39 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
     return mapServer(r.data)
   }
 
-  const load = async (idStr: string, isLocal: boolean): Promise<void> => {
+  // Build the read-only display for an optimistic pending placeholder. Returns
+  // null if the row is gone (the backend's real conversation arrived and it was
+  // reconciled away, or it aged past the TTL) so callers can show a notice
+  // instead of a stale view or a cloud 404.
+  const pendingDisplay = (idStr: string): Display | null => {
+    const p = getPendingConversation(idStr)
+    if (!p) return null
+    return {
+      title: p.title || 'Processing…',
+      emoji: p.emoji,
+      subtitle: p.subtitle,
+      transcript: p.transcript || p.preview,
+      isLocal: false,
+      isPending: true,
+      status: 'processing',
+      processing: true
+    }
+  }
+
+  const load = async (idStr: string, kind: ReturnType<typeof classifyConversationId>): Promise<void> => {
     try {
+      if (kind === 'pending') {
+        const d = pendingDisplay(idStr)
+        if (!d) {
+          setError(
+            'This conversation finished saving to Omi. Head back to the list — it now appears there with its full summary.'
+          )
+          return
+        }
+        setDisplay(d)
+        return
+      }
+      const isLocal = kind === 'local'
       if (isLocal) {
         const c = await window.omi.getLocalConversation(idStr)
         if (!c) {
@@ -134,15 +223,28 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
           })
           return
         }
+        // Prefer the stored per-speaker segments (screen recordings). Older
+        // recordings only have the flattened transcript — fall back to a single
+        // block so they still render.
+        const segments =
+          c.segments && c.segments.length > 0
+            ? c.segments.map((s) => ({
+                text: s.text,
+                speaker: s.speaker,
+                speaker_id: s.speakerId,
+                is_user: s.isUser,
+                source: s.source
+              }))
+            : c.transcript
+              ? [{ text: c.transcript, speaker: 'SPEAKER_00', start: 0 }]
+              : undefined
         setDisplay({
           title: c.title || 'Recording',
           subtitle: `${new Date(c.startedAt).toLocaleString()} · ${Math.round(
             (c.endedAt - c.startedAt) / 1000
           )}s · local only`,
           transcript: c.transcript,
-          segments: c.transcript
-            ? [{ text: c.transcript, speaker: 'SPEAKER_00', start: 0 }]
-            : undefined,
+          segments,
           isLocal: true,
           processing: false
         })
@@ -158,17 +260,33 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
 
   useEffect(() => {
     if (!id) return
-    const isLocal = id.startsWith('local-') || id.startsWith('chat-')
     setError(null)
     setDisplay(null)
-    load(id, isLocal)
+    load(id, classifyConversationId(id))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  // While viewing a pending placeholder, re-read it when the pending store
+  // changes so its client-side title/emoji fill in, and so we swap to the
+  // "now saved" notice the moment the backend's real conversation reconciles it
+  // away — all without ever issuing a cloud GET for the (404-ing) pending id.
+  useEffect(() => {
+    if (!id || classifyConversationId(id) !== 'pending') return
+    return subscribeConversations(() => {
+      const d = pendingDisplay(id)
+      if (d) setDisplay(d)
+      else
+        setError(
+          'This conversation finished saving to Omi. Head back to the list — it now appears there with its full summary.'
+        )
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   // Poll while Omi is still processing — title/overview/action_items become
   // available once the pipeline finishes summarizing the segments we POSTed.
   useEffect(() => {
-    if (!id || !display || display.isLocal) return
+    if (!id || !display || display.isLocal || display.isPending) return
     if (!display.processing) {
       if (pollHandle.current) {
         clearInterval(pollHandle.current)
@@ -205,8 +323,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
   const onRefresh = async (): Promise<void> => {
     if (!id || refreshing) return
     setRefreshing(true)
-    const isLocal = id.startsWith('local-') || id.startsWith('chat-')
-    await load(id, isLocal)
+    await load(id, classifyConversationId(id))
     setRefreshing(false)
   }
 
@@ -325,7 +442,7 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                 Processing
               </span>
             )}
-            {display.isLocal ? (
+            {display.isPending ? null : display.isLocal ? (
               <>
                 <span className={display.chatMessages ? 'badge' : 'badge-warning'}>
                   {display.chatMessages ? 'Chat' : 'local'}
@@ -364,11 +481,27 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
       <div className="flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
         <div className="mx-auto max-w-3xl">
           <div className="space-y-4">
+            {display.isPending && (
+              <div className="surface-card flex items-center gap-3 p-4 animate-fade-in">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-white/60" />
+                <p className="text-sm leading-relaxed text-white/70">
+                  Omi is still summarizing this conversation. The transcript is shown below;
+                  the summary and action items will appear here once processing finishes.
+                </p>
+              </div>
+            )}
             {display.overview && (
               <div className="surface-card p-6 animate-fade-in">
                 <h2 className="section-label mb-3">Summary</h2>
                 <p className="text-sm leading-relaxed text-white/85">{display.overview}</p>
               </div>
+            )}
+            {display.appResults && display.appResults.length > 0 && (
+              <>
+                {display.appResults.map((r, i) => (
+                  <AppResultCard key={r.app_id ?? i} result={r} />
+                ))}
+              </>
             )}
             {display.actionItems && display.actionItems.length > 0 && (
               <div className="surface-card p-6 animate-fade-in">
@@ -419,9 +552,15 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                 <CopyTranscriptButton
                   transcript={
                     display.segments
-                      ? display.segments
-                          .map((s) => `${s.speaker ? `[${s.speaker}] ` : ''}${s.text}`)
-                          .join('\n\n')
+                      ? (() => {
+                          const labelFor = makeSpeakerLabeler(display.segments)
+                          return display.segments
+                            .map((s) => {
+                              const who = labelFor(s)
+                              return `${who ? `[${who}] ` : ''}${s.text}`
+                            })
+                            .join('\n\n')
+                        })()
                       : (display.transcript ?? '')
                   }
                 />
@@ -447,18 +586,31 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                 </ul>
               ) : display.segments && display.segments.length > 0 ? (
                 <ul className="space-y-4">
-                  {display.segments.map((s, i) => {
-                    const label = s.speaker || 'speaker'
-                    return (
-                      <li key={i} className="flex gap-3 animate-fade-in">
-                        <span
-                          className={`shrink-0 self-start rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
-                            label
-                          )}`}
-                        >
-                          {label.replace(/^SPEAKER_/, 'S')}
-                        </span>
-                        <div className="min-w-0 flex-1">
+                  {(() => {
+                    // Only flag the source when a recording actually mixes mic +
+                    // system audio (their speaker numbers are independent).
+                    const segs = display.segments
+                    const mixed =
+                      segs.some((s) => s.source === 'mic') &&
+                      segs.some((s) => s.source === 'system')
+                    const labelFor = makeSpeakerLabeler(segs)
+                    return segs.map((s, i) => {
+                      const label = labelFor(s) ?? 'Speaker'
+                      return (
+                        <li key={i} className="flex gap-3 animate-fade-in">
+                          <span
+                            className={`shrink-0 self-start rounded-full border px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide ${speakerColor(
+                              label
+                            )}`}
+                          >
+                            {label}
+                          </span>
+                          {mixed && s.source === 'system' && (
+                            <span className="shrink-0 self-start rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wide text-white/40">
+                              system
+                            </span>
+                          )}
+                          <div className="min-w-0 flex-1">
                           {s.start != null && (
                             <div className="text-[10px] font-mono text-white/35">
                               {formatStart(s.start)}
@@ -469,8 +621,9 @@ export function ConversationDetail({ conversationId }: { conversationId: string 
                           </p>
                         </div>
                       </li>
-                    )
-                  })}
+                      )
+                    })
+                  })()}
                 </ul>
               ) : (
                 <pre className="whitespace-pre-wrap font-body text-sm leading-relaxed text-white/75">

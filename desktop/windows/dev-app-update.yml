@@ -1,0 +1,8 @@
+# Lets electron-updater run against GitHub Releases from an UNPACKED build
+# (`npm run build:unpack`) when you also set `autoUpdater.forceDevUpdateConfig`,
+# so the update round-trip can be exercised without a full install. Excluded from
+# the packaged app (the real app-update.yml is generated from electron-builder.yml).
+provider: github
+owner: andermont
+repo: omi-windows
+updaterCacheDirName: omi-windows-updater

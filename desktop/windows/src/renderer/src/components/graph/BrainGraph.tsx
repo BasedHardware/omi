@@ -16,6 +16,16 @@ export type BrainGraphProps = {
   graph: KnowledgeGraph
   centerNodeId?: string
   interactive?: boolean
+  // Orbit-control scope when interactive. 'full' = rotate + zoom + pan (default);
+  // 'rotate' = rotate only, so an embedded map (e.g. inside a scrollable page)
+  // can be spun without the scroll wheel hijacking the page scroll to zoom.
+  orbit?: 'full' | 'rotate'
+  // Lay the nodes out as a 3D sphere around the center (rotatable globe) instead
+  // of the default flat 2D plane. Onboarding stays 2D for label readability.
+  spherical?: boolean
+  // Initial camera distance from the center. Larger = more zoomed out. Matters
+  // mainly for the interactive case (the non-interactive rig frames its own).
+  cameraDistance?: number
   // Changing this re-rolls the module positions with an animation (used to
   // rearrange the graph on every onboarding screen change).
   shuffleKey?: number | string
@@ -24,6 +34,11 @@ export type BrainGraphProps = {
   // when shown. Use for the Memories tab. Leave false (default) for onboarding,
   // where the map is deliberately kept mounted across steps and must not blank.
   pauseWhenHidden?: boolean
+  // Lighter render that still animates (matches macOS's live force layout):
+  // low-poly spheres + a single glow halo (no second bloom pass), but the same
+  // animated reveal and continuous shine. Pairs with the node cap to keep a
+  // large graph responsive. Onboarding leaves this off for the full-fat render.
+  lite?: boolean
 }
 
 // Must match GraphSimulation.nodeRadius so the spheres and the collision force
@@ -46,12 +61,16 @@ function GraphNodeMesh({
   node,
   centerNodeId,
   reduced,
+  lite,
   posMap
 }: {
   sim: GraphSimulation
   node: NodePosition
   centerNodeId?: string
   reduced: boolean
+  // Lighter render: low-poly sphere + single glow halo (no outer bloom). Still
+  // animates (reveal + shine) like the full render.
+  lite: boolean
   // Shared map (owned by GraphScene, recreated on mount) where each node writes
   // its eased on-screen position so the edges can connect to it.
   posMap: Map<string, THREE.Vector3>
@@ -62,7 +81,7 @@ function GraphNodeMesh({
   const glowMesh = useRef<THREE.Mesh>(null)
   const target = useRef(new THREE.Vector3(node.x, node.y, node.z))
   const isFixed = node.id === centerNodeId
-  const color = nodeColor(node.nodeType, isFixed)
+  const color = nodeColor(node.nodeType, isFixed, node.id)
   const radius = radiusFor(node, isFixed)
   // The center ("you") label gets a bit bigger than the proportional size.
   const labelSize = labelFontSize(node.sizeScale) * (isFixed ? 1.35 : 1)
@@ -111,7 +130,7 @@ function GraphNodeMesh({
   return (
     <group ref={groupRef} position={[node.x, node.y, node.z]} scale={reduced ? [1, 1, 1] : [0, 0, 0]}>
       <mesh>
-        <sphereGeometry args={[radius, 32, 32]} />
+        <sphereGeometry args={[radius, lite ? 16 : 32, lite ? 16 : 32]} />
         <meshStandardMaterial
           ref={coreMat}
           color={color}
@@ -121,16 +140,19 @@ function GraphNodeMesh({
           metalness={0.1}
         />
       </mesh>
-      {/* pulsing glow halo (scales with the shine) */}
+      {/* Inner glow halo (animated shine) — kept in lite too, just low-poly, so
+          the graph still pulses and feels alive. */}
       <mesh ref={glowMesh}>
-        <sphereGeometry args={[radius * 1.9, 24, 24]} />
+        <sphereGeometry args={[radius * 1.9, lite ? 16 : 24, lite ? 16 : 24]} />
         <meshBasicMaterial ref={glowMat} color={color} transparent opacity={0.12} depthWrite={false} />
       </mesh>
-      {/* faint outer bloom for extra shine */}
-      <mesh>
-        <sphereGeometry args={[radius * 3, 16, 16]} />
-        <meshBasicMaterial color={color} transparent opacity={0.04} depthWrite={false} />
-      </mesh>
+      {/* Faint outer bloom for extra shine — the expensive extra pass, full only. */}
+      {!lite && (
+        <mesh>
+          <sphereGeometry args={[radius * 3, 16, 16]} />
+          <meshBasicMaterial color={color} transparent opacity={0.04} depthWrite={false} />
+        </mesh>
+      )}
       <Billboard position={[0, radius + labelSize * 0.9, 0]}>
         <Text
           // Font varies only ±20% with node size (matches collision/framing);
@@ -219,7 +241,11 @@ function GraphEdges({
           key={e.id}
           sim={sim}
           edge={e}
-          color={nodeColor(sim.liveNode(e.targetId)?.nodeType ?? 'concept', false)}
+          color={nodeColor(
+            sim.liveNode(e.targetId)?.nodeType ?? 'concept',
+            false,
+            sim.liveNode(e.targetId)?.id
+          )}
           posMap={posMap}
         />
       ))}
@@ -263,9 +289,14 @@ function GraphScene({
   graph,
   centerNodeId,
   interactive,
-  shuffleKey
+  orbit = 'full',
+  spherical = false,
+  shuffleKey,
+  lite = false
 }: BrainGraphProps): React.JSX.Element {
-  const { sim, nodes, reduced } = useGraphSimulation(graph, centerNodeId)
+  // Lite still animates its reveal/shine — it just renders lighter geometry — so
+  // it uses the same live simulation (only prefers-reduced-motion settles up front).
+  const { sim, nodes, reduced } = useGraphSimulation(graph, centerNodeId, spherical)
 
   // Eased on-screen position of each node, written by the meshes and read by the
   // edges so the lines stay glued to the spheres. Owned here (not on the sim) and
@@ -305,11 +336,12 @@ function GraphScene({
           node={n}
           centerNodeId={centerNodeId}
           reduced={reduced}
+          lite={lite}
           posMap={posMap}
         />
       ))}
       {interactive ? (
-        <OrbitControls enablePan enableZoom enableRotate />
+        <OrbitControls enableRotate enablePan={orbit === 'full'} enableZoom={orbit === 'full'} />
       ) : (
         <CameraRig />
       )}
@@ -330,8 +362,12 @@ export function BrainGraph({
   graph,
   centerNodeId,
   interactive = true,
+  orbit = 'full',
+  spherical = false,
+  cameraDistance = 700,
   shuffleKey,
-  pauseWhenHidden = false
+  pauseWhenHidden = false,
+  lite = false
 }: BrainGraphProps): React.JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(true)
@@ -363,7 +399,7 @@ export function BrainGraph({
         // Narrow FOV: a wide FOV projects off-center spheres into ellipses
         // ("deformed" nodes); this keeps them as round circles. CameraRig derives
         // its distance from the FOV, so the framing/zoom is unchanged.
-        camera={{ position: [0, 0, 700], fov: 28, near: 1, far: 20000 }}
+        camera={{ position: [0, 0, cameraDistance], fov: 28, near: 1, far: 20000 }}
         dpr={[1, 2]}
         frameloop="always"
         gl={{ antialias: true, alpha: true }}
@@ -372,7 +408,10 @@ export function BrainGraph({
           graph={graph}
           centerNodeId={centerNodeId}
           interactive={interactive}
+          orbit={orbit}
+          spherical={spherical}
           shuffleKey={shuffleKey}
+          lite={lite}
         />
       </Canvas>
       )}

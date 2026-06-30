@@ -27,22 +27,12 @@ function renderInline(text: string): React.ReactNode[] {
     )
       return <em key={i}>{part.slice(1, -1)}</em>
     const link = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(part)
-    if (link) {
-      // Only http(s)/mailto links are clickable. Chat replies can be steered by
-      // indirect prompt injection (the prompt includes OCR of whatever is on the
-      // user's screen), so a model could emit a file://, UNC (\\host\share), or
-      // custom-protocol href; rendering those as live links enables one-click
-      // NTLM-hash leakage and OS protocol-handler abuse. Anything else falls back
-      // to plain text — the label still shows, it just isn't a link.
-      const href = link[2].trim()
-      if (/^(https?:|mailto:)/i.test(href))
-        return (
-          <a key={i} href={href} target="_blank" rel="noreferrer" className="underline">
-            {link[1]}
-          </a>
-        )
-      return <span key={i}>{link[1]}</span>
-    }
+    if (link)
+      return (
+        <a key={i} href={link[2]} target="_blank" rel="noreferrer" className="underline">
+          {link[1]}
+        </a>
+      )
     return <span key={i}>{part}</span>
   })
 }

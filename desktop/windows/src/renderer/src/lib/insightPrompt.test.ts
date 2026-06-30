@@ -8,6 +8,17 @@ describe('buildInsightPrompt', () => {
     expect(p).toContain('writing')
     expect(p).toContain('Use a debugger')
   })
+
+  it('lets the model decline by default (selective)', () => {
+    const p = buildInsightPrompt('## Code — plan.md\nwriting', [])
+    expect(p).toContain('has_insight=false')
+  })
+
+  it('forces an insight in force mode (never declines)', () => {
+    const p = buildInsightPrompt('## Code — plan.md\nwriting', [], { force: true })
+    expect(p).toContain('ALWAYS return')
+    expect(p).not.toContain('has_insight=false')
+  })
 })
 
 describe('parseInsightResponse', () => {

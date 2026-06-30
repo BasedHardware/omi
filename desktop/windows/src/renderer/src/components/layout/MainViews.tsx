@@ -8,6 +8,7 @@ import { ConversationDetail } from '../../pages/ConversationDetail'
 import { Tasks } from '../../pages/Tasks'
 import { Goals } from '../../pages/Goals'
 import { Apps } from '../../pages/Apps'
+import { AppDetail } from '../../pages/AppDetail'
 import { Rewind } from '../../pages/Rewind'
 import { LiveConversation } from '../../pages/LiveConversation'
 
@@ -61,6 +62,11 @@ export function MainViews(): React.JSX.Element {
   const detailMatch = pathname.match(/^\/conversations\/([^/]+)$/)
   if (detailMatch) {
     return <ConversationDetail conversationId={detailMatch[1]} />
+  }
+
+  const appDetailMatch = pathname.match(/^\/apps\/([^/]+)$/)
+  if (appDetailMatch) {
+    return <AppDetail appId={decodeURIComponent(appDetailMatch[1])} />
   }
 
   const isHome = pathname === '/home'

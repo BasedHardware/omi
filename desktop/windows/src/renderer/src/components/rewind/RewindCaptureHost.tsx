@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { RewindSettings } from '../../../../shared/types'
+import { DEFAULT_CAPTURE_MAX_EDGE } from '../../../../shared/rewindResolution'
 
-// Cap the longest sampled edge — plenty for a timeline + OCR, and keeps each
-// canvas grab + JPEG encode cheap.
-const MAX_EDGE = 1600
 const JPEG_QUALITY = 0.6
 
 /**
@@ -32,6 +30,9 @@ export function RewindCaptureHost(): React.JSX.Element {
   useEffect(() => {
     const enabled = !!settings?.captureEnabled
     const intervalMs = settings?.intervalMs ?? 1000
+    // Longest-edge cap for both the live stream (getUserMedia) and the sampled
+    // canvas — the user-chosen capture resolution. Lower = cheaper to run + OCR.
+    const maxEdge = settings?.captureMaxEdge ?? DEFAULT_CAPTURE_MAX_EDGE
     let cancelled = false
 
     const stop = (): void => {
@@ -51,7 +52,7 @@ export function RewindCaptureHost(): React.JSX.Element {
       try {
         const v = videoRef.current
         if (v && v.videoWidth && v.videoHeight && !savingRef.current) {
-          const scale = Math.min(1, MAX_EDGE / Math.max(v.videoWidth, v.videoHeight))
+          const scale = Math.min(1, maxEdge / Math.max(v.videoWidth, v.videoHeight))
           const w = Math.round(v.videoWidth * scale)
           const h = Math.round(v.videoHeight * scale)
           const canvas =
@@ -96,12 +97,12 @@ export function RewindCaptureHost(): React.JSX.Element {
               chromeMediaSource: 'desktop',
               chromeMediaSourceId: sourceId,
               // The live stream is decoded continuously in the renderer, so its
-              // resolution + frame rate set the steady-state cost of having
-              // capture on. Keep both low: 720p is enough for a timeline + OCR of
-              // normal-size text, and we only sample every few seconds, so 1fps
-              // capture is plenty. (Was 1080p@30fps → froze; 1080p@2fps → laggy.)
-              maxWidth: 1280,
-              maxHeight: 720,
+              // resolution + frame rate set the steady-state cost of having capture
+              // on. Cap the longest edge at the user-chosen `maxEdge` (a square box
+              // preserves aspect ratio on any monitor orientation), and sample at
+              // 1fps. (Was 1080p@30fps → froze; 1080p@2fps → laggy.)
+              maxWidth: maxEdge,
+              maxHeight: maxEdge,
               maxFrameRate: 1
             }
           }
@@ -129,7 +130,7 @@ export function RewindCaptureHost(): React.JSX.Element {
       cancelled = true
       stop()
     }
-  }, [settings?.captureEnabled, settings?.intervalMs])
+  }, [settings?.captureEnabled, settings?.intervalMs, settings?.captureMaxEdge])
 
   return (
     <video

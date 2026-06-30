@@ -34,7 +34,10 @@ export function useRewind(): RewindState {
     const b = await window.omi.rewindDayBounds()
     setBounds(b)
     const to = b?.max ?? Date.now()
-    const from = to - DAY_MS
+    // Load the FULL stored history (oldest captured frame → newest), so the
+    // activity bar spans everything retained and scrolls back as far as data
+    // exists. `bounds.min` is MIN(ts) over all rewind_frames.
+    const from = b?.min ?? to - DAY_MS
     const f = await window.omi.rewindFrames(from, to)
     setFrames(f)
     if (f.length > 0) setCursorTs(f[f.length - 1].ts)

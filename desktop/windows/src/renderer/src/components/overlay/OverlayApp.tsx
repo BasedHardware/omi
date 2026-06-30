@@ -4,6 +4,7 @@ import { useChat } from '../../hooks/useChat'
 import { useAuth } from '../../hooks/useAuth'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { auth } from '../../lib/firebase'
+import { getPreferences } from '../../lib/preferences'
 import { Waveform } from './Waveform'
 import { ChatMessages } from '../chat/ChatMessages'
 import './overlay.css'
@@ -39,7 +40,9 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
     // Single send choke-point (typed Enter + voice commit) — tell onboarding the
     // user asked something in the bar.
     window.omiOverlay.notifyAsked()
-    sendChainRef.current = sendChainRef.current.then(() => sendRef.current(text)).catch(() => {})
+    sendChainRef.current = sendChainRef.current
+      .then(() => sendRef.current(text))
+      .catch(() => {})
   }, [])
 
   // Hold-Space-to-talk: a quick Space tap types a space; holding past the threshold
@@ -54,12 +57,9 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
     onCommit: (text) => {
       setDraft('')
       enqueueSend(text)
+      // Let the onboarding voice step know a hold-Space capture completed.
+      window.omiOverlay.notifyVoiceCaptured()
     },
-    // Fires on every completed hold-Space capture, even when transcription was
-    // unavailable (quota/1008) or silent. Drives the onboarding voice step so a
-    // no-quota account can finish onboarding instead of being stuck waiting for a
-    // transcript that will never arrive.
-    onCaptureEnd: () => window.omiOverlay.notifyVoiceCaptured(),
     restoreDraft: (snapshot) => setDraft(snapshot),
     getDraft: () => draftRef.current
   })
@@ -265,6 +265,15 @@ export function OverlayApp(): React.JSX.Element {
   const [authReady, setAuthReady] = useState(false)
   const shellRef = useRef<HTMLDivElement | null>(null)
 
+  // Floating-bar scale (independent of the main-app scale). The panel lays out at a
+  // fixed 480px width and the base 0.7 zoom paints it into the (main-sized) window;
+  // multiplying that zoom by the user's bar scale grows BOTH the layout and the fonts
+  // uniformly. The window width is widened to match by main (which holds the same
+  // scale). Seeded from the shared prefs at mount; main pushes live changes via
+  // 'overlay:scale' while the window stays warm.
+  const [scale, setScale] = useState(() => getPreferences().overlayScale)
+  useEffect(() => window.omiOverlay.onScale((s) => setScale(s)), [])
+
   // Stage the shell hidden as early as possible — a ref callback runs during commit,
   // before the first paint — so the window never flashes the fully-opaque panel
   // before the entrance fade runs.
@@ -364,7 +373,12 @@ export function OverlayApp(): React.JSX.Element {
   // already reports the halved height, so the window auto-sizes to it.
   return (
     <div ref={setShellRef}>
-      <div className="overlay-zoom">{content}</div>
+      {/* Inline zoom overrides overlay.css's base 0.7 so the whole panel scales with
+          the user's UI-scale setting. Width stays 480 (the design width); the rendered
+          width is 480 × zoom = the window width main computes for this scale. */}
+      <div className="overlay-zoom" style={{ zoom: 0.7 * scale }}>
+        {content}
+      </div>
     </div>
   )
 }

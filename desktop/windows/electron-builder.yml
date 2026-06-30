@@ -1,5 +1,11 @@
 appId: com.omiwindows.app
-productName: Omi for Windows
+productName: Omi
+# Auto-update source: the official monorepo's GitHub Releases. electron-builder
+# embeds an app-update.yml pointing here, so installed apps check BasedHardware/omi.
+publish:
+  provider: github
+  owner: BasedHardware
+  repo: omi
 directories:
   buildResources: build
 files:
@@ -19,16 +25,34 @@ asarUnpack:
   # koffi loads its native .node at runtime, resolved relative to its own package
   # dir — it must live outside the asar archive or the foreground monitor fails.
   - node_modules/koffi/**
+  # koffi 3.x ships the actual prebuilt binary in a SEPARATE per-platform package
+  # (@koromix/koffi-win32-x64/win32_x64/koffi.node), which koffi's loader resolves
+  # as a sibling under node_modules. It must be present AND unpacked, or the
+  # packaged app crashes on launch with "Cannot find the native Koffi module".
+  # (It's pinned as a direct dependency so electron-builder reliably bundles it.)
+  - node_modules/@koromix/**
+  # Belt-and-suspenders: never leave any native binary stranded inside the asar.
+  - '**/*.node'
 win:
-  executableName: omi-windows
+  executableName: omi
+  # The packaged exe / installer / Start-menu icon. Without this electron-builder
+  # falls back to the default Electron icon. 256x256 PNG → electron-builder makes
+  # the .ico. (The running window icon is set separately via nativeImage in main.)
+  icon: resources/icon.png
   target:
     - target: nsis
       arch: [x64]
 nsis:
+  # Assisted installer so the FIRST install offers a folder choice. Auto-updates
+  # are still silent (no wizard) because the app calls quitAndInstall(isSilent=true),
+  # which runs this installer with /S and reuses the registered install dir.
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
-  artifactName: ${productName}-Setup-${version}.${ext}
+  # Static installer filename with no version, so the downloaded file is just
+  # "omi.exe". electron-updater keys off the version inside latest.yml, not the
+  # filename, so a constant name is fine across releases.
+  artifactName: omi.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always

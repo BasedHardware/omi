@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
-import { hideOverlay, setOverlayHeight, setOverlayEnabled } from './window'
+import { hideOverlay, setOverlayHeight, setOverlayEnabled, setOverlayScale } from './window'
 import {
   setOverlayAccelerator,
   suspendOverlayShortcut,
@@ -17,6 +17,9 @@ export function registerOverlayHandlers(focusMain: () => void): void {
   ipcMain.on('overlay:setEnabled', (_e, enabled: boolean) => setOverlayEnabled(!!enabled))
   ipcMain.on('overlay:setHeight', (_e, px: number) => {
     if (typeof px === 'number' && px > 0) setOverlayHeight(px)
+  })
+  ipcMain.on('overlay:setScale', (_e, scale: number) => {
+    if (typeof scale === 'number') setOverlayScale(scale)
   })
   ipcMain.on('overlay:focusMain', () => {
     hideOverlay()

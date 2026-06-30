@@ -125,6 +125,9 @@ function App(): React.JSX.Element {
   useEffect(() => {
     const accel = getPreferences().overlayShortcut
     if (accel) void window.omiOverlay?.setAccelerator(accel)
+    // Tell main the saved floating-bar scale so the overlay window is sized
+    // correctly before its first summon (independent of the main-app scale).
+    window.omiOverlay?.setScale(getPreferences().overlayScale)
   }, [])
 
   if (loading) {

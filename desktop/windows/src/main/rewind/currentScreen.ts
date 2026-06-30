@@ -26,6 +26,19 @@ export function setCurrentScreen(t: string): void {
   ts = Date.now()
 }
 
+/**
+ * Re-affirm that the cached text is still "what's on screen right now" WITHOUT
+ * re-OCR. Called when a freshly sampled frame is a duplicate of the last captured
+ * frame: the screen is unchanged, so the existing OCR text is still accurate —
+ * just bump the freshness stamp. Without this, a screen held static streams only
+ * duplicate frames (which never re-OCR), the cache ages past CACHE_FRESH_MS, and
+ * the chat stops being able to read an unchanged, perfectly-available screen.
+ * No-op when the cache was never seeded (ts === 0): there is nothing to affirm.
+ */
+export function reaffirmCurrentScreen(): void {
+  if (ts !== 0) ts = Date.now()
+}
+
 export function getCurrentScreen(): { text: string; ts: number } {
   return { text, ts }
 }

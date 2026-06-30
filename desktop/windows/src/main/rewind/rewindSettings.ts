@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import type { RewindSettings } from '../../shared/types'
+import { clampCaptureMaxEdge, DEFAULT_CAPTURE_MAX_EDGE } from '../../shared/rewindResolution'
 
 // Rewind capture is ON by default — screen history is a core feature, so a fresh
 // install (no settings file yet) starts capturing. Once the user changes a
@@ -12,7 +13,8 @@ const DEFAULTS: RewindSettings = {
   captureEnabled: true,
   intervalMs: 1000,
   retentionDays: 14,
-  excludedApps: []
+  excludedApps: [],
+  captureMaxEdge: DEFAULT_CAPTURE_MAX_EDGE
 }
 
 function file(): string {
@@ -42,7 +44,8 @@ function sanitize(raw: Partial<RewindSettings>): RewindSettings {
     captureEnabled: raw.captureEnabled !== false,
     intervalMs,
     retentionDays,
-    excludedApps
+    excludedApps,
+    captureMaxEdge: clampCaptureMaxEdge(raw.captureMaxEdge)
   }
 }
 

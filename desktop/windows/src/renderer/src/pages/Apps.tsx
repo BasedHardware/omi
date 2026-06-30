@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { LayoutGrid, RefreshCw, Star, Check, Plus, Loader2, Search, SlidersHorizontal, X } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
+import { fetchAppsFull } from '../lib/chatApps'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 
@@ -11,10 +13,14 @@ type AppEntry = {
   image?: string | null
   author?: string | null
   category?: string | null
+  capabilities?: string[]
   rating_avg?: number | null
+  rating_count?: number | null
   installs?: number | null
   is_paid?: boolean
   price?: number | null
+  is_popular?: boolean | null
+  official?: boolean | null
 }
 
 // Turns raw API categories like "chat-assistants" into "Chat Assistants".
@@ -27,9 +33,47 @@ function formatCategory(raw: string): string {
     .join(' ')
 }
 
-function AppCard({ app, isOn, isBusy, onToggle }: { app: AppEntry; isOn: boolean; isBusy: boolean; onToggle: (a: AppEntry) => void }): React.JSX.Element {
+// Ranking score: most-installed/best-reviewed float to the top, with the
+// backend's curation flags (is_popular, official) given a decisive boost so
+// "popular and featured" lead. Used for the Most Popular / Featured rows and the
+// within-category ordering.
+function popularityScore(a: AppEntry): number {
+  const installs = a.installs ?? 0
+  const ratingWeight = (a.rating_avg ?? 0) * Math.log10((a.rating_count ?? 0) + 1)
   return (
-    <div className="surface-card flex flex-col p-5 animate-fade-in">
+    (a.is_popular ? 1e9 : 0) +
+    (a.official ? 5e8 : 0) +
+    Math.log10(installs + 1) * 100 +
+    ratingWeight * 10
+  )
+}
+
+function AppCard({
+  app,
+  isOn,
+  isBusy,
+  onToggle,
+  onOpen
+}: {
+  app: AppEntry
+  isOn: boolean
+  isBusy: boolean
+  onToggle: (a: AppEntry) => void
+  onOpen: (a: AppEntry) => void
+}): React.JSX.Element {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(app)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen(app)
+        }
+      }}
+      className="surface-card flex cursor-pointer flex-col p-5 text-left animate-fade-in transition-colors duration-200 hover:border-white/20"
+    >
       <div className="mb-3 flex items-start gap-3">
         {app.image ? (
           <img
@@ -66,7 +110,10 @@ function AppCard({ app, isOn, isBusy, onToggle }: { app: AppEntry; isOn: boolean
           {app.category && <span className="badge">{formatCategory(app.category)}</span>}
         </div>
         <button
-          onClick={() => onToggle(app)}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggle(app)
+          }}
           disabled={isBusy}
           className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
             isOn
@@ -89,6 +136,7 @@ function AppCard({ app, isOn, isBusy, onToggle }: { app: AppEntry; isOn: boolean
 }
 
 export function Apps(): React.JSX.Element {
+  const navigate = useNavigate()
   const [apps, setApps] = useState<AppEntry[]>([])
   const [enabled, setEnabled] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -101,15 +149,20 @@ export function Apps(): React.JSX.Element {
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set())
   const [filterOpen, setFilterOpen] = useState(false)
   const filterRef = useRef<HTMLDivElement>(null)
+  const openApp = (a: AppEntry): void => {
+    void navigate(`/apps/${encodeURIComponent(a.id)}`)
+  }
 
-  const load = async (): Promise<void> => {
+  const load = async (force = false): Promise<void> => {
     setError(null)
     try {
-      const [appsRes, enabledRes] = await Promise.all([
-        omiApi.get<AppEntry[]>('/v1/apps', { params: { include_reviews: false } }),
+      // Shared cache with the per-app detail page (fetchAppsFull) so opening an
+      // app reuses this fetch instead of hitting the slow /v1/apps again.
+      const [apps, enabledRes] = await Promise.all([
+        fetchAppsFull(force),
         omiApi.get<string[]>('/v1/apps/enabled').catch(() => ({ data: [] as string[] }))
       ])
-      setApps(Array.isArray(appsRes.data) ? appsRes.data : [])
+      setApps(apps)
       setEnabled(new Set(Array.isArray(enabledRes.data) ? enabledRes.data : []))
     } catch (e) {
       setError((e as Error).message)
@@ -143,7 +196,7 @@ export function Apps(): React.JSX.Element {
   const onRefresh = async (): Promise<void> => {
     if (refreshing) return
     setRefreshing(true)
-    await load()
+    await load(true)
     setRefreshing(false)
   }
 
@@ -221,11 +274,21 @@ export function Apps(): React.JSX.Element {
     }
 
     const categories: Record<string, AppEntry[]> = {}
-    const sortedByPopularity = [...base].sort((a, b) => {
-      const aScore = (a.rating_avg ?? 0) * Math.log((a.installs ?? 1) + 1)
-      const bScore = (b.rating_avg ?? 0) * Math.log((b.installs ?? 1) + 1)
-      return bScore - aScore
-    })
+    const sortedByPopularity = [...base].sort((a, b) => popularityScore(b) - popularityScore(a))
+
+    // Lead with curated rows so the best/most-installed apps surface first.
+    // "Most Popular" = top by score overall; "Featured" = the apps the backend
+    // flags official/popular. Both are highlight reels; apps may also appear in
+    // their category below (store convention). Skip them when a category filter
+    // is active (the user is already narrowing) or in the Installed tab.
+    if (selectedCats.size === 0 && tab !== 'installed') {
+      const mostPopular = sortedByPopularity.slice(0, LIMIT_PER_CATEGORY)
+      if (mostPopular.length > 0) categories['Most Popular'] = mostPopular
+      const featured = sortedByPopularity
+        .filter((a) => a.official || a.is_popular)
+        .slice(0, LIMIT_PER_CATEGORY)
+      if (featured.length > 0) categories['Featured'] = featured
+    }
 
     for (const app of sortedByPopularity) {
       const cat = app.category || 'Other'
@@ -424,7 +487,7 @@ export function Apps(): React.JSX.Element {
 
             {query.trim() ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {categorized.search?.map((a) => <AppCard key={a.id} app={a} isOn={enabled.has(a.id)} isBusy={busy.has(a.id)} onToggle={toggle} />)}
+                {categorized.search?.map((a) => <AppCard key={a.id} app={a} isOn={enabled.has(a.id)} isBusy={busy.has(a.id)} onToggle={toggle} onOpen={openApp} />)}
               </div>
             ) : (
               Object.entries(categorized)
@@ -439,7 +502,7 @@ export function Apps(): React.JSX.Element {
                     <h2 className="text-sm font-semibold text-white/80">{formatCategory(category)}</h2>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       {categoryApps.map((a) => (
-                        <AppCard key={a.id} app={a} isOn={enabled.has(a.id)} isBusy={busy.has(a.id)} onToggle={toggle} />
+                        <AppCard key={a.id} app={a} isOn={enabled.has(a.id)} isBusy={busy.has(a.id)} onToggle={toggle} onOpen={openApp} />
                       ))}
                     </div>
                   </div>

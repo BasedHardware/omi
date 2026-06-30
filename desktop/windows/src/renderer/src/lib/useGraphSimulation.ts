@@ -82,12 +82,15 @@ export class GraphSimulation {
   private nodeMap = new Map<string, SimNode>()
   private newlyAdded: string[] = []
 
-  constructor(private centerNodeId?: string) {
-    // 2D layout: every node lives on the z=0 plane so the camera faces it head
-    // on. This is what makes labels reliably readable — in 3D, two nodes far
-    // apart in space can still project on top of each other; on a plane they
-    // cannot, and label-aware collision (below) keeps titles from touching.
-    this.sim = forceSimulation<SimNode>([], 2).stop()
+  constructor(
+    private centerNodeId?: string,
+    // Layout dimensionality. 2D (default) keeps every node on the z=0 plane so
+    // the camera faces it head on and labels never project over each other —
+    // used by onboarding's reveal. 3D distributes nodes over a SPHERE around the
+    // center (the radial force becomes a spherical shell), for a rotatable globe.
+    private dims: 2 | 3 = 2
+  ) {
+    this.sim = forceSimulation<SimNode>([], dims).stop()
   }
 
   // The drawn radius of a node's sphere. The center ("you") node is a fixed,
@@ -153,6 +156,7 @@ export class GraphSimulation {
         node.x = node.y = node.z = 0
         node.fx = 0
         node.fy = 0
+        if (this.dims === 3) node.fz = 0
       } else {
         // Keep the node + its (possibly long) label inside the frame.
         node.targetRadius = Math.min(node.targetRadius, this.maxRadiusFor(node))
@@ -215,12 +219,13 @@ export class GraphSimulation {
     const edge = graph.edges.find((e) => e.sourceId === id || e.targetId === id)
     const neighborId = edge ? (edge.sourceId === id ? edge.targetId : edge.sourceId) : undefined
     const neighbor = neighborId ? this.nodeMap.get(neighborId) : undefined
-    // z stays 0 — the layout is 2D (see constructor). Only x/y are simulated.
+    // z is seeded only in 3D (sphere) mode; in 2D it stays on the z=0 plane.
     const jitter = (): number => (Math.random() - 0.5) * 60
+    const jz = (): number => (this.dims === 3 ? jitter() : 0)
     if (neighbor) {
-      return { x: (neighbor.x ?? 0) + jitter(), y: (neighbor.y ?? 0) + jitter(), z: 0 }
+      return { x: (neighbor.x ?? 0) + jitter(), y: (neighbor.y ?? 0) + jitter(), z: (neighbor.z ?? 0) + jz() }
     }
-    return { x: jitter(), y: jitter(), z: 0 }
+    return { x: jitter(), y: jitter(), z: jz() }
   }
 
   // Hard-clamp every node's actual position so the node AND its label always
@@ -233,14 +238,18 @@ export class GraphSimulation {
       if (n.id === this.centerNodeId) continue
       const x = n.x ?? 0
       const y = n.y ?? 0
-      const r = Math.hypot(x, y)
+      const z = n.z ?? 0
+      // Clamp the full 3D radius (z is 0 in 2D mode, so this also covers 2D).
+      const r = Math.hypot(x, y, z)
       const maxR = Math.max(RING_RADIUS * RADIUS_MIN, frame - this.collideRadius(n))
       if (r > maxR && r > 0) {
         const k = maxR / r
         n.x = x * k
         n.y = y * k
+        n.z = z * k
         n.vx = 0
         n.vy = 0
+        if (this.dims === 3) n.vz = 0
       }
     }
   }
@@ -375,10 +384,12 @@ export class GraphSimulation {
 // sim.liveNode(), so there are zero per-frame React re-renders.
 export function useGraphSimulation(
   graph: KnowledgeGraph,
-  centerNodeId?: string
+  centerNodeId?: string,
+  // When true the layout is a 3D sphere (rotatable globe); otherwise a 2D plane.
+  spherical = false
 ): { nodes: NodePosition[]; sim: GraphSimulation; reduced: boolean } {
   const simRef = useRef<GraphSimulation>(undefined)
-  if (!simRef.current) simRef.current = new GraphSimulation(centerNodeId)
+  if (!simRef.current) simRef.current = new GraphSimulation(centerNodeId, spherical ? 3 : 2)
   const reducedRef = useRef(
     typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true

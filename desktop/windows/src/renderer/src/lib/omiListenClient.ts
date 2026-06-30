@@ -1,6 +1,7 @@
 import { auth } from './firebase'
 import type { BackendSegment, ListenEvent, ListenSource } from '../../../shared/types'
 import { getPreferences } from './preferences'
+import { micAudioConstraints } from './micDevices'
 
 export type OmiListenCallbacks = {
   /** Fires once when the v4/listen WS reaches OPEN. */
@@ -15,9 +16,9 @@ export type OmiListenCallbacks = {
    * Fires when the WS closes AFTER it had connected (any code — clean 1000,
    * quota 1008, or abnormal 1005/1006). The Omi socket is dead, so no more
    * transcripts will arrive; the caller should fall back to keep recording.
-   * `reason` is the backend's close text (e.g. `trial_expired`) — needed to tell
-   * a quota/entitlement close apart from a generic drop. Pre-connect closes come
-   * through `onError(_, fatal=true)` instead.
+   * `reason` is the backend's close reason (e.g. "trial_expired"), needed to tell
+   * a paywall close from a generic drop. Pre-connect closes come through
+   * `onError(_, fatal=true)` instead.
    */
   onClosed: (code: number, reason: string) => void
 }
@@ -50,6 +51,25 @@ async function getSystemAudioStream(): Promise<MediaStream> {
 }
 
 /**
+ * Capture the microphone, honoring the user's chosen input device (Settings →
+ * General). The chosen device is pinned exactly; if it's been unplugged since it
+ * was selected, retry with the OS default rather than failing transcription over a
+ * stale selection.
+ */
+async function getMicStream(): Promise<MediaStream> {
+  const constraint = micAudioConstraints(getPreferences().micDeviceId)
+  try {
+    return await navigator.mediaDevices.getUserMedia({ audio: constraint })
+  } catch (e) {
+    const err = e as Error
+    if (constraint !== true && (err.name === 'OverconstrainedError' || err.name === 'NotFoundError')) {
+      return navigator.mediaDevices.getUserMedia({ audio: true })
+    }
+    throw e
+  }
+}
+
+/**
  * Open a v4/listen session for one audio source. The renderer captures PCM
  * with AudioContext, then forwards each
  * 4096-sample buffer to the main process as Int16. The main process owns the
@@ -64,10 +84,7 @@ export async function startOmiListen(
   const token = await user.getIdToken()
   const sessionId = `omi-listen-${Date.now()}-${nextSessionId++}`
 
-  const stream =
-    source === 'mic'
-      ? await navigator.mediaDevices.getUserMedia({ audio: true })
-      : await getSystemAudioStream()
+  const stream = source === 'mic' ? await getMicStream() : await getSystemAudioStream()
 
   const audioCtx = new AudioContext({ sampleRate: 16000 })
   const node = audioCtx.createMediaStreamSource(stream)
@@ -92,8 +109,8 @@ export async function startOmiListen(
       if (stopped) return
       if (connected) {
         // Connected then dropped (clean, quota, or abnormal) → let the caller
-        // end the session and surface an error. Pass the reason so a 1008
-        // entitlement/quota close can be reported as such, not a bare code.
+        // end the session and surface an error. Pass the reason so a paywall
+        // (1008 trial_expired) can be told from a generic drop.
         cb.onClosed(msg.code, msg.reason)
       } else {
         // Never connected → an initial failure; surface as fatal so the caller
@@ -112,26 +129,10 @@ export async function startOmiListen(
     })
   } catch (e) {
     unsub()
-    try {
-      processor.disconnect()
-    } catch {
-      /* ignore */
-    }
-    try {
-      node.disconnect()
-    } catch {
-      /* ignore */
-    }
-    try {
-      stream.getTracks().forEach((t) => t.stop())
-    } catch {
-      /* ignore */
-    }
-    try {
-      void audioCtx.close()
-    } catch {
-      /* ignore */
-    }
+    try { processor.disconnect() } catch { /* ignore */ }
+    try { node.disconnect() } catch { /* ignore */ }
+    try { stream.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }
+    try { void audioCtx.close() } catch { /* ignore */ }
     throw e
   }
 
@@ -152,26 +153,10 @@ export async function startOmiListen(
     stop: (): void => {
       stopped = true
       unsub()
-      try {
-        processor.disconnect()
-      } catch {
-        /* ignore */
-      }
-      try {
-        node.disconnect()
-      } catch {
-        /* ignore */
-      }
-      try {
-        stream.getTracks().forEach((t) => t.stop())
-      } catch {
-        /* ignore */
-      }
-      try {
-        void audioCtx.close()
-      } catch {
-        /* ignore */
-      }
+      try { processor.disconnect() } catch { /* ignore */ }
+      try { node.disconnect() } catch { /* ignore */ }
+      try { stream.getTracks().forEach((t) => t.stop()) } catch { /* ignore */ }
+      try { void audioCtx.close() } catch { /* ignore */ }
       void window.omi.listenStop(sessionId)
     }
   }

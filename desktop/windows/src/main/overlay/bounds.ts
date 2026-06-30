@@ -20,8 +20,11 @@ export type Bounds = { x: number; y: number; width: number; height: number }
  * near the top (TOP_MARGIN px down), height clamped to 70% of the work area, and
  * nudged up so it never runs off the bottom edge of the display.
  */
-export function computeOverlayBounds(workArea: WorkArea, contentHeight: number): Bounds {
-  const width = OVERLAY_WIDTH
+export function computeOverlayBounds(
+  workArea: WorkArea,
+  contentHeight: number,
+  width: number = OVERLAY_WIDTH
+): Bounds {
   const x = Math.round(workArea.x + (workArea.width - width) / 2)
 
   const maxHeight = Math.round(workArea.height * MAX_HEIGHT_FRACTION)
