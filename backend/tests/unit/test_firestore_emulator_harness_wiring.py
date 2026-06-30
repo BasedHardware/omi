@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from test_firestore_security_rules import MEMORY_PROTECTED_COLLECTIONS
+from tests.unit.test_firestore_security_rules import MEMORY_PROTECTED_COLLECTIONS
 
 _REPO_ROOT = Path(__file__).resolve().parents[2].parent
 _PYTHON_APPLY_SCRIPT = _REPO_ROOT / "backend" / "scripts" / "firestore_python_apply_emulator_test.py"
