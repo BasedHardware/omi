@@ -17,70 +17,10 @@ These tests exercise the db-layer contract (idempotency hit / miss / no-key
 backwards compat) and the router-layer key derivation.
 """
 
-import sys
-import types
-from pathlib import Path
 from unittest.mock import MagicMock
 
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-
-
-def _ensure_module(name):
-    if name not in sys.modules:
-        sys.modules[name] = types.ModuleType(name)
-    return sys.modules[name]
-
-
-for mod_name in [
-    'firebase_admin',
-    'firebase_admin.auth',
-    'google',
-    'google.api_core',
-    'google.api_core.exceptions',
-    'google.cloud',
-    'google.cloud.firestore',
-    'google.cloud.firestore_v1',
-    'google.cloud.firestore_v1.base_query',
-]:
-    _ensure_module(mod_name)
-
-database_pkg = _ensure_module('database')
-database_pkg.__path__ = [str(BACKEND_DIR / 'database')]
-
-
-class _FakeFirestoreClient:
-    def collection(self, *a, **kw):
-        return MagicMock()
-
-    def batch(self):
-        return MagicMock()
-
-
-sys.modules['google.cloud.firestore'].Client = _FakeFirestoreClient
-sys.modules['google.cloud.firestore'].SERVER_TIMESTAMP = object()
-sys.modules['google.cloud.firestore'].Query = MagicMock()
-
-
-class _FieldFilter:
-    def __init__(self, field, op, value):
-        self.field = field
-        self.op = op
-        self.value = value
-
-
-sys.modules['google.cloud.firestore'].FieldFilter = _FieldFilter
-sys.modules['google.cloud.firestore_v1'].FieldFilter = _FieldFilter
-sys.modules['google.cloud.firestore_v1.base_query'].FieldFilter = _FieldFilter
-sys.modules['google.api_core.exceptions'].NotFound = type('NotFound', (Exception,), {})
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-
-# Stub firestore client singleton.
-client_stub = types.ModuleType('database._client')
-client_stub.db = MagicMock()
-sys.modules['database._client'] = client_stub
-
-
 from database import action_items as action_items_db  # noqa: E402
+from routers import action_items as action_items_router  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # create_action_item — db layer
@@ -182,72 +122,27 @@ def test_idempotency_miss_writes_key_on_new_doc(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def _import_router_helper():
-    """Routers depend on a lot of upstream modules; stub the heaviest so the
-    helper can be imported without real Firestore/Pinecone/Redis."""
-
-    for mod_name in [
-        'utils',
-        'utils.executors',
-        'utils.users',
-        'utils.other',
-        'utils.other.endpoints',
-        'utils.notifications',
-        'utils.task_sync',
-        'database.conversations',
-        'database.redis_db',
-        'database.vector_db',
-    ]:
-        _ensure_module(mod_name)
-
-    sys.modules['utils.executors'].critical_executor = MagicMock()
-    sys.modules['utils.executors'].db_executor = MagicMock()
-    sys.modules['utils.users'].get_user_display_name = lambda *a, **k: ''
-    sys.modules['utils.other.endpoints'].get_current_user_uid = lambda: ''
-    sys.modules['utils.other'].endpoints = sys.modules['utils.other.endpoints']
-    sys.modules['utils.notifications'].send_notification = lambda *a, **k: None
-    sys.modules['utils.notifications'].send_action_item_data_message = lambda *a, **k: None
-    sys.modules['utils.notifications'].send_action_item_update_message = lambda *a, **k: None
-    sys.modules['utils.notifications'].send_action_item_deletion_message = lambda *a, **k: None
-    sys.modules['utils.notifications'].send_action_items_batch_deletion_message = lambda *a, **k: None
-    sys.modules['utils.notifications'].sync_action_item_reminder = lambda *a, **k: None
-    sys.modules['utils.task_sync'].auto_sync_action_item = lambda *a, **k: None
-    sys.modules['database.vector_db'].upsert_action_item_vector = lambda *a, **k: None
-    sys.modules['database.vector_db'].upsert_action_item_vectors_batch = lambda *a, **k: None
-    sys.modules['database.vector_db'].delete_action_item_vector = lambda *a, **k: None
-    sys.modules['database.vector_db'].delete_action_item_vectors_batch = lambda *a, **k: None
-    sys.modules['database.vector_db'].search_action_items_by_vector = lambda *a, **k: []
-
-    from routers import action_items as action_items_router
-
-    return action_items_router
-
-
 def test_content_key_is_stable_for_same_input():
-    router = _import_router_helper()
-    a = router._content_idempotency_key('uid-1', 'Buy milk')
-    b = router._content_idempotency_key('uid-1', 'Buy milk')
+    a = action_items_router._content_idempotency_key('uid-1', 'Buy milk')
+    b = action_items_router._content_idempotency_key('uid-1', 'Buy milk')
     assert a == b
 
 
 def test_content_key_normalizes_case_and_whitespace():
-    router = _import_router_helper()
-    a = router._content_idempotency_key('uid-1', 'Buy Milk')
-    b = router._content_idempotency_key('uid-1', '  buy milk  ')
+    a = action_items_router._content_idempotency_key('uid-1', 'Buy Milk')
+    b = action_items_router._content_idempotency_key('uid-1', '  buy milk  ')
     assert a == b
 
 
 def test_content_key_separates_users():
-    router = _import_router_helper()
-    a = router._content_idempotency_key('uid-1', 'Buy milk')
-    b = router._content_idempotency_key('uid-2', 'Buy milk')
+    a = action_items_router._content_idempotency_key('uid-1', 'Buy milk')
+    b = action_items_router._content_idempotency_key('uid-2', 'Buy milk')
     assert a != b
 
 
 def test_content_key_separates_descriptions():
-    router = _import_router_helper()
-    a = router._content_idempotency_key('uid-1', 'Buy milk')
-    b = router._content_idempotency_key('uid-1', 'Buy bread')
+    a = action_items_router._content_idempotency_key('uid-1', 'Buy milk')
+    b = action_items_router._content_idempotency_key('uid-1', 'Buy bread')
     assert a != b
 
 
@@ -255,7 +150,6 @@ def test_content_key_avoids_separator_collision():
     """Length-prefixed encoding must distinguish (uid='org', desc='user:task')
     from (uid='org:user', desc='task'). A naive ``f"{uid}:{desc}"`` encoding
     would collapse both to the same hash; the length prefix prevents this."""
-    router = _import_router_helper()
-    a = router._content_idempotency_key('org', 'user:task')
-    b = router._content_idempotency_key('org:user', 'task')
+    a = action_items_router._content_idempotency_key('org', 'user:task')
+    b = action_items_router._content_idempotency_key('org:user', 'task')
     assert a != b

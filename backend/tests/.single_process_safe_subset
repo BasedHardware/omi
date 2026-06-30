@@ -18,3 +18,11 @@ tests/unit/test_delete_account_stripe_cancel.py
 tests/unit/test_action_item_dedup.py
 tests/unit/test_omi_product_tool_failsoft.py
 tests/unit/test_users_add_sample_transaction.py
+tests/unit/test_action_item_idempotency.py
+tests/unit/test_action_items_date_range_validation.py
+tests/unit/test_action_items_pagination_order.py
+tests/unit/test_merge_validation.py
+tests/unit/test_user_usage.py
+tests/unit/test_chat_quota.py
+tests/unit/test_llm_usage_endpoints.py
+tests/unit/test_memories_stale_updates.py
