@@ -146,6 +146,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
   /// Guards against recording the same turn to chat history twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
+  /// Provider turn-complete events can arrive after a tool-call-only response and
+  /// before our async tool body has returned. Keep the voice turn open until every
+  /// requested tool has been answered; otherwise the bar collapses after "I'll check"
+  /// and the follow-up response is lost until the next PTT.
+  private var pendingRealtimeToolCallIds = Set<String>()
   /// When the last PTT turn started — used to keep the socket warm via auto-reconnect
   /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
   private var lastTurnAt: Date?
@@ -579,6 +584,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
     audioReceivedThisTurn = false
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
+    pendingRealtimeToolCallIds.removeAll()
     lastTurnAt = Date()
     if bargeIn {
       pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
@@ -701,6 +707,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       log("RealtimeHub[\(providerTag)]: dropping stale tool result \(name)")
       return
     }
+    pendingRealtimeToolCallIds.remove(toolCallKey(callId: callId, name: name))
     source.sendToolResult(callId: callId, name: name, output: output)
   }
 
@@ -787,6 +794,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   func hubDidRequestTool(name: String, callId: String, argumentsJSON: String, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
+    pendingRealtimeToolCallIds.insert(toolCallKey(callId: callId, name: name))
     let arguments =
       (try? JSONSerialization.jsonObject(with: Data(argumentsJSON.utf8)) as? [String: Any]) ?? [:]
     guard let tool = HubTool(rawValue: name) else {
@@ -1039,8 +1047,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       case "hermes": directedProvider = .hermes
       case "": directedProvider = nil
       default:
-        session?.sendToolResult(
-          callId: callId, name: name,
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
           output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.")
         return
       }
@@ -1106,6 +1114,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
 
   func hubDidFinishTurn(source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
+    guard pendingRealtimeToolCallIds.isEmpty else {
+      log("RealtimeHub[\(providerTag)]: deferring turn done with \(pendingRealtimeToolCallIds.count) tool result(s) pending")
+      return
+    }
     responding = false
     hubReconnectStrikes = 0  // a completed turn proves the hub works — reset the budget
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1123,6 +1135,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)
     }
     exitVoiceUI()
+  }
+
+  private func toolCallKey(callId: String, name: String) -> String {
+    "\(name):\(callId)"
   }
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {

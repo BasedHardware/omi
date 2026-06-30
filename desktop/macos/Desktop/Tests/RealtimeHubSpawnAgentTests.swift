@@ -22,6 +22,17 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("speak(ack)"))
   }
 
+  func testRealtimeToolTurnsStayOpenUntilToolResultReturns() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("private var pendingRealtimeToolCallIds = Set<String>()"))
+    XCTAssertTrue(source.contains("pendingRealtimeToolCallIds.insert(toolCallKey(callId: callId, name: name))"))
+    XCTAssertTrue(source.contains("pendingRealtimeToolCallIds.remove(toolCallKey(callId: callId, name: name))"))
+    XCTAssertTrue(source.contains("guard pendingRealtimeToolCallIds.isEmpty else"))
+    XCTAssertTrue(source.contains("deferring turn done with"))
+    XCTAssertFalse(source.contains("session?.sendToolResult("))
+  }
+
   func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
     let source = try realtimeHubControllerSource()
 
