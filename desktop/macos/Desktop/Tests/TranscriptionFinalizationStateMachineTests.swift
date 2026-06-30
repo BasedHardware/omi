@@ -260,6 +260,97 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertNil(session)
     }
 
+    func testCloudReconciliationExhaustionKeepsRetryingBeforeMaxAttempts() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: ConversationSource.desktop.rawValue,
+            retryCount: 3,
+            finalizationStrategy: .cloudReconcile
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.cloudReconciliationExhaustionAction(
+                session: session,
+                segmentCount: 0
+            ),
+            .keepRetrying
+        )
+    }
+
+    func testCloudReconciliationExhaustionFallsBackToLocalSegmentsWhenAvailable() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: ConversationSource.desktop.rawValue,
+            retryCount: 4,
+            finalizationStrategy: .cloudReconcile
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.cloudReconciliationExhaustionAction(
+                session: session,
+                segmentCount: 2
+            ),
+            .uploadLocalSegments
+        )
+    }
+
+    func testCloudReconciliationExhaustionDiscardsEmptyDesktopSessions() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: ConversationSource.desktop.rawValue,
+            retryCount: 4,
+            finalizationStrategy: .cloudReconcile
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.cloudReconciliationExhaustionAction(
+                session: session,
+                segmentCount: 0
+            ),
+            .discardEmptyDesktopSession
+        )
+    }
+
+    func testExhaustedEmptyDesktopCloudSessionIsDeletedInsteadOfFailed() async throws {
+        let sessionId = try await TranscriptionStorage.shared.startSession(
+            source: ConversationSource.desktop.rawValue,
+            finalizationStrategy: .cloudReconcile
+        )
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+        for _ in 0..<4 {
+            try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
+        }
+
+        let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let session = try XCTUnwrap(storedSession)
+
+        let handled = try await ConversationFinalizationService.shared.resolveExhaustedCloudReconciliation(
+            session: session,
+            sessionId: sessionId
+        )
+
+        XCTAssertTrue(handled)
+        let deletedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        XCTAssertNil(deletedSession)
+    }
+
+    func testCloudReconciliationExhaustionReportsEmptyNonDesktopSessions() {
+        let session = TranscriptionSessionRecord(
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            source: ConversationSource.omi.rawValue,
+            retryCount: 4,
+            finalizationStrategy: .cloudReconcile
+        )
+
+        XCTAssertEqual(
+            ConversationFinalizationService.cloudReconciliationExhaustionAction(
+                session: session,
+                segmentCount: 0
+            ),
+            .reportFailure
+        )
+    }
+
     func testCompactsOversizedLocalUploadWithoutDroppingText() {
         let segments = (0..<750).map { index in
             APIClient.UploadSegment(
