@@ -647,7 +647,6 @@ def process_segment(
             if private_cloud_sync_enabled:
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
-
             transcript_segments = [s.dict() for s in transcript_segments]
 
             # assign timestamps to each segment
