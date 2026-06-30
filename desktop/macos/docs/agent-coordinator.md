@@ -31,6 +31,8 @@ The coordinator uses the existing TypeScript desktop runtime kernel as the execu
 ## Phase 0 Decisions
 
 - Task chat should become a canonical task-chat session bound to `surfaceKind=task_chat`, `externalRefKind=task`, and the task id; legacy ACP resume IDs stay separate from Omi session IDs.
+- Main chat is the canonical user-facing conversation envelope for new typed routing. Typed main-chat turns may ask the coordinator for route context before the normal bridge call, but the bridge still produces the assistant response and child task/subagent runtime sessions remain isolated and auditable.
+- PTT/realtime turns are mirrored into main chat history after completion, but realtime reasoning still uses its warm voice path. True single-chat parity requires routing final PTT transcripts through the same parent-turn coordinator contract before removing separate voice/subagent affordances.
 - Floating pill replacement is deferred. Wave one may project legacy pill state into awareness/action-queue views and expose safe inspect/cancel/open actions, but `spawn_agent` / `manage_agent_pills` remain legacy workflows until a later replacement phase.
 - `DesktopAutomationBridge` and `scripts/omi-ctl` are verification and development substrates, documented in [desktop e2e](../e2e/SKILL.md) and [harness](../e2e/harness.md). They are not production coordinator actuators unless a separate approval path is added.
 - Local Agent API expansion is deferred until scoped local credentials, Host/Origin checks, token rotation, and context-access logging are in place.
