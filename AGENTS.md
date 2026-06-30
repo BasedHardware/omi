@@ -234,19 +234,24 @@ Rules:
 
 ## Formatting
 
-Always format code after making changes. The pre-commit hook handles this automatically, but you can also run manually:
+**Run `make setup` before your first commit** — it installs pre-commit and pre-push hooks that auto-format staged files. Verify: `test -x "$(git rev-parse --git-path hooks)/pre-commit" && echo OK`.
 
-| Language | Command |
-|----------|---------|
-| Dart (`app/`) | `dart format --line-length 120 <files>` |
-| Python (`backend/`) | `black --line-length 120 --skip-string-normalization <files>` |
-| C/C++ (firmware) | `clang-format -i <files>` |
+The **pre-commit hook** auto-formats staged files on commit (Dart, Python, ARB/JSON, web/Prettier, C/C++, Rust). The **pre-push hook** checks formatting of all files changed vs `main` and blocks the push if any are dirty.
+
+| Language | Auto-formatted by hook | Manual command |
+|----------|----------------------|----------------|
+| Dart (`app/`) | pre-commit + pre-push | `dart format --line-length 120 <files>` |
+| Python (`backend/`) | pre-commit + pre-push | `black --line-length 120 --skip-string-normalization <files>` |
+| ARB (`app/lib/l10n/`) | pre-commit + pre-push | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
+| C/C++ (firmware) | pre-commit + pre-push | `clang-format -i <files>` |
+| Rust (`desktop/macos/Backend-Rust/`) | pre-commit (fmt + check) + pre-push | `rustfmt --edition 2021 <files>` |
+| Web (`web/`) | pre-commit | `npx prettier --write <files>` |
 
 Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually.
 
 ## Git
 
-- **Before your first commit**, verify the pre-commit hook is installed (see Setup).
+- **Before your first commit**, run `make setup` to install Git hooks (see Setup). Commits without hooks bypass formatting and let violations land on `main`.
 - Before starting work, run `git fetch origin && git pull --ff-only` on `main` — don't branch off stale local state.
 - Always commit to the current branch — never switch branches mid-task. Always work in a git worktree for code changes (`git worktree add`).
 - Never push directly to `main`. Land changes through PRs only. Never squash-merge — use a regular merge.
