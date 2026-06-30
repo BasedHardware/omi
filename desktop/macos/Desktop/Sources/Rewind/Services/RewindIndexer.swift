@@ -525,16 +525,19 @@ actor RewindIndexer {
         }
     }
 
-    /// Stop the indexer
-    func stop() async {
+    /// Stop the indexer and return whether pending video frames flushed successfully.
+    @discardableResult
+    func stop() async -> Bool {
         // Flush any pending video frames before stopping
         do {
             _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
         } catch {
             logError("RewindIndexer: Failed to flush video chunk: \(error)")
+            return false
         }
 
         log("RewindIndexer: Stopped")
+        return true
     }
 
     // MARK: - OCR Backfill (battery → AC)
@@ -762,6 +765,44 @@ actor RewindIndexer {
 
         // Fallback: assume 1 fps
         return Int(CMTimeGetSeconds(duration))
+    }
+}
+
+enum RewindShutdownFlush {
+    static func flush(timeout: TimeInterval, context: String) -> Bool {
+        let state = RewindFlushState()
+        let semaphore = DispatchSemaphore(value: 0)
+        Task.detached(priority: .userInitiated) {
+            state.setFlushed(await RewindIndexer.shared.stop())
+            semaphore.signal()
+        }
+
+        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+            logError("\(context): Timed out flushing Rewind chunk")
+            return false
+        }
+
+        if !state.didFlush {
+            logError("\(context): Failed to flush Rewind chunk")
+        }
+        return state.didFlush
+    }
+}
+
+private final class RewindFlushState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var flushed = false
+
+    var didFlush: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return flushed
+    }
+
+    func setFlushed(_ value: Bool) {
+        lock.lock()
+        flushed = value
+        lock.unlock()
     }
 }
 

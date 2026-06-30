@@ -189,6 +189,11 @@ struct RewindPage: View {
                 searchViewMode = nil
                 selectedGroupIndex = 0
             }
+            invalidatePendingFrameLoad()
+            if searchViewMode != .results && !activeScreenshots.isEmpty {
+                currentIndex = min(currentIndex, activeScreenshots.count - 1)
+                scheduleLoadCurrentFrame()
+            }
         }
         // Global keyboard handlers
         .onKeyPress(.escape) {
@@ -454,9 +459,9 @@ struct RewindPage: View {
                     Button {
                         if searchViewMode != .timeline && !viewModel.screenshots.isEmpty {
                             currentIndex = 0
-                            scheduleLoadCurrentFrame()
                         }
                         searchViewMode = .timeline
+                        scheduleLoadCurrentFrame()
                     } label: {
                         Image(systemName: "timeline.selection")
                             .scaledFont(size: 11)
@@ -541,6 +546,11 @@ struct RewindPage: View {
                 .padding(.vertical, 8)
             }
             .onChange(of: selectedGroupIndex) { _, newIndex in
+                invalidatePendingFrameLoad()
+                if searchViewMode == .timeline && !activeScreenshots.isEmpty {
+                    currentIndex = min(currentIndex, activeScreenshots.count - 1)
+                    scheduleLoadCurrentFrame()
+                }
                 withAnimation {
                     proxy.scrollTo(newIndex, anchor: .center)
                 }
@@ -561,6 +571,25 @@ struct RewindPage: View {
             return currentGroupScreenshots
         }
         return viewModel.screenshots
+    }
+
+    private var activeFrameSourceToken: String {
+        let screenshots = activeScreenshots
+        let currentScreenshotID: String
+        if currentIndex < screenshots.count {
+            let screenshot = screenshots[currentIndex]
+            currentScreenshotID = screenshot.id.map(String.init)
+                ?? "\(screenshot.timestamp.timeIntervalSince1970):\(screenshot.videoChunkPath ?? screenshot.imagePath ?? "")"
+        } else {
+            currentScreenshotID = "none"
+        }
+        return [
+            searchViewMode.map(String.init(describing:)) ?? "timeline",
+            viewModel.activeSearchQuery ?? "",
+            String(selectedGroupIndex),
+            String(screenshots.count),
+            currentScreenshotID,
+        ].joined(separator: "|")
     }
 
     // MARK: - Timeline with Search
@@ -824,16 +853,27 @@ struct RewindPage: View {
         frameLoadRequestID = UUID()
         let requestID = frameLoadRequestID
         let requestedIndex = currentIndex
+        let sourceToken = activeFrameSourceToken
         frameLoadTask = Task {
-            await loadCurrentFrame(at: requestedIndex, requestID: requestID)
+            await loadCurrentFrame(at: requestedIndex, requestID: requestID, sourceToken: sourceToken)
         }
     }
 
-    private func isCurrentFrameLoad(index: Int, requestID: UUID) -> Bool {
-        !Task.isCancelled && frameLoadRequestID == requestID && currentIndex == index
+    private func invalidatePendingFrameLoad() {
+        frameLoadTask?.cancel()
+        frameLoadTask = nil
+        frameLoadRequestID = UUID()
+        isLoadingFrame = false
     }
 
-    private func loadCurrentFrame(at requestedIndex: Int, requestID: UUID) async {
+    private func isCurrentFrameLoad(index: Int, requestID: UUID, sourceToken: String) -> Bool {
+        !Task.isCancelled
+            && frameLoadRequestID == requestID
+            && currentIndex == index
+            && activeFrameSourceToken == sourceToken
+    }
+
+    private func loadCurrentFrame(at requestedIndex: Int, requestID: UUID, sourceToken: String) async {
         let screenshots = activeScreenshots
         guard requestedIndex < screenshots.count else { return }
 
@@ -842,7 +882,7 @@ struct RewindPage: View {
         // Try to load the requested frame. Scrubbing can launch several loads;
         // only the newest request is allowed to update visible state.
         if let image = await tryLoadFrame(at: requestedIndex) {
-            guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID) else { return }
+            guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID, sourceToken: sourceToken) else { return }
             currentImage = image
             viewModel.selectScreenshot(screenshots[requestedIndex])
             isLoadingFrame = false
@@ -851,7 +891,7 @@ struct RewindPage: View {
 
         // Frame failed to load (likely in an unfinalized video chunk).
         // Do NOT move currentIndex — keep the user's position and show the last valid image.
-        guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID) else { return }
+        guard isCurrentFrameLoad(index: requestedIndex, requestID: requestID, sourceToken: sourceToken) else { return }
         isLoadingFrame = false
     }
 
