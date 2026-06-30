@@ -41,7 +41,7 @@ clients_stub.parser = object()
 sys.modules.setdefault('utils.llm.clients', clients_stub)
 
 from utils import byok
-from utils.llm import chat, gateway_client
+from utils.llm import chat, gateway_client, gateway_observability
 from utils.llm import conversation_processing
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
@@ -161,7 +161,7 @@ def test_requires_context_byok_context_skips_gateway(monkeypatch):
     monkeypatch.setattr(
         chat, 'record_chat_extraction_gateway_result', gateway_client.record_chat_extraction_gateway_result
     )
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     monkeypatch.setattr(chat, 'get_llm', lambda feature: FakeLLM(chat.RequiresContext(value=True), existing_calls))
     monkeypatch.setattr(
         chat,
@@ -257,16 +257,17 @@ def test_strict_schema_removes_defaults_recursively():
     walk(schema)
 
 
-def test_chat_structured_gateway_records_success_metric(monkeypatch):
+def test_chat_structured_gateway_records_success_metric(monkeypatch, caplog):
     counter = FakeCounter()
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _VALUE_TRUE_RESPONSE)
 
-    result = gateway_client.invoke_chat_structured_gateway(
-        'classified prompt',
-        chat.RequiresContext,
-        feature='chat_extraction.requires_context',
-    )
+    with caplog.at_level(logging.INFO, logger='utils.llm.gateway_observability'):
+        result = gateway_client.invoke_chat_structured_gateway(
+            'classified prompt',
+            chat.RequiresContext,
+            feature='chat_extraction.requires_context',
+        )
 
     assert result == chat.RequiresContext(value=True)
     assert counter.calls == [
@@ -279,11 +280,16 @@ def test_chat_structured_gateway_records_success_metric(monkeypatch):
             1,
         )
     ]
+    assert 'llm_gateway_backend_event kind=request_result' in caplog.text
+    assert 'feature=chat_extraction.requires_context' in caplog.text
+    assert 'outcome=success' in caplog.text
+    assert 'reason=ok' in caplog.text
+    assert 'classified prompt' not in caplog.text
 
 
 def test_chat_structured_gateway_records_fallback_reason_metric(monkeypatch):
     counter = FakeCounter()
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     _mock_gateway_client(monkeypatch, lambda *args, **kwargs: _UNEXPECTED_RESPONSE)
 
     result = gateway_client.invoke_chat_structured_gateway(
@@ -365,7 +371,7 @@ def test_conversation_discard_byok_skips_gateway_and_uses_legacy_llm(monkeypatch
 
     byok.set_byok_keys({'openai': 'secret'})
     counter = FakeCounter()
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
     monkeypatch.setattr(
         conversation_processing,
         'invoke_chat_structured_gateway',
@@ -464,7 +470,7 @@ def test_action_items_gateway_shadow_keeps_legacy_result(monkeypatch):
     assert 'submit report by Friday' in captured['prompt']
 
 
-def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch):
+def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch, caplog):
     captured = {}
     counter = FakeCounter()
     call_order = []
@@ -528,15 +534,16 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
     monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
     monkeypatch.setattr(conversation_processing, '_submit_llm_background', immediate_submit)
-    monkeypatch.setattr(conversation_processing, 'LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS', counter)
 
-    result = conversation_processing.get_transcript_structure(
-        'we discussed project launch tasks',
-        datetime(2026, 6, 28, tzinfo=timezone.utc),
-        'en',
-        'UTC',
-        'uid',
-    )
+    with caplog.at_level(logging.INFO, logger='utils.llm.gateway_observability'):
+        result = conversation_processing.get_transcript_structure(
+            'we discussed project launch tasks',
+            datetime(2026, 6, 28, tzinfo=timezone.utc),
+            'en',
+            'UTC',
+            'uid',
+        )
 
     assert result.title == 'Weekly Planning'
     assert result.overview == 'Discussed project launch tasks.'
@@ -557,6 +564,11 @@ def test_conversation_structure_gateway_shadow_keeps_legacy_result_and_records_c
     } in comparison_labels
     assert any(labels['field'] == 'title_similarity' for labels in comparison_labels)
     assert any(labels['field'] == 'overview_similarity' for labels in comparison_labels)
+    assert 'llm_gateway_backend_event kind=shadow_comparison' in caplog.text
+    assert 'feature=conversation_structure.extract.shadow' in caplog.text
+    assert 'field=title_similarity' in caplog.text
+    assert 'Weekly Planning' not in caplog.text
+    assert 'Discussed project launch tasks.' not in caplog.text
 
 
 def test_conversation_structure_shadow_disabled_skips_gateway(monkeypatch):
@@ -592,7 +604,7 @@ def test_conversation_structure_shadow_disabled_skips_gateway(monkeypatch):
     monkeypatch.setattr(conversation_processing, 'get_llm', lambda feature, **kwargs: object())
     monkeypatch.setattr(conversation_processing, 'invoke_chat_structured_gateway', fake_gateway)
     monkeypatch.setattr(conversation_processing, '_submit_llm_background', fake_submit)
-    monkeypatch.setattr(gateway_client, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
 
     result = conversation_processing.get_transcript_structure(
         'we discussed project launch tasks',

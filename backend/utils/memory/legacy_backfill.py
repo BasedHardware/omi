@@ -6,7 +6,7 @@ Safety contract (locked directive):
   ``memory_items`` via ``apply_long_term_patch_firestore``. Legacy rows are **never** deleted,
   updated, or invalidated by this module.
 - **Idempotent (Q4)** — deterministic canonical ``memory_id`` per legacy row (hash of uid + legacy id).
-- **Resumable** — per-user checkpoint on ``memory_control/state`` (``legacy_backfill_*`` fields).
+- **Resumable** — per-user checkpoint on ``memory_state/apply_control`` (``legacy_backfill_*`` fields).
 - **Dry-run** — reports intended writes without touching canonical or legacy stores.
 - **Count-verified** — reconciles active legacy source count vs backfilled long_term destination ids.
 
@@ -220,7 +220,7 @@ def _fetch_active_legacy_memories(
 
 def _read_control_state(uid: str, *, db_client, create_if_missing: bool = True) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
-    ref = db_client.document(collections.memory_control_state)
+    ref = db_client.document(collections.memory_apply_control_state)
     snapshot = ref.get()
     if getattr(snapshot, "exists", False):
         return MemoryControlState(**(snapshot.to_dict() or {}))
@@ -231,7 +231,9 @@ def _read_control_state(uid: str, *, db_client, create_if_missing: bool = True) 
 
 
 def _persist_control_state(control: MemoryControlState, *, db_client) -> None:
-    db_client.document(MemoryCollections(uid=control.uid).memory_control_state).set(control.model_dump(mode="json"))
+    db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
+        control.model_dump(mode="json")
+    )
 
 
 def _legacy_evidence_id(*, uid: str, legacy_memory_id: str, index: int) -> str:

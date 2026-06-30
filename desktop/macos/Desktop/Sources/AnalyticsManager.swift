@@ -104,6 +104,10 @@ class AnalyticsManager {
     PostHogManager.shared.signInFailed(provider: provider, error: error)
   }
 
+  func authFlowEvent(_ eventName: String, properties: [String: Any]) {
+    PostHogManager.shared.authFlowEvent(eventName, properties: properties)
+  }
+
   func signedOut() {
     PostHogManager.shared.signedOut()
   }

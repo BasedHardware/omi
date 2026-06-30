@@ -449,7 +449,7 @@ def test_dry_run_writes_nothing(_trusted_account):
     rows = [_legacy_row(legacy_id="leg-dry", content="Dry run fact", conversation_id="conv-dry")]
     get_non_filtered_fn, active_snapshot = _make_non_filtered_store(rows)
     db = _PromotionFakeDb({})
-    control_path = f"users/{LEGACY_UID}/memory_control/state"
+    control_path = f"users/{LEGACY_UID}/memory_state/apply_control"
 
     report = backfill_user(LEGACY_UID, dry_run=True, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
 
@@ -495,7 +495,7 @@ def test_resume_after_interruption(_trusted_account):
     assert interrupted.completed is False
     assert interrupted.errors
 
-    control = MemoryControlState(**db.docs[f"users/{LEGACY_UID}/memory_control/state"])
+    control = MemoryControlState(**db.docs[f"users/{LEGACY_UID}/memory_state/apply_control"])
     assert control.legacy_backfill_processed_count == 2
 
     resumed = backfill_user(
