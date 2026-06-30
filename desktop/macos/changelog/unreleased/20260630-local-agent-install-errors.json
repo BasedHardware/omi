@@ -1,0 +1,3 @@
+{
+  "change": "Made unavailable local agents fail clearly with install-first guidance instead of exposing adapter environment variables."
+}

@@ -81,10 +81,14 @@ struct LocalAgentProviderAvailability: Equatable {
     var setupPrompt: String {
         switch provider {
         case .hermes:
-            return "I don't see Hermes on your PATH. Install Hermes or set OMI_HERMES_ADAPTER_COMMAND."
+            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
         case .openclaw:
-            return "I don't see OpenClaw on your PATH. Install OpenClaw or set OMI_OPENCLAW_ADAPTER_COMMAND."
+            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
         }
+    }
+
+    var toolError: String {
+        "Error: \(setupPrompt)"
     }
 }
 
