@@ -357,3 +357,10 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
     )
 
     assert errors == []
+
+
+def test_backend_listen_chart_only_workflow_preserves_runtime_project():
+    workflow_path = ROOT.parent / '.github/workflows/gcp_backend_listen_helm.yml'
+    workflow_text = workflow_path.read_text(encoding='utf-8')
+
+    assert workflow_text.count('--set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }}') == 2

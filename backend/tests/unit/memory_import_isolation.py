@@ -774,8 +774,14 @@ def install_memory_product_router_stubs(
 ) -> list[str]:
     sys.modules["fastapi"] = fastapi_stub
     sys.modules["database._client"] = MagicMock()
+    vector_db_stub = types.ModuleType("database.vector_db")
+    vector_db_stub.query_memory_vector_candidates = MagicMock(return_value=[])
+    sys.modules["database.vector_db"] = vector_db_stub
     sys.modules["utils.other.endpoints"] = auth_stub
-    return ["fastapi", "database._client", "utils.other.endpoints"]
+    database_pkg = sys.modules.get("database")
+    if isinstance(database_pkg, ModuleType):
+        setattr(database_pkg, "vector_db", vector_db_stub)
+    return ["fastapi", "database._client", "database.vector_db", "utils.other.endpoints"]
 
 
 _NON_ACTIVE_ROUTES_FIRESTORE_STUBBED = False
