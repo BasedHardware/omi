@@ -213,6 +213,7 @@ private struct ConnectOptionCard: View {
         case .completed:
           resultMessage = outcome.taskTitle
         }
+        statuses[destination] = await MemoryExportService.shared.status(for: destination)
       } catch {
         resultMessage = error.localizedDescription
       }
