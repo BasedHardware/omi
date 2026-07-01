@@ -211,6 +211,7 @@ function route(
                 max_bytes: MAX_REQUEST_BODY_BYTES
               }
             })
+            req.destroy()
             return
           }
           json(res, 400, {
